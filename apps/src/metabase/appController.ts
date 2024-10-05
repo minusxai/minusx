@@ -14,7 +14,7 @@ import {
   extractTableInfo,
   getSelectedDbId,
 } from "./helpers/getDatabaseSchema";
-import { get, map, truncate } from "lodash";
+import { get, map, set, truncate } from "lodash";
 import {
   DashboardMetabaseState,
   DashcardDetails,
@@ -24,7 +24,8 @@ import {
   VisualizationType,
   primaryVisualizationTypes,
   Card,
-  toLowerVisualizationType
+  toLowerVisualizationType,
+  ParameterValues
  } from "./helpers/types";
 
 
@@ -42,12 +43,16 @@ export class MetabaseController extends AppController<MetabaseAppState> {
     const actionContent: BlankMessageContent = {
       type: "BLANK",
     };
-    const state = (await this.app.getState()) as MetabaseAppStateSQLEditor;
-    if (state.sqlEditorState == "closed") {
-      await this.toggleSQLEditor("open");
+    const currentCard = await RPCs.getMetabaseState("qb.card") as Card;
+    if (currentCard) {
+      currentCard.dataset_query.native.query = sql;
+      await RPCs.dispatchMetabaseAction('metabase/qb/UPDATE_QUESTION', { card: currentCard });
+      await RPCs.dispatchMetabaseAction('metabase/qb/UPDATE_URL');
+    } else {
+      console.warn("Could not update SQL query: No current card found");
+      actionContent.content = "Could not update SQL query: Internal Error";
+      return actionContent;
     }
-    await this.uDblClick({ query: "sql_query" });
-    await this.setValue({ query: "sql_query", value: sql });
     await this.uClick({ query: "run_query" });
     await waitForQueryExecution();
     const sqlErrorMessage = await getSqlErrorMessage();
@@ -57,6 +62,36 @@ export class MetabaseController extends AppController<MetabaseAppState> {
       // table output
       const tableOutput = await getAndFormatOutputTable();
       actionContent.content = tableOutput;
+    }
+    return actionContent;
+  }
+
+  async setVariableValue({ variable, value }: { variable: string, value: string }) {
+    const actionContent: BlankMessageContent = {
+      type: "BLANK",
+    };
+    const setContentAndWarn = (content: string) => {
+      actionContent.content = content;
+      console.warn(content);
+    }
+    const currentCard = await RPCs.getMetabaseState("qb.card") as Card;
+    if (currentCard) {
+      let parameters = _.get(currentCard, 'dataset_query.native.template-tags', {} as any);
+      if (parameters[variable] == undefined) {
+        setContentAndWarn(`Could not update variable value: Variable "${variable}" not found`);
+        return actionContent;
+      } else {
+        let parameterId = parameters[variable].id;
+        if (parameterId == undefined) {
+          setContentAndWarn(`Could not update variable value: Variable "${variable}" not found`);
+          return actionContent;
+        } else {
+          await RPCs.dispatchMetabaseAction('metabase/qb/SET_PARAMETER_VALUE', { id: parameterId, value });
+        }
+      }
+    } else {
+      setContentAndWarn("Could not update variable value: No current card found");
+      return actionContent;
     }
     return actionContent;
   }
