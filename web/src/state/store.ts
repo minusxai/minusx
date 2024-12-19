@@ -165,6 +165,16 @@ const migrations = {
     let newState = {...state}
     newState.settings.newSearch = true
     return newState;
+  },
+  15: (state: any) => {
+    let newState = {...state}
+    newState.settings.availableMeasures = []
+    newState.settings.availableDimensions = []
+    newState.settings.usedMeasures = []
+    newState.settings.usedDimensions = []
+    newState.settings.usedFilters = []
+    newState.settings.usedTimeDimensions = []
+    newState.settings.usedOrder = []
   }
 }
 

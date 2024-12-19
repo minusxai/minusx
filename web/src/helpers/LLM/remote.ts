@@ -121,7 +121,6 @@ export const getMetaPlan = async(text: string, steps: string[], messageHistory: 
   return parsed.steps;
 }
 
-
 export const convertToMarkdown = async(appState, imgs): Promise<string[]> => {
   console.log('Converting', appState, imgs)
   const llmSettings = {
@@ -163,3 +162,4 @@ export const convertToMarkdown = async(appState, imgs): Promise<string[]> => {
   }).filter(i => i).join("\n")
   return content
 }
+

@@ -19,6 +19,35 @@ export type DevToolsTabName = 'Context' | 'Action History' | 'Prompts' | 'Availa
 //   |     '-- width: 100%
 //   '--no
 
+export interface SemanticMember { 
+  name: string
+  description: string
+}
+
+export interface SemanticFilter {
+  or?: SemanticFilter[]
+  and?: SemanticFilter[]
+  member?: string
+  operator?: string
+  values?: string[]
+}
+
+export interface TimeDimension {
+  dimension: string
+  granularity?: 'day' | 'week' | 'month' | 'quarter' | 'year'
+  dateRange?: string[] // [start, end], YYYY-MM-DD format
+}
+
+export type Order = [string, 'asc' | 'desc']
+
+export interface SemanticQuery {
+  measures: string[]
+  dimensions: string[]
+  filters: SemanticFilter[]
+  timeDimensions: TimeDimension[]
+  order: Order[]
+}
+
 interface Settings {
   isLocal: boolean,
   uploadLogs: boolean,
@@ -36,6 +65,13 @@ interface Settings {
   aiRules: string
   savedQueries: boolean
   newSearch: boolean
+  availableMeasures: SemanticMember[]
+  availableDimensions: SemanticMember[]
+  usedMeasures: string[]
+  usedDimensions: string[]
+  usedFilters: SemanticFilter[]
+  usedTimeDimensions: TimeDimension[]
+  usedOrder: Order[]
 }
 
 const initialState: Settings = {
@@ -54,7 +90,14 @@ const initialState: Settings = {
   isRecording: false,
   aiRules: '',
   savedQueries: false,
-  newSearch: false
+  newSearch: false,
+  availableMeasures: [],
+  availableDimensions: [],
+  usedMeasures: [],
+  usedDimensions: [],
+  usedFilters: [],
+  usedTimeDimensions: [],
+  usedOrder: []
 }
 
 export const settingsSlice = createSlice({
@@ -106,6 +149,27 @@ export const settingsSlice = createSlice({
     setNewSearch: (state, action: PayloadAction<boolean>) => {
       state.newSearch = action.payload
     },
+    setAvailableMeasures: (state, action: PayloadAction<SemanticMember[]>) => {
+      state.availableMeasures = action.payload
+    },
+    setAvailableDimensions: (state, action: PayloadAction<SemanticMember[]>) => {
+      state.availableDimensions = action.payload
+    },
+    setUsedMeasures: (state, action: PayloadAction<string[]>) => {
+      state.usedMeasures = action.payload
+    },
+    setUsedDimensions: (state, action: PayloadAction<string[]>) => {
+      state.usedDimensions = action.payload
+    },
+    setUsedFilters: (state, action: PayloadAction<SemanticFilter[]>) => {
+      state.usedFilters = action.payload
+    },
+    setUsedTimeDimensions: (state, action: PayloadAction<TimeDimension[]>) => {
+      state.usedTimeDimensions = action.payload
+    },
+    setUsedOrder: (state, action: PayloadAction<Order[]>) => {
+      state.usedOrder = action.payload
+    }
   }
 })
 
@@ -113,7 +177,9 @@ export const settingsSlice = createSlice({
 export const { updateIsLocal, updateUploadLogs,
   updateIsAppOpen, updateAppMode, updateIsDevToolsOpen,
   updateSidePanelTabName, updateDevToolsTabName, setSuggestQueries,
-  setIframeInfo, setConfirmChanges, setDemoMode, setAppRecording, setAiRules, setSavedQueries, setNewSearch
+  setIframeInfo, setConfirmChanges, setDemoMode, setAppRecording, setAiRules, setSavedQueries, setNewSearch,
+  setAvailableMeasures, setAvailableDimensions, setUsedMeasures, setUsedDimensions, setUsedFilters,
+  setUsedTimeDimensions, setUsedOrder
 } = settingsSlice.actions
 
 export default settingsSlice.reducer

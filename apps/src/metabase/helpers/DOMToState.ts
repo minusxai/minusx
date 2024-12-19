@@ -6,6 +6,7 @@ import { DashboardInfo } from './dashboard/types';
 import { getDashboardAppState } from './dashboard/appState';
 import { visualizationSettings, Card, ParameterValues, FormattedTable } from './types';
 const { getMetabaseState, queryURL } = RPCs;
+import { SemanticMember, SemanticQuery } from "web/types";
 
 interface ExtractedDataBase {
   name: string;
@@ -51,7 +52,14 @@ export interface MetabaseAppStateSQLEditor {
 // make this DashboardInfo
 export interface MetabaseAppStateDashboard extends DashboardInfo {}
 
-export type MetabaseAppState = MetabaseAppStateSQLEditor | MetabaseAppStateDashboard
+export interface MetabaseSemanticQueryAppState {
+  availableMeasures: SemanticMember[];
+  availableDimensions: SemanticMember[];
+  currentSemanticQuery: SemanticQuery;
+  dialect?: string;
+}
+
+export type MetabaseAppState = MetabaseAppStateSQLEditor | MetabaseAppStateDashboard | MetabaseSemanticQueryAppState;
 
 export async function convertDOMtoStateSQLQuery() {
   // CAUTION: This one does not update when changed via ui for some reason
@@ -95,13 +103,36 @@ export async function convertDOMtoStateDashboard(): Promise<MetabaseAppStateDash
     return dashboardInfo as MetabaseAppStateDashboard;
 };
 
+export async function semanticQueryState() {
+  const appSettings = RPCs.getAppSettings()
+  const { availableMeasures, availableDimensions, usedMeasures, usedDimensions, usedFilters, usedTimeDimensions, usedOrder } = appSettings
+  const selectedDatabaseInfo = await getDatabaseInfoForSelectedDb();
+  
+  const metabaseSemanticQueryAppState: MetabaseSemanticQueryAppState = {
+    availableMeasures,
+    availableDimensions,
+    currentSemanticQuery: {
+      measures: usedMeasures,
+      dimensions: usedDimensions,
+      filters: usedFilters,
+      timeDimensions: usedTimeDimensions,
+      order: usedOrder
+    },
+    dialect: selectedDatabaseInfo?.dialect
+  }
+  return metabaseSemanticQueryAppState;
+}
+
 export async function convertDOMtoState() {
   const url = await queryURL();
   if (isDashboardPage(url)) {
     return await convertDOMtoStateDashboard();
-  } else {
-    return await convertDOMtoStateSQLQuery();
   }
+  const appSettings = RPCs.getAppSettings()
+  if(appSettings.semanticPlanner) {
+    return await semanticQueryState();
+  }
+  return await convertDOMtoStateSQLQuery();
 }
 async function getSqlVariables() {
   const currentCard = await RPCs.getMetabaseState("qb.card") as Card;
