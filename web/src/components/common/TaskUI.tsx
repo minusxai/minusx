@@ -10,7 +10,8 @@ import {
   Text,
   Switch,
   Spinner,
-  Button
+  Button,
+  Checkbox
 } from '@chakra-ui/react'
 import React, { forwardRef, useCallback, useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
@@ -23,7 +24,7 @@ import chat from '../../chat/chat'
 import _ from 'lodash'
 import { abortPlan, startNewThread } from '../../state/chat/reducer'
 import { resetThumbnails, setInstructions as setTaskInstructions } from '../../state/thumbnails/reducer'
-import { setSuggestQueries } from '../../state/settings/reducer'
+import { setSuggestQueries, setDemoMode, setAvailableMeasures, setAvailableDimensions, setUsedMeasures, setUsedDimensions, setUsedFilters } from '../../state/settings/reducer'
 import { RootState } from '../../state/store'
 import { getSuggestions } from '../../helpers/LLM/remote'
 import { Thumbnails } from './Thumbnails'
@@ -45,7 +46,10 @@ import { getParsedIframeInfo } from '../../helpers/origin'
 import { VoiceInputButton } from './VoiceInputButton'
 import { getTranscripts } from '../../helpers/recordings'
 import { configs } from '../../constants'
+import axios from 'axios'
+import { SemanticLayerViewer } from './SemanticLayerViewer'
 
+const SEMANTIC_PROPERTIES_API = configs.SERVER_BASE_URL + "/semantic/properties"
 
 const TaskUI = forwardRef<HTMLTextAreaElement>((_props, ref) => {
   const currentTool = getParsedIframeInfo().tool
@@ -73,6 +77,24 @@ const TaskUI = forwardRef<HTMLTextAreaElement>((_props, ref) => {
     debouncedSetInstruction(instructions);
     return () => debouncedSetInstruction.cancel();
   }, [instructions, debouncedSetInstruction]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const response = await axios.get(SEMANTIC_PROPERTIES_API, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      })
+      const data = await response.data
+      dispatch(setAvailableMeasures(data.measures || []))
+      dispatch(setAvailableDimensions(data.dimensions || []))
+    }
+    try {
+      fetchData()
+    } catch (err) {
+      console.log('Error is', err)
+    }
+  }, [])
 
   const clearMessages = () => {
     dispatch(startNewThread())
@@ -121,22 +143,32 @@ const TaskUI = forwardRef<HTMLTextAreaElement>((_props, ref) => {
     })
   }
 
-
+  const updateDemoMode = (value: boolean) => {
+    dispatch(setDemoMode(value))
+  }
 
   const runTask = async () => {
     if (instructions) {
-      chat.addUserMessage({
-        content: {
-          type: "DEFAULT",
-          text: instructions,
-          images: thumbnails
-        },
-      })
-      dispatch(resetThumbnails())
+      const text = instructions
       setInstructions('')
+      if (demoMode && currentTool === "jupyter") {
+        setMetaQuestion(instructions)
+        await metaPlanner({text: instructions})
+        setMetaQuestion('')
+      } 
+      else {
+        chat.addUserMessage({
+          content: {
+            type: "DEFAULT",
+            text: instructions,
+            images: thumbnails
+          },
+        })
+        dispatch(resetThumbnails())
+      }
     }
   }
-
+  
   // suggestions stuff
   const [suggestions, setSuggestions] = useState<string[]>([]);
 
@@ -210,32 +242,31 @@ const TaskUI = forwardRef<HTMLTextAreaElement>((_props, ref) => {
         <ChatSection />
       </VStack>
       <VStack alignItems={"stretch"}>
-        { !taskInProgress && !userConfirmation.show && !(currentTool === "google" && currentToolVersion === "sheets") &&
+        { !userConfirmation.show && !(currentTool === "google" && currentToolVersion === "sheets") &&
         <>
-        <Divider borderColor={"minusxBW.500"}/>
-        {isMessageTooLong() ? 
-          <Text fontSize="sm" color={"minusxBW.600"}>Long conversations decrease speed and impact accuracy. Consider <HiOutlineRefresh style={{display:"inline-block", verticalAlign: "middle"}}/> this thread.</Text> : 
-          <ChatSuggestions
-            suggestQueries={suggestQueries}
-            toggleSuggestions={toggleSuggestions}
-            suggestions={suggestions} 
-            onSuggestionClick={(suggestion) => {
-              chat.addUserMessage({
-                content: {
-                  type: "DEFAULT",
-                  text: suggestion,
-                  images: []
-                },
-              })
-            }} 
-          />
-        }
-        <Divider borderColor={"minusxBW.500"}/>
+          {/* <Divider borderColor={"minusxBW.500"}/> */}
+          {isMessageTooLong() && <Text fontSize="sm" color={"minusxBW.600"}>Long conversations decrease speed and impact accuracy. Consider <HiOutlineRefresh style={{display:"inline-block", verticalAlign: "middle"}}/> this thread.</Text>}
+            {/* <ChatSuggestions
+              suggestQueries={suggestQueries}
+              toggleSuggestions={toggleSuggestions}
+              suggestions={suggestions} 
+              onSuggestionClick={(suggestion) => {
+                chat.addUserMessage({
+                  content: {
+                    type: "DEFAULT",
+                    text: suggestion,
+                    images: []
+                  },
+                })
+              }} 
+            /> */}
+          { demoMode && currentTool === "metabase" && <SemanticLayerViewer/> }
+          <Divider borderColor={"minusxBW.500"}/>
         </>
         }
         <Thumbnails thumbnails={thumbnails} />
         <UserConfirmation/>
-        {
+        {/* {
             demoMode && currentTool == "google" && currentToolVersion == "sheets" ? 
             <HStack justify={"center"}>
             <Button onClick={async () => {
@@ -267,8 +298,8 @@ const TaskUI = forwardRef<HTMLTextAreaElement>((_props, ref) => {
               await gdocImage(String(response?.response?.images[0]), 0.5)
             }} colorScheme="minusxGreen" size="sm" disabled={taskInProgress}>Use Metabase</Button>
             </HStack> : null
-          }
-          {
+          } */}
+          {/* {
             demoMode && currentTool === "jupyter" && (<Button onClick={async ()=>{
               if (instructions) {
                 const text = instructions
@@ -278,7 +309,7 @@ const TaskUI = forwardRef<HTMLTextAreaElement>((_props, ref) => {
                 setMetaQuestion('')
               }
             }} colorScheme="minusxGreen" size="sm" disabled={taskInProgress}>I'm feeling lucky</Button>)
-          }
+          } */}
         {/* {demoMode && <Button onClick={async () => {
               // let text = await gdocReadSelected()
               const appState = await getApp().getState() as JupyterNotebookState
@@ -314,6 +345,28 @@ const TaskUI = forwardRef<HTMLTextAreaElement>((_props, ref) => {
                 <VoiceInputButton disabled={taskInProgress} onClick={voiceInputOnClick} isRecording={isRecording}/>
                 <QuickActionButton tooltip="Select & Ask" onclickFn={handleSnapClick} icon={BiScreenshot} isDisabled={isSheets || taskInProgress}/>
                 <QuickActionButton tooltip="Clear Chat" onclickFn={clearMessages} icon={HiOutlineRefresh} isDisabled={messages.length === 0 || taskInProgress}/>
+                {configs.IS_DEV && <Checkbox sx={{
+                  '& input:not(:checked) + span': {
+                    borderColor: 'minusxBW.500',
+                  },
+                  '& input:checked + span': {
+                    bg: 'minusxGreen.500',
+                    borderColor: 'minusxGreen.500',
+                  },
+                  '& input:checked:hover + span': {
+                    bg: 'minusxGreen.500',
+                    borderColor: 'minusxGreen.500',
+                  },
+                  span:{
+                    marginLeft: 1,
+                  }
+                  }}
+                  isChecked={demoMode}
+                  onChange={(e) => updateDemoMode(e.target.checked)}
+                >
+                  <Text fontSize={12} color={"minusxBW.600"} p={0} m={0}>?</Text>
+                </Checkbox>
+                }
               </HStack>
               <HStack>
                 {

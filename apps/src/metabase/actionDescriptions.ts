@@ -172,3 +172,101 @@ export const ACTION_DESCRIPTIONS_DASHBOARD: ActionDescription[] = [
     description: 'Gets more detailed information about the specified dashcards, including the visualization type, the query, and the data displayed. Can pass multiple ids to get multiple dashcards.',
   }
 ];
+
+export const ACTION_DESCRIPTIONS_SEMANTIC_QUERY: ActionDescription[] = [
+  ...COMMON_ACTION_DESCRIPTIONS,
+  {
+    name: 'getSemanticQuery',
+    args: {
+      reasoning: {
+        type: 'string',
+        description: "The reasoning behind the measures, dimensions and filters used in the query based on the user's request. This should be in first person."
+      },
+      measures: {
+        type: 'array',
+        items: {
+          type: 'string',
+        },
+        description: "The measures to use in the query."
+      },
+      dimensions: {
+        type: 'array',
+        items: {
+          type: 'string',
+        },
+        description: "The dimensions to use in the query."
+      },
+      filters: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            or: {
+              type: "array",
+              items: { $ref: "#" },
+              description: "The OR filter conditions."
+            },
+            and: {
+              type: "array",
+              items: { $ref: "#" },
+              description: "The AND filter conditions."
+            },
+            member: {
+              type: "string",
+              description: "The dimension or measure to filter on."
+            },
+            operator: {
+              type: "string",
+              enum: ['equals', 'notEquals', 'gt', 'gte', 'lt', 'lte', 'contains', 'notContains'],
+              description: "The operator used in the filter."
+            },
+            values: {
+              type: "array",
+              items: {
+                type: "string"
+              },
+              "description": "The values for the filter."
+            }
+          }
+        }
+      },
+      timeDimensions: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            dimension: {
+              type: "string",
+              description: "The time dimension to filter on."
+            },
+            granularity: {
+              type: "string",
+              description: "The granularity of the time dimension.",
+              enum: ['day', 'week', 'month', 'quarter', 'year']
+            },
+            dateRange: {
+              type: "array",
+              items: {
+                type: "string"
+              },
+              description: "The date range to filter on. Should be in the [start_date, end_date], YYYY-MM-DD format."
+            }
+          }
+        }
+      },
+      order: {
+        type: 'array',
+        items: {
+          type: 'array',
+          items: {
+            type: 'string'
+          },
+        },
+        description: "The order of the results. Should be an array of arrays, where each inner array is [measure | dimension, 'asc' | 'desc']."
+      }
+
+    },
+    description: 'Generates SQL using cube.js semantic query API based on the measures, dimensions and filters provided.',
+    required: ["reasoning", "measures", "dimensions", "filters", "timeDimensions", "order"],
+  }
+];
