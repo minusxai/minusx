@@ -6,7 +6,7 @@ import { dispatch } from '../../state/dispatch'
 import {auth, auth as authModule} from '../../app/api'
 import { useSelector } from 'react-redux';
 import logo from '../../assets/img/logo.svg'
-import { BsLightbulbFill, BsArrowRight } from "react-icons/bs";
+import { BsLightbulbFill, BsArrowRight, BsFillLightningFill } from "react-icons/bs";
 import { getPlatformShortcut } from '../../helpers/platformCustomization'
 import { captureEvent, GLOBAL_EVENTS } from '../../tracking';
 import { capture } from '../../helpers/screenCapture/extensionCapture';
@@ -27,26 +27,15 @@ const FeatureHighlightBubble = ({items}: {items: HighlightItem[]}) => {
   const [isVisibile, setIsVisible] = useState(true)
   const [hintIdx, setHintIdx] = useState(0)
   const numHints = items.length
-  const [progress, setProgress] = useState(0);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setProgress((prevProgress) => {
-        if (prevProgress >= 100) {
-          handleNext();
-          return 0;
-        }
-        return prevProgress + 0.5;
-      });
-    }, 50);
-
-    return () => clearInterval(timer);
-  }, [hintIdx]);
+  const isLastTip = hintIdx === numHints - 1
 
   const handleNext = () => {
-    setHintIdx((hintIdx + 1) % numHints)
-    setProgress(0);
-  };
+    if (isLastTip) {
+      setIsVisible(false)
+    } else {
+      setHintIdx((hintIdx + 1) % numHints)
+    }
+  }
   
   return (
     isVisibile && <Box position="absolute"
@@ -90,21 +79,18 @@ const FeatureHighlightBubble = ({items}: {items: HighlightItem[]}) => {
           <HStack fontSize={"xs"} fontWeight={"bold"} alignItems={"center"} color={"minusxGreen.400"}>
             <BsLightbulbFill/><Box>Pro Tip {hintIdx + 1}/{numHints}</Box>
           </HStack>
-          <Button onClick={handleNext} variant="ghost" aria-label="Next" rightIcon={<BsArrowRight />} size="sm" fontWeight="bold">Next</Button>
+          <Button 
+            onClick={handleNext} 
+            variant="ghost" 
+            aria-label={isLastTip ? "Let's Go!" : "Next"} 
+            rightIcon={isLastTip ? <BsFillLightningFill /> : <BsArrowRight />}
+            size="sm" 
+            fontWeight="bold"
+          >
+            {isLastTip ? "Let's Go!" : "Next"}
+          </Button>
         </HStack>
-        <Progress
-            value={progress}
-            width="100%"
-            height={1}
-            position={"absolute"}
-            left={0}
-            bottom={0}
-            borderRadius={5}
-            colorScheme="minusxGreen"
-            size="sm"
-          />
-        </VStack>
-      
+      </VStack>
     </Box>
   );
 };
