@@ -10,6 +10,7 @@ const { fetchData } = RPCs;
 
 // 5 minutes
 const DEFAULT_TTL = 60 * 5;
+const ONE_DAY_TTL = 60 * 60 * 24;
 
 // this is a subset
 interface DatabaseResponse {
@@ -48,6 +49,12 @@ interface DatabaseInfo {
   }
 }
 
+async function getUniqueValsFromField(fieldId: number) {
+  const resp: any = await fetchData(`/api/field/${fieldId}/values`, 'GET');
+  return resp;
+}
+
+
 export interface DatabaseInfoWithTables extends DatabaseInfo {
   tables: FormattedTable[];
 }
@@ -65,30 +72,63 @@ export const extractDbInfo = (db: any, default_schema: string): DatabaseInfo => 
   },
 });
 
-export const extractTableInfo = (table: any, includeFields: boolean = false, schemaKey: string = 'schema'): FormattedTable => ({
-  name: _.get(table, 'name', ''),
-  ...(_.get(table, 'description', null) != null && { description: _.get(table, 'description', null) }),
-  schema: _.get(table, schemaKey, ''),
-  id: _.get(table, 'id', 0),
-  ...(
-    _.get(table, 'count') ? { count: _.get(table, 'count') } : {}
-  ),
-  ...(
-    includeFields
-    ? {
-      columns: _.map(_.get(table, 'fields', []), (field: any) => ({
-        name: _.get(field, 'name', ''),
-        type: field?.target?.id ? 'FOREIGN KEY' : _.get(field, 'database_type', null),
-        // only keep description if it exists. helps prune down context
-        ...(_.get(field, 'description', null) != null && { description: _.get(field, 'description', null) }),
-        // get foreign key info
-        ...(field?.target?.table_id != null && { fk_table_id: field?.target?.table_id }),
-        ...(field?.target?.name != null && { foreign_key_target: field?.target?.name }),
-      }))
+export const extractTableInfo = async (table: any, includeFields: boolean = false, schemaKey: string = 'schema'): FormattedTable => {
+    
+    const tableInfo = {
+        name: _.get(table, 'name', ''),
+        ...(_.get(table, 'description', null) != null && { description: _.get(table, 'description', null) }),
+        schema: _.get(table, schemaKey, ''),
+        id: _.get(table, 'id', 0),
+        ...(
+            _.get(table, 'count') ? { count: _.get(table, 'count') } : {}
+        ),
+        ...(
+            includeFields
+            ? {
+            columns: _.map(_.get(table, 'fields', []), (field: any) => ({
+                name: _.get(field, 'name', ''),
+                id: _.get(field, 'id', null),
+                type: field?.target?.id ? 'FOREIGN KEY' : _.get(field, 'database_type', null),
+                // only keep description if it exists. helps prune down context
+                ...(_.get(field, 'description', null) != null && { description: _.get(field, 'description', null) }),
+                // get foreign key info
+                ...(field?.target?.table_id != null && { fk_table_id: field?.target?.table_id }),
+                ...(field?.target?.name != null && { foreign_key_target: field?.target?.name }),
+                distinctCount: _.get(field, 'fingerprint.global.distinct-count', null),
+                exampleValues: null
+            }))
+            }
+            : {}
+        ),
+
     }
-    : {}
-  ),
-})
+    if (includeFields && tableInfo.columns) {
+        const textTypePatterns = ['varchar', 'text', 'char', 'string', 'nvarchar'];
+        
+        await Promise.all(
+            tableInfo.columns.map(async (column, index) => {
+                const type = (column.type || '').toLowerCase();
+                const isTextType = textTypePatterns.some(pattern => type.includes(pattern));
+                
+                if (isTextType && column.id && column.distinctCount && column.distinctCount < 50) {
+                    try {
+                        const uniqueValsResponse = await getUniqueValsFromField(column.id);
+                        if (uniqueValsResponse) {
+                            // uniqueValsResponse.values is a list of lists, so flatten it
+                            tableInfo.columns[index] = {
+                                ...column,
+                                exampleValues: uniqueValsResponse.values.flat()
+                            };
+                        }
+                    } catch (error) {
+                        console.warn(`Failed to fetch unique values for field ${column.name}:`, error);
+                    }
+                }
+            })
+        );
+    }
+    return tableInfo;
+}
 
 function getDefaultSchema(databaseInfo) {
   const engine = databaseInfo?.engine;
@@ -150,10 +190,14 @@ function getDefaultSchema(databaseInfo) {
 async function getDatabaseTablesWithoutFields(dbId: number): Promise<DatabaseInfoWithTables> {
   const jsonResponse = await fetchData(`/api/database/${dbId}?include=tables`, 'GET');
   const defaultSchema = getDefaultSchema(jsonResponse);
-  return {
+const tables = await Promise.all(
+    _.map(_.get(jsonResponse, 'tables', []), (table: any) => extractTableInfo(table, false))
+);
+
+return {
     ...extractDbInfo(jsonResponse, defaultSchema),
-    tables: _.map(_.get(jsonResponse, 'tables', []), (table: any) => (extractTableInfo(table, false)))
-  }
+    tables
+};
 }
 // only memoize for DEFAULT_TTL seconds
 export const memoizedGetDatabaseTablesWithoutFields = memoize(getDatabaseTablesWithoutFields, DEFAULT_TTL);
@@ -167,10 +211,10 @@ const fetchTableData = async (tableId: number) => {
     console.warn("Failed to get table schema", tableId, resp);
     return "missing";
   }
-  return extractTableInfo(resp, true);
+  return await extractTableInfo(resp, true);
 }
 
-export const memoizedFetchTableData = memoize(fetchTableData, DEFAULT_TTL);
+export const memoizedFetchTableData = memoize(fetchTableData, ONE_DAY_TTL);
 
 // only database info, no table info at all
 const getDatabaseInfo = async (dbId: number) => {
