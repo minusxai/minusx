@@ -1,7 +1,7 @@
 import { queryDOMMap, queryDOMSingle } from "./getElements"
 import { log } from "./log"
 import { checkMinusXClassName, identifyToolNative, setMinusxMode, toggleMinusX, toggleMinusXRoot } from "./domEvents"
-import { uClick, uDblClick, uHighlight, scrollIntoView, uSelectAllText, typeText, dragAndDropText } from "./actions"
+import { uClick, uDblClick, uHighlight, scrollIntoView, uSelectAllText, typeText, dragAndDropText, setStyle } from "./actions"
 import { captureVisibleTab } from "./rpcCalls"
 import { copyToClipboard } from "./copyToClipboard"
 import { getElementScreenCapture } from "./elementScreenCapture"
@@ -10,7 +10,6 @@ import { fetchData } from "./fetchData"
 import { initWindowListener, RPCPayload } from './initListeners'
 import { addNativeElements, attachEventsListener, attachMutationListener, detachMutationListener, initMutationObserver } from "./mutationObserver"
 import { respondToOtherTab, forwardToTab, getPendingMessage } from "./crossInstanceComms"
-import { configs } from "../../constants"
 import { startRecording, stopRecording } from "./microphone"
 export const rpc = {
     log,
@@ -21,6 +20,7 @@ export const rpc = {
     uSelectAllText,
     uHighlight,
     scrollIntoView,
+    setStyle,
     setMinusxMode,
     toggleMinusX,
     toggleMinusXRoot,
