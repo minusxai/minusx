@@ -6,9 +6,20 @@ import { ContextCatalog, MxModel } from '../../helpers/utils'
 
 export type AppMode = 'sidePanel' | 'selection'
 export type SidePanelTabName = 'chat' | 'settings' | 'context'
-export type DevToolsTabName = 'Context' | 'Action History' | 'Prompts' | 'Available Actions' | 'Planner Configs' | 'Context History' | 'Testing Tools' | 'Custom Instructions' | 'General Settings' | 'Data Catalog' | 'Dev Context'
+export type DevToolsTabName = 'Context' | 'Action History' | 'Prompts' | 'Available Actions' | 'Planner Configs' | 'Context History' | 'Testing Tools' | 'Custom Instructions' | 'General Settings' | 'Data Catalog' | 'Dev Context' | 'minusx.md'
 
 export const DEFAULT_TABLES = 'Default Tables'
+
+export const DEFAULT_MINUSXMD = `
+# minusx.md
+
+This is a user-specific reference guide for MinusX. It contains user preferences wrt. essential data sources, common conventions, key business concepts, important metrics and terminologies. The general notes are written by the user. It also includes notable memories that are automatically updated by the agent.
+
+### General Notes [added by the user]
+
+---
+### Notable Memories [added by MinusX agent]
+`
 
 const safeJSON = (text: string) => {
   try {
@@ -101,6 +112,7 @@ interface Settings {
   modelsMode: boolean
   viewAllCatalogs: boolean
   enable_highlight_helpers: boolean
+  useMemory: boolean
 }
 
 const initialState: Settings = {
@@ -117,7 +129,7 @@ const initialState: Settings = {
   demoMode: false,
   intercomBooted: false,
   isRecording: false,
-  aiRules: '',
+  aiRules: DEFAULT_MINUSXMD,
   tableDiff: {
     add: [],
     remove: []
@@ -131,7 +143,8 @@ const initialState: Settings = {
   groupsEnabled: false,
   modelsMode: true,
   viewAllCatalogs: false,
-  enable_highlight_helpers: false
+  enable_highlight_helpers: false,
+  useMemory: true,
 }
 
 export const settingsSlice = createSlice({
@@ -186,6 +199,11 @@ export const settingsSlice = createSlice({
     setAiRules: (state, action: PayloadAction<string>) => {
       state.aiRules = action.payload
     },
+    addMemory: (state, action: PayloadAction<string>) => {
+        const currentContent = state.aiRules || DEFAULT_MINUSXMD;
+        const newContent = currentContent.trim() + "\n- " + action.payload;
+        state.aiRules = newContent;
+    },
     resetDefaultTablesDB(state, action: PayloadAction<{dbId: Number}>) {
       state.tableDiff.add = state.tableDiff.add.filter((t) => t.dbId != action.payload.dbId)
     },
@@ -223,6 +241,9 @@ export const settingsSlice = createSlice({
     },
     setDRMode: (state, action: PayloadAction<boolean>) => {
       state.drMode = action.payload
+    },
+    setUseMemory: (state, action: PayloadAction<boolean>) => {
+      state.useMemory = action.payload
     },
     setSelectedCatalog: (state, action: PayloadAction<string>) => {
       const newSelectedCatalog = action.payload
@@ -325,7 +346,7 @@ export const { updateIsLocal, updateUploadLogs,
   updateSidePanelTabName, updateDevToolsTabName, setSuggestQueries,
   setIframeInfo, setConfirmChanges, setDemoMode, setAppRecording, setAiRules,
   applyTableDiff, setSelectedModels, setDRMode, setSelectedCatalog, saveCatalog, deleteCatalog, setMemberships,
-  setGroupsEnabled, resetDefaultTablesDB, setModelsMode, setViewAllCatalogs, setEnableHighlightHelpers,
+  setGroupsEnabled, resetDefaultTablesDB, setModelsMode, setViewAllCatalogs, setEnableHighlightHelpers, setUseMemory, addMemory
 } = settingsSlice.actions
 
 export default settingsSlice.reducer

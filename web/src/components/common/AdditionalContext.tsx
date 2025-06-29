@@ -1,18 +1,21 @@
-import { Checkbox, Button, Input, VStack, Text, Link, HStack, Box, Divider, AbsoluteCenter, Stack, Switch, Textarea, Radio, RadioGroup, IconButton, Icon, Tag, TagLabel } from '@chakra-ui/react';
-import React, { useEffect, useState } from 'react';
-import { dispatch, logoutState, resetState } from '../../state/dispatch';
+import { Button, VStack, Text, HStack, Box, Textarea } from '@chakra-ui/react';
+import React, { useState, useEffect } from 'react';
+import { dispatch } from '../../state/dispatch';
 import { setAiRules } from '../../state/settings/reducer';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../state/store';
 import { toast } from '../../app/toast';
-import { SettingsBlock } from './SettingsBlock';
 import { getParsedIframeInfo } from '../../helpers/origin';
+import { Markdown } from './Markdown';
+import { BsPencil, BsCheck, BsX } from 'react-icons/bs';
 
-const AdditionalContext = () => {
+export const AdditionalContext = () => {
   const aiRules = useSelector((state: RootState) => state.settings.aiRules)
   const [customInstructions, setCustomInstructions] = useState(aiRules)
+  const [isEditMode, setIsEditMode] = useState(false)
   const handleSave = () => {
     dispatch(setAiRules(customInstructions))
+    setIsEditMode(false)
     toast({
       title: 'Custom Instructions Saved!',
       description: "These instructions will be used from the next query onwards.",
@@ -22,9 +25,14 @@ const AdditionalContext = () => {
       position: 'bottom-right',
     })
   }
-  const handleReset = () => {
+  const handleCancel = () => {
     setCustomInstructions(aiRules)
+    setIsEditMode(false)
   }
+
+    useEffect(() => {
+        setCustomInstructions(aiRules);
+    }, [aiRules]);
 
   const tool = getParsedIframeInfo().tool
   let placeholder = `Example:\n1. Only use tables from "public" schema\n2. Always use plotly for plotting`
@@ -43,30 +51,119 @@ const AdditionalContext = () => {
     pt={2}
     >
       <VStack alignItems={"start"} gap={1}> 
-        <Textarea
-          marginTop={2}
-          value={customInstructions}
-          // onChange={(e) => dispatch(setAiRules(e.target.value))}
-          onChange={(e) => setCustomInstructions(e.target.value)}
-          placeholder={placeholder}
-          size="sm"
-          _focus={{
-            border: '1.5px solid #16a085',
-            boxShadow: 'none',
-            bg: "#fefefe"
-          }}
-          border='1px solid #aaa'
-          borderRadius='lg'
-          minHeight={450}
-          bg={"#eee"}
-        />
-        <HStack justify={"space-between"} width={"100%"} alignItems={"center"} pt={2}>
-          <HStack spacing={2}>
-            <Button size="sm" colorScheme="minusxGreen" onClick={handleSave} isDisabled={aiRules === customInstructions}>Save</Button>
-            <Button size="sm" colorScheme="minusxGreen" onClick={handleReset} isDisabled={aiRules === customInstructions}>Reset</Button>
-          </HStack>
-          {aiRules != customInstructions ? <Text color={"minusxBW.600"} fontSize="xs">unsaved changes</Text> : null}
+        <HStack justify={"space-between"} width={"100%"} alignItems={"center"}>
+          <Text fontSize="sm" fontWeight="medium">Special instructions and saved memories</Text>
+          {!isEditMode && (
+            <Button 
+              size="xs" 
+              variant="solid" 
+              colorScheme={"minusxGreen"} 
+              onClick={() => setIsEditMode(true)} 
+              leftIcon={<BsPencil />}
+            >
+              Edit
+            </Button>
+          )}
         </HStack>
+        
+        {isEditMode ? (
+          <>
+            <Box position="relative" width="100%">
+              <Textarea
+                marginTop={2}
+                value={customInstructions}
+                onChange={(e) => setCustomInstructions(e.target.value)}
+                placeholder={placeholder}
+                size="sm"
+                _focus={{
+                  border: '1.5px solid #16a085',
+                  boxShadow: 'none',
+                  bg: "#fefefe"
+                }}
+                border='1px solid #aaa'
+                borderRadius='lg'
+                minHeight={500}
+                bg={"#eee"}
+              />
+              <Box
+                position="absolute"
+                bottom={3}
+                right={3}
+                bg="rgba(255, 255, 255, 0.9)"
+                px={2}
+                py={1}
+                borderRadius="md"
+                fontSize="xs"
+                color="gray.600"
+                border="1px solid"
+                borderColor="gray.300"
+                fontWeight="medium"
+                zIndex={10}
+                pointerEvents="none"
+              >
+                {customInstructions.trim().split(/\s+/).filter(word => word.length > 0).length} words
+                {aiRules === customInstructions && (
+                  <Text as="span" color="green.600" ml={2}>• Saved</Text>
+                )}
+              </Box>
+            </Box>
+            {customInstructions.trim().split(/\s+/).filter(word => word.length > 0).length > 500 && (
+              <Text color={"red.500"} fontSize="xs" fontWeight={"bold"} pt={2} textAlign="center">
+                ⚠️ Long minusx.md may degrade performance. Consider making it shorter.
+              </Text>
+            )}
+            <HStack justify={"space-between"} width={"100%"} alignItems={"center"} pt={2}>
+              <HStack spacing={2}>
+                <Button size="sm" colorScheme="minusxGreen" onClick={handleSave} isDisabled={aiRules === customInstructions} leftIcon={<BsCheck />}>
+                  Save
+                </Button>
+                <Button size="sm" variant="outline" onClick={handleCancel} leftIcon={<BsX />}>
+                  Cancel
+                </Button>
+              </HStack>
+              {aiRules != customInstructions && (
+                <Text color={"red.500"} fontSize="xs" fontWeight={"bold"}>unsaved changes!</Text>
+              )}
+            </HStack>
+          </>
+        ) : (
+          <Box position="relative" width="100%">
+            <Box
+              marginTop={2}
+              border='1px solid #aaa'
+              borderRadius='lg'
+              minHeight={500}
+              maxHeight={500}
+              bg={"#fefefe"}
+              p={4}
+              width={"100%"}
+              overflow={"auto"}
+            >
+              {customInstructions ? (
+                <Markdown content={customInstructions} />
+              ) : (
+                <Text color={"gray.500"} fontSize="sm">No additional context provided</Text>
+              )}
+            </Box>
+            <Box
+              position="absolute"
+              bottom={3}
+              right={3}
+              bg="rgba(255, 255, 255, 0.9)"
+              px={2}
+              py={1}
+              borderRadius="md"
+              fontSize="xs"
+              color="gray.600"
+              border="1px solid"
+              borderColor="gray.300"
+              fontWeight="medium"
+            >
+              {customInstructions.trim().split(/\s+/).filter(word => word.length > 0).length} words
+              <Text as="span" color="green.600" ml={2}>• Saved</Text>
+            </Box>
+          </Box>
+        )}
       </VStack>
     </VStack>
   );
