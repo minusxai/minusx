@@ -380,6 +380,21 @@ export const chatSlice = createSlice({
       }
     },
     startNewThread: (state) => {
+      const currentMessages = getMessages(state)
+      // If there are no messages, we don't need to start a new thread
+      if (currentMessages.length == 0) {
+        return
+      }
+
+      // If the user is on a previous thread, only start a new thread if the latest thread has messages
+        if (state.activeThread != state.threads.length - 1) {
+        const latestThread = state.threads[state.threads.length - 1]
+        if (latestThread.messages.length == 0) {
+            state.activeThread = state.threads.length - 1
+            return
+        }
+      }
+
       if (state.threads.length >= MAX_THREADS) {
         const excessThreads = state.threads.length - MAX_THREADS + 1;
         state.threads.splice(0, excessThreads);
