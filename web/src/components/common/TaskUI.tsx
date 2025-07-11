@@ -79,6 +79,7 @@ const TaskUI = forwardRef<HTMLTextAreaElement>((_props, ref) => {
   const thumbnails = useSelector((state: RootState) => state.thumbnails.thumbnails)
   const thread = useSelector((state: RootState) => state.chat.activeThread)
   const activeThread = useSelector((state: RootState) => state.chat.threads[thread])
+  const totalThreads = useSelector((state: RootState) => state.chat.threads.length)
   const suggestQueries = useSelector((state: RootState) => state.settings.suggestQueries)
   const demoMode = useSelector((state: RootState) => state.settings.demoMode)
   const messages = activeThread.messages
@@ -108,6 +109,7 @@ const TaskUI = forwardRef<HTMLTextAreaElement>((_props, ref) => {
   const infoLoaded = useSelector((state: RootState) => state.billing.infoLoaded)
   const creditsExhausted = () => (credits <= 0 && infoLoaded)
   const creditsLow = () => (credits <= LOW_CREDITS_THRESHOLD && infoLoaded)
+  const lastThread = () => (thread === totalThreads - 1)
 
   const relevantTables = toolContext.relevantTables || []
 
@@ -527,6 +529,12 @@ const TaskUI = forwardRef<HTMLTextAreaElement>((_props, ref) => {
                 <Text fontSize="xs" lineHeight={"1rem"}>You're running low on credits. To get more, you can either upgrade to a Pro subscription in <span onClick={() => openDevtoolTab("General Settings")} style={{textDecoration: 'underline', cursor: 'pointer'}}>settings</span> or <Link style={{textDecoration: 'underline'}} href="https://minusx.ai/demo" isExternal>speak with us</Link> for 1 month free Pro!</Text>
             </Notify>
         }
+        {
+            !lastThread() &&
+            <Notify title="Previous Thread" notificationType='warning'>
+                <Text fontSize="xs" lineHeight={"1rem"}>You're viewing a previous thread.</Text>
+            </Notify>
+        }
         {   !taskInProgress &&
             <SettingsBlock title='Quick Actions'>
                 <HStack justifyContent={"center"} flexWrap={"wrap"} gap={1}>
@@ -543,7 +551,7 @@ const TaskUI = forwardRef<HTMLTextAreaElement>((_props, ref) => {
         }
 
         <VStack width={"100%"} alignItems={"stretch"} gap={0}>
-        { currentTool == 'metabase'  && !taskInProgress && !creditsExhausted() &&
+        { currentTool == 'metabase'  && !taskInProgress && !creditsExhausted() && lastThread() && 
         <HStack 
           mb={-2} 
           p={2} 
@@ -573,7 +581,7 @@ const TaskUI = forwardRef<HTMLTextAreaElement>((_props, ref) => {
         }
 
         <ReviewBox />
-        { !taskInProgress && !creditsExhausted() && 
+        { !taskInProgress && !creditsExhausted() && lastThread() && 
             <Stack aria-label="chat-input-area" position={"relative"}>
                 <AutosizeTextarea
                 ref={ref}

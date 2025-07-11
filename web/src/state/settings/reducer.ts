@@ -6,7 +6,7 @@ import { ContextCatalog, MxModel } from '../../helpers/utils'
 
 export type AppMode = 'sidePanel' | 'selection'
 export type SidePanelTabName = 'chat' | 'settings' | 'context'
-export type DevToolsTabName = 'Context' | 'Action History' | 'Prompts' | 'Available Actions' | 'Planner Configs' | 'Context History' | 'Testing Tools' | 'Custom Instructions' | 'General Settings' | 'Data Catalog' | 'Dev Context' | 'Memory' | 'CSS Customization' | 'Debug Tools'
+export type DevToolsTabName = 'Context' | 'History' | 'Action History' | 'Prompts' | 'Available Actions' | 'Planner Configs' | 'Context History' | 'Testing Tools' | 'Custom Instructions' | 'General Settings' | 'Data Catalog' | 'Dev Context' | 'Memory' | 'CSS Customization' | 'Debug Tools'
 
 export const DEFAULT_TABLES = 'Default Tables'
 
