@@ -338,7 +338,7 @@ export class MetabaseController extends AppController<MetabaseAppState> {
   @Action({
     labelRunning: "Executing SQL Query",
     labelDone: "Executed SQL query",
-    labelTask: "Executed SQL query",
+    labelTask: "Kick off SQL query",
     description: "Executes the SQL query in the Metabase SQL editor.",
     renderBody: () => {
       return {text: null, code: null}
@@ -355,7 +355,7 @@ export class MetabaseController extends AppController<MetabaseAppState> {
   @Action({
     labelRunning: "Executes the SQL query with parameters",
     labelDone: "Executed query",
-    labelTask: "Executed SQL query",
+    labelTask: "Kick off SQL query",
     description: "Executes the SQL query in the Metabase SQL editor with support for template tags and parameters.",
     renderBody: ({ sql, explanation }: { sql: string, explanation: string }, appState: MetabaseAppStateSQLEditor) => {
       const sqlQuery = appState?.sqlQuery
@@ -405,7 +405,7 @@ export class MetabaseController extends AppController<MetabaseAppState> {
   @Action({
     labelRunning: "Executes the SQL query with parameters",
     labelDone: "Executed query",
-    labelTask: "Executed SQL query",
+    labelTask: "Kick off SQL query",
     description: "Executes the SQL query in the Metabase SQL editor with support for template tags and parameters.",
     renderBody: ({ explanation, sql_edits}: { explanation: string, sql_edits: SQLEdits }, appState: MetabaseAppStateSQLEditor) => {
       const sqlQuery = appState?.sqlQuery
@@ -423,7 +423,7 @@ export class MetabaseController extends AppController<MetabaseAppState> {
   @Action({
     labelRunning: "Executes the SQL query",
     labelDone: "Executed query",
-    labelTask: "Executed SQL query",
+    labelTask: "Kick off SQL query",
     description: "Executes the SQL query in the Metabase SQL editor.",
     renderBody: ({ sql, explanation }: { sql: string, explanation: string }, appState: MetabaseAppStateSQLEditor) => {
       const sqlQuery = appState?.sqlQuery
