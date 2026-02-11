@@ -1,0 +1,54 @@
+{
+  "version": 3,
+  "rules": [
+    {
+      "type": "fileTypeAccess",
+      "role": "admin",
+      "allowedTypes": "*",
+      "createTypes": ["question", "dashboard", "folder", "context", "connection"],
+      "viewTypes": "*"
+    },
+    {
+      "type": "fileTypeAccess",
+      "role": "editor",
+      "allowedTypes": ["question", "dashboard", "folder", "context", "connection", "conversation", "session", "llm_call", "report"],
+      "createTypes": ["question", "dashboard", "folder", "context"],
+      "viewTypes": ["question", "dashboard", "folder", "context", "conversation", "session", "llm_call", "report"]
+    },
+    {
+      "type": "fileTypeAccess",
+      "role": "viewer",
+      "allowedTypes": ["question", "dashboard", "folder", "context", "connection", "conversation", "session", "llm_call"],
+      "createTypes": [],
+      "viewTypes": ["dashboard", "folder", "conversation", "session", "llm_call"]
+    },
+    {
+      "type": "createLocationRestrictions",
+      "role": "*",
+      "restrictions": [
+        {
+          "fileTypes": ["context", "question", "dashboard"],
+          "requiredPathPrefix": "",
+          "description": "Analytics files must be in mode root (resolved at runtime based on user's mode)"
+        },
+        {
+          "fileTypes": ["connection"],
+          "requiredPathPrefix": "/database",
+          "description": "Database connections must be in database folder (resolved at runtime based on user's mode)"
+        }
+      ]
+    },
+    {
+      "type": "creationBlocklist",
+      "role": "*",
+      "blockedTypes": ["config", "styles"],
+      "reason": "These file types are critical system files and cannot be manually created"
+    },
+    {
+      "type": "deletionBlocklist",
+      "role": "*",
+      "blockedTypes": ["config", "styles"],
+      "reason": "These file types are critical system files and cannot be deleted"
+    }
+  ]
+}

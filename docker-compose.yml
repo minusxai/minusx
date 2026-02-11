@@ -1,0 +1,57 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: minusx-backend
+    restart: unless-stopped
+    # Backend only accessible via Docker internal network (not exposed to host)
+    # Frontend communicates with backend via http://backend:8001
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - NEXTJS_URL=http://frontend:3000
+      - BASE_DUCKDB_DATA_PATH=/app
+      - WORKERS=${WORKERS:-4}
+    env_file:
+      - ./backend/.env
+    networks:
+      - minusx-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: minusx-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+      - atlas_documents:/app/atlas_documents
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_BACKEND_URL=http://backend:8001
+      - BASE_DUCKDB_DATA_PATH=/app
+    env_file:
+      - ./frontend/.env
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - minusx-network
+
+networks:
+  minusx-network:
+    driver: bridge
+
+volumes:
+  atlas_documents:
+    driver: local

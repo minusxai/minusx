@@ -1,0 +1,1619 @@
+{
+  "version": 11,
+  "companies": [
+    {
+      "id": "{{COMPANY_ID}}",
+      "name": "{{COMPANY_NAME}}",
+      "display_name": "{{COMPANY_NAME}}",
+      "subdomain": null,
+      "created_at": "{{TIMESTAMP}}",
+      "updated_at": "{{TIMESTAMP}}",
+      "users": [
+        {
+          "company_id": "{{COMPANY_ID}}",
+          "id": 1,
+          "email": "{{ADMIN_EMAIL}}",
+          "name": "{{ADMIN_NAME}}",
+          "password_hash": "{{ADMIN_PASSWORD_HASH}}",
+          "home_folder": "",
+          "role": "admin",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}"
+        }
+      ],
+      "documents": [
+        {
+          "id": 1,
+          "name": "tutorial",
+          "path": "/tutorial",
+          "type": "folder",
+          "content": {
+            "name": "tutorial",
+            "description": "Demo mode workspace"
+          },
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+          "id": 2,
+          "name": "database",
+          "path": "/tutorial/database",
+          "type": "folder",
+          "content": {
+            "name": "database",
+            "description": "Database connections for demo mode"
+          },
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+          "id": 3,
+          "name": "configs",
+          "path": "/tutorial/configs",
+          "type": "folder",
+          "content": {
+            "name": "configs",
+            "description": "Configuration files for demo mode"
+          },
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+          "id": 4,
+          "name": "logs",
+          "path": "/tutorial/logs",
+          "type": "folder",
+          "content": {
+            "name": "logs",
+            "description": "Logs for demo mode"
+          },
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+          "id": 5,
+          "name": "conversations",
+          "path": "/tutorial/logs/conversations",
+          "type": "folder",
+          "content": {
+            "name": "conversations",
+            "description": "Chat conversation logs for demo mode"
+          },
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+          "id": 6,
+          "name": "llm_calls",
+          "path": "/tutorial/logs/llm_calls",
+          "type": "folder",
+          "content": {
+            "name": "llm_calls",
+            "description": "LLM API call logs"
+          },
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+          "id": 7,
+          "name": "config",
+          "path": "/tutorial/configs/config",
+          "type": "config",
+          "content": {
+            "name": "config",
+            "branding": {
+              "displayName": "Demo Mode"
+            }
+          },
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+          "id": 8,
+          "name": "styles",
+          "path": "/tutorial/configs/styles",
+          "type": "styles",
+          "content": {
+            "name": "styles",
+            "styles": "/* Demo Mode Custom Styles */"
+          },
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+          "id": 9,
+          "name": "mxfood",
+          "path": "/tutorial/database/mxfood",
+          "type": "connection",
+          "content": {
+            "name": "mxfood",
+            "type": "{{DEFAULT_DB_TYPE}}",
+            "config": {
+              "file_path": "/app/data/mxfood.duckdb",
+              "read_only": false
+            },
+            "description": "Default database connection for tutorials"
+          },
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+          "id": 10,
+          "name": "Knowledge Base",
+          "path": "/tutorial/context",
+          "type": "context",
+          "references": [],
+          "content": {
+            "versions": [
+              {
+                "version": 1,
+                "databases": [
+                  {
+                    "databaseName": "mxfood",
+                    "whitelist": [
+                      {
+                        "type": "schema",
+                        "name": "main"
+                      }
+                    ]
+                  }
+                ],
+                "docs": [
+                  {
+                    "content": "# mxfood\n\n## Data Description\nThis db contains data about a food delivery company. You have 3 types of data:\n- standard ops / transactional data about orders, users, deliveries, products etc\n- events data (for user flows)\n- marketing data (ads, ad spends, etc)\n"
+                  }
+                ],
+                "createdAt": "{{TIMESTAMP}}",
+                "createdBy": 1,
+                "description": "Initial tutorial context"
+              }
+            ],
+            "published": {
+              "all": 1
+            },
+            "fullSchema": [
+              {
+                "databaseName": "mxfood",
+                "schemas": [
+                  {
+                    "schema": "main",
+                    "tables": [
+                      {
+                        "table": "ad_campaigns",
+                        "columns": [
+                          {
+                            "name": "campaign_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "channel_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "campaign_name",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "start_date",
+                            "type": "DATE"
+                          },
+                          {
+                            "name": "end_date",
+                            "type": "DATE"
+                          },
+                          {
+                            "name": "daily_budget",
+                            "type": "DOUBLE"
+                          },
+                          {
+                            "name": "target_audience",
+                            "type": "VARCHAR"
+                          }
+                        ]
+                      },
+                      {
+                        "table": "ad_spend",
+                        "columns": [
+                          {
+                            "name": "spend_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "campaign_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "date",
+                            "type": "DATE"
+                          },
+                          {
+                            "name": "impressions",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "clicks",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "installs",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "spend",
+                            "type": "DOUBLE"
+                          }
+                        ]
+                      },
+                      {
+                        "table": "attribution",
+                        "columns": [
+                          {
+                            "name": "attribution_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "user_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "campaign_id",
+                            "type": "DOUBLE"
+                          },
+                          {
+                            "name": "channel_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "attributed_at",
+                            "type": "TIMESTAMP"
+                          },
+                          {
+                            "name": "click_id",
+                            "type": "VARCHAR"
+                          }
+                        ]
+                      },
+                      {
+                        "table": "deliveries",
+                        "columns": [
+                          {
+                            "name": "delivery_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "order_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "driver_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "assigned_at",
+                            "type": "TIMESTAMP"
+                          },
+                          {
+                            "name": "picked_up_at",
+                            "type": "TIMESTAMP"
+                          },
+                          {
+                            "name": "delivered_at",
+                            "type": "TIMESTAMP"
+                          },
+                          {
+                            "name": "delivery_rating",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "delivery_notes",
+                            "type": "VARCHAR"
+                          }
+                        ]
+                      },
+                      {
+                        "table": "drivers",
+                        "columns": [
+                          {
+                            "name": "driver_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "name",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "zone_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "vehicle_type",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "rating",
+                            "type": "DOUBLE"
+                          },
+                          {
+                            "name": "created_at",
+                            "type": "TIMESTAMP"
+                          },
+                          {
+                            "name": "is_active",
+                            "type": "BOOLEAN"
+                          }
+                        ]
+                      },
+                      {
+                        "table": "events",
+                        "columns": [
+                          {
+                            "name": "event_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "user_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "session_id",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "event_name",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "event_timestamp",
+                            "type": "TIMESTAMP"
+                          },
+                          {
+                            "name": "platform",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "screen_name",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "properties",
+                            "type": "VARCHAR"
+                          }
+                        ]
+                      },
+                      {
+                        "table": "marketing_channels",
+                        "columns": [
+                          {
+                            "name": "channel_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "channel_name",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "channel_type",
+                            "type": "VARCHAR"
+                          }
+                        ]
+                      },
+                      {
+                        "table": "order_items",
+                        "columns": [
+                          {
+                            "name": "product_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "quantity",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "unit_price",
+                            "type": "DOUBLE"
+                          },
+                          {
+                            "name": "total_price",
+                            "type": "DOUBLE"
+                          },
+                          {
+                            "name": "order_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "order_item_id",
+                            "type": "BIGINT"
+                          }
+                        ]
+                      },
+                      {
+                        "table": "orders",
+                        "columns": [
+                          {
+                            "name": "user_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "restaurant_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "driver_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "zone_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "created_at",
+                            "type": "TIMESTAMP"
+                          },
+                          {
+                            "name": "status",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "subtotal",
+                            "type": "DOUBLE"
+                          },
+                          {
+                            "name": "delivery_fee",
+                            "type": "DOUBLE"
+                          },
+                          {
+                            "name": "discount_amount",
+                            "type": "DOUBLE"
+                          },
+                          {
+                            "name": "tip_amount",
+                            "type": "DOUBLE"
+                          },
+                          {
+                            "name": "total",
+                            "type": "DOUBLE"
+                          },
+                          {
+                            "name": "promo_code_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "is_subscription_order",
+                            "type": "BOOLEAN"
+                          },
+                          {
+                            "name": "platform",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "estimated_delivery_mins",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "actual_delivery_mins",
+                            "type": "DOUBLE"
+                          },
+                          {
+                            "name": "order_id",
+                            "type": "BIGINT"
+                          }
+                        ]
+                      },
+                      {
+                        "table": "product_categories",
+                        "columns": [
+                          {
+                            "name": "category_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "category_name",
+                            "type": "VARCHAR"
+                          }
+                        ]
+                      },
+                      {
+                        "table": "product_subcategories",
+                        "columns": [
+                          {
+                            "name": "subcategory_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "category_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "subcategory_name",
+                            "type": "VARCHAR"
+                          }
+                        ]
+                      },
+                      {
+                        "table": "products",
+                        "columns": [
+                          {
+                            "name": "product_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "restaurant_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "subcategory_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "name",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "description",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "price",
+                            "type": "DOUBLE"
+                          },
+                          {
+                            "name": "is_available",
+                            "type": "BOOLEAN"
+                          },
+                          {
+                            "name": "created_at",
+                            "type": "TIMESTAMP"
+                          }
+                        ]
+                      },
+                      {
+                        "table": "promo_codes",
+                        "columns": [
+                          {
+                            "name": "promo_code_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "code",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "discount_type",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "discount_value",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "min_order_value",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "max_uses",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "max_uses_per_user",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "valid_from",
+                            "type": "TIMESTAMP"
+                          },
+                          {
+                            "name": "valid_until",
+                            "type": "TIMESTAMP"
+                          },
+                          {
+                            "name": "is_first_order_only",
+                            "type": "BOOLEAN"
+                          }
+                        ]
+                      },
+                      {
+                        "table": "promo_usage",
+                        "columns": [
+                          {
+                            "name": "usage_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "promo_code_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "user_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "order_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "used_at",
+                            "type": "TIMESTAMP"
+                          },
+                          {
+                            "name": "discount_applied",
+                            "type": "DOUBLE"
+                          }
+                        ]
+                      },
+                      {
+                        "table": "restaurants",
+                        "columns": [
+                          {
+                            "name": "restaurant_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "name",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "zone_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "cuisine_type",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "price_tier",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "rating",
+                            "type": "DOUBLE"
+                          },
+                          {
+                            "name": "is_promoted",
+                            "type": "BOOLEAN"
+                          },
+                          {
+                            "name": "created_at",
+                            "type": "TIMESTAMP"
+                          },
+                          {
+                            "name": "is_active",
+                            "type": "BOOLEAN"
+                          }
+                        ]
+                      },
+                      {
+                        "table": "subscription_plans",
+                        "columns": [
+                          {
+                            "name": "plan_id",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "plan_name",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "monthly_price",
+                            "type": "DOUBLE"
+                          },
+                          {
+                            "name": "free_delivery_threshold",
+                            "type": "DOUBLE"
+                          },
+                          {
+                            "name": "discount_percent",
+                            "type": "BIGINT"
+                          }
+                        ]
+                      },
+                      {
+                        "table": "support_tickets",
+                        "columns": [
+                          {
+                            "name": "ticket_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "user_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "order_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "category",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "priority",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "status",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "created_at",
+                            "type": "TIMESTAMP"
+                          },
+                          {
+                            "name": "resolved_at",
+                            "type": "TIMESTAMP"
+                          },
+                          {
+                            "name": "resolution_type",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "refund_amount",
+                            "type": "DOUBLE"
+                          }
+                        ]
+                      },
+                      {
+                        "table": "user_subscriptions",
+                        "columns": [
+                          {
+                            "name": "subscription_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "user_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "plan_id",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "started_at",
+                            "type": "TIMESTAMP"
+                          },
+                          {
+                            "name": "ended_at",
+                            "type": "TIMESTAMP"
+                          },
+                          {
+                            "name": "status",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "billing_cycle",
+                            "type": "VARCHAR"
+                          }
+                        ]
+                      },
+                      {
+                        "table": "users",
+                        "columns": [
+                          {
+                            "name": "user_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "first_name",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "last_name",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "email",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "phone",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "created_at",
+                            "type": "TIMESTAMP"
+                          },
+                          {
+                            "name": "zone_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "acquisition_channel",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "referred_by_user_id",
+                            "type": "DOUBLE"
+                          },
+                          {
+                            "name": "platform",
+                            "type": "VARCHAR"
+                          }
+                        ]
+                      },
+                      {
+                        "table": "zones",
+                        "columns": [
+                          {
+                            "name": "zone_id",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "zone_name",
+                            "type": "VARCHAR"
+                          },
+                          {
+                            "name": "avg_delivery_time_mins",
+                            "type": "BIGINT"
+                          },
+                          {
+                            "name": "surge_multiplier",
+                            "type": "DOUBLE"
+                          },
+                          {
+                            "name": "lat_center",
+                            "type": "DOUBLE"
+                          },
+                          {
+                            "name": "lng_center",
+                            "type": "DOUBLE"
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "fullDocs": []
+          },
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+            "id": 11,
+            "name": "Top Level Metrics",
+            "path": "/tutorial/top-level-metrics",
+            "type": "dashboard",
+            "references": [
+                13,
+                14,
+                15,
+                16,
+                17,
+                18,
+                19,
+                20,
+                21,
+                22,
+                23
+            ],
+            "content": {
+                "description": "Top Important metrics for mxfood company",
+                "assets": [
+                    {
+                        "type": "question",
+                        "id": 13
+                    },
+                    {
+                        "type": "question",
+                        "id": 14
+                    },
+                    {
+                        "type": "question",
+                        "id": 15
+                    },
+                    {
+                        "type": "question",
+                        "id": 16
+                    },
+                    {
+                        "type": "question",
+                        "id": 17
+                    },
+                    {
+                        "type": "question",
+                        "id": 18
+                    },
+                    {
+                        "type": "question",
+                        "id": 19
+                    },
+                    {
+                        "type": "question",
+                        "id": 20
+                    },
+                    {
+                        "type": "question",
+                        "id": 21
+                    },
+                    {
+                        "type": "question",
+                        "id": 22
+                    },
+                    {
+                        "type": "question",
+                        "id": 23
+                    }
+                ],
+                "layout": {
+                    "columns": 12,
+                    "items": [
+                        {
+                            "id": "13",
+                            "x": 9,
+                            "y": 0,
+                            "w": 3,
+                            "h": 3
+                        },
+                        {
+                            "id": "14",
+                            "x": 0,
+                            "y": 3,
+                            "w": 5,
+                            "h": 4
+                        },
+                        {
+                            "id": "15",
+                            "x": 5,
+                            "y": 3,
+                            "w": 4,
+                            "h": 4
+                        },
+                        {
+                            "id": "16",
+                            "x": 4,
+                            "y": 7,
+                            "w": 8,
+                            "h": 4
+                        },
+                        {
+                            "id": "17",
+                            "x": 0,
+                            "y": 0,
+                            "w": 3,
+                            "h": 3
+                        },
+                        {
+                            "id": "18",
+                            "x": 3,
+                            "y": 0,
+                            "w": 3,
+                            "h": 3
+                        },
+                        {
+                            "id": "19",
+                            "x": 6,
+                            "y": 0,
+                            "w": 3,
+                            "h": 3
+                        },
+                        {
+                            "id": "20",
+                            "x": 0,
+                            "y": 7,
+                            "w": 4,
+                            "h": 4
+                        },
+                        {
+                            "id": "21",
+                            "x": 0,
+                            "y": 11,
+                            "w": 6,
+                            "h": 4
+                        },
+                        {
+                            "id": "22",
+                            "x": 9,
+                            "y": 3,
+                            "w": 3,
+                            "h": 4
+                        },
+                        {
+                            "id": "23",
+                            "x": 6,
+                            "y": 11,
+                            "w": 6,
+                            "h": 4
+                        }
+                    ]
+                }
+            },
+            "company_id": "{{COMPANY_ID}}",
+            "created_at": "{{TIMESTAMP}}",
+            "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+            "id": 12,
+            "name": "User Engagement Dashboard",
+            "path": "/tutorial/user-engagement-dashboard",
+            "type": "dashboard",
+            "references": [
+                20,
+                19,
+                24,
+                25,
+                26,
+                27
+            ],
+            "content": {
+                "description": "",
+                "assets": [
+                    {
+                        "type": "question",
+                        "id": 20
+                    },
+                    {
+                        "type": "question",
+                        "id": 19
+                    },
+                    {
+                        "type": "question",
+                        "id": 24
+                    },
+                    {
+                        "type": "question",
+                        "id": 25
+                    },
+                    {
+                        "type": "question",
+                        "id": 26
+                    },
+                    {
+                        "type": "question",
+                        "id": 27
+                    }
+                ],
+                "layout": {
+                    "columns": 12,
+                    "items": [
+                        {
+                            "id": "20",
+                            "x": 0,
+                            "y": 0,
+                            "w": 4,
+                            "h": 4
+                        },
+                        {
+                            "id": "19",
+                            "x": 4,
+                            "y": 0,
+                            "w": 4,
+                            "h": 4
+                        },
+                        {
+                            "id": "24",
+                            "x": 0,
+                            "y": 4,
+                            "w": 12,
+                            "h": 4
+                        },
+                        {
+                            "id": "25",
+                            "x": 8,
+                            "y": 0,
+                            "w": 4,
+                            "h": 4
+                        },
+                        {
+                            "id": "26",
+                            "x": 0,
+                            "y": 8,
+                            "w": 6,
+                            "h": 5
+                        },
+                        {
+                            "id": "27",
+                            "x": 6,
+                            "y": 8,
+                            "w": 6,
+                            "h": 5
+                        }
+                    ]
+                }
+            },
+            "company_id": "{{COMPANY_ID}}",
+            "created_at": "{{TIMESTAMP}}",
+            "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+            "id":13,
+            "name": "Average Order Value",
+            "path": "/tutorial/average-order-value",
+            "type": "question",
+            "references": [],
+            "content": {
+                "description": "Weekly average order value",
+                "query": "SELECT \n  DATE_TRUNC('week', created_at) as week_start,\n  AVG(total) as avg_order_value\nFROM orders\nGROUP BY DATE_TRUNC('week', created_at)\nORDER BY week_start",
+                "database_name": "mxfood",
+                "vizSettings": {
+                    "type": "trend",
+                    "xCols": [
+                        "week_start"
+                    ],
+                    "yCols": [
+                        "avg_order_value"
+                    ]
+                },
+                "parameters": []
+            },
+            "company_id": "{{COMPANY_ID}}",
+            "created_at": "{{TIMESTAMP}}",
+            "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+            "id": 14,
+            "name": "Weekly Orders and Revenue",
+            "path": "/tutorial/weekly-orders-and-revenue",
+            "type": "question",
+            "references": [],
+            "content": {
+                "description": "Weekly order count and Revenue",
+                "query": "SELECT \n  DATE_TRUNC('week', created_at) as week,\n  COUNT(*) as orders,\n  SUM(total) as revenue\nFROM orders\nGROUP BY DATE_TRUNC('week', created_at)\nORDER BY week",
+                "database_name": "mxfood",
+                "vizSettings": {
+                    "type": "line",
+                    "xCols": [
+                        "week"
+                    ],
+                    "yCols": [
+                        "orders",
+                        "revenue"
+                    ]
+                },
+                "parameters": []
+            },
+            "company_id": "{{COMPANY_ID}}",
+            "created_at": "{{TIMESTAMP}}",
+            "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+            "id": 15,
+            "name": "Weekly Revenue by Product Category",
+            "path": "/tutorial/weekly-revenue-by-product-category",
+            "type": "question",
+            "references": [],
+            "content": {
+                "description": "Weekly revenue split by product category (e.g., Pizza, Burgers, etc.)",
+                "query": "SELECT \n  DATE_TRUNC('week', o.created_at) as week_start,\n  pc.category_name,\n  SUM(oi.total_price) as revenue\nFROM orders o\nJOIN order_items oi ON o.order_id = oi.order_id\nJOIN products p ON oi.product_id = p.product_id\nJOIN product_subcategories ps ON p.subcategory_id = ps.subcategory_id\nJOIN product_categories pc ON ps.category_id = pc.category_id\nWHERE o.status = 'completed'\nGROUP BY DATE_TRUNC('week', o.created_at), pc.category_name\nORDER BY week_start, category_name",
+                "database_name": "mxfood",
+                "vizSettings": {
+                    "type": "bar",
+                    "xCols": [
+                        "week_start",
+                        "category_name"
+                    ],
+                    "yCols": [
+                        "revenue"
+                    ]
+                },
+                "parameters": []
+            },
+            "company_id": "{{COMPANY_ID}}",
+            "created_at": "{{TIMESTAMP}}",
+            "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+            "id": 16,
+            "name": "Orders by Day of Week and Hour (Last Month)",
+            "path": "/tutorial/orders-by-day-of-week-and-hour-last-month",
+            "type": "question",
+            "references": [],
+            "content": {
+                "description": "Pivot table showing average completed orders by day of week and hour of day for the last month",
+                "query": "WITH hourly_counts AS (\n  SELECT \n    DATE_TRUNC('day', created_at) as order_date,\n    CASE DAYOFWEEK(created_at)\n      WHEN 0 THEN 'Sunday'\n      WHEN 1 THEN 'Monday'\n      WHEN 2 THEN 'Tuesday'\n      WHEN 3 THEN 'Wednesday'\n      WHEN 4 THEN 'Thursday'\n      WHEN 5 THEN 'Friday'\n      WHEN 6 THEN 'Saturday'\n    END as day_of_week,\n    CASE \n      WHEN EXTRACT(HOUR FROM created_at) >= 0 AND EXTRACT(HOUR FROM created_at) < 6 THEN '0-6 (Early Morning)'\n      WHEN EXTRACT(HOUR FROM created_at) >= 6 AND EXTRACT(HOUR FROM created_at) < 12 THEN '6-12 (Morning)'\n      WHEN EXTRACT(HOUR FROM created_at) >= 12 AND EXTRACT(HOUR FROM created_at) < 18 THEN '12-18 (Afternoon)'\n      WHEN EXTRACT(HOUR FROM created_at) >= 18 THEN '18-24 (Evening)'\n    END as hour_range,\n    COUNT(*) as order_count\n  FROM orders\n  WHERE status = 'completed'\n    AND created_at >= '2025-12-01'\n GROUP BY order_date, day_of_week, hour_range\n)\nSELECT \n  day_of_week,\n  hour_range,\n  ROUND(AVG(order_count), 1) as avg_orders\nFROM hourly_counts\nGROUP BY day_of_week, hour_range\nORDER BY \n  CASE day_of_week\n    WHEN 'Monday' THEN 1\n    WHEN 'Tuesday' THEN 2\n    WHEN 'Wednesday' THEN 3\n    WHEN 'Thursday' THEN 4\n    WHEN 'Friday' THEN 5\n    WHEN 'Saturday' THEN 6\n    WHEN 'Sunday' THEN 7\n  END,\n  CASE hour_range\n    WHEN '0-6 (Early Morning)' THEN 1\n    WHEN '6-12 (Morning)' THEN 2\n    WHEN '12-18 (Afternoon)' THEN 3\n    WHEN '18-24 (Evening)' THEN 4\n  END",
+                "database_name": "mxfood",
+                "vizSettings": {
+                    "type": "pivot",
+                    "xCols": [
+                        "day_of_week",
+                        "hour_range"
+                    ],
+                    "yCols": [
+                        "avg_orders"
+                    ]
+                },
+                "parameters": []
+            },
+            "company_id": "{{COMPANY_ID}}",
+            "created_at": "{{TIMESTAMP}}",
+            "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+            "id": 17,
+            "name": "Total Monthly Orders",
+            "path": "/tutorial/total-monthly-orders",
+            "type": "question",
+            "references": [],
+            "content": {
+                "description": "Completed orders by month",
+                "query": "SELECT DATE_TRUNC('month', created_at) as month, COUNT(*) as orders FROM orders WHERE status = 'completed' GROUP BY 1 ORDER BY 1",
+                "database_name": "mxfood",
+                "vizSettings": {
+                    "type": "trend",
+                    "xCols": [
+                        "month"
+                    ],
+                    "yCols": [
+                        "orders"
+                    ]
+                },
+                "parameters": []
+            },
+            "company_id": "{{COMPANY_ID}}",
+            "created_at": "{{TIMESTAMP}}",
+            "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+            "id": 18,
+            "name": "Monthly Revenue",
+            "path": "/tutorial/monthly-revenue",
+            "type": "question",
+            "references": [],
+            "content": {
+                "description": "Total revenue per month",
+                "query": "SELECT DATE_TRUNC('month', created_at) as month, ROUND(SUM(total), 2) as revenue FROM orders WHERE status = 'completed' GROUP BY DATE_TRUNC('month', created_at) ORDER BY month",
+                "database_name": "mxfood",
+                "vizSettings": {
+                    "type": "trend",
+                    "xCols": [
+                        "month"
+                    ],
+                    "yCols": [
+                        "revenue"
+                    ]
+                },
+                "parameters": []
+            },
+            "company_id": "{{COMPANY_ID}}",
+            "created_at": "{{TIMESTAMP}}",
+            "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+            "id": 19,
+            "name": "Monthly Active Users",
+            "path": "/tutorial/monthly-active-users",
+            "type": "question",
+            "references": [],
+            "content": {
+                "description": "Count of unique users who placed orders each month",
+                "query": "SELECT DATE_TRUNC('month', created_at) as month, COUNT(DISTINCT user_id) as active_users FROM orders GROUP BY DATE_TRUNC('month', created_at) ORDER BY month",
+                "database_name": "mxfood",
+                "vizSettings": {
+                    "type": "trend",
+                    "xCols": [
+                        "month"
+                    ],
+                    "yCols": [
+                        "active_users"
+                    ]
+                },
+                "parameters": []
+            },
+            "company_id": "{{COMPANY_ID}}",
+            "created_at": "{{TIMESTAMP}}",
+            "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+            "id": 20,
+            "name": "Weekly Active Users",
+            "path": "/tutorial/weekly-active-users",
+            "type": "question",
+            "references": [],
+            "content": {
+                "description": "Number of new user signups each week",
+                "query": "WITH weekly_new_users AS (\n  SELECT \n    DATE_TRUNC('week', created_at) as week,\n    COUNT(*) as new_users\n  FROM users\n  GROUP BY DATE_TRUNC('week', created_at)\n),\nweekly_returning_users AS (\n  SELECT \n    DATE_TRUNC('week', o.created_at) as week,\n    COUNT(DISTINCT o.user_id) as returning_users\n  FROM orders o\n  JOIN users u ON o.user_id = u.user_id\n  WHERE DATE_TRUNC('week', o.created_at) > DATE_TRUNC('week', u.created_at)\n  GROUP BY DATE_TRUNC('week', o.created_at)\n)\nSELECT \n  COALESCE(n.week, r.week) as week,\n  COALESCE(n.new_users, 0) as new_users,\n  COALESCE(r.returning_users, 0) as returning_users\nFROM weekly_new_users n\nFULL OUTER JOIN weekly_returning_users r ON n.week = r.week\nORDER BY week",
+                "database_name": "mxfood",
+                "vizSettings": {
+                    "type": "area",
+                    "xCols": [
+                        "week"
+                    ],
+                    "yCols": [
+                        "new_users",
+                        "returning_users"
+                    ]
+                },
+                "parameters": []
+            },
+            "company_id": "{{COMPANY_ID}}",
+            "created_at": "{{TIMESTAMP}}",
+            "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+            "id": 21,
+            "name": "User Distribution by Subscription Status",
+            "path": "/tutorial/user-distribution-by-subscription-status",
+            "type": "question",
+            "references": [],
+            "content": {
+                "description": "Pie chart showing the breakdown of all users by whether they currently have an active subscription",
+                "query": "SELECT \n  CASE \n    WHEN us.subscription_id IS NOT NULL THEN 'Subscriber'\n    ELSE 'Non-Subscriber'\n  END as user_type,\n  COUNT(DISTINCT u.user_id) as user_count\nFROM users u\nLEFT JOIN user_subscriptions us ON u.user_id = us.user_id\n  AND us.status = 'active'\n  AND us.started_at <= '2025-12-01' \n  AND (us.ended_at IS NULL OR us.ended_at >= '2025-12-01')\nGROUP BY user_type\nORDER BY user_count DESC",
+                "database_name": "mxfood",
+                "vizSettings": {
+                    "type": "pie",
+                    "xCols": [
+                        "user_type"
+                    ],
+                    "yCols": [
+                        "user_count"
+                    ]
+                },
+                "parameters": []
+            },
+            "company_id": "{{COMPANY_ID}}",
+            "created_at": "{{TIMESTAMP}}",
+            "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+            "id": 22,
+            "name": "Revenue by Platform - Last Month",
+            "path": "/tutorial/revenue-by-platform-last-month",
+            "type": "question",
+            "references": [],
+            "content": {
+                "description": "Pie chart showing revenue breakdown by platform (iOS, Android, Web) for December 2025",
+                "query": "SELECT \n  platform,\n  ROUND(SUM(total), 2) as revenue\nFROM orders\nWHERE status = 'completed'\n  AND created_at >= '2025-12-01'\n  AND created_at < '2026-01-01'\nGROUP BY platform\nORDER BY revenue DESC",
+                "database_name": "mxfood",
+                "vizSettings": {
+                    "type": "pie",
+                    "xCols": [
+                        "platform"
+                    ],
+                    "yCols": [
+                        "revenue"
+                    ]
+                },
+                "parameters": []
+            },
+            "company_id": "{{COMPANY_ID}}",
+            "created_at": "{{TIMESTAMP}}",
+            "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+            "id": 23,
+            "name": "Top 5 Zones by Revenue - Last Month",
+            "path": "/tutorial/top-5-zones-by-revenue-last-month",
+            "type": "question",
+            "references": [],
+            "content": {
+                "description": "Bar chart showing the top 5 zones by revenue for December 2025",
+                "query": "SELECT \n  z.zone_name,\n  ROUND(SUM(o.total), 2) as revenue\nFROM orders o\nJOIN zones z ON o.zone_id = z.zone_id\nWHERE o.status = 'completed'\n  AND o.created_at >= '2025-12-01'\n  AND o.created_at < '2026-01-01'\nGROUP BY z.zone_name\nORDER BY revenue DESC\nLIMIT 5",
+                "database_name": "mxfood",
+                "vizSettings": {
+                    "type": "bar",
+                    "xCols": [
+                        "zone_name"
+                    ],
+                    "yCols": [
+                        "revenue"
+                    ]
+                },
+                "parameters": []
+            },
+            "company_id": "{{COMPANY_ID}}",
+            "created_at": "{{TIMESTAMP}}",
+            "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+            "id": 24,
+            "name": "User Conversion Funnel",
+            "path": "/tutorial/user-conversion-funnel",
+            "type": "question",
+            "references": [],
+            "content": {
+                "description": "Conversion funnel from app open to payment success",
+                "query": "WITH stage_map AS (\n  SELECT * FROM (VALUES ('app_open','App Open',1),('restaurant_view','Restaurant View',2),('add_to_cart','Add to Cart',3),('checkout_started','Checkout Started',4),('payment_success','Payment Success',5)) AS t(event_name, stage, stage_order)\n)\nSELECT m.stage, COALESCE(COUNT(DISTINCT e.session_id), 0) AS users FROM stage_map m LEFT JOIN events e ON e.event_name = m.event_name AND e.event_timestamp >= '2025-06-01' GROUP BY m.stage, m.stage_order ORDER BY m.stage_order;",
+                "database_name": "mxfood",
+                "vizSettings": {
+                    "type": "funnel",
+                    "xCols": [
+                        "stage"
+                    ],
+                    "yCols": [
+                        "users"
+                    ]
+                },
+                "parameters": []
+            },
+            "company_id": "{{COMPANY_ID}}",
+            "created_at": "{{TIMESTAMP}}",
+            "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+            "id": 25,
+            "name": "Daily Sessions",
+            "path": "/tutorial/daily-sessions",
+            "type": "question",
+            "references": [],
+            "content": {
+                "description": "Total sessions per day over the last 90 days",
+                "query": "SELECT \n  DATE(event_timestamp) as date,\n  platform,\n  COUNT(DISTINCT session_id) as total_sessions\nFROM events\nWHERE event_timestamp >= '2025-12-01'\nGROUP BY DATE(event_timestamp), platform\nORDER BY date, platform",
+                "database_name": "mxfood",
+                "vizSettings": {
+                    "type": "bar",
+                    "xCols": [
+                        "date",
+                        "platform"
+                    ],
+                    "yCols": [
+                        "total_sessions"
+                    ]
+                },
+                "parameters": []
+            },
+            "company_id": "{{COMPANY_ID}}",
+            "created_at": "{{TIMESTAMP}}",
+            "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+            "id": 26,
+            "name": "Average Events per Session",
+            "path": "/tutorial/average-events-per-session",
+            "type": "question",
+            "references": [],
+            "content": {
+                "description": "Daily average number of events per session",
+                "query": "SELECT \n  DATE_TRUNC('month', event_timestamp) as month_start,\n  ROUND(COUNT(*) * 1.0 / COUNT(DISTINCT session_id), 2) as events_per_session,\n  ROUND(COUNT(DISTINCT session_id) * 1.0 / COUNT(DISTINCT user_id), 2) as avg_sessions_per_user_per_week\nFROM events\nWHERE event_timestamp >= '2025-01-01'\nGROUP BY DATE_TRUNC('month', event_timestamp)\nORDER BY month_start",
+                "database_name": "mxfood",
+                "vizSettings": {
+                    "type": "line",
+                    "xCols": [
+                        "month_start"
+                    ],
+                    "yCols": [
+                        "avg_sessions_per_user_per_week",
+                        "events_per_session"
+                    ]
+                },
+                "parameters": []
+            },
+            "company_id": "{{COMPANY_ID}}",
+            "created_at": "{{TIMESTAMP}}",
+            "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+            "id": 27,
+            "name": "Conversion Rate Trend",
+            "path": "/tutorial/conversion-rate-trend",
+            "type": "question",
+            "references": [],
+            "content": {
+                "description": "Daily conversion rate from app open to payment success",
+                "query": "WITH weekly_funnel AS (\n  SELECT \n    DATE_TRUNC('week', event_timestamp) as week,\n    COUNT(DISTINCT CASE WHEN event_name = 'app_open' THEN user_id END) as app_opens,\n    COUNT(DISTINCT CASE WHEN event_name = 'payment_success' THEN user_id END) as conversions\n  FROM events\n  WHERE event_timestamp >= '2025-12-01'\n  GROUP BY DATE_TRUNC('week', event_timestamp)\n)\nSELECT \n  week,\n  ROUND(conversions * 100.0 / NULLIF(app_opens, 0), 2) as conversion_rate_pct\nFROM weekly_funnel\nWHERE app_opens > 0\nORDER BY week",
+                "database_name": "mxfood",
+                "vizSettings": {
+                    "type": "bar",
+                    "xCols": [
+                        "week"
+                    ],
+                    "yCols": [
+                        "conversion_rate_pct"
+                    ]
+                },
+                "parameters": []
+            },
+            "company_id": "{{COMPANY_ID}}",
+            "created_at": "{{TIMESTAMP}}",
+            "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+          "id": 100,
+          "name": "config",
+          "path": "/org/configs/config",
+          "type": "config",
+          "content": {
+            "name": "config",
+            "branding": {
+              "displayName": "{{COMPANY_NAME}}",
+              "agentName": "MinusX",
+              "favicon": "/favicon.ico"
+            }
+          },
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+          "id": 101,
+          "name": "styles",
+          "path": "/org/configs/styles",
+          "type": "styles",
+          "content": {
+            "name": "styles",
+            "styles": "{{DEFAULT_STYLES}}"
+          },
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+          "id": 102,
+          "name": "configs",
+          "path": "/org/configs",
+          "type": "folder",
+          "content": {
+            "name": "configs",
+            "description": "Company configuration files"
+          },
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+          "id": 103,
+          "name": "org",
+          "path": "/org",
+          "type": "folder",
+          "content": {
+            "name": "org",
+            "description": "Organization workspace"
+          },
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+          "id": 104,
+          "name": "logs",
+          "path": "/org/logs",
+          "type": "folder",
+          "content": {
+            "name": "logs",
+            "description": "System logs"
+          },
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+          "id": 105,
+          "name": "conversations",
+          "path": "/org/logs/conversations",
+          "type": "folder",
+          "content": {
+            "name": "conversations",
+            "description": "Chat conversation logs"
+          },
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+          "id": 106,
+          "name": "llm_calls",
+          "path": "/org/logs/llm_calls",
+          "type": "folder",
+          "content": {
+            "name": "llm_calls",
+            "description": "LLM API call logs"
+          },
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+          "id": 107,
+          "name": "database",
+          "path": "/org/database",
+          "type": "folder",
+          "content": {
+            "name": "database",
+            "description": "Database connections"
+          },
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}"
+        }
+      ]
+    }
+  ]
+}

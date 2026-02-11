@@ -1,0 +1,14 @@
+output*log
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+*.duckdb
+data/csv_connections
+
+# Backup files
+*.bak
+
+*.DS_Store
+experiments

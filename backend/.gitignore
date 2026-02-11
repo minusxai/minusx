@@ -1,0 +1,12 @@
+__pycache__
+*.db
+
+# Build artifacts
+*.egg-info/
+build/
+dist/
+*.pyc
+.env
+
+# Test outputs
+tests/test_outputs/

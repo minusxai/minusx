@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* Support for CSS backdrop-filter */
+@supports (backdrop-filter: blur(12px)) {
+  .backdrop-blur {
+    backdrop-filter: blur(12px);
+  }
+}
+
+/* React Grid Layout customization */
+.react-grid-placeholder {
+  background: rgba(22, 160, 133, 0.15) !important;
+  border-radius: 8px !important;
+}
+
+/* Resize handle styling */
+.react-grid-item > .react-resizable-handle {
+  width: 20px !important;
+  height: 20px !important;
+  background-color: #16a085 !important;
+  border-radius: 4px 0 4px 0 !important;
+  box-shadow: 0 0 10px rgba(22, 160, 133, 0.5) !important;
+  transition: all 0.2s ease !important;
+}
+
+.react-grid-item > .react-resizable-handle:hover {
+  background-color: #1abc9c !important;
+  box-shadow: 0 0 15px rgba(22, 160, 133, 0.8) !important;
+  transform: scale(1.1) !important;
+}
+
+.react-grid-item > .react-resizable-handle::after {
+  content: '' !important;
+  position: absolute !important;
+  right: 3px !important;
+  bottom: 3px !important;
+  width: 8px !important;
+  height: 8px !important;
+  border-right: 2px solid white !important;
+  border-bottom: 2px solid white !important;
+}
+
+/* Default logo styling (fallback) */
+[aria-label="Company logo"] {
+  background-image: url('/logox_dark.svg');
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  display: block;
+}
+
+.dark [aria-label="Company logo"] {
+  background-image: url('/logox.svg');
+}
+
+/* Pulse animation for getting started dot */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(4);
+    opacity: 0;
+  }
+}
+
+/* Shimmer animation for demo mode banner */
+@keyframes shimmer {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 200%;
+  }
+}

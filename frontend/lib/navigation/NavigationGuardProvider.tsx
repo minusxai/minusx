@@ -1,0 +1,241 @@
+'use client';
+
+/**
+ * NavigationGuardProvider - Intercepts in-app navigation when there are unsaved changes
+ *
+ * This provider:
+ * - Listens for click events on internal links
+ * - Checks if the CURRENT page's file has unsaved changes
+ * - Shows a confirmation modal before allowing navigation
+ * - Preserves URL parameters (as_user, mode) when navigating
+ */
+
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo } from 'react';
+import { usePathname } from 'next/navigation';
+import { useRouter } from './use-navigation';
+import { useAppSelector } from '@/store/hooks';
+import { Dialog, Portal, Button, Text } from '@chakra-ui/react';
+import { preserveParams } from './url-utils';
+
+/**
+ * Extract file ID from pathname
+ * Returns the file ID if on a /f/[id] route, null otherwise
+ */
+function getFileIdFromPathname(pathname: string): number | null {
+  // Match /f/123 pattern (file detail page)
+  const fileMatch = pathname.match(/^\/f\/(\d+)/);
+  if (fileMatch) {
+    return parseInt(fileMatch[1], 10);
+  }
+
+  return null;
+}
+
+/**
+ * Check if pathname is a new file creation page
+ */
+function isNewFilePage(pathname: string): boolean {
+  return pathname.startsWith('/new/');
+}
+
+/**
+ * Check if a specific file is dirty
+ */
+function isFileDirty(file: any): boolean {
+  if (!file) return false;
+  const hasContentChanges = file.persistableChanges && Object.keys(file.persistableChanges).length > 0;
+  const hasMetadataChanges = file.metadataChanges && (file.metadataChanges.name !== undefined || file.metadataChanges.path !== undefined);
+  return hasContentChanges || hasMetadataChanges;
+}
+
+interface NavigationGuardContextType {
+  navigate: (href: string) => void;
+}
+
+const NavigationGuardContext = createContext<NavigationGuardContextType | null>(null);
+
+export function useNavigationGuard() {
+  const context = useContext(NavigationGuardContext);
+  if (!context) {
+    throw new Error('useNavigationGuard must be used within NavigationGuardProvider');
+  }
+  return context;
+}
+
+interface NavigationGuardProviderProps {
+  children: ReactNode;
+}
+
+export function NavigationGuardProvider({ children }: NavigationGuardProviderProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Get the current file ID from the URL
+  const currentFileId = useMemo(() => getFileIdFromPathname(pathname), [pathname]);
+
+  // Check if we're on a /new/[type] page
+  const isOnNewFilePage = useMemo(() => isNewFilePage(pathname), [pathname]);
+
+  // Get the current file from Redux (if on a file page)
+  const currentFile = useAppSelector(state =>
+    currentFileId !== null ? state.files.files[currentFileId] : null
+  );
+
+  // For /new pages, find any dirty virtual file (negative ID)
+  const dirtyVirtualFile = useAppSelector(state => {
+    if (!isOnNewFilePage) return null;
+    // Find the first virtual file (negative ID) that has changes
+    const files = state.files.files;
+    for (const fileId in files) {
+      const id = parseInt(fileId, 10);
+      if (id < 0 && isFileDirty(files[id])) {
+        return files[id];
+      }
+    }
+    return null;
+  });
+
+  // Check if the current file is dirty
+  const isCurrentFileDirty = useMemo(() => {
+    if (currentFile) return isFileDirty(currentFile);
+    if (dirtyVirtualFile) return true;
+    return false;
+  }, [currentFile, dirtyVirtualFile]);
+
+  const currentFileName = currentFile?.name || dirtyVirtualFile?.name || 'Untitled';
+
+  // Modal state
+  const [isOpen, setIsOpen] = useState(false);
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+
+  // Navigate function that checks for dirty state
+  const navigate = useCallback((href: string) => {
+    if (isCurrentFileDirty) {
+      setPendingHref(href);
+      setIsOpen(true);
+    } else {
+      router.push(href);
+    }
+  }, [isCurrentFileDirty, router]);
+
+  // Confirm navigation
+  const handleConfirm = useCallback(() => {
+    if (pendingHref) {
+      router.push(pendingHref);
+    }
+    setIsOpen(false);
+    setPendingHref(null);
+  }, [pendingHref, router]);
+
+  // Cancel navigation
+  const handleCancel = useCallback(() => {
+    setIsOpen(false);
+    setPendingHref(null);
+  }, []);
+
+  // Handle browser beforeunload (tab close, refresh, external navigation)
+  useEffect(() => {
+    if (!isCurrentFileDirty) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      // Modern browsers ignore custom messages, but we still need to set returnValue
+      e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+      return e.returnValue;
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isCurrentFileDirty]);
+
+  // Intercept link clicks globally
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      // Find the closest anchor tag
+      const target = (e.target as Element).closest('a');
+      if (!target) return;
+
+      const href = target.getAttribute('href');
+      if (!href) return;
+
+      // Skip external links, hash links, and special protocols
+      if (
+        href.startsWith('http://') ||
+        href.startsWith('https://') ||
+        href.startsWith('mailto:') ||
+        href.startsWith('tel:') ||
+        href.startsWith('#') ||
+        target.getAttribute('target') === '_blank'
+      ) {
+        return;
+      }
+
+      // Skip if modifier keys are pressed (user wants to open in new tab)
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) {
+        return;
+      }
+
+      // Skip download links
+      if (target.hasAttribute('download')) {
+        return;
+      }
+
+      // Check if the current file has unsaved changes
+      if (isCurrentFileDirty) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // Preserve URL parameters
+        const preservedHref = preserveParams(href);
+        setPendingHref(preservedHref);
+        setIsOpen(true);
+      }
+    };
+
+    // Use capture phase to intercept before other handlers
+    document.addEventListener('click', handleClick, true);
+    return () => document.removeEventListener('click', handleClick, true);
+  }, [isCurrentFileDirty]);
+
+  return (
+    <NavigationGuardContext.Provider value={{ navigate }}>
+      {children}
+
+      {/* Unsaved Changes Navigation Modal */}
+      <Dialog.Root open={isOpen} onOpenChange={(e: { open: boolean }) => !e.open && handleCancel()}>
+        <Portal>
+          <Dialog.Backdrop />
+          <Dialog.Positioner display="flex" alignItems="center" justifyContent="center">
+            <Dialog.Content
+              maxW="500px"
+              bg="bg.surface"
+              borderRadius="lg"
+              border="1px solid"
+              borderColor="border.default"
+            >
+              <Dialog.Header px={6} py={4} borderBottom="1px solid" borderColor="border.default">
+                <Dialog.Title fontWeight="700" fontSize="xl" fontFamily={"mono"}>Discard Changes?</Dialog.Title>
+              </Dialog.Header>
+              <Dialog.Body px={6} py={5}>
+                <Text fontSize="sm" lineHeight="1.6">
+                  You have unsaved changes in "{currentFileName}". Are you sure you want to leave without saving?
+                </Text>
+              </Dialog.Body>
+              <Dialog.Footer px={6} py={4} gap={3} borderTop="1px solid" borderColor="border.default" justifyContent="flex-end">
+                <Dialog.ActionTrigger asChild>
+                  <Button variant="outline" onClick={handleCancel}>
+                    Stay on Page
+                  </Button>
+                </Dialog.ActionTrigger>
+                <Button bg="accent.danger" color="white" onClick={handleConfirm}>
+                  Leave Page
+                </Button>
+              </Dialog.Footer>
+              <Dialog.CloseTrigger />
+            </Dialog.Content>
+          </Dialog.Positioner>
+        </Portal>
+      </Dialog.Root>
+    </NavigationGuardContext.Provider>
+  );
+}

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <!-- CSV file icon -->
+  <path d="M20 10 L60 10 L80 30 L80 90 L20 90 Z" fill="#4CAF50" stroke="#388E3C" stroke-width="2"/>
+  <path d="M60 10 L60 30 L80 30" fill="#388E3C"/>
+  <!-- CSV text -->
+  <text x="50" y="62" font-family="Arial, sans-serif" font-size="18" font-weight="bold" fill="white" text-anchor="middle">CSV</text>
+</svg>
