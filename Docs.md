@@ -77,3 +77,9 @@ npm run dev
 ```
 
 The application will be available at http://localhost:3000
+
+### 5. Enable in production
+After adding your `.env` files, use the following command in the root project folder to run your services in production:
+```bash
+docker-compose up -d --build
+```
