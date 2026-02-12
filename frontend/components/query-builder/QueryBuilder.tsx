@@ -58,7 +58,12 @@ export function QueryBuilder({
   // Load IR from SQL when it changes externally
   useEffect(() => {
     async function loadIR() {
-      if (sql === lastSqlSent.current) return;
+      // Skip if SQL hasn't changed (but allow first initialization)
+      if (sql === lastSqlSent.current && ir !== null) {
+        // SQL hasn't changed - ensure loading is false and exit
+        setLoading(false);
+        return;
+      }
 
       if (!sql.trim()) {
         setIr({
@@ -67,6 +72,7 @@ export function QueryBuilder({
           from: { table: '' },
         });
         setLoading(false);
+        lastSqlSent.current = sql; // Mark as processed to prevent regeneration
         return;
       }
 
@@ -117,6 +123,10 @@ export function QueryBuilder({
   // Generate SQL whenever IR changes (debounced)
   useEffect(() => {
     if (!ir) return;
+
+    // Don't generate SQL for empty IR (no table selected)
+    // This prevents unwanted SQL changes when switching to GUI mode with empty/whitespace SQL
+    if (!ir.from.table) return;
 
     const timeoutId = setTimeout(async () => {
       try {
