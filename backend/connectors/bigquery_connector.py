@@ -3,6 +3,7 @@ from . import register_connector
 from sqlalchemy import create_engine, text
 from google.cloud import bigquery
 from google.oauth2 import service_account
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 
 
@@ -38,6 +39,7 @@ class BigQueryConnector(DatabaseConnector):
         """
         Get BigQuery schema using native google-cloud-bigquery library.
         Returns list of datasets (schemas) with their tables and columns.
+        Optimized with parallel table fetching for better performance.
         """
         try:
             service_account_json = self.config.get('service_account_json')
@@ -59,28 +61,37 @@ class BigQueryConnector(DatabaseConnector):
                 dataset_id = dataset.dataset_id
                 dataset_ref = client.dataset(dataset_id)
 
-                tables = []
-
                 # List all tables in the dataset
                 tables_list = list(client.list_tables(dataset_ref))
 
-                for table_item in tables_list:
-                    table_ref = dataset_ref.table(table_item.table_id)
-                    table = client.get_table(table_ref)
+                # Fetch tables in parallel using ThreadPoolExecutor (10 workers)
+                tables = []
+                with ThreadPoolExecutor(max_workers=10) as executor:
+                    # Submit all table fetch tasks
+                    future_to_table = {
+                        executor.submit(client.get_table, dataset_ref.table(table_item.table_id)): table_item
+                        for table_item in tables_list
+                    }
 
-                    columns = []
+                    # Collect results as they complete
+                    for future in as_completed(future_to_table):
+                        try:
+                            table = future.result()
 
-                    # Get column information from table schema
-                    for field in table.schema:
-                        columns.append({
-                            "name": field.name,
-                            "type": field.field_type
-                        })
+                            # Get column information from table schema
+                            columns = [
+                                {"name": field.name, "type": field.field_type}
+                                for field in table.schema
+                            ]
 
-                    tables.append({
-                        "table": table_item.table_id,
-                        "columns": columns
-                    })
+                            tables.append({
+                                "table": table.table_id,
+                                "columns": columns
+                            })
+                        except Exception as e:
+                            table_item = future_to_table[future]
+                            print(f"[BigQueryConnector] Error fetching table {table_item.table_id}: {e}")
+                            # Continue processing other tables
 
                 schemas.append({
                     "schema": dataset_id,
