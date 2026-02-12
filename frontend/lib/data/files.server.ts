@@ -343,6 +343,12 @@ class FilesDataLayerServer implements IFilesDataLayer {
       return this.loadFile(id, user, { refresh: true });
     }
 
+    // For contexts, reload through loader to recompute fullSchema and fullDocs
+    if (existingFile.type === 'context') {
+      console.log(`[FILES DataLayer] Context saved, recomputing fullSchema and fullDocs for ${name}`);
+      return this.loadFile(id, user, { refresh: true });
+    }
+
     // For other types, fetch updated file normally
     const updatedFile = await DocumentDB.getById(id, user.companyId);
 
