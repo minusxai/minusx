@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 160" width="380" height="160">
+  <!-- MINUSX (white) -->
+  <text
+    font-family="'JetBrains Mono','Menlo','Courier New',monospace"
+    font-size="9.5"
+    font-weight="700"
+    fill="#0D1117"
+    text-anchor="middle"
+    xml:space="preserve"
+  >
+    <tspan x="50%" dy="16">███╗   ███╗██╗███╗   ██╗██╗   ██╗███████╗██╗  ██╗</tspan>
+    <tspan x="50%" dy="11">████╗ ████║██║████╗  ██║██║   ██║██╔════╝╚██╗██╔╝</tspan>
+    <tspan x="50%" dy="11">██╔████╔██║██║██╔██╗ ██║██║   ██║███████╗ ╚███╔╝ </tspan>
+    <tspan x="50%" dy="11">██║╚██╔╝██║██║██║╚██╗██║██║   ██║╚════██║ ██╔██╗ </tspan>
+    <tspan x="50%" dy="11">██║ ╚═╝ ██║██║██║ ╚████║╚██████╔╝███████║██╔╝ ██╗</tspan>
+    <tspan x="50%" dy="11">╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝</tspan>
+  </text>
+
+  <!-- EXPLORE (teal) -->
+  <text
+    font-family="'JetBrains Mono','Menlo','Courier New',monospace"
+    font-size="9.5"
+    font-weight="700"
+    fill="#18a085"
+    text-anchor="middle"
+    xml:space="preserve"
+  >
+    <tspan x="50%" dy="100">███████╗██╗  ██╗██████╗ ██╗      ██████╗ ██████╗ ███████╗</tspan>
+    <tspan x="50%" dy="11">██╔════╝╚██╗██╔╝██╔══██╗██║     ██╔═══██╗██╔══██╗██╔════╝</tspan>
+    <tspan x="50%" dy="11">█████╗   ╚███╔╝ ██████╔╝██║     ██║   ██║██████╔╝█████╗  </tspan>
+    <tspan x="50%" dy="11">██╔══╝   ██╔██╗ ██╔═══╝ ██║     ██║   ██║██╔══██╗██╔══╝  </tspan>
+    <tspan x="50%" dy="11">███████╗██╔╝ ██╗██║     ███████╗╚██████╔╝██║  ██║███████╗</tspan>
+    <tspan x="50%" dy="11">╚══════╝╚═╝  ╚═╝╚═╝     ╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝</tspan>
+  </text>
+</svg>

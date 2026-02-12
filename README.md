@@ -2,6 +2,8 @@
 
 MinusX is an Agentic Business Intelligence platform built from the ground up for native AI interop. It is the Claude Code / Codex for data.
 
+![Schematic](./frontend/public/schematic.png)
+
 ## What you can do with MinusX
 
 - **Explore naturally:** Ask questions in plain English across all your data
