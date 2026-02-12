@@ -142,7 +142,7 @@ const getAtlasTheme = (colorMode: 'light' | 'dark'): EChartsOption => {
       containLabel: true,  // Auto-expand grid to fit axis labels and names
     },
 
-    // Note: xAxis and yAxis configurations are handled in withAtlasTheme()
+    // Note: xAxis and yAxis configurations are handled in withMinusXTheme()
     // to avoid TypeScript union type issues
 
     line: {
@@ -236,7 +236,7 @@ export const formatTooltipValue = (value: any): string => {
  * Merge user options with Atlas theme
  * Use this helper to ensure theme is consistently applied
  */
-export function withAtlasTheme(options: EChartsOption, colorMode: 'light' | 'dark' = 'dark'): EChartsOption {
+export function withMinusXTheme(options: EChartsOption, colorMode: 'light' | 'dark' = 'dark'): EChartsOption {
   const atlasTheme = getAtlasTheme(colorMode)
   const axisDefaults = getAxisDefaults(colorMode)
 

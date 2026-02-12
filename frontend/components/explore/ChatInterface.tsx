@@ -344,7 +344,7 @@ export default function ChatInterface({
       // Create conversation with temp ID (negative) and initial message
       dispatch(createConversation({
         conversationID: -Date.now(),
-        agent: 'AtlasAnalystAgent',
+        agent: 'AnalystAgent',
         agent_args: {
           connection_id: database?.databaseName || null,
           schema: simplifiedSchema,

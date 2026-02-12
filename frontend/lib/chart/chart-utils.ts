@@ -1,5 +1,5 @@
 import type { EChartsOption } from 'echarts'
-import { withAtlasTheme, COLOR_PALETTE } from './echarts-theme'
+import { withMinusXTheme, COLOR_PALETTE } from './echarts-theme'
 
 // Chart props interface
 export interface ChartProps {
@@ -550,5 +550,5 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
     series: chartSeries,
   }
 
-  return withAtlasTheme({ ...baseOption, ...additionalOptions }, colorMode)
+  return withMinusXTheme({ ...baseOption, ...additionalOptions }, colorMode)
 }

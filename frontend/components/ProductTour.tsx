@@ -12,7 +12,7 @@ import type { Tour } from 'shepherd.js';
 import { useAppSelector } from '@/store/hooks';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 
-const TOUR_COMPLETED_KEY = 'atlas-product-tour-completed';
+const TOUR_COMPLETED_KEY = 'minusx-product-tour-completed';
 
 const isTourCompleted = () => {
   if (typeof window === 'undefined') return true;
@@ -85,7 +85,7 @@ export default function ProductTour() {
     }
 
     // Add custom styles
-    const styleId = 'atlas-shepherd-styles';
+    const styleId = 'minusx-shepherd-styles';
     if (!document.getElementById(styleId)) {
       const style = document.createElement('style');
       style.id = styleId;

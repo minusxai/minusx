@@ -76,11 +76,11 @@ export default function ChatMessage({ message, databaseName, isCompact = false, 
         </GridItem>
       )}
 
-      {/* Tool Calls - Process rounds in order, interleaving TalkToUser/AtlasAnalystAgent and other tools */}
+      {/* Tool Calls - Process rounds in order, interleaving TalkToUser/AnalystAgent and other tools */}
       {!isUser && message.completed_tool_calls && (
         <>
           {message.completed_tool_calls.map((round, roundIndex) => {
-            // Separate TalkToUser and AtlasAnalystAgent from other tools in this round
+            // Separate TalkToUser and AnalystAgent from other tools in this round
             const talkToUserTools: typeof round = [];
             const regularTools: typeof round = [];
 
@@ -89,18 +89,18 @@ export default function ChatMessage({ message, databaseName, isCompact = false, 
 
               if (toolCall.function.name === 'TalkToUser') {
                 talkToUserTools.push(toolCallTuple);
-              } else if (toolCall.function.name === 'AtlasAnalystAgent') {
+              } else if (toolCall.function.name === 'AnalystAgent') {
                 const toolCall = toolCallTuple[0]
                 const toolCallResponse = cloneDeep(toolCallTuple[1])
 
-                // AtlasAnalystAgent content can be a string (JSON) or object
+                // AnalystAgent content can be a string (JSON) or object
                 let extractedContent;
                 if (typeof toolCallResponse.content === 'string') {
                   try {
                     const parsed = JSON.parse(toolCallResponse.content);
                     extractedContent = parsed.content;
                   } catch (e) {
-                    console.warn('[ChatMessage] Failed to parse AtlasAnalystAgent JSON:', e);
+                    console.warn('[ChatMessage] Failed to parse AnalystAgent JSON:', e);
                     extractedContent = toolCallResponse.content;
                   }
                 } else if (typeof toolCallResponse.content === 'object') {
@@ -118,7 +118,7 @@ export default function ChatMessage({ message, databaseName, isCompact = false, 
 
             return (
               <React.Fragment key={`round-${roundIndex}`}>
-                {/* Render TalkToUser and AtlasAnalystAgent tools first (full 12 cols on mobile, 8 cols on desktop) */}
+                {/* Render TalkToUser and AnalystAgent tools first (full 12 cols on mobile, 8 cols on desktop) */}
                 {talkToUserTools.map((toolCallTuple) => {
                   const [toolCall, toolMessage] = toolCallTuple;
                   const content = typeof toolMessage.content === 'string'
