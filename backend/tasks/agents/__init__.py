@@ -1,5 +1,5 @@
 """MinusX agents package."""
 
-from . import atlas_analyst
+from . import analyst
 
-__all__ = ["atlas_analyst"]
+__all__ = ["analyst"]

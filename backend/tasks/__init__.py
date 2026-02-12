@@ -21,7 +21,7 @@ from .types import ChatCompletionMessageParamMX, ChatCompletionMessageToolCallPa
 from . import test_agents
 
 # Import minusx analyst agent to register it
-from .agents import atlas_analyst
+from .agents import analyst
 
 # Rebuild ALLMRequest model now that Tool is defined
 # This resolves the forward reference in ALLMRequest.tools: List[Type["Tool"]]
