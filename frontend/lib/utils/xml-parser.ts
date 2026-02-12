@@ -18,7 +18,7 @@ export interface ParsedContent {
 /**
  * Parse content containing <thinking> and <answer> tags
  *
- * @param content - Raw content from TalkToUser/AtlasAnalystAgent
+ * @param content - Raw content from TalkToUser/AnalystAgent
  * @param isStreaming - Currently unused, kept for backwards compatibility
  * @returns Parsed sections or null if no tags found (backwards compatibility)
  */

@@ -41,7 +41,7 @@ export default function ExecuteSQLDisplay({ toolCallTuple, databaseName, isCompa
     };
   }
 
-  const parse_atlas_data = (data: any) => {
+  const parse_result_data = (data: any) => {
     return {
       columns: data.columns,
       types: data.types,
@@ -109,7 +109,7 @@ export default function ExecuteSQLDisplay({ toolCallTuple, databaseName, isCompa
           if (parsed.success === false || parsed.error) {
             error = parsed.error || 'Query failed';
           } else {
-            queryResult = parse_atlas_data(parsed.data ? parsed.data : parsed);
+            queryResult = parse_result_data(parsed.data ? parsed.data : parsed);
           }
         } catch (e) {
           // Not JSON, might be error string
@@ -123,7 +123,7 @@ export default function ExecuteSQLDisplay({ toolCallTuple, databaseName, isCompa
         error = toolMessage.content.error || 'Query failed';
       } else if (toolMessage.content) {
         // Content is already an object
-        queryResult = parse_atlas_data(toolMessage.content.data)
+        queryResult = parse_result_data(toolMessage.content.data)
       }
     } catch (e) {
       error = 'Failed to parse tool call arguments';

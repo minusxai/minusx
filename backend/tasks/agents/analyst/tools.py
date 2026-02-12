@@ -1,4 +1,4 @@
-"""Atlas Analyst Tools - executed by Next.js backend."""
+"""Analyst Tools - executed by Next.js backend."""
 from typing import Optional, List, Any, Dict
 from tasks import Tool, UserInputException, register_agent
 from enum import Enum

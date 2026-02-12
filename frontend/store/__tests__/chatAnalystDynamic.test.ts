@@ -1,5 +1,5 @@
 /**
- * E2E test for AtlasAnalystAgent with Dynamic LLM Mocking
+ * E2E test for AnalystAgent with Dynamic LLM Mocking
  *
  * This test uses a dynamic LLM mock server that allows:
  * - Request validation (assert on messages, tools, settings)
@@ -14,7 +14,7 @@
  *
  * Prerequisites:
  *   1. Install dependencies: npm install express @types/express
- *   2. Run test: npm test -- store/__tests__/chatAtlasAnalystDynamic.test.ts
+ *   2. Run test: npm test -- store/__tests__/chatAnalystDynamic.test.ts
  *
  * Note: Test automatically starts/stops mock server and Python test server.
  */
@@ -41,7 +41,7 @@ jest.mock('@/lib/database/db-config', () => {
   };
 });
 
-describe('Atlas Agent - E2E with Dynamic LLM Mocking', () => {
+describe('Agent - E2E with Dynamic LLM Mocking', () => {
   // Setup infrastructure with reusable harnesses
   const { getPythonPort, getLLMMockPort, getLLMMockServer } = withPythonBackend({ withLLMMock: true });
   const { getStore } = setupTestDb(getTestDbPath('atlas_analyst_dyn'), { withTestConnection: true });
@@ -86,7 +86,7 @@ describe('Atlas Agent - E2E with Dynamic LLM Mocking', () => {
     // Create conversation and send message
     store.dispatch(createConversation({
       conversationID,
-      agent: 'AtlasAnalystAgent',
+      agent: 'AnalystAgent',
       agent_args: {
         goal: 'Show me a chart of sales by region',
         connection_id: 'test_connection'
@@ -265,7 +265,7 @@ describe('Atlas Agent - E2E with Dynamic LLM Mocking', () => {
     // Create conversation and send message
     store.dispatch(createConversation({
       conversationID,
-      agent: 'AtlasAnalystAgent',
+      agent: 'AnalystAgent',
       agent_args: {
         goal: 'Show me a chart of sales by region',
         connection_id: 'test_connection'

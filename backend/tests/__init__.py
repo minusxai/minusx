@@ -1,1 +1,1 @@
-"""Test suite for Atlas v2 backend orchestration."""
+"""Test suite for MinusX backend orchestration."""

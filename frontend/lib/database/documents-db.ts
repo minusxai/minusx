@@ -1,5 +1,5 @@
 /**
- * SQLite database module for Atlas document management.
+ * SQLite database module for MinusX document management.
  * Handles CRUD operations for questions, dashboards, notebooks, slides, and reports.
  * Phase 2: Uses integer IDs instead of UUIDs
  * Phase 3: Uses database adapter interface (async)

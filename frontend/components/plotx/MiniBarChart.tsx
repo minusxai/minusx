@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { useAppSelector } from '@/store/hooks'
 import { EChart } from './EChart'
-import { withAtlasTheme } from '@/lib/chart/echarts-theme'
+import { withMinusXTheme } from '@/lib/chart/echarts-theme'
 
 interface MiniBarChartProps {
   data: Array<{ value: string; count: number }>
@@ -22,7 +22,7 @@ export const MiniBarChart = ({
 
     const remaining = totalUnique - data.length
 
-    return withAtlasTheme({
+    return withMinusXTheme({
       grid: {
         left: 0,
         right: 0,

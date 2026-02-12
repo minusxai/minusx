@@ -1,6 +1,6 @@
 # Database Scripts
 
-This directory contains scripts for managing the Atlas BI document database.
+This directory contains scripts for managing the MinusX BI document database.
 
 ## Scripts
 

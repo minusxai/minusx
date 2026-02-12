@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Box, HStack, Text } from '@chakra-ui/react'
 import { useAppSelector } from '@/store/hooks'
 import { EChart } from './EChart'
-import { withAtlasTheme } from '@/lib/chart/echarts-theme'
+import { withMinusXTheme } from '@/lib/chart/echarts-theme'
 
 interface MiniHistogramProps {
   data: Array<{ bin: number; binMin: number; binMax: number; count: number }>
@@ -23,7 +23,7 @@ export const MiniHistogram = ({
   const option = useMemo(() => {
     if (!data || data.length === 0) return {}
 
-    return withAtlasTheme({
+    return withMinusXTheme({
       grid: {
         left: 0,
         right: 0,

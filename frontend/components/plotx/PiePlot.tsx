@@ -3,7 +3,7 @@ import { Box } from '@chakra-ui/react'
 import { useAppSelector } from '@/store/hooks'
 import { EChart } from './EChart'
 import { isValidChartData, formatLargeNumber, buildToolbox, getTimestamp, type ChartProps } from '@/lib/chart/chart-utils'
-import { withAtlasTheme, COLOR_PALETTE } from '@/lib/chart/echarts-theme'
+import { withMinusXTheme, COLOR_PALETTE } from '@/lib/chart/echarts-theme'
 import type { EChartsOption } from 'echarts'
 
 interface PiePlotProps extends ChartProps {
@@ -170,7 +170,7 @@ export const PiePlot = (props: PiePlotProps) => {
       ],
     }
 
-    return withAtlasTheme(baseOption, colorMode)
+    return withMinusXTheme(baseOption, colorMode)
   }, [xAxisData, series, colorMode, containerWidth, containerHeight])
 
   if (!isValidChartData(xAxisData, series)) {

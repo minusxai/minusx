@@ -39,7 +39,7 @@ import { switchMode } from '@/lib/mode/mode-utils';
 const SAMPLE_DATABASE_ID = 9;
 const SAMPLE_DASHBOARD_ID = 11;
 const KNOWLEDGE_BASE_ID = 10;
-const CLICKED_ITEMS_STORAGE_KEY = 'atlas-getting-started-clicked';
+const CLICKED_ITEMS_STORAGE_KEY = 'minusx-getting-started-clicked';
 
 interface GettingStartedItem {
   id: string;

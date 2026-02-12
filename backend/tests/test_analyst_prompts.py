@@ -3,7 +3,7 @@
 import os
 import shutil
 from pathlib import Path
-from tasks.agents.atlas_analyst.prompt_loader import PromptLoader
+from tasks.agents.analyst.prompt_loader import PromptLoader
 
 
 def test_prompt_loader():

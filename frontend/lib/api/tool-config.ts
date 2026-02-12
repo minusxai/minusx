@@ -38,6 +38,9 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
   [ToolNames.TALK_TO_USER]: {
     displayComponent: ContentDisplay,
   },
+  [ToolNames.ANALYST_AGENT]: {
+    displayComponent: ContentDisplay,
+  },
   [ToolNames.ATLAS_ANALYST_AGENT]: {
     displayComponent: ContentDisplay,
   },

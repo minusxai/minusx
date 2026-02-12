@@ -42,14 +42,14 @@ export interface CompanyConfig {
  */
 export const DEFAULT_CONFIG: CompanyConfig = {
   branding: {
-    displayName: 'Atlas',
+    displayName: 'MinusX',
     agentName: 'MinusX',
     favicon: '/favicon.ico'
   },
   links: {
-    docsUrl: 'https://minusx.ai/docs',
+    docsUrl: 'https://docs.minusx.ai',
     supportUrl: 'https://minusx.ai/support',
-    githubIssuesUrl: 'https://github.com/minusx-ai/atlas/issues'
+    githubIssuesUrl: 'https://github.com/minusxai/minusx/issues'
   },
   messaging: {
     webhooks: []

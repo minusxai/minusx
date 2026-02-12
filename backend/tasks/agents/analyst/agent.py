@@ -57,7 +57,7 @@ async def allm_request(request: ALLMRequest, on_content=None):
 
 
 @register_agent
-class AtlasAnalystAgent(Agent):
+class AnalystAgent(Agent):
     """
     Analyst Agent that answers user questions by executing SQL queries.
     Uses LLM to decide which tools to call (ExecuteSQLQuery, SearchDBSchema).
@@ -204,7 +204,7 @@ class ReportAgent(Agent):
     Report Agent that runs report analyses and generates a summary.
 
     Flow:
-    1. Dispatch AtlasAnalystAgent for each reference (question/dashboard)
+    1. Dispatch AnalystAgent for each reference (question/dashboard)
     2. Collect results from child agents via reduce()
     3. Use LLM to synthesize all outputs into a final report
     4. Return the generated report with embedded query references
@@ -289,7 +289,7 @@ class ReportAgent(Agent):
                         self._collect_queries_from_task(child_task, reference_info)
 
     async def reduce(self, child_batches):
-        """Collect results from child AtlasAnalystAgent tasks and extract query results."""
+        """Collect results from child AnalystAgent tasks and extract query results."""
         for i, batch in enumerate(child_batches):
             # Get reference info for this batch
             reference_info = None
@@ -314,7 +314,7 @@ class ReportAgent(Agent):
     async def run(self) -> dict:
         """Execute the report by dispatching analyst agents and synthesizing results."""
         try:
-            # Phase 1: Dispatch AtlasAnalystAgent for each reference
+            # Phase 1: Dispatch AnalystAgent for each reference
             if self.references and not self.child_results:
                 agent_calls = []
                 for i, ref in enumerate(self.references):
@@ -333,7 +333,7 @@ IMPORTANT: Use foreground=false for ALL ExecuteSQLQuery calls - this is a backgr
                     # Create analyst agent call using AgentCall pattern
                     agent_calls.append(
                         AgentCall(
-                            agent="AtlasAnalystAgent",
+                            agent="AnalystAgent",
                             args={
                                 "goal": goal,
                                 "connection_id": ref_connection_id,
