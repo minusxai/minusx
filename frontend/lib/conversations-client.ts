@@ -45,7 +45,7 @@ export function parseLogToMessages(log: ConversationLogEntry[]): any[] {
 
       // Check if this is the main agent task (contains user message)
       const userMessage = entry.args?.goal || entry.args?.user_message || entry.args?.message;
-      if (userMessage && (agent === 'AtlasAnalystAgent' || agent === 'DefaultAgent')) {
+      if (userMessage && (agent === 'AnalystAgent' || agent === 'DefaultAgent')) {
         // User message
         messages.push({
           role: 'user',

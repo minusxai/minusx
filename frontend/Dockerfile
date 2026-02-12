@@ -1,4 +1,4 @@
-# Frontend Dockerfile for Atlas BI v2 - Multi-stage build with standalone mode
+# Frontend Dockerfile for MinusX BI - Multi-stage build with standalone mode
 
 # ===== BUILDER STAGE ===== #
 FROM node:20-slim AS builder

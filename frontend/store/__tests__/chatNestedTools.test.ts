@@ -2,7 +2,7 @@
  * E2E test for nested tool calls (backend tools spawning frontend tools)
  *
  * Tests ExecuteSQLQuery with foreground=true delegation to ExecuteSQLQueryForeground
- * Uses LLM mocking to control AtlasAnalystAgent's tool calls.
+ * Uses LLM mocking to control AnalystAgent's tool calls.
  *
  * Run: npm test -- store/__tests__/chatNestedTools.test.ts
  */
@@ -101,10 +101,10 @@ describe('Nested Tool Calls - ExecuteSQLQuery with Foreground', () => {
       }
     ]);
 
-    // Create conversation with AtlasAnalystAgent
+    // Create conversation with AnalystAgent
     store.dispatch(createConversation({
       conversationID,
-      agent: 'AtlasAnalystAgent',
+      agent: 'AnalystAgent',
       agent_args: {
         goal: 'Show me a chart of sales by region',
         connection_id: 'test_connection',
@@ -200,10 +200,10 @@ describe('Nested Tool Calls - ExecuteSQLQuery with Foreground', () => {
       }
     ]);
 
-    // Create conversation with AtlasAnalystAgent
+    // Create conversation with AnalystAgent
     store.dispatch(createConversation({
       conversationID,
-      agent: 'AtlasAnalystAgent',
+      agent: 'AnalystAgent',
       agent_args: {
         goal: 'Execute SQL query in background',
         connection_id: 'test_connection'
@@ -295,7 +295,7 @@ describe('Nested Tool Calls - ExecuteSQLQuery with Foreground', () => {
     // Create conversation and send message
     store.dispatch(createConversation({
       conversationID,
-      agent: 'AtlasAnalystAgent',
+      agent: 'AnalystAgent',
       agent_args: {
         goal: 'Execute a SQL query',
         connection_id: 'test_connection',

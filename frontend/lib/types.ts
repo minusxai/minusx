@@ -631,6 +631,7 @@ export const ToolNames = {
   SEARCH_DB_SCHEMA: 'SearchDBSchema',
   PRESENT_FINAL_ANSWER: 'PresentFinalAnswer',
   TALK_TO_USER: 'TalkToUser',
+  ANALYST_AGENT: 'AnalystAgent',
   ATLAS_ANALYST_AGENT: 'AtlasAnalystAgent'
 } as const;
 

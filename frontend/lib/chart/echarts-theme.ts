@@ -1,7 +1,7 @@
 import type { EChartsOption } from 'echarts'
 
 /**
- * Atlas BI ECharts Theme
+ * MinusX BI ECharts Theme
  * Based on Flat UI Colors and the design system in CLAUDE.md
  * Uses JetBrains Mono for all data/labels (monospace)
  * Uses Inter for titles/legends
@@ -70,10 +70,10 @@ const getThemeColors = (colorMode: 'light' | 'dark') => {
 }
 
 /**
- * Base ECharts theme configuration for Atlas BI
+ * Base ECharts theme configuration for MinusX BI
  * Apply this to all charts for consistent styling
  */
-const getAtlasTheme = (colorMode: 'light' | 'dark'): EChartsOption => {
+const getMinusXTheme = (colorMode: 'light' | 'dark'): EChartsOption => {
   const theme = getThemeColors(colorMode)
 
   return {
@@ -233,29 +233,29 @@ export const formatTooltipValue = (value: any): string => {
 }
 
 /**
- * Merge user options with Atlas theme
+ * Merge user options with MinusX theme
  * Use this helper to ensure theme is consistently applied
  */
 export function withMinusXTheme(options: EChartsOption, colorMode: 'light' | 'dark' = 'dark'): EChartsOption {
-  const atlasTheme = getAtlasTheme(colorMode)
+  const minusXTheme = getMinusXTheme(colorMode)
   const axisDefaults = getAxisDefaults(colorMode)
 
   const mergedOptions: EChartsOption = {
-    ...atlasTheme,
+    ...minusXTheme,
     ...options,
     // Deep merge specific properties
     textStyle: {
-      ...atlasTheme.textStyle,
+      ...minusXTheme.textStyle,
       ...options.textStyle,
     },
     tooltip: {
-      ...atlasTheme.tooltip,
+      ...minusXTheme.tooltip,
       ...options.tooltip,
       // Always add valueFormatter for 2 decimal places
       valueFormatter: formatTooltipValue,
     },
     grid: {
-      ...atlasTheme.grid,
+      ...minusXTheme.grid,
       ...options.grid,
     },
   }
@@ -263,7 +263,7 @@ export function withMinusXTheme(options: EChartsOption, colorMode: 'light' | 'da
   // Handle legend - deep merge to preserve theme styling
   if (options.legend) {
     const userLegend = Array.isArray(options.legend) ? options.legend[0] : options.legend
-    const themeLegend = Array.isArray(atlasTheme.legend) ? atlasTheme.legend[0] : atlasTheme.legend
+    const themeLegend = Array.isArray(minusXTheme.legend) ? minusXTheme.legend[0] : minusXTheme.legend
     mergedOptions.legend = {
       ...themeLegend,
       ...userLegend,
