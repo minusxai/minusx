@@ -36,6 +36,7 @@ export default function ExampleQuestions({ onPromptClick, container, colSpan, co
   const companyName = useAppSelector(selectCompanyName);
   const { config } = useConfigs();
   const agentName = config.branding.agentName;
+  const isMinusx = agentName.toLowerCase() === 'minusx';
 
   return (
     <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }} gap={2} w="100%">
@@ -43,29 +44,51 @@ export default function ExampleQuestions({ onPromptClick, container, colSpan, co
         <VStack gap={6} align="center" justify="center" flex="1" py={6}>
           {/* Welcome Header */}
           <VStack gap={2}>
-            <Box
-              p={3}
-              borderRadius="full"
-              bg="accent.teal/10"
-              border="2px solid"
-              borderColor="accent.teal/30"
-            >
+            {isMinusx ? (
               <Box
-                aria-label="Company logo"
-                role="img"
-                boxSize={6}
-                flexShrink={0}
-              />
-            </Box>
-            <Heading
-              fontSize="xl"
-              fontWeight="800"
-              fontFamily="mono"
-              color="fg.default"
-              letterSpacing="-0.02em"
-            >
-              Ask {agentName} anything
-            </Heading>
+                position="relative"
+                borderRadius="lg"
+                overflow="hidden"
+                p={4}
+              >
+                <Box
+                  position="absolute"
+                  inset={0}
+                  pointerEvents="none"
+                />
+                <img
+                  src={colorMode === 'light' ? '/minusx_explore_dark.svg' : '/minusx_explore.svg'}
+                  alt="minusx explore"
+                  style={{ width: '380px', height: '160px', position: 'relative' }}
+                />
+              </Box>
+            ) : (
+              <>
+                <Box
+                  p={3}
+                  borderRadius="full"
+                  bg="accent.teal/10"
+                  border="2px solid"
+                  borderColor="accent.teal/30"
+                >
+                  <Box
+                    aria-label="Company logo"
+                    role="img"
+                    boxSize={6}
+                    flexShrink={0}
+                  />
+                </Box>
+                <Heading
+                  fontSize="xl"
+                  fontWeight="800"
+                  fontFamily="mono"
+                  color="fg.default"
+                  letterSpacing="-0.02em"
+                >
+                  Ask {agentName} anything
+                </Heading>
+              </>
+            )}
             <Text
               color="fg.muted"
               fontSize="sm"
