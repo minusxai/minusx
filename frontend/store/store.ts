@@ -9,6 +9,7 @@ import recordingsReducer from './recordingsSlice';
 import reportRunsReducer from './reportRunsSlice';
 import alertRunsReducer from './alertRunsSlice';
 import { chatListenerMiddleware } from './chatListener';
+import { analyticsMiddleware } from '@/lib/analytics/middleware';
 
 function getAllReducers() {
   return {
@@ -36,7 +37,8 @@ export function makeStore(preloadedState?: PreloadedState) {
     reducer: getAllReducers(),
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware()
-        .prepend(chatListenerMiddleware.middleware),
+        .prepend(chatListenerMiddleware.middleware)
+        .concat(analyticsMiddleware),
     ...(preloadedState && { preloadedState }),
   });
 }

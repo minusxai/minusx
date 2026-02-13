@@ -19,6 +19,7 @@ import { APP_VERSION } from '@/lib/constants';
 import { exitImpersonation } from '@/lib/navigation/url-utils';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { useConfigs } from '@/lib/hooks/useConfigs';
+import { analytics, AnalyticsEvents } from '@/lib/analytics';
 
 interface NavItemProps {
   href: string;
@@ -407,6 +408,8 @@ export default function Sidebar() {
             onClick={() => {
               const redirectUrl = `${window.location.origin}/login`;
               console.log('[Sidebar] Signing out, redirectTo:', redirectUrl);
+              analytics.captureEvent(AnalyticsEvents.USER_SIGNED_OUT);
+              analytics.reset();
               signOut({ callbackUrl: redirectUrl, redirect:false, redirectTo: redirectUrl }).then(() => {
                 window.location.href = redirectUrl; // Ensure redirect after sign out
               });

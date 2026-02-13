@@ -8,6 +8,7 @@ import ReduxProvider from './ReduxProvider';
 import { DataLoader } from './DataLoader';
 import { ColorModeSync } from './ColorModeSync';
 import { NavigationGuardProvider } from '@/lib/navigation/NavigationGuardProvider';
+import { AnalyticsProvider } from './AnalyticsProvider';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { CompanyConfig } from '@/lib/branding/whitelabel';
 import { DEFAULT_CONFIG } from '@/lib/branding/whitelabel';
@@ -58,11 +59,13 @@ export function Providers({ children, initialData }: ProvidersProps) {
       <SessionProvider refetchOnWindowFocus={false}>
         <ChakraProvider value={system}>
           <AuthProvider>
-            <ColorModeSync />
-            <DataLoader />
-            <NavigationGuardProvider>
-              {children}
-            </NavigationGuardProvider>
+            <AnalyticsProvider>
+              <ColorModeSync />
+              <DataLoader />
+              <NavigationGuardProvider>
+                {children}
+              </NavigationGuardProvider>
+            </AnalyticsProvider>
           </AuthProvider>
         </ChakraProvider>
       </SessionProvider>
