@@ -27,7 +27,10 @@ export default function NewFilePage({ params }: NewFilePageProps) {
   const type = typeParam as FileType;
   const folderParam = searchParams.get('folder');
   const databaseName = searchParams.get('databaseName');
-  const query = searchParams.get('query');
+  const queryB64 = searchParams.get('queryB64');
+  const query = queryB64
+    ? new TextDecoder().decode(Uint8Array.from(atob(queryB64), c => c.charCodeAt(0)))
+    : null;
   const virtualIdParam = searchParams.get('virtualId');
 
   // Validate type is supported

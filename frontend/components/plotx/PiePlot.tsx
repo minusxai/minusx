@@ -11,11 +11,18 @@ interface PiePlotProps extends ChartProps {
 }
 
 export const PiePlot = (props: PiePlotProps) => {
-  const { xAxisData, series, emptyMessage } = props
+  const { xAxisData, series, emptyMessage, onChartClick } = props
   const colorMode = useAppSelector((state) => state.ui.colorMode)
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState<number | undefined>(undefined)
   const [containerHeight, setContainerHeight] = useState<number | undefined>(undefined)
+
+  // Stable click handler via ref
+  const onClickRef = useRef(onChartClick)
+  useEffect(() => { onClickRef.current = onChartClick })
+  const chartEvents = useMemo(() => ({
+    click: (params: unknown) => onClickRef.current?.(params),
+  }), [])
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -187,6 +194,7 @@ export const PiePlot = (props: PiePlotProps) => {
         option={option}
         style={{ width: '100%', height: '100%', minHeight: '300px' }}
         chartSettings={{ useCoarsePointer: true, renderer: 'canvas' }}
+        events={chartEvents}
       />
     </Box>
   )

@@ -282,6 +282,8 @@ export function QuestionVisualization({
                       fillHeight={true}
                       initialPivotConfig={currentState.vizSettings?.pivotConfig}
                       onPivotConfigChange={onPivotConfigChange}
+                      sql={currentState?.query}
+                      databaseName={currentState?.database_name}
                     />
                   </Box>
                 )}
