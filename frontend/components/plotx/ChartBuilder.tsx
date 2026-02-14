@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { Box, HStack, VStack, Text, IconButton } from '@chakra-ui/react'
-import { LuGripVertical, LuChevronDown, LuChevronUp } from 'react-icons/lu'
+import { LuChevronDown, LuChevronUp } from 'react-icons/lu'
 import { LinePlot } from './LinePlot'
 import { BarPlot } from './BarPlot'
 import { AreaPlot } from './AreaPlot'
@@ -304,11 +304,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
 
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null)
   const [selectedColumnForMobile, setSelectedColumnForMobile] = useState<string | null>(null)
-  const [sidebarWidth, setSidebarWidth] = useState(240) // default width in pixels
-  const [isResizing, setIsResizing] = useState(false)
   const [mobileSettingsExpanded, setMobileSettingsExpanded] = useState(false)
-  const dragStartX = useRef<number>(0)
-  const dragStartWidth = useRef<number>(240)
 
   const isTouchDevice = useIsTouchDevice()
 
@@ -374,51 +370,6 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   }, [rows, xAxisColumns, yAxisColumns, chartType])
 
   const hasData = yAxisColumns.length > 0
-
-  // Handle sidebar resize
-  const handleResizeStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsResizing(true)
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX
-    dragStartX.current = clientX
-    dragStartWidth.current = sidebarWidth
-  }, [sidebarWidth])
-
-  const handleResizeMove = useCallback((clientX: number) => {
-    if (!isResizing) return
-
-    const deltaX = clientX - dragStartX.current
-    const newWidth = Math.max(100, Math.min(300, dragStartWidth.current + deltaX))
-    setSidebarWidth(newWidth)
-  }, [isResizing])
-
-  const handleResizeEnd = useCallback(() => {
-    setIsResizing(false)
-  }, [])
-
-  // Mouse and touch event handlers for resize
-  useEffect(() => {
-    if (!isResizing) return
-
-    const handleMouseMove = (e: MouseEvent) => handleResizeMove(e.clientX)
-    const handleTouchMove = (e: TouchEvent) => {
-      e.preventDefault()
-      handleResizeMove(e.touches[0].clientX)
-    }
-
-    document.addEventListener('mousemove', handleMouseMove)
-    document.addEventListener('touchmove', handleTouchMove, { passive: false })
-    document.addEventListener('mouseup', handleResizeEnd)
-    document.addEventListener('touchend', handleResizeEnd)
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('touchmove', handleTouchMove)
-      document.removeEventListener('mouseup', handleResizeEnd)
-      document.removeEventListener('touchend', handleResizeEnd)
-    }
-  }, [isResizing, handleResizeMove, handleResizeEnd])
 
   // Use the compact view flag passed from parent
   const useCompactView = useCompactViewProp
@@ -520,7 +471,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   }
 
   return (
-    <Box display="flex" flexDirection={useCompactView ? "column" : "row"} gap={0} height={'100%'} width="100%" position="relative">
+    <Box display="flex" flexDirection="column" gap={0} height={'100%'} width="100%">
       {/* Compact View Toggle - Shows when container is narrow */}
       {showAxisBuilder && useCompactView && (
         <Box
@@ -564,137 +515,32 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
         </Box>
       )}
 
-      {/* Sidebar - Column Selector */}
+      {/* Column Selector */}
       {showAxisBuilder && (
-        <Box position="relative" flexShrink={0} display={useCompactView ? (mobileSettingsExpanded ? "block" : "none") : "block"}>
-          <Box
-            width={useCompactView ? "100%" : `${sidebarWidth}px`}
-            minWidth={useCompactView ? "100%" : `${sidebarWidth}px`}
-            height={useCompactView ? "auto" : "100%"}
-            maxHeight={useCompactView ? "none" : "100%"}
-            flexShrink={0}
-            bg="bg.surface"
-            borderRight={useCompactView ? "none" : "1px solid"}
-            borderRightColor="border.default"
-            borderBottom={useCompactView ? "1px solid" : "none"}
-            borderBottomColor="border.default"
-            p={useCompactView ? 2 : 4}
-            overflowY={useCompactView ? "visible" : "auto"}
-            overflowX="hidden"
-          >
-            <Box
-              display="flex"
-              flexDirection={useCompactView ? "row" : "column"}
-              gap={4}
-              alignItems="start"
-              justifyContent={"flex-start"}
-            >
-              {/* Dates Section */}
-              {groupedColumns.dates.length > 0 && (
-                <VStack align="start" gap={1} borderBottom={useCompactView ? "none" : "1px solid"} borderBottomColor="border.default" pb={useCompactView ? 0 : 5}>
-                  <Text fontSize={useCompactView ? "2xs" : "xs"} fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
-                    Dates
-                  </Text>
-                  <HStack gap={2} flexWrap="wrap">
-                    {groupedColumns.dates.map(col => (
-                      <ColumnChip
-                        key={col}
-                        column={col}
-                        type="date"
-                        isAssigned={xAxisColumns.includes(col) || yAxisColumns.includes(col)}
-                        isDragging={draggedColumn === col}
-                        isMobileSelected={selectedColumnForMobile === col}
-                        isTouchDevice={isTouchDevice}
-                        onDragStart={(e) => handleDragStart(e, col)}
-                        onDragEnd={handleDragEnd}
-                        onMobileSelect={() => handleMobileSelect(col)}
-                      />
-                    ))}
-                  </HStack>
-                </VStack>
-              )}
-
-              {/* Categories Section */}
-              {groupedColumns.categories.length > 0 && (
-                <VStack align="start" gap={1} borderBottom={useCompactView ? "none" : "1px solid"} borderBottomColor="border.default" pb={useCompactView ? 0 : 5}>
-                  <Text fontSize={useCompactView ? "2xs" : "xs"} fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
-                    Categories
-                  </Text>
-                  <HStack gap={2} flexWrap="wrap">
-                    {groupedColumns.categories.map(col => (
-                      <ColumnChip
-                        key={col}
-                        column={col}
-                        type="text"
-                        isAssigned={xAxisColumns.includes(col) || yAxisColumns.includes(col)}
-                        isDragging={draggedColumn === col}
-                        isMobileSelected={selectedColumnForMobile === col}
-                        isTouchDevice={isTouchDevice}
-                        onDragStart={(e) => handleDragStart(e, col)}
-                        onDragEnd={handleDragEnd}
-                        onMobileSelect={() => handleMobileSelect(col)}
-                      />
-                    ))}
-                  </HStack>
-                </VStack>
-              )}
-
-              {/* Numbers Section */}
-              {groupedColumns.numbers.length > 0 && (
-                <VStack align="start" gap={1} borderBottom={useCompactView ? "none" : "1px solid"} borderBottomColor="border.default" pb={useCompactView ? 0 : 5}>
-                  <Text fontSize={useCompactView ? "2xs" : "xs"} fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
-                    Numbers
-                  </Text>
-                  <HStack gap={2} flexWrap="wrap">
-                    {groupedColumns.numbers.map(col => (
-                      <ColumnChip
-                        key={col}
-                        column={col}
-                        type="number"
-                        isAssigned={xAxisColumns.includes(col) || yAxisColumns.includes(col)}
-                        isDragging={draggedColumn === col}
-                        isMobileSelected={selectedColumnForMobile === col}
-                        isTouchDevice={isTouchDevice}
-                        onDragStart={(e) => handleDragStart(e, col)}
-                        onDragEnd={handleDragEnd}
-                        onMobileSelect={() => handleMobileSelect(col)}
-                      />
-                    ))}
-                  </HStack>
-                </VStack>
-              )}
-            </Box>
-          </Box>
-
-          {/* Resize Handle - Full view only */}
-          {!useCompactView && (
-          <Box
-            display="flex"
-            position="absolute"
-            right={0}
-            top={0}
-            bottom={0}
-            width="10px"
-            cursor="col-resize"
-            onMouseDown={handleResizeStart}
-            onTouchStart={handleResizeStart}
-            _hover={{
-              bg: 'accent.teal/20',
-            }}
-            bg={isResizing ? 'accent.teal/30' : 'transparent'}
-            transition="background 0.2s"
-            alignItems="center"
-            justifyContent="center"
-            userSelect="none"
-          >
-            <Box
-              as={LuGripVertical}
-              fontSize="xl"
-              color={isResizing ? 'accent.teal' : 'accent.teal'}
-              opacity={1}
-            />
-          </Box>
-          )}
+        <Box
+          display={useCompactView ? (mobileSettingsExpanded ? "block" : "none") : "block"}
+          flexShrink={0}
+          bg="bg.muted"
+          borderBottom="1px solid"
+          borderColor="border.muted"
+          p={3}
+        >
+          <HStack gap={2} flexWrap="wrap">
+            {columns.map(col => (
+              <ColumnChip
+                key={col}
+                column={col}
+                type={resolveColumnType(col, columns, types)}
+                isAssigned={xAxisColumns.includes(col) || yAxisColumns.includes(col)}
+                isDragging={draggedColumn === col}
+                isMobileSelected={selectedColumnForMobile === col}
+                isTouchDevice={isTouchDevice}
+                onDragStart={(e) => handleDragStart(e, col)}
+                onDragEnd={handleDragEnd}
+                onMobileSelect={() => handleMobileSelect(col)}
+              />
+            ))}
+          </HStack>
         </Box>
       )}
 
@@ -745,8 +591,10 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
           <Box
             display={useCompactView ? (mobileSettingsExpanded ? "flex" : "none") : "flex"}
             flexDirection={"row"}
-            gap={4}
-            p={4}
+            gap={3}
+            px={3}
+            pt={2}
+            pb={3}
             bg="bg.muted"
             borderBottom="1px solid"
             borderColor="border.muted"
@@ -790,7 +638,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
         )}
 
         {/* Chart Display */}
-        <Box flex="1" px={showAxisBuilder && !useCompactView ? 6 : 0} overflow="hidden" display="flex" flexDirection="column" minHeight="0">
+        <Box flex="1" overflow="hidden" display="flex" flexDirection="column" minHeight="0">
           {hasData ? (
             <>
               {/* Show SingleValue when no X-axis columns selected */}

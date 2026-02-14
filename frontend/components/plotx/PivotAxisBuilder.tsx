@@ -2,7 +2,6 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Box, HStack, VStack, Text } from '@chakra-ui/react'
-import { Checkbox } from '@/components/ui/checkbox'
 import { LuChevronDown } from 'react-icons/lu'
 import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } from './AxisComponents'
 import type { PivotConfig, PivotValueConfig, AggregationFunction } from '@/lib/types'
@@ -141,19 +140,6 @@ export const PivotAxisBuilder = ({
       ...config,
       values: config.values.map(v => v.column === col ? { ...v, aggFunction: fn } : v),
     })
-  }, [config, onPivotConfigChange])
-
-  // Toggle totals
-  const toggleRowTotals = useCallback((checked: boolean) => {
-    onPivotConfigChange({ ...config, showRowTotals: checked })
-  }, [config, onPivotConfigChange])
-
-  const toggleColumnTotals = useCallback((checked: boolean) => {
-    onPivotConfigChange({ ...config, showColumnTotals: checked })
-  }, [config, onPivotConfigChange])
-
-  const toggleHeatmap = useCallback((checked: boolean) => {
-    onPivotConfigChange({ ...config, showHeatmap: checked })
   }, [config, onPivotConfigChange])
 
   // Drag handlers
@@ -312,30 +298,6 @@ export const PivotAxisBuilder = ({
         </DropZone>
       </Box>
 
-      {/* Options toggles */}
-      <HStack gap={4}>
-        <Checkbox
-          size="sm"
-          checked={config.showRowTotals !== false}
-          onCheckedChange={({ checked }) => toggleRowTotals(!!checked)}
-        >
-          <Text fontSize="xs" color="fg.muted">Row totals</Text>
-        </Checkbox>
-        <Checkbox
-          size="sm"
-          checked={config.showColumnTotals !== false}
-          onCheckedChange={({ checked }) => toggleColumnTotals(!!checked)}
-        >
-          <Text fontSize="xs" color="fg.muted">Column totals</Text>
-        </Checkbox>
-        <Checkbox
-          size="sm"
-          checked={config.showHeatmap !== false}
-          onCheckedChange={({ checked }) => toggleHeatmap(!!checked)}
-        >
-          <Text fontSize="xs" color="fg.muted">Heatmap</Text>
-        </Checkbox>
-      </HStack>
     </Box>
   )
 }
