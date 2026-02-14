@@ -171,6 +171,9 @@ chatListenerMiddleware.startListening({
               listenerApi.dispatch(addStreamingMessage(data));
             } else if (event === 'done') {
               doneEventData = data;
+            } else if (event === 'error') {
+              // Handle error events from server
+              throw new Error(data.error);
             } else if (event === 'user_input_request') {
               listenerApi.dispatch(addUserInputRequest({
                 conversationID,
