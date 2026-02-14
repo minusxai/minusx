@@ -4,7 +4,8 @@ import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Box, HStack, VStack, Text } from '@chakra-ui/react'
 import { LuChevronDown } from 'react-icons/lu'
 import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } from './AxisComponents'
-import type { PivotConfig, PivotValueConfig, AggregationFunction } from '@/lib/types'
+import { FormulaBuilder } from './FormulaBuilder'
+import type { PivotConfig, PivotValueConfig, PivotFormula, AggregationFunction } from '@/lib/types'
 
 const AGG_FUNCTIONS: AggregationFunction[] = ['SUM', 'AVG', 'COUNT', 'MIN', 'MAX']
 
@@ -14,6 +15,8 @@ interface PivotAxisBuilderProps {
   pivotConfig?: PivotConfig
   onPivotConfigChange: (config: PivotConfig) => void
   useCompactView?: boolean
+  availableRowValues?: string[]
+  availableColumnValues?: string[]
 }
 
 export const PivotAxisBuilder = ({
@@ -21,6 +24,8 @@ export const PivotAxisBuilder = ({
   types,
   pivotConfig,
   onPivotConfigChange,
+  availableRowValues,
+  availableColumnValues,
 }: PivotAxisBuilderProps) => {
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null)
   const isTouchDevice = useIsTouchDevice()
@@ -96,7 +101,10 @@ export const PivotAxisBuilder = ({
     if (!col || config.rows.includes(col)) { setDraggedColumn(null); setSelectedColumnForMobile(null); return }
     const newCols = config.columns.filter(c => c !== col)
     const newVals = config.values.filter(v => v.column !== col)
-    onPivotConfigChange({ ...config, rows: [...config.rows, col], columns: newCols, values: newVals })
+    const newRows = [...config.rows, col]
+    // Clear row formulas if first row dimension changes (new dim added to position 0 when empty)
+    const clearRowFormulas = config.rows.length === 0
+    onPivotConfigChange({ ...config, rows: newRows, columns: newCols, values: newVals, ...(clearRowFormulas ? { rowFormulas: [] } : {}) })
     setDraggedColumn(null)
     setSelectedColumnForMobile(null)
   }, [draggedColumn, selectedColumnForMobile, config, onPivotConfigChange])
@@ -106,7 +114,10 @@ export const PivotAxisBuilder = ({
     if (!col || config.columns.includes(col)) { setDraggedColumn(null); setSelectedColumnForMobile(null); return }
     const newRows = config.rows.filter(c => c !== col)
     const newVals = config.values.filter(v => v.column !== col)
-    onPivotConfigChange({ ...config, rows: newRows, columns: [...config.columns, col], values: newVals })
+    const newColumns = [...config.columns, col]
+    // Clear column formulas if first column dimension changes (new dim added to position 0 when empty)
+    const clearColFormulas = config.columns.length === 0
+    onPivotConfigChange({ ...config, rows: newRows, columns: newColumns, values: newVals, ...(clearColFormulas ? { columnFormulas: [] } : {}) })
     setDraggedColumn(null)
     setSelectedColumnForMobile(null)
   }, [draggedColumn, selectedColumnForMobile, config, onPivotConfigChange])
@@ -123,11 +134,17 @@ export const PivotAxisBuilder = ({
 
   // Remove handlers
   const removeFromRows = useCallback((col: string) => {
-    onPivotConfigChange({ ...config, rows: config.rows.filter(c => c !== col) })
+    const newRows = config.rows.filter(c => c !== col)
+    // Clear row formulas if first dimension is being removed (or was the first and now changes)
+    const clearRowFormulas = config.rows[0] === col
+    onPivotConfigChange({ ...config, rows: newRows, ...(clearRowFormulas ? { rowFormulas: [] } : {}) })
   }, [config, onPivotConfigChange])
 
   const removeFromColumns = useCallback((col: string) => {
-    onPivotConfigChange({ ...config, columns: config.columns.filter(c => c !== col) })
+    const newCols = config.columns.filter(c => c !== col)
+    // Clear column formulas if first dimension is being removed
+    const clearColFormulas = config.columns[0] === col
+    onPivotConfigChange({ ...config, columns: newCols, ...(clearColFormulas ? { columnFormulas: [] } : {}) })
   }, [config, onPivotConfigChange])
 
   const removeFromValues = useCallback((col: string) => {
@@ -297,6 +314,28 @@ export const PivotAxisBuilder = ({
           )}
         </DropZone>
       </Box>
+
+      {/* Row Formulas */}
+      {config.rows.length > 0 && availableRowValues && availableRowValues.length >= 2 && (
+        <FormulaBuilder
+          axis="row"
+          formulas={config.rowFormulas || []}
+          availableValues={availableRowValues}
+          dimensionName={config.rows[0]}
+          onChange={(formulas: PivotFormula[]) => onPivotConfigChange({ ...config, rowFormulas: formulas })}
+        />
+      )}
+
+      {/* Column Formulas */}
+      {config.columns.length > 0 && availableColumnValues && availableColumnValues.length >= 2 && (
+        <FormulaBuilder
+          axis="column"
+          formulas={config.columnFormulas || []}
+          availableValues={availableColumnValues}
+          dimensionName={config.columns[0]}
+          onChange={(formulas: PivotFormula[]) => onPivotConfigChange({ ...config, columnFormulas: formulas })}
+        />
+      )}
 
     </Box>
   )

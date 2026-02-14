@@ -14,7 +14,7 @@ import { PivotAxisBuilder } from './PivotAxisBuilder'
 import { SingleValue } from './SingleValue'
 import { TrendPlot } from './TrendPlot'
 import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } from './AxisComponents'
-import { aggregatePivotData } from '@/lib/chart/pivot-utils'
+import { aggregatePivotData, computeFormulas, getUniqueTopLevelRowValues, getUniqueTopLevelColumnValues } from '@/lib/chart/pivot-utils'
 import type { PivotConfig } from '@/lib/types'
 
 interface ChartBuilderProps {
@@ -387,6 +387,25 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     return aggregatePivotData(rows, pivotConfig)
   }, [rows, pivotConfig, chartType])
 
+  // Compute formula results from pivotData + pivotConfig
+  const formulaResults = useMemo(() => {
+    if (!pivotData || !pivotConfig) return null
+    const hasFormulas = (pivotConfig.rowFormulas?.length ?? 0) > 0 || (pivotConfig.columnFormulas?.length ?? 0) > 0
+    if (!hasFormulas) return null
+    return computeFormulas(pivotData, pivotConfig)
+  }, [pivotData, pivotConfig])
+
+  // Extract available top-level values for formula builder dropdowns
+  const availableRowValues = useMemo(() => {
+    if (!pivotData) return []
+    return getUniqueTopLevelRowValues(pivotData)
+  }, [pivotData])
+
+  const availableColumnValues = useMemo(() => {
+    if (!pivotData) return []
+    return getUniqueTopLevelColumnValues(pivotData)
+  }, [pivotData])
+
   // For pivot, we consider having data when pivotConfig has values
   const isPivot = chartType === 'pivot'
   const pivotHasData = isPivot && pivotData && pivotData.cells.length > 0
@@ -433,6 +452,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                 pivotConfig={pivotConfig}
                 onPivotConfigChange={handlePivotConfigChange}
                 useCompactView={useCompactView}
+                availableRowValues={availableRowValues}
+                availableColumnValues={availableColumnValues}
               />
             )}
           </>
@@ -447,6 +468,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
               showColTotals={pivotConfig?.showColumnTotals !== false}
               showHeatmap={pivotConfig?.showHeatmap !== false}
               rowDimNames={pivotConfig?.rows}
+              formulaResults={formulaResults}
             />
           ) : (
             <Box

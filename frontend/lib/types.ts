@@ -57,6 +57,15 @@ export interface PivotValueConfig {
   aggFunction: AggregationFunction;
 }
 
+export type FormulaOperator = '+' | '-' | '*' | '/'
+
+export interface PivotFormula {
+  name: string         // Display label, e.g. "YoY Change"
+  operandA: string     // Top-level dimension value, e.g. "2024"
+  operandB: string     // Top-level dimension value, e.g. "2023"
+  operator: FormulaOperator
+}
+
 export interface PivotConfig {
   rows: string[];           // Dimension columns for row headers
   columns: string[];        // Dimension columns for column headers
@@ -64,6 +73,8 @@ export interface PivotConfig {
   showRowTotals?: boolean;    // Show row totals column (default: true)
   showColumnTotals?: boolean; // Show column totals row (default: true)
   showHeatmap?: boolean;      // Show heatmap conditional formatting (default: true)
+  rowFormulas?: PivotFormula[]     // Formulas combining top-level row dimension values
+  columnFormulas?: PivotFormula[]  // Formulas combining top-level column dimension values
 }
 
 export interface VizSettings {

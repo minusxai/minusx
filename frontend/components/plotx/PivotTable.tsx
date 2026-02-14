@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useMemo, useCallback } from 'react'
-import { Box, Table as ChakraTable } from '@chakra-ui/react'
-import { LuChevronDown, LuChevronRight } from 'react-icons/lu'
+import { Box, Table as ChakraTable, Icon } from '@chakra-ui/react'
+import { LuChevronDown, LuChevronRight, LuSquareFunction } from 'react-icons/lu'
 import { formatLargeNumber } from '@/lib/chart/chart-utils'
-import type { PivotData } from '@/lib/chart/pivot-utils'
+import type { PivotData, FormulaResults } from '@/lib/chart/pivot-utils'
 
 interface PivotTableProps {
   pivotData: PivotData
@@ -13,11 +13,24 @@ interface PivotTableProps {
   showHeatmap?: boolean
   emptyMessage?: string
   rowDimNames?: string[]
+  formulaResults?: FormulaResults | null
 }
 
 type DisplayRow =
   | { type: 'data'; rowIndex: number }
   | { type: 'subtotal'; level: number; label: string; cells: number[]; rowTotal: number; groupValues: string[] }
+  | { type: 'formula-row'; name: string; cells: number[]; rowTotal: number }
+
+type ColEntry =
+  | { type: 'data'; cellIndex: number }
+  | { type: 'formula-col'; formulaIdx: number; valueIdx: number }
+
+interface HeaderCell {
+  label: string
+  colSpan: number
+  rowSpan?: number
+  isFormula?: boolean
+}
 
 const makeGroupKey = (values: string[]) => values.join('|||')
 
@@ -28,6 +41,7 @@ export const PivotTable = ({
   showHeatmap = true,
   emptyMessage,
   rowDimNames,
+  formulaResults,
 }: PivotTableProps) => {
   const { rowHeaders, columnHeaders, cells, rowTotals, columnTotals, grandTotal, valueLabels } = pivotData
 
@@ -35,6 +49,7 @@ export const PivotTable = ({
   const numRowDims = rowHeaders.length > 0 ? rowHeaders[0].length : 0
   const numColDims = columnHeaders.length > 0 ? columnHeaders[0].length : 0
   const numDataCols = cells.length > 0 ? cells[0].length : 0
+  const numValues = valueLabels.length || 1
 
   // Collapsed groups state
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
@@ -48,7 +63,7 @@ export const PivotTable = ({
     })
   }, [])
 
-  // Compute min/max across all cells for heatmap gradient
+  // Compute min/max across regular cells only for heatmap (excludes formula cells)
   const { minValue, maxValue } = useMemo(() => {
     let min = Infinity
     let max = -Infinity
@@ -69,117 +84,52 @@ export const PivotTable = ({
     return `accent.teal/${opacityPercent}`
   }
 
-  // Build display rows: interleave data rows with subtotal rows at group boundaries
-  const displayRows = useMemo((): DisplayRow[] => {
-    if (rowHeaders.length === 0) {
-      return cells.map((_, i) => ({ type: 'data' as const, rowIndex: i }))
+  // Column entries: interleave regular data columns with formula columns
+  const columnEntries = useMemo((): ColEntry[] => {
+    const colFormulas = formulaResults?.columnFormulas ?? []
+    if (numDataCols === 0) return []
+    if (colFormulas.length === 0) {
+      return Array.from({ length: numDataCols }, (_, i) => ({ type: 'data' as const, cellIndex: i }))
     }
 
-    // Only add subtotals when there are 2+ row dimensions
-    if (numRowDims < 2) {
-      return cells.map((_, i) => ({ type: 'data' as const, rowIndex: i }))
+    const entries: ColEntry[] = []
+    const formulasByInsertCK = new Map<number, number[]>()
+    for (let fi = 0; fi < colFormulas.length; fi++) {
+      const ck = colFormulas[fi].insertAfterColKeyIndex
+      if (!formulasByInsertCK.has(ck)) formulasByInsertCK.set(ck, [])
+      formulasByInsertCK.get(ck)!.push(fi)
     }
 
-    const result: DisplayRow[] = []
-
-    for (let i = 0; i < rowHeaders.length; i++) {
-      result.push({ type: 'data', rowIndex: i })
-
-      // Insert subtotals at group boundaries, deepest level first then shallower
-      for (let level = numRowDims - 2; level >= 0; level--) {
-        const isLastRow = i === rowHeaders.length - 1
-        const groupChanges = !isLastRow && (
-          rowHeaders[i][level] !== rowHeaders[i + 1][level] ||
-          (() => {
-            for (let p = 0; p < level; p++) {
-              if (rowHeaders[i][p] !== rowHeaders[i + 1][p]) return true
-            }
-            return false
-          })()
-        )
-
-        if (isLastRow || groupChanges) {
-          // Find start of this group
-          let groupStart = i
-          while (groupStart > 0) {
-            let sameGroup = true
-            for (let p = 0; p <= level; p++) {
-              if (rowHeaders[groupStart - 1][p] !== rowHeaders[i][p]) {
-                sameGroup = false
-                break
-              }
-            }
-            if (sameGroup) groupStart--
-            else break
+    for (let ck = 0; ck < columnHeaders.length; ck++) {
+      for (let vi = 0; vi < numValues; vi++) {
+        entries.push({ type: 'data', cellIndex: ck * numValues + vi })
+      }
+      const formulas = formulasByInsertCK.get(ck)
+      if (formulas) {
+        for (const fi of formulas) {
+          for (let vi = 0; vi < numValues; vi++) {
+            entries.push({ type: 'formula-col', formulaIdx: fi, valueIdx: vi })
           }
-
-          // Sum cells across the group
-          const subtotalCells = new Array(numDataCols).fill(0)
-          let subtotalRowTotal = 0
-          for (let r = groupStart; r <= i; r++) {
-            for (let c = 0; c < numDataCols; c++) {
-              subtotalCells[c] += cells[r][c]
-            }
-            subtotalRowTotal += rowTotals[r]
-          }
-
-          result.push({
-            type: 'subtotal',
-            level,
-            label: rowHeaders[i][level] + ' Total',
-            cells: subtotalCells,
-            rowTotal: subtotalRowTotal,
-            groupValues: rowHeaders[i].slice(0, level + 1),
-          })
         }
       }
     }
 
-    return result
-  }, [rowHeaders, cells, numRowDims, numDataCols, rowTotals])
+    return entries
+  }, [numDataCols, columnHeaders, numValues, formulaResults])
 
-  // Filter visible rows based on collapsed groups
-  const visibleRows = useMemo((): DisplayRow[] => {
-    if (collapsedGroups.size === 0 || numRowDims < 2) return displayRows
-
-    return displayRows.filter(dr => {
-      if (dr.type === 'data') {
-        // A data row is hidden if ANY group it belongs to is collapsed
-        for (let level = 0; level < numRowDims - 1; level++) {
-          const key = makeGroupKey(rowHeaders[dr.rowIndex].slice(0, level + 1))
-          if (collapsedGroups.has(key)) return false
-        }
-        return true
-      }
-
-      if (dr.type === 'subtotal') {
-        // A subtotal at level L is hidden if any PARENT group (levels 0..L-1) is collapsed
-        for (let parentLevel = 0; parentLevel < dr.level; parentLevel++) {
-          const parentKey = makeGroupKey(dr.groupValues.slice(0, parentLevel + 1))
-          if (collapsedGroups.has(parentKey)) return false
-        }
-        // The subtotal at its own level is always visible (serves as collapsed header)
-        return true
-      }
-
-      return true
-    })
-  }, [displayRows, collapsedGroups, rowHeaders, numRowDims])
-
-  // Build column header rows with colSpan for nested grouping
-  const colHeaderRows = useMemo(() => {
+  // Augmented column header rows with formula column headers
+  const augmentedColHeaderRows = useMemo((): HeaderCell[][] => {
     if (columnHeaders.length === 0) return []
+    const colFormulas = formulaResults?.columnFormulas ?? []
 
-    const rows: Array<Array<{ label: string; colSpan: number }>> = []
-
+    // Build base header rows
+    const baseRows: Array<Array<{ label: string; colSpan: number }>> = []
     for (let level = 0; level < numColDims; level++) {
       const headerRow: Array<{ label: string; colSpan: number }> = []
       let i = 0
-
       while (i < columnHeaders.length) {
         const currentLabel = columnHeaders[i][level]
         let span = 1
-
         while (i + span < columnHeaders.length) {
           const matches = columnHeaders[i + span][level] === currentLabel
           let parentsMatch = true
@@ -192,15 +142,12 @@ export const PivotTable = ({
           if (matches && parentsMatch) span++
           else break
         }
-
-        const effectiveSpan = hasMultipleValues ? span * valueLabels.length : span
+        const effectiveSpan = hasMultipleValues ? span * numValues : span
         headerRow.push({ label: currentLabel, colSpan: effectiveSpan })
         i += span
       }
-
-      rows.push(headerRow)
+      baseRows.push(headerRow)
     }
-
     if (hasMultipleValues) {
       const valueRow: Array<{ label: string; colSpan: number }> = []
       for (let c = 0; c < columnHeaders.length; c++) {
@@ -208,11 +155,235 @@ export const PivotTable = ({
           valueRow.push({ label: vl, colSpan: 1 })
         }
       }
-      rows.push(valueRow)
+      baseRows.push(valueRow)
     }
 
-    return rows
-  }, [columnHeaders, numColDims, hasMultipleValues, valueLabels])
+    // If no column formulas, return base rows as HeaderCell
+    if (colFormulas.length === 0) {
+      return baseRows.map(row => row.map(h => ({ label: h.label, colSpan: h.colSpan })))
+    }
+
+    // Determine level-0 group ranges (colKey ranges)
+    const level0Groups: { label: string; startCK: number; endCK: number }[] = []
+    {
+      let ck = 0
+      while (ck < columnHeaders.length) {
+        const start = ck
+        const label = columnHeaders[ck][0]
+        while (ck + 1 < columnHeaders.length && columnHeaders[ck + 1][0] === label) ck++
+        level0Groups.push({ label, startCK: start, endCK: ck })
+        ck++
+      }
+    }
+
+    // Map formulas to level-0 groups they insert after
+    const formulasAfterGroup = new Map<number, number[]>()
+    for (let fi = 0; fi < colFormulas.length; fi++) {
+      const insertCK = colFormulas[fi].insertAfterColKeyIndex
+      for (let g = 0; g < level0Groups.length; g++) {
+        if (insertCK >= level0Groups[g].startCK && insertCK <= level0Groups[g].endCK) {
+          if (!formulasAfterGroup.has(g)) formulasAfterGroup.set(g, [])
+          formulasAfterGroup.get(g)!.push(fi)
+          break
+        }
+      }
+    }
+
+    // Build augmented header rows
+    const result: HeaderCell[][] = []
+    for (let level = 0; level < baseRows.length; level++) {
+      const isValueLevel = hasMultipleValues && level === baseRows.length - 1
+
+      if (level === 0) {
+        const augRow: HeaderCell[] = []
+        for (let g = 0; g < level0Groups.length; g++) {
+          augRow.push({ label: baseRows[0][g].label, colSpan: baseRows[0][g].colSpan })
+          const formulas = formulasAfterGroup.get(g)
+          if (formulas) {
+            for (const fi of formulas) {
+              augRow.push({
+                label: colFormulas[fi].name,
+                colSpan: hasMultipleValues ? numValues : 1,
+                rowSpan: hasMultipleValues ? numColDims : numColDims,
+                isFormula: true,
+              })
+            }
+          }
+        }
+        result.push(augRow)
+      } else if (isValueLevel) {
+        // Value level: regular value labels + formula value labels
+        const augRow: HeaderCell[] = []
+        for (let g = 0; g < level0Groups.length; g++) {
+          const numCKs = level0Groups[g].endCK - level0Groups[g].startCK + 1
+          for (let ck = 0; ck < numCKs; ck++) {
+            for (const vl of valueLabels) {
+              augRow.push({ label: vl, colSpan: 1 })
+            }
+          }
+          const formulas = formulasAfterGroup.get(g)
+          if (formulas) {
+            for (const _fi of formulas) {
+              for (const vl of valueLabels) {
+                augRow.push({ label: vl, colSpan: 1, isFormula: true })
+              }
+            }
+          }
+        }
+        result.push(augRow)
+      } else {
+        // Intermediate dim levels: regular headers only (formula cols covered by rowSpan)
+        result.push(baseRows[level].map(h => ({ label: h.label, colSpan: h.colSpan })))
+      }
+    }
+
+    return result
+  }, [columnHeaders, numColDims, hasMultipleValues, numValues, valueLabels, formulaResults])
+
+  // Build display rows: data + subtotals + formula rows
+  const displayRows = useMemo((): DisplayRow[] => {
+    if (rowHeaders.length === 0) {
+      const result: DisplayRow[] = cells.map((_, i) => ({ type: 'data' as const, rowIndex: i }))
+      // Insert formula rows at end if applicable
+      const rowFormulas = formulaResults?.rowFormulas ?? []
+      for (const rf of rowFormulas) {
+        result.push({ type: 'formula-row', name: rf.name, cells: rf.cells, rowTotal: rf.rowTotal })
+      }
+      return result
+    }
+
+    // Build data + subtotal rows
+    const result: DisplayRow[] = []
+
+    if (numRowDims < 2) {
+      // No subtotals for single dim
+      for (let i = 0; i < rowHeaders.length; i++) {
+        result.push({ type: 'data', rowIndex: i })
+      }
+    } else {
+      for (let i = 0; i < rowHeaders.length; i++) {
+        result.push({ type: 'data', rowIndex: i })
+
+        for (let level = numRowDims - 2; level >= 0; level--) {
+          const isLastRow = i === rowHeaders.length - 1
+          const groupChanges = !isLastRow && (
+            rowHeaders[i][level] !== rowHeaders[i + 1][level] ||
+            (() => {
+              for (let p = 0; p < level; p++) {
+                if (rowHeaders[i][p] !== rowHeaders[i + 1][p]) return true
+              }
+              return false
+            })()
+          )
+
+          if (isLastRow || groupChanges) {
+            let groupStart = i
+            while (groupStart > 0) {
+              let sameGroup = true
+              for (let p = 0; p <= level; p++) {
+                if (rowHeaders[groupStart - 1][p] !== rowHeaders[i][p]) {
+                  sameGroup = false
+                  break
+                }
+              }
+              if (sameGroup) groupStart--
+              else break
+            }
+
+            const subtotalCells = new Array(numDataCols).fill(0)
+            let subtotalRowTotal = 0
+            for (let r = groupStart; r <= i; r++) {
+              for (let c = 0; c < numDataCols; c++) {
+                subtotalCells[c] += cells[r][c]
+              }
+              subtotalRowTotal += rowTotals[r]
+            }
+
+            result.push({
+              type: 'subtotal',
+              level,
+              label: rowHeaders[i][level] + ' Total',
+              cells: subtotalCells,
+              rowTotal: subtotalRowTotal,
+              groupValues: rowHeaders[i].slice(0, level + 1),
+            })
+          }
+        }
+      }
+    }
+
+    // Insert formula rows at appropriate positions
+    const rowFormulas = formulaResults?.rowFormulas ?? []
+    if (rowFormulas.length > 0) {
+      // Insert in reverse order so indices don't shift
+      const insertions: { position: number; formula: DisplayRow }[] = []
+      for (const rf of rowFormulas) {
+        const topLevelValue = rowHeaders[rf.insertAfterRowIndex]?.[0]
+        if (!topLevelValue) continue
+
+        let insertPosition = -1
+        // Find the level-0 subtotal for this group
+        for (let d = 0; d < result.length; d++) {
+          const dr = result[d]
+          if (dr.type === 'subtotal' && dr.level === 0 && dr.groupValues[0] === topLevelValue) {
+            insertPosition = d + 1
+            break
+          }
+        }
+        // Fallback: after the last data row of this group
+        if (insertPosition === -1) {
+          for (let d = result.length - 1; d >= 0; d--) {
+            const dr = result[d]
+            if (dr.type === 'data' && rowHeaders[dr.rowIndex][0] === topLevelValue) {
+              insertPosition = d + 1
+              break
+            }
+          }
+        }
+        if (insertPosition === -1) insertPosition = result.length
+
+        insertions.push({
+          position: insertPosition,
+          formula: { type: 'formula-row', name: rf.name, cells: rf.cells, rowTotal: rf.rowTotal },
+        })
+      }
+
+      // Sort by position descending so we can splice without shifting
+      insertions.sort((a, b) => b.position - a.position)
+      for (const ins of insertions) {
+        result.splice(ins.position, 0, ins.formula)
+      }
+    }
+
+    return result
+  }, [rowHeaders, cells, numRowDims, numDataCols, rowTotals, formulaResults])
+
+  // Filter visible rows based on collapsed groups (formula rows always visible)
+  const visibleRows = useMemo((): DisplayRow[] => {
+    if (collapsedGroups.size === 0 || numRowDims < 2) return displayRows
+
+    return displayRows.filter(dr => {
+      if (dr.type === 'formula-row') return true
+
+      if (dr.type === 'data') {
+        for (let level = 0; level < numRowDims - 1; level++) {
+          const key = makeGroupKey(rowHeaders[dr.rowIndex].slice(0, level + 1))
+          if (collapsedGroups.has(key)) return false
+        }
+        return true
+      }
+
+      if (dr.type === 'subtotal') {
+        for (let parentLevel = 0; parentLevel < dr.level; parentLevel++) {
+          const parentKey = makeGroupKey(dr.groupValues.slice(0, parentLevel + 1))
+          if (collapsedGroups.has(parentKey)) return false
+        }
+        return true
+      }
+
+      return true
+    })
+  }, [displayRows, collapsedGroups, rowHeaders, numRowDims])
 
   // Build row header spans for nested grouping based on visibleRows
   const rowSpans = useMemo(() => {
@@ -227,7 +398,8 @@ export const PivotTable = ({
       while (i < visibleRows.length) {
         const dr = visibleRows[i]
 
-        if (dr.type === 'subtotal') {
+        // Formula rows and subtotals don't participate in dimension grouping
+        if (dr.type === 'subtotal' || dr.type === 'formula-row') {
           spans[i][level] = { show: false, rowSpan: 1 }
           i++
           continue
@@ -237,6 +409,10 @@ export const PivotTable = ({
         let span = 1
         while (i + span < visibleRows.length) {
           const next = visibleRows[i + span]
+          if (next.type === 'formula-row') {
+            // Formula rows break the span
+            break
+          }
           if (next.type === 'subtotal') {
             if (next.level > level) {
               span++
@@ -275,10 +451,172 @@ export const PivotTable = ({
     )
   }
 
-  // Subtotal styling helpers
+  // Styling helpers
   const getSubtotalBg = (level: number) => level === 0 ? 'accent.teal/20' : 'accent.teal/12'
   const getSubtotalBorderTop = (level: number) => level === 0 ? '2px solid' : '1px solid'
   const getSubtotalBorderColor = (level: number) => level === 0 ? 'border.default' : 'border.muted'
+
+  const colFormulas = formulaResults?.columnFormulas ?? []
+  const hasColFormulas = colFormulas.length > 0
+
+  // Helper: render cells for a row using columnEntries
+  const renderDataCells = (rowIndex: number) => {
+    return columnEntries.map((entry, i) => {
+      if (entry.type === 'data') {
+        return (
+          <ChakraTable.Cell
+            key={`col-${i}`}
+            textAlign="right"
+            fontFamily="mono"
+            fontSize="sm"
+            bg={getCellBg(cells[rowIndex][entry.cellIndex])}
+          >
+            {formatLargeNumber(cells[rowIndex][entry.cellIndex])}
+          </ChakraTable.Cell>
+        )
+      }
+      // formula-col
+      const val = colFormulas[entry.formulaIdx].rowValues[rowIndex][entry.valueIdx]
+      return (
+        <ChakraTable.Cell
+          key={`col-${i}`}
+          textAlign="right"
+          fontFamily="mono"
+          fontSize="sm"
+          bg="accent.secondary/12"
+          fontStyle="italic"
+        >
+          {formatLargeNumber(val)}
+        </ChakraTable.Cell>
+      )
+    })
+  }
+
+  const renderSubtotalCells = (dr: Extract<DisplayRow, { type: 'subtotal' }>) => {
+    const subtotalBg = getSubtotalBg(dr.level)
+    const borderTop = getSubtotalBorderTop(dr.level)
+    const borderTopColor = getSubtotalBorderColor(dr.level)
+    const groupKey = makeGroupKey(dr.groupValues)
+
+    return columnEntries.map((entry, i) => {
+      if (entry.type === 'data') {
+        return (
+          <ChakraTable.Cell
+            key={`col-${i}`}
+            textAlign="right"
+            fontFamily="mono"
+            fontSize="sm"
+            fontWeight="600"
+            bg={subtotalBg}
+            color="fg.default"
+            borderTop={borderTop}
+            borderBottom={dr.level === 0 ? '2px solid' : undefined}
+            borderColor={borderTopColor}
+          >
+            {formatLargeNumber(dr.cells[entry.cellIndex])}
+          </ChakraTable.Cell>
+        )
+      }
+      // formula-col in subtotal row
+      const vals = colFormulas[entry.formulaIdx].subtotalValues.get(groupKey)
+      const val = vals?.[entry.valueIdx]
+      return (
+        <ChakraTable.Cell
+          key={`col-${i}`}
+          textAlign="right"
+          fontFamily="mono"
+          fontSize="sm"
+          fontWeight="600"
+          bg="accent.secondary/12"
+          fontStyle="italic"
+          color="fg.default"
+          borderTop={borderTop}
+          borderBottom={dr.level === 0 ? '2px solid' : undefined}
+          borderColor={borderTopColor}
+        >
+          {val !== undefined ? formatLargeNumber(val) : '\u2014'}
+        </ChakraTable.Cell>
+      )
+    })
+  }
+
+  const renderFormulaRowCells = (dr: Extract<DisplayRow, { type: 'formula-row' }>) => {
+    return columnEntries.map((entry, i) => {
+      if (entry.type === 'data') {
+        return (
+          <ChakraTable.Cell
+            key={`col-${i}`}
+            textAlign="right"
+            fontFamily="mono"
+            fontSize="sm"
+            fontWeight="600"
+            bg="accent.secondary/12"
+            fontStyle="italic"
+            color="fg.default"
+            borderTop="1px dashed"
+            borderColor="accent.secondary/40"
+          >
+            {formatLargeNumber(dr.cells[entry.cellIndex])}
+          </ChakraTable.Cell>
+        )
+      }
+      // formula-col in formula-row: show dash
+      return (
+        <ChakraTable.Cell
+          key={`col-${i}`}
+          textAlign="center"
+          fontFamily="mono"
+          fontSize="sm"
+          bg="accent.secondary/12"
+          color="fg.subtle"
+          borderTop="1px dashed"
+          borderColor="accent.secondary/40"
+        >
+          {'\u2014'}
+        </ChakraTable.Cell>
+      )
+    })
+  }
+
+  const renderGrandTotalCells = () => {
+    return columnEntries.map((entry, i) => {
+      if (entry.type === 'data') {
+        return (
+          <ChakraTable.Cell
+            key={`col-${i}`}
+            textAlign="right"
+            fontFamily="mono"
+            fontSize="sm"
+            fontWeight="600"
+            borderTop="2px solid"
+            borderColor="border.default"
+            bg="accent.teal/40"
+            color="fg.default"
+          >
+            {formatLargeNumber(columnTotals[entry.cellIndex])}
+          </ChakraTable.Cell>
+        )
+      }
+      // formula-col in grand total: dash
+      return (
+        <ChakraTable.Cell
+          key={`col-${i}`}
+          textAlign="center"
+          fontFamily="mono"
+          fontSize="sm"
+          fontWeight="600"
+          borderTop="2px solid"
+          borderColor="border.default"
+          bg="accent.teal/40"
+          color="fg.subtle"
+        >
+          {'\u2014'}
+        </ChakraTable.Cell>
+      )
+    })
+  }
+
+  const numHeaderRows = augmentedColHeaderRows.length
 
   return (
     <Box
@@ -292,14 +630,14 @@ export const PivotTable = ({
       <ChakraTable.Root size="sm" css={{ borderCollapse: 'collapse' }}>
         <ChakraTable.Header position="sticky" top={0} zIndex={5} bg="bg.muted">
           {/* Column header rows */}
-          {colHeaderRows.map((headerRow, rowIdx) => (
+          {augmentedColHeaderRows.map((headerRow, rowIdx) => (
             <ChakraTable.Row key={rowIdx} bg="bg.muted">
               {/* Row dimension name headers */}
               {rowIdx === 0 && numRowDims > 0 && (
                 Array.from({ length: numRowDims }, (_, dimIdx) => (
                   <ChakraTable.ColumnHeader
                     key={`dim-${dimIdx}`}
-                    rowSpan={colHeaderRows.length}
+                    rowSpan={numHeaderRows}
                     fontWeight="700"
                     fontSize="xs"
                     textTransform="uppercase"
@@ -323,25 +661,36 @@ export const PivotTable = ({
                 <ChakraTable.ColumnHeader
                   key={colIdx}
                   colSpan={hdr.colSpan}
+                  rowSpan={hdr.rowSpan}
                   fontWeight="700"
                   fontSize="xs"
                   textTransform="uppercase"
                   letterSpacing="0.05em"
-                  color="fg.muted"
+                  color={hdr.isFormula ? 'accent.secondary' : 'fg.muted'}
                   textAlign="center"
                   minW="80px"
-                  borderBottom={rowIdx < colHeaderRows.length - 1 ? '1px solid' : undefined}
+                  borderBottom={rowIdx < numHeaderRows - 1 ? '1px solid' : undefined}
                   borderColor="border.muted"
                   zIndex={3}
+                  bg={hdr.isFormula ? 'accent.secondary/12' : undefined}
+                  fontStyle={hdr.isFormula ? 'italic' : undefined}
                 >
-                  {hdr.label}
+                  {hdr.isFormula ? (
+                    <Box display="inline-flex" alignItems="center" gap={1} justifyContent="center">
+                      <Icon fontSize="md" color="accent.secondary">
+                        <LuSquareFunction />
+                      </Icon>
+                    
+                      {hdr.label}
+                    </Box>
+                  ) : hdr.label}
                 </ChakraTable.ColumnHeader>
               ))}
 
               {/* Row total header */}
               {showRowTotals && rowIdx === 0 && (
                 <ChakraTable.ColumnHeader
-                  rowSpan={colHeaderRows.length}
+                  rowSpan={numHeaderRows}
                   fontWeight="700"
                   fontSize="xs"
                   textTransform="uppercase"
@@ -361,7 +710,7 @@ export const PivotTable = ({
           ))}
 
           {/* If no column dimensions, still show a header row with value labels */}
-          {colHeaderRows.length === 0 && (
+          {augmentedColHeaderRows.length === 0 && (
             <ChakraTable.Row bg="bg.muted">
               {numRowDims > 0 && (
                 Array.from({ length: numRowDims }, (_, dimIdx) => (
@@ -421,8 +770,76 @@ export const PivotTable = ({
         </ChakraTable.Header>
 
         <ChakraTable.Body>
-          {/* Data + subtotal rows */}
+          {/* Data + subtotal + formula rows */}
           {visibleRows.map((displayRow, displayIndex) => {
+            // Formula row
+            if (displayRow.type === 'formula-row') {
+              return (
+                <ChakraTable.Row key={`formula-${displayIndex}`}>
+                  <ChakraTable.Cell
+                    colSpan={numRowDims || 1}
+                    fontWeight="700"
+                    fontSize="xs"
+                    textTransform="uppercase"
+                    letterSpacing="0.05em"
+                    fontStyle="italic"
+                    color="accent.secondary"
+                    borderRight="2px solid"
+                    borderTop="1px dashed"
+                    borderColor="accent.secondary/40"
+                    position="sticky"
+                    left={0}
+                    bg="accent.secondary/12"
+                    zIndex={2}
+                  >
+                    <Box display="flex" alignItems="center" gap={1}>
+                      <Icon fontSize="md" color="accent.secondary">
+                        <LuSquareFunction />
+                      </Icon>
+                      {displayRow.name}
+                    </Box>
+                  </ChakraTable.Cell>
+
+                  {hasColFormulas ? renderFormulaRowCells(displayRow) : (
+                    displayRow.cells.map((value, colIndex) => (
+                      <ChakraTable.Cell
+                        key={colIndex}
+                        textAlign="right"
+                        fontFamily="mono"
+                        fontSize="sm"
+                        fontWeight="600"
+                        bg="accent.secondary/12"
+                        fontStyle="italic"
+                        color="fg.default"
+                        borderTop="1px dashed"
+                        borderColor="accent.secondary/40"
+                      >
+                        {formatLargeNumber(value)}
+                      </ChakraTable.Cell>
+                    ))
+                  )}
+
+                  {showRowTotals && (
+                    <ChakraTable.Cell
+                      textAlign="right"
+                      fontFamily="mono"
+                      fontSize="sm"
+                      fontWeight="700"
+                      fontStyle="italic"
+                      borderLeft="2px solid"
+                      borderTop="1px dashed"
+                      borderColor="accent.secondary/40"
+                      bg="accent.secondary/12"
+                      color="accent.secondary"
+                    >
+                      {formatLargeNumber(displayRow.rowTotal)}
+                    </ChakraTable.Cell>
+                  )}
+                </ChakraTable.Row>
+              )
+            }
+
+            // Subtotal row
             if (displayRow.type === 'subtotal') {
               const S = displayRow.level
               const subtotalBg = getSubtotalBg(S)
@@ -433,8 +850,6 @@ export const PivotTable = ({
 
               return (
                 <ChakraTable.Row key={`subtotal-${displayIndex}`}>
-                  {/* Columns 0..S-1 are covered by parent rowSpan - don't render.
-                      The label cell starts at column S and spans to the last dim column. */}
                   <ChakraTable.Cell
                     colSpan={numRowDims - S}
                     fontWeight="700"
@@ -460,25 +875,25 @@ export const PivotTable = ({
                     </Box>
                   </ChakraTable.Cell>
 
-                  {/* Subtotal data cells */}
-                  {displayRow.cells.map((value, colIndex) => (
-                    <ChakraTable.Cell
-                      key={colIndex}
-                      textAlign="right"
-                      fontFamily="mono"
-                      fontSize="sm"
-                      fontWeight="600"
-                      bg={subtotalBg}
-                      color="fg.default"
-                      borderTop={borderTop}
-                      borderBottom={S === 0 ? '2px solid' : undefined}
-                      borderColor={borderTopColor}
-                    >
-                      {formatLargeNumber(value)}
-                    </ChakraTable.Cell>
-                  ))}
+                  {hasColFormulas ? renderSubtotalCells(displayRow) : (
+                    displayRow.cells.map((value, colIndex) => (
+                      <ChakraTable.Cell
+                        key={colIndex}
+                        textAlign="right"
+                        fontFamily="mono"
+                        fontSize="sm"
+                        fontWeight="600"
+                        bg={subtotalBg}
+                        color="fg.default"
+                        borderTop={borderTop}
+                        borderBottom={S === 0 ? '2px solid' : undefined}
+                        borderColor={borderTopColor}
+                      >
+                        {formatLargeNumber(value)}
+                      </ChakraTable.Cell>
+                    ))
+                  )}
 
-                  {/* Subtotal row total */}
                   {showRowTotals && (
                     <ChakraTable.Cell
                       textAlign="right"
@@ -524,18 +939,20 @@ export const PivotTable = ({
                   ) : null
                 )}
 
-                {/* Data cells */}
-                {cells[rowIndex].map((value, colIndex) => (
-                  <ChakraTable.Cell
-                    key={colIndex}
-                    textAlign="right"
-                    fontFamily="mono"
-                    fontSize="sm"
-                    bg={getCellBg(value)}
-                  >
-                    {formatLargeNumber(value)}
-                  </ChakraTable.Cell>
-                ))}
+                {/* Data cells (interleaved with formula columns if applicable) */}
+                {hasColFormulas ? renderDataCells(rowIndex) : (
+                  cells[rowIndex].map((value, colIndex) => (
+                    <ChakraTable.Cell
+                      key={colIndex}
+                      textAlign="right"
+                      fontFamily="mono"
+                      fontSize="sm"
+                      bg={getCellBg(value)}
+                    >
+                      {formatLargeNumber(value)}
+                    </ChakraTable.Cell>
+                  ))
+                )}
 
                 {/* Row total */}
                 {showRowTotals && (
@@ -577,21 +994,23 @@ export const PivotTable = ({
                 Grand Total
               </ChakraTable.Cell>
 
-              {columnTotals.map((total, colIndex) => (
-                <ChakraTable.Cell
-                  key={colIndex}
-                  textAlign="right"
-                  fontFamily="mono"
-                  fontSize="sm"
-                  fontWeight="600"
-                  borderTop="2px solid"
-                  borderColor="border.default"
-                  bg="accent.teal/40"
-                  color="fg.default"
-                >
-                  {formatLargeNumber(total)}
-                </ChakraTable.Cell>
-              ))}
+              {hasColFormulas ? renderGrandTotalCells() : (
+                columnTotals.map((total, colIndex) => (
+                  <ChakraTable.Cell
+                    key={colIndex}
+                    textAlign="right"
+                    fontFamily="mono"
+                    fontSize="sm"
+                    fontWeight="600"
+                    borderTop="2px solid"
+                    borderColor="border.default"
+                    bg="accent.teal/40"
+                    color="fg.default"
+                  >
+                    {formatLargeNumber(total)}
+                  </ChakraTable.Cell>
+                ))
+              )}
 
               {showRowTotals && (
                 <ChakraTable.Cell
