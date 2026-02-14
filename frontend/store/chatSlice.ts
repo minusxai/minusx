@@ -129,20 +129,21 @@ const chatSlice = createSlice({
     },
 
     // Load existing conversation from database
-    loadConversation(state, action: PayloadAction<Conversation>) {
-      const conv = action.payload;
+    loadConversation(state, action: PayloadAction<{ conversation: Conversation; setAsActive?: boolean }>) {
+      const { conversation: conv, setAsActive = false } = action.payload;
       // Ensure _id exists (for backwards compatibility with old conversations)
       if (!conv._id) {
         conv._id = crypto.randomUUID();
       }
 
-      // Deactivate all existing conversations
-      Object.values(state.conversations).forEach(c => {
-        c.active = false;
-      });
+      if (setAsActive) {
+        // Deactivate all existing conversations
+        Object.values(state.conversations).forEach(c => {
+          c.active = false;
+        });
+        conv.active = true;
+      }
 
-      // Mark loaded conversation as active
-      conv.active = true;
       state.conversations[conv.conversationID] = conv;
     },
 
@@ -453,11 +454,21 @@ const chatSlice = createSlice({
       pendingTool.userInputs.push(action.payload.userInput);
     },
 
-    // Deactivate conversation (for "New Chat" button)
-    deactivateConversation(state, action: PayloadAction<{ conversationID: number }>) {
-      const conv = state.conversations[action.payload.conversationID];
-      if (conv) {
-        conv.active = false;
+    // Set conversation as active (pass null to deactivate all)
+    setActiveConversation(state, action: PayloadAction<number | null>) {
+      const conversationID = action.payload;
+
+      // Deactivate all conversations
+      Object.values(state.conversations).forEach(c => {
+        c.active = false;
+      });
+
+      // Activate specified conversation (if not null)
+      if (conversationID !== null) {
+        const conv = state.conversations[conversationID];
+        if (conv) {
+          conv.active = true;
+        }
       }
     }
   }
@@ -476,7 +487,7 @@ export const {
   interruptChat,
   setUserInputResult,
   addUserInputRequest,
-  deactivateConversation
+  setActiveConversation
 } = chatSlice.actions;
 
 // Selectors

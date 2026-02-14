@@ -63,15 +63,18 @@ export function useConversation(conversationId?: number) {
 
         // Dispatch to Redux for caching
         dispatch(loadConversation({
-          _id: crypto.randomUUID(),  // Generate stable internal ID
-          conversationID: conversationId,
-          log_index: content.log.length,
-          messages,
-          executionState: 'FINISHED',
-          pending_tool_calls: [],
-          streamedCompletedToolCalls: [],
-          agent,
-          agent_args
+          conversation: {
+            _id: crypto.randomUUID(),  // Generate stable internal ID
+            conversationID: conversationId,
+            log_index: content.log.length,
+            messages,
+            executionState: 'FINISHED',
+            pending_tool_calls: [],
+            streamedCompletedToolCalls: [],
+            agent,
+            agent_args
+          },
+          setAsActive: false  // Don't activate when loading from URL
         }));
       } catch (err: any) {
         console.error('Failed to load conversation:', err);

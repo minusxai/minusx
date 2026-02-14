@@ -3,13 +3,13 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box, VStack, HStack, Text, Icon, Button, Spinner, Grid, GridItem } from '@chakra-ui/react';
-import { LuPlus, LuChevronDown, LuRefreshCw, LuSparkles } from 'react-icons/lu';
+import { LuPlus, LuChevronDown, LuRefreshCw, LuSparkles, LuPin } from 'react-icons/lu';
 import type { LoadError } from '@/lib/types/errors';
 import { AppState } from '@/lib/appState';
 import ChatInput from './ChatInput';
 import ThinkingIndicator from './ThinkingIndicator';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { createConversation, sendMessage, updateAgentArgs, interruptChat, selectOptionalConversation, deactivateConversation } from '@/store/chatSlice';
+import { createConversation, sendMessage, updateAgentArgs, interruptChat, selectOptionalConversation, setActiveConversation } from '@/store/chatSlice';
 import { useConversation } from '@/lib/hooks/useConversation';
 import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -292,10 +292,8 @@ export default function ChatInterface({
       dispatch(interruptChat({ conversationID }));
     }
 
-    // Deactivate current conversation (saves to history)
-    if (conversationID) {
-      dispatch(deactivateConversation({ conversationID }));
-    }
+    // Deactivate all conversations (saves current to history)
+    dispatch(setActiveConversation(null));
 
     // For explore page: navigate to /explore to show empty state
     if (container === 'page') {
@@ -405,6 +403,33 @@ export default function ChatInterface({
   }, [conversationID, isNewConversation, providedConversationId, container, router, conversation]);
 
 
+  // Handler for setting conversation as active
+  const handleSetAsActive = () => {
+    if (conversationID) {
+      dispatch(setActiveConversation(conversationID));
+    }
+  };
+
+  // Determine if current conversation is active
+  const isConversationActive = conversation?.active === true;
+
+  // "Set as Active" button (only shown for non-active conversations)
+  const setAsActiveButton = providedConversationId && !isConversationActive && conversation && (
+    <Tooltip content="Make this conversation active in sidechat" positioning={{ placement: 'bottom' }}>
+      <Button
+        onClick={handleSetAsActive}
+        size="xs"
+        variant="outline"
+        borderColor="border.emphasized"
+        color="fg.muted"
+        _hover={{ bg: 'bg.muted', borderColor: 'accent.teal', color: 'accent.teal' }}
+      >
+        <Icon as={LuPin} boxSize={4} mr={1} />
+        Set as Active
+      </Button>
+    </Tooltip>
+  );
+
   // New Chat button component (reused in both banner and standalone)
   const newChatButton = allMessages.length > 0 && (
     <Button
@@ -438,6 +463,7 @@ export default function ChatInterface({
         >
           <Box width="100%" display="flex" justifyContent="flex-end" alignItems="center" px={5}>
             <HStack gap={2}>
+              {setAsActiveButton}
               {newChatButton}
             </HStack>
           </Box>
