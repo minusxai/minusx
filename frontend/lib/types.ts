@@ -50,10 +50,27 @@ export interface QuestionReference {
   alias: string;     // Alias for use in SQL (e.g., "users")
 }
 
+export type AggregationFunction = 'SUM' | 'AVG' | 'COUNT' | 'MIN' | 'MAX';
+
+export interface PivotValueConfig {
+  column: string;
+  aggFunction: AggregationFunction;
+}
+
+export interface PivotConfig {
+  rows: string[];           // Dimension columns for row headers
+  columns: string[];        // Dimension columns for column headers
+  values: PivotValueConfig[]; // Measures with per-value aggregation
+  showRowTotals?: boolean;    // Show row totals column (default: true)
+  showColumnTotals?: boolean; // Show column totals row (default: true)
+  showHeatmap?: boolean;      // Show heatmap conditional formatting (default: true)
+}
+
 export interface VizSettings {
   type: 'table' | 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend';
   xCols?: string[];
   yCols?: string[];
+  pivotConfig?: PivotConfig;  // Only used when type === 'pivot'
 }
 
 // Document-based architecture types

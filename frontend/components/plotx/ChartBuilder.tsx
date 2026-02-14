@@ -10,9 +10,12 @@ import { ScatterPlot } from './ScatterPlot'
 import { FunnelPlot } from './FunnelPlot'
 import { PiePlot } from './PiePlot'
 import { PivotTable } from './PivotTable'
+import { PivotAxisBuilder } from './PivotAxisBuilder'
 import { SingleValue } from './SingleValue'
 import { TrendPlot } from './TrendPlot'
 import { getColumnType } from '@/lib/database/duckdb'
+import { aggregatePivotData } from '@/lib/chart/pivot-utils'
+import type { PivotConfig } from '@/lib/types'
 
 interface ChartBuilderProps {
   columns: string[]
@@ -25,6 +28,8 @@ interface ChartBuilderProps {
   showAxisBuilder?: boolean  // Whether to show axis selection UI (default: true)
   useCompactView?: boolean  // Whether to use compact layout (passed from parent)
   fillHeight?: boolean  // Whether chart should fill available height (default: false)
+  initialPivotConfig?: PivotConfig
+  onPivotConfigChange?: (config: PivotConfig) => void
 }
 
 type ColumnType = 'date' | 'number' | 'text'
@@ -248,7 +253,7 @@ const aggregateData = (
   return { xAxisData, series }
 }
 
-export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false }: ChartBuilderProps) => {
+export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange }: ChartBuilderProps) => {
   // Group columns by type
   
   const groupedColumns: GroupedColumns = useMemo(() => {
@@ -427,6 +432,101 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
 
   // Use the compact view flag passed from parent
   const useCompactView = useCompactViewProp
+
+  // Pivot-specific state
+  const [pivotConfig, setPivotConfig] = useState<PivotConfig | undefined>(initialPivotConfig)
+
+  const handlePivotConfigChange = useCallback((config: PivotConfig) => {
+    setPivotConfig(config)
+    onPivotConfigChange?.(config)
+  }, [onPivotConfigChange])
+
+  const pivotData = useMemo(() => {
+    if (chartType !== 'pivot' || !pivotConfig) return null
+    return aggregatePivotData(rows, pivotConfig)
+  }, [rows, pivotConfig, chartType])
+
+  // For pivot, we consider having data when pivotConfig has values
+  const isPivot = chartType === 'pivot'
+  const pivotHasData = isPivot && pivotData && pivotData.cells.length > 0
+
+  // Pivot mode: completely different layout
+  const [pivotSettingsExpanded, setPivotSettingsExpanded] = useState(true)
+
+  if (isPivot) {
+    return (
+      <Box display="flex" flexDirection="column" gap={0} height="100%" width="100%">
+        {/* Collapsible header */}
+        {showAxisBuilder && (
+          <>
+            <Box
+              display="flex"
+              alignItems="center"
+              justifyContent="space-between"
+              px={3}
+              py={1}
+              bg="bg.elevated"
+              borderBottom="1px solid"
+              borderColor="border.default"
+              cursor="pointer"
+              onClick={() => setPivotSettingsExpanded(!pivotSettingsExpanded)}
+              _hover={{ bg: "bg.muted" }}
+            >
+              <Text fontSize="sm" fontWeight="700" color="fg.default">
+                Visualization Settings
+              </Text>
+              <IconButton
+                aria-label="Toggle pivot settings"
+                size="xs"
+                variant="ghost"
+              >
+                {pivotSettingsExpanded ? <LuChevronUp /> : <LuChevronDown />}
+              </IconButton>
+            </Box>
+
+            {/* Pivot Axis Builder - collapsible */}
+            {pivotSettingsExpanded && (
+              <PivotAxisBuilder
+                columns={columns}
+                types={types}
+                pivotConfig={pivotConfig}
+                onPivotConfigChange={handlePivotConfigChange}
+                useCompactView={useCompactView}
+              />
+            )}
+          </>
+        )}
+
+        {/* Pivot Table */}
+        <Box flex="1" overflow="hidden" display="flex" minHeight="0">
+          {pivotHasData ? (
+            <PivotTable
+              pivotData={pivotData!}
+              showRowTotals={pivotConfig?.showRowTotals !== false}
+              showColTotals={pivotConfig?.showColumnTotals !== false}
+              showHeatmap={pivotConfig?.showHeatmap !== false}
+            />
+          ) : (
+            <Box
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+              width="100%"
+              color="fg.muted"
+              fontSize="sm"
+            >
+              <VStack gap={2}>
+                <Text fontWeight="600">No data to display</Text>
+                <Text fontSize="xs" color="fg.subtle">
+                  Drag columns to Rows, Columns, and Values to build your pivot table
+                </Text>
+              </VStack>
+            </Box>
+          )}
+        </Box>
+      </Box>
+    )
+  }
 
   return (
     <Box display="flex" flexDirection={useCompactView ? "column" : "row"} gap={0} height={'100%'} width="100%" position="relative">
@@ -740,15 +840,6 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       yAxisLabel={yAxisColumns.join(' | ')}
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
-                    />
-                  )}
-                  {chartType === 'pivot' && (
-                    <PivotTable
-                      xAxisData={aggregatedData.xAxisData}
-                      series={aggregatedData.series}
-                      xAxisLabel={xAxisColumns.join(' | ')}
-                      yAxisLabel={yAxisColumns.join(' | ')}
-                      yAxisColumns={yAxisColumns}
                     />
                   )}
                   {chartType === 'trend' && (

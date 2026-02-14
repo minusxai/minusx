@@ -300,6 +300,11 @@ export default function QuestionViewV2({
     });
   };
 
+  // Handle pivot config change
+  const handlePivotConfigChange = (pivotConfig: import('@/lib/types').PivotConfig) => {
+    onChange({ vizSettings: { ...content.vizSettings, pivotConfig } });
+  };
+
   // Handle adding a question reference
   const handleAddReference = (referencedQuestionId: number, alias: string) => {
     if (!questionId) return;
@@ -860,6 +865,7 @@ export default function QuestionViewV2({
                 data={queryData}
                 onVizTypeChange={handleVizTypeChange}
                 onAxisChange={handleAxisChange}
+                onPivotConfigChange={handlePivotConfigChange}
               />
             )}
           </Box>
