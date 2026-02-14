@@ -16,6 +16,7 @@ import { selectAppState } from '../appState';
 import { FilesAPI } from '../data/files';
 import { fetchWithCache } from './fetch-wrapper';
 import { API } from './declarations';
+import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 
 // ============================================================================
 // Frontend Tool Registry
@@ -254,13 +255,7 @@ registerFrontendTool('ExecuteSQLQueryForeground', async (args, context) => {
       updates.references = parsedReferences;
     }
 
-    console.log('[Foreground] Updating question with query:', query);
-    console.log('[Foreground] VizSettings:', finalVizSettings);
-    console.log('[Foreground] Parameters:', parsedParameters);
-    console.log('[Foreground] References:', parsedReferences);
-
     // Dispatch setEdit action to update the file
-    console.log('[Foreground] Updates are', updates)
     dispatch(setEdit({
       fileId: file_id as FileId,
       edits: updates
@@ -280,8 +275,6 @@ registerFrontendTool('ExecuteSQLQueryForeground', async (args, context) => {
       vizSettings: finalVizSettings,
       references: parsedReferences
     };
-
-    console.log('[Foreground] Triggering query execution');
     dispatch(setEphemeral({
       fileId: file_id as FileId,
       changes: { lastExecuted } as any
@@ -487,10 +480,6 @@ registerFrontendTool('Navigate', async (args, context) => {
 registerFrontendTool('EditDashboard', async (args, context) => {
   const { dispatch, state, userInputs } = context;
 
-  console.log('[EditDashboard] === START ===');
-  console.log('[EditDashboard] Dispatch available:', !!dispatch);
-  console.log('[EditDashboard] Parsed args:', args);
-
   let { operation, question_id, layout_item, asset_id, text_content, file_id } = args;
 
   if (operation === undefined || file_id === undefined || !dispatch) {
@@ -546,7 +535,6 @@ registerFrontendTool('EditDashboard', async (args, context) => {
   if (typeof layout_item === 'string' && layout_item) {
     try {
       layout_item = JSON.parse(layout_item);
-      console.log('[EditDashboard] Parsed layout_item:', layout_item);
     } catch (e) {
       console.error('[EditDashboard] Failed to parse layout_item:', layout_item);
     }
@@ -555,20 +543,11 @@ registerFrontendTool('EditDashboard', async (args, context) => {
   // Convert question_id to number if it's a string
   if (typeof question_id === 'string' && question_id) {
     question_id = parseInt(question_id, 10);
-    console.log('[EditDashboard] Converted question_id to number:', question_id);
   }
 
   // Get content from passed state or fallback to store
   const reduxState = state || store.getState();
   const mergedContent = selectMergedContent(reduxState, file_id) as DocumentContent;
-
-  console.log('[EditDashboard] Content:', {
-    hasContent: !!mergedContent,
-    stateSource: state ? 'passed' : 'fallback',
-    contentKeys: mergedContent ? Object.keys(mergedContent) : [],
-    assetsCount: mergedContent?.assets?.length,
-    layoutColumns: mergedContent?.layout?.columns
-  });
 
   if (!mergedContent) {
     return {
@@ -633,10 +612,6 @@ registerFrontendTool('EditDashboard', async (args, context) => {
 registerFrontendTool('EditReport', async (args, context) => {
   const { dispatch, state, userInputs } = context;
 
-  console.log('[EditReport] === START ===');
-  console.log('[EditReport] Dispatch available:', !!dispatch);
-  console.log('[EditReport] Parsed args:', args);
-
   let { operation, file_id, schedule, reference_type, reference_id, prompt, report_prompt, emails } = args;
 
   if (operation === undefined || file_id === undefined || !dispatch) {
@@ -686,7 +661,6 @@ registerFrontendTool('EditReport', async (args, context) => {
   if (typeof schedule === 'string' && schedule) {
     try {
       schedule = JSON.parse(schedule);
-      console.log('[EditReport] Parsed schedule:', schedule);
     } catch (e) {
       console.error('[EditReport] Failed to parse schedule:', schedule);
     }
@@ -696,7 +670,6 @@ registerFrontendTool('EditReport', async (args, context) => {
   if (typeof emails === 'string' && emails) {
     try {
       emails = JSON.parse(emails);
-      console.log('[EditReport] Parsed emails:', emails);
     } catch (e) {
       console.error('[EditReport] Failed to parse emails:', emails);
     }
@@ -705,19 +678,11 @@ registerFrontendTool('EditReport', async (args, context) => {
   // Convert reference_id to number if it's a string
   if (typeof reference_id === 'string' && reference_id) {
     reference_id = parseInt(reference_id, 10);
-    console.log('[EditReport] Converted reference_id to number:', reference_id);
   }
 
   // Get content from passed state or fallback to store
   const reduxState = state || store.getState();
   const mergedContent = selectMergedContent(reduxState, file_id) as ReportContent;
-
-  console.log('[EditReport] Content:', {
-    hasContent: !!mergedContent,
-    stateSource: state ? 'passed' : 'fallback',
-    contentKeys: mergedContent ? Object.keys(mergedContent) : [],
-    referencesCount: mergedContent?.references?.length
-  });
 
   if (!mergedContent) {
     return {
@@ -1444,34 +1409,55 @@ async function handleUpdateQuestion(
   }
 
   try {
-    // Dispatch update to Redux
+    // Dispatch update to Redux (sync - updates state immediately)
     dispatch(setEdit({
       fileId: questionId as FileId,
       edits: updates
     }));
 
-    // Execute query if query, parameters, or references were updated
-    let queryResults = null;
-    let queryError = null;
+    // Get FRESH state after dispatch
+    // Note: state from context is passed from chat listener and contains current Redux state
+    // After setEdit, we need to get updated state - but store.getState() in tool context may not work
+    // Use the state from context and manually merge the edits
+    const currentFile = state.files.files[questionId];
+    if (!currentFile || !currentFile.content) {
+      return {
+        success: false,
+        message: `Question ${questionId} not found in state`
+      };
+    }
 
+    // Manually create merged content: original content + edits we just made
+    const mergedContent = {
+      ...currentFile.content,
+      ...updates
+    } as QuestionContent;
+
+    const freshFile = currentFile;
+
+    if (!mergedContent || !freshFile) {
+      return {
+        success: false,
+        message: `Failed to get merged content or file for question ${questionId}`
+      };
+    }
+
+    // Determine if we should execute query
     const shouldExecuteQuery =
       updates.query !== undefined ||
       updates.parameters !== undefined ||
       updates.references !== undefined;
 
-    if (shouldExecuteQuery) {
-      // Get merged content (original + updates) for execution
-      const mergedContent = selectMergedContent(state, questionId) as QuestionContent;
-
-      if (mergedContent) {
-        try {
+    // Prepare query execution promise
+    const queryPromise = shouldExecuteQuery
+      ? (async () => {
           // Convert parameters array to key-value object for execution
           const paramsObj = (mergedContent.parameters || []).reduce((acc: any, p: any) => {
             acc[p.name] = p.value;
             return acc;
           }, {});
 
-          const queryResponse = await fetchWithCache('/api/query', {
+          return await fetchWithCache('/api/query', {
             method: 'POST',
             body: JSON.stringify({
               database_name: mergedContent.database_name || context.database?.databaseName || 'default',
@@ -1482,18 +1468,48 @@ async function handleUpdateQuestion(
             signal: context.signal,
             cacheStrategy: API.query.execute.cache,
           });
-          queryResults = queryResponse.data || queryResponse;
-        } catch (error: any) {
-          console.error('Failed to execute updated query:', error);
-          queryError = error.message || 'Query execution failed';
-        }
-      }
+        })()
+      : Promise.resolve(null); // Skip query execution if not needed
+
+    // Extract file metadata for save (from fresh state)
+    const fileName = freshFile.name;
+    const filePath = freshFile.path;
+
+    // Extract references from content using proper helper (same as useFile hook)
+    const references = extractReferencesFromContent(mergedContent, 'question');
+
+    // Parallelize file save and query execution
+    const [saveResult, queryResult] = await Promise.allSettled([
+      FilesAPI.saveFile(questionId, fileName, filePath, mergedContent, references),  // Save to database
+      queryPromise                                                                     // Execute query (or skip)
+    ]);
+
+    // Extract query results (non-fatal if failed or skipped)
+    let queryResults = null;
+    let queryError = null;
+    if (shouldExecuteQuery && queryResult.status === 'fulfilled' && queryResult.value) {
+      queryResults = queryResult.value.data || queryResult.value;
+    } else if (shouldExecuteQuery && queryResult.status === 'rejected') {
+      console.error('Failed to execute updated query:', queryResult.reason);
+      queryError = queryResult.reason?.message || 'Query execution failed';
+    }
+
+    // Check file save (fatal if failed, but still return query info)
+    if (saveResult.status === 'rejected') {
+      console.error('Failed to save question:', saveResult.reason);
+      return {
+        success: false,
+        message: `Failed to save question: ${saveResult.reason?.message || 'Unknown error'}`,
+        questionId,
+        queryResults,
+        queryError
+      };
     }
 
     const updatedFields = Object.keys(updates).join(', ');
     return {
       success: true,
-      message: `Updated question ${questionId}: ${updatedFields}`,
+      message: `Updated and saved question ${questionId}: ${updatedFields}`,
       questionId,
       queryResults,
       queryError
@@ -1502,7 +1518,8 @@ async function handleUpdateQuestion(
     console.error('Failed to update question:', error);
     return {
       success: false,
-      message: `Failed to update question: ${error instanceof Error ? error.message : 'Unknown error'}`
+      message: `Failed to update question: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      questionId
     };
   }
 }
