@@ -28,11 +28,9 @@ export default function NewFilePage({ params }: NewFilePageProps) {
   const folderParam = searchParams.get('folder');
   const databaseName = searchParams.get('databaseName');
   const queryB64 = searchParams.get('queryB64');
-  const queryRaw = searchParams.get('query');
-  // Support base64-encoded query (queryB64) for safe URL transport, fall back to plain query
   const query = queryB64
     ? new TextDecoder().decode(Uint8Array.from(atob(queryB64), c => c.charCodeAt(0)))
-    : queryRaw;
+    : null;
   const virtualIdParam = searchParams.get('virtualId');
 
   // Validate type is supported
