@@ -12,18 +12,56 @@ class VisualizationType(str, Enum):
     LINE = "line"
     SCATTER = "scatter"
     AREA = "area"
+    FUNNEL = "funnel"
+    PIE = "pie"
+    PIVOT = "pivot"
+    TREND = "trend"
+
+class AggregationFunction(str, Enum):
+    SUM = "SUM"
+    AVG = "AVG"
+    COUNT = "COUNT"
+    MIN = "MIN"
+    MAX = "MAX"
+
+class FormulaOperator(str, Enum):
+    ADD = "+"
+    SUBTRACT = "-"
+    MULTIPLY = "*"
+    DIVIDE = "/"
+
+class PivotValueConfig(BaseModel):
+    """A measure column with its aggregation function."""
+    column: str = Field(..., description="column name for the measure")
+    aggFunction: AggregationFunction = Field(AggregationFunction.SUM, description="aggregation function to apply (SUM, AVG, COUNT, MIN, MAX)")
+
+class PivotFormula(BaseModel):
+    """A derived row/column computed from two top-level dimension values."""
+    name: str = Field(..., description="display label, e.g. 'YoY Change'")
+    operandA: str = Field(..., description="top-level dimension value, e.g. '2024'")
+    operandB: str = Field(..., description="top-level dimension value, e.g. '2023'")
+    operator: FormulaOperator = Field(..., description="arithmetic operator: +, -, *, /")
+
+class PivotConfig(BaseModel):
+    """Configuration for pivot table visualization."""
+    rows: List[str] = Field(..., description="dimension columns for row headers")
+    columns: List[str] = Field(..., description="dimension columns for column headers")
+    values: List[PivotValueConfig] = Field(..., description="measures with per-value aggregation functions")
+    rowFormulas: Optional[List[PivotFormula]] = Field(None, description="formulas combining top-level row dimension values")
+    columnFormulas: Optional[List[PivotFormula]] = Field(None, description="formulas combining top-level column dimension values")
 
 class VisualizationSettings(BaseModel):
     """visualization settings"""
     type: VisualizationType = Field(..., description="type of the visualization (default is table)")
-    xCols: Optional[List[str]] = Field([], description="list of column names in the x axis (typically date / time / dimensions you want to split the metrics by)")
-    yCols: Optional[List[str]] = Field([], description="list of column names in the y axis (typically metrics/measurements you want shown)")
+    xCols: Optional[List[str]] = Field([], description="list of column names in the x axis (for non-pivot chart types)")
+    yCols: Optional[List[str]] = Field([], description="list of column names in the y axis (for non-pivot chart types)")
+    pivotConfig: Optional[PivotConfig] = Field(None, description="pivot table configuration (only used when type is 'pivot')")
     model_config = {
         "populate_by_name": True,
         "title": "VisualizationSettings"
     }
 
-vizSettingsJsonStr = """{'$defs': {'VisualizationType': {'enum': ['table', 'bar', 'line', 'scatter', 'area', 'funnel', 'pie', 'pivot'], 'title': 'VisualizationType', 'type': 'string'}}, 'description': 'visualization settings', 'properties': {'type': {'$ref': '#/$defs/VisualizationType', 'description': 'type of the visualization (default is table)'}, 'xCols': {'anyOf': [{'items': {'type': 'string'}, 'type': 'array'}, {'type': 'null'}], 'default': [], 'description': 'list of column names in the x axis (typically date / time / dimensions you want to split the metrics by)', 'title': 'Xcols'}, 'yCols': {'anyOf': [{'items': {'type': 'string'}, 'type': 'array'}, {'type': 'null'}], 'default': [], 'description': 'list of column names in the y axis (typically metrics/measurements you want shown)', 'title': 'Ycols'}}, 'required': ['type'], 'title': 'VisualizationSettings', 'type': 'object'}"""
+vizSettingsJsonStr = json.dumps(VisualizationSettings.model_json_schema())
 
 @register_agent
 class ExecuteSQLQuery(Tool):
@@ -40,27 +78,46 @@ class ExecuteSQLQuery(Tool):
     - When using foreground=true, both query and references are saved to the question
 
     VizSettings is a JSON string representing VisualizationSettings model.
-    Example1:
+    Example1 (line chart):
     {
         "type": "line",
         "xCols": ["date"],
         "yCols": ["sales", "profit"]
     }
-    Example2:
+    Example2 (table):
     {
         "type": "table"
     }
-    Example3:
+    Example3 (bar chart):
     {
         "type": "bar",
         "xCols": ["category", "subcategory"],
         "yCols": ["revenue"]
     }
+    Example4 (pivot table):
+    {
+        "type": "pivot",
+        "pivotConfig": {
+            "rows": ["region", "city"],
+            "columns": ["year"],
+            "values": [{"column": "revenue", "aggFunction": "SUM"}],
+        }
+    }
+    Example5 (pivot with formula):
+    {
+        "type": "pivot",
+        "pivotConfig": {
+            "rows": ["product"],
+            "columns": ["year"],
+            "values": [{"column": "sales", "aggFunction": "SUM"}],
+            "columnFormulas": [{"name": "YoY Change", "operandA": "2024", "operandB": "2023", "operator": "-"}]
+        }
+    }
     Viz Instructions by types:
     - table: no need of xCols or yCols
     - bar, line, scatter, area: first value of xCol is x axis, others are treated as dimensions/splits to the metrics. yCols are the various measures/metrics
     - funnel, pie: one xCols val and one yCols val are needed. xCols value should be categories ideally
-    - pivot: two xCols val are needed (one for horizontal, one for vertical) and one val for yCols (the metric/measurement to pivot)
+    - pivot: use pivotConfig instead of xCols/yCols. pivotConfig.rows are dimension columns for row headers, pivotConfig.columns are dimension columns for column headers, pivotConfig.values are measures with per-value aggregation functions (SUM/AVG/COUNT/MIN/MAX). Optional: rowFormulas/columnFormulas to compute derived rows/columns from top-level dimension values.
     - trend: the most recent yCols value is displayed (along with %change from last-but-one value)
     """
 
@@ -183,7 +240,7 @@ class EditDashboard(Tool):
         questionName: Optional[str] = Field(None, description="Name for the question (required for add_new_question, optional for update_question)"),
         query: Optional[str] = Field(None, description="SQL query (required for add_new_question, optional for update_question)"),
         database_name: Optional[str] = Field(None, description="Database connection name (required for add_new_question)"),
-        vizSettings: Optional[dict] = Field(None, description="Visualization settings {type, xCols, yCols} (required for add_new_question, optional for update_question)"),
+        vizSettings: Optional[dict] = Field(None, description="Visualization settings {type, xCols, yCols} or {type: 'pivot', pivotConfig: {rows, columns, values}} (required for add_new_question, optional for update_question)"),
         parameters: Optional[list] = Field(None, description='Query parameters array [{name, type, label?, value?}] for parameterized queries with :paramName syntax. (Optional)'),
         references: Optional[list] = Field(None, description='Question references for composed questions (optional): [{id: int, alias: str}]'),
         description: Optional[str] = Field(None, description="Description for the question, optional"),

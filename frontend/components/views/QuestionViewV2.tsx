@@ -22,6 +22,8 @@ import {
 import {
   LuChevronDown,
   LuChevronUp,
+  LuChevronLeft,
+  LuChevronRight,
   LuSparkles,
   LuX,
   LuGripVertical,
@@ -115,6 +117,7 @@ export default function QuestionViewV2({
   // Resizable panel state
   const [leftPanelWidth, setLeftPanelWidth] = useState(45); // percentage
   const [isResizing, setIsResizing] = useState(false);
+  const [collapsedPanel, setCollapsedPanel] = useState<'none' | 'left' | 'right'>('none');
   const resizeStartX = useRef<number>(0);
   const resizeStartWidth = useRef<number>(45);
   const rafRef = useRef<number | null>(null);
@@ -297,6 +300,11 @@ export default function QuestionViewV2({
     });
   };
 
+  // Handle pivot config change
+  const handlePivotConfigChange = (pivotConfig: import('@/lib/types').PivotConfig) => {
+    onChange({ vizSettings: { ...content.vizSettings, pivotConfig } });
+  };
+
   // Handle adding a question reference
   const handleAddReference = (referencedQuestionId: number, alias: string) => {
     if (!questionId) return;
@@ -446,21 +454,50 @@ export default function QuestionViewV2({
             />
           )}
 
+          {/* Collapsed Left Panel Strip */}
+          {!useCompactLayout && collapsedPanel === 'left' && (
+            <Box
+              width="36px"
+              flexShrink={0}
+              display="flex"
+              flexDirection="column"
+              alignItems="center"
+              justifyContent="center"
+              cursor="pointer"
+              onClick={() => setCollapsedPanel('none')}
+              _hover={{ bg: 'bg.muted' }}
+              my={2}
+              ml={2}
+              borderRadius="lg"
+              border="1px solid"
+              borderColor="border.muted"
+              gap={2}
+            >
+              <Text
+                fontSize="xs"
+                color="fg.muted"
+                fontWeight="600"
+                style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
+              >
+                Query
+              </Text>
+              <Box color="fg.muted"><LuChevronRight size={14} /></Box>
+            </Box>
+          )}
+
           {/* Left Panel: SQL Editor + Parameters */}
           <Box
-            display="flex"
+            display={collapsedPanel === 'left' && !useCompactLayout ? 'none' : 'flex'}
             flexDirection="column"
             flexShrink={0}
-            width={!useCompactLayout ? `calc(${leftPanelWidth}% - 8px)` : '100%'}
-            minWidth={!useCompactLayout ? '300px' : undefined}
+            flex={!useCompactLayout && collapsedPanel === 'right' ? 1 : undefined}
+            width={!useCompactLayout ? (collapsedPanel === 'none' ? `calc(${leftPanelWidth}% - 8px)` : undefined) : '100%'}
+            minWidth={!useCompactLayout && collapsedPanel === 'none' ? '300px' : undefined}
             position="relative"
-            // bg="bg.surface"
             borderRadius={!useCompactLayout ? 'lg' : undefined}
             overflow="hidden"
             my={!useCompactLayout ? 2 : 0}
             ml={!useCompactLayout ? 2 : 0}
-            // border={!useCompactLayout ? '1px solid' : undefined}
-            // borderColor="border.muted"
           >
             {/* SQL Editor Section */}
             <Box
@@ -614,7 +651,7 @@ export default function QuestionViewV2({
           {/* End Left Panel */}
 
           {/* Resize Handle - Only in side-by-side mode */}
-          {!useCompactLayout && (
+          {!useCompactLayout && collapsedPanel === 'none' && (
             <Box
               display="flex"
               alignItems="center"
@@ -638,22 +675,39 @@ export default function QuestionViewV2({
                 transition="all 0.15s ease"
                 borderRadius="full"
               />
-              {/* Center grip indicator */}
+              {/* Center grip indicator with collapse arrows */}
               <Box
                 position="absolute"
                 top="50%"
                 transform="translateY(-50%)"
                 display="flex"
+                flexDirection="column"
                 alignItems="center"
                 justifyContent="center"
                 width="20px"
-                height="40px"
+                height="72px"
                 bg={isResizing ? 'accent.teal' : 'bg.emphasized'}
                 _groupHover={{ bg: 'accent.teal' }}
                 borderRadius="md"
                 transition="all 0.15s ease"
                 boxShadow="sm"
+                gap={0}
               >
+                <Box
+                  cursor="pointer"
+                  p={1}
+                  borderRadius="sm"
+                  onClick={() => setCollapsedPanel('left')}
+                  onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
+                  _hover={{ opacity: 0.7 }}
+                >
+                  <Box
+                    as={LuChevronLeft}
+                    fontSize="xs"
+                    color={isResizing ? 'white' : 'fg.muted'}
+                    _groupHover={{ color: 'white' }}
+                  />
+                </Box>
                 <Box
                   as={LuGripVertical}
                   fontSize="sm"
@@ -661,7 +715,53 @@ export default function QuestionViewV2({
                   _groupHover={{ color: 'white' }}
                   transition="color 0.15s ease"
                 />
+                <Box
+                  cursor="pointer"
+                  p={1}
+                  borderRadius="sm"
+                  onClick={() => setCollapsedPanel('right')}
+                  onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
+                  _hover={{ opacity: 0.7 }}
+                >
+                  <Box
+                    as={LuChevronRight}
+                    fontSize="xs"
+                    color={isResizing ? 'white' : 'fg.muted'}
+                    _groupHover={{ color: 'white' }}
+                  />
+                </Box>
               </Box>
+            </Box>
+          )}
+
+          {/* Collapsed Right Panel Strip */}
+          {!useCompactLayout && collapsedPanel === 'right' && (
+            <Box
+              width="36px"
+              flexShrink={0}
+              display="flex"
+              flexDirection="column"
+              alignItems="center"
+              justifyContent="center"
+              cursor="pointer"
+              onClick={() => setCollapsedPanel('none')}
+              _hover={{ bg: 'bg.muted' }}
+              my={2}
+              mr={2}
+              borderRadius="lg"
+              border="1px solid"
+              borderColor="border.muted"
+              gap={2}
+            >
+              <Box color="fg.muted"><LuChevronLeft size={14} /></Box>
+              <Text
+                fontSize="xs"
+                color="fg.muted"
+                fontWeight="600"
+                style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
+              >
+                Results
+              </Text>
             </Box>
           )}
 
@@ -669,7 +769,7 @@ export default function QuestionViewV2({
           <Box
             ref={resultsContainerRef}
             flex={1}
-            display="flex"
+            display={collapsedPanel === 'right' && !useCompactLayout ? 'none' : 'flex'}
             flexDirection="column"
             minHeight="0"
             overflow="hidden"
@@ -765,6 +865,7 @@ export default function QuestionViewV2({
                 data={queryData}
                 onVizTypeChange={handleVizTypeChange}
                 onAxisChange={handleAxisChange}
+                onPivotConfigChange={handlePivotConfigChange}
               />
             )}
           </Box>

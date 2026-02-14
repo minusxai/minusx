@@ -50,10 +50,38 @@ export interface QuestionReference {
   alias: string;     // Alias for use in SQL (e.g., "users")
 }
 
+export type AggregationFunction = 'SUM' | 'AVG' | 'COUNT' | 'MIN' | 'MAX';
+
+export interface PivotValueConfig {
+  column: string;
+  aggFunction: AggregationFunction;
+}
+
+export type FormulaOperator = '+' | '-' | '*' | '/'
+
+export interface PivotFormula {
+  name: string         // Display label, e.g. "YoY Change"
+  operandA: string     // Top-level dimension value, e.g. "2024"
+  operandB: string     // Top-level dimension value, e.g. "2023"
+  operator: FormulaOperator
+}
+
+export interface PivotConfig {
+  rows: string[];           // Dimension columns for row headers
+  columns: string[];        // Dimension columns for column headers
+  values: PivotValueConfig[]; // Measures with per-value aggregation
+  showRowTotals?: boolean;    // Show row totals column (default: true)
+  showColumnTotals?: boolean; // Show column totals row (default: true)
+  showHeatmap?: boolean;      // Show heatmap conditional formatting (default: true)
+  rowFormulas?: PivotFormula[]     // Formulas combining top-level row dimension values
+  columnFormulas?: PivotFormula[]  // Formulas combining top-level column dimension values
+}
+
 export interface VizSettings {
   type: 'table' | 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend';
   xCols?: string[];
   yCols?: string[];
+  pivotConfig?: PivotConfig;  // Only used when type === 'pivot'
 }
 
 // Document-based architecture types

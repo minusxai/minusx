@@ -9,7 +9,7 @@ import { Table } from '@/components/plotx/Table';
 import { ChartBuilder } from '@/components/plotx/ChartBuilder';
 import { parseErrorMessage } from '@/lib/utils/error-parser';
 import { VizTypeSelector } from './VizTypeSelector';
-import type { QuestionContent, QueryResult, VizSettings } from '@/lib/types';
+import type { QuestionContent, QueryResult, VizSettings, PivotConfig } from '@/lib/types';
 import { useState, useEffect } from 'react';
 import { useAppDispatch } from '@/store/hooks';
 import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection } from '@/store/uiSlice';
@@ -35,6 +35,7 @@ interface QuestionVisualizationProps {
   data: QueryResult | null;
   onVizTypeChange: (type: VizSettings['type']) => void;
   onAxisChange: (xCols: string[], yCols: string[]) => void;
+  onPivotConfigChange?: (config: PivotConfig) => void;
 }
 
 function AnimatedLoadingText() {
@@ -65,6 +66,7 @@ export function QuestionVisualization({
   data,
   onVizTypeChange,
   onAxisChange,
+  onPivotConfigChange,
 }: QuestionVisualizationProps) {
   const dispatch = useAppDispatch();
   const { config: appConfig } = useConfigs();
@@ -278,6 +280,8 @@ export function QuestionVisualization({
                       showAxisBuilder={config.viz.showChartBuilder}
                       useCompactView={useCompactLayout}
                       fillHeight={true}
+                      initialPivotConfig={currentState.vizSettings?.pivotConfig}
+                      onPivotConfigChange={onPivotConfigChange}
                     />
                   </Box>
                 )}
