@@ -40,9 +40,11 @@ export default function ConnectionTablesBrowser({
   const handleTableClick = (schemaName: string, tableName: string) => {
     const fullTableName = schemaName ? `${schemaName}.${tableName}` : tableName;
     const query = `SELECT * FROM ${fullTableName} LIMIT 100`;
+    const utf8Bytes = new TextEncoder().encode(query);
+    const binaryStr = Array.from(utf8Bytes, b => String.fromCharCode(b)).join('');
     const params = new URLSearchParams({
       databaseName: connectionName,
-      query: query,
+      queryB64: btoa(binaryStr),
     });
     router.push(`/new/question?${params.toString()}`);
   };

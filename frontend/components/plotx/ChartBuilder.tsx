@@ -438,7 +438,10 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     const cteSql = `WITH base AS (\n${sql}\n)\nSELECT * FROM base${whereClause}`
     const params = new URLSearchParams()
     if (databaseName) params.set('databaseName', databaseName)
-    params.set('query', cteSql)
+    // Base64-encode the SQL to avoid URL encoding issues with special characters
+    const utf8Bytes = new TextEncoder().encode(cteSql)
+    const binaryStr = Array.from(utf8Bytes, b => String.fromCharCode(b)).join('')
+    params.set('queryB64', btoa(binaryStr))
     window.open(`/new/question?${params.toString()}`, '_blank')
     setDrillDown(null)
   }, [drillDown, sql, databaseName])
