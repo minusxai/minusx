@@ -505,6 +505,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
               showRowTotals={pivotConfig?.showRowTotals !== false}
               showColTotals={pivotConfig?.showColumnTotals !== false}
               showHeatmap={pivotConfig?.showHeatmap !== false}
+              rowDimNames={pivotConfig?.rows}
             />
           ) : (
             <Box
