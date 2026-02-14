@@ -1,7 +1,8 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { Box, Table as ChakraTable } from '@chakra-ui/react'
+import { LuChevronDown, LuChevronRight } from 'react-icons/lu'
 import { formatLargeNumber } from '@/lib/chart/chart-utils'
 import type { PivotData } from '@/lib/chart/pivot-utils'
 
@@ -16,7 +17,9 @@ interface PivotTableProps {
 
 type DisplayRow =
   | { type: 'data'; rowIndex: number }
-  | { type: 'subtotal'; level: number; label: string; cells: number[]; rowTotal: number }
+  | { type: 'subtotal'; level: number; label: string; cells: number[]; rowTotal: number; groupValues: string[] }
+
+const makeGroupKey = (values: string[]) => values.join('|||')
 
 export const PivotTable = ({
   pivotData,
@@ -32,6 +35,18 @@ export const PivotTable = ({
   const numRowDims = rowHeaders.length > 0 ? rowHeaders[0].length : 0
   const numColDims = columnHeaders.length > 0 ? columnHeaders[0].length : 0
   const numDataCols = cells.length > 0 ? cells[0].length : 0
+
+  // Collapsed groups state
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+
+  const toggleGroup = useCallback((groupKey: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev)
+      if (next.has(groupKey)) next.delete(groupKey)
+      else next.add(groupKey)
+      return next
+    })
+  }, [])
 
   // Compute min/max across all cells for heatmap gradient
   const { minValue, maxValue } = useMemo(() => {
@@ -114,6 +129,7 @@ export const PivotTable = ({
             label: rowHeaders[i][level] + ' Total',
             cells: subtotalCells,
             rowTotal: subtotalRowTotal,
+            groupValues: rowHeaders[i].slice(0, level + 1),
           })
         }
       }
@@ -121,6 +137,34 @@ export const PivotTable = ({
 
     return result
   }, [rowHeaders, cells, numRowDims, numDataCols, rowTotals])
+
+  // Filter visible rows based on collapsed groups
+  const visibleRows = useMemo((): DisplayRow[] => {
+    if (collapsedGroups.size === 0 || numRowDims < 2) return displayRows
+
+    return displayRows.filter(dr => {
+      if (dr.type === 'data') {
+        // A data row is hidden if ANY group it belongs to is collapsed
+        for (let level = 0; level < numRowDims - 1; level++) {
+          const key = makeGroupKey(rowHeaders[dr.rowIndex].slice(0, level + 1))
+          if (collapsedGroups.has(key)) return false
+        }
+        return true
+      }
+
+      if (dr.type === 'subtotal') {
+        // A subtotal at level L is hidden if any PARENT group (levels 0..L-1) is collapsed
+        for (let parentLevel = 0; parentLevel < dr.level; parentLevel++) {
+          const parentKey = makeGroupKey(dr.groupValues.slice(0, parentLevel + 1))
+          if (collapsedGroups.has(parentKey)) return false
+        }
+        // The subtotal at its own level is always visible (serves as collapsed header)
+        return true
+      }
+
+      return true
+    })
+  }, [displayRows, collapsedGroups, rowHeaders, numRowDims])
 
   // Build column header rows with colSpan for nested grouping
   const colHeaderRows = useMemo(() => {
@@ -170,23 +214,20 @@ export const PivotTable = ({
     return rows
   }, [columnHeaders, numColDims, hasMultipleValues, valueLabels])
 
-  // Build row header spans for nested grouping
-  // Key: subtotal rows at level S are INCLUDED in the rowSpan of levels 0..S-1
-  // This matches the reference UX where parent dim cells span over child subtotals
+  // Build row header spans for nested grouping based on visibleRows
   const rowSpans = useMemo(() => {
     if (rowHeaders.length === 0 || numRowDims === 0) return []
 
-    const spans: Array<Array<{ show: boolean; rowSpan: number }>> = displayRows.map(() =>
+    const spans: Array<Array<{ show: boolean; rowSpan: number }>> = visibleRows.map(() =>
       Array.from({ length: numRowDims }, () => ({ show: true, rowSpan: 1 }))
     )
 
     for (let level = 0; level < numRowDims; level++) {
       let i = 0
-      while (i < displayRows.length) {
-        const dr = displayRows[i]
+      while (i < visibleRows.length) {
+        const dr = visibleRows[i]
 
         if (dr.type === 'subtotal') {
-          // Subtotals never show individual dim cells - they render their own colSpan label
           spans[i][level] = { show: false, rowSpan: 1 }
           i++
           continue
@@ -194,18 +235,15 @@ export const PivotTable = ({
 
         // Data row: count span including subtotals at levels STRICTLY GREATER than this level
         let span = 1
-        while (i + span < displayRows.length) {
-          const next = displayRows[i + span]
+        while (i + span < visibleRows.length) {
+          const next = visibleRows[i + span]
           if (next.type === 'subtotal') {
             if (next.level > level) {
-              // Include child subtotals in parent's rowSpan
               span++
               continue
             }
-            // Subtotal at this level or above breaks the group
             break
           }
-          // Data row: check values match at this level and all parents
           const matches = rowHeaders[next.rowIndex][level] === rowHeaders[dr.rowIndex][level]
           let parentsMatch = true
           for (let p = 0; p < level; p++) {
@@ -227,7 +265,7 @@ export const PivotTable = ({
     }
 
     return spans
-  }, [rowHeaders, numRowDims, displayRows])
+  }, [rowHeaders, numRowDims, visibleRows])
 
   if (cells.length === 0 || (cells.length > 0 && cells[0].length === 0)) {
     return (
@@ -251,8 +289,8 @@ export const PivotTable = ({
       borderColor="border.muted"
       borderRadius="md"
     >
-      <ChakraTable.Root size="sm" stickyHeader>
-        <ChakraTable.Header>
+      <ChakraTable.Root size="sm" css={{ borderCollapse: 'collapse' }}>
+        <ChakraTable.Header position="sticky" top={0} zIndex={5} bg="bg.muted">
           {/* Column header rows */}
           {colHeaderRows.map((headerRow, rowIdx) => (
             <ChakraTable.Row key={rowIdx} bg="bg.muted">
@@ -272,7 +310,7 @@ export const PivotTable = ({
                     position={dimIdx === 0 ? 'sticky' : undefined}
                     left={dimIdx === 0 ? 0 : undefined}
                     bg="bg.muted"
-                    zIndex={dimIdx === 0 ? 3 : undefined}
+                    zIndex={dimIdx === 0 ? 4 : 3}
                     minW="100px"
                   >
                     {rowDimNames?.[dimIdx] || ''}
@@ -294,6 +332,7 @@ export const PivotTable = ({
                   minW="80px"
                   borderBottom={rowIdx < colHeaderRows.length - 1 ? '1px solid' : undefined}
                   borderColor="border.muted"
+                  zIndex={3}
                 >
                   {hdr.label}
                 </ChakraTable.ColumnHeader>
@@ -313,6 +352,7 @@ export const PivotTable = ({
                   borderColor="border.default"
                   minW="80px"
                   bg="accent.teal/20"
+                  zIndex={3}
                 >
                   Total
                 </ChakraTable.ColumnHeader>
@@ -337,7 +377,7 @@ export const PivotTable = ({
                     position={dimIdx === 0 ? 'sticky' : undefined}
                     left={dimIdx === 0 ? 0 : undefined}
                     bg="bg.muted"
-                    zIndex={dimIdx === 0 ? 3 : undefined}
+                    zIndex={dimIdx === 0 ? 4 : 3}
                     minW="100px"
                   >
                     {rowDimNames?.[dimIdx] || ''}
@@ -354,6 +394,7 @@ export const PivotTable = ({
                   color="fg.muted"
                   textAlign="right"
                   minW="80px"
+                  zIndex={3}
                 >
                   {vl}
                 </ChakraTable.ColumnHeader>
@@ -370,6 +411,7 @@ export const PivotTable = ({
                   borderColor="border.default"
                   minW="80px"
                   bg="accent.teal/20"
+                  zIndex={3}
                 >
                   Total
                 </ChakraTable.ColumnHeader>
@@ -380,12 +422,14 @@ export const PivotTable = ({
 
         <ChakraTable.Body>
           {/* Data + subtotal rows */}
-          {displayRows.map((displayRow, displayIndex) => {
+          {visibleRows.map((displayRow, displayIndex) => {
             if (displayRow.type === 'subtotal') {
               const S = displayRow.level
               const subtotalBg = getSubtotalBg(S)
               const borderTop = getSubtotalBorderTop(S)
               const borderTopColor = getSubtotalBorderColor(S)
+              const groupKey = makeGroupKey(displayRow.groupValues)
+              const collapsed = collapsedGroups.has(groupKey)
 
               return (
                 <ChakraTable.Row key={`subtotal-${displayIndex}`}>
@@ -406,8 +450,14 @@ export const PivotTable = ({
                     left={S === 0 ? 0 : undefined}
                     bg={subtotalBg}
                     zIndex={S === 0 ? 2 : undefined}
+                    cursor="pointer"
+                    onClick={() => toggleGroup(groupKey)}
+                    _hover={{ opacity: 0.8 }}
                   >
-                    {displayRow.label}
+                    <Box display="flex" alignItems="center" gap={1}>
+                      <Box as={collapsed ? LuChevronRight : LuChevronDown} fontSize="sm" flexShrink={0} />
+                      {displayRow.label}
+                    </Box>
                   </ChakraTable.Cell>
 
                   {/* Subtotal data cells */}
