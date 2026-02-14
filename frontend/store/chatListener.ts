@@ -30,6 +30,133 @@ const API_BASE_URL = typeof window === 'undefined'
 export const chatListenerMiddleware = createListenerMiddleware();
 
 /**
+ * Call chat API with automatic fallback from streaming to non-streaming
+ * Returns { success, data, error }
+ */
+interface ChatAPIRequest {
+  conversationID: number | null;
+  log_index: number;
+  user_message: string | null;
+  completed_tool_calls?: any[];
+  agent: string;
+  agent_args: any;
+}
+
+interface ChatAPIResult {
+  success: boolean;
+  data?: any;
+  error?: string;
+  usedFallback?: boolean;
+}
+
+async function callChatAPIWithFallback(
+  request: ChatAPIRequest,
+  abortController: AbortController,
+  onStreamingEvent?: (data: any) => void
+): Promise<ChatAPIResult> {
+  const useStreaming = process.env.NODE_ENV !== 'test';
+
+  // Try streaming first (if enabled)
+  if (useStreaming) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(request),
+        signal: abortController.signal
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let doneEventData: any = null;
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          // Split on double newlines (SSE event separator)
+          const events = buffer.split('\n\n');
+          buffer = events.pop() || '';
+
+          for (const eventChunk of events) {
+            if (!eventChunk.trim()) continue;
+
+            const parsed = parseSSEChunk(eventChunk);
+            if (!parsed) continue;
+
+            const { event, data } = parsed;
+
+            if (event === 'streaming_event' && onStreamingEvent) {
+              onStreamingEvent(data);
+            } else if (event === 'done') {
+              doneEventData = data;
+            } else if (event === 'error') {
+              throw new Error(data.error);
+            }
+          }
+        }
+
+        if (!doneEventData) {
+          throw new Error('Stream ended without done event');
+        }
+
+        return { success: true, data: doneEventData };
+      } finally {
+        reader.releaseLock();
+      }
+    } catch (streamError: any) {
+      // If aborted by user, don't fallback
+      if (streamError.name === 'AbortError') {
+        throw streamError;
+      }
+
+      console.warn('[chatListener] Streaming failed, falling back to non-streaming:', streamError.message);
+
+      // Fall through to non-streaming fallback
+    }
+  }
+
+  // Non-streaming fallback (or test mode)
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+      signal: abortController.signal
+    });
+
+    const data = await response.json();
+
+    if (data.error) {
+      return { success: false, error: data.error };
+    }
+
+    return {
+      success: true,
+      data: data,
+      usedFallback: useStreaming  // Only true if we fell back from streaming
+    };
+  } catch (fallbackError: any) {
+    return {
+      success: false,
+      error: fallbackError.message || 'Failed to send message'
+    };
+  }
+}
+
+/**
  * Parse SSE chunk
  */
 function parseSSEChunk(chunk: string): any | null {
@@ -58,7 +185,7 @@ function parseSSEChunk(chunk: string): any | null {
 }
 
 /**
- * Listen for createConversation action → Call /api/chat/stream (with SSE) or /api/chat (in tests)
+ * Listen for createConversation action → Call chat API with streaming + fallback
  * Used for new conversations with the initial message
  */
 chatListenerMiddleware.startListening({
@@ -78,126 +205,51 @@ chatListenerMiddleware.startListening({
     const abortController = new AbortController();
     abortControllers.set(conversation._id, abortController);
 
-    // Use non-streaming endpoint in test environment for simplicity
-    const useStreaming = process.env.NODE_ENV !== 'test';
-
     try {
-      if (!useStreaming) {
-        // Non-streaming path (for tests)
-        // Send null for negative IDs (temporary/virtual)
-        const apiConversationID = conversationID < 0 ? null : conversationID;
-
-        const response = await fetch(`${API_BASE_URL}/api/chat`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            conversationID: apiConversationID,
-            log_index: conversation.log_index,
-            user_message: message,
-            agent: conversation.agent,
-            agent_args: conversation.agent_args
-          }),
-          signal: abortController.signal
-        });
-
-        const data = await response.json();
-
-        if (data.error) {
-          listenerApi.dispatch(setError({ conversationID, error: data.error }));
-          return;
-        }
-
-        // Update conversation with results
-        listenerApi.dispatch(updateConversation({
-          conversationID,
-          newConversationID: data.conversationID,
-          log_index: data.log_index,
-          completed_tool_calls: data.completed_tool_calls,
-          pending_tool_calls: data.pending_tool_calls
-        }));
-        return;
-      }
-
-      // Streaming path (production)
       // Send null for negative IDs (temporary/virtual)
       const apiConversationID = conversationID < 0 ? null : conversationID;
 
-      const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      // Call API with automatic fallback
+      const result = await callChatAPIWithFallback(
+        {
           conversationID: apiConversationID,
           log_index: conversation.log_index,
           user_message: message,
           agent: conversation.agent,
           agent_args: conversation.agent_args
-        }),
-        signal: abortController.signal
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error('No response body');
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let doneEventData: any = null;
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-
-          // Split on double newlines (SSE event separator)
-          const events = buffer.split('\n\n');
-          buffer = events.pop() || '';
-
-          for (const eventChunk of events) {
-            if (!eventChunk.trim()) continue;
-
-            const parsed = parseSSEChunk(eventChunk);
-            if (!parsed) continue;
-
-            const { event, data } = parsed;
-
-            if (event === 'streaming_event') {
-              listenerApi.dispatch(addStreamingMessage(data));
-            } else if (event === 'done') {
-              doneEventData = data;
-            } else if (event === 'user_input_request') {
-              listenerApi.dispatch(addUserInputRequest({
-                conversationID,
-                tool_call_id: data.tool_call_id,
-                userInput: data.user_input
-              }));
-            }
+        },
+        abortController,
+        (data) => {
+          // Handle streaming events
+          if (data.type === 'NewConversation' || data.type === 'StreamedContent' ||
+              data.type === 'ToolCreated' || data.type === 'ToolCompleted') {
+            listenerApi.dispatch(addStreamingMessage(data));
           }
         }
+      );
 
-        // Handle done event after stream completes
-        if (doneEventData) {
-          // Clear streaming content first
-          listenerApi.dispatch(clearStreamingContent({ conversationID }));
-
-          // Then update with final state
-          listenerApi.dispatch(updateConversation({
-            conversationID,
-            newConversationID: doneEventData.conversationID,
-            log_index: doneEventData.log_index,
-            completed_tool_calls: doneEventData.completed_tool_calls,
-            pending_tool_calls: doneEventData.pending_tool_calls
-          }));
-        }
-      } finally {
-        reader.releaseLock();
+      if (!result.success) {
+        listenerApi.dispatch(setError({ conversationID, error: result.error || 'Unknown error' }));
+        return;
       }
+
+      // Clear streaming content before final update
+      listenerApi.dispatch(clearStreamingContent({ conversationID }));
+
+      // Update conversation with results
+      listenerApi.dispatch(updateConversation({
+        conversationID,
+        newConversationID: result.data.conversationID,
+        log_index: result.data.log_index,
+        completed_tool_calls: result.data.completed_tool_calls,
+        pending_tool_calls: result.data.pending_tool_calls
+      }));
+
+      // Log fallback usage for monitoring
+      if (result.usedFallback) {
+        console.warn('[chatListener] Used non-streaming fallback for createConversation');
+      }
+
     } catch (error: any) {
       // Don't show error if request was aborted (user clicked stop)
       if (error.name === 'AbortError') {
@@ -220,7 +272,7 @@ chatListenerMiddleware.startListening({
 });
 
 /**
- * Listen for sendMessage action → Call /api/chat/stream (with SSE) or /api/chat (in tests)
+ * Listen for sendMessage action → Call chat API with streaming + fallback
  * Used for adding messages to existing conversations
  */
 chatListenerMiddleware.startListening({
@@ -236,149 +288,64 @@ chatListenerMiddleware.startListening({
     const abortController = new AbortController();
     abortControllers.set(conversation._id, abortController);
 
-    // Use non-streaming endpoint in test environment for simplicity
-    const useStreaming = process.env.NODE_ENV !== 'test';
-
     try {
-      if (!useStreaming) {
-        // Non-streaming path (for tests)
-        // Send null for negative IDs (temporary/virtual)
-        const apiConversationID = conversationID < 0 ? null : conversationID;
-
-        const response = await fetch(`${API_BASE_URL}/api/chat`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            conversationID: apiConversationID,
-            log_index: conversation.log_index,
-            user_message: message,
-            agent: conversation.agent,
-            agent_args: conversation.agent_args
-          }),
-          signal: abortController.signal
-        });
-
-        const data = await response.json();
-
-        if (data.error) {
-          listenerApi.dispatch(setError({ conversationID, error: data.error }));
-          return;
-        }
-
-        // Update conversation with results
-        listenerApi.dispatch(updateConversation({
-          conversationID,
-          newConversationID: data.conversationID,
-          log_index: data.log_index,
-          completed_tool_calls: data.completed_tool_calls,
-          pending_tool_calls: data.pending_tool_calls
-        }));
-        return;
-      }
-
-      // Streaming path (production)
       // Send null for negative IDs (temporary/virtual)
       const apiConversationID = conversationID < 0 ? null : conversationID;
 
-      const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      // Call API with automatic fallback
+      const result = await callChatAPIWithFallback(
+        {
           conversationID: apiConversationID,
           log_index: conversation.log_index,
           user_message: message,
           agent: conversation.agent,
           agent_args: conversation.agent_args
-        }),
-        signal: abortController.signal
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error('No response body');
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let doneEventData: any = null;
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-
-          // Split on double newlines (SSE event separator)
-          const events = buffer.split('\n\n');
-          buffer = events.pop() || '';
-
-          for (const eventChunk of events) {
-            if (!eventChunk.trim()) continue;
-
-            const parsed = parseSSEChunk(eventChunk);
-            if (!parsed) continue;
-
-            const { event, data } = parsed;
-
-            switch (event) {
-              case 'streaming_event':
-                // Skip streaming events if aborted
-                if (abortController.signal.aborted) {
-                  console.log('[sendMessage] Skipping streaming event - aborted');
-                  break;
-                }
-
-                // Dispatch streaming event to build streamedCompletedToolCalls
-                listenerApi.dispatch(addStreamingMessage(data));
-                break;
-
-              case 'done':
-                // Always process done event (for cleanup)
-                doneEventData = data;
-                break;
-
-              case 'error':
-                // Always process error event
-                throw new Error(data.error);
-
-              default:
-                console.warn('Unknown SSE event:', event);
-            }
+        },
+        abortController,
+        (data) => {
+          // Handle streaming events (skip if aborted)
+          if (!abortController.signal.aborted) {
+            listenerApi.dispatch(addStreamingMessage(data));
           }
         }
-      } finally {
-        reader.releaseLock();
-      }
+      );
 
-      // Process done event
-      if (!doneEventData) {
-        throw new Error('Stream ended without done event');
+      if (!result.success) {
+        listenerApi.dispatch(setError({ conversationID, error: result.error || 'Unknown error' }));
+        listenerApi.dispatch(clearStreamingContent({ conversationID }));
+        return;
       }
 
       // Use real conversation ID for clearing streaming (it might have forked)
-      const realConversationID = doneEventData.conversationID || conversationID;
+      const realConversationID = result.data.conversationID || conversationID;
 
-      // Clear streaming state on the correct conversation
+      // Clear streaming state
       listenerApi.dispatch(clearStreamingContent({ conversationID: realConversationID }));
 
       // Update conversation with final results
       listenerApi.dispatch(updateConversation({
         conversationID,
-        newConversationID: doneEventData.conversationID,
-        log_index: doneEventData.log_index,
-        completed_tool_calls: doneEventData.completed_tool_calls,
-        pending_tool_calls: doneEventData.pending_tool_calls
+        newConversationID: result.data.conversationID,
+        log_index: result.data.log_index,
+        completed_tool_calls: result.data.completed_tool_calls,
+        pending_tool_calls: result.data.pending_tool_calls
       }));
+
+      // Log fallback usage for monitoring
+      if (result.usedFallback) {
+        console.warn('[chatListener] Used non-streaming fallback for sendMessage');
+      }
 
       // Cleanup AbortController (using stable _id)
       abortControllers.delete(conversation._id);
 
     } catch (error: any) {
+      // Don't show error if request was aborted (user clicked stop)
+      if (error.name === 'AbortError') {
+        console.log('[chatListener] Request aborted by user');
+        return;
+      }
+
       listenerApi.dispatch(setError({
         conversationID,
         error: error.message || 'Unknown error'
@@ -415,151 +382,68 @@ chatListenerMiddleware.startListening({
       abortControllers.set(conversation._id, abortController);
     }
 
-    // Use non-streaming endpoint in test environment for simplicity
-    const useStreaming = process.env.NODE_ENV !== 'test';
-
-    // All tools done - send results to backend
     try {
+      // All tools done - send results to backend
       const completed_tool_calls = conversation.pending_tool_calls.map(p => [
         p.toolCall,
         p.result!
       ]);
 
-      if (!useStreaming) {
-        // Non-streaming path (for tests)
-        const response = await fetch(`${API_BASE_URL}/api/chat`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            conversationID,
-            log_index: conversation.log_index,
-            user_message: null,
-            completed_tool_calls,
-            agent: conversation.agent,
-            agent_args: conversation.agent_args
-          }),
-          signal: abortController.signal
-        });
-
-        const data = await response.json();
-
-        if (data.error) {
-          listenerApi.dispatch(setError({ conversationID, error: data.error }));
-          return;
-        }
-
-        // Update conversation - may have more pending tools
-        listenerApi.dispatch(updateConversation({
-          conversationID,
-          newConversationID: data.conversationID,
-          log_index: data.log_index,
-          completed_tool_calls: data.completed_tool_calls,
-          pending_tool_calls: data.pending_tool_calls
-        }));
-        return;
-      }
-
-      // Streaming path (production)
-      const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      // Call API with automatic fallback
+      const result = await callChatAPIWithFallback(
+        {
           conversationID,
           log_index: conversation.log_index,
           user_message: null,
           completed_tool_calls,
           agent: conversation.agent,
           agent_args: conversation.agent_args
-        }),
-        signal: abortController.signal
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error('No response body');
-      }
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-      let doneEventData: any = null;
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-
-          // Split on double newlines (SSE event separator)
-          const events = buffer.split('\n\n');
-          buffer = events.pop() || '';
-
-          for (const eventChunk of events) {
-            if (!eventChunk.trim()) continue;
-
-            const parsed = parseSSEChunk(eventChunk);
-            if (!parsed) continue;
-
-            const { event, data } = parsed;
-
-            switch (event) {
-              case 'streaming_event':
-                // Skip streaming events if aborted
-                if (abortController.signal.aborted) {
-                  console.log('[sendMessage] Skipping streaming event - aborted');
-                  break;
-                }
-
-                // Dispatch streaming event to build streamedCompletedToolCalls
-                listenerApi.dispatch(addStreamingMessage(data));
-                break;
-
-              case 'done':
-                // Always process done event (for cleanup)
-                doneEventData = data;
-                break;
-
-              case 'error':
-                // Always process error event
-                throw new Error(data.error);
-
-              default:
-                console.warn('Unknown SSE event:', event);
-            }
+        },
+        abortController,
+        (data) => {
+          // Handle streaming events (skip if aborted)
+          if (!abortController.signal.aborted) {
+            listenerApi.dispatch(addStreamingMessage(data));
           }
         }
-      } finally {
-        reader.releaseLock();
-      }
+      );
 
-      // Process done event
-      if (!doneEventData) {
-        throw new Error('Stream ended without done event');
+      if (!result.success) {
+        listenerApi.dispatch(setError({ conversationID, error: result.error || 'Unknown error' }));
+        listenerApi.dispatch(clearStreamingContent({ conversationID }));
+        return;
       }
 
       // Use real conversation ID for clearing streaming (it might have forked)
-      const realConversationID = doneEventData.conversationID || conversationID;
+      const realConversationID = result.data.conversationID || conversationID;
 
-      // Clear streaming state on the correct conversation
+      // Clear streaming state
       listenerApi.dispatch(clearStreamingContent({ conversationID: realConversationID }));
 
       // Update conversation with final results
       listenerApi.dispatch(updateConversation({
         conversationID,
-        newConversationID: doneEventData.conversationID,
-        log_index: doneEventData.log_index,
-        completed_tool_calls: doneEventData.completed_tool_calls,
-        pending_tool_calls: doneEventData.pending_tool_calls
+        newConversationID: result.data.conversationID,
+        log_index: result.data.log_index,
+        completed_tool_calls: result.data.completed_tool_calls,
+        pending_tool_calls: result.data.pending_tool_calls
       }));
+
+      // Log fallback usage for monitoring
+      if (result.usedFallback) {
+        console.warn('[chatListener] Used non-streaming fallback for completeToolCall');
+      }
 
       // Cleanup AbortController (using stable _id)
       abortControllers.delete(conversation._id);
 
     } catch (error: any) {
+      // Don't show error if request was aborted (user clicked stop)
+      if (error.name === 'AbortError') {
+        console.log('[chatListener] Request aborted by user');
+        return;
+      }
+
       listenerApi.dispatch(setError({
         conversationID,
         error: error.message || 'Unknown error'
