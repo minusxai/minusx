@@ -380,27 +380,38 @@ The application supports mode-based file system isolation, similar to the `as_us
 - `table` - Raw data table
 - `line`, `bar`, `area`, `scatter` - Standard charts (ECharts)
 - `funnel`, `pie` - Categorical charts
-- `pivot` - Aggregated pivot table with color gradient
+- `pivot` - Cross-tab pivot table with Rows/Columns/Values axes, per-value aggregation functions, heatmap, subtotals, and collapsible groups
 
 **VizSettings Interface**:
 ```typescript
 interface VizSettings {
   type: 'table' | 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot';
-  xCols?: string[];  // Grouping columns (rows in pivot)
-  yCols?: string[];  // Value columns (aggregated with SUM)
+  xCols?: string[];      // Grouping columns (used by non-pivot chart types)
+  yCols?: string[];      // Value columns (aggregated with SUM, used by non-pivot chart types)
+  pivotConfig?: PivotConfig;  // Only used when type === 'pivot'
 }
 ```
 
 **Key Files**:
 - `components/plotx/ChartBuilder.tsx` - Main chart component with drag-drop axis selection
-- `components/plotx/{LinePlot,BarPlot,PiePlot,PivotTable,...}.tsx` - Individual viz renderers
+- `components/plotx/AxisComponents.tsx` - Shared drag-drop components (ColumnChip, DropZone, ZoneChip)
+- `components/plotx/PivotAxisBuilder.tsx` - Pivot-specific Rows/Columns/Values drop zones with aggregation function selector
+- `components/plotx/PivotTable.tsx` - Pivot table renderer with nested headers, subtotals, collapsible groups, heatmap
+- `lib/chart/pivot-utils.ts` - Pure pivot aggregation logic (`aggregatePivotData()` → `PivotData`)
+- `components/plotx/{LinePlot,BarPlot,PiePlot,...}.tsx` - Individual viz renderers
 - `components/question/VizTypeSelector.tsx` - Viz type icon buttons
 - `components/question/QuestionVisualization.tsx` - Routes to Table or ChartBuilder
 - `lib/chart/chart-utils.ts` - Shared chart utilities (formatting, axis calculations)
 
+**Pivot Table Architecture**:
+- Pivot uses its own config (`PivotConfig`) instead of `xCols`/`yCols`: `rows` (dimension columns for row headers), `columns` (dimension columns for column headers), `values` (measures with per-value `AggregationFunction`: SUM/AVG/COUNT/MIN/MAX)
+- `ChartBuilder.tsx` branches on `chartType === 'pivot'`: renders `PivotAxisBuilder` instead of X/Y drop zones, calls `aggregatePivotData()` instead of `aggregateData()`, passes `PivotData` to `PivotTable`
+- `PivotTable.tsx` renders multi-level nested row/column headers via `rowSpan`/`colSpan`, subtotal rows at group boundaries, collapsible groups (toggle on subtotal rows), teal heatmap gradient, row/column/grand totals
+- Config changes propagate: `PivotAxisBuilder` → `ChartBuilder` → `QuestionVisualization` → `QuestionViewV2` → saved to `vizSettings.pivotConfig`
+
 **Aggregation Logic** (`ChartBuilder.tsx` → `aggregateData()`):
 - Groups rows by X-axis columns, sums Y-axis columns
-- For multiple X columns: reorders by cardinality for `line/bar/area/scatter`, honors original order for `pie/funnel/pivot`
+- For multiple X columns: reorders by cardinality for `line/bar/area/scatter`, honors original order for `pie/funnel`
 - Returns `{ xAxisData: string[], series: Array<{name, data}> }` format
 
 **Adding a New Viz Type**:
