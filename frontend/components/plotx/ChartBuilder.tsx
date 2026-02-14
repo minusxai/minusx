@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { Box, HStack, VStack, Text, IconButton } from '@chakra-ui/react'
 import { LuChevronDown, LuChevronUp } from 'react-icons/lu'
 import { LinePlot } from './LinePlot'
@@ -13,7 +13,9 @@ import { PivotTable } from './PivotTable'
 import { PivotAxisBuilder } from './PivotAxisBuilder'
 import { SingleValue } from './SingleValue'
 import { TrendPlot } from './TrendPlot'
+import { DrillDownCard, type DrillDownState } from './DrillDownCard'
 import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } from './AxisComponents'
+import { aggregateData } from '@/lib/chart/aggregate-data'
 import { aggregatePivotData, computeFormulas, getUniqueTopLevelRowValues, getUniqueTopLevelColumnValues } from '@/lib/chart/pivot-utils'
 import type { PivotConfig } from '@/lib/types'
 
@@ -25,19 +27,13 @@ interface ChartBuilderProps {
   initialXCols?: string[]
   initialYCols?: string[]
   onAxisChange?: (xCols: string[], yCols: string[]) => void
-  showAxisBuilder?: boolean  // Whether to show axis selection UI (default: true)
-  useCompactView?: boolean  // Whether to use compact layout (passed from parent)
-  fillHeight?: boolean  // Whether chart should fill available height (default: false)
+  showAxisBuilder?: boolean
+  useCompactView?: boolean
+  fillHeight?: boolean
   initialPivotConfig?: PivotConfig
   onPivotConfigChange?: (config: PivotConfig) => void
-  sql?: string           // The original SQL query (for drill-down)
-  databaseName?: string  // The connection/database name (for drill-down)
-}
-
-interface DrillDownState {
-  filters: Record<string, string>
-  yColumn: string
-  position: { x: number; y: number }
+  sql?: string
+  databaseName?: string
 }
 
 interface GroupedColumns {
@@ -46,206 +42,8 @@ interface GroupedColumns {
   categories: string[]
 }
 
-interface AggregatedData {
-  xAxisData: string[]
-  series: Array<{
-    name: string
-    data: number[]
-  }>
-}
-
-// Aggregate data based on X and Y axis selections
-const aggregateData = (
-  rows: Record<string, any>[],
-  xAxisColumns: string[],
-  yAxisColumns: string[],
-  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend'
-): AggregatedData => {
-  if (yAxisColumns.length === 0) {
-    return { xAxisData: [], series: [] }
-  }
-
-  // Handle case when no X axis columns (show total aggregation)
-  if (xAxisColumns.length === 0) {
-    const series = yAxisColumns.map(yCol => {
-      const values: number[] = []
-      rows.forEach(row => {
-        const val = row[yCol]
-        if (val !== null && val !== undefined && !isNaN(Number(val))) {
-          values.push(Number(val))
-        }
-      })
-      const total = values.reduce((acc, v) => acc + v, 0)
-      return {
-        name: yCol,
-        data: [total]
-      }
-    })
-
-    return {
-      xAxisData: ['Total'],
-      series
-    }
-  }
-
-  // Group data by X axis columns
-  const grouped = new Map<string, Record<string, number[]>>()
-
-  rows.forEach(row => {
-    // Create key from X axis columns (e.g., "2023-01-01" or "2023-01-01|Electronics")
-    const xKey = xAxisColumns.map(col => {
-      const val = row[col]
-      if (val instanceof Date) {
-        return val.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-      }
-      return String(val)
-    }).join(' | ')
-
-    if (!grouped.has(xKey)) {
-      grouped.set(xKey, {})
-    }
-
-    const group = grouped.get(xKey)!
-
-    // For each Y column, accumulate values
-    yAxisColumns.forEach(yCol => {
-      if (!group[yCol]) {
-        group[yCol] = []
-      }
-      const val = row[yCol]
-      if (val !== null && val !== undefined && !isNaN(Number(val))) {
-        group[yCol].push(Number(val))
-      }
-    })
-  })
-
-  // Convert grouped data to series format
-  const xAxisData = Array.from(grouped.keys())
-
-  // If we have multiple X columns (e.g., date + category), we need to create series per category
-  if (xAxisColumns.length > 1) {
-    // For line/bar/area/scatter: reorder columns by cardinality (highest cardinality becomes x-axis)
-    // For pie/funnel/pivot: honor the original column order as specified by the user
-    const shouldReorderByCardinality = ['line', 'bar', 'area', 'scatter'].includes(chartType)
-
-    let xAxisCol: string
-    let groupingCols: string[]
-
-    if (shouldReorderByCardinality) {
-      // Calculate cardinality for each X column
-      const cardinalities = xAxisColumns.map(col => {
-        const uniqueValues = new Set(rows.map(row => String(row[col])))
-        return { col, cardinality: uniqueValues.size }
-      })
-
-      // Sort by cardinality descending (highest cardinality first)
-      // If cardinality is equal, preserve original order
-      cardinalities.sort((a, b) => {
-        if (b.cardinality !== a.cardinality) {
-          return b.cardinality - a.cardinality
-        }
-        // Preserve original order when cardinality is equal
-        return xAxisColumns.indexOf(a.col) - xAxisColumns.indexOf(b.col)
-      })
-
-      // Highest cardinality column(s) become x-axis, rest become grouping
-      xAxisCol = cardinalities[0].col
-      groupingCols = cardinalities.slice(1).map(c => c.col)
-    } else {
-      // Honor original order: first column is x-axis, rest are grouping
-      xAxisCol = xAxisColumns[0]
-      groupingCols = xAxisColumns.slice(1)
-    }
-
-    // Extract unique values for the grouping columns
-    const uniqueGroups = new Set<string>()
-
-    rows.forEach(row => {
-      const groupVal = groupingCols.map(col => String(row[col])).join(' | ')
-      uniqueGroups.add(groupVal)
-    })
-
-    // Create nested grouping structure
-    const nestedGrouped = new Map<string, Map<string, number[]>>()
-
-    rows.forEach(row => {
-      // Primary key (highest cardinality column - the x-axis)
-      const val = row[xAxisCol]
-      const primaryKey = val instanceof Date
-        ? val.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-        : String(val)
-
-      // Secondary key (grouping columns)
-      const secondaryKey = groupingCols.map(col => String(row[col])).join(' | ')
-
-      if (!nestedGrouped.has(primaryKey)) {
-        nestedGrouped.set(primaryKey, new Map())
-      }
-
-      const primaryGroup = nestedGrouped.get(primaryKey)!
-
-      if (!primaryGroup.has(secondaryKey)) {
-        primaryGroup.set(secondaryKey, [])
-      }
-
-      // Accumulate Y values
-      yAxisColumns.forEach(yCol => {
-        const val = row[yCol]
-        if (val !== null && val !== undefined && !isNaN(Number(val))) {
-          const key = `${secondaryKey}|${yCol}`
-          if (!primaryGroup.has(key)) {
-            primaryGroup.set(key, [])
-          }
-          primaryGroup.get(key)!.push(Number(val))
-        }
-      })
-    })
-
-    // Build series
-    const seriesMap = new Map<string, number[]>()
-    const primaryKeys = Array.from(nestedGrouped.keys())
-
-    // For each combination of group + yColumn, create a series
-    uniqueGroups.forEach(group => {
-      yAxisColumns.forEach(yCol => {
-        const seriesName = yAxisColumns.length > 1 ? `${group} - ${yCol}` : group
-        const data: number[] = []
-
-        primaryKeys.forEach(primaryKey => {
-          const primaryGroup = nestedGrouped.get(primaryKey)!
-          const key = `${group}|${yCol}`
-          const values = primaryGroup.get(key) || []
-          // Sum the values (default aggregation)
-          const sum = values.reduce((acc, v) => acc + v, 0)
-          data.push(sum)
-        })
-
-        seriesMap.set(seriesName, data)
-      })
-    })
-
-    return {
-      xAxisData: primaryKeys,
-      series: Array.from(seriesMap.entries()).map(([name, data]) => ({ name, data }))
-    }
-  }
-
-  // Simple case: single X column
-  const series = yAxisColumns.map(yCol => ({
-    name: yCol,
-    data: xAxisData.map(xKey => {
-      const values = grouped.get(xKey)?.[yCol] || []
-      // Sum the values (default aggregation)
-      return values.reduce((acc, v) => acc + v, 0)
-    })
-  }))
-
-  return { xAxisData, series }
-}
-
 export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName }: ChartBuilderProps) => {
   // Group columns by type
-  
   const groupedColumns: GroupedColumns = useMemo(() => {
     const groups: GroupedColumns = {
       dates: [],
@@ -291,7 +89,6 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   // Auto-select columns: use initialXCols/initialYCols if provided, otherwise auto-select
   const [xAxisColumns, setXAxisColumns] = useState<string[]>(() => {
     if (initialXCols && initialXCols.length > 0) {
-      // Filter to only include columns that actually exist in the data
       const validCols = initialXCols.filter(col => columns.includes(col))
       if (validCols.length > 0) return validCols
     }
@@ -300,7 +97,6 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
 
   const [yAxisColumns, setYAxisColumns] = useState<string[]>(() => {
     if (initialYCols && initialYCols.length > 0) {
-      // Filter to only include columns that actually exist in the data
       const validCols = initialYCols.filter(col => columns.includes(col))
       if (validCols.length > 0) return validCols
     }
@@ -404,47 +200,10 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     }
   }, [xAxisColumns, rows, chartType])
 
-  // Drill-down state for floating popover
+  // Drill-down state
   const [drillDown, setDrillDown] = useState<DrillDownState | null>(null)
-  const drillDownRef = useRef<HTMLDivElement>(null)
 
-  // Close drill-down on click outside or Escape
-  useEffect(() => {
-    if (!drillDown) return
-    const handleClickOutside = (e: MouseEvent) => {
-      if (drillDownRef.current && !drillDownRef.current.contains(e.target as Node)) {
-        setDrillDown(null)
-      }
-    }
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setDrillDown(null)
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('keydown', handleEscape)
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-      document.removeEventListener('keydown', handleEscape)
-    }
-  }, [drillDown])
-
-  // Build CTE SQL and open in new tab
-  const handleSeeRecords = useCallback(() => {
-    if (!drillDown || !sql) return
-    const whereClauses = Object.entries(drillDown.filters).map(([col, val]) => {
-      const escapedVal = String(val).replace(/'/g, "''")
-      return `"${col}" = '${escapedVal}'`
-    })
-    const whereClause = whereClauses.length > 0 ? `\nWHERE ${whereClauses.join('\n  AND ')}` : ''
-    const cteSql = `WITH base AS (\n${sql}\n)\nSELECT * FROM base${whereClause}`
-    const params = new URLSearchParams()
-    if (databaseName) params.set('databaseName', databaseName)
-    // Base64-encode the SQL to avoid URL encoding issues with special characters
-    const utf8Bytes = new TextEncoder().encode(cteSql)
-    const binaryStr = Array.from(utf8Bytes, b => String.fromCharCode(b)).join('')
-    params.set('queryB64', btoa(binaryStr))
-    window.open(`/new/question?${params.toString()}`, '_blank')
-    setDrillDown(null)
-  }, [drillDown, sql, databaseName])
+  const closeDrillDown = useCallback(() => setDrillDown(null), [])
 
   // Pivot cell click handler (called from PivotTable)
   const handlePivotCellClick = useCallback((filters: Record<string, string>, valueLabel: string, event: React.MouseEvent) => {
@@ -463,46 +222,35 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     let yColumn: string | undefined
 
     if (chartType === 'pie' || chartType === 'funnel') {
-      // Pie/Funnel: params.name is the slice/stage label (an xAxisData value)
       const xValue = params.name as string
 
       if (xAxisColumns.length === 1) {
         filters[xAxisColumns[0]] = xValue
       } else if (xAxisColumns.length > 1) {
-        // For pie/funnel with multiple X cols, xAxisData = values of first X col
-        // Grouping cols are summed away in the pie/funnel aggregation
         if (axisMapping) {
           filters[axisMapping.primaryXCol] = xValue
         }
       }
-      // Pie/funnel sum across all Y columns
       yColumn = yAxisColumns.length === 1 ? yAxisColumns[0] : yAxisColumns.join(', ')
     } else {
-      // Line/Bar/Area/Scatter: use dataIndex and seriesName
       const dataIndex: number = params.dataIndex ?? 0
-      // Strip dual Y-axis suffix "(L)" / "(R)" appended by buildChartOption
       const cleanSeriesName = (params.seriesName || '').replace(/ \([LR]\)$/, '')
 
       if (xAxisColumns.length === 0) {
-        // Total aggregation — no x filter
         yColumn = cleanSeriesName
       } else if (xAxisColumns.length === 1) {
-        // Single X column
         filters[xAxisColumns[0]] = aggregatedData.xAxisData[dataIndex]
         if (yAxisColumns.length === 1) {
           yColumn = yAxisColumns[0]
         } else {
-          // seriesName is the Y column name
           yColumn = cleanSeriesName
         }
       } else if (axisMapping) {
-        // Multiple X columns with cardinality reordering
         filters[axisMapping.primaryXCol] = aggregatedData.xAxisData[dataIndex]
 
         let groupPart = cleanSeriesName
 
         if (yAxisColumns.length > 1) {
-          // seriesName format: "groupVal - yCol"
           for (const yCol of yAxisColumns) {
             if (groupPart.endsWith(` - ${yCol}`)) {
               yColumn = yCol
@@ -514,7 +262,6 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
           yColumn = yAxisColumns[0]
         }
 
-        // groupPart is grouping values joined by ' | '
         const groupValues = groupPart.split(' | ')
         axisMapping.groupingCols.forEach((col, i) => {
           if (i < groupValues.length) {
@@ -576,69 +323,6 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   // For pivot, we consider having data when pivotConfig has values
   const isPivot = chartType === 'pivot'
   const pivotHasData = isPivot && pivotData && pivotData.cells.length > 0
-
-  // Clamp position to keep card within viewport
-  const clampPosition = (x: number, y: number) => {
-    const cardW = 240
-    const cardH = 160
-    return {
-      x: Math.min(x, window.innerWidth - cardW - 8),
-      y: Math.min(y, window.innerHeight - cardH - 8),
-    }
-  }
-
-  // Render drill-down floating card
-  const renderDrillDownCard = () => {
-    if (!drillDown) return null
-    const pos = clampPosition(drillDown.position.x, drillDown.position.y)
-    const filterEntries = Object.entries(drillDown.filters)
-    return (
-      <Box
-        ref={drillDownRef}
-        position="fixed"
-        left={`${pos.x}px`}
-        top={`${pos.y}px`}
-        zIndex={1000}
-        bg="bg.surface"
-        border="1px solid"
-        borderColor="border.default"
-        borderRadius="lg"
-        boxShadow="lg"
-        p={3}
-        minW="180px"
-        maxW="300px"
-      >
-        <VStack align="stretch" gap={1.5}>
-          {filterEntries.map(([col, val]) => (
-            <HStack key={col} gap={1.5} fontSize="xs">
-              <Text fontWeight="600" color="fg.muted" flexShrink={0}>{col}</Text>
-              <Text color="fg.default" fontFamily="mono" truncate>{String(val)}</Text>
-            </HStack>
-          ))}
-          {filterEntries.length === 0 && (
-            <Text fontSize="xs" color="fg.muted">Total aggregation</Text>
-          )}
-          {sql && (
-            <>
-              <Box borderTop="1px solid" borderColor="border.muted" my={1} />
-              <Box
-                as="button"
-                fontSize="xs"
-                fontWeight="600"
-                color="accent.teal"
-                cursor="pointer"
-                textAlign="left"
-                _hover={{ textDecoration: 'underline' }}
-                onClick={handleSeeRecords}
-              >
-                See Records →
-              </Box>
-            </>
-          )}
-        </VStack>
-      </Box>
-    )
-  }
 
   // Pivot mode: completely different layout
   const [pivotSettingsExpanded, setPivotSettingsExpanded] = useState(true)
@@ -719,7 +403,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
           )}
         </Box>
 
-        {renderDrillDownCard()}
+        <DrillDownCard drillDown={drillDown} onClose={closeDrillDown} sql={sql} databaseName={databaseName} />
       </Box>
     )
   }
@@ -992,8 +676,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
         </Box>
       </VStack>
 
-      {renderDrillDownCard()}
+      <DrillDownCard drillDown={drillDown} onClose={closeDrillDown} sql={sql} databaseName={databaseName} />
     </Box>
   )
 }
-
