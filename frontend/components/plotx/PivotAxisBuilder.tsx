@@ -3,27 +3,9 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Box, HStack, VStack, Text } from '@chakra-ui/react'
 import { Checkbox } from '@/components/ui/checkbox'
-import { LuHash, LuCalendar, LuType, LuX, LuChevronDown } from 'react-icons/lu'
-import { getColumnType } from '@/lib/database/duckdb'
+import { LuChevronDown } from 'react-icons/lu'
+import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } from './AxisComponents'
 import type { PivotConfig, PivotValueConfig, AggregationFunction } from '@/lib/types'
-
-type ColumnType = 'date' | 'number' | 'text'
-
-const getTypeIcon = (type: ColumnType) => {
-  switch (type) {
-    case 'number': return LuHash
-    case 'date': return LuCalendar
-    case 'text': return LuType
-  }
-}
-
-const getTypeColor = (type: ColumnType) => {
-  switch (type) {
-    case 'number': return '#2980b9'
-    case 'date': return '#9b59b6'
-    case 'text': return '#f39c12'
-  }
-}
 
 const AGG_FUNCTIONS: AggregationFunction[] = ['SUM', 'AVG', 'COUNT', 'MIN', 'MAX']
 
@@ -40,25 +22,23 @@ export const PivotAxisBuilder = ({
   types,
   pivotConfig,
   onPivotConfigChange,
-  useCompactView = false,
 }: PivotAxisBuilderProps) => {
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null)
-  const [isTouchDevice, setIsTouchDevice] = useState(false)
+  const isTouchDevice = useIsTouchDevice()
   const [selectedColumnForMobile, setSelectedColumnForMobile] = useState<string | null>(null)
 
-  useEffect(() => {
-    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0)
-  }, [])
+  // All columns with their types, in a flat list
+  const allColumns = useMemo(() => {
+    return columns.map(col => ({ col, type: resolveColumnType(col, columns, types) }))
+  }, [columns, types])
 
-  // Classify columns
+  // Classify columns for auto-init
   const groupedColumns = useMemo(() => {
     const groups: { dates: string[]; numbers: string[]; categories: string[] } = {
-      dates: [],
-      numbers: [],
-      categories: [],
+      dates: [], numbers: [], categories: [],
     }
-    columns.forEach((col, index) => {
-      const type = types?.[index] ? getColumnType(types[index]) : 'text'
+    columns.forEach((col) => {
+      const type = resolveColumnType(col, columns, types)
       if (type === 'date') groups.dates.push(col)
       else if (type === 'number') groups.numbers.push(col)
       else groups.categories.push(col)
@@ -74,14 +54,12 @@ export const PivotAxisBuilder = ({
     const colCols: string[] = []
     const vals: PivotValueConfig[] = []
 
-    // First date/category → rows
     if (groupedColumns.dates.length > 0) {
       rowCols.push(groupedColumns.dates[0])
     } else if (groupedColumns.categories.length > 0) {
       rowCols.push(groupedColumns.categories[0])
     }
 
-    // Second category → columns (or second date if no categories)
     const remainingCats = groupedColumns.categories.filter(c => !rowCols.includes(c))
     const remainingDates = groupedColumns.dates.filter(c => !rowCols.includes(c))
     if (remainingCats.length > 0) {
@@ -90,7 +68,6 @@ export const PivotAxisBuilder = ({
       colCols.push(remainingDates[0])
     }
 
-    // First number → values with SUM
     if (groupedColumns.numbers.length > 0) {
       vals.push({ column: groupedColumns.numbers[0], aggFunction: 'SUM' })
     }
@@ -118,7 +95,6 @@ export const PivotAxisBuilder = ({
   const handleDropRows = useCallback(() => {
     const col = draggedColumn || selectedColumnForMobile
     if (!col || config.rows.includes(col)) { setDraggedColumn(null); setSelectedColumnForMobile(null); return }
-    // Remove from other zones if present
     const newCols = config.columns.filter(c => c !== col)
     const newVals = config.values.filter(v => v.column !== col)
     onPivotConfigChange({ ...config, rows: [...config.rows, col], columns: newCols, values: newVals })
@@ -180,217 +156,100 @@ export const PivotAxisBuilder = ({
     onPivotConfigChange({ ...config, showHeatmap: checked })
   }, [config, onPivotConfigChange])
 
-  const handleDragStart = useCallback((column: string, isMobile?: boolean) => {
+  // Drag handlers
+  const handleDragStart = useCallback((e: React.DragEvent, column: string) => {
     setDraggedColumn(column)
-    if (isMobile) {
-      setSelectedColumnForMobile(prev => prev === column ? null : column)
-    }
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', column)
   }, [])
 
-  // Column chip (source)
-  const ColumnChip = ({ col, type }: { col: string; type: ColumnType }) => {
-    const Icon = getTypeIcon(type)
-    const color = getTypeColor(type)
-    const isAssigned = assignedColumns.has(col)
-    const isMobileSelected = selectedColumnForMobile === col
+  const handleDragEnd = useCallback(() => {
+    setDraggedColumn(null)
+  }, [])
+
+  const handleMobileSelect = useCallback((column: string) => {
+    setSelectedColumnForMobile(prev => prev === column ? null : column)
+  }, [])
+
+  // Aggregation selector component for value zone chips
+  const AggSelector = ({ column, aggFunction }: { column: string; aggFunction: AggregationFunction }) => {
+    const [showMenu, setShowMenu] = useState(false)
 
     return (
-      <HStack
-        gap={1}
-        p={1.5}
-        bg={isMobileSelected ? 'accent.teal' : isAssigned ? 'bg.muted' : 'transparent'}
-        borderRadius="sm"
-        border="2px solid"
-        borderColor={isMobileSelected ? 'accent.teal' : isAssigned ? 'accent.teal' : 'transparent'}
-        cursor={isTouchDevice ? 'pointer' : 'grab'}
-        opacity={isAssigned ? 1 : 0.7}
-        _hover={{ bg: 'bg.muted', borderColor: 'border.muted' }}
-        _active={{ cursor: isTouchDevice ? 'pointer' : 'grabbing' }}
-        draggable={!isTouchDevice}
-        onDragStart={() => !isTouchDevice && handleDragStart(col)}
-        onClick={() => isTouchDevice && handleDragStart(col, true)}
-        transition="all 0.2s"
-        userSelect="none"
-      >
-        <Box as={Icon} fontSize="xs" color={isMobileSelected ? 'white' : color} flexShrink={0} />
-        <Text fontSize="2xs" fontFamily="mono" color={isMobileSelected ? 'white' : 'fg.default'} lineClamp={1} wordBreak="break-all" userSelect="none">
-          {col}
-        </Text>
-      </HStack>
-    )
-  }
-
-  // Drop zone
-  const PivotDropZone = ({ label, onDrop, children }: { label: string; onDrop: () => void; children: React.ReactNode }) => {
-    const [isDragOver, setIsDragOver] = useState(false)
-
-    return (
-      <VStack
-        flex="1"
-        align="stretch"
-        gap={1}
-        p={2}
-        bg={isDragOver ? 'accent.teal/10' : 'bg.surface'}
-        borderRadius="md"
-        border="2px dashed"
-        borderColor={isDragOver ? 'accent.teal' : 'border.muted'}
-        position="relative"
-        minH="40px"
-        onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
-        onDragLeave={() => setIsDragOver(false)}
-        onDrop={(e) => { e.preventDefault(); setIsDragOver(false); onDrop() }}
-        onClick={() => isTouchDevice && onDrop()}
-        cursor={isTouchDevice ? 'pointer' : 'default'}
-        transition="all 0.2s"
-      >
-        <Text
-          fontSize="2xs"
-          fontWeight="700"
-          color="fg.subtle"
-          textTransform="uppercase"
-          letterSpacing="0.05em"
-          position="absolute"
-          top={-2.5}
-          bg="bg.muted"
+      <Box position="relative">
+        <HStack
+          gap={0.5}
           px={1.5}
+          py={0.5}
+          bg="accent.teal/15"
           borderRadius="sm"
-          border="1px dashed"
-          borderColor={isDragOver ? 'accent.teal' : 'border.muted'}
+          cursor="pointer"
+          onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu) }}
+          _hover={{ bg: 'accent.teal/25' }}
+          transition="all 0.15s"
         >
-          {label}
-        </Text>
-        {children}
-      </VStack>
-    )
-  }
-
-  // Chip inside a drop zone (removable, with optional agg selector for values)
-  const ZoneChip = ({ col, onRemove, aggFunction, onAggChange }: {
-    col: string
-    onRemove: () => void
-    aggFunction?: AggregationFunction
-    onAggChange?: (fn: AggregationFunction) => void
-  }) => {
-    const [showAggMenu, setShowAggMenu] = useState(false)
-    const colIndex = columns.indexOf(col)
-    const type = types?.[colIndex] ? getColumnType(types[colIndex]) : 'text'
-    const Icon = getTypeIcon(type)
-    const color = getTypeColor(type)
-
-    return (
-      <HStack
-        gap={1}
-        px={2}
-        py={1}
-        bg="bg.muted"
-        borderRadius="sm"
-        border="1px solid"
-        borderColor="border.muted"
-        minWidth={0}
-        position="relative"
-      >
-        <Box as={Icon} fontSize="xs" color={color} flexShrink={0} />
-        <Text fontSize="xs" fontFamily="mono" color="fg.default" lineClamp={1} flex="1" minWidth={0}>
-          {col}
-        </Text>
-        {/* Aggregation selector for values */}
-        {aggFunction && onAggChange && (
-          <Box position="relative">
-            <HStack
-              gap={0.5}
-              px={1.5}
-              py={0.5}
-              bg="accent.teal/15"
-              borderRadius="sm"
-              cursor="pointer"
-              onClick={(e) => { e.stopPropagation(); setShowAggMenu(!showAggMenu) }}
-              _hover={{ bg: 'accent.teal/25' }}
-              transition="all 0.15s"
-            >
-              <Text fontSize="2xs" fontWeight="700" color="accent.teal">
-                {aggFunction}
-              </Text>
-              <Box as={LuChevronDown} fontSize="2xs" color="accent.teal" />
-            </HStack>
-            {showAggMenu && (
-              <VStack
-                position="absolute"
-                top="100%"
-                left={0}
-                mt={1}
-                bg="bg.panel"
-                border="1px solid"
-                borderColor="border.muted"
-                borderRadius="md"
-                boxShadow="md"
-                zIndex={10}
-                p={1}
-                gap={0}
-                minW="70px"
+          <Text fontSize="2xs" fontWeight="700" color="accent.teal">
+            {aggFunction}
+          </Text>
+          <Box as={LuChevronDown} fontSize="2xs" color="accent.teal" />
+        </HStack>
+        {showMenu && (
+          <VStack
+            position="absolute"
+            top="100%"
+            left={0}
+            mt={1}
+            bg="bg.panel"
+            border="1px solid"
+            borderColor="border.muted"
+            borderRadius="md"
+            boxShadow="md"
+            zIndex={10}
+            p={1}
+            gap={0}
+            minW="70px"
+          >
+            {AGG_FUNCTIONS.map(fn => (
+              <Box
+                key={fn}
+                px={2}
+                py={1}
+                cursor="pointer"
+                borderRadius="sm"
+                bg={fn === aggFunction ? 'accent.teal/15' : 'transparent'}
+                _hover={{ bg: 'accent.teal/10' }}
+                onClick={(e) => { e.stopPropagation(); changeAggFunction(column, fn); setShowMenu(false) }}
               >
-                {AGG_FUNCTIONS.map(fn => (
-                  <Box
-                    key={fn}
-                    px={2}
-                    py={1}
-                    cursor="pointer"
-                    borderRadius="sm"
-                    bg={fn === aggFunction ? 'accent.teal/15' : 'transparent'}
-                    _hover={{ bg: 'accent.teal/10' }}
-                    onClick={(e) => { e.stopPropagation(); onAggChange(fn); setShowAggMenu(false) }}
-                  >
-                    <Text fontSize="xs" fontWeight={fn === aggFunction ? '700' : '500'} color={fn === aggFunction ? 'accent.teal' : 'fg.default'}>
-                      {fn}
-                    </Text>
-                  </Box>
-                ))}
-              </VStack>
-            )}
-          </Box>
+                <Text fontSize="xs" fontWeight={fn === aggFunction ? '700' : '500'} color={fn === aggFunction ? 'accent.teal' : 'fg.default'}>
+                  {fn}
+                </Text>
+              </Box>
+            ))}
+          </VStack>
         )}
-        <Box
-          as="button"
-          onClick={(e: React.MouseEvent) => { e.stopPropagation(); onRemove() }}
-          ml={0.5}
-          _hover={{ color: 'accent.danger' }}
-          transition="color 0.2s"
-          flexShrink={0}
-        >
-          <LuX size={12} />
-        </Box>
-      </HStack>
+      </Box>
     )
   }
 
   return (
     <Box display="flex" flexDirection="column" gap={3} width="100%" p={3} bg="bg.muted" borderBottom="1px solid" borderColor="border.muted">
-      {/* Column source palette */}
-      <Box display="flex" flexDirection="row" gap={3} flexWrap="wrap" alignItems="start">
-        {groupedColumns.dates.length > 0 && (
-          <VStack align="start" gap={0.5}>
-            <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">Dates</Text>
-            <HStack gap={1} flexWrap="wrap">
-              {groupedColumns.dates.map(col => <ColumnChip key={col} col={col} type="date" />)}
-            </HStack>
-          </VStack>
-        )}
-        {groupedColumns.categories.length > 0 && (
-          <VStack align="start" gap={0.5}>
-            <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">Categories</Text>
-            <HStack gap={1} flexWrap="wrap">
-              {groupedColumns.categories.map(col => <ColumnChip key={col} col={col} type="text" />)}
-            </HStack>
-          </VStack>
-        )}
-        {groupedColumns.numbers.length > 0 && (
-          <VStack align="start" gap={0.5}>
-            <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">Numbers</Text>
-            <HStack gap={1} flexWrap="wrap">
-              {groupedColumns.numbers.map(col => <ColumnChip key={col} col={col} type="number" />)}
-            </HStack>
-          </VStack>
-        )}
-      </Box>
+      {/* Column source palette - flat list */}
+      <HStack gap={2} flexWrap="wrap">
+        {allColumns.map(({ col, type }) => (
+          <ColumnChip
+            key={col}
+            column={col}
+            type={type}
+            isAssigned={assignedColumns.has(col)}
+            isDragging={draggedColumn === col}
+            isMobileSelected={selectedColumnForMobile === col}
+            isTouchDevice={isTouchDevice}
+            onDragStart={(e) => handleDragStart(e, col)}
+            onDragEnd={handleDragEnd}
+            onMobileSelect={() => handleMobileSelect(col)}
+          />
+        ))}
+      </HStack>
 
       {/* Mobile instruction */}
       {isTouchDevice && selectedColumnForMobile && (
@@ -403,44 +262,54 @@ export const PivotAxisBuilder = ({
 
       {/* Drop zones */}
       <Box display="flex" flexDirection="row" gap={3}>
-        <PivotDropZone label="Rows" onDrop={handleDropRows}>
-          <HStack gap={1} flexWrap="wrap" mt={1}>
+        <DropZone label="Rows" onDrop={handleDropRows} isTouchDevice={isTouchDevice}>
+          <HStack gap={1.5} flexWrap="wrap">
             {config.rows.map(col => (
-              <ZoneChip key={col} col={col} onRemove={() => removeFromRows(col)} />
+              <ZoneChip
+                key={col}
+                column={col}
+                type={resolveColumnType(col, columns, types)}
+                onRemove={() => removeFromRows(col)}
+              />
             ))}
           </HStack>
           {config.rows.length === 0 && (
-            <Text fontSize="2xs" color="fg.subtle" fontStyle="italic">Drop dimensions here</Text>
+            <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Drop dimensions here</Text>
           )}
-        </PivotDropZone>
+        </DropZone>
 
-        <PivotDropZone label="Columns" onDrop={handleDropColumns}>
-          <HStack gap={1} flexWrap="wrap" mt={1}>
+        <DropZone label="Columns" onDrop={handleDropColumns} isTouchDevice={isTouchDevice}>
+          <HStack gap={1.5} flexWrap="wrap">
             {config.columns.map(col => (
-              <ZoneChip key={col} col={col} onRemove={() => removeFromColumns(col)} />
+              <ZoneChip
+                key={col}
+                column={col}
+                type={resolveColumnType(col, columns, types)}
+                onRemove={() => removeFromColumns(col)}
+              />
             ))}
           </HStack>
           {config.columns.length === 0 && (
-            <Text fontSize="2xs" color="fg.subtle" fontStyle="italic">Drop dimensions here</Text>
+            <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Drop dimensions here</Text>
           )}
-        </PivotDropZone>
+        </DropZone>
 
-        <PivotDropZone label="Values" onDrop={handleDropValues}>
-          <HStack gap={1} flexWrap="wrap" mt={1}>
+        <DropZone label="Values" onDrop={handleDropValues} isTouchDevice={isTouchDevice}>
+          <HStack gap={1.5} flexWrap="wrap">
             {config.values.map(v => (
               <ZoneChip
                 key={v.column}
-                col={v.column}
+                column={v.column}
+                type={resolveColumnType(v.column, columns, types)}
                 onRemove={() => removeFromValues(v.column)}
-                aggFunction={v.aggFunction}
-                onAggChange={(fn) => changeAggFunction(v.column, fn)}
+                extra={<AggSelector column={v.column} aggFunction={v.aggFunction} />}
               />
             ))}
           </HStack>
           {config.values.length === 0 && (
-            <Text fontSize="2xs" color="fg.subtle" fontStyle="italic">Drop measures here</Text>
+            <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Drop measures here</Text>
           )}
-        </PivotDropZone>
+        </DropZone>
       </Box>
 
       {/* Options toggles */}

@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useCallback, useMemo, useRef, useEffect, use } from 'react'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { Box, HStack, VStack, Text, IconButton } from '@chakra-ui/react'
-import { LuHash, LuCalendar, LuType, LuX, LuGripVertical, LuChevronDown, LuChevronUp } from 'react-icons/lu'
+import { LuGripVertical, LuChevronDown, LuChevronUp } from 'react-icons/lu'
 import { LinePlot } from './LinePlot'
 import { BarPlot } from './BarPlot'
 import { AreaPlot } from './AreaPlot'
@@ -13,7 +13,7 @@ import { PivotTable } from './PivotTable'
 import { PivotAxisBuilder } from './PivotAxisBuilder'
 import { SingleValue } from './SingleValue'
 import { TrendPlot } from './TrendPlot'
-import { getColumnType } from '@/lib/database/duckdb'
+import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } from './AxisComponents'
 import { aggregatePivotData } from '@/lib/chart/pivot-utils'
 import type { PivotConfig } from '@/lib/types'
 
@@ -32,8 +32,6 @@ interface ChartBuilderProps {
   onPivotConfigChange?: (config: PivotConfig) => void
 }
 
-type ColumnType = 'date' | 'number' | 'text'
-
 interface GroupedColumns {
   dates: string[]
   numbers: string[]
@@ -46,22 +44,6 @@ interface AggregatedData {
     name: string
     data: number[]
   }>
-}
-
-const getTypeIcon = (type: ColumnType) => {
-  switch (type) {
-    case 'number': return LuHash
-    case 'date': return LuCalendar
-    case 'text': return LuType
-  }
-}
-
-const getTypeColor = (type: ColumnType) => {
-  switch (type) {
-    case 'number': return '#2980b9' // Primary blue
-    case 'date': return '#9b59b6'   // Purple
-    case 'text': return '#f39c12'   // Orange
-  }
 }
 
 // Aggregate data based on X and Y axis selections
@@ -263,8 +245,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
       categories: [],
     }
 
-    columns.forEach((col, index) => {
-      const type = types?.[index] ? getColumnType(types[index]) : 'text'
+    columns.forEach((col) => {
+      const type = resolveColumnType(col, columns, types)
       if (type === 'date') {
         groups.dates.push(col)
       } else if (type === 'number') {
@@ -328,13 +310,21 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   const dragStartX = useRef<number>(0)
   const dragStartWidth = useRef<number>(240)
 
-  // Handle drag start (both mouse and mobile click)
-  const handleDragStart = useCallback((column: string, isMobile?: boolean) => {
+  const isTouchDevice = useIsTouchDevice()
+
+  // Handle drag start
+  const handleDragStart = useCallback((e: React.DragEvent, column: string) => {
     setDraggedColumn(column)
-    if (isMobile) {
-      // Toggle selection on mobile
-      setSelectedColumnForMobile(prev => prev === column ? null : column)
-    }
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', column)
+  }, [])
+
+  const handleDragEnd = useCallback(() => {
+    setDraggedColumn(null)
+  }, [])
+
+  const handleMobileSelect = useCallback((column: string) => {
+    setSelectedColumnForMobile(prev => prev === column ? null : column)
   }, [])
 
   // Handle drop on X axis
@@ -595,7 +585,6 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
             <Box
               display="flex"
               flexDirection={useCompactView ? "row" : "column"}
-            //   flexWrap="wrap"
               gap={4}
               alignItems="start"
               justifyContent={"flex-start"}
@@ -608,13 +597,17 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                   </Text>
                   <HStack gap={2} flexWrap="wrap">
                     {groupedColumns.dates.map(col => (
-                      <ColumnItem
+                      <ColumnChip
                         key={col}
                         column={col}
                         type="date"
-                        onDragStart={handleDragStart}
-                        isSelected={xAxisColumns.includes(col) || yAxisColumns.includes(col)}
+                        isAssigned={xAxisColumns.includes(col) || yAxisColumns.includes(col)}
+                        isDragging={draggedColumn === col}
                         isMobileSelected={selectedColumnForMobile === col}
+                        isTouchDevice={isTouchDevice}
+                        onDragStart={(e) => handleDragStart(e, col)}
+                        onDragEnd={handleDragEnd}
+                        onMobileSelect={() => handleMobileSelect(col)}
                       />
                     ))}
                   </HStack>
@@ -629,13 +622,17 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                   </Text>
                   <HStack gap={2} flexWrap="wrap">
                     {groupedColumns.categories.map(col => (
-                      <ColumnItem
+                      <ColumnChip
                         key={col}
                         column={col}
                         type="text"
-                        onDragStart={handleDragStart}
-                        isSelected={xAxisColumns.includes(col) || yAxisColumns.includes(col)}
+                        isAssigned={xAxisColumns.includes(col) || yAxisColumns.includes(col)}
+                        isDragging={draggedColumn === col}
                         isMobileSelected={selectedColumnForMobile === col}
+                        isTouchDevice={isTouchDevice}
+                        onDragStart={(e) => handleDragStart(e, col)}
+                        onDragEnd={handleDragEnd}
+                        onMobileSelect={() => handleMobileSelect(col)}
                       />
                     ))}
                   </HStack>
@@ -650,13 +647,17 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                   </Text>
                   <HStack gap={2} flexWrap="wrap">
                     {groupedColumns.numbers.map(col => (
-                      <ColumnItem
+                      <ColumnChip
                         key={col}
                         column={col}
                         type="number"
-                        onDragStart={handleDragStart}
-                        isSelected={xAxisColumns.includes(col) || yAxisColumns.includes(col)}
+                        isAssigned={xAxisColumns.includes(col) || yAxisColumns.includes(col)}
+                        isDragging={draggedColumn === col}
                         isMobileSelected={selectedColumnForMobile === col}
+                        isTouchDevice={isTouchDevice}
+                        onDragStart={(e) => handleDragStart(e, col)}
+                        onDragEnd={handleDragEnd}
+                        onMobileSelect={() => handleMobileSelect(col)}
                       />
                     ))}
                   </HStack>
@@ -753,24 +754,38 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
             alignItems="stretch"
           >
           {/* X Axis Drop Zone */}
-          <DropZone
-            label="X Axis"
-            columns={xAxisColumns}
-            onDrop={handleDropX}
-            onRemove={removeFromX}
-            types={types}
-            allColumns={columns}
-          />
+          <DropZone label="X Axis" onDrop={handleDropX} isTouchDevice={isTouchDevice}>
+            <HStack gap={1.5} flexWrap="wrap">
+              {xAxisColumns.map(col => (
+                <ZoneChip
+                  key={col}
+                  column={col}
+                  type={resolveColumnType(col, columns, types)}
+                  onRemove={() => removeFromX(col)}
+                />
+              ))}
+            </HStack>
+            {xAxisColumns.length === 0 && (
+              <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Drop columns here</Text>
+            )}
+          </DropZone>
 
           {/* Y Axis Drop Zone */}
-          <DropZone
-            label="Y Axis"
-            columns={yAxisColumns}
-            onDrop={handleDropY}
-            onRemove={removeFromY}
-            types={types}
-            allColumns={columns}
-          />
+          <DropZone label="Y Axis" onDrop={handleDropY} isTouchDevice={isTouchDevice}>
+            <HStack gap={1.5} flexWrap="wrap">
+              {yAxisColumns.map(col => (
+                <ZoneChip
+                  key={col}
+                  column={col}
+                  type={resolveColumnType(col, columns, types)}
+                  onRemove={() => removeFromY(col)}
+                />
+              ))}
+            </HStack>
+            {yAxisColumns.length === 0 && (
+              <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Drop columns here</Text>
+            )}
+          </DropZone>
           </Box>
         )}
 
@@ -872,175 +887,3 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   )
 }
 
-// Column Item Component (draggable)
-interface ColumnItemProps {
-  column: string
-  type: ColumnType
-  onDragStart: (column: string, isMobile?: boolean) => void
-  isSelected: boolean
-  isMobileSelected?: boolean
-}
-
-const ColumnItem = ({ column, type, onDragStart, isSelected, isMobileSelected }: ColumnItemProps) => {
-  const Icon = getTypeIcon(type)
-  const color = getTypeColor(type)
-  const [isTouchDevice, setIsTouchDevice] = useState(false)
-
-  // Detect if this is a touch device
-  useEffect(() => {
-    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0)
-  }, [])
-
-  const handleClick = (e: React.MouseEvent) => {
-    // On touch devices, use click to select
-    if (isTouchDevice) {
-      e.preventDefault()
-      e.stopPropagation()
-      onDragStart(column, true)
-    }
-  }
-
-  return (
-    <HStack
-      gap={{ base: 1, md: 2 }}
-      p={{ base: 1.5, md: 2 }}
-      bg={isMobileSelected ? 'accent.teal' : isSelected ? 'bg.muted' : 'transparent'}
-      borderRadius="sm"
-      border="2px solid"
-      borderColor={isMobileSelected ? 'accent.teal' : isSelected ? 'accent.teal' : 'transparent'}
-      cursor={{ base: "pointer", md: "grab" }}
-      opacity={isSelected ? 1 : 0.7}
-      _hover={{ bg: 'bg.muted', borderColor: 'border.muted' }}
-      _active={{ cursor: { base: "pointer", md: "grabbing" } }}
-      draggable={!isTouchDevice}
-      onDragStart={() => !isTouchDevice && onDragStart(column)}
-      onClick={handleClick}
-      transition="all 0.2s"
-      userSelect="none"
-      boxShadow={isMobileSelected ? '0 0 0 3px rgba(22, 160, 133, 0.3)' : 'none'}
-    >
-      <Box as={Icon} fontSize={{ base: "xs", md: "sm" }} color={isMobileSelected ? 'white' : color} flexShrink={0} />
-      <Text fontSize={{ base: "2xs", md: "xs" }} fontFamily="mono" color={isMobileSelected ? 'white' : 'fg.default'} lineClamp={1} wordBreak="break-all" userSelect="none">
-        {column}
-      </Text>
-    </HStack>
-  )
-}
-
-// Drop Zone Component
-interface DropZoneProps {
-  label: string
-  columns: string[]
-  onDrop: () => void
-  onRemove: (column: string) => void
-  types: string[]
-  allColumns: string[]
-}
-
-const DropZone = ({ label, columns, onDrop, onRemove, types, allColumns }: DropZoneProps) => {
-  const [isDragOver, setIsDragOver] = useState(false)
-  const [isTouchDevice, setIsTouchDevice] = useState(false)
-
-  // Detect if this is a touch device
-  useEffect(() => {
-    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0)
-  }, [])
-
-  const handleClick = () => {
-    // On touch devices, clicking the drop zone will drop the selected column
-    if (isTouchDevice) {
-      onDrop()
-    }
-  }
-
-  return (
-    <VStack
-      flex="1"
-      maxWidth={{ base: "100%", md: "400px" }}
-      align="stretch"
-      gap={2}
-      p={3}
-      bg={isDragOver ? 'accent.teal/10' : 'bg.surface'}
-      borderRadius="md"
-      border="2px dashed"
-      borderColor={isDragOver ? 'accent.teal' : 'border.muted'}
-      cursor={{ base: "pointer", md: "default" }}
-      position={"relative"}
-      onDragOver={(e) => {
-        e.preventDefault()
-        setIsDragOver(true)
-      }}
-      onDragLeave={() => setIsDragOver(false)}
-      onDrop={(e) => {
-        e.preventDefault()
-        setIsDragOver(false)
-        onDrop()
-      }}
-      onClick={handleClick}
-      transition="all 0.2s"
-    >
-      <Text fontSize="xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" position={"absolute"} top={-3} bg="bg.muted" px={2} py={0} borderRadius="sm"
-      border="1px dashed" borderColor={isDragOver ? 'accent.teal' : 'border.muted'}>
-        {label}
-      </Text>
-      {columns.length > 0 ? (
-        <HStack gap={2} flexWrap="wrap">
-          {columns.map(col => {
-            const index = allColumns.indexOf(col)
-            const type = types?.[index] ? getColumnType(types[index]) : 'text'
-            const Icon = getTypeIcon(type)
-            const color = getTypeColor(type)
-
-            return (
-              <HStack
-                key={col}
-                gap={1.5}
-                px={2}
-                py={1}
-                bg="bg.muted"
-                borderRadius="sm"
-                border="1px solid"
-                borderColor="border.muted"
-                maxWidth={{ base: "100%", md: "200px" }}
-                minWidth={0}
-              >
-                <Box as={Icon} fontSize="xs" color={color} flexShrink={0} />
-                <Text
-                  fontSize="xs"
-                  fontFamily="mono"
-                  color="fg.default"
-                  overflow="hidden"
-                  textOverflow="ellipsis"
-                  whiteSpace="nowrap"
-                  flex="1"
-                  minWidth={0}
-                >
-                  {col}
-                </Text>
-                <Box
-                  as="button"
-                  onClick={() => onRemove(col)}
-                  ml={1}
-                  _hover={{ color: 'accent.danger' }}
-                  transition="color 0.2s"
-                  flexShrink={0}
-                >
-                  <LuX size={12} />
-                </Box>
-              </HStack>
-            )
-          })}
-        </HStack>
-      ) : (
-        <Text fontSize="xs" color="fg.subtle" fontStyle="italic" display={{ base: "none", md: "block" }}>
-          Drop columns here
-        </Text>
-      )}
-      {columns.length === 0 && (
-        <Text fontSize="xs" color="fg.subtle" fontStyle="italic" display={{ base: "block", md: "none" }}>
-          Click on any column to add
-        </Text>
-      )}
-    </VStack>
-  )
-}
