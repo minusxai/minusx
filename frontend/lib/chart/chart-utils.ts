@@ -9,6 +9,7 @@ export interface ChartProps {
   xAxisLabel?: string
   yAxisLabel?: string
   yAxisColumns?: string[]  // The actual Y-axis column names (for dual-axis logic)
+  onChartClick?: (params: unknown) => void  // ECharts click event handler for drill-down
 }
 
 // Calculate axis label interval based on data length, container width, and max label length after truncation

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { Box, HStack, VStack, Text, IconButton } from '@chakra-ui/react'
 import { LuChevronDown, LuChevronUp } from 'react-icons/lu'
 import { LinePlot } from './LinePlot'
@@ -30,6 +30,14 @@ interface ChartBuilderProps {
   fillHeight?: boolean  // Whether chart should fill available height (default: false)
   initialPivotConfig?: PivotConfig
   onPivotConfigChange?: (config: PivotConfig) => void
+  sql?: string           // The original SQL query (for drill-down)
+  databaseName?: string  // The connection/database name (for drill-down)
+}
+
+interface DrillDownState {
+  filters: Record<string, string>
+  yColumn: string
+  position: { x: number; y: number }
 }
 
 interface GroupedColumns {
@@ -235,7 +243,7 @@ const aggregateData = (
   return { xAxisData, series }
 }
 
-export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange }: ChartBuilderProps) => {
+export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName }: ChartBuilderProps) => {
   // Group columns by type
   
   const groupedColumns: GroupedColumns = useMemo(() => {
@@ -369,6 +377,162 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     return aggregateData(rows, xAxisColumns, yAxisColumns, chartType)
   }, [rows, xAxisColumns, yAxisColumns, chartType])
 
+  // Compute axis mapping for multi-X-column charts (needed for drill-down click handler)
+  const axisMapping = useMemo(() => {
+    if (xAxisColumns.length <= 1) return null
+
+    const shouldReorderByCardinality = ['line', 'bar', 'area', 'scatter'].includes(chartType)
+
+    if (shouldReorderByCardinality) {
+      const cardinalities = xAxisColumns.map(col => {
+        const uniqueValues = new Set(rows.map(row => String(row[col])))
+        return { col, cardinality: uniqueValues.size }
+      })
+      cardinalities.sort((a, b) => {
+        if (b.cardinality !== a.cardinality) return b.cardinality - a.cardinality
+        return xAxisColumns.indexOf(a.col) - xAxisColumns.indexOf(b.col)
+      })
+      return {
+        primaryXCol: cardinalities[0].col,
+        groupingCols: cardinalities.slice(1).map(c => c.col),
+      }
+    } else {
+      return {
+        primaryXCol: xAxisColumns[0],
+        groupingCols: xAxisColumns.slice(1),
+      }
+    }
+  }, [xAxisColumns, rows, chartType])
+
+  // Drill-down state for floating popover
+  const [drillDown, setDrillDown] = useState<DrillDownState | null>(null)
+  const drillDownRef = useRef<HTMLDivElement>(null)
+
+  // Close drill-down on click outside or Escape
+  useEffect(() => {
+    if (!drillDown) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (drillDownRef.current && !drillDownRef.current.contains(e.target as Node)) {
+        setDrillDown(null)
+      }
+    }
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDrillDown(null)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleEscape)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [drillDown])
+
+  // Build CTE SQL and open in new tab
+  const handleSeeRecords = useCallback(() => {
+    if (!drillDown || !sql) return
+    const whereClauses = Object.entries(drillDown.filters).map(([col, val]) => {
+      const escapedVal = String(val).replace(/'/g, "''")
+      return `"${col}" = '${escapedVal}'`
+    })
+    const whereClause = whereClauses.length > 0 ? `\nWHERE ${whereClauses.join('\n  AND ')}` : ''
+    const cteSql = `WITH base AS (\n${sql}\n)\nSELECT * FROM base${whereClause}`
+    const params = new URLSearchParams()
+    if (databaseName) params.set('databaseName', databaseName)
+    params.set('query', cteSql)
+    window.open(`/new/question?${params.toString()}`, '_blank')
+    setDrillDown(null)
+  }, [drillDown, sql, databaseName])
+
+  // Pivot cell click handler (called from PivotTable)
+  const handlePivotCellClick = useCallback((filters: Record<string, string>, valueLabel: string, event: React.MouseEvent) => {
+    console.log('Pivot drill-down:', { filters, value: valueLabel, sql })
+    setDrillDown({
+      filters,
+      yColumn: valueLabel,
+      position: { x: event.clientX, y: event.clientY },
+    })
+  }, [sql])
+
+  // Drill-down click handler: translates ECharts click params to column filters
+  const handleChartClick = useCallback((rawParams: unknown) => {
+    const params = rawParams as { seriesName?: string; dataIndex?: number; name?: string }
+    const filters: Record<string, string> = {}
+    let yColumn: string | undefined
+
+    if (chartType === 'pie' || chartType === 'funnel') {
+      // Pie/Funnel: params.name is the slice/stage label (an xAxisData value)
+      const xValue = params.name as string
+
+      if (xAxisColumns.length === 1) {
+        filters[xAxisColumns[0]] = xValue
+      } else if (xAxisColumns.length > 1) {
+        // For pie/funnel with multiple X cols, xAxisData = values of first X col
+        // Grouping cols are summed away in the pie/funnel aggregation
+        if (axisMapping) {
+          filters[axisMapping.primaryXCol] = xValue
+        }
+      }
+      // Pie/funnel sum across all Y columns
+      yColumn = yAxisColumns.length === 1 ? yAxisColumns[0] : yAxisColumns.join(', ')
+    } else {
+      // Line/Bar/Area/Scatter: use dataIndex and seriesName
+      const dataIndex: number = params.dataIndex ?? 0
+      // Strip dual Y-axis suffix "(L)" / "(R)" appended by buildChartOption
+      const cleanSeriesName = (params.seriesName || '').replace(/ \([LR]\)$/, '')
+
+      if (xAxisColumns.length === 0) {
+        // Total aggregation — no x filter
+        yColumn = cleanSeriesName
+      } else if (xAxisColumns.length === 1) {
+        // Single X column
+        filters[xAxisColumns[0]] = aggregatedData.xAxisData[dataIndex]
+        if (yAxisColumns.length === 1) {
+          yColumn = yAxisColumns[0]
+        } else {
+          // seriesName is the Y column name
+          yColumn = cleanSeriesName
+        }
+      } else if (axisMapping) {
+        // Multiple X columns with cardinality reordering
+        filters[axisMapping.primaryXCol] = aggregatedData.xAxisData[dataIndex]
+
+        let groupPart = cleanSeriesName
+
+        if (yAxisColumns.length > 1) {
+          // seriesName format: "groupVal - yCol"
+          for (const yCol of yAxisColumns) {
+            if (groupPart.endsWith(` - ${yCol}`)) {
+              yColumn = yCol
+              groupPart = groupPart.slice(0, -(` - ${yCol}`.length))
+              break
+            }
+          }
+        } else {
+          yColumn = yAxisColumns[0]
+        }
+
+        // groupPart is grouping values joined by ' | '
+        const groupValues = groupPart.split(' | ')
+        axisMapping.groupingCols.forEach((col, i) => {
+          if (i < groupValues.length) {
+            filters[col] = groupValues[i]
+          }
+        })
+      }
+    }
+
+    if (!yColumn) yColumn = yAxisColumns[0] || ''
+
+    // Extract mouse position from ECharts event
+    const echartsParams = rawParams as { event?: { event?: MouseEvent } }
+    const mouseEvent = echartsParams?.event?.event
+    const x = mouseEvent?.clientX ?? 0
+    const y = mouseEvent?.clientY ?? 0
+
+    console.log('Chart drill-down:', { filters, yColumn, sql })
+    setDrillDown({ filters, yColumn, position: { x, y } })
+  }, [chartType, xAxisColumns, yAxisColumns, aggregatedData, axisMapping, sql])
+
   const hasData = yAxisColumns.length > 0
 
   // Use the compact view flag passed from parent
@@ -409,6 +573,69 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   // For pivot, we consider having data when pivotConfig has values
   const isPivot = chartType === 'pivot'
   const pivotHasData = isPivot && pivotData && pivotData.cells.length > 0
+
+  // Clamp position to keep card within viewport
+  const clampPosition = (x: number, y: number) => {
+    const cardW = 240
+    const cardH = 160
+    return {
+      x: Math.min(x, window.innerWidth - cardW - 8),
+      y: Math.min(y, window.innerHeight - cardH - 8),
+    }
+  }
+
+  // Render drill-down floating card
+  const renderDrillDownCard = () => {
+    if (!drillDown) return null
+    const pos = clampPosition(drillDown.position.x, drillDown.position.y)
+    const filterEntries = Object.entries(drillDown.filters)
+    return (
+      <Box
+        ref={drillDownRef}
+        position="fixed"
+        left={`${pos.x}px`}
+        top={`${pos.y}px`}
+        zIndex={1000}
+        bg="bg.surface"
+        border="1px solid"
+        borderColor="border.default"
+        borderRadius="lg"
+        boxShadow="lg"
+        p={3}
+        minW="180px"
+        maxW="300px"
+      >
+        <VStack align="stretch" gap={1.5}>
+          {filterEntries.map(([col, val]) => (
+            <HStack key={col} gap={1.5} fontSize="xs">
+              <Text fontWeight="600" color="fg.muted" flexShrink={0}>{col}</Text>
+              <Text color="fg.default" fontFamily="mono" truncate>{String(val)}</Text>
+            </HStack>
+          ))}
+          {filterEntries.length === 0 && (
+            <Text fontSize="xs" color="fg.muted">Total aggregation</Text>
+          )}
+          {sql && (
+            <>
+              <Box borderTop="1px solid" borderColor="border.muted" my={1} />
+              <Box
+                as="button"
+                fontSize="xs"
+                fontWeight="600"
+                color="accent.teal"
+                cursor="pointer"
+                textAlign="left"
+                _hover={{ textDecoration: 'underline' }}
+                onClick={handleSeeRecords}
+              >
+                See Records →
+              </Box>
+            </>
+          )}
+        </VStack>
+      </Box>
+    )
+  }
 
   // Pivot mode: completely different layout
   const [pivotSettingsExpanded, setPivotSettingsExpanded] = useState(true)
@@ -466,7 +693,9 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
               pivotData={pivotData!}
               showHeatmap={pivotConfig?.showHeatmap !== false}
               rowDimNames={pivotConfig?.rows}
+              colDimNames={pivotConfig?.columns}
               formulaResults={formulaResults}
+              onCellClick={handlePivotCellClick}
             />
           ) : (
             <Box
@@ -486,6 +715,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
             </Box>
           )}
         </Box>
+
+        {renderDrillDownCard()}
       </Box>
     )
   }
@@ -674,6 +905,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       yAxisLabel={yAxisColumns.join(' | ')}
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
+                      onChartClick={handleChartClick}
                     />
                   )}
                   {chartType === 'bar' && (
@@ -684,6 +916,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       yAxisLabel={yAxisColumns.join(' | ')}
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
+                      onChartClick={handleChartClick}
                     />
                   )}
                   {chartType === 'area' && (
@@ -694,6 +927,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       yAxisLabel={yAxisColumns.join(' | ')}
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
+                      onChartClick={handleChartClick}
                     />
                   )}
                   {chartType === 'scatter' && (
@@ -704,6 +938,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       yAxisLabel={yAxisColumns.join(' | ')}
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
+                      onChartClick={handleChartClick}
                     />
                   )}
                   {chartType === 'funnel' && (
@@ -714,6 +949,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       yAxisLabel={yAxisColumns.join(' | ')}
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
+                      onChartClick={handleChartClick}
                     />
                   )}
                   {chartType === 'pie' && (
@@ -724,6 +960,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       yAxisLabel={yAxisColumns.join(' | ')}
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
+                      onChartClick={handleChartClick}
                     />
                   )}
                   {chartType === 'trend' && (
@@ -751,6 +988,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
           )}
         </Box>
       </VStack>
+
+      {renderDrillDownCard()}
     </Box>
   )
 }

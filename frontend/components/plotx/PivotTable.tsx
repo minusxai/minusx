@@ -13,7 +13,9 @@ interface PivotTableProps {
   showHeatmap?: boolean
   emptyMessage?: string
   rowDimNames?: string[]
+  colDimNames?: string[]
   formulaResults?: FormulaResults | null
+  onCellClick?: (filters: Record<string, string>, valueLabel: string, event: React.MouseEvent) => void
 }
 
 type DisplayRow =
@@ -41,7 +43,9 @@ export const PivotTable = ({
   showHeatmap = true,
   emptyMessage,
   rowDimNames,
+  colDimNames,
   formulaResults,
+  onCellClick,
 }: PivotTableProps) => {
   const { rowHeaders, columnHeaders, cells, rowTotals, columnTotals, grandTotal, valueLabels } = pivotData
 
@@ -443,6 +447,37 @@ export const PivotTable = ({
     return spans
   }, [rowHeaders, numRowDims, visibleRows])
 
+  // Drill-down click handler for pivot data cells
+  const handlePivotCellClick = useCallback((rowIndex: number, cellIndex: number, event: React.MouseEvent) => {
+    const filters: Record<string, string> = {}
+
+    // Row dimension filters
+    if (rowDimNames && rowHeaders[rowIndex]) {
+      rowDimNames.forEach((dimName, i) => {
+        if (i < rowHeaders[rowIndex].length) {
+          filters[dimName] = rowHeaders[rowIndex][i]
+        }
+      })
+    }
+
+    // Column dimension filters
+    const colKeyIndex = Math.floor(cellIndex / numValues)
+    if (colDimNames && columnHeaders[colKeyIndex]) {
+      colDimNames.forEach((dimName, i) => {
+        if (i < columnHeaders[colKeyIndex].length) {
+          filters[dimName] = columnHeaders[colKeyIndex][i]
+        }
+      })
+    }
+
+    // Value identification
+    const valueIndex = cellIndex % numValues
+    const valueLabel = valueLabels[valueIndex] || ''
+
+    console.log('Pivot drill-down filters:', { filters, value: valueLabel })
+    onCellClick?.(filters, valueLabel, event)
+  }, [rowHeaders, columnHeaders, rowDimNames, colDimNames, numValues, valueLabels, onCellClick])
+
   if (cells.length === 0 || (cells.length > 0 && cells[0].length === 0)) {
     return (
       <Box color="fg.subtle" fontSize="sm" textAlign="center" py={8}>
@@ -470,6 +505,9 @@ export const PivotTable = ({
             fontFamily="mono"
             fontSize="sm"
             bg={getCellBg(cells[rowIndex][entry.cellIndex])}
+            cursor="pointer"
+            onClick={(e) => handlePivotCellClick(rowIndex, entry.cellIndex, e)}
+            _hover={{ outline: '2px solid', outlineColor: 'accent.teal', outlineOffset: '-2px' }}
           >
             {formatLargeNumber(cells[rowIndex][entry.cellIndex])}
           </ChakraTable.Cell>
@@ -948,6 +986,9 @@ export const PivotTable = ({
                       fontFamily="mono"
                       fontSize="sm"
                       bg={getCellBg(value)}
+                      cursor="pointer"
+                      onClick={(e) => handlePivotCellClick(rowIndex, colIndex, e)}
+                      _hover={{ outline: '2px solid', outlineColor: 'accent.teal', outlineOffset: '-2px' }}
                     >
                       {formatLargeNumber(value)}
                     </ChakraTable.Cell>

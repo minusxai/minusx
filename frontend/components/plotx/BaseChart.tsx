@@ -13,11 +13,18 @@ interface BaseChartProps extends ChartProps {
 }
 
 export const BaseChart = (props: BaseChartProps) => {
-  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, chartType, emptyMessage, additionalOptions } = props
+  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, chartType, emptyMessage, additionalOptions, onChartClick } = props
   const colorMode = useAppSelector((state) => state.ui.colorMode)
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState<number | undefined>(undefined)
   const [containerHeight, setContainerHeight] = useState<number | undefined>(undefined)
+
+  // Stable click handler via ref so EChart's one-time event binding always calls the latest callback
+  const onClickRef = useRef(onChartClick)
+  useEffect(() => { onClickRef.current = onChartClick })
+  const chartEvents = useMemo(() => ({
+    click: (params: unknown) => onClickRef.current?.(params),
+  }), [])
 
   // Measure container dimensions
   useEffect(() => {
@@ -84,6 +91,7 @@ export const BaseChart = (props: BaseChartProps) => {
         option={option}
         style={{ width: '100%', height: '100%', minHeight: '300px' }}
         chartSettings={{ useCoarsePointer: true, renderer: 'canvas' }}
+        events={chartEvents}
       />
     </Box>
   )
