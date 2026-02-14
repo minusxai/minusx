@@ -1115,6 +1115,7 @@ function handleSetParameterValues(
 
 /**
  * Handle add_new_question operation - create new question and add to dashboard
+ * Also executes the query and returns results for agent visibility
  */
 async function handleAddNewQuestion(
   content: DocumentContent,
@@ -1129,7 +1130,7 @@ async function handleAddNewQuestion(
     description = '',
     file_id
   } = args;
-  const { dispatch, state, database: contextDatabase } = context;
+  const { dispatch, state, database: contextDatabase, signal } = context;
 
   // Validate required parameters
   if (file_id === undefined) {
@@ -1180,21 +1181,58 @@ async function handleAddNewQuestion(
   };
 
   try {
-    // Create question file via API with automatic deduplication
-    const json = await fetchWithCache('/api/documents', {
-      method: 'POST',
-      body: JSON.stringify({
-        name: questionName,
-        path: questionPath,
-        type: 'question',
-        content: questionContent
+    // Execute file creation and query in parallel for better performance
+    const [fileResult, queryResult] = await Promise.allSettled([
+      // Create question file via API
+      fetchWithCache('/api/documents', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: questionName,
+          path: questionPath,
+          type: 'question',
+          content: questionContent
+        }),
+        cacheStrategy: {
+          ttl: 0,  // No caching for mutations
+          deduplicate: false,  // Allow creating multiple questions
+        },
       }),
-      cacheStrategy: {
-        ttl: 0,  // No caching for mutations
-        deduplicate: false,  // Allow creating multiple questions
-      },
-    });
+      // Execute SQL query to get results
+      fetchWithCache('/api/query', {
+        method: 'POST',
+        body: JSON.stringify({
+          database_name: database_name || contextDatabase?.databaseName || 'default',
+          query: query,
+          parameters: []  // New questions don't have parameter values yet
+        }),
+        signal: signal,
+        cacheStrategy: API.query.execute.cache,
+      })
+    ]);
 
+    // Extract query results (always include, even if file creation failed)
+    let queryResults = null;
+    let queryError = null;
+    if (queryResult.status === 'fulfilled') {
+      queryResults = queryResult.value.data || queryResult.value;
+    } else {
+      console.error('Failed to execute query for new question:', queryResult.reason);
+      queryError = queryResult.reason?.message || 'Query execution failed';
+    }
+
+    // Check file creation (fatal if failed, but still return query info)
+    if (fileResult.status === 'rejected') {
+      console.error('Failed to create question:', fileResult.reason);
+      return {
+        success: false,
+        message: `Failed to create question: ${fileResult.reason?.message || 'Unknown error'}`,
+        queryResults: queryResults,  // Include query results even on file failure
+        queryError: queryError
+      };
+    }
+
+    // File creation succeeded - extract question data
+    const json = fileResult.value;
     const newQuestion = json.data.data; // API returns { success: true, data: { data: newFile } }
     const newQuestionId = newQuestion.id;
 
@@ -1222,14 +1260,18 @@ async function handleAddNewQuestion(
           success: true,
           questionId: newQuestionId,
           message: `Created question "${questionName}" (ID: ${newQuestionId}) and added to dashboard`,
-          updates
+          updates,
+          queryResults: queryResults,
+          queryError: queryError
         };
       } catch (addError) {
         // Question created but failed to add to dashboard
         return {
           success: true,
           questionId: newQuestionId,
-          message: `Created question "${questionName}" (ID: ${newQuestionId}) but failed to add to dashboard: ${addError instanceof Error ? addError.message : 'Unknown error'}`
+          message: `Created question "${questionName}" (ID: ${newQuestionId}) but failed to add to dashboard: ${addError instanceof Error ? addError.message : 'Unknown error'}`,
+          queryResults: queryResults,
+          queryError: queryError
         };
       }
     }
@@ -1238,7 +1280,9 @@ async function handleAddNewQuestion(
     return {
       success: true,
       questionId: newQuestionId,
-      message: `Created question "${questionName}" (ID: ${newQuestionId})`
+      message: `Created question "${questionName}" (ID: ${newQuestionId})`,
+      queryResults: queryResults,
+      queryError: queryError
     };
   } catch (error) {
     console.error('Failed to create question:', error);
