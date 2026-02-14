@@ -1450,11 +1450,53 @@ async function handleUpdateQuestion(
       edits: updates
     }));
 
+    // Execute query if query, parameters, or references were updated
+    let queryResults = null;
+    let queryError = null;
+
+    const shouldExecuteQuery =
+      updates.query !== undefined ||
+      updates.parameters !== undefined ||
+      updates.references !== undefined;
+
+    if (shouldExecuteQuery) {
+      // Get merged content (original + updates) for execution
+      const mergedContent = selectMergedContent(state, questionId) as QuestionContent;
+
+      if (mergedContent) {
+        try {
+          // Convert parameters array to key-value object for execution
+          const paramsObj = (mergedContent.parameters || []).reduce((acc: any, p: any) => {
+            acc[p.name] = p.value;
+            return acc;
+          }, {});
+
+          const queryResponse = await fetchWithCache('/api/query', {
+            method: 'POST',
+            body: JSON.stringify({
+              database_name: mergedContent.database_name || context.database?.databaseName || 'default',
+              query: mergedContent.query,
+              parameters: paramsObj,
+              references: mergedContent.references
+            }),
+            signal: context.signal,
+            cacheStrategy: API.query.execute.cache,
+          });
+          queryResults = queryResponse.data || queryResponse;
+        } catch (error: any) {
+          console.error('Failed to execute updated query:', error);
+          queryError = error.message || 'Query execution failed';
+        }
+      }
+    }
+
     const updatedFields = Object.keys(updates).join(', ');
     return {
       success: true,
       message: `Updated question ${questionId}: ${updatedFields}`,
-      questionId
+      questionId,
+      queryResults,
+      queryError
     };
   } catch (error) {
     console.error('Failed to update question:', error);
