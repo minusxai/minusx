@@ -88,13 +88,16 @@ export default function RightSidebar({
     appState?.fileId && isDashboard ? selectDashboardEditMode(state, appState.fileId) : false
   );
 
-  // If chat is running, open sidebar with chat section
-  // Otherwise, if in dashboard edit mode, show add questions section
+  // Auto-open sidebar sections based on state changes
+  // Priority: chat running > user's explicit selection > default dashboard edit behavior
   useEffect(() => {
     if (showChat && isChatRunning) {
+      // When chat starts running, always switch to chat section
       dispatch(setRightSidebarCollapsed(false));
       dispatch(setActiveSidebarSection('chat'));
-    } else if (isDashboard && dashboardEditMode) {
+    } else if (isDashboard && dashboardEditMode && !activeSidebarSection) {
+      // Only auto-open questions section if no section is currently active
+      // This prevents overriding user's explicit choice (e.g., staying in chat)
       dispatch(setRightSidebarCollapsed(false));
       dispatch(setActiveSidebarSection('questions'));
     }
