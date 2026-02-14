@@ -5,10 +5,9 @@
  * Phase 3: Uses database adapter interface (async)
  */
 import { DbFile, AccessToken, BaseFileContent } from '../types';
-import { DB_PATH, DB_DIR } from './db-config';
+import { DB_PATH, DB_DIR, getDbType } from './db-config';
 import { randomUUID } from 'crypto';
 import { getAdapter } from './adapter/factory';
-import { IDatabaseAdapter } from './adapter/types';
 
 export { DB_PATH, DB_DIR };
 export { resetAdapter as resetConnection } from './adapter/factory';
@@ -32,17 +31,6 @@ export interface DbRow {
 // Phase 6: extractReferencesFromContent moved to client-side (lib/data/helpers/extract-references.ts)
 // Server is dumb - just saves what client sends
 
-/**
- * Get next ID for a company (replaces id-generator.ts logic inline)
- */
-async function getNextId(db: IDatabaseAdapter, table: string, companyId: number): Promise<number> {
-  const result = await db.query<{ next_id: number }>(
-    `SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM ${table} WHERE company_id = $1`,
-    [companyId]
-  );
-  return result.rows[0].next_id;
-}
-
 export class DocumentDB {
   /**
    * Create a new file with per-company auto-increment ID
@@ -52,17 +40,52 @@ export class DocumentDB {
    */
   static async create(name: string, path: string, type: string, content: BaseFileContent, references: number[], company_id: number): Promise<number> {
     const db = await getAdapter();
+    const dbType = getDbType();
 
-    // Get next ID for this company
-    const nextId = await getNextId(db, 'files', company_id);
+    // Atomic ID generation with CTE
+    // PostgreSQL: Uses advisory lock to prevent race conditions
+    // SQLite: Already atomic (better-sqlite3 is synchronous, no lock needed)
+    if (dbType === 'postgres') {
+      // Generate unique lock ID for this company's files table
+      // Using bit shift to combine company_id and table identifier (1 = files)
+      const lockId = (company_id << 16) | 1;
 
-    // Phase 6: Server is dumb - client sends pre-extracted references
-    await db.query(
-      'INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)',
-      [company_id, nextId, name, path, type, JSON.stringify(content), JSON.stringify(references)]
-    );
+      // pg_advisory_xact_lock ensures only one transaction generates IDs for this company at a time
+      // Lock is automatically released when transaction commits/rolls back
+      // Combined into single statement with multiple CTEs to avoid "multiple commands" error
+      const result = await db.query<{ id: number }>(`
+        WITH lock AS (
+          SELECT pg_advisory_xact_lock($1) AS lock_acquired
+        ),
+        next_id_gen AS (
+          SELECT COALESCE(MAX(id), 0) + 1 AS next_id
+          FROM files
+          WHERE company_id = $2
+        )
+        INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
+        SELECT $2, next_id, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        FROM next_id_gen, lock
+        RETURNING id
+      `, [lockId, company_id, name, path, type, JSON.stringify(content), JSON.stringify(references)]);
 
-    return nextId;
+      return result.rows[0].id;
+    } else {
+      // SQLite: No lock needed (better-sqlite3 is synchronous - already atomic)
+      // Note: company_id passed twice because SQLite translates $1, $2 to ?, ? (no parameter reuse)
+      const result = await db.query<{ id: number }>(`
+        WITH next_id_gen AS (
+          SELECT COALESCE(MAX(id), 0) + 1 AS next_id
+          FROM files
+          WHERE company_id = $1
+        )
+        INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
+        SELECT $2, next_id, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        FROM next_id_gen
+        RETURNING id
+      `, [company_id, company_id, name, path, type, JSON.stringify(content), JSON.stringify(references)]);
+
+      return result.rows[0].id;
+    }
   }
 
   /**

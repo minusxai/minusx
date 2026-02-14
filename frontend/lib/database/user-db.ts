@@ -3,6 +3,7 @@
  * Handles CRUD operations for users in multi-tenant architecture.
  */
 import { getAdapter } from './adapter/factory';
+import { getDbType } from './db-config';
 import { IDatabaseAdapter } from './adapter/types';
 import { UserRole } from '../types';
 import { isAdmin } from '../auth/role-helpers';
@@ -61,18 +62,6 @@ interface UserRow {
   updated_at: string;
 }
 
-/**
- * Helper to get the next ID for a given table and company
- */
-async function getNextId(adapter: IDatabaseAdapter, tableName: string, companyId: number): Promise<number> {
-  const result = await adapter.query<{ max_id: number | null }>(
-    `SELECT MAX(id) as max_id FROM ${tableName} WHERE company_id = $1`,
-    [companyId]
-  );
-  const maxId = result.rows[0]?.max_id;
-  return (maxId ?? 0) + 1;
-}
-
 export class UserDB {
   /**
    * Create a new user
@@ -92,19 +81,38 @@ export class UserDB {
     } = {}
   ): Promise<number> {
     const adapter = options.db || await getAdapter();
+    const dbType = getDbType();
 
     const role = options.role || 'viewer';  // Default to viewer
     const normalizedHomeFolder = validateAndNormalizeHomeFolder(home_folder, role);
 
-    // Get next ID for this company
-    const nextId = await getNextId(adapter, 'users', company_id);
+    // Atomic ID generation with CTE
+    // PostgreSQL: Uses advisory lock to prevent race conditions
+    // SQLite: Already atomic (better-sqlite3 is synchronous, no lock needed)
+    if (dbType === 'postgres') {
+      // Generate unique lock ID for this company's users table
+      // Using bit shift to combine company_id and table identifier (2 = users)
+      const lockId = (company_id << 16) | 2;
 
-    await adapter.query(
-      `INSERT INTO users (company_id, id, email, name, password_hash, phone, state, home_folder, role, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-      [
+      // pg_advisory_xact_lock ensures only one transaction generates IDs for this company at a time
+      // Lock is automatically released when transaction commits/rolls back
+      // Combined into single statement with multiple CTEs to avoid "multiple commands" error
+      const result = await adapter.query<{ id: number }>(`
+        WITH lock AS (
+          SELECT pg_advisory_xact_lock($1) AS lock_acquired
+        ),
+        next_id_gen AS (
+          SELECT COALESCE(MAX(id), 0) + 1 AS next_id
+          FROM users
+          WHERE company_id = $2
+        )
+        INSERT INTO users (company_id, id, email, name, password_hash, phone, state, home_folder, role, created_at, updated_at)
+        SELECT $2, next_id, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        FROM next_id_gen, lock
+        RETURNING id
+      `, [
+        lockId,
         company_id,
-        nextId,
         email,
         name,
         options.password_hash || null,
@@ -112,10 +120,36 @@ export class UserDB {
         options.state || null,
         normalizedHomeFolder,
         role
-      ]
-    );
+      ]);
 
-    return nextId;
+      return result.rows[0].id;
+    } else {
+      // SQLite: No lock needed (better-sqlite3 is synchronous - already atomic)
+      // Note: company_id passed twice because SQLite translates $1, $2 to ?, ? (no parameter reuse)
+      const result = await adapter.query<{ id: number }>(`
+        WITH next_id_gen AS (
+          SELECT COALESCE(MAX(id), 0) + 1 AS next_id
+          FROM users
+          WHERE company_id = $1
+        )
+        INSERT INTO users (company_id, id, email, name, password_hash, phone, state, home_folder, role, created_at, updated_at)
+        SELECT $2, next_id, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        FROM next_id_gen
+        RETURNING id
+      `, [
+        company_id,
+        company_id,
+        email,
+        name,
+        options.password_hash || null,
+        options.phone || null,
+        options.state || null,
+        normalizedHomeFolder,
+        role
+      ]);
+
+      return result.rows[0].id;
+    }
   }
 
   /**
