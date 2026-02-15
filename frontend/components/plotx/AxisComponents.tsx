@@ -159,32 +159,30 @@ const FormatPopover = ({ type, column, formatConfig, onChange }: FormatPopoverPr
 
   return (
     <VStack align="stretch" gap={2.5} p={2.5} minW="180px">
-      {/* Alias - shown for text type */}
-      {type === 'text' && (
-        <Box>
-          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
-            Alias
-          </Text>
-          <input
-            type="text"
-            placeholder={column}
-            value={config.alias || ''}
-            onChange={handleAliasChange}
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              fontSize: '12px',
-              fontFamily: 'var(--fonts-mono, monospace)',
-              padding: '4px 8px',
-              width: '100%',
-              border: '1px solid var(--colors-border-muted, #333)',
-              borderRadius: '4px',
-              background: 'var(--colors-bg-surface, transparent)',
-              color: 'var(--colors-fg-default, inherit)',
-              outline: 'none',
-            }}
-          />
-        </Box>
-      )}
+      {/* Alias */}
+      <Box>
+        <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+          Alias
+        </Text>
+        <input
+          type="text"
+          placeholder={column}
+          value={config.alias || ''}
+          onChange={handleAliasChange}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            fontSize: '12px',
+            fontFamily: 'var(--fonts-mono, monospace)',
+            padding: '4px 8px',
+            width: '100%',
+            border: '1px solid var(--colors-border-muted, #333)',
+            borderRadius: '4px',
+            background: 'var(--colors-bg-surface, transparent)',
+            color: 'var(--colors-fg-default, inherit)',
+            outline: 'none',
+          }}
+        />
+      </Box>
 
       {/* Decimal points - shown for number type */}
       {type === 'number' && (

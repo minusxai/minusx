@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useCallback, useMemo } from 'react'
-import { Box, VStack, Text, IconButton } from '@chakra-ui/react'
-import { LuChevronDown, LuChevronUp } from 'react-icons/lu'
+import { Box, VStack, Text } from '@chakra-ui/react'
 import { LinePlot } from './LinePlot'
 import { BarPlot } from './BarPlot'
 import { AreaPlot } from './AreaPlot'
@@ -37,6 +36,7 @@ interface ChartBuilderProps {
   databaseName?: string
   initialColumnFormats?: Record<string, ColumnFormatConfig>
   onColumnFormatsChange?: (formats: Record<string, ColumnFormatConfig>) => void
+  settingsExpanded?: boolean
 }
 
 interface GroupedColumns {
@@ -45,7 +45,7 @@ interface GroupedColumns {
   categories: string[]
 }
 
-export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange }: ChartBuilderProps) => {
+export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, settingsExpanded: settingsExpandedProp }: ChartBuilderProps) => {
   // Group columns by type
   const groupedColumns: GroupedColumns = useMemo(() => {
     const groups: GroupedColumns = {
@@ -109,7 +109,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   // Track if user has manually changed column selection
   const [hasUserModifiedColumns, setHasUserModifiedColumns] = useState(false)
 
-  const [mobileSettingsExpanded, setMobileSettingsExpanded] = useState(false)
+
 
   // Column format config
   const [columnFormats, setColumnFormats] = useState<Record<string, ColumnFormatConfig>>(initialColumnFormats || {})
@@ -341,54 +341,21 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   const pivotHasData = isPivot && pivotData && pivotData.cells.length > 0
 
   // Pivot mode: completely different layout
-  const [pivotSettingsExpanded, setPivotSettingsExpanded] = useState(true)
-
   if (isPivot) {
     return (
       <Box display="flex" flexDirection="column" gap={0} height="100%" width="100%">
-        {/* Collapsible header */}
-        {showAxisBuilder && (
-          <>
-            <Box
-              display="flex"
-              alignItems="center"
-              justifyContent="space-between"
-              px={3}
-              py={1}
-              bg="bg.elevated"
-              borderBottom="1px solid"
-              borderColor="border.default"
-              cursor="pointer"
-              onClick={() => setPivotSettingsExpanded(!pivotSettingsExpanded)}
-              _hover={{ bg: "bg.muted" }}
-            >
-              <Text fontSize="sm" fontWeight="700" color="fg.default">
-                Visualization Settings
-              </Text>
-              <IconButton
-                aria-label="Toggle pivot settings"
-                size="xs"
-                variant="ghost"
-              >
-                {pivotSettingsExpanded ? <LuChevronUp /> : <LuChevronDown />}
-              </IconButton>
-            </Box>
-
-            {/* Pivot Axis Builder - collapsible */}
-            {pivotSettingsExpanded && (
-              <PivotAxisBuilder
-                columns={columns}
-                types={types}
-                pivotConfig={pivotConfig}
-                onPivotConfigChange={handlePivotConfigChange}
-                useCompactView={useCompactView}
-                availableRowValues={availableRowValues}
-                availableColumnValues={availableColumnValues}
-                columnFormats={columnFormats}
-                onColumnFormatChange={handleColumnFormatChange}
-              />
-            )}
-          </>
+        {showAxisBuilder && settingsExpandedProp && (
+          <PivotAxisBuilder
+            columns={columns}
+            types={types}
+            pivotConfig={pivotConfig}
+            onPivotConfigChange={handlePivotConfigChange}
+            useCompactView={useCompactView}
+            availableRowValues={availableRowValues}
+            availableColumnValues={availableColumnValues}
+            columnFormats={columnFormats}
+            onColumnFormatChange={handleColumnFormatChange}
+          />
         )}
 
         {/* Pivot Table */}
@@ -430,36 +397,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
 
   return (
     <Box display="flex" flexDirection="column" gap={0} height={'100%'} width="100%">
-      {/* Compact View Toggle - Shows when container is narrow */}
-      {showAxisBuilder && useCompactView && (
-        <Box
-          display="flex"
-          alignItems="center"
-          justifyContent="space-between"
-          px={3}
-          py={1}
-          bg="bg.elevated"
-          borderBottom="1px solid"
-          borderColor="border.default"
-          cursor="pointer"
-          onClick={() => setMobileSettingsExpanded(!mobileSettingsExpanded)}
-          _hover={{ bg: "bg.muted" }}
-        >
-          <Text fontSize="sm" fontWeight="700" color="fg.default">
-            Visualization Settings
-          </Text>
-          <IconButton
-            aria-label="Toggle viz settings"
-            size="xs"
-            variant="ghost"
-          >
-            {mobileSettingsExpanded ? <LuChevronUp /> : <LuChevronDown />}
-          </IconButton>
-        </Box>
-      )}
-
       {/* Axis Builder (column palette + drop zones) */}
-      {showAxisBuilder && (!useCompactView || mobileSettingsExpanded) && (
+      {showAxisBuilder && (!useCompactView || settingsExpandedProp) && (
         <AxisBuilder columns={columns} types={types} zones={chartZones} columnFormats={columnFormats} onColumnFormatChange={handleColumnFormatChange} />
       )}
 

@@ -117,7 +117,9 @@ export default function QuestionViewV2({
   // Resizable panel state
   const [leftPanelWidth, setLeftPanelWidth] = useState(45); // percentage
   const [isResizing, setIsResizing] = useState(false);
-  const [collapsedPanel, setCollapsedPanel] = useState<'none' | 'left' | 'right'>('none');
+  const [collapsedPanel, setCollapsedPanel] = useState<'none' | 'left' | 'right'>(
+    fullMode && content.query?.trim() ? 'left' : 'none'
+  );
   const resizeStartX = useRef<number>(0);
   const resizeStartWidth = useRef<number>(45);
   const rafRef = useRef<number | null>(null);
