@@ -52,11 +52,11 @@ export function VizTypeSelector({
   return (
     <Container
       gap={1}
-      bg={'bg.muted'}
-      p={2}
-    //   borderRadius={10}
-      shadow={'sm'}
+      bg={orientation === 'horizontal' ? 'transparent' : 'bg.muted'}
+      p={orientation === 'horizontal' ? 0 : 2}
+      shadow={orientation === 'horizontal' ? undefined : 'sm'}
       h={'100%'}
+      flexWrap={orientation === 'horizontal' ? 'wrap' : undefined}
     >
       {VIZ_TYPES.map(({ type, icon, label }) => {
         const isActive = value === type;

@@ -3,8 +3,8 @@
  * Displays query results with multiple visualization types
  */
 
-import { Box, HStack, VStack, Text, Spinner, Button } from '@chakra-ui/react';
-import { LuRocket, LuWrench } from 'react-icons/lu';
+import { Box, HStack, VStack, Text, Spinner, Button, IconButton } from '@chakra-ui/react';
+import { LuRocket, LuWrench, LuSettings, LuChevronDown, LuChevronUp } from 'react-icons/lu';
 import { Table } from '@/components/plotx/Table';
 import { ChartBuilder } from '@/components/plotx/ChartBuilder';
 import { parseErrorMessage } from '@/lib/utils/error-parser';
@@ -80,21 +80,42 @@ export function QuestionVisualization({
     dispatch(setRightSidebarCollapsed(false));
   };
 
+  const [vizSettingsExpanded, setVizSettingsExpanded] = useState(false);
+
   if (!currentState) {
     return null;
   }
 
   const useCompactLayout = config.viz.typesButtonsOrientation === 'horizontal';
+  const isChartType = currentState?.vizSettings?.type && currentState.vizSettings.type !== 'table';
   return (
     <VStack gap={0} width="full" align="stretch" flex="1" overflow="hidden"
     borderRadius={'lg'}>
       {useCompactLayout && config.viz.showTypeButtons && data && !error && (
-        <Box>
-          <VizTypeSelector
-            value={currentState?.vizSettings?.type || 'table'}
-            onChange={onVizTypeChange}
-            orientation={config.viz.typesButtonsOrientation}
-          />
+        <Box display="flex" flexWrap="wrap" alignItems="center" justifyContent="space-between" bg="bg.muted" shadow="sm" p={2} gap={1}>
+          <Box flexShrink={1} minWidth={0}>
+            <VizTypeSelector
+              value={currentState?.vizSettings?.type || 'table'}
+              onChange={onVizTypeChange}
+              orientation={config.viz.typesButtonsOrientation}
+            />
+          </Box>
+          {isChartType && config.viz.showChartBuilder && (
+            <Button
+              aria-label="Toggle viz settings"
+              size="xs"
+              variant="ghost"
+              onClick={() => setVizSettingsExpanded(!vizSettingsExpanded)}
+              color="fg.muted"
+              fontWeight="600"
+              fontSize="xs"
+              flexShrink={0}
+            >
+              <LuSettings size={14} />
+              Viz Settings
+              {vizSettingsExpanded ? <LuChevronUp size={14} /> : <LuChevronDown size={14} />}
+            </Button>
+          )}
         </Box>
       )}
 
@@ -288,6 +309,7 @@ export function QuestionVisualization({
                       databaseName={currentState?.database_name}
                       initialColumnFormats={currentState.vizSettings?.columnFormats}
                       onColumnFormatsChange={onColumnFormatsChange}
+                      settingsExpanded={useCompactLayout ? vizSettingsExpanded : undefined}
                     />
                   </Box>
                 )}
