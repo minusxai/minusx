@@ -110,7 +110,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   // Track if user has manually changed column selection
   const [hasUserModifiedColumns, setHasUserModifiedColumns] = useState(false)
 
-  const [mobileSettingsExpanded, setMobileSettingsExpanded] = useState(false)
+
 
   // Column format config
   const [columnFormats, setColumnFormats] = useState<Record<string, ColumnFormatConfig>>(initialColumnFormats || {})
@@ -436,36 +436,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
 
   return (
     <Box display="flex" flexDirection="column" gap={0} height={'100%'} width="100%">
-      {/* Compact View Toggle - only show if not externally controlled */}
-      {showAxisBuilder && useCompactView && settingsExpandedProp === undefined && (
-        <Box
-          display="flex"
-          alignItems="center"
-          justifyContent="space-between"
-          px={3}
-          py={1}
-          bg="bg.elevated"
-          borderBottom="1px solid"
-          borderColor="border.default"
-          cursor="pointer"
-          onClick={() => setMobileSettingsExpanded(!mobileSettingsExpanded)}
-          _hover={{ bg: "bg.muted" }}
-        >
-          <Text fontSize="sm" fontWeight="700" color="fg.default">
-            Visualization Settings
-          </Text>
-          <IconButton
-            aria-label="Toggle viz settings"
-            size="xs"
-            variant="ghost"
-          >
-            {mobileSettingsExpanded ? <LuChevronUp /> : <LuChevronDown />}
-          </IconButton>
-        </Box>
-      )}
-
       {/* Axis Builder (column palette + drop zones) */}
-      {showAxisBuilder && (!useCompactView || (settingsExpandedProp ?? mobileSettingsExpanded)) && (
+      {showAxisBuilder && (!useCompactView || settingsExpandedProp) && (
         <AxisBuilder columns={columns} types={types} zones={chartZones} columnFormats={columnFormats} onColumnFormatChange={handleColumnFormatChange} />
       )}
 

@@ -58,7 +58,7 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
   }, [draggedColumn, selectedColumnForMobile])
 
   return (
-    <Box display="flex" flexDirection="column" gap={3} width="100%" p={3} bg="bg.muted" borderBottom="1px solid" borderColor="border.muted">
+    <Box display="flex" flexDirection="column" gap={3} width="100%" p={3} bg="bg.canvas" borderBottom="1px solid" borderColor="border.muted">
       {/* Column palette */}
       <HStack gap={2} flexWrap="wrap">
         {columns.map(col => (
