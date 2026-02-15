@@ -1,8 +1,9 @@
-import { useMemo, useRef, useState, useEffect } from 'react'
+import { useMemo } from 'react'
 import { Box } from '@chakra-ui/react'
 import { useAppSelector } from '@/store/hooks'
 import { EChart } from './EChart'
-import { isValidChartData, formatLargeNumber, formatNumber, formatDateValue, buildToolbox, getTimestamp, type ChartProps } from '@/lib/chart/chart-utils'
+import { useChartContainer } from './useChartContainer'
+import { isValidChartData, resolveChartFormats, buildToolbox, getTimestamp, type ChartProps } from '@/lib/chart/chart-utils'
 import { withMinusXTheme, COLOR_PALETTE } from '@/lib/chart/echarts-theme'
 import type { EChartsOption } from 'echarts'
 
@@ -13,55 +14,9 @@ interface PiePlotProps extends ChartProps {
 export const PiePlot = (props: PiePlotProps) => {
   const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns } = props
   const colorMode = useAppSelector((state) => state.ui.colorMode)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [containerWidth, setContainerWidth] = useState<number | undefined>(undefined)
-  const [containerHeight, setContainerHeight] = useState<number | undefined>(undefined)
+  const { containerRef, containerWidth, containerHeight, chartEvents } = useChartContainer(onChartClick)
 
-  // Stable click handler via ref
-  const onClickRef = useRef(onChartClick)
-  useEffect(() => { onClickRef.current = onChartClick })
-  const chartEvents = useMemo(() => ({
-    click: (params: unknown) => onClickRef.current?.(params),
-  }), [])
-
-  useEffect(() => {
-    if (!containerRef.current) return
-
-    const updateDimensions = () => {
-      if (containerRef.current) {
-        const newWidth = containerRef.current.offsetWidth
-        const newHeight = containerRef.current.offsetHeight
-        if (newWidth > 0) setContainerWidth(newWidth)
-        if (newHeight > 0) setContainerHeight(newHeight)
-      }
-    }
-
-    updateDimensions()
-
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect
-        if (width > 0) setContainerWidth(width)
-        if (height > 0) setContainerHeight(height)
-      }
-    })
-
-    resizeObserver.observe(containerRef.current)
-
-    return () => {
-      resizeObserver.disconnect()
-    }
-  }, [])
-
-  // Resolve format configs
-  const yDecimalPoints = yAxisColumns
-    ?.map(col => columnFormats?.[col]?.decimalPoints)
-    .find(dp => dp !== undefined)
-  const xDateFormat = xAxisColumns
-    ?.map(col => columnFormats?.[col]?.dateFormat)
-    .find(Boolean)
-  const fmtName = (name: string) => xDateFormat ? formatDateValue(name, xDateFormat) : name
-  const fmtValue = (value: number) => formatNumber(value, yDecimalPoints)
+  const { fmtName, fmtValue } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
 
   const option: EChartsOption = useMemo(() => {
     if (!isValidChartData(xAxisData, series)) {

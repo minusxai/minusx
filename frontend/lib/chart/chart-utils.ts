@@ -113,6 +113,23 @@ export const formatDateValue = (dateStr: string, format: string): string => {
   }
 }
 
+// Resolve format configs for chart axes (shared by PiePlot, FunnelPlot, and buildChartOption)
+export const resolveChartFormats = (
+  columnFormats?: Record<string, ColumnFormatConfig>,
+  xAxisColumns?: string[],
+  yAxisColumns?: string[],
+) => {
+  const yDecimalPoints = yAxisColumns
+    ?.map(col => columnFormats?.[col]?.decimalPoints)
+    .find(dp => dp !== undefined)
+  const xDateFormat = xAxisColumns
+    ?.map(col => columnFormats?.[col]?.dateFormat)
+    .find(Boolean)
+  const fmtName = (name: string) => xDateFormat ? formatDateValue(name, xDateFormat) : name
+  const fmtValue = (value: number) => formatNumber(value, yDecimalPoints)
+  return { yDecimalPoints, xDateFormat, fmtName, fmtValue }
+}
+
 // Validate chart data
 export const isValidChartData = (xAxisData?: string[], series?: Array<{ name: string; data: number[] }>): boolean => {
   return !!(xAxisData && xAxisData.length > 0 && series && series.length > 0)
@@ -282,12 +299,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats } = config
 
   // Resolve format configs for axes
-  const yDecimalPoints = yAxisColumns
-    ?.map(col => columnFormats?.[col]?.decimalPoints)
-    .find(dp => dp !== undefined)
-  const xDateFormat = xAxisColumns
-    ?.map(col => columnFormats?.[col]?.dateFormat)
-    .find(Boolean)
+  const { yDecimalPoints, xDateFormat } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
 
   // Determine if we need dual Y-axes
   // Only use dual Y-axis when there are 2+ Y-axis columns (distinct metrics)

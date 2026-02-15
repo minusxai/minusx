@@ -1,7 +1,7 @@
 import { Box, HStack, VStack, Text, Icon } from '@chakra-ui/react'
 import { LuTrendingUp, LuTrendingDown, LuMinus } from 'react-icons/lu'
 import { CHART_COLORS } from '@/lib/chart/echarts-theme'
-import { formatLargeNumber, formatNumber } from '@/lib/chart/chart-utils'
+import { formatNumber } from '@/lib/chart/chart-utils'
 import type { ColumnFormatConfig } from '@/lib/types'
 
 interface TrendPlotProps {
