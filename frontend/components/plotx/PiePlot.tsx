@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, useEffect } from 'react'
 import { Box } from '@chakra-ui/react'
 import { useAppSelector } from '@/store/hooks'
 import { EChart } from './EChart'
-import { isValidChartData, formatLargeNumber, buildToolbox, getTimestamp, type ChartProps } from '@/lib/chart/chart-utils'
+import { isValidChartData, formatLargeNumber, formatNumber, formatDateValue, buildToolbox, getTimestamp, type ChartProps } from '@/lib/chart/chart-utils'
 import { withMinusXTheme, COLOR_PALETTE } from '@/lib/chart/echarts-theme'
 import type { EChartsOption } from 'echarts'
 
@@ -11,7 +11,7 @@ interface PiePlotProps extends ChartProps {
 }
 
 export const PiePlot = (props: PiePlotProps) => {
-  const { xAxisData, series, emptyMessage, onChartClick } = props
+  const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns } = props
   const colorMode = useAppSelector((state) => state.ui.colorMode)
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState<number | undefined>(undefined)
@@ -53,6 +53,16 @@ export const PiePlot = (props: PiePlotProps) => {
     }
   }, [])
 
+  // Resolve format configs
+  const yDecimalPoints = yAxisColumns
+    ?.map(col => columnFormats?.[col]?.decimalPoints)
+    .find(dp => dp !== undefined)
+  const xDateFormat = xAxisColumns
+    ?.map(col => columnFormats?.[col]?.dateFormat)
+    .find(Boolean)
+  const fmtName = (name: string) => xDateFormat ? formatDateValue(name, xDateFormat) : name
+  const fmtValue = (value: number) => formatNumber(value, yDecimalPoints)
+
   const option: EChartsOption = useMemo(() => {
     if (!isValidChartData(xAxisData, series)) {
       return {}
@@ -66,7 +76,7 @@ export const PiePlot = (props: PiePlotProps) => {
         const val = s.data[index]
         return sum + (typeof val === 'number' && !isNaN(val) ? val : 0)
       }, 0)
-      return { name, value }
+      return { name: fmtName(name), value }
     })
 
     // Calculate total for percentage
@@ -120,7 +130,7 @@ export const PiePlot = (props: PiePlotProps) => {
         confine: false,
         formatter: (params: any) => {
           const { name, value, percent } = params
-          return `${name}<br/>Value: ${formatLargeNumber(value)}<br/>Percent: ${percent.toFixed(1)}%`
+          return `${name}<br/>Value: ${fmtValue(value)}<br/>Percent: ${percent.toFixed(1)}%`
         },
       },
       legend: {
@@ -178,7 +188,7 @@ export const PiePlot = (props: PiePlotProps) => {
     }
 
     return withMinusXTheme(baseOption, colorMode)
-  }, [xAxisData, series, colorMode, containerWidth, containerHeight])
+  }, [xAxisData, series, colorMode, containerWidth, containerHeight, fmtName, fmtValue])
 
   if (!isValidChartData(xAxisData, series)) {
     return (

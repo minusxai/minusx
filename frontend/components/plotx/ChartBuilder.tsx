@@ -577,7 +577,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                     />
                   )}
                   {chartType === 'trend' && (
-                    <TrendPlot series={aggregatedData.series} />
+                    <TrendPlot series={aggregatedData.series} columnFormats={columnFormats} yAxisColumns={yAxisColumns} />
                   )}
                 </Box>
               )}
