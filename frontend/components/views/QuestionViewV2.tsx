@@ -464,6 +464,9 @@ export default function QuestionViewV2({
           {/* Collapsed Left Panel Strip */}
           {!useCompactLayout && collapsedPanel === 'left' && (
             <Box
+              bg="accent.teal/30"
+              border="1px solid"
+              borderColor="accent.teal"
               width="36px"
               flexShrink={0}
               display="flex"
@@ -472,23 +475,21 @@ export default function QuestionViewV2({
               justifyContent="center"
               cursor="pointer"
               onClick={() => setCollapsedPanel('none')}
-              _hover={{ bg: 'bg.muted' }}
+              _hover={{ bg: 'accent.teal/50' }}
               my={2}
               ml={2}
               borderRadius="lg"
-              border="1px solid"
-              borderColor="border.muted"
               gap={2}
             >
               <Text
                 fontSize="xs"
-                color="fg.muted"
+                color="fg.default"
                 fontWeight="600"
                 style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
               >
                 Query
               </Text>
-              <Box color="fg.muted"><LuChevronRight size={14} /></Box>
+              <Box color="fg.default"><LuChevronRight size={14} /></Box>
             </Box>
           )}
 
@@ -744,6 +745,9 @@ export default function QuestionViewV2({
           {/* Collapsed Right Panel Strip */}
           {!useCompactLayout && collapsedPanel === 'right' && (
             <Box
+              bg="accent.teal/30"
+              border="1px solid"
+              borderColor="accent.teal"
               width="36px"
               flexShrink={0}
               display="flex"
@@ -752,18 +756,16 @@ export default function QuestionViewV2({
               justifyContent="center"
               cursor="pointer"
               onClick={() => setCollapsedPanel('none')}
-              _hover={{ bg: 'bg.muted' }}
+              _hover={{ bg: 'accent.teal/50' }}
               my={2}
               mr={2}
               borderRadius="lg"
-              border="1px solid"
-              borderColor="border.muted"
               gap={2}
             >
-              <Box color="fg.muted"><LuChevronLeft size={14} /></Box>
+              <Box color="fg.default"><LuChevronLeft size={14} /></Box>
               <Text
                 fontSize="xs"
-                color="fg.muted"
+                color="fg.default"
                 fontWeight="600"
                 style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
               >
