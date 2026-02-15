@@ -9,7 +9,7 @@ import { Table } from '@/components/plotx/Table';
 import { ChartBuilder } from '@/components/plotx/ChartBuilder';
 import { parseErrorMessage } from '@/lib/utils/error-parser';
 import { VizTypeSelector } from './VizTypeSelector';
-import type { QuestionContent, QueryResult, VizSettings, PivotConfig } from '@/lib/types';
+import type { QuestionContent, QueryResult, VizSettings, PivotConfig, ColumnFormatConfig } from '@/lib/types';
 import { useState, useEffect } from 'react';
 import { useAppDispatch } from '@/store/hooks';
 import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection } from '@/store/uiSlice';
@@ -36,6 +36,7 @@ interface QuestionVisualizationProps {
   onVizTypeChange: (type: VizSettings['type']) => void;
   onAxisChange: (xCols: string[], yCols: string[]) => void;
   onPivotConfigChange?: (config: PivotConfig) => void;
+  onColumnFormatsChange?: (formats: Record<string, ColumnFormatConfig>) => void;
 }
 
 function AnimatedLoadingText() {
@@ -67,6 +68,7 @@ export function QuestionVisualization({
   onVizTypeChange,
   onAxisChange,
   onPivotConfigChange,
+  onColumnFormatsChange,
 }: QuestionVisualizationProps) {
   const dispatch = useAppDispatch();
   const { config: appConfig } = useConfigs();
@@ -284,6 +286,8 @@ export function QuestionVisualization({
                       onPivotConfigChange={onPivotConfigChange}
                       sql={currentState?.query}
                       databaseName={currentState?.database_name}
+                      initialColumnFormats={currentState.vizSettings?.columnFormats}
+                      onColumnFormatsChange={onColumnFormatsChange}
                     />
                   </Box>
                 )}

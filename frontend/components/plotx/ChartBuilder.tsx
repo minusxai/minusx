@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useMemo } from 'react'
-import { Box, HStack, VStack, Text, IconButton } from '@chakra-ui/react'
+import { Box, VStack, Text, IconButton } from '@chakra-ui/react'
 import { LuChevronDown, LuChevronUp } from 'react-icons/lu'
 import { LinePlot } from './LinePlot'
 import { BarPlot } from './BarPlot'
@@ -14,10 +14,11 @@ import { PivotAxisBuilder } from './PivotAxisBuilder'
 import { SingleValue } from './SingleValue'
 import { TrendPlot } from './TrendPlot'
 import { DrillDownCard, type DrillDownState } from './DrillDownCard'
-import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } from './AxisComponents'
+import { AxisBuilder, type AxisZone } from './AxisBuilder'
+import { resolveColumnType } from './AxisComponents'
 import { aggregateData } from '@/lib/chart/aggregate-data'
 import { aggregatePivotData, computeFormulas, getUniqueTopLevelRowValues, getUniqueTopLevelColumnValues } from '@/lib/chart/pivot-utils'
-import type { PivotConfig } from '@/lib/types'
+import type { PivotConfig, ColumnFormatConfig } from '@/lib/types'
 
 interface ChartBuilderProps {
   columns: string[]
@@ -34,6 +35,8 @@ interface ChartBuilderProps {
   onPivotConfigChange?: (config: PivotConfig) => void
   sql?: string
   databaseName?: string
+  initialColumnFormats?: Record<string, ColumnFormatConfig>
+  onColumnFormatsChange?: (formats: Record<string, ColumnFormatConfig>) => void
 }
 
 interface GroupedColumns {
@@ -42,7 +45,7 @@ interface GroupedColumns {
   categories: string[]
 }
 
-export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName }: ChartBuilderProps) => {
+export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange }: ChartBuilderProps) => {
   // Group columns by type
   const groupedColumns: GroupedColumns = useMemo(() => {
     const groups: GroupedColumns = {
@@ -106,52 +109,47 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   // Track if user has manually changed column selection
   const [hasUserModifiedColumns, setHasUserModifiedColumns] = useState(false)
 
-  const [draggedColumn, setDraggedColumn] = useState<string | null>(null)
-  const [selectedColumnForMobile, setSelectedColumnForMobile] = useState<string | null>(null)
   const [mobileSettingsExpanded, setMobileSettingsExpanded] = useState(false)
 
-  const isTouchDevice = useIsTouchDevice()
+  // Column format config
+  const [columnFormats, setColumnFormats] = useState<Record<string, ColumnFormatConfig>>(initialColumnFormats || {})
 
-  // Handle drag start
-  const handleDragStart = useCallback((e: React.DragEvent, column: string) => {
-    setDraggedColumn(column)
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', column)
-  }, [])
+  const handleColumnFormatChange = useCallback((column: string, config: ColumnFormatConfig) => {
+    const isEmpty = !config.alias && config.decimalPoints === undefined && !config.dateFormat
+    setColumnFormats(prev => {
+      const next = { ...prev }
+      if (isEmpty) {
+        delete next[column]
+      } else {
+        next[column] = config
+      }
+      onColumnFormatsChange?.(next)
+      return next
+    })
+  }, [onColumnFormatsChange])
 
-  const handleDragEnd = useCallback(() => {
-    setDraggedColumn(null)
-  }, [])
-
-  const handleMobileSelect = useCallback((column: string) => {
-    setSelectedColumnForMobile(prev => prev === column ? null : column)
-  }, [])
+  // Helper: resolve display name using alias
+  const getDisplayName = useCallback((col: string) => columnFormats[col]?.alias || col, [columnFormats])
 
   // Handle drop on X axis
-  const handleDropX = useCallback(() => {
-    const colToAdd = draggedColumn || selectedColumnForMobile
-    if (colToAdd && !xAxisColumns.includes(colToAdd)) {
-      const newXCols = [...xAxisColumns, colToAdd]
+  const handleDropX = useCallback((col: string) => {
+    if (!xAxisColumns.includes(col)) {
+      const newXCols = [...xAxisColumns, col]
       setXAxisColumns(newXCols)
       setHasUserModifiedColumns(true)
       onAxisChange?.(newXCols, yAxisColumns)
     }
-    setDraggedColumn(null)
-    setSelectedColumnForMobile(null)
-  }, [draggedColumn, selectedColumnForMobile, xAxisColumns, yAxisColumns, onAxisChange])
+  }, [xAxisColumns, yAxisColumns, onAxisChange])
 
   // Handle drop on Y axis
-  const handleDropY = useCallback(() => {
-    const colToAdd = draggedColumn || selectedColumnForMobile
-    if (colToAdd && !yAxisColumns.includes(colToAdd)) {
-      const newYCols = [...yAxisColumns, colToAdd]
+  const handleDropY = useCallback((col: string) => {
+    if (!yAxisColumns.includes(col)) {
+      const newYCols = [...yAxisColumns, col]
       setYAxisColumns(newYCols)
       setHasUserModifiedColumns(true)
       onAxisChange?.(xAxisColumns, newYCols)
     }
-    setDraggedColumn(null)
-    setSelectedColumnForMobile(null)
-  }, [draggedColumn, selectedColumnForMobile, yAxisColumns, xAxisColumns, onAxisChange])
+  }, [yAxisColumns, xAxisColumns, onAxisChange])
 
   // Remove column from axis
   const removeFromX = useCallback((column: string) => {
@@ -167,6 +165,24 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     setHasUserModifiedColumns(true)
     onAxisChange?.(xAxisColumns, newYCols)
   }, [yAxisColumns, xAxisColumns, onAxisChange])
+
+  // Build axis zones for AxisBuilder
+  const chartZones: AxisZone[] = useMemo(() => [
+    {
+      label: 'X Axis',
+      items: xAxisColumns.map(col => ({ column: col })),
+      emptyText: 'Drop columns here',
+      onDrop: handleDropX,
+      onRemove: removeFromX,
+    },
+    {
+      label: 'Y Axis',
+      items: yAxisColumns.map(col => ({ column: col })),
+      emptyText: 'Drop columns here',
+      onDrop: handleDropY,
+      onRemove: removeFromY,
+    },
+  ], [xAxisColumns, yAxisColumns, handleDropX, handleDropY, removeFromX, removeFromY])
 
   // Aggregate data
   const aggregatedData = useMemo(() => {
@@ -368,6 +384,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                 useCompactView={useCompactView}
                 availableRowValues={availableRowValues}
                 availableColumnValues={availableColumnValues}
+                columnFormats={columnFormats}
+                onColumnFormatChange={handleColumnFormatChange}
               />
             )}
           </>
@@ -379,10 +397,12 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
             <PivotTable
               pivotData={pivotData!}
               showHeatmap={pivotConfig?.showHeatmap !== false}
-              rowDimNames={pivotConfig?.rows}
-              colDimNames={pivotConfig?.columns}
+              rowDimNames={pivotConfig?.rows.map(col => columnFormats[col]?.alias || col)}
+              colDimNames={pivotConfig?.columns.map(col => columnFormats[col]?.alias || col)}
               formulaResults={formulaResults}
               onCellClick={handlePivotCellClick}
+              columnFormats={columnFormats}
+              valueColumns={pivotConfig?.values.map(v => v.column)}
             />
           ) : (
             <Box
@@ -425,24 +445,9 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
           onClick={() => setMobileSettingsExpanded(!mobileSettingsExpanded)}
           _hover={{ bg: "bg.muted" }}
         >
-          <HStack gap={2}>
-            <Text fontSize="sm" fontWeight="700" color="fg.default">
-              Visualization Settings
-            </Text>
-            {selectedColumnForMobile && (
-              <Box
-                px={2}
-                py={0.5}
-                bg="accent.teal"
-                borderRadius="full"
-                fontSize="xs"
-                color="white"
-                fontWeight="600"
-              >
-                1 selected
-              </Box>
-            )}
-          </HStack>
+          <Text fontSize="sm" fontWeight="700" color="fg.default">
+            Visualization Settings
+          </Text>
           <IconButton
             aria-label="Toggle viz settings"
             size="xs"
@@ -453,33 +458,9 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
         </Box>
       )}
 
-      {/* Column Selector */}
-      {showAxisBuilder && (
-        <Box
-          display={useCompactView ? (mobileSettingsExpanded ? "block" : "none") : "block"}
-          flexShrink={0}
-          bg="bg.muted"
-          borderBottom="1px solid"
-          borderColor="border.muted"
-          p={3}
-        >
-          <HStack gap={2} flexWrap="wrap">
-            {columns.map(col => (
-              <ColumnChip
-                key={col}
-                column={col}
-                type={resolveColumnType(col, columns, types)}
-                isAssigned={xAxisColumns.includes(col) || yAxisColumns.includes(col)}
-                isDragging={draggedColumn === col}
-                isMobileSelected={selectedColumnForMobile === col}
-                isTouchDevice={isTouchDevice}
-                onDragStart={(e) => handleDragStart(e, col)}
-                onDragEnd={handleDragEnd}
-                onMobileSelect={() => handleMobileSelect(col)}
-              />
-            ))}
-          </HStack>
-        </Box>
+      {/* Axis Builder (column palette + drop zones) */}
+      {showAxisBuilder && (!useCompactView || mobileSettingsExpanded) && (
+        <AxisBuilder columns={columns} types={types} zones={chartZones} columnFormats={columnFormats} onColumnFormatChange={handleColumnFormatChange} />
       )}
 
       {/* Chart Area */}
@@ -508,73 +489,6 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
           </Box>
         )}
 
-        {/* Mobile instruction text */}
-        {showAxisBuilder && selectedColumnForMobile && (
-          <Box
-            p={3}
-            bg="accent.teal/10"
-            borderBottom="1px solid"
-            borderColor="accent.teal"
-            textAlign="center"
-            display={useCompactView ? (mobileSettingsExpanded ? "block" : "none") : "block"}
-          >
-            <Text fontSize="sm" fontWeight="600" color="accent.teal">
-              Tap on X Axis or Y Axis below to add "{selectedColumnForMobile}"
-            </Text>
-          </Box>
-        )}
-
-        {/* Axis Drop Zones */}
-        {showAxisBuilder && (
-          <Box
-            display={useCompactView ? (mobileSettingsExpanded ? "flex" : "none") : "flex"}
-            flexDirection={"row"}
-            gap={3}
-            px={3}
-            pt={2}
-            pb={3}
-            bg="bg.muted"
-            borderBottom="1px solid"
-            borderColor="border.muted"
-            justifyContent="center"
-            alignItems="stretch"
-          >
-          {/* X Axis Drop Zone */}
-          <DropZone label="X Axis" onDrop={handleDropX} isTouchDevice={isTouchDevice}>
-            <HStack gap={1.5} flexWrap="wrap">
-              {xAxisColumns.map(col => (
-                <ZoneChip
-                  key={col}
-                  column={col}
-                  type={resolveColumnType(col, columns, types)}
-                  onRemove={() => removeFromX(col)}
-                />
-              ))}
-            </HStack>
-            {xAxisColumns.length === 0 && (
-              <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Drop columns here</Text>
-            )}
-          </DropZone>
-
-          {/* Y Axis Drop Zone */}
-          <DropZone label="Y Axis" onDrop={handleDropY} isTouchDevice={isTouchDevice}>
-            <HStack gap={1.5} flexWrap="wrap">
-              {yAxisColumns.map(col => (
-                <ZoneChip
-                  key={col}
-                  column={col}
-                  type={resolveColumnType(col, columns, types)}
-                  onRemove={() => removeFromY(col)}
-                />
-              ))}
-            </HStack>
-            {yAxisColumns.length === 0 && (
-              <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Drop columns here</Text>
-            )}
-          </DropZone>
-          </Box>
-        )}
-
         {/* Chart Display */}
         <Box flex="1" overflow="hidden" display="flex" flexDirection="column" minHeight="0">
           {hasData ? (
@@ -588,8 +502,10 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                     <LinePlot
                       xAxisData={aggregatedData.xAxisData}
                       series={aggregatedData.series}
-                      xAxisLabel={xAxisColumns.join(' | ')}
-                      yAxisLabel={yAxisColumns.join(' | ')}
+                      xAxisLabel={xAxisColumns.map(getDisplayName).join(' | ')}
+                      yAxisLabel={yAxisColumns.map(getDisplayName).join(' | ')}
+                      xAxisColumns={xAxisColumns}
+                      columnFormats={columnFormats}
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
@@ -599,8 +515,10 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                     <BarPlot
                       xAxisData={aggregatedData.xAxisData}
                       series={aggregatedData.series}
-                      xAxisLabel={xAxisColumns.join(' | ')}
-                      yAxisLabel={yAxisColumns.join(' | ')}
+                      xAxisLabel={xAxisColumns.map(getDisplayName).join(' | ')}
+                      yAxisLabel={yAxisColumns.map(getDisplayName).join(' | ')}
+                      xAxisColumns={xAxisColumns}
+                      columnFormats={columnFormats}
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
@@ -610,8 +528,10 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                     <AreaPlot
                       xAxisData={aggregatedData.xAxisData}
                       series={aggregatedData.series}
-                      xAxisLabel={xAxisColumns.join(' | ')}
-                      yAxisLabel={yAxisColumns.join(' | ')}
+                      xAxisLabel={xAxisColumns.map(getDisplayName).join(' | ')}
+                      yAxisLabel={yAxisColumns.map(getDisplayName).join(' | ')}
+                      xAxisColumns={xAxisColumns}
+                      columnFormats={columnFormats}
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
@@ -621,8 +541,10 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                     <ScatterPlot
                       xAxisData={aggregatedData.xAxisData}
                       series={aggregatedData.series}
-                      xAxisLabel={xAxisColumns.join(' | ')}
-                      yAxisLabel={yAxisColumns.join(' | ')}
+                      xAxisLabel={xAxisColumns.map(getDisplayName).join(' | ')}
+                      yAxisLabel={yAxisColumns.map(getDisplayName).join(' | ')}
+                      xAxisColumns={xAxisColumns}
+                      columnFormats={columnFormats}
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
@@ -632,8 +554,10 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                     <FunnelPlot
                       xAxisData={aggregatedData.xAxisData}
                       series={aggregatedData.series}
-                      xAxisLabel={xAxisColumns.join(' | ')}
-                      yAxisLabel={yAxisColumns.join(' | ')}
+                      xAxisLabel={xAxisColumns.map(getDisplayName).join(' | ')}
+                      yAxisLabel={yAxisColumns.map(getDisplayName).join(' | ')}
+                      xAxisColumns={xAxisColumns}
+                      columnFormats={columnFormats}
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
@@ -643,15 +567,17 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                     <PiePlot
                       xAxisData={aggregatedData.xAxisData}
                       series={aggregatedData.series}
-                      xAxisLabel={xAxisColumns.join(' | ')}
-                      yAxisLabel={yAxisColumns.join(' | ')}
+                      xAxisLabel={xAxisColumns.map(getDisplayName).join(' | ')}
+                      yAxisLabel={yAxisColumns.map(getDisplayName).join(' | ')}
+                      xAxisColumns={xAxisColumns}
+                      columnFormats={columnFormats}
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
                     />
                   )}
                   {chartType === 'trend' && (
-                    <TrendPlot series={aggregatedData.series} />
+                    <TrendPlot series={aggregatedData.series} columnFormats={columnFormats} yAxisColumns={yAxisColumns} />
                   )}
                 </Box>
               )}
@@ -668,7 +594,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
               <VStack gap={2}>
                 <Text fontWeight="600">No data to display</Text>
                 <Text fontSize="xs" color="fg.subtle">
-                  Drag at least one column to Y axis to see aggregated values
+                  Drag at least one column to Y Axis to see aggregated values
                 </Text>
               </VStack>
             </Box>

@@ -305,6 +305,11 @@ export default function QuestionViewV2({
     onChange({ vizSettings: { ...content.vizSettings, pivotConfig } });
   };
 
+  // Handle column formats change
+  const handleColumnFormatsChange = (columnFormats: Record<string, import('@/lib/types').ColumnFormatConfig>) => {
+    onChange({ vizSettings: { ...content.vizSettings, columnFormats } });
+  };
+
   // Handle adding a question reference
   const handleAddReference = (referencedQuestionId: number, alias: string) => {
     if (!questionId) return;
@@ -866,6 +871,7 @@ export default function QuestionViewV2({
                 onVizTypeChange={handleVizTypeChange}
                 onAxisChange={handleAxisChange}
                 onPivotConfigChange={handlePivotConfigChange}
+                onColumnFormatsChange={handleColumnFormatsChange}
               />
             )}
           </Box>

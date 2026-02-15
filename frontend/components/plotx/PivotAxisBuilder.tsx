@@ -3,9 +3,10 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Box, HStack, VStack, Text } from '@chakra-ui/react'
 import { LuChevronDown } from 'react-icons/lu'
-import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } from './AxisComponents'
+import { resolveColumnType } from './AxisComponents'
+import { AxisBuilder, type AxisZone } from './AxisBuilder'
 import { FormulaBuilder } from './FormulaBuilder'
-import type { PivotConfig, PivotValueConfig, PivotFormula, AggregationFunction } from '@/lib/types'
+import type { PivotConfig, PivotValueConfig, PivotFormula, AggregationFunction, ColumnFormatConfig } from '@/lib/types'
 
 const AGG_FUNCTIONS: AggregationFunction[] = ['SUM', 'AVG', 'COUNT', 'MIN', 'MAX']
 
@@ -17,6 +18,8 @@ interface PivotAxisBuilderProps {
   useCompactView?: boolean
   availableRowValues?: string[]
   availableColumnValues?: string[]
+  columnFormats?: Record<string, ColumnFormatConfig>
+  onColumnFormatChange?: (column: string, config: ColumnFormatConfig) => void
 }
 
 export const PivotAxisBuilder = ({
@@ -26,16 +29,9 @@ export const PivotAxisBuilder = ({
   onPivotConfigChange,
   availableRowValues,
   availableColumnValues,
+  columnFormats,
+  onColumnFormatChange,
 }: PivotAxisBuilderProps) => {
-  const [draggedColumn, setDraggedColumn] = useState<string | null>(null)
-  const isTouchDevice = useIsTouchDevice()
-  const [selectedColumnForMobile, setSelectedColumnForMobile] = useState<string | null>(null)
-
-  // All columns with their types, in a flat list
-  const allColumns = useMemo(() => {
-    return columns.map(col => ({ col, type: resolveColumnType(col, columns, types) }))
-  }, [columns, types])
-
   // Classify columns for auto-init
   const groupedColumns = useMemo(() => {
     const groups: { dates: string[]; numbers: string[]; categories: string[] } = {
@@ -86,63 +82,41 @@ export const PivotAxisBuilder = ({
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Which columns are already assigned
-  const assignedColumns = useMemo(() => {
-    const set = new Set<string>()
-    config.rows.forEach(c => set.add(c))
-    config.columns.forEach(c => set.add(c))
-    config.values.forEach(v => set.add(v.column))
-    return set
-  }, [config])
-
-  // Drop handlers
-  const handleDropRows = useCallback(() => {
-    const col = draggedColumn || selectedColumnForMobile
-    if (!col || config.rows.includes(col)) { setDraggedColumn(null); setSelectedColumnForMobile(null); return }
+  // Drop handlers (receive column from AxisBuilder)
+  const handleDropRows = useCallback((col: string) => {
+    if (config.rows.includes(col)) return
     const newCols = config.columns.filter(c => c !== col)
     const newVals = config.values.filter(v => v.column !== col)
     const newRows = [...config.rows, col]
-    // Clear row formulas if first row dimension changes (new dim added to position 0 when empty)
     const clearRowFormulas = config.rows.length === 0
     onPivotConfigChange({ ...config, rows: newRows, columns: newCols, values: newVals, ...(clearRowFormulas ? { rowFormulas: [] } : {}) })
-    setDraggedColumn(null)
-    setSelectedColumnForMobile(null)
-  }, [draggedColumn, selectedColumnForMobile, config, onPivotConfigChange])
+  }, [config, onPivotConfigChange])
 
-  const handleDropColumns = useCallback(() => {
-    const col = draggedColumn || selectedColumnForMobile
-    if (!col || config.columns.includes(col)) { setDraggedColumn(null); setSelectedColumnForMobile(null); return }
+  const handleDropColumns = useCallback((col: string) => {
+    if (config.columns.includes(col)) return
     const newRows = config.rows.filter(c => c !== col)
     const newVals = config.values.filter(v => v.column !== col)
     const newColumns = [...config.columns, col]
-    // Clear column formulas if first column dimension changes (new dim added to position 0 when empty)
     const clearColFormulas = config.columns.length === 0
     onPivotConfigChange({ ...config, rows: newRows, columns: newColumns, values: newVals, ...(clearColFormulas ? { columnFormulas: [] } : {}) })
-    setDraggedColumn(null)
-    setSelectedColumnForMobile(null)
-  }, [draggedColumn, selectedColumnForMobile, config, onPivotConfigChange])
+  }, [config, onPivotConfigChange])
 
-  const handleDropValues = useCallback(() => {
-    const col = draggedColumn || selectedColumnForMobile
-    if (!col || config.values.some(v => v.column === col)) { setDraggedColumn(null); setSelectedColumnForMobile(null); return }
+  const handleDropValues = useCallback((col: string) => {
+    if (config.values.some(v => v.column === col)) return
     const newRows = config.rows.filter(c => c !== col)
     const newCols = config.columns.filter(c => c !== col)
     onPivotConfigChange({ ...config, rows: newRows, columns: newCols, values: [...config.values, { column: col, aggFunction: 'SUM' }] })
-    setDraggedColumn(null)
-    setSelectedColumnForMobile(null)
-  }, [draggedColumn, selectedColumnForMobile, config, onPivotConfigChange])
+  }, [config, onPivotConfigChange])
 
   // Remove handlers
   const removeFromRows = useCallback((col: string) => {
     const newRows = config.rows.filter(c => c !== col)
-    // Clear row formulas if first dimension is being removed (or was the first and now changes)
     const clearRowFormulas = config.rows[0] === col
     onPivotConfigChange({ ...config, rows: newRows, ...(clearRowFormulas ? { rowFormulas: [] } : {}) })
   }, [config, onPivotConfigChange])
 
   const removeFromColumns = useCallback((col: string) => {
     const newCols = config.columns.filter(c => c !== col)
-    // Clear column formulas if first dimension is being removed
     const clearColFormulas = config.columns[0] === col
     onPivotConfigChange({ ...config, columns: newCols, ...(clearColFormulas ? { columnFormulas: [] } : {}) })
   }, [config, onPivotConfigChange])
@@ -158,21 +132,6 @@ export const PivotAxisBuilder = ({
       values: config.values.map(v => v.column === col ? { ...v, aggFunction: fn } : v),
     })
   }, [config, onPivotConfigChange])
-
-  // Drag handlers
-  const handleDragStart = useCallback((e: React.DragEvent, column: string) => {
-    setDraggedColumn(column)
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', column)
-  }, [])
-
-  const handleDragEnd = useCallback(() => {
-    setDraggedColumn(null)
-  }, [])
-
-  const handleMobileSelect = useCallback((column: string) => {
-    setSelectedColumnForMobile(prev => prev === column ? null : column)
-  }, [])
 
   // Aggregation selector component for value zone chips
   const AggSelector = ({ column, aggFunction }: { column: string; aggFunction: AggregationFunction }) => {
@@ -234,109 +193,91 @@ export const PivotAxisBuilder = ({
     )
   }
 
+  // Build zones config
+  const zones: AxisZone[] = useMemo(() => [
+    {
+      label: 'Rows',
+      items: config.rows.map(col => ({ column: col })),
+      emptyText: 'Drop dimensions here',
+      onDrop: handleDropRows,
+      onRemove: removeFromRows,
+    },
+    {
+      label: 'Columns',
+      items: config.columns.map(col => ({ column: col })),
+      emptyText: 'Drop dimensions here',
+      onDrop: handleDropColumns,
+      onRemove: removeFromColumns,
+    },
+    {
+      label: 'Values',
+      items: config.values.map(v => ({
+        column: v.column,
+        extra: <AggSelector column={v.column} aggFunction={v.aggFunction} />,
+      })),
+      emptyText: 'Drop measures here',
+      onDrop: handleDropValues,
+      onRemove: removeFromValues,
+    },
+  ], [config, handleDropRows, handleDropColumns, handleDropValues, removeFromRows, removeFromColumns, removeFromValues])
+
+  const showRowFormulas = config.rows.length > 0 && availableRowValues && availableRowValues.length >= 2
+  const showColFormulas = config.columns.length > 0 && availableColumnValues && availableColumnValues.length >= 2
+
   return (
-    <Box display="flex" flexDirection="column" gap={3} width="100%" p={3} bg="bg.muted" borderBottom="1px solid" borderColor="border.muted">
-      {/* Column source palette - flat list */}
-      <HStack gap={2} flexWrap="wrap">
-        {allColumns.map(({ col, type }) => (
-          <ColumnChip
-            key={col}
-            column={col}
-            type={type}
-            isAssigned={assignedColumns.has(col)}
-            isDragging={draggedColumn === col}
-            isMobileSelected={selectedColumnForMobile === col}
-            isTouchDevice={isTouchDevice}
-            onDragStart={(e) => handleDragStart(e, col)}
-            onDragEnd={handleDragEnd}
-            onMobileSelect={() => handleMobileSelect(col)}
-          />
-        ))}
-      </HStack>
-
-      {/* Mobile instruction */}
-      {isTouchDevice && selectedColumnForMobile && (
-        <Box p={2} bg="accent.teal/10" borderRadius="md" textAlign="center">
-          <Text fontSize="xs" fontWeight="600" color="accent.teal">
-            Tap a zone below to add &quot;{selectedColumnForMobile}&quot;
-          </Text>
-        </Box>
-      )}
-
-      {/* Drop zones */}
-      <Box display="flex" flexDirection="row" gap={3}>
-        <DropZone label="Rows" onDrop={handleDropRows} isTouchDevice={isTouchDevice}>
-          <HStack gap={1.5} flexWrap="wrap">
-            {config.rows.map(col => (
-              <ZoneChip
-                key={col}
-                column={col}
-                type={resolveColumnType(col, columns, types)}
-                onRemove={() => removeFromRows(col)}
+    <AxisBuilder columns={columns} types={types} zones={zones} columnFormats={columnFormats} onColumnFormatChange={onColumnFormatChange}>
+      {(showRowFormulas || showColFormulas) && (
+        <HStack
+          gap={4}
+          align="stretch"
+          pt={3}
+          borderTop="1px dashed"
+          borderColor="border.muted"
+        >
+          {/* Row Formulas */}
+          <Box flex={1} minW={0}>
+            {showRowFormulas ? (
+              <FormulaBuilder
+                axis="row"
+                formulas={config.rowFormulas || []}
+                availableValues={availableRowValues!}
+                dimensionName={config.rows[0]}
+                onChange={(formulas: PivotFormula[]) => onPivotConfigChange({ ...config, rowFormulas: formulas })}
               />
-            ))}
-          </HStack>
-          {config.rows.length === 0 && (
-            <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Drop dimensions here</Text>
-          )}
-        </DropZone>
+            ) : (
+              <VStack align="start" gap={0}>
+                <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em" color="fg.subtle">
+                  Row Formulas
+                </Text>
+                <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Add row dimensions first</Text>
+              </VStack>
+            )}
+          </Box>
 
-        <DropZone label="Columns" onDrop={handleDropColumns} isTouchDevice={isTouchDevice}>
-          <HStack gap={1.5} flexWrap="wrap">
-            {config.columns.map(col => (
-              <ZoneChip
-                key={col}
-                column={col}
-                type={resolveColumnType(col, columns, types)}
-                onRemove={() => removeFromColumns(col)}
+          {/* Vertical separator */}
+          <Box width="1px" bg="border.muted" alignSelf="stretch" />
+
+          {/* Column Formulas */}
+          <Box flex={1} minW={0}>
+            {showColFormulas ? (
+              <FormulaBuilder
+                axis="column"
+                formulas={config.columnFormulas || []}
+                availableValues={availableColumnValues!}
+                dimensionName={config.columns[0]}
+                onChange={(formulas: PivotFormula[]) => onPivotConfigChange({ ...config, columnFormulas: formulas })}
               />
-            ))}
-          </HStack>
-          {config.columns.length === 0 && (
-            <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Drop dimensions here</Text>
-          )}
-        </DropZone>
-
-        <DropZone label="Values" onDrop={handleDropValues} isTouchDevice={isTouchDevice}>
-          <HStack gap={1.5} flexWrap="wrap">
-            {config.values.map(v => (
-              <ZoneChip
-                key={v.column}
-                column={v.column}
-                type={resolveColumnType(v.column, columns, types)}
-                onRemove={() => removeFromValues(v.column)}
-                extra={<AggSelector column={v.column} aggFunction={v.aggFunction} />}
-              />
-            ))}
-          </HStack>
-          {config.values.length === 0 && (
-            <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Drop measures here</Text>
-          )}
-        </DropZone>
-      </Box>
-
-      {/* Row Formulas */}
-      {config.rows.length > 0 && availableRowValues && availableRowValues.length >= 2 && (
-        <FormulaBuilder
-          axis="row"
-          formulas={config.rowFormulas || []}
-          availableValues={availableRowValues}
-          dimensionName={config.rows[0]}
-          onChange={(formulas: PivotFormula[]) => onPivotConfigChange({ ...config, rowFormulas: formulas })}
-        />
+            ) : (
+              <VStack align="start" gap={0}>
+                <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em" color="fg.subtle">
+                  Column Formulas
+                </Text>
+                <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Add column dimensions first</Text>
+              </VStack>
+            )}
+          </Box>
+        </HStack>
       )}
-
-      {/* Column Formulas */}
-      {config.columns.length > 0 && availableColumnValues && availableColumnValues.length >= 2 && (
-        <FormulaBuilder
-          axis="column"
-          formulas={config.columnFormulas || []}
-          availableValues={availableColumnValues}
-          dimensionName={config.columns[0]}
-          onChange={(formulas: PivotFormula[]) => onPivotConfigChange({ ...config, columnFormulas: formulas })}
-        />
-      )}
-
-    </Box>
+    </AxisBuilder>
   )
 }

@@ -1,13 +1,16 @@
 import { Box, HStack, VStack, Text, Icon } from '@chakra-ui/react'
 import { LuTrendingUp, LuTrendingDown, LuMinus } from 'react-icons/lu'
 import { CHART_COLORS } from '@/lib/chart/echarts-theme'
-import { formatLargeNumber } from '@/lib/chart/chart-utils'
+import { formatNumber } from '@/lib/chart/chart-utils'
+import type { ColumnFormatConfig } from '@/lib/types'
 
 interface TrendPlotProps {
   series: Array<{ name: string; data: number[] }>
+  columnFormats?: Record<string, ColumnFormatConfig>
+  yAxisColumns?: string[]
 }
 
-export const TrendPlot = ({ series }: TrendPlotProps) => {
+export const TrendPlot = ({ series, columnFormats, yAxisColumns }: TrendPlotProps) => {
   if (!series || series.length === 0) {
     return (
       <Box color="fg.subtle" fontSize="sm" textAlign="center" py={8}>
@@ -36,6 +39,11 @@ export const TrendPlot = ({ series }: TrendPlotProps) => {
     >
       <HStack gap={8} flexWrap="wrap" justify="center">
         {series.map((s, index) => {
+          // Resolve decimal points for this series
+          const colName = yAxisColumns?.[index]
+          const dp = colName ? columnFormats?.[colName]?.decimalPoints : undefined
+          const fmtVal = (v: number) => formatNumber(v, dp)
+
           // Get the last (most recent) value and the second-to-last (previous) value
           const currentValue = s.data[s.data.length - 1] || 0
           const previousValue = s.data.length > 1 ? s.data[s.data.length - 2] : null
@@ -82,7 +90,7 @@ export const TrendPlot = ({ series }: TrendPlotProps) => {
                 letterSpacing="-0.02em"
                 lineHeight="1"
               >
-                {formatLargeNumber(currentValue)}
+                {fmtVal(currentValue)}
               </Text>
 
               {/* Trend Indicator */}
@@ -106,7 +114,7 @@ export const TrendPlot = ({ series }: TrendPlotProps) => {
                     color="fg.muted"
                     fontFamily="mono"
                   >
-                    vs {previousValue !== null ? formatLargeNumber(previousValue) : ''}
+                    vs {previousValue !== null ? fmtVal(previousValue) : ''}
                   </Text>
                 </HStack>
               ) : (

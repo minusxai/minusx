@@ -77,11 +77,18 @@ export interface PivotConfig {
   columnFormulas?: PivotFormula[]  // Formulas combining top-level column dimension values
 }
 
+export interface ColumnFormatConfig {
+  alias?: string
+  decimalPoints?: number    // 0, 1, 2, 3, 4
+  dateFormat?: string       // 'iso' | 'us' | 'eu' | 'short' | 'month-year' | 'year'
+}
+
 export interface VizSettings {
   type: 'table' | 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend';
   xCols?: string[];
   yCols?: string[];
   pivotConfig?: PivotConfig;  // Only used when type === 'pivot'
+  columnFormats?: Record<string, ColumnFormatConfig>;
 }
 
 // Document-based architecture types

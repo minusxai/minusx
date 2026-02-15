@@ -1,9 +1,10 @@
-import { useMemo, useRef, useState, useEffect } from 'react'
+import { useMemo, useState } from 'react'
 import { Box, Button } from '@chakra-ui/react'
 import { LuArrowRightLeft } from 'react-icons/lu'
 import { useAppSelector } from '@/store/hooks'
 import { EChart } from './EChart'
-import { isValidChartData, formatLargeNumber, buildToolbox, getTimestamp, type ChartProps } from '@/lib/chart/chart-utils'
+import { useChartContainer } from './useChartContainer'
+import { isValidChartData, resolveChartFormats, buildToolbox, getTimestamp, type ChartProps } from '@/lib/chart/chart-utils'
 import { withMinusXTheme, COLOR_PALETTE } from '@/lib/chart/echarts-theme'
 import type { EChartsOption } from 'echarts'
 
@@ -18,48 +19,12 @@ interface FunnelPlotProps extends ChartProps {
 }
 
 export const FunnelPlot = (props: FunnelPlotProps) => {
-  const { xAxisData, series, emptyMessage, onChartClick } = props
+  const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns } = props
   const colorMode = useAppSelector((state) => state.ui.colorMode)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [containerWidth, setContainerWidth] = useState<number | undefined>(undefined)
-  const [containerHeight, setContainerHeight] = useState<number | undefined>(undefined)
+  const { containerRef, containerWidth, containerHeight, chartEvents } = useChartContainer(onChartClick)
   const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>('horizontal')
 
-  // Stable click handler via ref
-  const onClickRef = useRef(onChartClick)
-  useEffect(() => { onClickRef.current = onChartClick })
-  const chartEvents = useMemo(() => ({
-    click: (params: unknown) => onClickRef.current?.(params),
-  }), [])
-
-  useEffect(() => {
-    if (!containerRef.current) return
-
-    const updateDimensions = () => {
-      if (containerRef.current) {
-        const newWidth = containerRef.current.offsetWidth
-        const newHeight = containerRef.current.offsetHeight
-        if (newWidth > 0) setContainerWidth(newWidth)
-        if (newHeight > 0) setContainerHeight(newHeight)
-      }
-    }
-
-    updateDimensions()
-
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect
-        if (width > 0) setContainerWidth(width)
-        if (height > 0) setContainerHeight(height)
-      }
-    })
-
-    resizeObserver.observe(containerRef.current)
-
-    return () => {
-      resizeObserver.disconnect()
-    }
-  }, [])
+  const { fmtName, fmtValue } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
 
   const option: EChartsOption = useMemo(() => {
     if (!isValidChartData(xAxisData, series)) {
@@ -74,7 +39,7 @@ export const FunnelPlot = (props: FunnelPlotProps) => {
         const val = s.data[index]
         return sum + (typeof val === 'number' && !isNaN(val) ? val : 0)
       }, 0)
-      return { name, value }
+      return { name: fmtName(name), value }
     })
 
     // Sort by value descending for proper funnel display
@@ -139,7 +104,7 @@ export const FunnelPlot = (props: FunnelPlotProps) => {
           const { name, value } = params
           // Calculate percentage relative to top stage
           const percentOfTop = (value / topValue) * 100
-          return `${name}<br/>Value: ${formatLargeNumber(value)}<br/>Percent: ${percentOfTop.toFixed(1)}%`
+          return `${name}<br/>Value: ${fmtValue(value)}<br/>Percent: ${percentOfTop.toFixed(1)}%`
         },
       },
       legend: {
@@ -171,7 +136,7 @@ export const FunnelPlot = (props: FunnelPlotProps) => {
             color: LABEL_COLORS[colorMode],
             fontWeight: 'bold',
             formatter: (params: any) => {
-              return `${params.name}\n${formatLargeNumber(params.value)}`
+              return `${params.name}\n${fmtValue(params.value)}`
             },
           },
           labelLine: {
@@ -196,7 +161,7 @@ export const FunnelPlot = (props: FunnelPlotProps) => {
     }
 
     return withMinusXTheme(baseOption, colorMode)
-  }, [xAxisData, series, colorMode, containerWidth, containerHeight, orientation])
+  }, [xAxisData, series, colorMode, containerWidth, containerHeight, orientation, fmtName, fmtValue])
 
   if (!isValidChartData(xAxisData, series)) {
     return (

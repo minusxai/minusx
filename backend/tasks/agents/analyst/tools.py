@@ -50,12 +50,19 @@ class PivotConfig(BaseModel):
     rowFormulas: Optional[List[PivotFormula]] = Field(None, description="formulas combining top-level row dimension values")
     columnFormulas: Optional[List[PivotFormula]] = Field(None, description="formulas combining top-level column dimension values")
 
+class ColumnFormatConfig(BaseModel):
+    """Per-column display formatting. Only set when the user explicitly asks to change formatting."""
+    alias: Optional[str] = Field(None, description="display name override for the column header")
+    decimalPoints: Optional[int] = Field(None, description="number of decimal places (0-4) for numeric columns")
+    dateFormat: Optional[str] = Field(None, description="date display format: 'iso', 'us', 'eu', 'short', 'month-year', or 'year'")
+
 class VisualizationSettings(BaseModel):
     """visualization settings"""
     type: VisualizationType = Field(..., description="type of the visualization (default is table)")
     xCols: Optional[List[str]] = Field([], description="list of column names in the x axis (for non-pivot chart types)")
     yCols: Optional[List[str]] = Field([], description="list of column names in the y axis (for non-pivot chart types)")
     pivotConfig: Optional[PivotConfig] = Field(None, description="pivot table configuration (only used when type is 'pivot')")
+    columnFormats: Optional[Dict[str, ColumnFormatConfig]] = Field(None, description="per-column display formatting keyed by column name. Only set when user asks to rename columns, change decimal places, or change date format. Good defaults are applied automatically.")
     model_config = {
         "populate_by_name": True,
         "title": "VisualizationSettings"
@@ -119,6 +126,9 @@ class ExecuteSQLQuery(Tool):
     - funnel, pie: one xCols val and one yCols val are needed. xCols value should be categories ideally
     - pivot: use pivotConfig instead of xCols/yCols. pivotConfig.rows are dimension columns for row headers, pivotConfig.columns are dimension columns for column headers, pivotConfig.values are measures with per-value aggregation functions (SUM/AVG/COUNT/MIN/MAX). Optional: rowFormulas/columnFormulas to compute derived rows/columns from top-level dimension values.
     - trend: the most recent yCols value is displayed (along with %change from last-but-one value)
+
+    columnFormats (optional): Only set when the user explicitly asks to rename a column, change decimal places, or change date display format. Good defaults are applied automatically so you do not need to set this unless asked.
+    Example: {"revenue": {"alias": "Sales", "decimalPoints": 2}, "order_date": {"dateFormat": "short"}}
     """
 
     def __init__(

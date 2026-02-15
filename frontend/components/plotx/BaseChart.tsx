@@ -1,7 +1,8 @@
-import { useMemo, useRef, useState, useEffect } from 'react'
+import { useMemo } from 'react'
 import { Box } from '@chakra-ui/react'
 import { useAppSelector } from '@/store/hooks'
 import { EChart } from './EChart'
+import { useChartContainer } from './useChartContainer'
 import { buildChartOption, isValidChartData, type ChartProps } from '@/lib/chart/chart-utils'
 import type { EChartsOption } from 'echarts'
 
@@ -13,50 +14,9 @@ interface BaseChartProps extends ChartProps {
 }
 
 export const BaseChart = (props: BaseChartProps) => {
-  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, chartType, emptyMessage, additionalOptions, onChartClick } = props
+  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, chartType, emptyMessage, additionalOptions, onChartClick, columnFormats } = props
   const colorMode = useAppSelector((state) => state.ui.colorMode)
-  const containerRef = useRef<HTMLDivElement>(null)
-  const [containerWidth, setContainerWidth] = useState<number | undefined>(undefined)
-  const [containerHeight, setContainerHeight] = useState<number | undefined>(undefined)
-
-  // Stable click handler via ref so EChart's one-time event binding always calls the latest callback
-  const onClickRef = useRef(onChartClick)
-  useEffect(() => { onClickRef.current = onChartClick })
-  const chartEvents = useMemo(() => ({
-    click: (params: unknown) => onClickRef.current?.(params),
-  }), [])
-
-  // Measure container dimensions
-  useEffect(() => {
-    if (!containerRef.current) return
-
-    const updateDimensions = () => {
-      if (containerRef.current) {
-        const newWidth = containerRef.current.offsetWidth
-        const newHeight = containerRef.current.offsetHeight
-        if (newWidth > 0) setContainerWidth(newWidth)
-        if (newHeight > 0) setContainerHeight(newHeight)
-      }
-    }
-
-    // Immediate measurement
-    updateDimensions()
-
-    // Use ResizeObserver for dynamic changes
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const { width, height } = entry.contentRect
-        if (width > 0) setContainerWidth(width)
-        if (height > 0) setContainerHeight(height)
-      }
-    })
-
-    resizeObserver.observe(containerRef.current)
-
-    return () => {
-      resizeObserver.disconnect()
-    }
-  }, [])
+  const { containerRef, containerWidth, containerHeight, chartEvents } = useChartContainer(onChartClick)
 
   const option: EChartsOption = useMemo(() => {
     if (!isValidChartData(xAxisData, series)) {
@@ -69,13 +29,15 @@ export const BaseChart = (props: BaseChartProps) => {
       xAxisLabel,
       yAxisLabel,
       yAxisColumns,
+      xAxisColumns,
       chartType,
       additionalOptions,
       colorMode,
       containerWidth,
       containerHeight,
+      columnFormats,
     })
-  }, [xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, chartType, additionalOptions, colorMode, containerWidth, containerHeight])
+  }, [xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, chartType, additionalOptions, colorMode, containerWidth, containerHeight, columnFormats])
 
   if (!isValidChartData(xAxisData, series)) {
     return (
