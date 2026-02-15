@@ -13,7 +13,7 @@ interface BaseChartProps extends ChartProps {
 }
 
 export const BaseChart = (props: BaseChartProps) => {
-  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, chartType, emptyMessage, additionalOptions, onChartClick } = props
+  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, chartType, emptyMessage, additionalOptions, onChartClick, columnFormats } = props
   const colorMode = useAppSelector((state) => state.ui.colorMode)
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState<number | undefined>(undefined)
@@ -69,13 +69,15 @@ export const BaseChart = (props: BaseChartProps) => {
       xAxisLabel,
       yAxisLabel,
       yAxisColumns,
+      xAxisColumns,
       chartType,
       additionalOptions,
       colorMode,
       containerWidth,
       containerHeight,
+      columnFormats,
     })
-  }, [xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, chartType, additionalOptions, colorMode, containerWidth, containerHeight])
+  }, [xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, chartType, additionalOptions, colorMode, containerWidth, containerHeight, columnFormats])
 
   if (!isValidChartData(xAxisData, series)) {
     return (

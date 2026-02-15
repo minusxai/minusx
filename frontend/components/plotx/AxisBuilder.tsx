@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import { Box, HStack, Text } from '@chakra-ui/react'
 import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } from './AxisComponents'
+import type { ColumnFormatConfig } from '@/lib/types'
 
 export interface AxisZone {
   label: string
@@ -16,10 +17,12 @@ interface AxisBuilderProps {
   columns: string[]
   types: string[]
   zones: AxisZone[]
+  columnFormats?: Record<string, ColumnFormatConfig>
+  onColumnFormatChange?: (column: string, config: ColumnFormatConfig) => void
   children?: React.ReactNode
 }
 
-export const AxisBuilder = ({ columns, types, zones, children }: AxisBuilderProps) => {
+export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnFormatChange, children }: AxisBuilderProps) => {
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null)
   const [selectedColumnForMobile, setSelectedColumnForMobile] = useState<string | null>(null)
   const isTouchDevice = useIsTouchDevice()
@@ -95,6 +98,8 @@ export const AxisBuilder = ({ columns, types, zones, children }: AxisBuilderProp
                   type={resolveColumnType(item.column, columns, types)}
                   onRemove={() => zone.onRemove(item.column)}
                   extra={item.extra}
+                  formatConfig={columnFormats?.[item.column]}
+                  onFormatChange={onColumnFormatChange ? (config) => onColumnFormatChange(item.column, config) : undefined}
                 />
               ))}
             </HStack>

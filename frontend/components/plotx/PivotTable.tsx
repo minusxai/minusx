@@ -3,8 +3,9 @@
 import { useState, useMemo, useCallback } from 'react'
 import { Box, Table as ChakraTable, Icon } from '@chakra-ui/react'
 import { LuChevronDown, LuChevronRight, LuSquareFunction } from 'react-icons/lu'
-import { formatLargeNumber } from '@/lib/chart/chart-utils'
+import { formatLargeNumber, formatNumber, formatDateValue } from '@/lib/chart/chart-utils'
 import type { PivotData, FormulaResults } from '@/lib/chart/pivot-utils'
+import type { ColumnFormatConfig } from '@/lib/types'
 
 interface PivotTableProps {
   pivotData: PivotData
@@ -16,6 +17,8 @@ interface PivotTableProps {
   colDimNames?: string[]
   formulaResults?: FormulaResults | null
   onCellClick?: (filters: Record<string, string>, valueLabel: string, event: React.MouseEvent) => void
+  columnFormats?: Record<string, ColumnFormatConfig>
+  valueColumns?: string[]  // Actual column names for each value (maps value index → column name)
 }
 
 type DisplayRow =
@@ -46,8 +49,28 @@ export const PivotTable = ({
   colDimNames,
   formulaResults,
   onCellClick,
+  columnFormats,
+  valueColumns,
 }: PivotTableProps) => {
   const { rowHeaders, columnHeaders, cells, rowTotals, columnTotals, grandTotal, valueLabels } = pivotData
+
+  // Format a numeric cell value using per-value-column decimal config
+  const fmt = useCallback((value: number, valueIndex?: number): string => {
+    if (columnFormats && valueColumns && valueIndex !== undefined) {
+      const colName = valueColumns[valueIndex % (valueColumns.length || 1)]
+      const dp = colName ? columnFormats[colName]?.decimalPoints : undefined
+      if (dp !== undefined) return formatNumber(value, dp)
+    }
+    return formatLargeNumber(value)
+  }, [columnFormats, valueColumns])
+
+  // Format a header value (row or column) using date format config
+  const fmtHeader = useCallback((value: string, dimName?: string): string => {
+    if (!dimName || !columnFormats) return value
+    const dateFormat = columnFormats[dimName]?.dateFormat
+    if (dateFormat) return formatDateValue(value, dateFormat)
+    return value
+  }, [columnFormats])
 
   const hasMultipleValues = valueLabels.length > 1
   const numRowDims = rowHeaders.length > 0 ? rowHeaders[0].length : 0
@@ -132,10 +155,11 @@ export const PivotTable = ({
       const headerRow: Array<{ label: string; colSpan: number }> = []
       let i = 0
       while (i < columnHeaders.length) {
-        const currentLabel = columnHeaders[i][level]
+        const rawLabel = columnHeaders[i][level]
+        const currentLabel = fmtHeader(rawLabel, colDimNames?.[level])
         let span = 1
         while (i + span < columnHeaders.length) {
-          const matches = columnHeaders[i + span][level] === currentLabel
+          const matches = columnHeaders[i + span][level] === rawLabel
           let parentsMatch = true
           for (let p = 0; p < level; p++) {
             if (columnHeaders[i + span][p] !== columnHeaders[i][p]) {
@@ -242,7 +266,7 @@ export const PivotTable = ({
     }
 
     return result
-  }, [columnHeaders, numColDims, hasMultipleValues, numValues, valueLabels, formulaResults])
+  }, [columnHeaders, numColDims, hasMultipleValues, numValues, valueLabels, formulaResults, fmtHeader, colDimNames])
 
   // Build display rows: data + subtotals + formula rows
   const displayRows = useMemo((): DisplayRow[] => {
@@ -509,7 +533,7 @@ export const PivotTable = ({
             onClick={(e) => handlePivotCellClick(rowIndex, entry.cellIndex, e)}
             _hover={{ outline: '2px solid', outlineColor: 'accent.teal', outlineOffset: '-2px' }}
           >
-            {formatLargeNumber(cells[rowIndex][entry.cellIndex])}
+            {fmt(cells[rowIndex][entry.cellIndex], entry.cellIndex % numValues)}
           </ChakraTable.Cell>
         )
       }
@@ -524,7 +548,7 @@ export const PivotTable = ({
           bg="accent.secondary/12"
           fontStyle="italic"
         >
-          {formatLargeNumber(val)}
+          {fmt(val, entry.valueIdx)}
         </ChakraTable.Cell>
       )
     })
@@ -551,7 +575,7 @@ export const PivotTable = ({
             borderBottom={dr.level === 0 ? '2px solid' : undefined}
             borderColor={borderTopColor}
           >
-            {formatLargeNumber(dr.cells[entry.cellIndex])}
+            {fmt(dr.cells[entry.cellIndex], entry.cellIndex % numValues)}
           </ChakraTable.Cell>
         )
       }
@@ -572,7 +596,7 @@ export const PivotTable = ({
           borderBottom={dr.level === 0 ? '2px solid' : undefined}
           borderColor={borderTopColor}
         >
-          {val !== undefined ? formatLargeNumber(val) : '\u2014'}
+          {val !== undefined ? fmt(val, entry.valueIdx) : '\u2014'}
         </ChakraTable.Cell>
       )
     })
@@ -594,7 +618,7 @@ export const PivotTable = ({
             borderTop="1px dashed"
             borderColor="accent.secondary/40"
           >
-            {formatLargeNumber(dr.cells[entry.cellIndex])}
+            {fmt(dr.cells[entry.cellIndex], entry.cellIndex % numValues)}
           </ChakraTable.Cell>
         )
       }
@@ -631,7 +655,7 @@ export const PivotTable = ({
             bg="accent.teal/40"
             color="fg.default"
           >
-            {formatLargeNumber(columnTotals[entry.cellIndex])}
+            {fmt(columnTotals[entry.cellIndex], entry.cellIndex % numValues)}
           </ChakraTable.Cell>
         )
       }
@@ -852,7 +876,7 @@ export const PivotTable = ({
                         borderTop="1px dashed"
                         borderColor="accent.secondary/40"
                       >
-                        {formatLargeNumber(value)}
+                        {fmt(value, colIndex % numValues)}
                       </ChakraTable.Cell>
                     ))
                   )}
@@ -870,7 +894,7 @@ export const PivotTable = ({
                       bg="accent.secondary/12"
                       color="accent.secondary"
                     >
-                      {formatLargeNumber(displayRow.rowTotal)}
+                      {fmt(displayRow.rowTotal)}
                     </ChakraTable.Cell>
                   )}
                 </ChakraTable.Row>
@@ -927,7 +951,7 @@ export const PivotTable = ({
                         borderBottom={S === 0 ? '2px solid' : undefined}
                         borderColor={borderTopColor}
                       >
-                        {formatLargeNumber(value)}
+                        {fmt(value, colIndex % numValues)}
                       </ChakraTable.Cell>
                     ))
                   )}
@@ -945,7 +969,7 @@ export const PivotTable = ({
                       bg={S === 0 ? 'accent.teal/40' : 'accent.teal/30'}
                       color="fg.default"
                     >
-                      {formatLargeNumber(displayRow.rowTotal)}
+                      {fmt(displayRow.rowTotal)}
                     </ChakraTable.Cell>
                   )}
                 </ChakraTable.Row>
@@ -972,7 +996,7 @@ export const PivotTable = ({
                       zIndex={dimIdx === 0 ? 2 : undefined}
                       verticalAlign="top"
                     >
-                      {rowHeaders[rowIndex][dimIdx]}
+                      {fmtHeader(rowHeaders[rowIndex][dimIdx], rowDimNames?.[dimIdx])}
                     </ChakraTable.Cell>
                   ) : null
                 )}
@@ -990,7 +1014,7 @@ export const PivotTable = ({
                       onClick={(e) => handlePivotCellClick(rowIndex, colIndex, e)}
                       _hover={{ outline: '2px solid', outlineColor: 'accent.teal', outlineOffset: '-2px' }}
                     >
-                      {formatLargeNumber(value)}
+                      {fmt(value, colIndex % numValues)}
                     </ChakraTable.Cell>
                   ))
                 )}
@@ -1007,7 +1031,7 @@ export const PivotTable = ({
                     bg="accent.teal/20"
                     color="fg.default"
                   >
-                    {formatLargeNumber(rowTotals[rowIndex])}
+                    {fmt(rowTotals[rowIndex])}
                   </ChakraTable.Cell>
                 )}
               </ChakraTable.Row>
@@ -1048,7 +1072,7 @@ export const PivotTable = ({
                     bg="accent.teal/40"
                     color="fg.default"
                   >
-                    {formatLargeNumber(total)}
+                    {fmt(total, colIndex % numValues)}
                   </ChakraTable.Cell>
                 ))
               )}
@@ -1065,7 +1089,7 @@ export const PivotTable = ({
                   borderColor="border.default"
                   bg="accent.teal/50"
                 >
-                  {formatLargeNumber(grandTotal)}
+                  {fmt(grandTotal)}
                 </ChakraTable.Cell>
               )}
             </ChakraTable.Row>

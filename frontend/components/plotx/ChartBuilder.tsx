@@ -18,7 +18,7 @@ import { AxisBuilder, type AxisZone } from './AxisBuilder'
 import { resolveColumnType } from './AxisComponents'
 import { aggregateData } from '@/lib/chart/aggregate-data'
 import { aggregatePivotData, computeFormulas, getUniqueTopLevelRowValues, getUniqueTopLevelColumnValues } from '@/lib/chart/pivot-utils'
-import type { PivotConfig } from '@/lib/types'
+import type { PivotConfig, ColumnFormatConfig } from '@/lib/types'
 
 interface ChartBuilderProps {
   columns: string[]
@@ -35,6 +35,8 @@ interface ChartBuilderProps {
   onPivotConfigChange?: (config: PivotConfig) => void
   sql?: string
   databaseName?: string
+  initialColumnFormats?: Record<string, ColumnFormatConfig>
+  onColumnFormatsChange?: (formats: Record<string, ColumnFormatConfig>) => void
 }
 
 interface GroupedColumns {
@@ -43,7 +45,7 @@ interface GroupedColumns {
   categories: string[]
 }
 
-export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName }: ChartBuilderProps) => {
+export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange }: ChartBuilderProps) => {
   // Group columns by type
   const groupedColumns: GroupedColumns = useMemo(() => {
     const groups: GroupedColumns = {
@@ -108,6 +110,26 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   const [hasUserModifiedColumns, setHasUserModifiedColumns] = useState(false)
 
   const [mobileSettingsExpanded, setMobileSettingsExpanded] = useState(false)
+
+  // Column format config
+  const [columnFormats, setColumnFormats] = useState<Record<string, ColumnFormatConfig>>(initialColumnFormats || {})
+
+  const handleColumnFormatChange = useCallback((column: string, config: ColumnFormatConfig) => {
+    const isEmpty = !config.alias && config.decimalPoints === undefined && !config.dateFormat
+    setColumnFormats(prev => {
+      const next = { ...prev }
+      if (isEmpty) {
+        delete next[column]
+      } else {
+        next[column] = config
+      }
+      onColumnFormatsChange?.(next)
+      return next
+    })
+  }, [onColumnFormatsChange])
+
+  // Helper: resolve display name using alias
+  const getDisplayName = useCallback((col: string) => columnFormats[col]?.alias || col, [columnFormats])
 
   // Handle drop on X axis
   const handleDropX = useCallback((col: string) => {
@@ -362,6 +384,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                 useCompactView={useCompactView}
                 availableRowValues={availableRowValues}
                 availableColumnValues={availableColumnValues}
+                columnFormats={columnFormats}
+                onColumnFormatChange={handleColumnFormatChange}
               />
             )}
           </>
@@ -377,6 +401,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
               colDimNames={pivotConfig?.columns}
               formulaResults={formulaResults}
               onCellClick={handlePivotCellClick}
+              columnFormats={columnFormats}
+              valueColumns={pivotConfig?.values.map(v => v.column)}
             />
           ) : (
             <Box
@@ -434,7 +460,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
 
       {/* Axis Builder (column palette + drop zones) */}
       {showAxisBuilder && (!useCompactView || mobileSettingsExpanded) && (
-        <AxisBuilder columns={columns} types={types} zones={chartZones} />
+        <AxisBuilder columns={columns} types={types} zones={chartZones} columnFormats={columnFormats} onColumnFormatChange={handleColumnFormatChange} />
       )}
 
       {/* Chart Area */}
@@ -476,8 +502,10 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                     <LinePlot
                       xAxisData={aggregatedData.xAxisData}
                       series={aggregatedData.series}
-                      xAxisLabel={xAxisColumns.join(' | ')}
-                      yAxisLabel={yAxisColumns.join(' | ')}
+                      xAxisLabel={xAxisColumns.map(getDisplayName).join(' | ')}
+                      yAxisLabel={yAxisColumns.map(getDisplayName).join(' | ')}
+                      xAxisColumns={xAxisColumns}
+                      columnFormats={columnFormats}
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
@@ -487,8 +515,10 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                     <BarPlot
                       xAxisData={aggregatedData.xAxisData}
                       series={aggregatedData.series}
-                      xAxisLabel={xAxisColumns.join(' | ')}
-                      yAxisLabel={yAxisColumns.join(' | ')}
+                      xAxisLabel={xAxisColumns.map(getDisplayName).join(' | ')}
+                      yAxisLabel={yAxisColumns.map(getDisplayName).join(' | ')}
+                      xAxisColumns={xAxisColumns}
+                      columnFormats={columnFormats}
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
@@ -498,8 +528,10 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                     <AreaPlot
                       xAxisData={aggregatedData.xAxisData}
                       series={aggregatedData.series}
-                      xAxisLabel={xAxisColumns.join(' | ')}
-                      yAxisLabel={yAxisColumns.join(' | ')}
+                      xAxisLabel={xAxisColumns.map(getDisplayName).join(' | ')}
+                      yAxisLabel={yAxisColumns.map(getDisplayName).join(' | ')}
+                      xAxisColumns={xAxisColumns}
+                      columnFormats={columnFormats}
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
@@ -509,8 +541,10 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                     <ScatterPlot
                       xAxisData={aggregatedData.xAxisData}
                       series={aggregatedData.series}
-                      xAxisLabel={xAxisColumns.join(' | ')}
-                      yAxisLabel={yAxisColumns.join(' | ')}
+                      xAxisLabel={xAxisColumns.map(getDisplayName).join(' | ')}
+                      yAxisLabel={yAxisColumns.map(getDisplayName).join(' | ')}
+                      xAxisColumns={xAxisColumns}
+                      columnFormats={columnFormats}
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
@@ -520,8 +554,10 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                     <FunnelPlot
                       xAxisData={aggregatedData.xAxisData}
                       series={aggregatedData.series}
-                      xAxisLabel={xAxisColumns.join(' | ')}
-                      yAxisLabel={yAxisColumns.join(' | ')}
+                      xAxisLabel={xAxisColumns.map(getDisplayName).join(' | ')}
+                      yAxisLabel={yAxisColumns.map(getDisplayName).join(' | ')}
+                      xAxisColumns={xAxisColumns}
+                      columnFormats={columnFormats}
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
@@ -531,8 +567,10 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                     <PiePlot
                       xAxisData={aggregatedData.xAxisData}
                       series={aggregatedData.series}
-                      xAxisLabel={xAxisColumns.join(' | ')}
-                      yAxisLabel={yAxisColumns.join(' | ')}
+                      xAxisLabel={xAxisColumns.map(getDisplayName).join(' | ')}
+                      yAxisLabel={yAxisColumns.map(getDisplayName).join(' | ')}
+                      xAxisColumns={xAxisColumns}
+                      columnFormats={columnFormats}
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}

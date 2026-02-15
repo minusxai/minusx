@@ -6,7 +6,7 @@ import { LuChevronDown } from 'react-icons/lu'
 import { resolveColumnType } from './AxisComponents'
 import { AxisBuilder, type AxisZone } from './AxisBuilder'
 import { FormulaBuilder } from './FormulaBuilder'
-import type { PivotConfig, PivotValueConfig, PivotFormula, AggregationFunction } from '@/lib/types'
+import type { PivotConfig, PivotValueConfig, PivotFormula, AggregationFunction, ColumnFormatConfig } from '@/lib/types'
 
 const AGG_FUNCTIONS: AggregationFunction[] = ['SUM', 'AVG', 'COUNT', 'MIN', 'MAX']
 
@@ -18,6 +18,8 @@ interface PivotAxisBuilderProps {
   useCompactView?: boolean
   availableRowValues?: string[]
   availableColumnValues?: string[]
+  columnFormats?: Record<string, ColumnFormatConfig>
+  onColumnFormatChange?: (column: string, config: ColumnFormatConfig) => void
 }
 
 export const PivotAxisBuilder = ({
@@ -27,6 +29,8 @@ export const PivotAxisBuilder = ({
   onPivotConfigChange,
   availableRowValues,
   availableColumnValues,
+  columnFormats,
+  onColumnFormatChange,
 }: PivotAxisBuilderProps) => {
   // Classify columns for auto-init
   const groupedColumns = useMemo(() => {
@@ -217,28 +221,62 @@ export const PivotAxisBuilder = ({
     },
   ], [config, handleDropRows, handleDropColumns, handleDropValues, removeFromRows, removeFromColumns, removeFromValues])
 
-  return (
-    <AxisBuilder columns={columns} types={types} zones={zones}>
-      {/* Row Formulas */}
-      {config.rows.length > 0 && availableRowValues && availableRowValues.length >= 2 && (
-        <FormulaBuilder
-          axis="row"
-          formulas={config.rowFormulas || []}
-          availableValues={availableRowValues}
-          dimensionName={config.rows[0]}
-          onChange={(formulas: PivotFormula[]) => onPivotConfigChange({ ...config, rowFormulas: formulas })}
-        />
-      )}
+  const showRowFormulas = config.rows.length > 0 && availableRowValues && availableRowValues.length >= 2
+  const showColFormulas = config.columns.length > 0 && availableColumnValues && availableColumnValues.length >= 2
 
-      {/* Column Formulas */}
-      {config.columns.length > 0 && availableColumnValues && availableColumnValues.length >= 2 && (
-        <FormulaBuilder
-          axis="column"
-          formulas={config.columnFormulas || []}
-          availableValues={availableColumnValues}
-          dimensionName={config.columns[0]}
-          onChange={(formulas: PivotFormula[]) => onPivotConfigChange({ ...config, columnFormulas: formulas })}
-        />
+  return (
+    <AxisBuilder columns={columns} types={types} zones={zones} columnFormats={columnFormats} onColumnFormatChange={onColumnFormatChange}>
+      {(showRowFormulas || showColFormulas) && (
+        <HStack
+          gap={4}
+          align="stretch"
+          pt={3}
+          borderTop="1px dashed"
+          borderColor="border.muted"
+        >
+          {/* Row Formulas */}
+          <Box flex={1} minW={0}>
+            {showRowFormulas ? (
+              <FormulaBuilder
+                axis="row"
+                formulas={config.rowFormulas || []}
+                availableValues={availableRowValues!}
+                dimensionName={config.rows[0]}
+                onChange={(formulas: PivotFormula[]) => onPivotConfigChange({ ...config, rowFormulas: formulas })}
+              />
+            ) : (
+              <VStack align="start" gap={0}>
+                <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em" color="fg.subtle">
+                  Row Formulas
+                </Text>
+                <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Add row dimensions first</Text>
+              </VStack>
+            )}
+          </Box>
+
+          {/* Vertical separator */}
+          <Box width="1px" bg="border.muted" alignSelf="stretch" />
+
+          {/* Column Formulas */}
+          <Box flex={1} minW={0}>
+            {showColFormulas ? (
+              <FormulaBuilder
+                axis="column"
+                formulas={config.columnFormulas || []}
+                availableValues={availableColumnValues!}
+                dimensionName={config.columns[0]}
+                onChange={(formulas: PivotFormula[]) => onPivotConfigChange({ ...config, columnFormulas: formulas })}
+              />
+            ) : (
+              <VStack align="start" gap={0}>
+                <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em" color="fg.subtle">
+                  Column Formulas
+                </Text>
+                <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Add column dimensions first</Text>
+              </VStack>
+            )}
+          </Box>
+        </HStack>
       )}
     </AxisBuilder>
   )

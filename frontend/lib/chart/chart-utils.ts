@@ -1,5 +1,6 @@
 import type { EChartsOption } from 'echarts'
 import { withMinusXTheme, COLOR_PALETTE } from './echarts-theme'
+import type { ColumnFormatConfig } from '@/lib/types'
 
 // Chart props interface
 export interface ChartProps {
@@ -10,6 +11,8 @@ export interface ChartProps {
   yAxisLabel?: string
   yAxisColumns?: string[]  // The actual Y-axis column names (for dual-axis logic)
   onChartClick?: (params: unknown) => void  // ECharts click event handler for drill-down
+  columnFormats?: Record<string, ColumnFormatConfig>
+  xAxisColumns?: string[]  // Actual X-axis column names (for format config lookup)
 }
 
 // Calculate axis label interval based on data length, container width, and max label length after truncation
@@ -69,6 +72,45 @@ export const formatLargeNumber = (value: number): string => {
   }
 
   return `${sign}${absValue.toFixed(1)}`
+}
+
+// Format number with explicit decimal points (full number with commas)
+export const formatNumber = (value: number, decimalPoints?: number): string => {
+  if (decimalPoints === undefined) return formatLargeNumber(value)
+  return value.toLocaleString(undefined, {
+    minimumFractionDigits: decimalPoints,
+    maximumFractionDigits: decimalPoints,
+  })
+}
+
+// Format date string according to named format
+export const DATE_FORMAT_OPTIONS = [
+  { value: 'iso', label: '2024-01-15' },
+  { value: 'us', label: '01/15/2024' },
+  { value: 'eu', label: '15/01/2024' },
+  { value: 'short', label: 'Jan 15, 2024' },
+  { value: 'month-year', label: 'Jan 2024' },
+  { value: 'year', label: '2024' },
+] as const
+
+export const formatDateValue = (dateStr: string, format: string): string => {
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return dateStr
+
+  const pad = (n: number) => n.toString().padStart(2, '0')
+  const month = d.toLocaleString('en-US', { month: 'short' })
+  const day = d.getDate()
+  const year = d.getFullYear()
+
+  switch (format) {
+    case 'iso': return `${year}-${pad(d.getMonth() + 1)}-${pad(day)}`
+    case 'us': return `${pad(d.getMonth() + 1)}/${pad(day)}/${year}`
+    case 'eu': return `${pad(day)}/${pad(d.getMonth() + 1)}/${year}`
+    case 'short': return `${month} ${day}, ${year}`
+    case 'month-year': return `${month} ${year}`
+    case 'year': return `${year}`
+    default: return dateStr
+  }
 }
 
 // Validate chart data
@@ -227,15 +269,25 @@ interface BaseChartConfig {
   xAxisLabel?: string
   yAxisLabel?: string
   yAxisColumns?: string[]
+  xAxisColumns?: string[]
   chartType: 'line' | 'bar' | 'area' | 'scatter'
   additionalOptions?: Partial<EChartsOption>
   colorMode?: 'light' | 'dark'
   containerWidth?: number
   containerHeight?: number
+  columnFormats?: Record<string, ColumnFormatConfig>
 }
 
 export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
-  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight } = config
+  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats } = config
+
+  // Resolve format configs for axes
+  const yDecimalPoints = yAxisColumns
+    ?.map(col => columnFormats?.[col]?.decimalPoints)
+    .find(dp => dp !== undefined)
+  const xDateFormat = xAxisColumns
+    ?.map(col => columnFormats?.[col]?.dateFormat)
+    .find(Boolean)
 
   // Determine if we need dual Y-axes
   // Only use dual Y-axis when there are 2+ Y-axis columns (distinct metrics)
@@ -356,7 +408,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           name: getAxisName(0), // Left axis shows names of series on left
           position: 'left' as const,
           axisLabel: {
-            formatter: (value: number) => formatLargeNumber(value),
+            formatter: (value: number) => formatNumber(value, yDecimalPoints),
           },
         },
         {
@@ -364,7 +416,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           name: getAxisName(1), // Right axis shows names of series on right
           position: 'right' as const,
           axisLabel: {
-            formatter: (value: number) => formatLargeNumber(value),
+            formatter: (value: number) => formatNumber(value, yDecimalPoints),
           },
         },
       ]
@@ -372,7 +424,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         type: 'value' as const,
         name: wrapAxisName(yAxisLabel, maxAxisNameLength),
         axisLabel: {
-          formatter: (value: number) => formatLargeNumber(value),
+          formatter: (value: number) => formatNumber(value, yDecimalPoints),
         },
       }
 
@@ -473,7 +525,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           formatter: (params: any) => {
             const [x, y] = params.data
             const formattedX = x
-            const formattedY = typeof y === 'number' ? formatLargeNumber(y) : y
+            const formattedY = typeof y === 'number' ? formatNumber(y, yDecimalPoints) : y
             return `${params.seriesName}<br/>${xAxisLabel || 'X'}: ${formattedX}<br/>${yAxisLabel || 'Y'}: ${formattedY}`
           },
         }
@@ -487,7 +539,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           transitionDuration: 0.2,
           ...(chartType === 'bar' && { axisPointer: { type: 'shadow' } }),
           valueFormatter: (value: any) => {
-            return typeof value === 'number' ? formatLargeNumber(value) : String(value)
+            return typeof value === 'number' ? formatNumber(value, yDecimalPoints) : String(value)
           },
         },
     legend: {
@@ -516,6 +568,11 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         interval: labelInterval, // Use pre-calculated interval based on truncated label length
         rotate: 0, // Keep labels horizontal by default
         formatter: (value: string) => {
+          // Use explicit date format if configured
+          if (xDateFormat) {
+            return formatDateValue(value, xDateFormat)
+          }
+
           // Try to parse as date and format based on available space
           // Priority when space is tight: Year > Month > Day
           const date = new Date(value)
