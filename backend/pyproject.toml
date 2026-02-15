@@ -42,4 +42,4 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["connectors", "pipelines", "processors", "tasks"]
+packages = ["connectors", "pipelines", "processors", "tasks", "sql_utils"]

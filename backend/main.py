@@ -28,6 +28,7 @@ from pipelines.executor import PipelineExecutor
 from pipelines.tap_tester import test_tap
 from processors import process_csv_upload, delete_csv_connection
 from processors import process_google_sheets_import, delete_google_sheets_connection
+from sql_utils.limit_enforcer import enforce_query_limit
 from autocomplete import get_completions, AutocompleteRequest, get_mention_completions, MentionItem
 from sql_ir import parse_sql_to_ir, ir_to_sql, UnsupportedSQLError, QueryIR
 
@@ -138,6 +139,26 @@ async def root():
     return {"message": "MinusX BI Backend API", "status": "running"}
 
 
+def _get_dialect_for_connection(conn_type: str) -> str:
+    """
+    Map connection type to sqlglot dialect for query parsing.
+
+    Args:
+        conn_type: Connection type from connector (e.g., 'postgresql', 'duckdb', 'bigquery')
+
+    Returns:
+        Sqlglot dialect name
+    """
+    dialect_map = {
+        'duckdb': 'duckdb',
+        'bigquery': 'bigquery',
+        'postgresql': 'postgres',
+        'csv': 'duckdb',  # CSV uses DuckDB engine
+        'google-sheets': 'duckdb',  # Google Sheets uses DuckDB engine
+    }
+    return dialect_map.get(conn_type, 'postgres')
+
+
 @app.post("/api/execute-query", response_model=QueryResponse)
 async def execute_sql_query(query_request: QueryRequest, request: Request):
     """
@@ -181,6 +202,15 @@ async def execute_sql_query(query_request: QueryRequest, request: Request):
         engine = await connector.get_engine()
         print(f"[PYTHON] Connection init took {(time.time() - init_start) * 1000:.2f}ms")
 
+        # Enforce query limits for safety (add LIMIT if missing, cap at max)
+        dialect = _get_dialect_for_connection(connector.conn_type)
+        safe_query = enforce_query_limit(
+            query_request.query,
+            default_limit=1000,
+            max_limit=10000,
+            dialect=dialect
+        )
+
         # Execute query (detect engine type)
         exec_start = time.time()
 
@@ -188,9 +218,9 @@ async def execute_sql_query(query_request: QueryRequest, request: Request):
             # True async execution (PostgreSQL)
             async with engine.connect() as connection:
                 if query_request.parameters:
-                    result = await connection.execute(text(query_request.query), query_request.parameters)
+                    result = await connection.execute(text(safe_query), query_request.parameters)
                 else:
-                    result = await connection.execute(text(query_request.query))
+                    result = await connection.execute(text(safe_query))
                 print(f"[PYTHON] Query execution took {(time.time() - exec_start) * 1000:.2f}ms")
 
                 # Get column names
@@ -224,9 +254,9 @@ async def execute_sql_query(query_request: QueryRequest, request: Request):
             def _execute_sync():
                 with engine.connect() as connection:
                     if query_request.parameters:
-                        result = connection.execute(text(query_request.query), query_request.parameters)
+                        result = connection.execute(text(safe_query), query_request.parameters)
                     else:
-                        result = connection.execute(text(query_request.query))
+                        result = connection.execute(text(safe_query))
 
                     # Get column names and rows
                     columns = list(result.keys())
