@@ -33,6 +33,7 @@
     "better-sqlite3": "^12.5.0",
     "dotenv": "^17.2.3",
     "echarts": "^6.0.0",
+    "html-to-image": "^1.11.13",
     "js-yaml": "^4.1.1",
     "jsonpath-plus": "^10.3.0",
     "jsonwebtoken": "^9.0.3",

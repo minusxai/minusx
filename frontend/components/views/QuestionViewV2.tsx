@@ -392,7 +392,14 @@ export default function QuestionViewV2({
   }, [onChange, content.parameters, content.references, parameters]);
 
   return (
-    <Box display="flex" flexDirection="column" overflow="hidden" flex="1" minH="0">
+    <Box
+      display="flex"
+      flexDirection="column"
+      overflow="hidden"
+      flex="1"
+      minH="0"
+      data-file-id={questionId}
+    >
       {/* Header */}
       {fullMode && (
         <Box p={3} pb={2} borderBottomWidth="1px" borderColor="border.muted">

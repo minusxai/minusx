@@ -336,7 +336,7 @@ export default function DashboardView({
   };
 
   return (
-    <Box flex="1">
+    <Box flex="1" data-file-id={fileId}>
       {/* Header with Title, Description, and Badges */}
       <Box>
         <DocumentHeader
