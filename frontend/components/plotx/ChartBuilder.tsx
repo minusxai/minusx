@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useCallback, useMemo } from 'react'
-import { Box, VStack, Text, IconButton } from '@chakra-ui/react'
-import { LuChevronDown, LuChevronUp } from 'react-icons/lu'
+import { Box, VStack, Text } from '@chakra-ui/react'
 import { LinePlot } from './LinePlot'
 import { BarPlot } from './BarPlot'
 import { AreaPlot } from './AreaPlot'
@@ -342,59 +341,21 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   const pivotHasData = isPivot && pivotData && pivotData.cells.length > 0
 
   // Pivot mode: completely different layout
-  const [pivotSettingsExpanded, setPivotSettingsExpanded] = useState(false)
-  const effectivePivotSettingsExpanded = settingsExpandedProp ?? pivotSettingsExpanded
-
   if (isPivot) {
     return (
       <Box display="flex" flexDirection="column" gap={0} height="100%" width="100%">
-        {/* Collapsible header - only show if not externally controlled */}
-        {showAxisBuilder && settingsExpandedProp === undefined && (
-          <>
-            <Box
-              display="flex"
-              alignItems="center"
-              justifyContent="space-between"
-              px={3}
-              py={1}
-              bg="bg.elevated"
-              borderBottom="1px solid"
-              borderColor="border.default"
-              cursor="pointer"
-              onClick={() => setPivotSettingsExpanded(!pivotSettingsExpanded)}
-              _hover={{ bg: "bg.muted" }}
-            >
-              <Text fontSize="sm" fontWeight="700" color="fg.default">
-                Visualization Settings
-              </Text>
-              <IconButton
-                aria-label="Toggle pivot settings"
-                size="xs"
-                variant="ghost"
-              >
-                {pivotSettingsExpanded ? <LuChevronUp /> : <LuChevronDown />}
-              </IconButton>
-            </Box>
-          </>
-        )}
-
-        {showAxisBuilder && (
-          <>
-            {/* Pivot Axis Builder - collapsible */}
-            {effectivePivotSettingsExpanded && (
-              <PivotAxisBuilder
-                columns={columns}
-                types={types}
-                pivotConfig={pivotConfig}
-                onPivotConfigChange={handlePivotConfigChange}
-                useCompactView={useCompactView}
-                availableRowValues={availableRowValues}
-                availableColumnValues={availableColumnValues}
-                columnFormats={columnFormats}
-                onColumnFormatChange={handleColumnFormatChange}
-              />
-            )}
-          </>
+        {showAxisBuilder && settingsExpandedProp && (
+          <PivotAxisBuilder
+            columns={columns}
+            types={types}
+            pivotConfig={pivotConfig}
+            onPivotConfigChange={handlePivotConfigChange}
+            useCompactView={useCompactView}
+            availableRowValues={availableRowValues}
+            availableColumnValues={availableColumnValues}
+            columnFormats={columnFormats}
+            onColumnFormatChange={handleColumnFormatChange}
+          />
         )}
 
         {/* Pivot Table */}
