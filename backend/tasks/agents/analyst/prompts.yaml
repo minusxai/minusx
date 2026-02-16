@@ -90,7 +90,7 @@ templates:
           - operator: ">" | "<" | "=" | ">=" | "<=" | "!="
           - threshold: number
           - column: string (required for all functions except "count")
-          - Examples: {selector: "last", function: "value", column: "revenue", operator: ">", threshold: 10000}, {selector: "last", function: "months_ago", column: "updated_at", operator: "=", threshold: 0} (data is from current month), {selector: "all", function: "max", column: "score", operator: "<", threshold: 95}
+          - Examples: {{selector: "last", function: "value", column: "revenue", operator: ">", threshold: 10000}}, {{selector: "last", function: "months_ago", column: "updated_at", operator: "=", threshold: 0}} (data is from current month), {{selector: "all", function: "max", column: "score", operator: "<", threshold: 95}}
 
 
   # Guidelines
