@@ -756,7 +756,7 @@ export const selectMergedContent = createSelector(
       ...content,
       ...persistableChanges,
       ...ephemeralChanges
-    };
+    } as DbFile['content'];
   }
 );
 

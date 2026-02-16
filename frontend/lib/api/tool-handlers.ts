@@ -5,7 +5,7 @@
  * Used for tools that require user interaction or client-specific capabilities.
  */
 
-import { ToolCall, ToolMessage, DatabaseWithSchema, DocumentContent, QuestionContent, ReportContent, ReportReference } from '@/lib/types';
+import { ToolCall, ToolMessage, DatabaseWithSchema, DocumentContent, QuestionContent, ReportContent, ReportReference, AlertContent, AlertSelector, AlertFunction, ComparisonOperator } from '@/lib/types';
 import { setEdit, setEphemeral, setFile, selectMergedContent, type FileId } from '@/store/filesSlice';
 import type { AppDispatch, RootState } from '@/store/store';
 import { store } from '@/store/store';
@@ -843,6 +843,130 @@ function handleUpdateEmails(
   }
   return { emails };
 }
+
+/**
+ * EditAlert - Edit alert configuration (question, condition, schedule)
+ */
+registerFrontendTool('EditAlert', async (args, context) => {
+  const { dispatch, state, userInputs } = context;
+
+  let { operation, file_id, schedule, question_id, condition, emails } = args;
+
+  if (operation === undefined || file_id === undefined || !dispatch) {
+    return {
+      success: false,
+      error: 'Missing operation or file_id argument'
+    };
+  }
+
+  // Check if user confirmation is required
+  const askForConfirmation = state?.ui?.askForConfirmation ?? false;
+
+  if (askForConfirmation) {
+    const userConfirmed = userInputs?.[0]?.result;
+
+    if (userConfirmed === undefined) {
+      const opDescriptions: Record<string, string> = {
+        'update_schedule': 'update alert schedule',
+        'update_question': `set monitored question to #${question_id}`,
+        'update_condition': 'update alert condition',
+        'update_emails': 'update delivery emails',
+      };
+      const description = opDescriptions[operation] || `perform "${operation}"`;
+
+      throw new UserInputException({
+        type: 'confirmation',
+        title: 'Edit alert?',
+        message: `Do you want to ${description}?`,
+        confirmText: 'Yes',
+        cancelText: 'No'
+      });
+    }
+
+    if (userConfirmed === false) {
+      return {
+        success: false,
+        message: 'Alert edit cancelled by user'
+      };
+    }
+  }
+
+  // Parse schedule/condition if JSON strings
+  if (typeof schedule === 'string' && schedule) {
+    try { schedule = JSON.parse(schedule); } catch {}
+  }
+  if (typeof condition === 'string' && condition) {
+    try { condition = JSON.parse(condition); } catch {}
+  }
+  if (typeof question_id === 'string' && question_id) {
+    question_id = parseInt(question_id, 10);
+  }
+
+  const reduxState = state || store.getState();
+  const mergedContent = selectMergedContent(reduxState, file_id) as AlertContent;
+
+  if (!mergedContent) {
+    return {
+      success: false,
+      error: `Alert content not available. FileId: ${file_id}`
+    };
+  }
+
+  let updates: Partial<AlertContent>;
+  let resultMessage: string;
+
+  switch (operation) {
+    case 'update_schedule':
+      if (!schedule?.cron || !schedule?.timezone) {
+        throw new Error('schedule with cron and timezone is required');
+      }
+      updates = { schedule };
+      resultMessage = `Updated schedule to ${schedule.cron} (${schedule.timezone})`;
+      break;
+    case 'update_question':
+      if (!question_id) {
+        throw new Error('question_id is required for update_question');
+      }
+      updates = { questionId: question_id };
+      resultMessage = `Set monitored question to #${question_id}`;
+      break;
+    case 'update_condition':
+      if (!condition?.selector || !condition?.function || !condition?.operator || condition?.threshold === undefined) {
+        throw new Error('condition with selector, function, operator, and threshold is required');
+      }
+      updates = {
+        condition: {
+          selector: condition.selector as AlertSelector,
+          function: condition.function as AlertFunction,
+          operator: condition.operator as ComparisonOperator,
+          threshold: Number(condition.threshold),
+          ...(condition.column ? { column: condition.column } : {})
+        }
+      };
+      resultMessage = `Updated condition: ${condition.function}(${condition.selector}${condition.column ? ', ' + condition.column : ''}) ${condition.operator} ${condition.threshold}`;
+      break;
+    case 'update_emails':
+      if (!Array.isArray(emails)) {
+        throw new Error('emails array is required for update_emails');
+      }
+      updates = { emails: emails.map((e: any) => String(e).trim()).filter(Boolean) };
+      resultMessage = `Updated delivery emails: ${updates.emails!.join(', ') || '(none)'}`;
+      break;
+    default:
+      throw new Error(`Unknown operation: ${operation}`);
+  }
+
+  dispatch(setEdit({
+    fileId: file_id as FileId,
+    edits: updates
+  }));
+
+  return {
+    success: true,
+    message: `Successfully executed ${operation}. ${resultMessage}`,
+    updates
+  };
+});
 
 // Operation handlers
 

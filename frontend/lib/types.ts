@@ -448,13 +448,67 @@ export interface ReportRunContent extends BaseFileContent {
   error?: string;         // Top-level error if any
 }
 
+// Alert types
+export type AlertSelector = 'first' | 'last' | 'all';
+export type AlertFunction =
+  // For first/last (single row)
+  | 'value'        // raw numeric value
+  | 'diff'         // difference vs adjacent row
+  | 'pct_change'   // % change vs adjacent row
+  | 'months_ago'   // calendar months between value and now
+  | 'days_ago'     // calendar days between value and now
+  | 'years_ago'    // years between value and now
+  // For all (aggregate)
+  | 'count'        // row count (no column needed)
+  | 'sum'          // sum of column
+  | 'avg'          // average of column
+  | 'min'          // min of column
+  | 'max';         // max of column
+export type ComparisonOperator = '>' | '<' | '=' | '>=' | '<=' | '!=';
+
+export interface AlertCondition {
+  selector: AlertSelector;
+  column?: string;          // Required for all functions except 'count'
+  function: AlertFunction;
+  operator: ComparisonOperator;
+  threshold: number;
+}
+
+export interface AlertSchedule {
+  cron: string;
+  timezone: string;
+}
+
+export interface AlertContent extends BaseFileContent {
+  description?: string;
+  schedule: AlertSchedule;
+  questionId: number;        // Reference to a saved question
+  condition: AlertCondition;
+  emails?: string[];         // Delivery email addresses
+}
+
+export interface AlertRunContent extends BaseFileContent {
+  alertId: number;
+  alertName: string;
+  startedAt: string;
+  completedAt?: string;
+  status: 'running' | 'triggered' | 'not_triggered' | 'failed';
+  actualValue: number | null;
+  threshold: number;
+  operator: ComparisonOperator;
+  selector: AlertSelector;
+  function: AlertFunction;
+  column?: string;
+  error?: string;
+}
+
 /**
  * Database file entity
  * Extends BaseFileMetadata with content and multi-tenant support
  * content can be null for metadata-only loads (Phase 2: Partial Loading)
  */
 export interface DbFile extends BaseFileMetadata {
-  content: QuestionContent | DocumentContent | ContextContent | ConnectionContent | ConnectorContent | UsersContent | FolderContent | ConfigContent | SessionRecordingFileContent | StylesContent | ReportContent | ReportRunContent | null;
+  content: QuestionContent | DocumentContent | ContextContent | ConnectionContent | ConnectorContent | UsersContent | FolderContent | ConfigContent | SessionRecordingFileContent | StylesContent | ReportContent | ReportRunContent | AlertContent | AlertRunContent | null;
   company_id?: number;     // Always present in DB queries (NOT NULL column), optional for type flexibility
 }
 

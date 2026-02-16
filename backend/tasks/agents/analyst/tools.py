@@ -339,6 +339,64 @@ class EditReport(Tool):
 
 
 @register_agent
+class EditAlert(Tool):
+    """Edit alert configuration - monitored question, condition, schedule, and delivery.
+    EditAlert Operations:
+        1. update_schedule: Update when the alert checks
+            - Required: schedule (dict: {{cron: str, timezone: str}})
+            - cron: Cron expression (e.g., "0 9 * * 1" = Monday 9am)
+            - timezone: IANA timezone (e.g., "America/New_York")
+
+        2. update_question: Set which question to monitor
+            - Required: question_id (int) - the file ID of the question
+
+        3. update_condition: Update the alert condition
+            - Required: condition (dict: {{selector: str, function: str, operator: str, threshold: number, column?: str}})
+            - selector: "first" | "last" | "all" — which row(s) to evaluate
+            - function: depends on selector
+              - For "first"/"last": "value" | "diff" | "pct_change" | "months_ago" | "days_ago" | "years_ago"
+                - value: raw numeric value from the selected row
+                - diff: difference between selected row and adjacent row
+                - pct_change: % change between selected row and adjacent row
+                - months_ago/days_ago/years_ago: calendar distance from now (for freshness checks)
+              - For "all": "count" | "sum" | "avg" | "min" | "max"
+                - count: total number of rows (no column needed)
+                - sum/avg/min/max: aggregate of all values in the column
+            - operator: ">" | "<" | "=" | ">=" | "<=" | "!="
+            - threshold: numeric threshold to compare against
+            - column: required for all functions except "count"
+
+        4. update_emails: Update the delivery email list
+            - Required: emails (list of str) - email addresses to notify when alert triggers
+    """
+
+    def __init__(
+        self,
+        file_id: int = Field(..., description="The alert file ID to edit"),
+        operation: str = Field(..., description="Operation: 'update_schedule' | 'update_question' | 'update_condition' | 'update_emails'"),
+        schedule: Optional[dict] = Field(None, description="Schedule object {cron: str, timezone: str} for update_schedule"),
+        question_id: Optional[int] = Field(None, description="Question file ID to monitor (for update_question)"),
+        condition: Optional[dict] = Field(None, description="Condition object {selector, function, operator, threshold, column?} for update_condition"),
+        emails: Optional[list] = Field(None, description="List of email addresses for update_emails"),
+        **kwargs
+    ):
+        super().__init__(**kwargs)  # type: ignore
+        self.file_id = file_id
+        self.operation = operation
+        self.schedule = schedule
+        self.question_id = question_id
+        self.condition = condition
+        self.emails = emails
+
+    async def reduce(self, child_batches):
+        pass
+
+    async def run(self) -> str:
+        # Signal that this tool needs frontend execution
+        raise UserInputException(self._unique_id)
+
+
+@register_agent
 class GetAllQuestions(Tool):
     """Get all available questions that can be added to the dashboard.
         - Purpose: See all questions available to add to dashboard

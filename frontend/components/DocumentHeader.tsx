@@ -24,6 +24,7 @@ const DEFAULT_PLACEHOLDERS: Record<string, { name: string; description: string }
   notebook: { name: 'New Notebook', description: 'Helpful description about this notebook.' },
   presentation: { name: 'New Presentation', description: 'Helpful description about this presentation.' },
   report: { name: 'New Report', description: 'Helpful description about this report.' },
+  alert: { name: 'New Alert', description: 'Helpful description about this alert.' },
   context: { name: 'New Knowledge Base', description: 'Helpful description about this knowledge base.' },
 };
 
@@ -31,7 +32,7 @@ export interface DocumentHeaderProps {
   // Content
   name: string;
   description?: string;
-  fileType: 'question' | 'dashboard' | 'notebook' | 'presentation' | 'report' | 'context';
+  fileType: 'question' | 'dashboard' | 'notebook' | 'presentation' | 'report' | 'context' | 'alert';
 
   // State
   editMode: boolean;

@@ -7,6 +7,7 @@ import configsReducer from './configsSlice';
 import chatReducer from './chatSlice';
 import recordingsReducer from './recordingsSlice';
 import reportRunsReducer from './reportRunsSlice';
+import alertRunsReducer from './alertRunsSlice';
 import { chatListenerMiddleware } from './chatListener';
 
 function getAllReducers() {
@@ -19,6 +20,7 @@ function getAllReducers() {
     chat: chatReducer,  // Orchestration API with automatic tool execution
     recordings: recordingsReducer,  // Session recording state
     reportRuns: reportRunsReducer,  // Report run state (runs list, selected run)
+    alertRuns: alertRunsReducer,    // Alert run state (runs list, selected run)
   }
 }
 

@@ -127,7 +127,7 @@ export default function NewFilePage({ params }: NewFilePageProps) {
       } : undefined,
     };
 
-    if (type === 'question' || type === 'dashboard' || type === 'report') {
+    if (type === 'question' || type === 'dashboard' || type === 'report' || type === 'alert') {
       config.showChat = true;
     }
 

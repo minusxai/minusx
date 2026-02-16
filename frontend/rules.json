@@ -5,15 +5,15 @@
       "type": "fileTypeAccess",
       "role": "admin",
       "allowedTypes": "*",
-      "createTypes": ["question", "dashboard", "folder", "context", "connection"],
+      "createTypes": ["question", "dashboard", "folder", "context", "connection", "alert", "report"],
       "viewTypes": "*"
     },
     {
       "type": "fileTypeAccess",
       "role": "editor",
-      "allowedTypes": ["question", "dashboard", "folder", "context", "connection", "conversation", "session", "llm_call", "report"],
-      "createTypes": ["question", "dashboard", "folder", "context"],
-      "viewTypes": ["question", "dashboard", "folder", "context", "conversation", "session", "llm_call", "report"]
+      "allowedTypes": ["question", "dashboard", "folder", "context", "connection", "conversation", "session", "llm_call", "report", "alert"],
+      "createTypes": ["question", "dashboard", "folder", "context", "alert", "report"],
+      "viewTypes": ["question", "dashboard", "folder", "context", "conversation", "session", "llm_call", "report", "alert"]
     },
     {
       "type": "fileTypeAccess",
