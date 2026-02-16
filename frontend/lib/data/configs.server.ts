@@ -1,11 +1,12 @@
 import 'server-only';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { CompanyConfig, DEFAULT_CONFIG, DEFAULT_STYLES, mergeConfig } from '@/lib/branding/whitelabel';
+import { CompanyConfig, DEFAULT_CONFIG, DEFAULT_STYLES, mergeConfig, type AccessRulesOverride } from '@/lib/branding/whitelabel';
 import { getAdapter } from '@/lib/database/adapter/factory';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { Mode, DEFAULT_MODE } from '@/lib/mode/mode-types';
 import { validateWebhook } from '@/lib/messaging/webhook-executor';
+import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 
 export interface GetConfigsResult {
   config: CompanyConfig;
@@ -113,6 +114,67 @@ export function validateCompanyConfig(content: unknown): content is Partial<Comp
       if (errors.length > 0) {
         console.warn('[Config] Invalid webhook in messaging config:', errors);
         return false;
+      }
+    }
+  }
+
+  // If accessRules exists, validate its structure
+  if (config.accessRules !== undefined) {
+    if (!validateAccessRulesOverride(config.accessRules)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+const VALID_ROLES = ['admin', 'editor', 'viewer'] as const;
+const VALID_ACCESS_FIELDS = ['allowedTypes', 'createTypes', 'viewTypes'] as const;
+const VALID_FILE_TYPES = new Set(Object.keys(FILE_TYPE_METADATA));
+
+/**
+ * Validate a file type array value (or '*')
+ * Returns true if the value is '*' or an array of valid FileType strings
+ */
+function validateFileTypeArray(value: unknown): boolean {
+  if (value === '*') return true;
+  if (!Array.isArray(value)) return false;
+  return value.every(item => typeof item === 'string' && VALID_FILE_TYPES.has(item));
+}
+
+/**
+ * Validate the accessRules override structure
+ */
+function validateAccessRulesOverride(accessRules: unknown): accessRules is AccessRulesOverride {
+  if (typeof accessRules !== 'object' || accessRules === null) return false;
+
+  for (const [role, override] of Object.entries(accessRules)) {
+    // Validate role key
+    if (!(VALID_ROLES as readonly string[]).includes(role)) {
+      console.warn(`[Config] Invalid role in accessRules: ${role}`);
+      return false;
+    }
+
+    // Validate override object
+    if (typeof override !== 'object' || override === null) return false;
+
+    const overrideObj = override as Record<string, unknown>;
+
+    // Reject unrecognized fields
+    for (const field of Object.keys(overrideObj)) {
+      if (!(VALID_ACCESS_FIELDS as readonly string[]).includes(field)) {
+        console.warn(`[Config] Invalid field in accessRules.${role}: ${field}`);
+        return false;
+      }
+    }
+
+    // Validate each present field
+    for (const field of VALID_ACCESS_FIELDS) {
+      if (field in overrideObj) {
+        if (!validateFileTypeArray(overrideObj[field])) {
+          console.warn(`[Config] Invalid value for accessRules.${role}.${field}`);
+          return false;
+        }
       }
     }
   }

@@ -3,6 +3,7 @@ import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { canAccessFileType, canViewFileType } from '@/lib/auth/access-rules';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { resolvePath, resolveHomeFolderSync } from '@/lib/mode/path-resolver';
+import type { AccessRulesOverride } from '@/lib/branding/whitelabel';
 
 /**
  * Check if a user has access to a specific file (path-based, mode-aware)
@@ -51,9 +52,10 @@ export function checkFileAccess(file: DbFile, user: EffectiveUser): boolean {
 
 /**
  * Check if user has access to a file type (type-based)
+ * @param overrides - Optional per-company access rules overrides
  */
-export function checkFileTypeAccess(file: DbFile, user: EffectiveUser): boolean {
-  return canAccessFileType(user.role, file.type);
+export function checkFileTypeAccess(file: DbFile, user: EffectiveUser, overrides?: AccessRulesOverride): boolean {
+  return canAccessFileType(user.role, file.type, overrides);
 }
 
 /**
@@ -149,9 +151,9 @@ function isAncestorContext(file: DbFile, user: EffectiveUser): boolean {
  * @param user - The effective user
  * @returns true if user can access file, false otherwise
  */
-export function canAccessFile(file: DbFile, user: EffectiveUser): boolean {
-  // Step 1: Type check (role-based)
-  if (!canAccessFileType(user.role, file.type)) {
+export function canAccessFile(file: DbFile, user: EffectiveUser, overrides?: AccessRulesOverride): boolean {
+  // Step 1: Type check (role-based, with optional config overrides)
+  if (!canAccessFileType(user.role, file.type, overrides)) {
     console.log('[Permissions] Access DENIED - user role cannot access file type:', {
       role: user.role,
       fileType: file.type
@@ -211,14 +213,14 @@ export function canAccessFile(file: DbFile, user: EffectiveUser): boolean {
  * - Loading ancestor contexts
  * - API operations that need full access
  */
-export function canViewFileInUI(file: DbFile, user: EffectiveUser): boolean {
+export function canViewFileInUI(file: DbFile, user: EffectiveUser, overrides?: AccessRulesOverride): boolean {
   // First check full access permissions
-  if (!canAccessFile(file, user)) {
+  if (!canAccessFile(file, user, overrides)) {
     return false;
   }
 
-  // Then check UI visibility (viewTypes)
-  if (!canViewFileType(user.role, file.type)) {
+  // Then check UI visibility (viewTypes, with optional config overrides)
+  if (!canViewFileType(user.role, file.type, overrides)) {
     console.log('[Permissions] View DENIED - user role cannot view file type in UI:', {
       role: user.role,
       fileType: file.type

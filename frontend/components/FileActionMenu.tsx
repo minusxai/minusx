@@ -6,7 +6,7 @@ import { useRouter } from '@/lib/navigation/use-navigation';
 import { useState } from 'react';
 import { useAppDispatch } from '@/store/hooks';
 import { deleteFile } from '@/store/filesSlice';
-import { canDeleteFileType } from '@/lib/auth/access-rules.client';
+import { useAccessRules } from '@/lib/auth/access-rules.client';
 import { FileType } from '@/lib/types';
 
 interface FileActionMenuProps {
@@ -21,6 +21,7 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
   const router = useRouter();
   const dispatch = useAppDispatch();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const { canDeleteFileType } = useAccessRules();
   const canDelete = canDeleteFileType(fileType);
 
   const handleDeleteClick = () => {

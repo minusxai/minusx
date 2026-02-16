@@ -3,6 +3,7 @@ import path from 'path';
 import { FileType, UserRole } from '@/lib/types';
 import { Mode } from '@/lib/mode/mode-types';
 import { resolvePath } from '@/lib/mode/path-resolver';
+import type { AccessRulesOverride } from '@/lib/branding/whitelabel';
 
 // Base rule type for extensibility
 interface AccessRule {
@@ -99,18 +100,39 @@ export function loadAccessRules(): RulesConfig {
 }
 
 /**
- * Check if a user can access a specific file type
- * @param role - User's role
- * @param fileType - The file type to check
- * @returns true if user can access the file type
+ * Get effective file type access rule for a role, applying config-based overrides.
+ * Overrides replace individual fields (allowedTypes, createTypes, viewTypes) per role.
+ * If no override exists for a role/field, the rules.json default is used.
  */
-export function canAccessFileType(role: UserRole, fileType: FileType): boolean {
+function getEffectiveRule(role: UserRole, overrides?: AccessRulesOverride): FileTypeAccessRule | undefined {
   const config = loadAccessRules();
 
-  // Find the fileTypeAccess rule for this role
   const rule = config.rules.find(
     (r): r is FileTypeAccessRule => r.type === 'fileTypeAccess' && (r as FileTypeAccessRule).role === role
   ) as FileTypeAccessRule | undefined;
+
+  if (!rule || !overrides?.[role]) {
+    return rule;
+  }
+
+  const roleOverride = overrides[role];
+  return {
+    ...rule,
+    ...(roleOverride.allowedTypes !== undefined && { allowedTypes: roleOverride.allowedTypes }),
+    ...(roleOverride.createTypes !== undefined && { createTypes: roleOverride.createTypes }),
+    ...(roleOverride.viewTypes !== undefined && { viewTypes: roleOverride.viewTypes }),
+  };
+}
+
+/**
+ * Check if a user can access a specific file type
+ * @param role - User's role
+ * @param fileType - The file type to check
+ * @param overrides - Optional per-company access rules overrides
+ * @returns true if user can access the file type
+ */
+export function canAccessFileType(role: UserRole, fileType: FileType, overrides?: AccessRulesOverride): boolean {
+  const rule = getEffectiveRule(role, overrides);
 
   if (!rule) {
     console.log(`[Access Rules] No rule found for role: ${role}`);
@@ -130,15 +152,11 @@ export function canAccessFileType(role: UserRole, fileType: FileType): boolean {
  * Uses viewTypes instead of allowedTypes for UI filtering
  * @param role - User's role
  * @param fileType - The file type to check
+ * @param overrides - Optional per-company access rules overrides
  * @returns true if user can view the file type in UI
  */
-export function canViewFileType(role: UserRole, fileType: FileType): boolean {
-  const config = loadAccessRules();
-
-  // Find the fileTypeAccess rule for this role
-  const rule = config.rules.find(
-    (r): r is FileTypeAccessRule => r.type === 'fileTypeAccess' && (r as FileTypeAccessRule).role === role
-  ) as FileTypeAccessRule | undefined;
+export function canViewFileType(role: UserRole, fileType: FileType, overrides?: AccessRulesOverride): boolean {
+  const rule = getEffectiveRule(role, overrides);
 
   if (!rule) {
     console.log(`[Access Rules] No rule found for role: ${role}`);
@@ -236,13 +254,10 @@ export function validateFileLocation(type: FileType, path: string, mode: Mode): 
 /**
  * Check if a file type should show in the Create menu for a role
  * This is purely for UI filtering - API can still create types not in this list
+ * @param overrides - Optional per-company access rules overrides
  */
-export function canShowInCreateMenu(role: UserRole, type: FileType): boolean {
-  const config = loadAccessRules();
-
-  const rule = config.rules.find(
-    (r): r is FileTypeAccessRule => r.type === 'fileTypeAccess' && (r as FileTypeAccessRule).role === role
-  ) as FileTypeAccessRule | undefined;
+export function canShowInCreateMenu(role: UserRole, type: FileType, overrides?: AccessRulesOverride): boolean {
+  const rule = getEffectiveRule(role, overrides);
 
   if (!rule) return false;
   if (!rule.createTypes) return false;
