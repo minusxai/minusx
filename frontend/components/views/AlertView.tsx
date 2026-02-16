@@ -4,7 +4,7 @@ import { Box, Text, VStack, HStack, Input, Button, Flex, Badge } from '@chakra-u
 import { AlertContent, AlertRunContent, AlertSelector, AlertFunction, ComparisonOperator } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import DocumentHeader from '../DocumentHeader';
-import { LuPlay, LuClock, LuBell, LuGripVertical, LuHistory, LuSettings, LuColumns3 } from 'react-icons/lu';
+import { LuPlay, LuClock, LuBell, LuGripVertical, LuHistory, LuSettings, LuColumns3, LuScanSearch } from 'react-icons/lu';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { useAppSelector } from '@/store/hooks';
 import { createListCollection } from '@chakra-ui/react';
@@ -339,7 +339,7 @@ export default function AlertView({
               >
                 <Box position="absolute" left={0} top={0} bottom={0} width="3px" bg="accent.primary" borderLeftRadius="md" />
                 <HStack mb={2} gap={1.5}>
-                  <LuBell size={14} color="var(--chakra-colors-accent-primary)" />
+                  <LuScanSearch size={14} color="var(--chakra-colors-accent-primary)" />
                   <Text fontWeight="700" fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Source Question</Text>
                 </HStack>
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Text, VStack, HStack, Input, Button, Textarea, Flex, Separator, Badge, IconButton } from '@chakra-ui/react';
+import { Box, Text, VStack, HStack, Input, Button, Textarea, Flex, Badge, IconButton } from '@chakra-ui/react';
 import { ReportContent, ReportReference, ReportRunContent } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import DocumentHeader from '../DocumentHeader';
@@ -294,16 +294,25 @@ export default function ReportView({
             border={!useCompactLayout ? '1px solid' : undefined}
             borderColor="border.muted"
           >
-            <VStack gap={4} align="stretch" p={4}>
-              {/* Schedule Section - Compact single line */}
-              <Box>
-                <HStack mb={2}>
-                  <LuClock size={16} />
-                  <Text fontWeight="600" fontSize="sm">Schedule</Text>
+            <VStack gap={3} align="stretch" p={4}>
+              {/* Schedule Card */}
+              <Box
+                position="relative"
+                bg="bg.muted"
+                borderRadius="md"
+                border="1px solid"
+                borderColor="border.muted"
+                p={3}
+                pl={5}
+                overflow="hidden"
+              >
+                <Box position="absolute" left={0} top={0} bottom={0} width="3px" bg="accent.teal" borderLeftRadius="md" />
+                <HStack mb={2} gap={1.5}>
+                  <LuClock size={14} color="var(--chakra-colors-accent-teal)" />
+                  <Text fontWeight="700" fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Schedule</Text>
                 </HStack>
 
                 <HStack gap={2}>
-                  {/* Cron Preset */}
                   <Box flex={2}>
                     <SelectRoot
                       collection={cronCollection}
@@ -314,7 +323,7 @@ export default function ReportView({
                       disabled={!editMode}
                       size="sm"
                     >
-                      <SelectTrigger>
+                      <SelectTrigger bg="bg.surface">
                         <SelectValueText placeholder="Select schedule" />
                       </SelectTrigger>
                       <SelectPositioner>
@@ -329,7 +338,6 @@ export default function ReportView({
                     </SelectRoot>
                   </Box>
 
-                  {/* Custom Cron */}
                   <Box flex={1}>
                     <Input
                       value={report.schedule?.cron || ''}
@@ -341,10 +349,10 @@ export default function ReportView({
                       size="sm"
                       fontFamily="mono"
                       fontSize="xs"
+                      bg="bg.surface"
                     />
                   </Box>
 
-                  {/* Timezone */}
                   <Box flex={1}>
                     <SelectRoot
                       collection={timezoneCollection}
@@ -355,7 +363,7 @@ export default function ReportView({
                       disabled={!editMode}
                       size="sm"
                     >
-                      <SelectTrigger>
+                      <SelectTrigger bg="bg.surface">
                         <SelectValueText placeholder="TZ" />
                       </SelectTrigger>
                       <SelectPositioner>
@@ -372,14 +380,22 @@ export default function ReportView({
                 </HStack>
               </Box>
 
-              <Separator />
-
-              {/* Analysis Section */}
-              <Box>
+              {/* Analysis Card */}
+              <Box
+                position="relative"
+                bg="bg.muted"
+                borderRadius="md"
+                border="1px solid"
+                borderColor="border.muted"
+                p={3}
+                pl={5}
+                overflow="hidden"
+              >
+                <Box position="absolute" left={0} top={0} bottom={0} width="3px" bg="accent.secondary" borderLeftRadius="md" />
                 <HStack mb={3} justify="space-between">
-                  <HStack>
-                    <LuListChecks size={16} />
-                    <Text fontWeight="600" fontSize="sm">Analysis</Text>
+                  <HStack gap={1.5}>
+                    <LuListChecks size={14} color="var(--chakra-colors-accent-secondary)" />
+                    <Text fontWeight="700" fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Analysis</Text>
                   </HStack>
                   {editMode && (
                     <Button size="xs" variant="ghost" onClick={addReference}>
@@ -391,7 +407,6 @@ export default function ReportView({
 
                 <VStack align="stretch" gap={2}>
                   {(report.references || []).map((q, index) => {
-                    // Get the referenced file name and type metadata
                     const referencedFile = files[q.reference.id];
                     const referenceName = referencedFile?.name || 'Select item...';
                     const typeMetadata = FILE_TYPE_METADATA[q.reference.type];
@@ -402,11 +417,12 @@ export default function ReportView({
                         key={index}
                         position="relative"
                         borderRadius="md"
-                        bg="bg.muted"
-                        _hover={{ bg: editMode ? 'bg.subtle' : 'bg.muted' }}
+                        bg="bg.surface"
+                        border="1px solid"
+                        borderColor="border.muted"
+                        _hover={{ bg: editMode ? 'bg.subtle' : 'bg.surface' }}
                         transition="background 0.15s ease"
                       >
-                        {/* Left accent border */}
                         <Box
                           position="absolute"
                           left={0}
@@ -418,7 +434,6 @@ export default function ReportView({
                         />
 
                         <Box pl={4} pr={3} py={3}>
-                          {/* Header row: Name + Delete */}
                           <HStack justify="space-between" align="flex-start" mb={editMode ? 2 : (q.prompt ? 2 : 0)}>
                             <HStack gap={2} flex={1} align="center">
                               <Box color={typeMetadata.color} flexShrink={0}>
@@ -426,7 +441,6 @@ export default function ReportView({
                               </Box>
 
                               {editMode ? (
-                                /* Edit mode: Compact selectors */
                                 <HStack gap={2} flex={1}>
                                   <SelectRoot
                                     collection={referenceTypeCollection}
@@ -447,7 +461,6 @@ export default function ReportView({
                                       border="1px solid"
                                       borderColor="border.default"
                                       minW="100px"
-                                    //   maxW="100px"
                                     >
                                       <SelectValueText />
                                     </SelectTrigger>
@@ -490,7 +503,6 @@ export default function ReportView({
                                   </SelectRoot>
                                 </HStack>
                               ) : (
-                                /* View mode: Display name prominently */
                                 <Text fontSize="sm" fontWeight="500" color="fg.default">
                                   {referenceName}
                                 </Text>
@@ -511,7 +523,6 @@ export default function ReportView({
                             )}
                           </HStack>
 
-                          {/* Prompt */}
                           {editMode ? (
                             <Textarea
                               value={q.prompt}
@@ -544,7 +555,7 @@ export default function ReportView({
                     <Box
                       py={8}
                       px={4}
-                      bg="bg.muted"
+                      bg="bg.surface"
                       borderRadius="md"
                       textAlign="center"
                       border="1px dashed"
@@ -564,17 +575,24 @@ export default function ReportView({
                 </VStack>
               </Box>
 
-              <Separator />
-
-              {/* Report Instructions Section */}
-              <Box>
-                <HStack mb={2}>
-                  <LuFileText size={16} />
-                  <Text fontWeight="600" fontSize="sm">Report Instructions</Text>
+              {/* Report Instructions Card */}
+              <Box
+                position="relative"
+                bg="bg.muted"
+                borderRadius="md"
+                border="1px solid"
+                borderColor="border.muted"
+                p={3}
+                pl={5}
+                overflow="hidden"
+              >
+                <Box position="absolute" left={0} top={0} bottom={0} width="3px" bg="accent.warning" borderLeftRadius="md" />
+                <HStack mb={1} gap={1.5}>
+                  <LuFileText size={14} color="var(--chakra-colors-accent-warning)" />
+                  <Text fontWeight="700" fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Report Instructions</Text>
                 </HStack>
-
-                <Text fontSize="xs" color="fg.muted" mb={2}>
-                  Instructions for synthesizing the individual analyses into the final report.
+                <Text fontSize="xs" color="fg.subtle" mb={2}>
+                  How to synthesize individual analyses into the final report.
                 </Text>
 
                 <Textarea
@@ -584,16 +602,25 @@ export default function ReportView({
                   disabled={!editMode}
                   rows={3}
                   size="sm"
+                  bg="bg.surface"
                 />
               </Box>
 
-              <Separator />
-
-              {/* Delivery Section */}
-              <Box>
-                <HStack mb={2}>
-                  <LuMail size={16} />
-                  <Text fontWeight="600" fontSize="sm">Delivery</Text>
+              {/* Delivery Card */}
+              <Box
+                position="relative"
+                bg="bg.muted"
+                borderRadius="md"
+                border="1px solid"
+                borderColor="border.muted"
+                p={3}
+                pl={5}
+                overflow="hidden"
+              >
+                <Box position="absolute" left={0} top={0} bottom={0} width="3px" bg="accent.primary" borderLeftRadius="md" />
+                <HStack mb={2} gap={1.5}>
+                  <LuMail size={14} color="var(--chakra-colors-accent-primary)" />
+                  <Text fontWeight="700" fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Delivery</Text>
                 </HStack>
 
                 <Input
@@ -604,6 +631,7 @@ export default function ReportView({
                   placeholder="user@example.com, team@example.com"
                   disabled={!editMode}
                   size="sm"
+                  bg="bg.surface"
                 />
               </Box>
             </VStack>
