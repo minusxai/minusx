@@ -93,7 +93,8 @@ export function useNewFile(type: FileType, options?: NewFileOptions): number {
           references: [],
           content: template.content,
           created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          company_id: user?.companyId ?? 0
         };
 
         dispatch(setFile({ file: virtualFile, references: [] }));

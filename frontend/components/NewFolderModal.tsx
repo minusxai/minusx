@@ -5,7 +5,7 @@ import { Dialog, Input, Button, VStack, HStack, Text, Box } from '@chakra-ui/rea
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { SelectRoot, SelectTrigger, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { createListCollection } from '@chakra-ui/react';
-import { useAppDispatch } from '@/store/hooks';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { addFile } from '@/store/filesSlice';
 import type { DbFile } from '@/lib/types';
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
@@ -18,6 +18,7 @@ interface NewFolderModalProps {
 }
 
 export default function NewFolderModal({ isOpen, onClose, defaultParentPath = '/' }: NewFolderModalProps) {
+  const companyId = useAppSelector((state) => state.auth.user?.companyId ?? 0);
   const router = useRouter();
   const dispatch = useAppDispatch();
   const [folderName, setFolderName] = useState('');
@@ -95,7 +96,8 @@ export default function NewFolderModal({ isOpen, onClose, defaultParentPath = '/
           description: ''
         },
         created_at: now,
-        updated_at: now
+        updated_at: now,
+        company_id: companyId
       };
 
       // Immediately add to Redux cache

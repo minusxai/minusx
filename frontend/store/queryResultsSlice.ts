@@ -12,6 +12,7 @@
  */
 import { createSlice, PayloadAction, createSelector } from '@reduxjs/toolkit';
 import type { RootState } from './store';
+import { getQueryHash } from '@/lib/utils/query-hash';
 
 /**
  * Query result stored in Redux
@@ -38,14 +39,8 @@ const initialState: QueryResultsState = {
   results: {}
 };
 
-/**
- * Generate hash key for query lookup
- * Simple string concatenation with delimiter
- */
-export function getQueryHash(query: string, params: Record<string, any>, database: string): string {
-  const paramStr = JSON.stringify(params);
-  return `${database}|||${query}|||${paramStr}`;
-}
+// Re-export getQueryHash for convenience
+export { getQueryHash };
 
 const queryResultsSlice = createSlice({
   name: 'queryResults',

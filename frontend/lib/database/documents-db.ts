@@ -295,6 +295,95 @@ export class DocumentDB {
   }
 
   /**
+   * Update multiple files in a single transaction with a single optimized query
+   * @param files - Array of files to update with their complete data
+   * @param company_id - The company ID for tenant isolation (REQUIRED for security)
+   * @returns Array of successfully updated file IDs
+   */
+  static async updateMultiple(
+    files: Array<{
+      id: number;
+      name: string;
+      path: string;
+      content: BaseFileContent;
+      references: number[];
+    }>,
+    company_id: number
+  ): Promise<number[]> {
+    if (files.length === 0) return [];
+
+    const db = await getAdapter();
+    const dbType = getDbType();
+
+    // Use optimized single-query approach with VALUES clause
+    return await db.transaction(async (tx) => {
+      if (dbType === 'postgres') {
+        // PostgreSQL: UPDATE FROM VALUES (single query bulk update)
+        const values = files.map((file, idx) => {
+          const offset = idx * 5;
+          return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5})`;
+        }).join(', ');
+
+        const params: any[] = [];
+        files.forEach(file => {
+          params.push(
+            file.id,
+            file.name,
+            file.path,
+            JSON.stringify(file.content),
+            JSON.stringify(file.references)
+          );
+        });
+
+        const result = await tx.query<{ id: number }>(`
+          UPDATE files
+          SET
+            name = v.name,
+            path = v.path,
+            content = v.content,
+            file_references = v.file_references,
+            updated_at = CURRENT_TIMESTAMP
+          FROM (VALUES ${values}) AS v(id, name, path, content, file_references)
+          WHERE files.id = v.id::int AND files.company_id = $${params.length + 1}
+          RETURNING files.id
+        `, [...params, company_id]);
+
+        return result.rows.map(r => r.id);
+      } else {
+        // SQLite: Use CASE statements for bulk update
+        const ids = files.map(f => f.id);
+        const nameCases = files.map((f, idx) => `WHEN ${f.id} THEN $${idx + 1}`).join(' ');
+        const pathCases = files.map((f, idx) => `WHEN ${f.id} THEN $${files.length + idx + 1}`).join(' ');
+        const contentCases = files.map((f, idx) => `WHEN ${f.id} THEN $${2 * files.length + idx + 1}`).join(' ');
+        const refCases = files.map((f, idx) => `WHEN ${f.id} THEN $${3 * files.length + idx + 1}`).join(' ');
+
+        const params: any[] = [
+          ...files.map(f => f.name),
+          ...files.map(f => f.path),
+          ...files.map(f => JSON.stringify(f.content)),
+          ...files.map(f => JSON.stringify(f.references)),
+          ...ids,
+          company_id
+        ];
+
+        await tx.query(`
+          UPDATE files
+          SET
+            name = CASE id ${nameCases} END,
+            path = CASE id ${pathCases} END,
+            content = CASE id ${contentCases} END,
+            file_references = CASE id ${refCases} END,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id IN (${ids.map((_, idx) => `$${4 * files.length + idx + 1}`).join(', ')})
+            AND company_id = $${params.length}
+        `, params);
+
+        return ids;
+      }
+    });
+  }
+
+  /**
    * Update only file metadata (name and/or path) without modifying content
    * @param id - File ID
    * @param name - New file name

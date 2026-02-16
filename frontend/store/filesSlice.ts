@@ -1,13 +1,15 @@
 import { createSlice, PayloadAction, createSelector } from '@reduxjs/toolkit';
 import type { DbFile, FileType, DocumentContent, AssetReference, QuestionContent, QuestionReference } from '@/lib/types';
+import type { FileInfo } from '@/lib/data/types';
 import type { RootState } from './store';
+import { getQueryHash } from '@/lib/utils/query-hash';
 
 /**
  * FileState: Complete file state including metadata and change tracking
  * Extends DbFile with UI state and change tracking
  * Implements Core Patterns architecture from Phase 1
  */
-export interface FileState extends Omit<DbFile, 'company_id'> {
+export interface FileState extends DbFile {
   // Computed references (IDs of referenced files from content.assets)
   references: number[];
 
@@ -172,15 +174,7 @@ const filesSlice = createSlice({
      * Set FileInfo (metadata without full content)
      * Used by useFolder hook for folder listings
      */
-    setFileInfo(state, action: PayloadAction<Array<{
-      id: number;
-      name: string;
-      path: string;
-      type: FileType;
-      references: number[];
-      created_at: string;
-      updated_at: string;
-    }>>) {
+    setFileInfo(state, action: PayloadAction<FileInfo[]>) {
       action.payload.forEach(fileInfo => {
         // If file already exists, update metadata only
         if (state.files[fileInfo.id]) {
@@ -231,6 +225,7 @@ const filesSlice = createSlice({
           content: {} as any,
           created_at: '',
           updated_at: '',
+          company_id: 0,  // Placeholder value
           loading,
           saving: false,
           updatedAt: 0,
@@ -248,10 +243,35 @@ const filesSlice = createSlice({
     setEdit(state, action: PayloadAction<{ fileId: FileId; edits: Partial<DbFile['content']> }>) {
       const { fileId, edits } = action.payload;
       if (state.files[fileId]) {
-        state.files[fileId].persistableChanges = {
+        // Merge edits with existing persistableChanges
+        const newPersistableChanges = {
           ...state.files[fileId].persistableChanges,
           ...edits
         };
+
+        // For questions: recompute queryResultId if query/params/database changed
+        if (state.files[fileId].type === 'question' && edits) {
+          const questionEditsKeys = ['query', 'parameters', 'database_name'];
+          const hasQueryChanges = Object.keys(edits).some(key => questionEditsKeys.includes(key));
+
+          if (hasQueryChanges) {
+            // Merge current content with all changes to get complete picture
+            const mergedContent = {
+              ...state.files[fileId].content,
+              ...newPersistableChanges
+            } as QuestionContent;
+
+            const params = (mergedContent.parameters || []).reduce((acc, p) => {
+              acc[p.name] = p.value ?? '';
+              return acc;
+            }, {} as Record<string, any>);
+
+            const queryResultId = getQueryHash(mergedContent.query, params, mergedContent.database_name);
+            (newPersistableChanges as any).queryResultId = queryResultId;
+          }
+        }
+
+        state.files[fileId].persistableChanges = newPersistableChanges;
       }
     },
 
@@ -262,9 +282,22 @@ const filesSlice = createSlice({
     setFullContent(state, action: PayloadAction<{ fileId: FileId; content: DbFile['content'] }>) {
       const { fileId, content } = action.payload;
       if (state.files[fileId]) {
+        let contentToStore = content;
+
+        // For questions: compute and add queryResultId
+        if (state.files[fileId].type === 'question' && content) {
+          const questionContent = content as QuestionContent;
+          const params = (questionContent.parameters || []).reduce((acc, p) => {
+            acc[p.name] = p.value ?? '';
+            return acc;
+          }, {} as Record<string, any>);
+          const queryResultId = getQueryHash(questionContent.query, params, questionContent.database_name);
+          contentToStore = { ...content, queryResultId } as DbFile['content'];
+        }
+
         // Store the full new content as persistableChanges
         // On save, this replaces file.content entirely
-        state.files[fileId].persistableChanges = content;
+        state.files[fileId].persistableChanges = contentToStore;
       }
     },
 
@@ -365,15 +398,7 @@ const filesSlice = createSlice({
      */
     setFolderInfo(state, action: PayloadAction<{
       path: string;
-      fileInfos: Array<{
-        id: number;
-        name: string;
-        path: string;
-        type: FileType;
-        references: number[];
-        created_at: string;
-        updated_at: string;
-      }>;
+      fileInfos: FileInfo[];
     }>) {
       const { path, fileInfos } = action.payload;
 
@@ -399,6 +424,7 @@ const filesSlice = createSlice({
           content: { description: '' },  // Empty folder content (name is in file metadata)
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
+          company_id: 0,  // Synthetic folder placeholder
           loading: false,
           saving: false,
           updatedAt: Date.now(),

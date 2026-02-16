@@ -363,6 +363,7 @@ export interface QuestionContent extends BaseFileContent {
   parameters?: QuestionParameter[];
   database_name: string;  // Database connection name, or empty string if no database available
   references?: QuestionReference[];  // Composed questions (single-level only)
+  queryResultId?: string;  // Hash of query+params+database for result lookup (saved questions only)
 }
 
 export interface DocumentContent extends BaseFileContent {
@@ -509,7 +510,7 @@ export interface AlertRunContent extends BaseFileContent {
  */
 export interface DbFile extends BaseFileMetadata {
   content: QuestionContent | DocumentContent | ContextContent | ConnectionContent | ConnectorContent | UsersContent | FolderContent | ConfigContent | SessionRecordingFileContent | StylesContent | ReportContent | ReportRunContent | AlertContent | AlertRunContent | null;
-  company_id?: number;     // Always present in DB queries (NOT NULL column), optional for type flexibility
+  company_id: number;     // NOT NULL column in DB
 }
 
 /**
