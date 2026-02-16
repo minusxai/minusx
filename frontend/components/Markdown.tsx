@@ -5,6 +5,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Link from 'next/link';
 import { LuChartColumnIncreasing, LuFilePlus2, LuRocket } from 'react-icons/lu';
+import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
+import { FileType } from '@/lib/types';
 import { ReactNode, useMemo, useState } from 'react';
 import { useAppSelector } from '@/store/hooks';
 import { ReportQueryResult, QuestionContent } from '@/lib/types';
@@ -204,10 +206,10 @@ export default function Markdown({
         if (!href) return false;
         return href === '/explore';
     };
-  // Check if a link is a new question/dashboard page link (/new/question or /new/dashboard)
+  // Check if a link is a new content page link (/new/{type})
   const isNewContentPageLink = (href: string | undefined): boolean => {
     if (!href) return false;
-    return href === '/new/question' || href === '/new/dashboard';
+    return /^\/new\/[^/]+$/.test(href);
   };
 
   // Custom components for ReactMarkdown
@@ -233,15 +235,17 @@ export default function Markdown({
         );
       }
       if (isNewContentPageLink(href)) {
-        const isQuestion = href === '/new/question';
+        const fileType = href!.split('/').pop() as FileType;
+        const metadata = getFileTypeMetadata(fileType);
+        const Icon = metadata?.icon ?? LuFilePlus2;
         return (
           <LinkButton
             href={withMode(href)}
-            icon={isQuestion ? <LuFilePlus2 size={14} /> : <LuRocket size={14} />}
+            icon={<Icon size={14} />}
             variant={variant}
-            bg="accent.danger/90"
+            bg={metadata?.color ?? 'accent.danger/90'}
           >
-            {isQuestion ? 'New Question Page' : 'New Dashboard Page'}
+            New {metadata?.label ?? fileType}
           </LinkButton>
         );
       }
