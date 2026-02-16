@@ -11,7 +11,7 @@ import {
 } from '@/store/filesSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { getFiles } from '@/lib/data/files';
-import { canViewFileType } from '@/lib/auth/access-rules.client';
+import { useAccessRules } from '@/lib/auth/access-rules.client';
 import { isHiddenSystemPath } from '@/lib/mode/path-resolver';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';
 import type { FileState } from '@/store/filesSlice';
@@ -86,6 +86,7 @@ export function useFolder(path: string, options: UseFolderOptions = {}): UseFold
 
   // Get effective user for permission filtering
   const effectiveUser = useAppSelector(selectEffectiveUser);
+  const { canViewFileType } = useAccessRules();
 
   // Get child files from folder.references
   const childIds = folder?.references || [];
@@ -95,7 +96,7 @@ export function useFolder(path: string, options: UseFolderOptions = {}): UseFold
   const mode = effectiveUser?.mode || DEFAULT_MODE;
   const files = useMemo(() => {
     return allFiles.filter(file => {
-      // Filter by role-based type permissions
+      // Filter by role-based type permissions (with config overrides)
       if (!canViewFileType(effectiveUser?.role || 'viewer', file.type)) {
         return false;
       }
@@ -105,7 +106,7 @@ export function useFolder(path: string, options: UseFolderOptions = {}): UseFold
       }
       return true;
     });
-  }, [allFiles, effectiveUser?.role, mode]);
+  }, [allFiles, effectiveUser?.role, mode, canViewFileType]);
 
   // Effect: Load folder if not fresh (or if forceLoad is true)
   useEffect(() => {

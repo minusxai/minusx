@@ -20,6 +20,8 @@ import { extractReferenceIds, extractAllReferenceIds } from './helpers/reference
 import { AccessPermissionError, FileNotFoundError } from '@/lib/errors';
 import { PROTECTED_FILE_PATHS } from '@/lib/constants';
 import { canAccessFileType, canCreateFileType, validateFileLocation } from '@/lib/auth/access-rules';
+import type { AccessRulesOverride } from '@/lib/branding/whitelabel';
+import { getConfigsByCompanyId } from './configs.server';
 import { resolvePath, resolveHomeFolderSync, isFileTypeAllowedInPath, resolveHomeFolder } from '@/lib/mode/path-resolver';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { getLoader, LoaderOptions } from './loaders';
@@ -36,6 +38,18 @@ import { getQueryHash } from '@/lib/utils/query-hash';
  * and in getEffectiveUserFromToken()
  */
 class FilesDataLayerServer implements IFilesDataLayer {
+  /**
+   * Load access rules overrides from company config (cached per-company by configs layer)
+   */
+  private async _getOverrides(user: EffectiveUser): Promise<AccessRulesOverride | undefined> {
+    try {
+      const { config } = await getConfigsByCompanyId(user.companyId, user.mode);
+      return config.accessRules;
+    } catch {
+      return undefined;
+    }
+  }
+
   async loadFile(id: number, user: EffectiveUser, options?: LoaderOptions): Promise<LoadFileResult> {
     const dbStart = Date.now();
     const file = await DocumentDB.getById(id, user.companyId);
@@ -44,6 +58,9 @@ class FilesDataLayerServer implements IFilesDataLayer {
     if (!file) {
       throw new FileNotFoundError(id);
     }
+
+    // Load config-based access rule overrides once per request
+    const overrides = await this._getOverrides(user);
 
     // Check file access (unified: type + mode + path) - Phase 4
     console.log(`[FILES DataLayer] Checking access for user:`, {
@@ -55,7 +72,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
       fileId: id
     });
 
-    if (!canAccessFile(file, user)) {
+    if (!canAccessFile(file, user, overrides)) {
       throw new AccessPermissionError('You do not have permission to access this file');
     }
 
@@ -67,7 +84,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     console.log(`[FILES DataLayer] Loading ${refIds.length} references took ${Date.now() - refStart}ms`);
 
     // Filter references by unified permission check (Phase 4)
-    const filteredReferences = references.filter(ref => canAccessFile(ref, user));
+    const filteredReferences = references.filter(ref => canAccessFile(ref, user, overrides));
 
     // Apply custom loaders AFTER permission checks (Phase 3)
     const loaderStart = Date.now();
@@ -90,9 +107,10 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
   async loadFiles(ids: number[], user: EffectiveUser, options?: LoaderOptions): Promise<LoadFilesResult> {
     const files = await DocumentDB.getByIds(ids, user.companyId);
+    const overrides = await this._getOverrides(user);
 
     // Filter by unified permission check (Phase 4)
-    const filteredFiles = files.filter(f => canAccessFile(f, user));
+    const filteredFiles = files.filter(f => canAccessFile(f, user, overrides));
 
     const uniqueRefIds = await extractAllReferenceIds(filteredFiles);
     const references = uniqueRefIds.length > 0
@@ -100,7 +118,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
       : [];
 
     // Filter references by unified permission check (Phase 4)
-    const filteredReferences = references.filter(ref => canAccessFile(ref, user));
+    const filteredReferences = references.filter(ref => canAccessFile(ref, user, overrides));
 
     // Apply loaders AFTER permission checks (Phase 3)
     const transformedFiles = await Promise.all(
@@ -136,8 +154,10 @@ class FilesDataLayerServer implements IFilesDataLayer {
       false  // includeContent: false - 50-80% faster!
     );
 
+    const overrides = await this._getOverrides(user);
+
     // Apply unified permission filter (Phase 4)
-    files = files.filter(f => canAccessFile(f, user));
+    files = files.filter(f => canAccessFile(f, user, overrides));
 
     // Apply loaders AFTER permission checks (Phase 3)
     files = await Promise.all(
@@ -182,9 +202,10 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
   async createFile(input: CreateFileInput, user: EffectiveUser): Promise<CreateFileResult> {
     const { name, path, type, content, references = [], options } = input;
+    const overrides = await this._getOverrides(user);
 
     // Check file type access
-    if (!canAccessFileType(user.role, type)) {
+    if (!canAccessFileType(user.role, type, overrides)) {
       throw new AccessPermissionError(`You do not have permission to create files of type: ${type}`);
     }
 
@@ -321,8 +342,10 @@ class FilesDataLayerServer implements IFilesDataLayer {
       throw new FileNotFoundError(id);
     }
 
+    const overrides = await this._getOverrides(user);
+
     // Check file access (unified: type + mode + path) - Phase 4
-    if (!canAccessFile(existingFile, user)) {
+    if (!canAccessFile(existingFile, user, overrides)) {
       throw new AccessPermissionError('You do not have permission to modify this file');
     }
 
@@ -400,8 +423,10 @@ class FilesDataLayerServer implements IFilesDataLayer {
       throw new FileNotFoundError(`File not found at path: ${path}`);
     }
 
+    const overrides = await this._getOverrides(user);
+
     // Check file access (unified: type + mode + path) - Phase 4
-    if (!canAccessFile(file, user)) {
+    if (!canAccessFile(file, user, overrides)) {
       throw new AccessPermissionError('You do not have permission to access this file');
     }
 

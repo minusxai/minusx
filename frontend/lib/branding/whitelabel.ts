@@ -3,6 +3,25 @@
  * Default configuration with database override support
  */
 
+import type { FileType } from '@/lib/ui/file-metadata';
+import type { UserRole } from '@/lib/types';
+
+/**
+ * Per-role file type access override
+ * Each field, if specified, completely replaces the default from rules.json
+ */
+export interface FileTypeAccessOverride {
+  allowedTypes?: '*' | FileType[];
+  createTypes?: '*' | FileType[];
+  viewTypes?: '*' | FileType[];
+}
+
+/**
+ * Role-keyed map of file type access overrides
+ * Only specified roles/fields override the defaults from rules.json
+ */
+export type AccessRulesOverride = Partial<Record<UserRole, FileTypeAccessOverride>>;
+
 export interface CompanyBranding {
   displayName: string;  // Company display name
   agentName: string;    // Agent name
@@ -33,6 +52,7 @@ export interface CompanyConfig {
   };
   city?: string;  // Optional city identifier for agent context
   thinkingPhrases?: string[];  // Optional custom thinking phrases for AI indicator
+  accessRules?: AccessRulesOverride;  // Per-company file type access overrides (overrides rules.json)
   // Future: theme, features, etc.
 }
 
@@ -96,7 +116,8 @@ export function mergeConfig(
     // Override thinkingPhrases only if present and non-empty array
     thinkingPhrases: (overrides.thinkingPhrases && overrides.thinkingPhrases.length > 0)
       ? overrides.thinkingPhrases
-      : defaults.thinkingPhrases
+      : defaults.thinkingPhrases,
+    accessRules: overrides.accessRules ?? defaults.accessRules,
     // Future: merge other config sections
   };
 }

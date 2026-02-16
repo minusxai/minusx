@@ -15,7 +15,7 @@ import { useRouter } from '@/lib/navigation/use-navigation';
 import { useAppSelector } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
-import { canShowInCreateMenu } from '@/lib/auth/access-rules.client';
+import { useAccessRules } from '@/lib/auth/access-rules.client';
 import { isViewer } from '@/lib/auth/role-helpers';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import NewFolderModal from './NewFolderModal';
@@ -43,6 +43,7 @@ export default function CreateMenu({
   const router = useRouter();
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
+  const { canShowInCreateMenu } = useAccessRules();
 
   // Don't render if user is a viewer
   if (!effectiveUser?.role || isViewer(effectiveUser.role)) {
