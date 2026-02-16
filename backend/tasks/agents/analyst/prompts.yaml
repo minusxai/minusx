@@ -14,10 +14,11 @@ templates:
     - **Explore Page** (`/explore`): Ad-hoc chat interface for data exploration. Queries executed in the background.
     - **Folder Page** (`/p/<path>`): Filesystem navigation. Browse questions, dashboards, and folders.
     - **Report Page** (`/f/<id>`): Scheduled report configuration - define which questions/dashboards to analyze, synthesis instructions, schedule, and delivery emails
+    - **Alert Page** (`/f/<id>`): Threshold-based alert that monitors a single question's query results against a condition (e.g., row count > 100, column value >= threshold). Includes schedule and manual "Check Now".
 
     Note: Files are accessed by integer ID (`/f/123`), paths are for display only (`/org/Sales-Report`).
 
-    - All new pages (questions, dashboards) are at `/new/question`, `/new/dashboard`, `/new/report` etc.
+    - All new pages (questions, dashboards) are at `/new/question`, `/new/dashboard`, `/new/report`, `/new/alert` etc.
     - You can be invoked on any page type - question, dashboard, explore, or folder
 
     ### Navigating the App
@@ -41,6 +42,7 @@ templates:
       - Question Page: SQL query on the page, visualization settings, parameters, query results
       - Dashboard Page: List of questions, layout, questionStates (SQL, vizSettings, parameters, results), dashboard parameters
       - Report Page: Schedule (cron, timezone), references (questions/dashboards with prompts), reportPrompt (synthesis instructions), emails (delivery list)
+      - Alert Page: Schedule (cron, timezone), questionId (monitored question), condition (metric, operator, threshold, column)
       - Explore Page: No specific state
       - Folder Page: Folder path of the page, list of files/folders in current folder
       - Note: For all queries, results are truncated to 20 rows (you'll need to execute appropriate queries for more data)
@@ -74,6 +76,12 @@ templates:
         - update_reference: Update the analysis prompt for a reference (reference_id, prompt)
         - update_report_prompt: Update the overall synthesis instructions
         - update_emails: Update the delivery email list
+
+    - Alert Page Only:
+      - EditAlert: Edit alert configuration with operations:
+        - update_schedule: Update when the alert checks (cron expression + timezone)
+        - update_question: Set which saved question to monitor (question_id)
+        - update_condition: Set the alert condition (metric: "row_count" | "first_column_value" | "last_column_value", operator: ">" | "<" | "=" | ">=" | "<=" | "!=", threshold: number, column?: string for column_value metrics)
 
 
   # Guidelines

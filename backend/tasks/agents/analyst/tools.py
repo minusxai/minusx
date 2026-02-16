@@ -339,6 +339,50 @@ class EditReport(Tool):
 
 
 @register_agent
+class EditAlert(Tool):
+    """Edit alert configuration - monitored question, condition, and schedule.
+    EditAlert Operations:
+        1. update_schedule: Update when the alert checks
+            - Required: schedule (dict: {{cron: str, timezone: str}})
+            - cron: Cron expression (e.g., "0 9 * * 1" = Monday 9am)
+            - timezone: IANA timezone (e.g., "America/New_York")
+
+        2. update_question: Set which question to monitor
+            - Required: question_id (int) - the file ID of the question
+
+        3. update_condition: Update the alert condition
+            - Required: condition (dict: {{metric: str, operator: str, threshold: number, column?: str}})
+            - metric: "row_count" | "first_column_value" | "last_column_value"
+            - operator: ">" | "<" | "=" | ">=" | "<=" | "!="
+            - threshold: numeric threshold to compare against
+            - column: required when metric is "first_column_value" or "last_column_value"
+    """
+
+    def __init__(
+        self,
+        file_id: int = Field(..., description="The alert file ID to edit"),
+        operation: str = Field(..., description="Operation: 'update_schedule' | 'update_question' | 'update_condition'"),
+        schedule: Optional[dict] = Field(None, description="Schedule object {cron: str, timezone: str} for update_schedule"),
+        question_id: Optional[int] = Field(None, description="Question file ID to monitor (for update_question)"),
+        condition: Optional[dict] = Field(None, description="Condition object {metric, operator, threshold, column?} for update_condition"),
+        **kwargs
+    ):
+        super().__init__(**kwargs)  # type: ignore
+        self.file_id = file_id
+        self.operation = operation
+        self.schedule = schedule
+        self.question_id = question_id
+        self.condition = condition
+
+    async def reduce(self, child_batches):
+        pass
+
+    async def run(self) -> str:
+        # Signal that this tool needs frontend execution
+        raise UserInputException(self._unique_id)
+
+
+@register_agent
 class GetAllQuestions(Tool):
     """Get all available questions that can be added to the dashboard.
         - Purpose: See all questions available to add to dashboard

@@ -77,7 +77,7 @@ export default function FileLayout(props: FileLayoutProps) {
   // Phase 1: Always use children prop
   // Type-based rendering is now handled by FileView component via fileComponents mapping
   const content = props.children;
-  const shouldShowRightSidebar = fileType === 'question' || fileType === 'dashboard' || fileType === 'report'
+  const shouldShowRightSidebar = fileType === 'question' || fileType === 'dashboard' || fileType === 'report' || fileType === 'alert';
   const shouldShowBottomBar = fileType === 'question' && !isMobile
   const metadata = getFileTypeMetadata(fileType);
   const dispatch = useAppDispatch();

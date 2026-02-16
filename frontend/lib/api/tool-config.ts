@@ -6,6 +6,7 @@ import ClarifyDisplay from '@/components/explore/tools/ClarifyDisplay';
 import NavigateDisplay from '@/components/explore/tools/NavigateDisplay';
 import EditDashboardDisplay from '@/components/explore/tools/EditDashboardDisplay';
 import EditReportDisplay from '@/components/explore/tools/EditReportDisplay';
+import EditAlertDisplay from '@/components/explore/tools/EditAlertDisplay';
 import { DisplayProps } from '@/lib/types';
 
 // Tool configuration interface
@@ -52,6 +53,9 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
   },
   'EditReport': {
     displayComponent: EditReportDisplay
+  },
+  'EditAlert': {
+    displayComponent: EditAlertDisplay
   }
 };
 
