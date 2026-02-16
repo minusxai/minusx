@@ -160,7 +160,6 @@ export default function AlertContainerV2({
 
   // Check Now handler - executes the referenced question's query and evaluates the condition
   const handleCheckNow = useCallback(async () => {
-    console.log('[Alert] Check Now clicked', { isRunning, fileId, questionId: mergedContent?.questionId, isDirty });
     if (isRunning || !file || typeof fileId !== 'number' || fileId < 0 || !mergedContent) return;
     if (!mergedContent.questionId || mergedContent.questionId <= 0) return;
 
@@ -171,15 +170,12 @@ export default function AlertContainerV2({
     try {
       // 1. Load the referenced question to get SQL and connection
       const loadResult = await FilesAPI.loadFile(mergedContent.questionId);
-      console.log('[Alert] Loaded question file:', loadResult);
-      // loadFile returns { data: DbFile, metadata } via json.data from API
       const questionFile = loadResult?.data || loadResult;
       if (!questionFile || !(questionFile as any).content) {
         throw new Error('Referenced question not found');
       }
 
       const questionContent = (questionFile as any).content as QuestionContent;
-      console.log('[Alert] Question content:', { query: questionContent.query, db: questionContent.database_name });
 
       // 2. Execute the query
       const queryResponse = await fetch('/api/query', {
@@ -198,7 +194,6 @@ export default function AlertContainerV2({
       }
 
       const queryResult = await queryResponse.json();
-      console.log('[Alert] Query result:', { rowCount: queryResult.data?.rows?.length });
       const rows = queryResult.data?.rows || [];
 
       // 3. Extract metric value
@@ -240,15 +235,13 @@ export default function AlertContainerV2({
       const timestamp = new Date(startedAt).toISOString().replace(/[:.]/g, '-');
       const runPath = resolvePath(userMode, `/logs/alerts/${fileId}/${timestamp}`);
 
-      console.log('[Alert] Saving run to:', runPath, 'status:', runContent.status);
-      const saveResult = await FilesAPI.createFile({
+      await FilesAPI.createFile({
         name: timestamp,
         path: runPath,
         type: 'alert_run',
         content: runContent,
         options: { createPath: true }
       });
-      console.log('[Alert] Save result:', saveResult);
 
       // 7. Refresh runs
       await loadRuns(true);
