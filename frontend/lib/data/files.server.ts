@@ -530,7 +530,8 @@ class FilesDataLayerServer implements IFilesDataLayer {
             function: 'count',
             operator: '>',
             threshold: 0
-          }
+          },
+          emails: []
         };
 
         return {

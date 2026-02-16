@@ -484,6 +484,7 @@ export interface AlertContent extends BaseFileContent {
   schedule: AlertSchedule;
   questionId: number;        // Reference to a saved question
   condition: AlertCondition;
+  emails?: string[];         // Delivery email addresses
 }
 
 export interface AlertRunContent extends BaseFileContent {

@@ -850,7 +850,7 @@ function handleUpdateEmails(
 registerFrontendTool('EditAlert', async (args, context) => {
   const { dispatch, state, userInputs } = context;
 
-  let { operation, file_id, schedule, question_id, condition } = args;
+  let { operation, file_id, schedule, question_id, condition, emails } = args;
 
   if (operation === undefined || file_id === undefined || !dispatch) {
     return {
@@ -870,6 +870,7 @@ registerFrontendTool('EditAlert', async (args, context) => {
         'update_schedule': 'update alert schedule',
         'update_question': `set monitored question to #${question_id}`,
         'update_condition': 'update alert condition',
+        'update_emails': 'update delivery emails',
       };
       const description = opDescriptions[operation] || `perform "${operation}"`;
 
@@ -943,6 +944,13 @@ registerFrontendTool('EditAlert', async (args, context) => {
         }
       };
       resultMessage = `Updated condition: ${condition.function}(${condition.selector}${condition.column ? ', ' + condition.column : ''}) ${condition.operator} ${condition.threshold}`;
+      break;
+    case 'update_emails':
+      if (!Array.isArray(emails)) {
+        throw new Error('emails array is required for update_emails');
+      }
+      updates = { emails: emails.map((e: any) => String(e).trim()).filter(Boolean) };
+      resultMessage = `Updated delivery emails: ${updates.emails!.join(', ') || '(none)'}`;
       break;
     default:
       throw new Error(`Unknown operation: ${operation}`);

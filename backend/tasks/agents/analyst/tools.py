@@ -340,7 +340,7 @@ class EditReport(Tool):
 
 @register_agent
 class EditAlert(Tool):
-    """Edit alert configuration - monitored question, condition, and schedule.
+    """Edit alert configuration - monitored question, condition, schedule, and delivery.
     EditAlert Operations:
         1. update_schedule: Update when the alert checks
             - Required: schedule (dict: {{cron: str, timezone: str}})
@@ -365,15 +365,19 @@ class EditAlert(Tool):
             - operator: ">" | "<" | "=" | ">=" | "<=" | "!="
             - threshold: numeric threshold to compare against
             - column: required for all functions except "count"
+
+        4. update_emails: Update the delivery email list
+            - Required: emails (list of str) - email addresses to notify when alert triggers
     """
 
     def __init__(
         self,
         file_id: int = Field(..., description="The alert file ID to edit"),
-        operation: str = Field(..., description="Operation: 'update_schedule' | 'update_question' | 'update_condition'"),
+        operation: str = Field(..., description="Operation: 'update_schedule' | 'update_question' | 'update_condition' | 'update_emails'"),
         schedule: Optional[dict] = Field(None, description="Schedule object {cron: str, timezone: str} for update_schedule"),
         question_id: Optional[int] = Field(None, description="Question file ID to monitor (for update_question)"),
         condition: Optional[dict] = Field(None, description="Condition object {selector, function, operator, threshold, column?} for update_condition"),
+        emails: Optional[list] = Field(None, description="List of email addresses for update_emails"),
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
@@ -382,6 +386,7 @@ class EditAlert(Tool):
         self.schedule = schedule
         self.question_id = question_id
         self.condition = condition
+        self.emails = emails
 
     async def reduce(self, child_batches):
         pass
