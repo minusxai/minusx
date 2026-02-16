@@ -351,11 +351,20 @@ class EditAlert(Tool):
             - Required: question_id (int) - the file ID of the question
 
         3. update_condition: Update the alert condition
-            - Required: condition (dict: {{metric: str, operator: str, threshold: number, column?: str}})
-            - metric: "row_count" | "first_column_value" | "last_column_value"
+            - Required: condition (dict: {{selector: str, function: str, operator: str, threshold: number, column?: str}})
+            - selector: "first" | "last" | "all" — which row(s) to evaluate
+            - function: depends on selector
+              - For "first"/"last": "value" | "diff" | "pct_change" | "months_ago" | "days_ago" | "years_ago"
+                - value: raw numeric value from the selected row
+                - diff: difference between selected row and adjacent row
+                - pct_change: % change between selected row and adjacent row
+                - months_ago/days_ago/years_ago: calendar distance from now (for freshness checks)
+              - For "all": "count" | "sum" | "avg" | "min" | "max"
+                - count: total number of rows (no column needed)
+                - sum/avg/min/max: aggregate of all values in the column
             - operator: ">" | "<" | "=" | ">=" | "<=" | "!="
             - threshold: numeric threshold to compare against
-            - column: required when metric is "first_column_value" or "last_column_value"
+            - column: required for all functions except "count"
     """
 
     def __init__(
@@ -364,7 +373,7 @@ class EditAlert(Tool):
         operation: str = Field(..., description="Operation: 'update_schedule' | 'update_question' | 'update_condition'"),
         schedule: Optional[dict] = Field(None, description="Schedule object {cron: str, timezone: str} for update_schedule"),
         question_id: Optional[int] = Field(None, description="Question file ID to monitor (for update_question)"),
-        condition: Optional[dict] = Field(None, description="Condition object {metric, operator, threshold, column?} for update_condition"),
+        condition: Optional[dict] = Field(None, description="Condition object {selector, function, operator, threshold, column?} for update_condition"),
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore

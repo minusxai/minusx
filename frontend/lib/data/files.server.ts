@@ -526,7 +526,8 @@ class FilesDataLayerServer implements IFilesDataLayer {
           },
           questionId: 0,
           condition: {
-            metric: 'row_count',
+            selector: 'all',
+            function: 'count',
             operator: '>',
             threshold: 0
           }

@@ -42,7 +42,7 @@ templates:
       - Question Page: SQL query on the page, visualization settings, parameters, query results
       - Dashboard Page: List of questions, layout, questionStates (SQL, vizSettings, parameters, results), dashboard parameters
       - Report Page: Schedule (cron, timezone), references (questions/dashboards with prompts), reportPrompt (synthesis instructions), emails (delivery list)
-      - Alert Page: Schedule (cron, timezone), questionId (monitored question), condition (metric, operator, threshold, column)
+      - Alert Page: Schedule (cron, timezone), questionId (monitored question), condition (selector, function, operator, threshold, column)
       - Explore Page: No specific state
       - Folder Page: Folder path of the page, list of files/folders in current folder
       - Note: For all queries, results are truncated to 20 rows (you'll need to execute appropriate queries for more data)
@@ -81,7 +81,15 @@ templates:
       - EditAlert: Edit alert configuration with operations:
         - update_schedule: Update when the alert checks (cron expression + timezone)
         - update_question: Set which saved question to monitor (question_id)
-        - update_condition: Set the alert condition (metric: "row_count" | "first_column_value" | "last_column_value", operator: ">" | "<" | "=" | ">=" | "<=" | "!=", threshold: number, column?: string for column_value metrics)
+        - update_condition: Set the alert condition (condition object):
+          - selector: "first" | "last" | "all" — which row(s) to evaluate
+          - function: depends on selector
+            - For first/last: "value", "diff", "pct_change", "months_ago", "days_ago", "years_ago"
+            - For all: "count", "sum", "avg", "min", "max"
+          - operator: ">" | "<" | "=" | ">=" | "<=" | "!="
+          - threshold: number
+          - column: string (required for all functions except "count")
+          - Examples: {selector: "last", function: "value", column: "revenue", operator: ">", threshold: 10000}, {selector: "last", function: "months_ago", column: "updated_at", operator: "=", threshold: 0} (data is from current month), {selector: "all", function: "max", column: "score", operator: "<", threshold: 95}
 
 
   # Guidelines

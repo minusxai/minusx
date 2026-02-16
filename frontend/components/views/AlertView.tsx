@@ -1,10 +1,10 @@
 'use client';
 
-import { Box, Text, VStack, HStack, Input, Button, Flex, Separator, Badge } from '@chakra-ui/react';
-import { AlertContent, AlertRunContent, AlertMetricType, ComparisonOperator } from '@/lib/types';
+import { Box, Text, VStack, HStack, Input, Button, Flex, Badge } from '@chakra-ui/react';
+import { AlertContent, AlertRunContent, AlertSelector, AlertFunction, ComparisonOperator } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import DocumentHeader from '../DocumentHeader';
-import { LuPlay, LuClock, LuBell, LuGripVertical, LuHistory } from 'react-icons/lu';
+import { LuPlay, LuClock, LuBell, LuGripVertical, LuHistory, LuSettings, LuColumns3 } from 'react-icons/lu';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { useAppSelector } from '@/store/hooks';
 import { createListCollection } from '@chakra-ui/react';
@@ -64,13 +64,74 @@ const timezoneCollection = createListCollection({
   items: TIMEZONES.map(tz => ({ value: tz.value, label: tz.label }))
 });
 
-const metricCollection = createListCollection({
+const selectorCollection = createListCollection({
   items: [
-    { value: 'row_count', label: 'Row count' },
-    { value: 'first_column_value', label: 'First value of column' },
-    { value: 'last_column_value', label: 'Last value of column' },
+    { value: 'first', label: 'First row' },
+    { value: 'last', label: 'Last row' },
+    { value: 'all', label: 'All rows' },
   ]
 });
+
+const FUNCTIONS_BY_SELECTOR: Record<AlertSelector, { value: string; label: string }[]> = {
+  first: [
+    { value: 'value', label: 'Value' },
+    { value: 'diff', label: 'Change' },
+    { value: 'pct_change', label: '% Change' },
+    { value: 'months_ago', label: 'Months since' },
+    { value: 'days_ago', label: 'Days since' },
+    { value: 'years_ago', label: 'Years since' },
+  ],
+  last: [
+    { value: 'value', label: 'Value' },
+    { value: 'diff', label: 'Change' },
+    { value: 'pct_change', label: '% Change' },
+    { value: 'months_ago', label: 'Months since' },
+    { value: 'days_ago', label: 'Days since' },
+    { value: 'years_ago', label: 'Years since' },
+  ],
+  all: [
+    { value: 'count', label: 'Count' },
+    { value: 'sum', label: 'Sum' },
+    { value: 'avg', label: 'Average' },
+    { value: 'min', label: 'Min' },
+    { value: 'max', label: 'Max' },
+  ],
+};
+
+// Human-readable summary builder
+function buildConditionSummary(condition: AlertContent['condition'] | undefined | null) {
+  if (!condition) return null;
+  const fn = condition.function;
+  const col = condition.column;
+  const sel = condition.selector;
+  const op = condition.operator;
+  const thresh = condition.threshold;
+  const rowLabel = sel === 'all' ? 'all rows' : `${sel} row`;
+
+  // Build the "what" part
+  let what: string;
+  if (fn === 'count') {
+    what = 'row count';
+  } else if (fn === 'value') {
+    what = `${col} in ${rowLabel}`;
+  } else if (fn === 'diff') {
+    what = `change in ${col} at ${rowLabel}`;
+  } else if (fn === 'pct_change') {
+    what = `% change in ${col} at ${rowLabel}`;
+  } else if (fn === 'months_ago') {
+    what = `months since ${col} in ${rowLabel}`;
+  } else if (fn === 'days_ago') {
+    what = `days since ${col} in ${rowLabel}`;
+  } else if (fn === 'years_ago') {
+    what = `years since ${col} in ${rowLabel}`;
+  } else {
+    // sum, avg, min, max
+    what = `${fn} of ${col} across ${rowLabel}`;
+  }
+
+  const suffix = fn === 'pct_change' ? '%' : '';
+  return { what, op, thresh: `${thresh}${suffix}` };
+}
 
 const operatorCollection = createListCollection({
   items: [
@@ -264,12 +325,22 @@ export default function AlertView({
             border={!useCompactLayout ? '1px solid' : undefined}
             borderColor="border.muted"
           >
-            <VStack gap={4} align="stretch" p={4}>
-              {/* Question Selector */}
-              <Box>
-                <HStack mb={2}>
-                  <LuBell size={16} />
-                  <Text fontWeight="600" fontSize="sm">Question to Monitor</Text>
+            <VStack gap={3} align="stretch" p={4}>
+              {/* Question Selector Card */}
+              <Box
+                position="relative"
+                bg="bg.muted"
+                borderRadius="md"
+                border="1px solid"
+                borderColor="border.muted"
+                p={3}
+                pl={5}
+                overflow="hidden"
+              >
+                <Box position="absolute" left={0} top={0} bottom={0} width="3px" bg="accent.primary" borderLeftRadius="md" />
+                <HStack mb={2} gap={1.5}>
+                  <LuBell size={14} color="var(--chakra-colors-accent-primary)" />
+                  <Text fontWeight="700" fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Source Question</Text>
                 </HStack>
 
                 {editMode ? (
@@ -281,7 +352,7 @@ export default function AlertView({
                     })}
                     size="sm"
                   >
-                    <SelectTrigger>
+                    <SelectTrigger bg="bg.surface">
                       <SelectValueText placeholder="Select a question..." />
                     </SelectTrigger>
                     <SelectPositioner>
@@ -295,52 +366,34 @@ export default function AlertView({
                     </SelectPositioner>
                   </SelectRoot>
                 ) : (
-                  <Text fontSize="sm" color="fg.default">
+                  <Text fontSize="sm" fontWeight="600" color="fg.default">
                     {referencedQuestion?.name || (alert.questionId ? `Question #${alert.questionId}` : 'No question selected')}
                   </Text>
                 )}
               </Box>
 
-              <Separator />
+              {/* Condition Builder Card */}
+              <Box
+                position="relative"
+                bg="bg.muted"
+                borderRadius="md"
+                border="1px solid"
+                borderColor="border.muted"
+                p={3}
+                pl={5}
+                overflow="hidden"
+              >
+                <Box position="absolute" left={0} top={0} bottom={0} width="3px" bg="accent.warning" borderLeftRadius="md" />
+                <HStack mb={3} gap={1.5}>
+                  <LuSettings size={14} color="var(--chakra-colors-accent-warning)" />
+                  <Text fontWeight="700" fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Condition</Text>
+                </HStack>
 
-              {/* Condition Builder */}
-              <Box>
-                <Text fontWeight="600" fontSize="sm" mb={2}>Condition</Text>
-
-                <VStack gap={2} align="stretch">
-                  {/* Metric */}
-                  <HStack gap={2}>
-                    <Text fontSize="xs" color="fg.muted" minW="60px">Metric</Text>
-                    <Box flex={1}>
-                      <SelectRoot
-                        collection={metricCollection}
-                        value={[alert.condition?.metric || 'row_count']}
-                        onValueChange={(e) => onChange({
-                          condition: { ...alert.condition, metric: e.value[0] as AlertMetricType }
-                        })}
-                        disabled={!editMode}
-                        size="sm"
-                      >
-                        <SelectTrigger>
-                          <SelectValueText />
-                        </SelectTrigger>
-                        <SelectPositioner>
-                          <SelectContent>
-                            {metricCollection.items.map((item) => (
-                              <SelectItem key={item.value} item={item}>
-                                {item.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </SelectPositioner>
-                      </SelectRoot>
-                    </Box>
-                  </HStack>
-
-                  {/* Column (only for column_value) */}
-                  {(alert.condition?.metric === 'first_column_value' || alert.condition?.metric === 'last_column_value') && (
+                <VStack gap={2.5} align="stretch">
+                  {/* Column */}
+                  {alert.condition?.function !== 'count' && (
                     <HStack gap={2}>
-                      <Text fontSize="xs" color="fg.muted" minW="60px">Column</Text>
+                      <Text fontSize="xs" color="fg.muted" minW="65px" fontWeight="600">Column</Text>
                       <Input
                         value={alert.condition?.column || ''}
                         onChange={(e) => onChange({
@@ -352,13 +405,89 @@ export default function AlertView({
                         fontFamily="mono"
                         fontSize="xs"
                         flex={1}
+                        bg="bg.surface"
                       />
                     </HStack>
                   )}
 
+                  {/* Selector */}
+                  <HStack gap={2}>
+                    <Text fontSize="xs" color="fg.muted" minW="65px" fontWeight="600">Rows</Text>
+                    <Box flex={1}>
+                      <SelectRoot
+                        collection={selectorCollection}
+                        value={[alert.condition?.selector || 'all']}
+                        onValueChange={(e) => {
+                          const newSelector = e.value[0] as AlertSelector;
+                          const validFns = FUNCTIONS_BY_SELECTOR[newSelector];
+                          const currentFn = alert.condition?.function;
+                          const fnStillValid = validFns.some(f => f.value === currentFn);
+                          onChange({
+                            condition: {
+                              ...alert.condition,
+                              selector: newSelector,
+                              function: fnStillValid ? currentFn! : validFns[0].value as AlertFunction,
+                            }
+                          });
+                        }}
+                        disabled={!editMode}
+                        size="sm"
+                      >
+                        <SelectTrigger bg="bg.surface">
+                          <SelectValueText />
+                        </SelectTrigger>
+                        <SelectPositioner>
+                          <SelectContent>
+                            {selectorCollection.items.map((item) => (
+                              <SelectItem key={item.value} item={item}>
+                                {item.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </SelectPositioner>
+                      </SelectRoot>
+                    </Box>
+                  </HStack>
+
+                  {/* Function */}
+                  <HStack gap={2}>
+                    <Text fontSize="xs" color="fg.muted" minW="65px" fontWeight="600">Measure</Text>
+                    <Box flex={1}>
+                      {(() => {
+                        const selector = alert.condition?.selector || 'all';
+                        const fnItems = FUNCTIONS_BY_SELECTOR[selector];
+                        const fnCollection = createListCollection({ items: fnItems });
+                        return (
+                          <SelectRoot
+                            collection={fnCollection}
+                            value={[alert.condition?.function || fnItems[0].value]}
+                            onValueChange={(e) => onChange({
+                              condition: { ...alert.condition, function: e.value[0] as AlertFunction }
+                            })}
+                            disabled={!editMode}
+                            size="sm"
+                          >
+                            <SelectTrigger bg="bg.surface">
+                              <SelectValueText />
+                            </SelectTrigger>
+                            <SelectPositioner>
+                              <SelectContent>
+                                {fnCollection.items.map((item) => (
+                                  <SelectItem key={item.value} item={item}>
+                                    {item.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </SelectPositioner>
+                          </SelectRoot>
+                        );
+                      })()}
+                    </Box>
+                  </HStack>
+
                   {/* Operator + Threshold */}
                   <HStack gap={2}>
-                    <Text fontSize="xs" color="fg.muted" minW="60px">When</Text>
+                    <Text fontSize="xs" color="fg.muted" minW="65px" fontWeight="600">Trigger</Text>
                     <Box flex={1}>
                       <SelectRoot
                         collection={operatorCollection}
@@ -369,7 +498,7 @@ export default function AlertView({
                         disabled={!editMode}
                         size="sm"
                       >
-                        <SelectTrigger>
+                        <SelectTrigger bg="bg.surface">
                           <SelectValueText />
                         </SelectTrigger>
                         <SelectPositioner>
@@ -394,34 +523,43 @@ export default function AlertView({
                       fontFamily="mono"
                       fontSize="xs"
                       flex={1}
+                      bg="bg.surface"
                     />
                   </HStack>
                 </VStack>
 
-                {/* Condition summary in view mode */}
-                {!editMode && (
-                  <Box mt={2} p={2} bg="bg.muted" borderRadius="md">
-                    <Text fontSize="xs" color="fg.muted">
-                      Alert triggers when{' '}
-                      <Text as="span" fontWeight="600" color="fg.default">
-                        {alert.condition?.metric === 'row_count' ? 'row count' : `"${alert.condition?.column}"`}
+                {/* Condition summary — prose */}
+                {(() => {
+                  const summary = buildConditionSummary(alert.condition);
+                  if (!summary) return null;
+                  return (
+                    <Box mt={3} p={2} bg="bg.surface" borderRadius="md" border="1px dashed" borderColor="border.muted">
+                      <Text fontSize="xs" color="fg.muted">
+                        Trigger when{' '}
+                        <Text as="span" fontWeight="700" color="accent.warning">{summary.what}</Text>
+                        {' '}<Text as="span" fontWeight="600">{summary.op}</Text>{' '}
+                        <Text as="span" fontWeight="700" color="accent.warning">{summary.thresh}</Text>
                       </Text>
-                      {' '}{alert.condition?.operator}{' '}
-                      <Text as="span" fontWeight="600" color="fg.default">
-                        {alert.condition?.threshold}
-                      </Text>
-                    </Text>
-                  </Box>
-                )}
+                    </Box>
+                  );
+                })()}
               </Box>
 
-              <Separator />
-
-              {/* Schedule Section */}
-              <Box>
-                <HStack mb={2}>
-                  <LuClock size={16} />
-                  <Text fontWeight="600" fontSize="sm">Schedule</Text>
+              {/* Schedule Card */}
+              <Box
+                position="relative"
+                bg="bg.muted"
+                borderRadius="md"
+                border="1px solid"
+                borderColor="border.muted"
+                p={3}
+                pl={5}
+                overflow="hidden"
+              >
+                <Box position="absolute" left={0} top={0} bottom={0} width="3px" bg="accent.teal" borderLeftRadius="md" />
+                <HStack mb={2} gap={1.5}>
+                  <LuClock size={14} color="var(--chakra-colors-accent-teal)" />
+                  <Text fontWeight="700" fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Schedule</Text>
                 </HStack>
 
                 <HStack gap={2}>
@@ -435,7 +573,7 @@ export default function AlertView({
                       disabled={!editMode}
                       size="sm"
                     >
-                      <SelectTrigger>
+                      <SelectTrigger bg="bg.surface">
                         <SelectValueText placeholder="Select schedule" />
                       </SelectTrigger>
                       <SelectPositioner>
@@ -461,6 +599,7 @@ export default function AlertView({
                       size="sm"
                       fontFamily="mono"
                       fontSize="xs"
+                      bg="bg.surface"
                     />
                   </Box>
 
@@ -474,7 +613,7 @@ export default function AlertView({
                       disabled={!editMode}
                       size="sm"
                     >
-                      <SelectTrigger>
+                      <SelectTrigger bg="bg.surface">
                         <SelectValueText placeholder="TZ" />
                       </SelectTrigger>
                       <SelectPositioner>
@@ -637,7 +776,7 @@ export default function AlertView({
                       <HStack justify="space-between">
                         <Text fontSize="xs" color="fg.muted">Metric</Text>
                         <Text fontSize="xs" fontWeight="600">
-                          {selectedRun.content.metric === 'row_count' ? 'Row count' : `Column: ${selectedRun.content.column}`}
+                          {buildConditionSummary(selectedRun.content as unknown as AlertContent['condition'])?.what || selectedRun.content.function}
                         </Text>
                       </HStack>
                       {selectedRun.content.actualValue !== null && (
@@ -673,27 +812,25 @@ export default function AlertView({
                       <Text fontSize="sm" lineHeight="1.6">
                         {(() => {
                           const r = selectedRun.content;
-                          const metricLabel = r.metric === 'row_count'
-                            ? 'The row count'
-                            : r.metric === 'last_column_value'
-                              ? `The last value of "${r.column}"`
-                              : `The first value of "${r.column}"`;
+                          const summary = buildConditionSummary(r as unknown as AlertContent['condition']);
                           const val = r.actualValue?.toLocaleString() ?? 'N/A';
-                          const thresh = r.threshold.toLocaleString();
+                          const suffix = r.function === 'pct_change' ? '%' : '';
 
                           if (r.status === 'triggered') {
                             return (
                               <>
-                                {metricLabel} was <Text as="span" fontWeight="700">{val}</Text>, which is{' '}
-                                <Text as="span" fontWeight="700">{r.operator} {thresh}</Text>.{' '}
+                                The <Text as="span" fontWeight="700">{summary?.what}</Text> was{' '}
+                                <Text as="span" fontWeight="700">{val}{suffix}</Text>, which is{' '}
+                                <Text as="span" fontWeight="700">{r.operator} {summary?.thresh}</Text>.{' '}
                                 The alert condition was met.
                               </>
                             );
                           }
                           return (
                             <>
-                              {metricLabel} was <Text as="span" fontWeight="700">{val}</Text>, which does not satisfy{' '}
-                              <Text as="span" fontWeight="700">{r.operator} {thresh}</Text>.{' '}
+                              The <Text as="span" fontWeight="700">{summary?.what}</Text> was{' '}
+                              <Text as="span" fontWeight="700">{val}{suffix}</Text>, which does not satisfy{' '}
+                              <Text as="span" fontWeight="700">{r.operator} {summary?.thresh}</Text>.{' '}
                               No action needed.
                             </>
                           );

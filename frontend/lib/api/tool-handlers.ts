@@ -5,7 +5,7 @@
  * Used for tools that require user interaction or client-specific capabilities.
  */
 
-import { ToolCall, ToolMessage, DatabaseWithSchema, DocumentContent, QuestionContent, ReportContent, ReportReference, AlertContent, AlertMetricType, ComparisonOperator } from '@/lib/types';
+import { ToolCall, ToolMessage, DatabaseWithSchema, DocumentContent, QuestionContent, ReportContent, ReportReference, AlertContent, AlertSelector, AlertFunction, ComparisonOperator } from '@/lib/types';
 import { setEdit, setEphemeral, setFile, selectMergedContent, type FileId } from '@/store/filesSlice';
 import type { AppDispatch, RootState } from '@/store/store';
 import { store } from '@/store/store';
@@ -930,18 +930,19 @@ registerFrontendTool('EditAlert', async (args, context) => {
       resultMessage = `Set monitored question to #${question_id}`;
       break;
     case 'update_condition':
-      if (!condition?.metric || !condition?.operator || condition?.threshold === undefined) {
-        throw new Error('condition with metric, operator, and threshold is required');
+      if (!condition?.selector || !condition?.function || !condition?.operator || condition?.threshold === undefined) {
+        throw new Error('condition with selector, function, operator, and threshold is required');
       }
       updates = {
         condition: {
-          metric: condition.metric as AlertMetricType,
+          selector: condition.selector as AlertSelector,
+          function: condition.function as AlertFunction,
           operator: condition.operator as ComparisonOperator,
           threshold: Number(condition.threshold),
           ...(condition.column ? { column: condition.column } : {})
         }
       };
-      resultMessage = `Updated condition: ${condition.metric} ${condition.operator} ${condition.threshold}`;
+      resultMessage = `Updated condition: ${condition.function}(${condition.selector}${condition.column ? ', ' + condition.column : ''}) ${condition.operator} ${condition.threshold}`;
       break;
     default:
       throw new Error(`Unknown operation: ${operation}`);

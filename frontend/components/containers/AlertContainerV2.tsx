@@ -15,7 +15,7 @@ import { useFile } from '@/lib/hooks/useFile';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import { FilesAPI } from '@/lib/data/files';
 import AlertView from '@/components/views/AlertView';
-import { AlertContent, AlertRunContent, QuestionContent, ComparisonOperator } from '@/lib/types';
+import { AlertContent, AlertRunContent, QuestionContent, ComparisonOperator, AlertSelector, AlertFunction } from '@/lib/types';
 import { useCallback, useState, useEffect } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { isUserFacingError } from '@/lib/errors';
@@ -196,21 +196,63 @@ export default function AlertContainerV2({
       const queryResult = await queryResponse.json();
       const rows = queryResult.data?.rows || [];
 
-      // 3. Extract metric value
+      // 3. Extract metric value based on selector + function
       let actualValue: number;
-      if (condition.metric === 'row_count') {
+      const col = condition.column || '';
+      const fn = condition.function;
+      const selector = condition.selector;
+
+      if (fn === 'count') {
+        // Row count — no column needed
         actualValue = rows.length;
+      } else if (fn === 'sum' || fn === 'avg' || fn === 'min' || fn === 'max') {
+        // Aggregates over all rows
+        if (rows.length === 0) throw new Error('Query returned no rows');
+        const vals = rows.map((r: any) => {
+          const v = typeof r[col] === 'number' ? r[col] : Number(r[col]);
+          if (isNaN(v)) throw new Error(`Column "${col}" contains non-numeric value: ${r[col]}`);
+          return v;
+        });
+        if (fn === 'sum') actualValue = vals.reduce((a: number, b: number) => a + b, 0);
+        else if (fn === 'avg') actualValue = vals.reduce((a: number, b: number) => a + b, 0) / vals.length;
+        else if (fn === 'min') actualValue = Math.min(...vals);
+        else actualValue = Math.max(...vals);
       } else {
-        // first_column_value or last_column_value
-        if (rows.length === 0) {
-          throw new Error('Query returned no rows');
-        }
-        const col = condition.column || '';
-        const row = condition.metric === 'last_column_value' ? rows[rows.length - 1] : rows[0];
-        const raw = row[col];
-        actualValue = typeof raw === 'number' ? raw : Number(raw);
-        if (isNaN(actualValue)) {
-          throw new Error(`Column "${col}" value is not a number: ${raw}`);
+        // Single-row functions (first/last selector)
+        if (rows.length === 0) throw new Error('Query returned no rows');
+        const rowIdx = selector === 'last' ? rows.length - 1 : 0;
+
+        if (fn === 'value') {
+          const raw = rows[rowIdx][col];
+          actualValue = typeof raw === 'number' ? raw : Number(raw);
+          if (isNaN(actualValue)) throw new Error(`Column "${col}" value is not a number: ${raw}`);
+        } else if (fn === 'diff' || fn === 'pct_change') {
+          // Compare selected row vs adjacent row
+          if (rows.length < 2) throw new Error('Need at least 2 rows for diff/pct_change');
+          const adjIdx = selector === 'last' ? rows.length - 2 : 1;
+          const selected = typeof rows[rowIdx][col] === 'number' ? rows[rowIdx][col] : Number(rows[rowIdx][col]);
+          const adjacent = typeof rows[adjIdx][col] === 'number' ? rows[adjIdx][col] : Number(rows[adjIdx][col]);
+          if (isNaN(selected) || isNaN(adjacent)) throw new Error(`Column "${col}" contains non-numeric values`);
+          if (fn === 'diff') {
+            actualValue = selected - adjacent;
+          } else {
+            if (adjacent === 0) throw new Error('Cannot compute % change: adjacent value is 0');
+            actualValue = ((selected - adjacent) / Math.abs(adjacent)) * 100;
+          }
+        } else if (fn === 'months_ago' || fn === 'days_ago' || fn === 'years_ago') {
+          const raw = rows[rowIdx][col];
+          const d = new Date(raw);
+          if (isNaN(d.getTime())) throw new Error(`Column "${col}" contains invalid date: ${raw}`);
+          const now = new Date();
+          if (fn === 'days_ago') {
+            actualValue = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+          } else if (fn === 'months_ago') {
+            actualValue = (now.getFullYear() * 12 + now.getMonth()) - (d.getFullYear() * 12 + d.getMonth());
+          } else {
+            actualValue = now.getFullYear() - d.getFullYear();
+          }
+        } else {
+          throw new Error(`Unknown function: ${fn}`);
         }
       }
 
@@ -227,7 +269,8 @@ export default function AlertContainerV2({
         actualValue,
         threshold: condition.threshold,
         operator: condition.operator,
-        metric: condition.metric,
+        selector: condition.selector,
+        function: condition.function,
         column: condition.column,
       };
 
@@ -259,7 +302,8 @@ export default function AlertContainerV2({
         actualValue: null,
         threshold: condition.threshold,
         operator: condition.operator,
-        metric: condition.metric,
+        selector: condition.selector,
+        function: condition.function,
         column: condition.column,
         error: error instanceof Error ? error.message : 'Unknown error',
       };

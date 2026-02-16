@@ -449,12 +449,27 @@ export interface ReportRunContent extends BaseFileContent {
 }
 
 // Alert types
-export type AlertMetricType = 'row_count' | 'first_column_value' | 'last_column_value';
+export type AlertSelector = 'first' | 'last' | 'all';
+export type AlertFunction =
+  // For first/last (single row)
+  | 'value'        // raw numeric value
+  | 'diff'         // difference vs adjacent row
+  | 'pct_change'   // % change vs adjacent row
+  | 'months_ago'   // calendar months between value and now
+  | 'days_ago'     // calendar days between value and now
+  | 'years_ago'    // years between value and now
+  // For all (aggregate)
+  | 'count'        // row count (no column needed)
+  | 'sum'          // sum of column
+  | 'avg'          // average of column
+  | 'min'          // min of column
+  | 'max';         // max of column
 export type ComparisonOperator = '>' | '<' | '=' | '>=' | '<=' | '!=';
 
 export interface AlertCondition {
-  metric: AlertMetricType;
-  column?: string;          // Required when metric is 'first/last_column_value'
+  selector: AlertSelector;
+  column?: string;          // Required for all functions except 'count'
+  function: AlertFunction;
   operator: ComparisonOperator;
   threshold: number;
 }
@@ -480,7 +495,8 @@ export interface AlertRunContent extends BaseFileContent {
   actualValue: number | null;
   threshold: number;
   operator: ComparisonOperator;
-  metric: AlertMetricType;
+  selector: AlertSelector;
+  function: AlertFunction;
   column?: string;
   error?: string;
 }
