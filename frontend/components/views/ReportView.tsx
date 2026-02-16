@@ -4,7 +4,7 @@ import { Box, Text, VStack, HStack, Input, Button, Textarea, Flex, Badge, IconBu
 import { ReportContent, ReportReference, ReportRunContent } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import DocumentHeader from '../DocumentHeader';
-import { LuPlay, LuClock, LuMail, LuPlus, LuTrash2, LuFileText, LuGripVertical, LuListChecks, LuHistory } from 'react-icons/lu';
+import { LuPlay, LuClock, LuMail, LuInfo, LuPlus, LuTrash2, LuFileText, LuGripVertical, LuListChecks, LuHistory } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import Markdown from '@/components/Markdown';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
@@ -261,6 +261,14 @@ export default function ReportView({
         viewMode={activeTab}
         onViewModeChange={(mode) => setActiveTab(mode)}
       />
+
+      {/* Cron not active info banner */}
+      <HStack gap={2} px={4} py={2} bg="yellow.subtle" borderBottomWidth="1px" borderColor="yellow.muted"  borderRadius={"md"}>
+        <LuInfo size={14} color="var(--chakra-colors-yellow-fg)" />
+        <Text fontSize="xs" color="yellow.fg">
+          Scheduled runs are not active yet. Use <strong>Run Now</strong> to generate a report.
+        </Text>
+      </HStack>
 
       {/* JSON View */}
       {activeTab === 'json' && (

@@ -4,7 +4,7 @@ import { Box, Text, VStack, HStack, Input, Button, Flex, Badge } from '@chakra-u
 import { AlertContent, AlertRunContent, AlertSelector, AlertFunction, ComparisonOperator } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import DocumentHeader from '../DocumentHeader';
-import { LuPlay, LuClock, LuBell, LuMail, LuGripVertical, LuHistory, LuSettings, LuColumns3, LuScanSearch } from 'react-icons/lu';
+import { LuPlay, LuClock, LuBell, LuMail, LuInfo, LuGripVertical, LuHistory, LuSettings, LuColumns3, LuScanSearch } from 'react-icons/lu';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { useAppSelector } from '@/store/hooks';
 import { createListCollection } from '@chakra-ui/react';
@@ -292,6 +292,14 @@ export default function AlertView({
         viewMode={activeTab}
         onViewModeChange={(mode) => setActiveTab(mode)}
       />
+
+      {/* Cron not active info banner */}
+      <HStack gap={2} px={4} py={2} bg="yellow.subtle" borderBottomWidth="1px" borderColor="yellow.muted" borderRadius={"md"}>
+        <LuInfo size={14} color="var(--chakra-colors-yellow-fg)" />
+        <Text fontSize="xs" color="yellow.fg">
+          Scheduled runs are not active yet. Use <strong>Check Now</strong> to test your alert.
+        </Text>
+      </HStack>
 
       {/* JSON View */}
       {activeTab === 'json' && (
