@@ -448,13 +448,50 @@ export interface ReportRunContent extends BaseFileContent {
   error?: string;         // Top-level error if any
 }
 
+// Alert types
+export type AlertMetricType = 'row_count' | 'first_column_value' | 'last_column_value';
+export type ComparisonOperator = '>' | '<' | '=' | '>=' | '<=' | '!=';
+
+export interface AlertCondition {
+  metric: AlertMetricType;
+  column?: string;          // Required when metric is 'first/last_column_value'
+  operator: ComparisonOperator;
+  threshold: number;
+}
+
+export interface AlertSchedule {
+  cron: string;
+  timezone: string;
+}
+
+export interface AlertContent extends BaseFileContent {
+  description?: string;
+  schedule: AlertSchedule;
+  questionId: number;        // Reference to a saved question
+  condition: AlertCondition;
+}
+
+export interface AlertRunContent extends BaseFileContent {
+  alertId: number;
+  alertName: string;
+  startedAt: string;
+  completedAt?: string;
+  status: 'running' | 'triggered' | 'not_triggered' | 'failed';
+  actualValue: number | null;
+  threshold: number;
+  operator: ComparisonOperator;
+  metric: AlertMetricType;
+  column?: string;
+  error?: string;
+}
+
 /**
  * Database file entity
  * Extends BaseFileMetadata with content and multi-tenant support
  * content can be null for metadata-only loads (Phase 2: Partial Loading)
  */
 export interface DbFile extends BaseFileMetadata {
-  content: QuestionContent | DocumentContent | ContextContent | ConnectionContent | ConnectorContent | UsersContent | FolderContent | ConfigContent | SessionRecordingFileContent | StylesContent | ReportContent | ReportRunContent | null;
+  content: QuestionContent | DocumentContent | ContextContent | ConnectionContent | ConnectorContent | UsersContent | FolderContent | ConfigContent | SessionRecordingFileContent | StylesContent | ReportContent | ReportRunContent | AlertContent | AlertRunContent | null;
   company_id?: number;     // Always present in DB queries (NOT NULL column), optional for type flexibility
 }
 

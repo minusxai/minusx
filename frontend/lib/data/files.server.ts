@@ -1,7 +1,7 @@
 import 'server-only';
 import { DocumentDB, AccessTokenDB } from '@/lib/database/documents-db';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { DbFile, BaseFileContent, FileType, QuestionContent, DocumentContent, ConnectionContent, ContextContent, ReportContent } from '@/lib/types';
+import { DbFile, BaseFileContent, FileType, QuestionContent, DocumentContent, ConnectionContent, ContextContent, ReportContent, AlertContent } from '@/lib/types';
 import { IFilesDataLayer } from './files.interface';
 import {
   LoadFileResult,
@@ -514,6 +514,27 @@ class FilesDataLayerServer implements IFilesDataLayer {
         return {
           content,
           fileName: 'New Report'
+        };
+      }
+
+      case 'alert': {
+        const content: AlertContent = {
+          description: '',
+          schedule: {
+            cron: '0 9 * * 1',  // Default: Monday 9am
+            timezone: 'America/New_York'
+          },
+          questionId: 0,
+          condition: {
+            metric: 'row_count',
+            operator: '>',
+            threshold: 0
+          }
+        };
+
+        return {
+          content,
+          fileName: 'New Alert'
         };
       }
 

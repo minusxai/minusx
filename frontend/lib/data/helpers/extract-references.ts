@@ -35,5 +35,11 @@ export function extractReferencesFromContent(content: BaseFileContent, type: Fil
       .map((ref: any) => ref.id);
   }
 
+  // Alerts reference a single question via questionId
+  if (type === 'alert') {
+    const questionId = (content as any)?.questionId;
+    return typeof questionId === 'number' && questionId > 0 ? [questionId] : [];
+  }
+
   return [];
 }
