@@ -1,7 +1,11 @@
 import { AnalyticsFileType, FileType } from './ui/file-metadata';
+import type { FileState } from '@/store/filesSlice';
 
 // Re-export FileType for convenience
 export type { FileType };
+
+// Re-export FileState for convenience
+export type { FileState };
 
 // Re-export SQL IR types
 export type {
@@ -843,4 +847,84 @@ export interface DisplayProps {
   databaseName?: string;
   isCompact?: boolean;
   showThinking: boolean;
+}
+
+// ============================================================================
+// Phase 1: Unified File System API Types
+// ============================================================================
+
+/**
+ * ReadFiles Tool - Load multiple files with references and query results
+ */
+export interface ReadFilesInput {
+  fileIds: number[];  // Array of file IDs to load
+}
+
+export interface ReadFilesOutput {
+  fileStates: FileState[];     // One FileState per requested fileId
+  references: FileState[];     // All unique referenced files across all loaded files
+  queryResults: QueryResult[]; // All unique query results for questions
+}
+
+/**
+ * EditFile Tool - Range-based file editing
+ */
+export interface EditFileInput {
+  fileId: number;
+  from: number;      // Start line number (1-indexed, inclusive)
+  to: number;        // End line number (1-indexed, inclusive)
+  newContent: string; // Replacement content for the range
+}
+
+export interface EditFileOutput {
+  success: true;
+  diff: string;                // Unified diff showing the change
+  fileState: FileState;        // Updated file state with changes
+  references: FileState[];     // Updated references (if any changed)
+  queryResults: QueryResult[]; // Updated query results (if query changed)
+}
+
+export interface EditFileError {
+  success: false;
+  error: string;
+  validationErrors?: Array<{
+    field: string;
+    message: string;
+  }>;
+}
+
+/**
+ * PublishFile Tool - Commit changes to database
+ */
+export interface PublishFileInput {
+  fileId: number;  // File to publish (will cascade to dirty references)
+}
+
+export interface PublishFileOutput {
+  success: true;
+  savedFileIds: number[];  // IDs of all files saved (main + cascade)
+}
+
+export interface PublishFileError {
+  success: false;
+  error: string;
+  failedFiles?: Array<{
+    id: number;
+    name: string;
+    error: string;
+  }>;
+}
+
+/**
+ * ExecuteQuery Tool - Standalone query execution
+ */
+export interface ExecuteQueryInput {
+  query: string;
+  connectionId: string;         // Connection name/ID
+  parameters?: Record<string, any>;
+}
+
+export interface ExecuteQueryOutput extends QueryResult {
+  // Extends QueryResult (columns, types, rows) with optional error
+  error?: string;
 }

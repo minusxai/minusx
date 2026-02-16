@@ -1728,3 +1728,65 @@ registerFrontendTool('ClarifyFrontend', async (args, context) => {
     selection: userResponse
   };
 });
+
+// ============================================================================
+// Phase 1: Unified File System API - Frontend Tools
+// ============================================================================
+
+/**
+ * ReadFiles - Load multiple files with references and query results
+ */
+registerFrontendTool('ReadFiles', async (args, context) => {
+  const { fileIds } = args;
+  const { state, dispatch } = context;
+
+  if (!state || !dispatch) {
+    throw new Error('Redux state and dispatch required for ReadFiles');
+  }
+
+  // Import and execute
+  const { readFiles } = await import('./read-files.client');
+  const result = await readFiles({ fileIds }, () => state);
+
+  return result;
+});
+
+/**
+ * EditFile - Range-based file editing with validation
+ */
+registerFrontendTool('EditFile', async (args, context) => {
+  const { fileId, from, to, newContent } = args;
+  const { state, dispatch } = context;
+
+  if (!state || !dispatch) {
+    throw new Error('Redux state and dispatch required for EditFile');
+  }
+
+  // Import and execute
+  const { editFile } = await import('./edit-file.client');
+  const result = await editFile(
+    { fileId, from, to, newContent },
+    () => state,
+    dispatch
+  );
+
+  return result;
+});
+
+/**
+ * PublishFile - Commit changes from Redux to database
+ */
+registerFrontendTool('PublishFile', async (args, context) => {
+  const { fileId } = args;
+  const { state, dispatch } = context;
+
+  if (!state || !dispatch) {
+    throw new Error('Redux state and dispatch required for PublishFile');
+  }
+
+  // Import and execute
+  const { publishFile } = await import('./publish-file.client');
+  const result = await publishFile({ fileId }, () => state, dispatch);
+
+  return result;
+});

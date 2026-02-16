@@ -722,3 +722,114 @@ class PresentFinalAnswer(Tool):
     
 
 # web_search is a server-side tool provided by Anthropic - no client-side implementation needed
+
+
+# ============================================================================
+# Phase 1: Unified File System API Tools
+# ============================================================================
+
+@register_agent
+class ReadFiles(Tool):
+    """Load multiple files with their references and query results.
+
+    Use this to read file content before editing or to inspect multiple files at once.
+    Returns file states, references, and cached query results.
+    """
+
+    def __init__(
+        self,
+        fileIds: List[int] = Field(..., description="Array of file IDs to load"),
+        **kwargs
+    ):
+        super().__init__(**kwargs)  # type: ignore
+        self.fileIds = fileIds
+
+    async def reduce(self, child_batches):
+        pass
+
+    async def run(self) -> str:
+        # Frontend tool - executes in browser with Redux access
+        raise UserInputException(self._unique_id)
+
+
+@register_agent
+class EditFile(Tool):
+    """Edit a file using line-based range editing.
+
+    Specify the line range to replace (from, to) and the new content.
+    The tool validates changes and returns a diff.
+    Changes are stored in Redux but NOT saved to database until PublishFile is called.
+    """
+
+    def __init__(
+        self,
+        fileId: int = Field(..., description="File ID to edit"),
+        from_line: int = Field(..., alias="from", description="Start line number (1-indexed, inclusive)"),
+        to_line: int = Field(..., alias="to", description="End line number (1-indexed, inclusive)"),
+        newContent: str = Field(..., description="Replacement content for the specified line range"),
+        **kwargs
+    ):
+        super().__init__(**kwargs)  # type: ignore
+        self.fileId = fileId
+        self.from_line = from_line
+        self.to_line = to_line
+        self.newContent = newContent
+
+    async def reduce(self, child_batches):
+        pass
+
+    async def run(self) -> str:
+        # Frontend tool - executes in browser with Redux access
+        raise UserInputException(self._unique_id)
+
+
+@register_agent
+class PublishFile(Tool):
+    """Commit changes from Redux to the database.
+
+    Saves the specified file and all dirty references in a single atomic transaction.
+    Use this after EditFile to persist changes to disk.
+    """
+
+    def __init__(
+        self,
+        fileId: int = Field(..., description="File ID to publish (will cascade to dirty references)"),
+        **kwargs
+    ):
+        super().__init__(**kwargs)  # type: ignore
+        self.fileId = fileId
+
+    async def reduce(self, child_batches):
+        pass
+
+    async def run(self) -> str:
+        # Frontend tool - executes in browser with Redux access
+        raise UserInputException(self._unique_id)
+
+
+@register_agent
+class ExecuteQuery(Tool):
+    """Execute a standalone SQL query without modifying any files.
+
+    Use this to run ad-hoc queries for data exploration.
+    Results are cached but not associated with any question file.
+    """
+
+    def __init__(
+        self,
+        query: str = Field(..., description="SQL query to execute"),
+        connectionId: str = Field(..., description="Database connection name"),
+        parameters: Optional[Dict[str, Any]] = Field(None, description="Query parameters as key-value pairs"),
+        **kwargs
+    ):
+        super().__init__(**kwargs)  # type: ignore
+        self.query = query
+        self.connectionId = connectionId
+        self.parameters = parameters or {}
+
+    async def reduce(self, child_batches):
+        pass
+
+    async def run(self) -> str:
+        # Backend tool - executes in Next.js API routes
+        raise UserInputException(self._unique_id)
