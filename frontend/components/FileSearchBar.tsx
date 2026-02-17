@@ -12,7 +12,7 @@ import {
   Portal
 } from '@chakra-ui/react';
 import { LuSearch } from 'react-icons/lu';
-import { useRouter } from '@/lib/navigation/use-navigation';
+import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import type { SearchResultMetadata } from '@/lib/search/file-search';
 import { useFetchManual } from '@/lib/api/useFetch';
@@ -31,7 +31,7 @@ export default function FileSearchBar({ onResultClick }: FileSearchBarProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const router = useRouter();
+  const { navigate } = useNavigationGuard();
 
   // Use centralized fetch with automatic deduplication
   const [searchFiles, { loading }] = useFetchManual(API.files.search);
@@ -92,9 +92,9 @@ export default function FileSearchBar({ onResultClick }: FileSearchBarProps) {
     } else {
       // Navigate to folder path for folders, file detail for everything else
       if (result.type === 'folder') {
-        router.push(`/p${result.path}`);
+        navigate(`/p${result.path}`);
       } else {
-        router.push(`/f/${result.id}`);
+        navigate(`/f/${result.id}`);
       }
     }
   };
