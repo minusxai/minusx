@@ -6,10 +6,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Box, Text, HStack, VStack, Popover, Portal } from '@chakra-ui/react';
+import { Box, Text, HStack, VStack } from '@chakra-ui/react';
 import { JoinClause, TableReference } from '@/lib/sql/ir-types';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { QueryChip, getColumnIcon } from './QueryChip';
+import { PickerPopover, PickerHeader, PickerList, PickerItem } from './PickerPopover';
 import { LuX, LuGitMerge } from 'react-icons/lu';
 
 interface TableInfo {
@@ -195,10 +196,10 @@ export function JoinBuilder({
 
   return (
     <Box
-      bg="rgba(255, 255, 255, 0.02)"
+      bg="bg.subtle"
       borderRadius="lg"
       border="1px solid"
-      borderColor="rgba(255, 255, 255, 0.06)"
+      borderColor="border.muted"
       p={3}
     >
       <HStack justify="space-between" mb={2.5}>
@@ -225,13 +226,12 @@ export function JoinBuilder({
           <Box key={joinIndex}>
             <HStack gap={2} flexWrap="wrap" align="center" mb={join.on.length > 0 ? 2 : 0}>
               {/* Join chip - clickable to edit */}
-              <Popover.Root
+              <PickerPopover
                 open={editingJoinIndex === joinIndex}
                 onOpenChange={(details) => {
                   if (!details.open) setEditingJoinIndex(null);
                 }}
-              >
-                <Popover.Trigger asChild>
+                trigger={
                   <Box>
                     <QueryChip
                       variant="table"
@@ -243,60 +243,41 @@ export function JoinBuilder({
                       {formatJoinLabel(join)}
                     </QueryChip>
                   </Box>
-                </Popover.Trigger>
-                <Portal>
-                  <Popover.Positioner>
-                    <Popover.Content width="280px" bg="gray.900" borderColor="gray.700" border="1px solid" p={0} overflow="hidden" borderRadius="lg">
-                      <Popover.Body p={2} bg="gray.900">
-                        {/* Join type */}
-                        <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" px={2} py={1.5}>
-                          Join Type
-                        </Text>
-                        <VStack gap={0.5} align="stretch" mb={2}>
-                          {(['INNER', 'LEFT'] as const).map((type) => (
-                            <Box
-                              key={type}
-                              px={2}
-                              py={1.5}
-                              borderRadius="md"
-                              cursor="pointer"
-                              bg={join.type === type ? 'rgba(99, 102, 241, 0.15)' : 'transparent'}
-                              _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
-                              onClick={() => handleChangeJoinType(joinIndex, type)}
-                            >
-                              <Text fontSize="sm">{type} JOIN</Text>
-                            </Box>
-                          ))}
-                        </VStack>
+                }
+              >
+                {/* Join type */}
+                <PickerHeader>Join Type</PickerHeader>
+                <PickerList>
+                  {(['INNER', 'LEFT'] as const).map((type) => (
+                    <PickerItem
+                      key={type}
+                      selected={join.type === type}
+                      onClick={() => handleChangeJoinType(joinIndex, type)}
+                    >
+                      {`${type} JOIN`}
+                    </PickerItem>
+                  ))}
+                </PickerList>
 
-                        {/* Table selection */}
-                        <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" px={2} py={1.5}>
-                          Table
-                        </Text>
-                        <VStack gap={0.5} align="stretch" maxH="200px" overflowY="auto">
-                          {availableTables.map((table) => (
-                            <Box
-                              key={table.displayName}
-                              px={2}
-                              py={1.5}
-                              borderRadius="md"
-                              cursor="pointer"
-                              bg={getTableDisplayName(join.table) === table.displayName ? 'rgba(99, 102, 241, 0.15)' : 'transparent'}
-                              _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
-                              onClick={() => {
-                                handleChangeJoinTable(joinIndex, table.displayName);
-                                setEditingJoinIndex(null);
-                              }}
-                            >
-                              <Text fontSize="sm">{table.displayName}</Text>
-                            </Box>
-                          ))}
-                        </VStack>
-                      </Popover.Body>
-                    </Popover.Content>
-                  </Popover.Positioner>
-                </Portal>
-              </Popover.Root>
+                {/* Table selection */}
+                <Box mt={2}>
+                  <PickerHeader>Table</PickerHeader>
+                  <PickerList maxH="200px">
+                    {availableTables.map((table) => (
+                      <PickerItem
+                        key={table.displayName}
+                        selected={getTableDisplayName(join.table) === table.displayName}
+                        onClick={() => {
+                          handleChangeJoinTable(joinIndex, table.displayName);
+                          setEditingJoinIndex(null);
+                        }}
+                      >
+                        {table.displayName}
+                      </PickerItem>
+                    ))}
+                  </PickerList>
+                </Box>
+              </PickerPopover>
 
               <Text fontSize="xs" color="fg.muted" fontWeight="500">
                 on
@@ -314,13 +295,12 @@ export function JoinBuilder({
               ))}
 
               {/* Add condition */}
-              <Popover.Root
+              <PickerPopover
                 open={addConditionForJoin === joinIndex}
                 onOpenChange={(details) => {
                   if (!details.open) setAddConditionForJoin(null);
                 }}
-              >
-                <Popover.Trigger asChild>
+                trigger={
                   <Box
                     as="button"
                     display="inline-flex"
@@ -328,46 +308,40 @@ export function JoinBuilder({
                     gap={1}
                     bg="transparent"
                     border="1px dashed"
-                    borderColor="rgba(147, 197, 253, 0.28)"
+                    borderColor="border.default"
                     borderRadius="md"
                     px={2}
                     py={1}
                     cursor="pointer"
                     transition="all 0.15s ease"
-                    _hover={{ bg: 'rgba(147, 197, 253, 0.1)', borderStyle: 'solid' }}
+                    _hover={{ bg: 'bg.muted', borderStyle: 'solid' }}
                     onClick={() => setAddConditionForJoin(joinIndex)}
                   >
-                    <Text fontSize="xs" color="#93c5fd" fontWeight="500">+ on</Text>
+                    <Text fontSize="xs" color="accent.primary" fontWeight="500">+ on</Text>
                   </Box>
-                </Popover.Trigger>
-                <Portal>
-                  <Popover.Positioner>
-                    <Popover.Content width="320px" bg="gray.900" borderColor="gray.700" border="1px solid" p={0} overflow="hidden" borderRadius="lg">
-                      <Popover.Body p={2} bg="gray.900">
-                        <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" px={2} py={1.5}>
-                          Add Condition
-                        </Text>
-                        <ConditionBuilder
-                          existingTables={existingTables}
-                          getColumnsForTable={getColumnsForTable}
-                          fromTable={fromTable}
-                          joinTable={join.table}
-                          onAdd={(left, leftCol, right, rightCol) => {
-                            handleAddCondition(joinIndex, left, leftCol, right, rightCol);
-                          }}
-                        />
-                      </Popover.Body>
-                    </Popover.Content>
-                  </Popover.Positioner>
-                </Portal>
-              </Popover.Root>
+                }
+                width="320px"
+              >
+                <PickerHeader>Add Condition</PickerHeader>
+                <ConditionBuilder
+                  existingTables={existingTables}
+                  getColumnsForTable={getColumnsForTable}
+                  fromTable={fromTable}
+                  joinTable={join.table}
+                  onAdd={(left, leftCol, right, rightCol) => {
+                    handleAddCondition(joinIndex, left, leftCol, right, rightCol);
+                  }}
+                />
+              </PickerPopover>
             </HStack>
           </Box>
         ))}
 
         {/* Add join */}
-        <Popover.Root open={addJoinOpen} onOpenChange={(details) => setAddJoinOpen(details.open)}>
-          <Popover.Trigger asChild>
+        <PickerPopover
+          open={addJoinOpen}
+          onOpenChange={(details) => setAddJoinOpen(details.open)}
+          trigger={
             <Box
               as="button"
               display="inline-flex"
@@ -375,50 +349,36 @@ export function JoinBuilder({
               gap={1.5}
               bg="transparent"
               border="1px dashed"
-              borderColor="rgba(99, 102, 241, 0.3)"
+              borderColor="border.default"
               borderRadius="md"
               px={2.5}
               py={1}
               cursor="pointer"
               transition="all 0.15s ease"
-              _hover={{ bg: 'rgba(99, 102, 241, 0.1)', borderStyle: 'solid' }}
+              _hover={{ bg: 'bg.muted', borderStyle: 'solid' }}
               onClick={() => setAddJoinOpen(true)}
             >
-              <Text fontSize="sm" color="#a5b4fc" fontWeight="500">+</Text>
-              <Text fontSize="xs" color="#a5b4fc" fontWeight="500">Add Join</Text>
+              <Text fontSize="sm" color="accent.primary" fontWeight="500">+</Text>
+              <Text fontSize="xs" color="accent.primary" fontWeight="500">Add Join</Text>
             </Box>
-          </Popover.Trigger>
-          <Portal>
-            <Popover.Positioner>
-              <Popover.Content width="280px" bg="gray.900" borderColor="gray.700" border="1px solid" p={0} overflow="hidden" borderRadius="lg">
-                <Popover.Body p={2} bg="gray.900">
-                  <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" px={2} py={1.5}>
-                    Join Table
-                  </Text>
-                  <VStack gap={0.5} align="stretch" maxH="250px" overflowY="auto">
-                    {loading ? (
-                      <Text fontSize="sm" color="fg.muted" px={2} py={1.5}>Loading...</Text>
-                    ) : (
-                      availableTables.map((table) => (
-                        <Box
-                          key={table.displayName}
-                          px={2}
-                          py={1.5}
-                          borderRadius="md"
-                          cursor="pointer"
-                          _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
-                          onClick={() => handleAddJoin(table.displayName)}
-                        >
-                          <Text fontSize="sm">{table.displayName}</Text>
-                        </Box>
-                      ))
-                    )}
-                  </VStack>
-                </Popover.Body>
-              </Popover.Content>
-            </Popover.Positioner>
-          </Portal>
-        </Popover.Root>
+          }
+        >
+          <PickerHeader>Join Table</PickerHeader>
+          <PickerList maxH="250px">
+            {loading ? (
+              <Text fontSize="sm" color="fg.muted" px={2} py={1.5}>Loading...</Text>
+            ) : (
+              availableTables.map((table) => (
+                <PickerItem
+                  key={table.displayName}
+                  onClick={() => handleAddJoin(table.displayName)}
+                >
+                  {table.displayName}
+                </PickerItem>
+              ))
+            )}
+          </PickerList>
+        </PickerPopover>
       </VStack>
     </Box>
   );
@@ -450,44 +410,32 @@ function ConditionBuilder({ existingTables, getColumnsForTable, fromTable, joinT
       <HStack gap={2}>
         <Box flex={1}>
           <Text fontSize="xs" color="fg.muted" mb={1}>Left Table</Text>
-          <VStack gap={0.5} align="stretch" maxH="100px" overflowY="auto" bg="rgba(0,0,0,0.2)" borderRadius="md" p={1}>
+          <VStack gap={0.5} align="stretch" maxH="100px" overflowY="auto" bg="bg.muted" borderRadius="md" p={1}>
             {existingTables.map((t) => (
-              <Box
+              <PickerItem
                 key={t}
-                px={2}
-                py={1}
-                borderRadius="sm"
-                cursor="pointer"
-                fontSize="xs"
-                bg={leftTable === t ? 'rgba(99, 102, 241, 0.2)' : 'transparent'}
-                _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
+                selected={leftTable === t}
+                selectedBg="rgba(99, 102, 241, 0.2)"
                 onClick={() => { setLeftTable(t); setLeftCol(''); }}
               >
-                {t}
-              </Box>
+                <Text fontSize="xs">{t}</Text>
+              </PickerItem>
             ))}
           </VStack>
         </Box>
         <Box flex={1}>
           <Text fontSize="xs" color="fg.muted" mb={1}>Column</Text>
-          <VStack gap={0.5} align="stretch" maxH="100px" overflowY="auto" bg="rgba(0,0,0,0.2)" borderRadius="md" p={1}>
+          <VStack gap={0.5} align="stretch" maxH="100px" overflowY="auto" bg="bg.muted" borderRadius="md" p={1}>
             {leftColumns.map((c) => (
-              <Box
+              <PickerItem
                 key={c.name}
-                px={2}
-                py={1}
-                borderRadius="sm"
-                cursor="pointer"
-                fontSize="xs"
-                bg={leftCol === c.name ? 'rgba(99, 102, 241, 0.2)' : 'transparent'}
-                _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
+                icon={getColumnIcon(c.type)}
+                selected={leftCol === c.name}
+                selectedBg="rgba(99, 102, 241, 0.2)"
                 onClick={() => setLeftCol(c.name)}
               >
-                <HStack gap={1}>
-                  <Box color="fg.muted">{getColumnIcon(c.type)}</Box>
-                  <Text>{c.name}</Text>
-                </HStack>
-              </Box>
+                <Text fontSize="xs">{c.name}</Text>
+              </PickerItem>
             ))}
           </VStack>
         </Box>
@@ -499,44 +447,32 @@ function ConditionBuilder({ existingTables, getColumnsForTable, fromTable, joinT
       <HStack gap={2}>
         <Box flex={1}>
           <Text fontSize="xs" color="fg.muted" mb={1}>Right Table</Text>
-          <VStack gap={0.5} align="stretch" maxH="100px" overflowY="auto" bg="rgba(0,0,0,0.2)" borderRadius="md" p={1}>
+          <VStack gap={0.5} align="stretch" maxH="100px" overflowY="auto" bg="bg.muted" borderRadius="md" p={1}>
             {existingTables.map((t) => (
-              <Box
+              <PickerItem
                 key={t}
-                px={2}
-                py={1}
-                borderRadius="sm"
-                cursor="pointer"
-                fontSize="xs"
-                bg={rightTable === t ? 'rgba(99, 102, 241, 0.2)' : 'transparent'}
-                _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
+                selected={rightTable === t}
+                selectedBg="rgba(99, 102, 241, 0.2)"
                 onClick={() => { setRightTable(t); setRightCol(''); }}
               >
-                {t}
-              </Box>
+                <Text fontSize="xs">{t}</Text>
+              </PickerItem>
             ))}
           </VStack>
         </Box>
         <Box flex={1}>
           <Text fontSize="xs" color="fg.muted" mb={1}>Column</Text>
-          <VStack gap={0.5} align="stretch" maxH="100px" overflowY="auto" bg="rgba(0,0,0,0.2)" borderRadius="md" p={1}>
+          <VStack gap={0.5} align="stretch" maxH="100px" overflowY="auto" bg="bg.muted" borderRadius="md" p={1}>
             {rightColumns.map((c) => (
-              <Box
+              <PickerItem
                 key={c.name}
-                px={2}
-                py={1}
-                borderRadius="sm"
-                cursor="pointer"
-                fontSize="xs"
-                bg={rightCol === c.name ? 'rgba(99, 102, 241, 0.2)' : 'transparent'}
-                _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
+                icon={getColumnIcon(c.type)}
+                selected={rightCol === c.name}
+                selectedBg="rgba(99, 102, 241, 0.2)"
                 onClick={() => setRightCol(c.name)}
               >
-                <HStack gap={1}>
-                  <Box color="fg.muted">{getColumnIcon(c.type)}</Box>
-                  <Text>{c.name}</Text>
-                </HStack>
-              </Box>
+                <Text fontSize="xs">{c.name}</Text>
+              </PickerItem>
             ))}
           </VStack>
         </Box>
@@ -549,13 +485,13 @@ function ConditionBuilder({ existingTables, getColumnsForTable, fromTable, joinT
         px={3}
         py={1.5}
         borderRadius="md"
-        bg={canAdd ? 'rgba(45, 212, 191, 0.2)' : 'rgba(255, 255, 255, 0.05)'}
-        color={canAdd ? '#2dd4bf' : 'fg.muted'}
+        bg={canAdd ? 'rgba(22, 160, 133, 0.15)' : 'bg.subtle'}
+        color={canAdd ? 'accent.teal' : 'fg.muted'}
         fontSize="sm"
         fontWeight="500"
         cursor={canAdd ? 'pointer' : 'not-allowed'}
         opacity={canAdd ? 1 : 0.5}
-        _hover={canAdd ? { bg: 'rgba(45, 212, 191, 0.3)' } : undefined}
+        _hover={canAdd ? { bg: 'rgba(22, 160, 133, 0.25)' } : undefined}
         onClick={() => canAdd && onAdd(leftTable, leftCol, rightTable, rightCol)}
       >
         Add Condition

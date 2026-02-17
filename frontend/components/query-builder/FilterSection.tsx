@@ -6,7 +6,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Box, HStack, Text, VStack, Input, createListCollection, Popover, Portal, Button, IconButton } from '@chakra-ui/react';
+import { Box, HStack, Text, VStack, Input, createListCollection, Button, IconButton } from '@chakra-ui/react';
 import {
   SelectRoot,
   SelectTrigger,
@@ -18,6 +18,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { FilterGroup, FilterCondition } from '@/lib/sql/ir-types';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { QueryChip, AddChipButton, getColumnIcon } from './QueryChip';
+import { PickerPopover, PickerList, PickerItem } from './PickerPopover';
 import { LuX, LuPlus } from 'react-icons/lu';
 
 interface FilterSectionProps {
@@ -352,12 +353,164 @@ export function FilterSection({
   const totalItems = filterConditions.length + nestedGroups.length;
   const showOperatorToggle = totalItems > 1;
 
+  // Shared filter form content (used by both add and edit popovers)
+  const renderFilterForm = (mode: 'add' | 'edit') => (
+    <VStack gap={3} align="stretch">
+      <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase">
+        {mode === 'add' ? 'Add filter' : 'Edit filter'}
+      </Text>
+
+      {/* Show aggregate toggle only for HAVING clause */}
+      {filterType === 'having' && (
+        <>
+          <Checkbox
+            checked={newFilter.isAggregate}
+            onCheckedChange={(e) => setNewFilter(prev => ({
+              ...prev,
+              isAggregate: e.checked === true,
+              column: '',
+              aggregate: e.checked === true ? 'COUNT' : undefined,
+            }))}
+          >
+            <Text fontSize="sm">Use aggregate function</Text>
+          </Checkbox>
+
+          {newFilter.isAggregate && (
+            <SelectRoot
+              collection={createListCollection({
+                items: AGGREGATES.map(a => ({ label: a.label, value: a.value }))
+              })}
+              value={newFilter.aggregate ? [newFilter.aggregate] : ['COUNT']}
+              onValueChange={(e) => setNewFilter(prev => ({
+                ...prev,
+                aggregate: e.value[0] as 'COUNT' | 'SUM' | 'AVG' | 'MIN' | 'MAX' | 'COUNT_DISTINCT',
+                column: e.value[0] === 'COUNT' ? prev.column : '',
+              }))}
+              size="sm"
+            >
+              <SelectTrigger>
+                <SelectValueText placeholder="Aggregate function" />
+              </SelectTrigger>
+              <SelectContent>
+                {AGGREGATES.map(agg => (
+                  <SelectItem key={agg.value} item={agg.value}>
+                    {agg.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </SelectRoot>
+          )}
+        </>
+      )}
+
+      {/* Different column selection based on aggregate */}
+      {newFilter.isAggregate && newFilter.aggregate === 'COUNT' ? (
+        // COUNT: Allow * or column
+        <PickerList maxH="200px">
+          <PickerItem
+            selected={!newFilter.column}
+            selectedBg="rgba(134, 239, 172, 0.15)"
+            onClick={() => setNewFilter(prev => ({ ...prev, column: '' }))}
+          >
+            * (all rows)
+          </PickerItem>
+          {availableColumns.map(col => (
+            <PickerItem
+              key={col.name}
+              icon={getColumnIcon(col.type)}
+              selected={newFilter.column === col.name}
+              selectedBg="rgba(134, 239, 172, 0.15)"
+              onClick={() => setNewFilter(prev => ({ ...prev, column: col.name }))}
+            >
+              {col.name}
+            </PickerItem>
+          ))}
+        </PickerList>
+      ) : (
+        // Regular column selector
+        <SelectRoot
+          collection={createListCollection({
+            items: availableColumns.map((c) => ({ label: c.name, value: c.name })),
+          })}
+          value={newFilter.column ? [newFilter.column] : []}
+          onValueChange={(e) =>
+            setNewFilter((prev) => ({ ...prev, column: e.value[0] || '' }))
+          }
+          size="sm"
+        >
+          <SelectTrigger>
+            <SelectValueText placeholder="Select column..." />
+          </SelectTrigger>
+          <SelectContent>
+            {availableColumns.map((col) => (
+              <SelectItem key={col.name} item={col.name}>
+                <HStack gap={2}>
+                  {getColumnIcon(col.type)}
+                  <Text>{col.name}</Text>
+                </HStack>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </SelectRoot>
+      )}
+
+      <SelectRoot
+        collection={createListCollection({
+          items: OPERATORS.map((o) => ({ label: o.label, value: o.value })),
+        })}
+        value={[newFilter.operator]}
+        onValueChange={(e) =>
+          setNewFilter((prev) => ({
+            ...prev,
+            operator: (e.value[0] as Operator) || '=',
+          }))
+        }
+        size="sm"
+      >
+        <SelectTrigger>
+          <SelectValueText />
+        </SelectTrigger>
+        <SelectContent>
+          {OPERATORS.map((op) => (
+            <SelectItem key={op.value} item={op.value}>
+              {op.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </SelectRoot>
+
+      {OPERATORS.find((o) => o.value === newFilter.operator)?.needsValue && (
+        <Input
+          size="sm"
+          placeholder={newFilter.operator === 'IN' ? '1, 2, 3' : 'Value or :param'}
+          value={newFilter.value}
+          onChange={(e) =>
+            setNewFilter((prev) => ({ ...prev, value: e.target.value }))
+          }
+        />
+      )}
+
+      <Button
+        size="sm"
+        bg="accent.primary"
+        onClick={mode === 'add' ? handleAddFilter : handleUpdateFilter}
+        disabled={
+          filterType === 'having' && newFilter.isAggregate
+            ? !newFilter.aggregate || (newFilter.aggregate !== 'COUNT' && !newFilter.column)
+            : !newFilter.column
+        }
+      >
+        {mode === 'add' ? 'Add Filter' : 'Update Filter'}
+      </Button>
+    </VStack>
+  );
+
   return (
     <Box
-      bg={depth === 0 ? "rgba(255, 255, 255, 0.02)" : "rgba(255, 255, 255, 0.01)"}
+      bg="bg.subtle"
       borderRadius="lg"
       border="1px solid"
-      borderColor={depth === 0 ? "rgba(255, 255, 255, 0.06)" : "rgba(255, 255, 255, 0.04)"}
+      borderColor="border.muted"
       p={3}
       ml={depth > 0 ? 4 : 0}
     >
@@ -412,7 +565,7 @@ export function FilterSection({
       {/* Filter condition chips */}
       <HStack gap={2} flexWrap="wrap" align="center" mb={nestedGroups.length > 0 ? 3 : 0}>
         {filterConditions.map((cond, idx) => (
-          <Popover.Root
+          <PickerPopover
             key={`filter-${idx}`}
             open={editingIndex === idx}
             onOpenChange={(details) => {
@@ -421,8 +574,7 @@ export function FilterSection({
                 setNewFilter({ column: '', operator: '=', value: '', isAggregate: false });
               }
             }}
-          >
-            <Popover.Trigger asChild>
+            trigger={
               <Box>
                 <QueryChip
                   variant="filter"
@@ -433,338 +585,28 @@ export function FilterSection({
                   {formatFilterLabel(cond)}
                 </QueryChip>
               </Box>
-            </Popover.Trigger>
-            <Portal>
-              <Popover.Positioner>
-                <Popover.Content width="320px" bg="gray.900" borderColor="gray.700" border="1px solid" p={0} overflow="hidden" borderRadius="lg">
-                  <Popover.Body p={3}>
-                    <VStack gap={3} align="stretch">
-                      <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase">
-                        Edit filter
-                      </Text>
-
-                      {/* Show aggregate toggle only for HAVING clause */}
-                      {filterType === 'having' && (
-                        <>
-                          <Checkbox
-                            checked={newFilter.isAggregate}
-                            onCheckedChange={(e) => setNewFilter(prev => ({
-                              ...prev,
-                              isAggregate: e.checked === true,
-                              column: '',
-                              aggregate: e.checked === true ? 'COUNT' : undefined,
-                            }))}
-                          >
-                            <Text fontSize="sm">Use aggregate function</Text>
-                          </Checkbox>
-
-                          {newFilter.isAggregate && (
-                            <SelectRoot
-                              collection={createListCollection({
-                                items: AGGREGATES.map(a => ({ label: a.label, value: a.value }))
-                              })}
-                              value={newFilter.aggregate ? [newFilter.aggregate] : ['COUNT']}
-                              onValueChange={(e) => setNewFilter(prev => ({
-                                ...prev,
-                                aggregate: e.value[0] as 'COUNT' | 'SUM' | 'AVG' | 'MIN' | 'MAX' | 'COUNT_DISTINCT',
-                                column: e.value[0] === 'COUNT' ? prev.column : '',
-                              }))}
-                              size="sm"
-                            >
-                              <SelectTrigger>
-                                <SelectValueText placeholder="Aggregate function" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {AGGREGATES.map(agg => (
-                                  <SelectItem key={agg.value} item={agg.value}>
-                                    {agg.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </SelectRoot>
-                          )}
-                        </>
-                      )}
-
-                      {/* Different column selection based on aggregate */}
-                      {newFilter.isAggregate && newFilter.aggregate === 'COUNT' ? (
-                        // COUNT: Allow * or column
-                        <VStack gap={0.5} align="stretch" maxH="200px" overflowY="auto">
-                          <Box
-                            px={2} py={1.5} borderRadius="md" cursor="pointer"
-                            bg={!newFilter.column ? 'rgba(134, 239, 172, 0.15)' : 'transparent'}
-                            _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
-                            onClick={() => setNewFilter(prev => ({ ...prev, column: '' }))}
-                          >
-                            <Text fontSize="sm">* (all rows)</Text>
-                          </Box>
-                          {availableColumns.map(col => (
-                            <Box
-                              key={col.name}
-                              px={2} py={1.5} borderRadius="md" cursor="pointer"
-                              bg={newFilter.column === col.name ? 'rgba(134, 239, 172, 0.15)' : 'transparent'}
-                              _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
-                              onClick={() => setNewFilter(prev => ({ ...prev, column: col.name }))}
-                            >
-                              <HStack gap={2}>
-                                {getColumnIcon(col.type)}
-                                <Text fontSize="sm">{col.name}</Text>
-                              </HStack>
-                            </Box>
-                          ))}
-                        </VStack>
-                      ) : (
-                        // Regular column selector
-                        <SelectRoot
-                          collection={createListCollection({
-                            items: availableColumns.map((c) => ({ label: c.name, value: c.name })),
-                          })}
-                          value={newFilter.column ? [newFilter.column] : []}
-                          onValueChange={(e) =>
-                            setNewFilter((prev) => ({ ...prev, column: e.value[0] || '' }))
-                          }
-                          size="sm"
-                        >
-                          <SelectTrigger>
-                            <SelectValueText placeholder="Select column..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableColumns.map((col) => (
-                              <SelectItem key={col.name} item={col.name}>
-                                <HStack gap={2}>
-                                  {getColumnIcon(col.type)}
-                                  <Text>{col.name}</Text>
-                                </HStack>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </SelectRoot>
-                      )}
-
-                      <SelectRoot
-                        collection={createListCollection({
-                          items: OPERATORS.map((o) => ({ label: o.label, value: o.value })),
-                        })}
-                        value={[newFilter.operator]}
-                        onValueChange={(e) =>
-                          setNewFilter((prev) => ({
-                            ...prev,
-                            operator: (e.value[0] as Operator) || '=',
-                          }))
-                        }
-                        size="sm"
-                      >
-                        <SelectTrigger>
-                          <SelectValueText />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {OPERATORS.map((op) => (
-                            <SelectItem key={op.value} item={op.value}>
-                              {op.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </SelectRoot>
-
-                      {OPERATORS.find((o) => o.value === newFilter.operator)?.needsValue && (
-                        <Input
-                          size="sm"
-                          placeholder={newFilter.operator === 'IN' ? '1, 2, 3' : 'Value or :param'}
-                          value={newFilter.value}
-                          onChange={(e) =>
-                            setNewFilter((prev) => ({ ...prev, value: e.target.value }))
-                          }
-                        />
-                      )}
-
-                      <Button
-                        size="sm"
-                        colorPalette="blue"
-                        onClick={handleUpdateFilter}
-                        disabled={
-                          filterType === 'having' && newFilter.isAggregate
-                            ? !newFilter.aggregate || (newFilter.aggregate !== 'COUNT' && !newFilter.column)
-                            : !newFilter.column
-                        }
-                      >
-                        Update Filter
-                      </Button>
-                    </VStack>
-                  </Popover.Body>
-                </Popover.Content>
-              </Popover.Positioner>
-            </Portal>
-          </Popover.Root>
+            }
+            width="320px"
+            padding={3}
+          >
+            {renderFilterForm('edit')}
+          </PickerPopover>
         ))}
 
         {/* Add filter */}
-        <Popover.Root open={addFilterOpen && !isEditing} onOpenChange={(details) => setAddFilterOpen(details.open)}>
-          <Popover.Trigger asChild>
+        <PickerPopover
+          open={addFilterOpen && !isEditing}
+          onOpenChange={(details) => setAddFilterOpen(details.open)}
+          trigger={
             <Box>
               <AddChipButton onClick={() => setAddFilterOpen(true)} variant="filter" />
             </Box>
-          </Popover.Trigger>
-          <Portal>
-            <Popover.Positioner>
-              <Popover.Content width="320px" bg="gray.900" borderColor="gray.700" border="1px solid" p={0} overflow="hidden" borderRadius="lg">
-                <Popover.Body p={3}>
-                  <VStack gap={3} align="stretch">
-                    <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase">
-                      Add filter
-                    </Text>
-
-                    {/* Show aggregate toggle only for HAVING clause */}
-                    {filterType === 'having' && (
-                      <>
-                        <Checkbox
-                          checked={newFilter.isAggregate}
-                          onCheckedChange={(e) => setNewFilter(prev => ({
-                            ...prev,
-                            isAggregate: e.checked === true,
-                            column: '',
-                            aggregate: e.checked === true ? 'COUNT' : undefined,
-                          }))}
-                        >
-                          <Text fontSize="sm">Use aggregate function</Text>
-                        </Checkbox>
-
-                        {newFilter.isAggregate && (
-                          <SelectRoot
-                            collection={createListCollection({
-                              items: AGGREGATES.map(a => ({ label: a.label, value: a.value }))
-                            })}
-                            value={newFilter.aggregate ? [newFilter.aggregate] : ['COUNT']}
-                            onValueChange={(e) => setNewFilter(prev => ({
-                              ...prev,
-                              aggregate: e.value[0] as 'COUNT' | 'SUM' | 'AVG' | 'MIN' | 'MAX' | 'COUNT_DISTINCT',
-                              column: e.value[0] === 'COUNT' ? prev.column : '', // Reset column when switching from COUNT
-                            }))}
-                            size="sm"
-                          >
-                            <SelectTrigger>
-                              <SelectValueText placeholder="Aggregate function" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {AGGREGATES.map(agg => (
-                                <SelectItem key={agg.value} item={agg.value}>
-                                  {agg.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </SelectRoot>
-                        )}
-                      </>
-                    )}
-
-                    {/* Different column selection based on aggregate */}
-                    {newFilter.isAggregate && newFilter.aggregate === 'COUNT' ? (
-                      // COUNT: Allow * or column
-                      <VStack gap={0.5} align="stretch" maxH="200px" overflowY="auto">
-                        <Box
-                          px={2} py={1.5} borderRadius="md" cursor="pointer"
-                          bg={!newFilter.column ? 'rgba(134, 239, 172, 0.15)' : 'transparent'}
-                          _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
-                          onClick={() => setNewFilter(prev => ({ ...prev, column: '' }))}
-                        >
-                          <Text fontSize="sm">* (all rows)</Text>
-                        </Box>
-                        {availableColumns.map(col => (
-                          <Box
-                            key={col.name}
-                            px={2} py={1.5} borderRadius="md" cursor="pointer"
-                            bg={newFilter.column === col.name ? 'rgba(134, 239, 172, 0.15)' : 'transparent'}
-                            _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
-                            onClick={() => setNewFilter(prev => ({ ...prev, column: col.name }))}
-                          >
-                            <HStack gap={2}>
-                              {getColumnIcon(col.type)}
-                              <Text fontSize="sm">{col.name}</Text>
-                            </HStack>
-                          </Box>
-                        ))}
-                      </VStack>
-                    ) : (
-                      // Regular column selector
-                      <SelectRoot
-                        collection={createListCollection({
-                          items: availableColumns.map((c) => ({ label: c.name, value: c.name })),
-                        })}
-                        value={newFilter.column ? [newFilter.column] : []}
-                        onValueChange={(e) =>
-                          setNewFilter((prev) => ({ ...prev, column: e.value[0] || '' }))
-                        }
-                        size="sm"
-                      >
-                        <SelectTrigger>
-                          <SelectValueText placeholder="Select column..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {availableColumns.map((col) => (
-                            <SelectItem key={col.name} item={col.name}>
-                              <HStack gap={2}>
-                                {getColumnIcon(col.type)}
-                                <Text>{col.name}</Text>
-                              </HStack>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </SelectRoot>
-                    )}
-
-                    <SelectRoot
-                      collection={createListCollection({
-                        items: OPERATORS.map((o) => ({ label: o.label, value: o.value })),
-                      })}
-                      value={[newFilter.operator]}
-                      onValueChange={(e) =>
-                        setNewFilter((prev) => ({
-                          ...prev,
-                          operator: (e.value[0] as Operator) || '=',
-                        }))
-                      }
-                      size="sm"
-                    >
-                      <SelectTrigger>
-                        <SelectValueText />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {OPERATORS.map((op) => (
-                          <SelectItem key={op.value} item={op.value}>
-                            {op.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </SelectRoot>
-
-                    {OPERATORS.find((o) => o.value === newFilter.operator)?.needsValue && (
-                      <Input
-                        size="sm"
-                        placeholder={newFilter.operator === 'IN' ? '1, 2, 3' : 'Value or :param'}
-                        value={newFilter.value}
-                        onChange={(e) =>
-                          setNewFilter((prev) => ({ ...prev, value: e.target.value }))
-                        }
-                      />
-                    )}
-
-                    <Button
-                      size="sm"
-                      colorPalette="blue"
-                      onClick={handleAddFilter}
-                      disabled={
-                        filterType === 'having' && newFilter.isAggregate
-                          ? !newFilter.aggregate || (newFilter.aggregate !== 'COUNT' && !newFilter.column)
-                          : !newFilter.column
-                      }
-                    >
-                      Add Filter
-                    </Button>
-                  </VStack>
-                </Popover.Body>
-              </Popover.Content>
-            </Popover.Positioner>
-          </Portal>
-        </Popover.Root>
+          }
+          width="320px"
+          padding={3}
+        >
+          {renderFilterForm('add')}
+        </PickerPopover>
 
         {/* Add group button - only show if depth < 2 (limit nesting) */}
         {depth < 2 && (

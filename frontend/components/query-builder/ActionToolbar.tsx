@@ -47,21 +47,21 @@ function ActionButton({ icon, label, onClick, isActive }: ActionButtonProps) {
       flex={1}
       borderRadius="lg"
       border="1px solid"
-      borderColor={isActive ? 'rgba(45, 212, 191, 0.4)' : 'rgba(255, 255, 255, 0.08)'}
-      bg={isActive ? 'rgba(45, 212, 191, 0.1)' : 'transparent'}
+      borderColor={isActive ? 'accent.teal' : 'border.muted'}
+      bg={isActive ? 'rgba(22, 160, 133, 0.1)' : 'transparent'}
       cursor="pointer"
       transition="all 0.15s ease"
       _hover={{
-        bg: 'rgba(255, 255, 255, 0.05)',
-        borderColor: 'rgba(255, 255, 255, 0.15)',
+        bg: 'bg.muted',
+        borderColor: 'border.default',
         transform: 'translateY(-1px)',
       }}
       onClick={onClick}
     >
-      <Box color={isActive ? '#2dd4bf' : 'fg.muted'} fontSize="lg">
+      <Box color={isActive ? 'accent.teal' : 'fg.muted'} fontSize="lg">
         {icon}
       </Box>
-      <Text fontSize="xs" color={isActive ? '#2dd4bf' : 'fg.muted'} fontWeight="500">
+      <Text fontSize="xs" color={isActive ? 'accent.teal' : 'fg.muted'} fontWeight="500">
         {label}
       </Text>
     </VStack>
@@ -142,27 +142,27 @@ export function ActionToolbar({
             flex={1}
             borderRadius="lg"
             border="1px solid"
-            borderColor={currentLimit ? 'rgba(45, 212, 191, 0.4)' : 'rgba(255, 255, 255, 0.08)'}
-            bg={currentLimit ? 'rgba(45, 212, 191, 0.1)' : 'transparent'}
+            borderColor={currentLimit ? 'accent.teal' : 'border.muted'}
+            bg={currentLimit ? 'rgba(22, 160, 133, 0.1)' : 'transparent'}
             cursor="pointer"
             transition="all 0.15s ease"
             _hover={{
-              bg: 'rgba(255, 255, 255, 0.05)',
-              borderColor: 'rgba(255, 255, 255, 0.15)',
+              bg: 'bg.muted',
+              borderColor: 'border.default',
               transform: 'translateY(-1px)',
             }}
           >
-            <Box color={currentLimit ? '#2dd4bf' : 'fg.muted'} fontSize="lg">
+            <Box color={currentLimit ? 'accent.teal' : 'fg.muted'} fontSize="lg">
               <LuListOrdered size={18} />
             </Box>
-            <Text fontSize="xs" color={currentLimit ? '#2dd4bf' : 'fg.muted'} fontWeight="500">
+            <Text fontSize="xs" color={currentLimit ? 'accent.teal' : 'fg.muted'} fontWeight="500">
               {currentLimit ? `${currentLimit} rows` : 'Row limit'}
             </Text>
           </VStack>
         </Popover.Trigger>
         <Portal>
           <Popover.Positioner>
-            <Popover.Content width="180px" bg="gray.900" borderColor="gray.700" border="1px solid" p={0} overflow="hidden" borderRadius="lg">
+            <Popover.Content width="180px" bg="bg.elevated" p={0} overflow="hidden" borderRadius="lg">
               <Popover.Body p={3}>
                 <VStack gap={2} align="stretch">
                   <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase">
@@ -187,10 +187,10 @@ export function ActionToolbar({
                         px={2}
                         py={1}
                         borderRadius="md"
-                        bg="rgba(255, 255, 255, 0.05)"
+                        bg="bg.subtle"
                         fontSize="xs"
                         color="fg.muted"
-                        _hover={{ bg: 'rgba(255, 255, 255, 0.1)' }}
+                        _hover={{ bg: 'bg.muted' }}
                         onClick={() => {
                           setLimitValue(num.toString());
                           onLimitChange(num);
