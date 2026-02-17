@@ -1,9 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Box, VStack, Text, Flex, Switch, Button, Heading, Container, Icon } from '@chakra-ui/react';
-import { LuChevronRight, LuRefreshCw } from 'react-icons/lu';
+import { useState, ReactNode, useMemo } from 'react';
+import { Box, VStack, Text, Flex, Switch, Button, Heading, Container, Tabs } from '@chakra-ui/react';
+import { LuRefreshCw } from 'react-icons/lu';
 import { ColorModeButton } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { setAskForConfirmation, setShowDebug, setShowJson } from '@/store/uiSlice';
@@ -16,16 +15,68 @@ import Breadcrumb from '@/components/Breadcrumb';
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import { API } from '@/lib/api/declarations';
 
-type SettingsView = 'main' | 'data-management';
+type TabId = 'general' | 'dev' | 'data';
+
+interface SettingEntry {
+  tab: TabId;
+  title: string;
+  description: string;
+  control: ReactNode;
+  visible?: boolean; // defaults to true
+}
+
+interface TabEntry {
+  id: TabId;
+  label: string;
+  visible?: boolean;
+  /** Custom content instead of rendering settings rows */
+  custom?: ReactNode;
+}
+
+function SettingRow({ title, description, control }: { title: string; description: string; control: ReactNode }) {
+  return (
+    <Flex
+      justify="space-between"
+      align="center"
+      py={5}
+      px={6}
+      _hover={{ bg: 'bg.subtle' }}
+      transition="all 0.15s ease"
+    >
+      <Box flex="1" mr={4}>
+        <Text fontSize="sm" fontWeight="medium" fontFamily="mono" mb={1}>
+          {title}
+        </Text>
+        <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+          {description}
+        </Text>
+      </Box>
+      {control}
+    </Flex>
+  );
+}
+
+function SwitchControl({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <Switch.Root
+      checked={checked}
+      onCheckedChange={(details) => onChange(details.checked)}
+      colorPalette="teal"
+    >
+      <Switch.HiddenInput />
+      <Switch.Control>
+        <Switch.Thumb />
+      </Switch.Control>
+    </Switch.Root>
+  );
+}
 
 export default function SettingsPage() {
-  const router = useRouter();
   const dispatch = useAppDispatch();
   const askForConfirmation = useAppSelector((state) => state.ui.askForConfirmation);
   const showDebug = useAppSelector((state) => state.ui.showDebug);
   const showJson = useAppSelector((state) => state.ui.showJson);
   const user = useAppSelector((state) => state.auth.user);
-  const [currentView, setCurrentView] = useState<SettingsView>('main');
   const [isClearing, setIsClearing] = useState(false);
 
   const isAdmin = user?.role === 'admin';
@@ -46,7 +97,6 @@ export default function SettingsPage() {
         duration: 5000,
       });
 
-      // Optionally reload the page after a short delay
       setTimeout(() => {
         window.location.reload();
       }, 1000);
@@ -63,285 +113,156 @@ export default function SettingsPage() {
     }
   };
 
+  // ── Settings config ──────────────────────────────────────────────
+  const settings: SettingEntry[] = useMemo(() => [
+    {
+      tab: 'general',
+      title: 'Appearance: Dark Mode',
+      description: 'Switch between light and dark theme',
+      control: <ColorModeButton />,
+    },
+    {
+      tab: 'general',
+      title: 'Confirm Actions',
+      description: 'Confirm before applying AI-suggested changes to any page',
+      control: (
+        <SwitchControl
+          checked={askForConfirmation}
+          onChange={(checked) => dispatch(setAskForConfirmation(checked))}
+        />
+      ),
+    },
+    {
+      tab: 'general',
+      title: 'Mode',
+      description: `Current: ${user?.mode || 'org'}`,
+      control: (
+        <Flex gap={2}>
+          <Button size="sm" variant={user?.mode === 'org' ? 'solid' : 'outline'} onClick={() => switchMode('org')}>
+            Org
+          </Button>
+          <Button size="sm" variant={user?.mode === 'tutorial' ? 'solid' : 'outline'} onClick={() => switchMode('tutorial')}>
+            Tutorial
+          </Button>
+        </Flex>
+      ),
+    },
+    {
+      tab: 'dev',
+      title: 'Show Debug Info',
+      description: 'Display debug information in the interface',
+      control: (
+        <SwitchControl
+          checked={showDebug}
+          onChange={(checked) => dispatch(setShowDebug(checked))}
+        />
+      ),
+      visible: showDebugOption,
+    },
+    {
+      tab: 'dev',
+      title: 'Show JSON Toggle',
+      description: 'Display JSON toggle button in the interface',
+      control: (
+        <SwitchControl
+          checked={showJson}
+          onChange={(checked) => dispatch(setShowJson(checked))}
+        />
+      ),
+      visible: showDebugOption,
+    },
+    {
+      tab: 'dev',
+      title: 'Session Recording',
+      description: 'Record your session for debugging and support',
+      control: <RecordingControl />,
+    },
+    {
+      tab: 'dev',
+      title: 'Clear Cache',
+      description: 'Reload configs, styles, contexts, and connections',
+      control: (
+        <Button size="sm" variant="outline" onClick={handleClearCache} loading={isClearing} disabled={isClearing}>
+          <LuRefreshCw />
+          Clear
+        </Button>
+      ),
+    },
+  ], [askForConfirmation, showDebug, showJson, showDebugOption, isClearing, user?.mode, dispatch, handleClearCache]);
+
+  // ── Tabs config ──────────────────────────────────────────────────
+  const tabs: TabEntry[] = useMemo(() => [
+    { id: 'general', label: 'General' },
+    { id: 'dev', label: 'Dev', visible: isAdmin },
+    {
+      id: 'data',
+      label: 'Data Management',
+      visible: isAdmin,
+      custom: (
+        <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
+          <DataManagementSection />
+        </Box>
+      ),
+    },
+  ], [isAdmin]);
+
   const breadcrumbItems = [
     { label: 'Home', href: '/' },
     { label: 'Settings', href: undefined }
   ];
 
-  // Don't render until user is loaded
   if (!user) {
     return null;
   }
+
+  const visibleTabs = tabs.filter((t) => t.visible !== false);
+
+  const renderTabContent = (tab: TabEntry) => {
+    if (tab.custom) return tab.custom;
+
+    const tabSettings = settings.filter((s) => s.tab === tab.id && s.visible !== false);
+    return (
+      <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
+        <VStack align="stretch" gap={0} divideY="1px">
+          {tabSettings.map((s) => (
+            <SettingRow key={s.title} title={s.title} description={s.description} control={s.control} />
+          ))}
+        </VStack>
+      </Box>
+    );
+  };
 
   return (
     <Box minH="100vh" bg="bg.canvas">
       <Container maxW="container.md" py={{ base: 4, md: 8 }} px={{ base: 4, md: 8 }}>
         <Breadcrumb items={breadcrumbItems} />
 
-        {currentView === 'main' ? (
-          <Box>
-            <Heading
-              fontSize={{ base: '3xl', md: '4xl', lg: '5xl' }}
-              fontWeight="900"
-              letterSpacing="-0.03em"
-              mt={10}
-              mb={8}
-              color="fg.default"
-            >
-              Settings
-            </Heading>
+        <Heading
+          fontSize={{ base: '3xl', md: '4xl', lg: '5xl' }}
+          fontWeight="900"
+          letterSpacing="-0.03em"
+          mt={10}
+          mb={8}
+          color="fg.default"
+        >
+          Settings
+        </Heading>
 
-            <Box
-              bg="bg.surface"
-              borderRadius="xl"
-              shadow="sm"
-              borderWidth="1px"
-              borderColor="border"
-              overflow="hidden"
-            >
-              <VStack align="stretch" gap={0} divideY="1px">
-                {/* Dark Mode Setting */}
-                <Flex
-                  justify="space-between"
-                  align="center"
-                  py={5}
-                  px={6}
-                  _hover={{ bg: 'bg.subtle' }}
-                  transition="all 0.15s ease"
-                >
-                  <Box flex="1" mr={4}>
-                    <Text fontSize="sm" fontWeight="medium" fontFamily="mono" mb={1}>
-                      Appearance
-                    </Text>
-                    <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-                      Switch between light and dark theme
-                    </Text>
-                  </Box>
-                  <ColorModeButton />
-                </Flex>
+        <Tabs.Root defaultValue="general" variant="line" colorPalette="teal">
+          <Tabs.List mb={6}>
+            {visibleTabs.map((tab) => (
+              <Tabs.Trigger key={tab.id} value={tab.id} fontFamily="mono" fontSize="sm">
+                {tab.label}
+              </Tabs.Trigger>
+            ))}
+          </Tabs.List>
 
-                {/* Mode Switcher */}
-                <Flex
-                  justify="space-between"
-                  align="center"
-                  py={5}
-                  px={6}
-                  _hover={{ bg: 'bg.subtle' }}
-                  transition="all 0.15s ease"
-                >
-                  <Box flex="1" mr={4}>
-                    <Text fontSize="sm" fontWeight="medium" fontFamily="mono" mb={1}>
-                      Mode
-                    </Text>
-                    <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-                      Current: {user?.mode || 'org'}
-                    </Text>
-                  </Box>
-                  <Flex gap={2}>
-                    <Button
-                      size="sm"
-                      variant={user?.mode === 'org' ? 'solid' : 'outline'}
-                      onClick={() => switchMode('org')}
-                    >
-                      Org
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={user?.mode === 'tutorial' ? 'solid' : 'outline'}
-                      onClick={() => switchMode('tutorial')}
-                    >
-                      Tutorial
-                    </Button>
-                  </Flex>
-                </Flex>
-
-                {/* Ask for Confirmation Setting */}
-                <Flex
-                  justify="space-between"
-                  align="center"
-                  py={5}
-                  px={6}
-                  _hover={{ bg: 'bg.subtle' }}
-                  transition="all 0.15s ease"
-                >
-                  <Box flex="1" mr={4}>
-                    <Text fontSize="sm" fontWeight="medium" fontFamily="mono" mb={1}>
-                      Confirm Actions
-                    </Text>
-                    <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-                      Confirm before applying AI-suggested changes to any page
-                    </Text>
-                  </Box>
-                  <Switch.Root
-                    checked={askForConfirmation}
-                    onCheckedChange={(details) => dispatch(setAskForConfirmation(details.checked))}
-                    colorPalette="teal"
-                  >
-                    <Switch.HiddenInput />
-                    <Switch.Control>
-                      <Switch.Thumb />
-                    </Switch.Control>
-                  </Switch.Root>
-                </Flex>
-
-                {/* Show Debug Setting - Admin + Dev Mode Only */}
-                {showDebugOption && (
-                  <Flex
-                    justify="space-between"
-                    align="center"
-                    py={5}
-                    px={6}
-                    _hover={{ bg: 'bg.subtle' }}
-                    transition="all 0.15s ease"
-                  >
-                    <Box flex="1" mr={4}>
-                      <Text fontSize="sm" fontWeight="medium" fontFamily="mono" mb={1}>
-                        Show Debug Info
-                      </Text>
-                      <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-                        Display debug information in the interface
-                      </Text>
-                    </Box>
-                    <Switch.Root
-                      checked={showDebug}
-                      onCheckedChange={(details) => dispatch(setShowDebug(details.checked))}
-                      colorPalette="teal"
-                    >
-                      <Switch.HiddenInput />
-                      <Switch.Control>
-                        <Switch.Thumb />
-                      </Switch.Control>
-                    </Switch.Root>
-                  </Flex>
-                )}
-
-                {/* Show JSON Setting - Admin + Dev Mode Only */}
-                {showDebugOption && (
-                  <Flex
-                    justify="space-between"
-                    align="center"
-                    py={5}
-                    px={6}
-                    _hover={{ bg: 'bg.subtle' }}
-                    transition="all 0.15s ease"
-                  >
-                    <Box flex="1" mr={4}>
-                      <Text fontSize="sm" fontWeight="medium" fontFamily="mono" mb={1}>
-                        Show JSON Toggle
-                      </Text>
-                      <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-                        Display JSON toggle button in the interface
-                      </Text>
-                    </Box>
-                    <Switch.Root
-                      checked={showJson}
-                      onCheckedChange={(details) => dispatch(setShowJson(details.checked))}
-                      colorPalette="teal"
-                    >
-                      <Switch.HiddenInput />
-                      <Switch.Control>
-                        <Switch.Thumb />
-                      </Switch.Control>
-                    </Switch.Root>
-                  </Flex>
-                )}
-
-                {/* Session Recording - Admin Only */}
-                {isAdmin && (
-                  <Flex
-                    justify="space-between"
-                    align="center"
-                    py={5}
-                    px={6}
-                    _hover={{ bg: 'bg.subtle' }}
-                    transition="all 0.15s ease"
-                  >
-                    <Box flex="1" mr={4}>
-                      <Text fontSize="sm" fontWeight="medium" fontFamily="mono" mb={1}>
-                        Session Recording
-                      </Text>
-                      <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-                        Record your session for debugging and support
-                      </Text>
-                    </Box>
-                    <RecordingControl />
-                  </Flex>
-                )}
-
-                {/* Clear Cache - Admin Only */}
-                {isAdmin && (
-                  <Flex
-                    justify="space-between"
-                    align="center"
-                    py={5}
-                    px={6}
-                    _hover={{ bg: 'bg.subtle' }}
-                    transition="all 0.15s ease"
-                  >
-                    <Box flex="1" mr={4}>
-                      <Text fontSize="sm" fontWeight="medium" fontFamily="mono" mb={1}>
-                        Clear Cache
-                      </Text>
-                      <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-                        Reload configs, styles, contexts, and connections
-                      </Text>
-                    </Box>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleClearCache}
-                      loading={isClearing}
-                      disabled={isClearing}
-                    >
-                      <LuRefreshCw />
-                      Clear
-                    </Button>
-                  </Flex>
-                )}
-
-                {/* Data Management - Admin Only */}
-                {isAdmin && (
-                  <Flex
-                    justify="space-between"
-                    align="center"
-                    py={5}
-                    px={6}
-                    _hover={{ bg: 'bg.subtle' }}
-                    transition="all 0.15s ease"
-                    cursor="pointer"
-                    onClick={() => setCurrentView('data-management')}
-                  >
-                    <Box flex="1" mr={4}>
-                      <Text fontSize="sm" fontWeight="medium" fontFamily="mono" mb={1}>
-                        Data Management
-                      </Text>
-                      <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-                        Export, validate, and import database
-                      </Text>
-                    </Box>
-                    <Icon fontSize="xl" color="fg.muted">
-                      <LuChevronRight />
-                    </Icon>
-                  </Flex>
-                )}
-              </VStack>
-            </Box>
-          </Box>
-        ) : (
-          <Box mt={10}>
-            <Box
-              bg="bg.surface"
-              borderRadius="xl"
-              shadow="sm"
-              borderWidth="1px"
-              borderColor="border"
-              overflow="hidden"
-            >
-              {/* DataManagementSection has its own header with back button */}
-              <DataManagementSection onBack={() => setCurrentView('main')} />
-            </Box>
-          </Box>
-        )}
+          {visibleTabs.map((tab) => (
+            <Tabs.Content key={tab.id} value={tab.id}>
+              {renderTabContent(tab)}
+            </Tabs.Content>
+          ))}
+        </Tabs.Root>
       </Container>
     </Box>
   );
