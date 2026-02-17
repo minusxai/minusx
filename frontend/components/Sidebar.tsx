@@ -250,7 +250,7 @@ export default function Sidebar() {
         align="stretch"
         gap={2}
         p={isCollapsed ? 3 : 4}
-        overflow="hidden"
+        overflow="scroll"
       >
         {/* New Button */}
         <CreateMenu variant="sidebar" currentPath={currentPath} isCollapsed={isCollapsed} />
