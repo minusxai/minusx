@@ -19,21 +19,16 @@ interface BatchSaveRequest {
     content: BaseFileContent;
     references: number[];
   }>;
-  companyId: number;
 }
 
 export const POST = withAuth(async (request: NextRequest, user) => {
   try {
     const body: BatchSaveRequest = await request.json();
-    const { files, companyId } = body;
+    const { files } = body;
 
     // Validate request
     if (!files || !Array.isArray(files) || files.length === 0) {
       return ApiErrors.validationError('files array is required and must not be empty');
-    }
-
-    if (!companyId || companyId !== user.companyId) {
-      return ApiErrors.unauthorized('Invalid company ID');
     }
 
     // Validate all files have required fields
@@ -44,7 +39,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     }
 
     // Use DocumentDB.updateMultiple for atomic save
-    const savedFileIds = await DocumentDB.updateMultiple(files, companyId);
+    const savedFileIds = await DocumentDB.updateMultiple(files, user.companyId);
 
     return successResponse({
       savedFileIds,

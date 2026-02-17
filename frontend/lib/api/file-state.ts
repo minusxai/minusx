@@ -20,7 +20,7 @@
 
 import { store as fallbackStore } from '@/store/store';
 import { clientStoreRef } from '@/components/ReduxProvider';
-import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFiles, selectMergedContent, setEdit } from '@/store/filesSlice';
+import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit } from '@/store/filesSlice';
 
 // Helper to get the active store (client store if available, fallback to singleton)
 // This ensures we update the SAME store that components subscribe to
@@ -594,18 +594,25 @@ export async function publishFile(
   // Determine if this is a create or update
   const isVirtualFile = fileId < 0;
 
+  // Prepare content for saving: merge only persistable changes, NOT ephemeral
+  // Ephemeral changes (lastExecuted, parameterValues, etc.) should not be persisted
+  const contentToSave = fileState.persistableChanges
+    ? { ...fileState.content, ...fileState.persistableChanges }
+    : fileState.content;
+
   // Prepare file data
   const fileData = {
     name: fileState.metadataChanges?.name || fileState.name,
     path: fileState.metadataChanges?.path || fileState.path,
     type: fileState.type,
-    content: mergedContent,
+    content: contentToSave,
     company_id: state.auth.user?.companyId
   };
 
   // Save file
   let savedId: number;
   let savedName: string;
+  let updatedFile: DbFile;
 
   if (isVirtualFile) {
     // Create new file using FilesAPI
@@ -617,6 +624,7 @@ export async function publishFile(
     });
     savedId = result.data.id;
     savedName = result.data.name;
+    updatedFile = result.data;
   } else {
     // Update existing file using FilesAPI
     const extractReferences = (await import('@/lib/data/helpers/extract-references')).extractReferencesFromContent;
@@ -631,7 +639,11 @@ export async function publishFile(
     );
     savedId = result.data.id;
     savedName = result.data.name;
+    updatedFile = result.data;
   }
+
+  // Update file state with response from API (so base content is updated)
+  getStore().dispatch(setFile({ file: updatedFile }));
 
   // Clear changes for the main file
   getStore().dispatch(clearEdits(fileId));
@@ -657,9 +669,12 @@ export async function publishFile(
     const hasMetadataChanges = refState.metadataChanges && Object.keys(refState.metadataChanges).length > 0;
 
     if (hasPersistableChanges || hasMetadataChanges) {
-      // Get merged content and metadata
-      const editedContent = selectMergedContent(currentState, refId);
-      if (!editedContent) continue; // Skip if content is undefined
+      // Get content for saving: merge only persistable changes, NOT ephemeral
+      const contentToSave = refState.persistableChanges
+        ? { ...refState.content, ...refState.persistableChanges }
+        : refState.content;
+
+      if (!contentToSave) continue; // Skip if content is undefined
 
       const editedName = refState.metadataChanges?.name ?? refState.name;
       const editedPath = refState.metadataChanges?.path ?? refState.path;
@@ -668,7 +683,7 @@ export async function publishFile(
         id: refId,
         name: editedName,
         path: editedPath,
-        content: editedContent,
+        content: contentToSave,
         references: refState.references || []
       });
     }
@@ -679,8 +694,11 @@ export async function publishFile(
     const result = await FilesAPI.batchSaveFiles(dirtyRefs);
     const savedFileIds = result.savedFileIds;
 
-    // Clear changes for all saved references
+    // Reload saved references to update their base content
+    // This ensures their content doesn't revert after clearing changes
     for (const savedId of savedFileIds) {
+      const reloadResult = await FilesAPI.loadFile(savedId);
+      getStore().dispatch(setFile({ file: reloadResult.data, references: reloadResult.metadata.references }));
       getStore().dispatch(clearEdits(savedId));
       getStore().dispatch(clearMetadataEdits(savedId));
     }

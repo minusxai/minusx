@@ -149,7 +149,9 @@ class FilesDataLayerClient implements IFilesDataLayer {
     }
 
     const json = await res.json();
-    return json.data;
+    // API now returns { success: true, data: DbFile }
+    // Return in SaveFileResult format
+    return { data: json.data };
   }
 
   async getTemplate(type: FileType, options: GetTemplateOptions, user?: EffectiveUser): Promise<GetTemplateResult> {
