@@ -5,6 +5,7 @@ import { Box, Button, Dialog, HStack, Text, VStack } from '@chakra-ui/react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useNewFile } from '@/lib/hooks/useNewFile';
 import { useFile } from '@/lib/hooks/useFile';
+import { editFile, publishFile, clearFileChanges } from '@/lib/api/file-state';
 import { useQueryResult } from '@/lib/hooks/useQueryResult';
 import { selectIsDirty, selectMergedContent, selectEffectiveName, setEphemeral, deleteFile } from '@/store/filesSlice';
 import { QuestionContent } from '@/lib/types';
@@ -40,7 +41,7 @@ export default function CreateQuestionModalContainer({
   const effectiveId = questionId ?? virtualId;
 
   // Use useFile hook for state management
-  const { file, loading: fileLoading, saving, edit, editMetadata, save, cancel } = useFile(effectiveId);
+  const { file, loading: fileLoading, saving, error } = useFile(effectiveId);
   const isDirty = useAppSelector(state => selectIsDirty(state, effectiveId));
   const mergedContent = useAppSelector(state => selectMergedContent(state, effectiveId)) as QuestionContent | undefined;
   const effectiveName = useAppSelector(state => selectEffectiveName(state, effectiveId)) || '';
@@ -94,13 +95,13 @@ export default function CreateQuestionModalContainer({
 
   // Handle content changes
   const handleChange = useCallback((updates: Partial<QuestionContent>) => {
-    edit(updates);
-  }, [edit]);
+    editFile({ fileId: typeof effectiveId === 'number' ? effectiveId : -1, changes: { content: updates } });
+  }, [effectiveId]);
 
   // Handle metadata changes (Phase 5)
   const handleMetadataChange = useCallback((changes: { name?: string }) => {
-    editMetadata(changes);
-  }, [editMetadata]);
+    editFile({ fileId: typeof effectiveId === 'number' ? effectiveId : -1, changes });
+  }, [effectiveId]);
 
   // Handle query execution
   const handleExecute = useCallback(() => {
@@ -125,12 +126,12 @@ export default function CreateQuestionModalContainer({
   // Handle save
   // Note: Name/description validation is handled by DocumentHeader
   const handleSave = useCallback(async () => {
-    if (!mergedContent || !file) return;
+    if (!mergedContent || !file || typeof effectiveId !== 'number') return;
 
     setSaveError(null);
 
     try {
-      const result = await save();
+      const result = await publishFile({ fileId: effectiveId });
 
       // Ensure save was successful and returned a result
       if (!result || typeof result.id !== 'number') {
@@ -154,18 +155,20 @@ export default function CreateQuestionModalContainer({
       console.error('Failed to save question:', error);
       setSaveError('An unexpected error occurred. Please try again.');
     }
-  }, [mergedContent, effectiveId, save, dispatch, onQuestionCreated, onClose]);
+  }, [mergedContent, effectiveId, onQuestionCreated, onClose]);
 
   // Handle cancel
   const handleCancel = useCallback(() => {
     if (isDirty) {
       setShowConfirmClose(true);
     } else {
-      cancel();
+      if (typeof effectiveId === 'number') {
+        clearFileChanges({ fileId: effectiveId });
+      }
       // NOTE: Don't cleanup virtual file - see save handler comment
       onClose();
     }
-  }, [isDirty, cancel, onClose]);
+  }, [isDirty, effectiveId, onClose]);
 
   // Register handleCancel with parent so ESC/click-outside go through dirty check
   useEffect(() => {
@@ -181,11 +184,13 @@ export default function CreateQuestionModalContainer({
 
   // Handle discard changes
   const handleDiscardChanges = useCallback(() => {
-    cancel();
+    if (typeof effectiveId === 'number') {
+      clearFileChanges({ fileId: effectiveId });
+    }
     // NOTE: Don't cleanup virtual file - see save handler comment
     setShowConfirmClose(false);
     onClose();
-  }, [cancel, onClose]);
+  }, [effectiveId, onClose]);
 
   // Show loading state
   if (fileLoading || !file || !mergedContent) {

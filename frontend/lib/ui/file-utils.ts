@@ -1,5 +1,5 @@
 import { AppRouterInstance } from 'next/dist/shared/lib/app-router-context.shared-runtime';
-import { SaveResult } from '@/lib/hooks/useFile';
+import { PublishFileResult as SaveResult } from '@/lib/api/file-state';
 import { FileId, isVirtualFileId } from '@/store/filesSlice';
 import { slugify } from '@/lib/slug-utils';
 

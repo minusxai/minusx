@@ -1,8 +1,10 @@
 import { useMemo } from 'react';
 import { useAppSelector } from '@/store/hooks';
 import { useFiles } from './useFiles';
+import { useFilesByCriteria } from './useFilesByCriteria';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type { DbFile } from '@/lib/types';
+import type { LoadError } from '@/lib/types/errors';
 
 /**
  * Options for useContexts hook
@@ -19,7 +21,7 @@ export interface UseContextsReturn {
   contexts: DbFile[];     // All context metadata (partial load)
   homeContext: DbFile | undefined;  // Home context (fully loaded)
   loading: boolean;
-  reload: () => void;
+  error: Error | LoadError | null;
 }
 
 /**
@@ -51,7 +53,7 @@ export function useContexts(options: UseContextsOptions = {}): UseContextsReturn
   );
 
   // Load all context metadata (partial)
-  const { files: allContexts, loading: metadataLoading, reload } = useFiles({
+  const { files: allContexts, loading: metadataLoading, error: metadataError } = useFilesByCriteria({
     criteria,
     ttl,
     skip,
@@ -70,17 +72,16 @@ export function useContexts(options: UseContextsOptions = {}): UseContextsReturn
   }, [allContexts, homeFolder]);
 
   // Fully load home context (triggers context loader for fullSchema/fullDocs)
-  const { files: homeContextFiles, loading: homeContextLoading } = useFiles({
+  const { files: homeContextFiles, loading: homeContextLoading, error: homeContextError } = useFiles({
     ids: homeContextMeta ? [homeContextMeta.id] : [],
     skip: !homeContextMeta,
-    ttl,
-    partial: false  // Full load with content
+    ttl
   });
 
   return {
     contexts: allContexts,
     homeContext: homeContextFiles[0],
     loading: metadataLoading || homeContextLoading,
-    reload
+    error: metadataError || homeContextError
   };
 }

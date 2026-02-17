@@ -16,7 +16,6 @@ import {
   readFiles,
   filePromises,
   editFile,
-  editFileMetadata,
   publishFile,
   reloadFile,
   clearFileChanges,
@@ -592,12 +591,12 @@ describe('readFiles - File State Manager', () => {
     });
   });
 
-  describe('editFileMetadata', () => {
-    it('should update metadataChanges', () => {
+  describe('editFile - metadata only', () => {
+    it('should update metadataChanges when editing only name', async () => {
       const mockFile = createMockFile(1);
       mockStore.dispatch(setFile({ file: mockFile, references: [] }));
 
-      editFileMetadata({
+      await editFile({
         fileId: 1,
         changes: { name: 'New Name' }
       });
@@ -608,11 +607,11 @@ describe('readFiles - File State Manager', () => {
       });
     });
 
-    it('should handle name and path together', () => {
+    it('should handle name and path together', async () => {
       const mockFile = createMockFile(1);
       mockStore.dispatch(setFile({ file: mockFile, references: [] }));
 
-      editFileMetadata({
+      await editFile({
         fileId: 1,
         changes: { name: 'New Name', path: '/org/new-path' }
       });

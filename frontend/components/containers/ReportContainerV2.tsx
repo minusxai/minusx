@@ -12,6 +12,7 @@ import { setRuns, setSelectedRun, selectRuns, selectSelectedRunId } from '@/stor
 import { selectEffectiveUser } from '@/store/authSlice';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { useFile } from '@/lib/hooks/useFile';
+import { editFile, publishFile, clearFileChanges } from '@/lib/api/file-state';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import { FilesAPI } from '@/lib/data/files';
 import ReportView from '@/components/views/ReportView';
@@ -35,7 +36,7 @@ export default function ReportContainerV2({
   const dispatch = useAppDispatch();
 
   // Use useFile hook for state management
-  const { file, loading: fileLoading, saving, edit, editMetadata, save, cancel } = useFile(fileId);
+  const { file, loading: fileLoading, saving, error } = useFile(fileId);
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
   const effectiveName = useAppSelector(state => selectEffectiveName(state, fileId)) || '';
   const effectiveUser = useAppSelector(selectEffectiveUser);
@@ -132,20 +133,20 @@ export default function ReportContainerV2({
 
   // Handlers
   const handleChange = useCallback((updates: Partial<ReportContent>) => {
-    edit(updates);
-  }, [edit]);
+    editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes: { content: updates } });
+  }, [fileId]);
 
   const handleMetadataChange = useCallback((changes: { name?: string }) => {
-    editMetadata(changes);
-  }, [editMetadata]);
+    editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes });
+  }, [fileId]);
 
   const handleSave = useCallback(async () => {
-    if (!mergedContent) return;
+    if (!mergedContent || typeof fileId !== 'number') return;
 
     setSaveError(null);
 
     try {
-      const result = await save();
+      const result = await publishFile({ fileId });
       redirectAfterSave(result, fileId, router);
     } catch (error) {
       if (isUserFacingError(error)) {
@@ -155,13 +156,15 @@ export default function ReportContainerV2({
       console.error('Failed to save report:', error);
       setSaveError('An unexpected error occurred. Please try again.');
     }
-  }, [mergedContent, fileId, router, save]);
+  }, [mergedContent, fileId, router]);
 
   const handleRevert = useCallback(() => {
-    cancel();
+    if (typeof fileId === 'number') {
+      clearFileChanges({ fileId });
+    }
     setEditMode(false);
     setSaveError(null);
-  }, [cancel]);
+  }, [fileId]);
 
   const handleEditModeChange = useCallback((newEditMode: boolean) => {
     setEditMode(newEditMode);

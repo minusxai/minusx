@@ -252,7 +252,11 @@ export async function readFilesByCriteria(
  */
 export interface EditFileOptions {
   fileId: number;
-  changes: Partial<Pick<DbFile, 'name' | 'path' | 'content'>>;  // Can edit name, path, and/or content
+  changes: {
+    name?: string;
+    path?: string;
+    content?: Partial<DbFile['content']>;  // Allow partial content updates
+  };
 }
 
 /**
@@ -492,19 +496,20 @@ function generateDiff(oldStr: string, newStr: string): string {
 /**
  * Options for editFileMetadata
  */
-export interface EditFileMetadataOptions {
+interface EditFileMetadataOptions {
   fileId: number;
   changes: { name?: string; path?: string };
 }
 
 /**
- * EditFileMetadata - Edit file name/path
+ * EditFileMetadata - Edit file name/path (internal only)
  *
  * Stores changes in metadataChanges (doesn't save to database).
+ * External callers should use editFile() instead.
  *
  * @param options - File ID and metadata changes
  */
-export function editFileMetadata(options: EditFileMetadataOptions): void {
+function editFileMetadata(options: EditFileMetadataOptions): void {
   const { fileId, changes } = options;
 
   // Import setMetadataEdit from filesSlice
@@ -526,6 +531,9 @@ export interface PublishFileResult {
   id: number;
   name: string;
 }
+
+/** @deprecated Use PublishFileResult instead */
+export type SaveResult = PublishFileResult;
 
 /**
  * PublishFile - Save file and dirty references to database
