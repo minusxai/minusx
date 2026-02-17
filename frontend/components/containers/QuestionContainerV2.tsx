@@ -103,6 +103,7 @@ export default function QuestionContainerV2({
 
   // Phase 3: Execute query handler - updates lastExecuted to trigger execution
   const handleExecute = useCallback((overrideParams?: QuestionParameter[]) => {
+    console.log('Executing query', mergedContent)
     if (!mergedContent) return;
 
     const params = overrideParams || mergedContent.parameters || [];

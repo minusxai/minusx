@@ -20,20 +20,27 @@
 
 import { store as fallbackStore } from '@/store/store';
 import { clientStoreRef } from '@/components/ReduxProvider';
-import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit } from '@/store/filesSlice';
-
-// Helper to get the active store (client store if available, fallback to singleton)
-// This ensures we update the SAME store that components subscribe to
-const getStore = () => clientStoreRef.current || fallbackStore;
-import { selectQueryResult, setQueryResult, setQueryError } from '@/store/queryResultsSlice';
+import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, clearEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles } from '@/store/filesSlice';
+import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, setQueryLoading } from '@/store/queryResultsSlice';
 import { selectSelectedRun } from '@/store/reportRunsSlice';
-import { FilesAPI } from '@/lib/data/files';
+import { selectEffectiveUser } from '@/store/authSlice';
+import { FilesAPI, getFiles } from '@/lib/data/files';
 import { PromiseManager } from '@/lib/utils/promise-manager';
 import { CACHE_TTL } from '@/lib/constants/cache';
+import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
+import { resolveHomeFolderSync, isHiddenSystemPath } from '@/lib/mode/path-resolver';
+import { fetchWithCache } from '@/lib/api/fetch-wrapper';
+import { API } from '@/lib/api/declarations';
+import { canViewFileType } from '@/lib/auth/access-rules.client';
+import { getQueryHash } from '@/lib/utils/query-hash';
 import type { RootState } from '@/store/store';
 import type { ReadFilesInput, ReadFilesOutput, FileState, QueryResult, QuestionContent, FileType, DocumentContent, AssetReference, DbFile, BaseFileContent, QuestionParameter, QuestionReference } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
 import type { AppState, QuestionAppState, DashboardAppState, ReportAppState, GenericAppState } from '@/lib/appState';
+
+// Helper to get the active store (client store if available, fallback to singleton)
+// This ensures we update the SAME store that components subscribe to
+const getStore = () => clientStoreRef.current || fallbackStore;
 
 /**
  * Augmentation context passed to augment functions
@@ -532,7 +539,6 @@ function editFileMetadata(options: EditFileMetadataOptions): void {
   const { fileId, changes } = options;
 
   // Import setMetadataEdit from filesSlice
-  const { setMetadataEdit } = require('@/store/filesSlice');
   getStore().dispatch(setMetadataEdit({ fileId, changes }));
 }
 
@@ -576,7 +582,6 @@ export async function publishFile(
   }
 
   // Import isDirty selector
-  const { selectIsDirty, clearEdits, clearMetadataEdits } = require('@/store/filesSlice');
 
   // Check if file is dirty
   const isDirty = selectIsDirty(state, fileId);
@@ -599,6 +604,10 @@ export async function publishFile(
   const contentToSave = fileState.persistableChanges
     ? { ...fileState.content, ...fileState.persistableChanges }
     : fileState.content;
+
+  if (!contentToSave) {
+    throw new Error(`File ${fileId} has no content to save`);
+  }
 
   // Prepare file data
   const fileData = {
@@ -627,7 +636,7 @@ export async function publishFile(
     updatedFile = result.data;
   } else {
     // Update existing file using FilesAPI
-    const extractReferences = (await import('@/lib/data/helpers/extract-references')).extractReferencesFromContent;
+    const extractReferences = extractReferencesFromContent;
     const references = extractReferences(fileData.content, fileData.type as FileType);
 
     const result = await FilesAPI.saveFile(
@@ -670,7 +679,7 @@ export async function publishFile(
 
     if (hasPersistableChanges || hasMetadataChanges) {
       // Get content for saving: merge only persistable changes, NOT ephemeral
-      const contentToSave = refState.persistableChanges
+      const contentToSave: BaseFileContent | null = refState.persistableChanges
         ? { ...refState.content, ...refState.persistableChanges }
         : refState.content;
 
@@ -683,7 +692,7 @@ export async function publishFile(
         id: refId,
         name: editedName,
         path: editedPath,
-        content: contentToSave,
+        content: contentToSave as BaseFileContent,  // Safe after null check
         references: refState.references || []
       });
     }
@@ -728,7 +737,6 @@ export async function reloadFile(options: ReloadFileOptions): Promise<void> {
 
   // Set loading state (unless silent)
   if (!silent) {
-    const { setLoading } = require('@/store/filesSlice');
     getStore().dispatch(setLoading({ id: fileId, loading: true }));
   }
 
@@ -737,7 +745,6 @@ export async function reloadFile(options: ReloadFileOptions): Promise<void> {
     const result = await FilesAPI.loadFile(fileId, undefined, { refresh: true });
 
     // Update Redux with fresh data
-    const { setFile } = require('@/store/filesSlice');
     getStore().dispatch(setFile({
       file: result.data,
       references: result.metadata.references || []
@@ -745,8 +752,7 @@ export async function reloadFile(options: ReloadFileOptions): Promise<void> {
   } finally {
     // Clear loading state
     if (!silent) {
-      const { setLoading } = require('@/store/filesSlice');
-      getStore().dispatch(setLoading({ id: fileId, loading: false }));
+        getStore().dispatch(setLoading({ id: fileId, loading: false }));
     }
   }
 }
@@ -770,7 +776,6 @@ export function clearFileChanges(options: ClearFileChangesOptions): void {
   const { fileId } = options;
 
   // Import clear actions
-  const { clearEdits, clearMetadataEdits, clearEphemeral } = require('@/store/filesSlice');
 
   // Clear all changes
   getStore().dispatch(clearEdits(fileId));
@@ -835,7 +840,6 @@ export async function createVirtualFile(
   let resolvedFolder = folder;
   if (!resolvedFolder) {
     // Import path resolver dynamically to avoid circular deps
-    const { resolveHomeFolderSync } = await import('@/lib/mode/path-resolver');
     resolvedFolder = user
       ? resolveHomeFolderSync(user.mode, user.home_folder || '')
       : '/org';
@@ -862,7 +866,6 @@ export async function createVirtualFile(
   };
 
   // Add to Redux
-  const { setFile } = await import('@/store/filesSlice');
   getStore().dispatch(setFile({ file: virtualFile, references: [] }));
 
   return virtualId;
@@ -900,8 +903,6 @@ export async function createFolder(
   parentPath: string
 ): Promise<CreateFolderResult> {
   // Call API to create folder
-  const { fetchWithCache } = await import('@/lib/api/fetch-wrapper');
-  const { API } = await import('@/lib/api/declarations');
 
   const result = await fetchWithCache('/api/folders', {
     method: 'POST',
@@ -928,7 +929,6 @@ export async function createFolder(
   };
 
   // Add to Redux
-  const { addFile } = await import('@/store/filesSlice');
   getStore().dispatch(addFile(folderFile));
 
   // Return metadata
@@ -989,16 +989,6 @@ export async function readFolder(
 
   const state = getStore().getState();
 
-  // Import selectors and actions dynamically
-  const {
-    selectFileIdByPath,
-    selectFile,
-    selectIsFolderFresh,
-    selectFiles,
-    setFileInfo,
-    setFolderInfo,
-    setLoading
-  } = await import('@/store/filesSlice');
 
   // Look up folder ID by path
   const folderId = selectFileIdByPath(state, path);
@@ -1029,7 +1019,6 @@ export async function readFolder(
 
   try {
     // Fetch folder contents from API
-    const { getFiles } = await import('@/lib/data/files');
     const response = await getFiles({ paths: [path], depth });
 
     // Store folder file itself (for pathIndex)
@@ -1084,13 +1073,10 @@ async function filterFilesByPermissions(files: FileState[]): Promise<FileState[]
   const state = getStore().getState();
 
   // Get effective user and mode
-  const { selectEffectiveUser } = await import('@/store/authSlice');
   const effectiveUser = selectEffectiveUser(state);
   const mode = effectiveUser?.mode || 'org';
 
   // Import access rules and path helpers
-  const { canViewFileType } = await import('@/lib/auth/access-rules.client');
-  const { isHiddenSystemPath } = await import('@/lib/mode/path-resolver');
 
   // Filter by permissions
   return files.filter(file => {
@@ -1177,8 +1163,6 @@ export async function getQueryResult(
   const state = getStore().getState();
 
   // Import query utilities
-  const { getQueryHash } = await import('@/lib/utils/query-hash');
-  const { selectQueryResult, selectIsQueryFresh } = await import('@/store/queryResultsSlice');
 
   const queryId = getQueryHash(query, queryParams, database);
 
@@ -1193,7 +1177,6 @@ export async function getQueryResult(
   // Step 2: Execute with deduplication via PromiseManager
   return queryPromiseManager.execute(queryId, async () => {
     // Import Redux actions
-    const { setQueryLoading, setQueryResult, setQueryError } = await import('@/store/queryResultsSlice');
 
     // Set loading state
     getStore().dispatch(setQueryLoading({ query, params: queryParams, database, loading: true }));

@@ -722,6 +722,7 @@ export function useQueryResult(
   references?: QuestionReference[],
   options: UseQueryResultOptions = {}
 ): UseQueryResultReturn {
+  console.log('Executing query', options.skip, query)
   const { ttl = CACHE_TTL.QUERY, skip = false } = options;
 
   // Select result from Redux
@@ -745,6 +746,7 @@ export function useQueryResult(
   // Effect: Execute query if needed
   // IMPORTANT: Don't use useCallback for executeQuery - inline it to prevent re-execution on edits
   useEffect(() => {
+    console.log('[useQueryResult] Checking if query needs fetch:', { needsFetch, hasData, isFresh, loading, error: result?.error });
     if (!needsFetch) return;
 
     // Skip if already loading
