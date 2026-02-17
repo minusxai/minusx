@@ -1,10 +1,10 @@
 /**
  * Phase 1 E2E Test - Unified File System API
  *
- * Tests the complete flow of ReadFiles, EditFileReplace, PublishFile, and ExecuteQuery
+ * Tests the complete flow of ReadFiles, EditFileLineEncoded, PublishFile, and ExecuteQuery
  * with real API calls (no mocking) for true integration testing.
  *
- * Uses EditFileReplace for range-based line editing (useful for AI agents).
+ * Uses EditFileLineEncoded for range-based line editing (useful for AI agents).
  * For simpler content-based editing, see file-state.test.ts.
  */
 
@@ -15,7 +15,7 @@ import authReducer from '../authSlice';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase, createMockFetch } from './test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
 import type { QuestionContent, DocumentContent, UserRole } from '@/lib/types';
-import { readFiles, editFileReplace, publishFile } from '@/lib/api/file-state';
+import { readFiles, editFileLineEncoded, publishFile, readFilesStr, editFileStr } from '@/lib/api/file-state';
 import { executeQuery } from '@/lib/api/execute-query.server';
 import type { RootState } from '@/store/store';
 import type { Mode } from '@/lib/mode/mode-types';
@@ -406,7 +406,7 @@ describe('Phase 1: Unified File System API E2E', () => {
     // Edit just the query line (change GROUP BY to ORDER BY)
     const newQueryLine = '  "query": "SELECT month, SUM(revenue) as total FROM sales ORDER BY month",';
 
-    const editResult = await editFileReplace(
+    const editResult = await editFileLineEncoded(
       {
         fileId: questionId,
         from: queryLineIndex + 1,  // 1-indexed
@@ -484,7 +484,7 @@ describe('Phase 1: Unified File System API E2E', () => {
     });
 
     // Try to edit with invalid JSON (missing closing quote)
-    const result = await editFileReplace(
+    const result = await editFileLineEncoded(
       {
         fileId: questionId,
         from: 2,
@@ -553,7 +553,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       const currentContent = JSON.stringify(questionFile?.content, null, 2);
       const currentLines = currentContent.split('\n').length;
 
-      const validVizResult = await editFileReplace(
+      const validVizResult = await editFileLineEncoded(
         {
           fileId: questionId,
           from: 1,
@@ -600,7 +600,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         parameters: []
       }, null, 2);
 
-      const missingFieldResult = await editFileReplace(
+      const missingFieldResult = await editFileLineEncoded(
         {
           fileId: questionId,
           from: 1,
@@ -629,7 +629,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         }
       }, null, 2);
 
-      const validFieldResult = await editFileReplace({
+      const validFieldResult = await editFileLineEncoded({
         fileId: questionId,
         from: 1,
         to: currentLines,
@@ -675,7 +675,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       const currentContent2 = JSON.stringify(currentFile2?.content, null, 2);
       const currentLines2 = currentContent2.split('\n').length;
 
-      const validParamsResult = await editFileReplace({
+      const validParamsResult = await editFileLineEncoded({
         fileId: questionId,
         from: 1,
         to: currentLines2,
@@ -707,7 +707,7 @@ describe('Phase 1: Unified File System API E2E', () => {
 
       // Step 1: Missing comma
       console.log('[1] Testing missing comma...');
-      const missingCommaResult = await editFileReplace(
+      const missingCommaResult = await editFileLineEncoded(
         {
           fileId: questionId,
           from: 2,
@@ -724,7 +724,7 @@ describe('Phase 1: Unified File System API E2E', () => {
 
       // Step 2: Trailing comma
       console.log('[2] Testing trailing comma...');
-      const trailingCommaResult = await editFileReplace({
+      const trailingCommaResult = await editFileLineEncoded({
         fileId: questionId,
         from: 10,
         to: 11,
@@ -774,7 +774,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       const currentDashContent = JSON.stringify(currentDashFile?.content, null, 2);
       const currentDashLines = currentDashContent.split('\n').length;
 
-      const validLayoutResult = await editFileReplace({
+      const validLayoutResult = await editFileLineEncoded({
         fileId: dashboardId,
         from: 1,
         to: currentDashLines,
@@ -821,7 +821,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       const currentDashContent2 = JSON.stringify(currentDashFile2?.content, null, 2);
       const currentDashLines2 = currentDashContent2.split('\n').length;
 
-      const validAssetResult = await editFileReplace({
+      const validAssetResult = await editFileLineEncoded({
         fileId: dashboardId,
         from: 1,
         to: currentDashLines2,
@@ -867,7 +867,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       const currentDashContent3 = JSON.stringify(currentDashFile3?.content, null, 2);
       const currentDashLines3 = currentDashContent3.split('\n').length;
 
-      const noDescResult = await editFileReplace({
+      const noDescResult = await editFileLineEncoded({
         fileId: dashboardId,
         from: 1,
         to: currentDashLines3,
@@ -917,7 +917,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       const currentDashContent4 = JSON.stringify(currentDashFile4?.content, null, 2);
       const currentDashLines4 = currentDashContent4.split('\n').length;
 
-      const multiLayoutResult = await editFileReplace(
+      const multiLayoutResult = await editFileLineEncoded(
         {
           fileId: dashboardId,
           from: 1,
@@ -976,7 +976,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       const currentContent = JSON.stringify(questionFile?.content, null, 2);
       const currentLines = currentContent.split('\n').length;
 
-      await editFileReplace({
+      await editFileLineEncoded({
         fileId: questionId,
         from: 1,
         to: currentLines,
@@ -1014,7 +1014,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       const currentContent = JSON.stringify(questionFile?.content, null, 2);
       const currentLines = currentContent.split('\n').length;
 
-      await editFileReplace({
+      await editFileLineEncoded({
         fileId: questionId,
         from: 1,
         to: currentLines,
@@ -1056,7 +1056,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       const currentContent = JSON.stringify(questionFile?.content, null, 2);
       const currentLines = currentContent.split('\n').length;
 
-      await editFileReplace({
+      await editFileLineEncoded({
         fileId: questionId,
         from: 1,
         to: currentLines,
@@ -1159,7 +1159,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       const currentQuestionContent = JSON.stringify(questionFile?.content, null, 2);
       const currentQuestionLines = currentQuestionContent.split('\n').length;
 
-      await editFileReplace({
+      await editFileLineEncoded({
         fileId: questionId,
         from: 1,
         to: currentQuestionLines,
@@ -1177,7 +1177,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       const currentDashContent = JSON.stringify(dashboardFile?.content, null, 2);
       const currentDashLines = currentDashContent.split('\n').length;
 
-      await editFileReplace({
+      await editFileLineEncoded({
         fileId: dashboardId,
         from: 1,
         to: currentDashLines,
@@ -1260,6 +1260,405 @@ describe('Phase 1: Unified File System API E2E', () => {
       expect(result2).toBeDefined();
       expect(result2).toEqual(result1);
       console.log('✓ Second call returned from cache (same result as first call)');
+    });
+  });
+
+  // ============================================================================
+  // String-Based Operations Tests (readFilesStr, editFileStr)
+  // ============================================================================
+
+  describe('String-Based Operations', () => {
+    // Clear state before each test to prevent pollution from earlier tests
+    beforeEach(() => {
+      (store.dispatch as any)({
+        type: 'files/clearEdits',
+        payload: questionId
+      });
+      (store.dispatch as any)({
+        type: 'files/clearEdits',
+        payload: dashboardId
+      });
+    });
+
+    describe('readFilesStr', () => {
+      it('should return compact JSON strings for files', async () => {
+        console.log('\n[TEST] readFilesStr - Compact JSON output');
+
+        // Load files into Redux first
+        const questionFile = await DocumentDB.getById(questionId, 1);
+        (store.dispatch as any)({
+          type: 'files/setFiles',
+          payload: { files: [questionFile] }
+        });
+
+        // Call readFilesStr
+        const result = await readFilesStr({ fileIds: [questionId] });
+
+        // Verify result structure
+        expect(result.fileStates).toHaveLength(1);
+        expect(result.fileStates[0].id).toBe(questionId);
+        expect(result.stringifiedFiles).toBeDefined();
+        expect(result.stringifiedFiles[questionId]).toBeDefined();
+
+        // Verify it's compact JSON (no newlines or extra spaces)
+        const compactStr = result.stringifiedFiles[questionId];
+        expect(compactStr).not.toContain('\n');
+        expect(compactStr).not.toMatch(/\s{2,}/); // No multiple spaces
+        expect(compactStr).toContain('"query"');
+        expect(compactStr).toContain('"database_name"');
+
+        console.log('✓ readFilesStr returned compact JSON (no pretty print)');
+        console.log(`✓ String length: ${compactStr.length} characters`);
+      });
+
+      it('should handle multiple files', async () => {
+        console.log('\n[TEST] readFilesStr - Multiple files');
+
+        // Load both question and dashboard
+        const questionFile = await DocumentDB.getById(questionId, 1);
+        const dashboardFile = await DocumentDB.getById(dashboardId, 1);
+        (store.dispatch as any)({
+          type: 'files/setFiles',
+          payload: { files: [questionFile, dashboardFile] }
+        });
+
+        // Call readFilesStr with multiple IDs
+        const result = await readFilesStr({ fileIds: [questionId, dashboardId] });
+
+        // Verify both files returned
+        expect(result.fileStates).toHaveLength(2);
+        expect(result.stringifiedFiles[questionId]).toBeDefined();
+        expect(result.stringifiedFiles[dashboardId]).toBeDefined();
+
+        // Verify both are compact JSON
+        expect(result.stringifiedFiles[questionId]).not.toContain('\n');
+        expect(result.stringifiedFiles[dashboardId]).not.toContain('\n');
+
+        console.log('✓ readFilesStr handled multiple files correctly');
+      });
+    });
+
+    describe('editFileStr', () => {
+      it('should successfully replace string in file content', async () => {
+        console.log('\n[TEST] editFileStr - Basic string replacement');
+
+        // Load question into Redux
+        const questionFile = await DocumentDB.getById(questionId, 1);
+        (store.dispatch as any)({
+          type: 'files/setFiles',
+          payload: { files: [questionFile] }
+        });
+
+        // Get current content as compact string
+        const currentContent = JSON.stringify(questionFile?.content);
+        const queryMatch = currentContent.match(/"query":"[^"]+"/);
+        expect(queryMatch).toBeTruthy();
+        const originalQuery = queryMatch![0];
+
+        // Replace query with a modified version
+        const result = await editFileStr({
+          fileId: questionId,
+          oldMatch: originalQuery,
+          newMatch: '"query":"SELECT month, total FROM modified_sales"'
+        });
+
+        // Verify success
+        expect(result.success).toBe(true);
+        expect(result.diff).toBeDefined();
+        if (result.success && result.diff) {
+          expect(result.diff).toContain('-');
+          expect(result.diff).toContain('+');
+          expect(result.diff).toContain('modified_sales');
+          console.log('✓ editFileStr successfully replaced string');
+          console.log(`Diff preview:\n${result.diff.split('\n').slice(0, 5).join('\n')}...`);
+        }
+
+        // Verify changes are in Redux
+        const questionState = (store.getState() as any).files.files[questionId];
+        expect(questionState.persistableChanges.query).toContain('modified_sales');
+        console.log('✓ Changes stored in Redux persistableChanges');
+      });
+
+      it('should handle string not found error', async () => {
+        console.log('\n[TEST] editFileStr - String not found');
+
+        // Load question into Redux
+        const questionFile = await DocumentDB.getById(questionId, 1);
+        (store.dispatch as any)({
+          type: 'files/setFiles',
+          payload: { files: [questionFile] }
+        });
+
+        // Try to replace a string that doesn't exist
+        const result = await editFileStr({
+          fileId: questionId,
+          oldMatch: '"nonexistent":"field"',
+          newMatch: '"new":"value"'
+        });
+
+        // Verify error
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(result.error).toContain('not found');
+          console.log('✓ editFileStr correctly rejected non-existent string');
+          console.log(`Error: ${result.error}`);
+        }
+      });
+
+      it('should validate JSON after replacement', async () => {
+        console.log('\n[TEST] editFileStr - JSON validation');
+
+        // Load question into Redux
+        const questionFile = await DocumentDB.getById(questionId, 1);
+        (store.dispatch as any)({
+          type: 'files/setFiles',
+          payload: { files: [questionFile] }
+        });
+
+        // Get current content
+        const currentContent = JSON.stringify(questionFile?.content);
+        const queryMatch = currentContent.match(/"query":"[^"]+"/);
+        expect(queryMatch).toBeTruthy();
+
+        // Try to replace with invalid JSON (missing closing quote)
+        const result = await editFileStr({
+          fileId: questionId,
+          oldMatch: queryMatch![0],
+          newMatch: '"query":"SELECT * FROM invalid'  // Missing closing quote
+        });
+
+        // Verify error
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(result.error).toContain('Invalid JSON');
+          console.log('✓ editFileStr correctly rejected invalid JSON');
+          console.log(`Error: ${result.error}`);
+        }
+      });
+
+      it('should validate required question fields', async () => {
+        console.log('\n[TEST] editFileStr - Question field validation');
+
+        // Load question into Redux
+        const questionFile = await DocumentDB.getById(questionId, 1);
+        (store.dispatch as any)({
+          type: 'files/setFiles',
+          payload: { files: [questionFile] }
+        });
+
+        // Get current content
+        const currentContent = JSON.stringify(questionFile?.content);
+        const databaseMatch = currentContent.match(/"database_name":"[^"]+"/);
+        expect(databaseMatch).toBeTruthy();
+
+        // Try to remove database_name field
+        const result = await editFileStr({
+          fileId: questionId,
+          oldMatch: `${databaseMatch![0]},`,
+          newMatch: ''  // Remove the field
+        });
+
+        // Verify error
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(result.error).toContain('database_name');
+          console.log('✓ editFileStr validated required question fields');
+          console.log(`Error: ${result.error}`);
+        }
+      });
+
+      it('should validate required dashboard fields', async () => {
+        console.log('\n[TEST] editFileStr - Dashboard field validation');
+
+        // Load dashboard into Redux
+        const dashboardFile = await DocumentDB.getById(dashboardId, 1);
+        (store.dispatch as any)({
+          type: 'files/setFiles',
+          payload: { files: [dashboardFile] }
+        });
+
+        // Get current content
+        const currentContent = JSON.stringify(dashboardFile?.content);
+        const assetsMatch = currentContent.match(/"assets":\[[^\]]*\]/);
+        expect(assetsMatch).toBeTruthy();
+
+        // Try to remove assets field
+        const result = await editFileStr({
+          fileId: dashboardId,
+          oldMatch: `${assetsMatch![0]},`,
+          newMatch: ''  // Remove the field
+        });
+
+        // Verify error
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(result.error).toContain('assets');
+          console.log('✓ editFileStr validated required dashboard fields');
+          console.log(`Error: ${result.error}`);
+        }
+      });
+
+      it('should work with editFileStr + publishFile flow', async () => {
+        console.log('\n[TEST] editFileStr + PublishFile integration');
+
+        // Load question into Redux
+        const questionFile = await DocumentDB.getById(questionId, 1);
+        (store.dispatch as any)({
+          type: 'files/setFiles',
+          payload: { files: [questionFile] }
+        });
+
+        // Get current description
+        const currentContent = JSON.stringify(questionFile?.content);
+        const descMatch = currentContent.match(/"description":"[^"]*"/);
+        expect(descMatch).toBeTruthy();
+
+        // Step 1: Edit with string replacement
+        console.log('[1] Editing file with editFileStr...');
+        const editResult = await editFileStr({
+          fileId: questionId,
+          oldMatch: descMatch![0],
+          newMatch: '"description":"Monthly revenue analysis"'
+        });
+
+        expect(editResult.success).toBe(true);
+        console.log('✓ editFileStr successful');
+
+        // Verify changes in Redux
+        const questionState1 = (store.getState() as any).files.files[questionId];
+        expect(questionState1.persistableChanges.description).toBe('Monthly revenue analysis');
+
+        // Step 2: Publish changes
+        console.log('[2] Publishing changes...');
+        const publishResult = await publishFile({ fileId: questionId });
+
+        expect(publishResult.id).toBe(questionId);
+        console.log('✓ PublishFile successful');
+
+        // Verify changes cleared
+        const questionState2 = (store.getState() as any).files.files[questionId];
+        expect(Object.keys(questionState2.persistableChanges).length).toBe(0);
+        console.log('✓ persistableChanges cleared after publish');
+      });
+
+      it('should handle multiple consecutive edits', async () => {
+        console.log('\n[TEST] editFileStr - Multiple consecutive edits');
+
+        // Load question into Redux (fresh state from beforeEach)
+        const questionFile = await DocumentDB.getById(questionId, 1);
+        (store.dispatch as any)({
+          type: 'files/setFiles',
+          payload: { files: [questionFile] }
+        });
+
+        // Get the actual content to match against
+        const initialContent = JSON.stringify(questionFile?.content);
+        const descMatch = initialContent.match(/"description":"[^"]+"/);
+        expect(descMatch).toBeTruthy();
+
+        // Edit 1: Change description
+        console.log('[1] First edit - change description...');
+        const result1 = await editFileStr({
+          fileId: questionId,
+          oldMatch: descMatch![0],
+          newMatch: '"description":"Revenue Report"'
+        });
+
+        if (!result1.success) {
+          console.error('First edit failed:', result1.error);
+        }
+        expect(result1.success).toBe(true);
+        console.log('✓ First edit successful');
+
+        // Edit 2: Change query (editFileStr automatically uses merged content)
+        console.log('[2] Second edit - change query...');
+        // Get the current query from merged content (includes first edit)
+        const questionState1 = (store.getState() as any).files.files[questionId];
+        const mergedContent = { ...questionFile!.content, ...questionState1.persistableChanges };
+        const currentStr = JSON.stringify(mergedContent);
+        const queryMatch = currentStr.match(/"query":"[^"]+"/);
+        expect(queryMatch).toBeTruthy();
+
+        const result2 = await editFileStr({
+          fileId: questionId,
+          oldMatch: queryMatch![0],
+          newMatch: '"query":"SELECT * FROM sales WHERE month = :month"'
+        });
+        expect(result2.success).toBe(true);
+        console.log('✓ Second edit successful');
+
+        // Verify both changes in Redux
+        const questionState2 = (store.getState() as any).files.files[questionId];
+        expect(questionState2.persistableChanges.description).toBe('Revenue Report');
+        expect(questionState2.persistableChanges.query).toContain('WHERE month = :month');
+        console.log('✓ Both edits accumulated in persistableChanges');
+      });
+    });
+
+    describe('String vs Line-Encoded Comparison', () => {
+      it('should produce equivalent results for same edit', async () => {
+        console.log('\n[TEST] String vs Line-Encoded - Equivalent edits');
+
+        // Setup: Load question twice (separate test scenarios)
+        const questionFile = await DocumentDB.getById(questionId, 1);
+
+        // Get current query to replace
+        const currentContent = JSON.stringify(questionFile?.content);
+        const queryMatch = currentContent.match(/"query":"[^"]+"/);
+        expect(queryMatch).toBeTruthy();
+        const originalQuery = queryMatch![0];
+
+        // Scenario 1: String-based edit
+        console.log('[1] Testing string-based edit...');
+        (store.dispatch as any)({
+          type: 'files/setFiles',
+          payload: { files: [questionFile] }
+        });
+
+        const strResult = await editFileStr({
+          fileId: questionId,
+          oldMatch: originalQuery,
+          newMatch: '"query":"SELECT month, total FROM comparison_test"'
+        });
+
+        expect(strResult.success).toBe(true);
+        const strState = (store.getState() as any).files.files[questionId];
+        const strQuery = strState.persistableChanges.query;
+        console.log('✓ String-based edit completed');
+
+        // Clear state for next test
+        (store.dispatch as any)({
+          type: 'files/clearEdits',
+          payload: questionId
+        });
+
+        // Scenario 2: Line-encoded edit
+        console.log('[2] Testing line-encoded edit...');
+        (store.dispatch as any)({
+          type: 'files/setFiles',
+          payload: { files: [questionFile] }
+        });
+
+        const prettyContent = JSON.stringify(questionFile?.content, null, 2);
+        const lines = prettyContent.split('\n');
+        const queryLineIdx = lines.findIndex(line => line.includes('"query"'));
+
+        const lineResult = await editFileLineEncoded({
+          fileId: questionId,
+          from: queryLineIdx + 1,
+          to: queryLineIdx + 1,
+          newContent: '  "query": "SELECT month, total FROM comparison_test",'
+        });
+
+        expect(lineResult.success).toBe(true);
+        const lineState = (store.getState() as any).files.files[questionId];
+        const lineQuery = lineState.persistableChanges.query;
+        console.log('✓ Line-encoded edit completed');
+
+        // Compare results
+        expect(strQuery).toBe(lineQuery);
+        console.log('✓ Both methods produced identical query results');
+      });
     });
   });
 });

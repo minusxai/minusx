@@ -6,7 +6,7 @@
  */
 
 import { ToolCall, ToolMessage, DatabaseWithSchema, DocumentContent, QuestionContent, ReportContent, ReportReference, AlertContent, AlertSelector, AlertFunction, ComparisonOperator } from '@/lib/types';
-import { setEdit, setEphemeral, setFile, selectMergedContent, type FileId } from '@/store/filesSlice';
+import { setEdit, setEphemeral, setFile, selectMergedContent, setMetadataEdit, type FileId } from '@/store/filesSlice';
 import type { AppDispatch, RootState } from '@/store/store';
 import { store } from '@/store/store';
 import type { UserInput } from './user-input-exception';
@@ -16,6 +16,9 @@ import { FilesAPI } from '../data/files';
 import { fetchWithCache } from './fetch-wrapper';
 import { API } from './declarations';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
+import { getRouter } from '@/lib/navigation/use-navigation';
+import { getAppState, readFilesLineEncoded, editFileLineEncoded, readFilesStr, editFileStr, publishFile, getQueryResult } from '@/lib/api/file-state';
+import { canCreateFileType } from '@/lib/auth/access-rules.client';
 
 // ============================================================================
 // Frontend Tool Registry
@@ -326,7 +329,6 @@ registerFrontendTool('UpdateFileMetadata', async (args, context) => {
   const fileId = file_id as FileId;
   // Update metadata (name/path)
   if (name !== undefined || path !== undefined) {
-    const { setMetadataEdit } = await import('@/store/filesSlice');
     const changes: { name?: string; path?: string } = {};
     if (name !== undefined) changes.name = name;
     // if (path !== undefined) changes.path = path;
@@ -336,7 +338,6 @@ registerFrontendTool('UpdateFileMetadata', async (args, context) => {
 
   // Update content (description)
   if (description !== undefined) {
-    const { setEdit } = await import('@/store/filesSlice');
     dispatch(setEdit({ fileId, edits: { description } }));
   }
 
@@ -357,7 +358,6 @@ registerFrontendTool('UpdateFileMetadata', async (args, context) => {
 registerFrontendTool('Navigate', async (args, context) => {
   const { file_id, path, newFileType } = args;
   const { state, userInputs } = context;
-  const { getRouter } = await import('@/lib/navigation/use-navigation');
 
   // Check if user confirmation is required
 //   const askForConfirmation = state?.ui?.askForConfirmation ?? false;
@@ -423,7 +423,6 @@ registerFrontendTool('Navigate', async (args, context) => {
         await FilesAPI.loadFile(file_id)
       }
     }
-    const { getAppState } = await import('@/lib/api/file-state');
     const appState = state ? await getAppState(file_id) : undefined;
     const debugMsg = newFileType !== undefined ? `;newFileType=${newFileType} is ignored since file_id provided` : ''
     const debugMsg2 = path !== undefined ? `;path=${path} is ignored since file_id provided` : ''
@@ -437,7 +436,6 @@ registerFrontendTool('Navigate', async (args, context) => {
   // Navigate to new file creation page
   if (newFileType !== undefined) {
     // Check if user has permission to create this file type
-    const { canCreateFileType } = await import('@/lib/auth/access-rules.client');
     const canCreate = canCreateFileType(newFileType);
 
     if (!canCreate) {
@@ -1744,33 +1742,35 @@ registerFrontendTool('ClarifyFrontend', async (args, context) => {
 
 /**
  * ReadFiles - Load multiple files with references and query results
+ * Returns compact JSON strings for LLM consumption
  */
 registerFrontendTool('ReadFiles', async (args, context) => {
   const { fileIds } = args;
 
-  // Import and execute (new unified API)
-  const { readFiles } = await import('./file-state');
-  const result = await readFiles({ fileIds });
+  // Execute with compact JSON strings
+  const result = await readFilesStr({ fileIds }, {});
 
   return result;
 });
 
 /**
- * EditFile - Apply content changes to a file (deep merge)
+ * EditFile - String-based editing for native toolset
+ * Routes to editFileStr for string find-and-replace with oldMatch/newMatch parameters
  */
 registerFrontendTool('EditFile', async (args, context) => {
-  const { fileId, changes } = args;
+  const { fileId, oldMatch, newMatch } = args;
 
-  // Import and execute (new unified API with deep merge)
-  const { editFile, getQueryResult } = await import('./file-state');
-  await editFile({ fileId, changes });
+  // Native toolset uses string-based editing (oldMatch/newMatch parameters)
+  const result = await editFileStr({ fileId, oldMatch, newMatch });
+
+  if (!result.success) {
+    throw new Error(result.error || 'Edit failed');
+  }
 
   // Auto-execute query for questions (agent tool only)
-  // User edits in UI should NOT auto-execute (explicit Run button)
   const state = store.getState();
   const fileState = state.files.files[fileId];
-  if (fileState?.type === 'question' && changes.content) {
-    const { selectMergedContent } = await import('@/store/filesSlice');
+  if (fileState?.type === 'question') {
     const finalContent = selectMergedContent(state, fileId) as any;
 
     if (finalContent?.query && finalContent?.database_name) {
@@ -1788,7 +1788,7 @@ registerFrontendTool('EditFile', async (args, context) => {
     }
   }
 
-  return { success: true };
+  return result;
 });
 
 /**
@@ -1797,16 +1797,14 @@ registerFrontendTool('EditFile', async (args, context) => {
 registerFrontendTool('EditFileReplace', async (args, context) => {
   const { fileId, from, to, newContent } = args;
 
-  // Import and execute (range-based API for precise editing)
-  const { editFileReplace, getQueryResult } = await import('./file-state');
-  const result = await editFileReplace({ fileId, from, to, newContent });
+  // Range-based API for precise editing
+  const result = await editFileLineEncoded({ fileId, from, to, newContent });
 
   // Auto-execute query for questions (agent tool only)
   if (result.success) {
     const state = store.getState();
     const fileState = state.files.files[fileId];
     if (fileState?.type === 'question') {
-      const { selectMergedContent } = await import('@/store/filesSlice');
       const finalContent = selectMergedContent(state, fileId) as any;
 
       if (finalContent?.query && finalContent?.database_name) {
@@ -1834,8 +1832,7 @@ registerFrontendTool('EditFileReplace', async (args, context) => {
 registerFrontendTool('PublishFile', async (args, context) => {
   const { fileId } = args;
 
-  // Import and execute (new unified API)
-  const { publishFile } = await import('./file-state');
+  // Execute (new unified API)
   const result = await publishFile({ fileId });
 
   return result;

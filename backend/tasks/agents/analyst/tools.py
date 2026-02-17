@@ -754,9 +754,9 @@ class ReadFiles(Tool):
 
 @register_agent
 class EditFile(Tool):
-    """Edit a file using line-based range editing.
+    """Edit a file using string find-and-replace.
 
-    Specify the line range to replace (from, to) and the new content.
+    Search for oldMatch in the file content and replace with newMatch.
     The tool validates changes and returns a diff.
     Changes are stored in Redux but NOT saved to database until PublishFile is called.
     """
@@ -764,16 +764,14 @@ class EditFile(Tool):
     def __init__(
         self,
         fileId: int = Field(..., description="File ID to edit"),
-        from_line: int = Field(..., alias="from", description="Start line number (1-indexed, inclusive)"),
-        to_line: int = Field(..., alias="to", description="End line number (1-indexed, inclusive)"),
-        newContent: str = Field(..., description="Replacement content for the specified line range"),
+        oldMatch: str = Field(..., description="String to search for in file content"),
+        newMatch: str = Field(..., description="String to replace with"),
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
         self.fileId = fileId
-        self.from_line = from_line
-        self.to_line = to_line
-        self.newContent = newContent
+        self.oldMatch = oldMatch
+        self.newMatch = newMatch
 
     async def reduce(self, child_batches):
         pass

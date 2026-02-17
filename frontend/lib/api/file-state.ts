@@ -338,9 +338,192 @@ export async function editFile(options: EditFileOptions): Promise<void> {
 }
 
 /**
- * Options for editFileReplace (legacy line-based editing)
+ * Read files with line-encoded content for LLM consumption
+ *
+ * Formats each file's content as JSON with line numbers (1-indexed)
+ * matching the format expected by editFileReplace.
+ *
+ * @param input - File IDs to load
+ * @param options - TTL and skip options
+ * @returns ReadFilesOutput with additional lineEncodedFiles map
  */
-export interface EditFileReplaceOptions {
+export async function readFilesLineEncoded(
+  input: ReadFilesInput,
+  options: ReadFilesOptions = {}
+): Promise<ReadFilesOutput & { lineEncodedFiles: Record<number, string> }> {
+  const result = await readFiles(input, options);
+
+  const lineEncodedFiles: Record<number, string> = {};
+
+  for (const fileState of result.fileStates) {
+    // Get merged content (same as editFileReplace uses)
+    const state = getStore().getState();
+    const mergedContent = selectMergedContent(state, fileState.id);
+
+    if (!mergedContent) continue;
+
+    // Format content as JSON (same as editFileReplace line 378)
+    const contentStr = JSON.stringify(mergedContent, null, 2);
+    const lines = contentStr.split('\n');
+
+    // Add 1-indexed line numbers with padding for alignment
+    const maxLineNum = lines.length;
+    const padding = String(maxLineNum).length;
+
+    const encoded = lines
+      .map((line, idx) => {
+        const lineNum = idx + 1; // 1-indexed (matching editFileReplace)
+        return `${String(lineNum).padStart(padding)} | ${line}`;
+      })
+      .join('\n');
+
+    lineEncodedFiles[fileState.id] = encoded;
+  }
+
+  return { ...result, lineEncodedFiles };
+}
+
+/**
+ * Read files and return stringified content (no pretty print)
+ *
+ * Loads files and returns their content as compact JSON strings.
+ * Useful for string-based operations where line encoding is not needed.
+ *
+ * @param input - File IDs to load
+ * @param options - Read options (ttl, skip, etc.)
+ * @returns File states and stringified content (id -> string)
+ */
+export async function readFilesStr(
+  input: ReadFilesInput,
+  options: ReadFilesOptions = {}
+): Promise<ReadFilesOutput & { stringifiedFiles: Record<number, string> }> {
+  const result = await readFiles(input, options);
+
+  const stringifiedFiles: Record<number, string> = {};
+
+  for (const fileState of result.fileStates) {
+    const state = getStore().getState();
+    const mergedContent = selectMergedContent(state, fileState.id);
+
+    if (!mergedContent) continue;
+
+    // Stringify without pretty print (compact JSON)
+    const contentStr = JSON.stringify(mergedContent);
+    stringifiedFiles[fileState.id] = contentStr;
+  }
+
+  return { ...result, stringifiedFiles };
+}
+
+/**
+ * Options for editFileStr (string-based editing)
+ */
+export interface EditFileStrOptions {
+  fileId: number;
+  oldMatch: string;    // String to search for
+  newMatch: string;    // String to replace with
+}
+
+/**
+ * EditFileStr - String-based editing using find and replace
+ *
+ * Searches for oldMatch in the file content and replaces with newMatch.
+ * Uses string replace (replaces first occurrence only).
+ * Validates JSON after edit.
+ * Changes are stored in Redux but NOT saved to database until PublishFile is called.
+ *
+ * @param options - File ID and search/replace strings
+ * @returns Success status with diff
+ */
+export async function editFileStr(
+  options: EditFileStrOptions
+): Promise<{ success: boolean; diff?: string; error?: string }> {
+  const { fileId, oldMatch, newMatch } = options;
+  const state = getStore().getState();
+
+  // Get file state
+  const fileState = selectFile(state, fileId);
+  if (!fileState) {
+    return { success: false, error: `File ${fileId} not found` };
+  }
+
+  // Get merged content
+  const mergedContent = selectMergedContent(state, fileId);
+  if (!mergedContent) {
+    return { success: false, error: `File ${fileId} has no content` };
+  }
+
+  // Convert content to JSON string (compact)
+  const contentStr = JSON.stringify(mergedContent);
+
+  // Check if oldMatch exists
+  if (!contentStr.includes(oldMatch)) {
+    return { success: false, error: `String "${oldMatch}" not found in file content` };
+  }
+
+  // Apply string replace (first occurrence only)
+  const editedStr = contentStr.replace(oldMatch, newMatch);
+
+  // Parse edited content as JSON
+  let editedContent;
+  try {
+    editedContent = JSON.parse(editedStr);
+  } catch (error) {
+    return {
+      success: false,
+      error: `Invalid JSON after edit: ${error instanceof Error ? error.message : 'Unknown error'}`
+    };
+  }
+
+  // Validate required fields based on file type (same as editFileLineEncoded)
+  if (fileState.type === 'question') {
+    const questionContent = editedContent as QuestionContent;
+    if (!questionContent.database_name) {
+      return {
+        success: false,
+        error: 'Question requires database_name field'
+      };
+    }
+    if (!questionContent.query) {
+      return {
+        success: false,
+        error: 'Question requires query field'
+      };
+    }
+  }
+
+  if (fileState.type === 'dashboard') {
+    const dashboardContent = editedContent as DocumentContent;
+    if (!dashboardContent.assets) {
+      return {
+        success: false,
+        error: 'Dashboard requires assets field'
+      };
+    }
+    if (!dashboardContent.layout) {
+      return {
+        success: false,
+        error: 'Dashboard requires layout field'
+      };
+    }
+  }
+
+  // Store edit in Redux
+  getStore().dispatch(setEdit({
+    fileId,
+    edits: editedContent
+  }));
+
+  // Generate diff
+  const diff = generateDiff(contentStr, editedStr);
+
+  return { success: true, diff };
+}
+
+/**
+ * Options for editFileLineEncoded (line-based editing)
+ */
+export interface EditFileLineEncodedOptions {
   fileId: number;
   from: number;    // Line number (1-indexed)
   to: number;      // Line number (1-indexed)
@@ -348,7 +531,7 @@ export interface EditFileReplaceOptions {
 }
 
 /**
- * EditFileReplace - Range-based line editing (legacy API)
+ * EditFileLineEncoded - Range-based line editing
  *
  * Useful for precise line-by-line editing of JSON content.
  * Validates JSON after edit and auto-executes queries for questions.
@@ -356,8 +539,8 @@ export interface EditFileReplaceOptions {
  * @param options - File ID and line range to replace
  * @returns Success status with diff
  */
-export async function editFileReplace(
-  options: EditFileReplaceOptions
+export async function editFileLineEncoded(
+  options: EditFileLineEncodedOptions
 ): Promise<{ success: boolean; diff?: string; error?: string }> {
   const { fileId, from, to, newContent } = options;
   const state = getStore().getState();

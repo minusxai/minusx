@@ -214,6 +214,7 @@ export async function POST(request: NextRequest) {
 
           // Consume Python stream and forward events (company ID header added automatically)
           let pythonDoneEvent: SSEEvent | null = null;
+          let pythonErrorEvent: SSEEvent | null = null;
 
           for await (const event of consumePythonStream('/api/chat/stream', requestPayload)) {
             // Check for abort before processing event - if aborted, stop forwarding events
@@ -230,8 +231,11 @@ export async function POST(request: NextRequest) {
               pythonDoneEvent = event;
               // Don't forward done event yet - we may have more work
             } else if (event.type === 'error') {
-              // Forward error events
+              // Python backend error - treat as terminal event
+              pythonErrorEvent = event;
               safeEnqueue(controller, encoder, 'error', event);
+              // Break immediately - no more processing after error
+              break;
             } else {
               // Forward streaming events to frontend with conversationID added
               const eventWithConversationID: StreamingEvent = {
@@ -240,6 +244,11 @@ export async function POST(request: NextRequest) {
               };
               safeEnqueue(controller, encoder, 'streaming_event', eventWithConversationID);
             }
+          }
+
+          // If Python sent an error, throw it to be caught by outer catch block
+          if (pythonErrorEvent) {
+            throw new Error(`Python backend error: ${(pythonErrorEvent as any).error || 'Unknown error'}`);
           }
 
           if (!pythonDoneEvent || pythonDoneEvent.type !== 'done') {
@@ -398,6 +407,15 @@ export async function POST(request: NextRequest) {
         safeEnqueue(controller, encoder, 'error', {
           type: 'error',
           error: error.message || 'Unknown error',
+          timestamp: new Date().toISOString()
+        });
+        // Also send a done event so frontend knows stream is complete
+        safeEnqueue(controller, encoder, 'done', {
+          type: 'done',
+          conversationID: currentConversationID,
+          log_index: currentLogIndex,
+          pending_tool_calls: [],
+          completed_tool_calls: accumulatedCompletedToolCalls,
           timestamp: new Date().toISOString()
         });
         controller.close();
