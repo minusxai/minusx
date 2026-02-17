@@ -228,9 +228,9 @@ export function useFile(id: FileId | undefined, options: UseFileOptions = {}): U
   // Get saving state from Redux
   const saving = file?.saving || false;
 
-  // For virtual files: show loading if file doesn't exist in Redux yet
-  // This prevents the flash of "File not found" on first render
-  const effectiveLoading = loading || Boolean(id && isVirtualFileId(id) && !file);
+  // Show loading if file doesn't exist in Redux yet (prevents flash of 404)
+  // This applies to both real and virtual files on first render
+  const effectiveLoading = loading || Boolean(id && !file);
 
   return {
     file,
