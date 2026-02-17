@@ -15,6 +15,7 @@ export { SqlPreview } from './SqlPreview';
 
 
 export { QueryChip, AddChipButton, getColumnIcon } from './QueryChip';
+export { PickerPopover, PickerHeader, PickerList, PickerItem } from './PickerPopover';
 export { DataSection } from './DataSection';
 export { FilterSection } from './FilterSection';
 export { SummarizeSection } from './SummarizeSection';

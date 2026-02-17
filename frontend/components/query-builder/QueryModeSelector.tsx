@@ -23,11 +23,11 @@ export function QueryModeSelector({
   return (
     <HStack
       gap={0}
-      bg="rgba(255, 255, 255, 0.05)"
+      bg="bg.subtle"
       borderRadius="md"
       p={0.5}
       border="1px solid"
-      borderColor="rgba(255, 255, 255, 0.08)"
+      borderColor="border.muted"
     >
       <Box
         as="button"
@@ -38,7 +38,7 @@ export function QueryModeSelector({
         color={mode === 'sql' ? 'white' : 'fg.muted'}
         cursor="pointer"
         transition="all 0.15s ease"
-        _hover={{ color: mode === 'sql' ? 'white' : 'fg' }}
+        _hover={{ color: mode === 'sql' ? 'white' : 'fg.default' }}
         onClick={() => onModeChange('sql')}
         display="flex"
         alignItems="center"
@@ -57,7 +57,7 @@ export function QueryModeSelector({
         cursor={canUseGUI ? 'pointer' : 'not-allowed'}
         opacity={canUseGUI ? 1 : 0.5}
         transition="all 0.15s ease"
-        _hover={{ color: canUseGUI ? (mode === 'gui' ? 'white' : 'fg') : undefined }}
+        _hover={{ color: canUseGUI ? (mode === 'gui' ? 'white' : 'fg.default') : undefined }}
         onClick={() => canUseGUI && onModeChange('gui')}
         title={guiError || 'Visual query builder'}
         display="flex"

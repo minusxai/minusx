@@ -5,9 +5,10 @@
 
 'use client';
 
-import { Box, HStack, Text, IconButton } from '@chakra-ui/react';
+import { Box, HStack, Text } from '@chakra-ui/react';
 import { LuX, LuTable, LuHash, LuCalendar, LuType } from 'react-icons/lu';
 import { ReactNode } from 'react';
+import { useAppSelector } from '@/store/hooks';
 
 export type ChipVariant = 'metric' | 'dimension' | 'filter' | 'table' | 'sort' | 'neutral';
 
@@ -21,7 +22,9 @@ interface QueryChipProps {
   size?: 'sm' | 'md';
 }
 
-const variantStyles: Record<ChipVariant, { bg: string; border: string; color: string; hoverBg: string }> = {
+type VariantStyle = { bg: string; border: string; color: string; hoverBg: string };
+
+const variantStylesDark: Record<ChipVariant, VariantStyle> = {
   metric: {
     bg: 'rgba(134, 239, 172, 0.12)',
     border: 'rgba(134, 239, 172, 0.3)',
@@ -60,6 +63,50 @@ const variantStyles: Record<ChipVariant, { bg: string; border: string; color: st
   },
 };
 
+const variantStylesLight: Record<ChipVariant, VariantStyle> = {
+  metric: {
+    bg: 'rgba(22, 163, 74, 0.08)',
+    border: 'rgba(22, 163, 74, 0.25)',
+    color: '#16a34a',
+    hoverBg: 'rgba(22, 163, 74, 0.15)',
+  },
+  dimension: {
+    bg: 'rgba(217, 119, 6, 0.08)',
+    border: 'rgba(217, 119, 6, 0.25)',
+    color: '#d97706',
+    hoverBg: 'rgba(217, 119, 6, 0.15)',
+  },
+  filter: {
+    bg: 'rgba(37, 99, 235, 0.08)',
+    border: 'rgba(37, 99, 235, 0.25)',
+    color: '#2563eb',
+    hoverBg: 'rgba(37, 99, 235, 0.15)',
+  },
+  table: {
+    bg: 'rgba(79, 70, 229, 0.08)',
+    border: 'rgba(79, 70, 229, 0.25)',
+    color: '#4f46e5',
+    hoverBg: 'rgba(79, 70, 229, 0.15)',
+  },
+  sort: {
+    bg: 'rgba(124, 58, 237, 0.08)',
+    border: 'rgba(124, 58, 237, 0.25)',
+    color: '#7c3aed',
+    hoverBg: 'rgba(124, 58, 237, 0.15)',
+  },
+  neutral: {
+    bg: 'rgba(100, 116, 139, 0.08)',
+    border: 'rgba(100, 116, 139, 0.2)',
+    color: '#64748b',
+    hoverBg: 'rgba(100, 116, 139, 0.15)',
+  },
+};
+
+export function useChipVariantStyles(variant: ChipVariant): VariantStyle {
+  const colorMode = useAppSelector((state) => state.ui.colorMode);
+  return (colorMode === 'light' ? variantStylesLight : variantStylesDark)[variant];
+}
+
 export function QueryChip({
   children,
   variant = 'neutral',
@@ -69,7 +116,7 @@ export function QueryChip({
   isActive = false,
   size = 'sm',
 }: QueryChipProps) {
-  const styles = variantStyles[variant];
+  const styles = useChipVariantStyles(variant);
   const isClickable = !!onClick;
 
   return (
@@ -112,7 +159,7 @@ export function QueryChip({
           borderRadius="sm"
           color={styles.color}
           opacity={0.5}
-          _hover={{ opacity: 1, bg: 'rgba(255,255,255,0.1)' }}
+          _hover={{ opacity: 1, bg: 'bg.muted' }}
           onClick={(e: React.MouseEvent) => {
             e.stopPropagation();
             onRemove();
@@ -133,7 +180,7 @@ interface AddChipButtonProps {
 }
 
 export function AddChipButton({ onClick, variant = 'neutral', size = 'sm' }: AddChipButtonProps) {
-  const styles = variantStyles[variant];
+  const styles = useChipVariantStyles(variant);
 
   return (
     <Box

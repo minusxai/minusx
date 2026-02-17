@@ -31,12 +31,12 @@ export function AliasInput({
       }}
       width={width}
       fontSize="sm"
-      bg="rgba(255, 255, 255, 0.02)"
-      borderColor="rgba(255, 255, 255, 0.1)"
-      _hover={{ borderColor: 'rgba(255, 255, 255, 0.2)' }}
+      bg="bg.subtle"
+      borderColor="border.default"
+      _hover={{ borderColor: 'border.emphasized' }}
       _focus={{
-        borderColor: 'blue.400',
-        boxShadow: '0 0 0 1px var(--chakra-colors-blue-400)'
+        borderColor: 'accent.primary',
+        boxShadow: '0 0 0 1px var(--chakra-colors-accent-primary)'
       }}
     />
   );

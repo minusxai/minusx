@@ -6,11 +6,12 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Box, Text, HStack, VStack, Popover, Portal } from '@chakra-ui/react';
+import { Box, Text, HStack } from '@chakra-ui/react';
 import { OrderByClause } from '@/lib/sql/ir-types';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { LuArrowUp, LuArrowDown, LuX } from 'react-icons/lu';
 import { QueryChip, AddChipButton, getColumnIcon } from './QueryChip';
+import { PickerPopover, PickerHeader, PickerList, PickerItem } from './PickerPopover';
 
 interface OrderByBuilderProps {
   databaseName: string;
@@ -100,10 +101,10 @@ export function OrderByBuilder({
 
   return (
     <Box
-      bg="rgba(255, 255, 255, 0.02)"
+      bg="bg.subtle"
       borderRadius="lg"
       border="1px solid"
-      borderColor="rgba(255, 255, 255, 0.06)"
+      borderColor="border.muted"
       p={3}
     >
       <HStack justify="space-between" mb={2.5}>
@@ -127,7 +128,7 @@ export function OrderByBuilder({
       <HStack gap={2} flexWrap="wrap" align="center">
         {/* Sort chips */}
         {clauses.map((clause, idx) => (
-          <Popover.Root
+          <PickerPopover
             key={`sort-${idx}`}
             open={editingIndex === idx}
             onOpenChange={(details) => {
@@ -135,8 +136,7 @@ export function OrderByBuilder({
                 setEditingIndex(null);
               }
             }}
-          >
-            <Popover.Trigger asChild>
+            trigger={
               <Box>
                 <QueryChip
                   variant="sort"
@@ -148,118 +148,89 @@ export function OrderByBuilder({
                   {clause.column}
                 </QueryChip>
               </Box>
-            </Popover.Trigger>
-            <Portal>
-              <Popover.Positioner>
-                <Popover.Content width="200px" bg="gray.900" borderColor="gray.700" border="1px solid" p={0} overflow="hidden" borderRadius="lg">
-                  <Popover.Body p={2} bg="gray.900">
-                    <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" px={2} py={1.5}>
-                      {clause.column}
-                    </Text>
-                    <VStack gap={0.5} align="stretch" bg="gray.900">
-                      <Box
-                        px={2}
-                        py={1.5}
-                        borderRadius="md"
-                        cursor="pointer"
-                        bg={clause.direction === 'ASC' ? 'rgba(192, 132, 252, 0.15)' : 'transparent'}
-                        _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
-                        onClick={() => handleToggleDirection(idx)}
-                      >
-                        <HStack gap={2}>
-                          <Box color="fg.muted"><LuArrowUp size={14} /></Box>
-                          <Text fontSize="sm">Ascending</Text>
-                        </HStack>
-                      </Box>
-                      <Box
-                        px={2}
-                        py={1.5}
-                        borderRadius="md"
-                        cursor="pointer"
-                        bg={clause.direction === 'DESC' ? 'rgba(192, 132, 252, 0.15)' : 'transparent'}
-                        _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
-                        onClick={() => handleToggleDirection(idx)}
-                      >
-                        <HStack gap={2}>
-                          <Box color="fg.muted"><LuArrowDown size={14} /></Box>
-                          <Text fontSize="sm">Descending</Text>
-                        </HStack>
-                      </Box>
-                    </VStack>
-                  </Popover.Body>
-                </Popover.Content>
-              </Popover.Positioner>
-            </Portal>
-          </Popover.Root>
+            }
+            width="200px"
+          >
+            <PickerHeader>{clause.column}</PickerHeader>
+            <PickerList>
+              <PickerItem
+                icon={<LuArrowUp size={14} />}
+                selected={clause.direction === 'ASC'}
+                selectedBg="rgba(192, 132, 252, 0.15)"
+                onClick={() => handleToggleDirection(idx)}
+              >
+                Ascending
+              </PickerItem>
+              <PickerItem
+                icon={<LuArrowDown size={14} />}
+                selected={clause.direction === 'DESC'}
+                selectedBg="rgba(192, 132, 252, 0.15)"
+                onClick={() => handleToggleDirection(idx)}
+              >
+                Descending
+              </PickerItem>
+            </PickerList>
+          </PickerPopover>
         ))}
 
         {/* Add sort popover */}
-        <Popover.Root open={addSortOpen && editingIndex === null} onOpenChange={(details) => setAddSortOpen(details.open)}>
-          <Popover.Trigger asChild>
+        <PickerPopover
+          open={addSortOpen && editingIndex === null}
+          onOpenChange={(details) => setAddSortOpen(details.open)}
+          trigger={
             <Box>
               <AddChipButton onClick={() => setAddSortOpen(true)} variant="sort" />
             </Box>
-          </Popover.Trigger>
-          <Portal>
-            <Popover.Positioner>
-              <Popover.Content width="240px" bg="gray.900" borderColor="gray.700" border="1px solid" p={0} overflow="hidden" borderRadius="lg">
-                <Popover.Body p={2} bg="gray.900">
-                  <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" px={2} py={1.5}>
-                    Sort by
-                  </Text>
-                  <VStack gap={0.5} align="stretch" maxH="250px" overflowY="auto" bg="gray.900">
-                    {availableColumns.map((col) => (
-                      <Box
-                        key={col.name}
-                        px={2}
-                        py={1.5}
-                        borderRadius="md"
-                        cursor="pointer"
-                        _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
-                        onClick={() => handleAddSort(col.name)}
-                      >
-                        <HStack gap={2} justify="space-between">
-                          <HStack gap={2}>
-                            <Box color="fg.muted">{getColumnIcon(col.type)}</Box>
-                            <Text fontSize="sm">{col.name}</Text>
-                          </HStack>
-                          <HStack gap={1}>
-                            <Box
-                              as="button"
-                              p={1}
-                              borderRadius="sm"
-                              color="fg.muted"
-                              _hover={{ bg: 'rgba(192, 132, 252, 0.2)', color: '#c084fc' }}
-                              onClick={(e: React.MouseEvent) => {
-                                e.stopPropagation();
-                                handleAddSort(col.name, 'ASC');
-                              }}
-                            >
-                              <LuArrowUp size={12} />
-                            </Box>
-                            <Box
-                              as="button"
-                              p={1}
-                              borderRadius="sm"
-                              color="fg.muted"
-                              _hover={{ bg: 'rgba(192, 132, 252, 0.2)', color: '#c084fc' }}
-                              onClick={(e: React.MouseEvent) => {
-                                e.stopPropagation();
-                                handleAddSort(col.name, 'DESC');
-                              }}
-                            >
-                              <LuArrowDown size={12} />
-                            </Box>
-                          </HStack>
-                        </HStack>
-                      </Box>
-                    ))}
-                  </VStack>
-                </Popover.Body>
-              </Popover.Content>
-            </Popover.Positioner>
-          </Portal>
-        </Popover.Root>
+          }
+          width="240px"
+        >
+          <PickerHeader>Sort by</PickerHeader>
+          <PickerList maxH="250px" searchable searchPlaceholder="Search columns...">
+            {(query) =>
+              availableColumns
+                .filter((col) => !query || col.name.toLowerCase().includes(query.toLowerCase()))
+                .map((col) => (
+                  <PickerItem
+                    key={col.name}
+                    icon={getColumnIcon(col.type)}
+                    onClick={() => handleAddSort(col.name)}
+                    rightElement={
+                      <HStack gap={1}>
+                        <Box
+                          as="button"
+                          p={1}
+                          borderRadius="sm"
+                          color="fg.muted"
+                          _hover={{ bg: 'bg.muted', color: 'accent.secondary' }}
+                          onClick={(e: React.MouseEvent) => {
+                            e.stopPropagation();
+                            handleAddSort(col.name, 'ASC');
+                          }}
+                        >
+                          <LuArrowUp size={12} />
+                        </Box>
+                        <Box
+                          as="button"
+                          p={1}
+                          borderRadius="sm"
+                          color="fg.muted"
+                          _hover={{ bg: 'bg.muted', color: 'accent.secondary' }}
+                          onClick={(e: React.MouseEvent) => {
+                            e.stopPropagation();
+                            handleAddSort(col.name, 'DESC');
+                          }}
+                        >
+                          <LuArrowDown size={12} />
+                        </Box>
+                      </HStack>
+                    }
+                  >
+                    {col.name}
+                  </PickerItem>
+                ))
+            }
+          </PickerList>
+        </PickerPopover>
 
         {clauses.length === 0 && (
           <Text fontSize="xs" color="fg.muted" fontStyle="italic">

@@ -7,11 +7,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Box, HStack, Text, VStack, Spinner, Popover, Portal, Button } from '@chakra-ui/react';
+import { Box, HStack, Text, VStack, Spinner, Button } from '@chakra-ui/react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { SelectColumn } from '@/lib/sql/ir-types';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { QueryChip, AddChipButton, getColumnIcon } from './QueryChip';
+import { PickerPopover, PickerHeader, PickerList, PickerItem } from './PickerPopover';
 import { AliasInput } from './AliasInput';
 import { LuX } from 'react-icons/lu';
 
@@ -103,10 +104,10 @@ export function ColumnsSection({
 
   return (
     <Box
-      bg="rgba(255, 255, 255, 0.02)"
+      bg="bg.subtle"
       borderRadius="lg"
       border="1px solid"
-      borderColor="rgba(255, 255, 255, 0.06)"
+      borderColor="border.muted"
       p={3}
     >
       <HStack justify="space-between" mb={2.5}>
@@ -147,7 +148,7 @@ export function ColumnsSection({
             if (col.type !== 'column' || col.column === '*') return null;
 
             return (
-              <Popover.Root
+              <PickerPopover
                 key={index}
                 open={editingIndex === index}
                 onOpenChange={(details) => {
@@ -156,8 +157,7 @@ export function ColumnsSection({
                     setEditAlias('');
                   }
                 }}
-              >
-                <Popover.Trigger asChild>
+                trigger={
                   <Box>
                     <QueryChip
                       variant="neutral"
@@ -172,96 +172,83 @@ export function ColumnsSection({
                       {col.alias ? `${col.column} as ${col.alias}` : col.column}
                     </QueryChip>
                   </Box>
-                </Popover.Trigger>
-                <Portal>
-                  <Popover.Positioner>
-                    <Popover.Content width="280px" bg="gray.900" borderColor="gray.700" border="1px solid" p={0} borderRadius="lg">
-                      <Popover.Body p={3}>
-                        <VStack gap={3} align="stretch">
-                          <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase">
-                            Column Alias
-                          </Text>
-                          <Text fontSize="sm" color="fg">
-                            {col.column}
-                          </Text>
-                          <AliasInput
-                            value={editAlias}
-                            onChange={(alias) => setEditAlias(alias || '')}
-                            placeholder="Alias (optional)"
-                          />
-                          <Button
-                            size="sm"
-                            colorPalette="blue"
-                            onClick={() => {
-                              const newColumns = [...columns];
-                              newColumns[index] = {
-                                ...newColumns[index],
-                                alias: editAlias.trim() || undefined
-                              };
-                              onChange(newColumns);
-                              setEditingIndex(null);
-                            }}
-                          >
-                            Update
-                          </Button>
-                        </VStack>
-                      </Popover.Body>
-                    </Popover.Content>
-                  </Popover.Positioner>
-                </Portal>
-              </Popover.Root>
+                }
+                padding={3}
+              >
+                <VStack gap={3} align="stretch">
+                  <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase">
+                    Column Alias
+                  </Text>
+                  <Text fontSize="sm" color="fg">
+                    {col.column}
+                  </Text>
+                  <AliasInput
+                    value={editAlias}
+                    onChange={(alias) => setEditAlias(alias || '')}
+                    placeholder="Alias (optional)"
+                  />
+                  <Button
+                    size="sm"
+                    colorPalette="blue"
+                    onClick={() => {
+                      const newColumns = [...columns];
+                      newColumns[index] = {
+                        ...newColumns[index],
+                        alias: editAlias.trim() || undefined
+                      };
+                      onChange(newColumns);
+                      setEditingIndex(null);
+                    }}
+                  >
+                    Update
+                  </Button>
+                </VStack>
+              </PickerPopover>
             );
           })}
 
           {/* Add column button */}
-          <Popover.Root open={popoverOpen} onOpenChange={(details) => setPopoverOpen(details.open)}>
-            <Popover.Trigger asChild>
+          <PickerPopover
+            open={popoverOpen}
+            onOpenChange={(details) => setPopoverOpen(details.open)}
+            trigger={
               <Box>
                 <AddChipButton onClick={() => setPopoverOpen(true)} />
               </Box>
-            </Popover.Trigger>
-            <Portal>
-              <Popover.Positioner>
-                <Popover.Content width="220px" bg="gray.900" borderColor="gray.700" border="1px solid" p={0} overflow="hidden" borderRadius="lg">
-                  <Popover.Body p={2} bg="gray.900">
-                    <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" px={2} py={1.5}>
-                      Available Columns
-                    </Text>
-                    <VStack gap={0.5} align="stretch" maxH="250px" overflowY="auto">
-                      {loading ? (
-                        <HStack px={2} py={3} justify="center">
-                          <Spinner size="sm" />
-                        </HStack>
-                      ) : selectableColumns.length === 0 ? (
-                        <Text fontSize="sm" color="fg.muted" px={2} py={2}>
-                          All columns selected
-                        </Text>
-                      ) : (
-                        selectableColumns.map((col) => (
-                          <Box
-                            key={col.name}
-                            px={2}
-                            py={1.5}
-                            borderRadius="md"
-                            cursor="pointer"
-                            _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
-                            onClick={() => handleAddColumn(col.name)}
-                          >
-                            <Text fontSize="sm">{col.name}</Text>
-                            {col.type && (
-                              <Text fontSize="xs" color="fg.muted">
-                                {col.type}
-                              </Text>
-                            )}
-                          </Box>
-                        ))
-                      )}
-                    </VStack>
-                  </Popover.Body>
-                </Popover.Content>
-              </Popover.Positioner>
-            </Portal>
-          </Popover.Root>
+            }
+            width="220px"
+          >
+            <PickerHeader>Available Columns</PickerHeader>
+            <PickerList maxH="250px" searchable searchPlaceholder="Search columns...">
+              {(query) =>
+                loading ? (
+                  <HStack px={2} py={3} justify="center">
+                    <Spinner size="sm" />
+                  </HStack>
+                ) : selectableColumns.length === 0 ? (
+                  <Text fontSize="sm" color="fg.muted" px={2} py={2}>
+                    All columns selected
+                  </Text>
+                ) : (
+                  selectableColumns
+                    .filter((col) => !query || col.name.toLowerCase().includes(query.toLowerCase()))
+                    .map((col) => (
+                      <PickerItem
+                        key={col.name}
+                        onClick={() => handleAddColumn(col.name)}
+                      >
+                        <Text fontSize="sm">{col.name}</Text>
+                        {col.type && (
+                          <Text fontSize="xs" color="fg.muted">
+                            {col.type}
+                          </Text>
+                        )}
+                      </PickerItem>
+                    ))
+                )
+              }
+            </PickerList>
+          </PickerPopover>
         </HStack>
       )}
 

@@ -6,17 +6,11 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Box, HStack, Text, VStack, createListCollection, Popover, Portal, Button } from '@chakra-ui/react';
-import {
-  SelectRoot,
-  SelectTrigger,
-  SelectContent,
-  SelectItem,
-  SelectValueText,
-} from '@/components/ui/select';
+import { Box, HStack, Text, VStack, SimpleGrid } from '@chakra-ui/react';
 import { SelectColumn, GroupByClause, GroupByItem } from '@/lib/types';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { QueryChip, AddChipButton, getColumnIcon } from './QueryChip';
+import { PickerPopover, PickerHeader, PickerList, PickerItem } from './PickerPopover';
 import { AliasInput } from './AliasInput';
 import { LuSigma, LuX, LuCalendar } from 'react-icons/lu';
 
@@ -49,12 +43,12 @@ interface SummarizeSectionProps {
 }
 
 const AGGREGATES = [
-  { label: 'Count', value: 'COUNT' },
-  { label: 'Sum', value: 'SUM' },
-  { label: 'Average', value: 'AVG' },
-  { label: 'Min', value: 'MIN' },
-  { label: 'Max', value: 'MAX' },
-  { label: 'Count distinct', value: 'COUNT_DISTINCT' },
+  { label: 'Count', shortLabel: 'Count', value: 'COUNT' },
+  { label: 'Sum', shortLabel: 'Sum', value: 'SUM' },
+  { label: 'Average', shortLabel: 'Avg', value: 'AVG' },
+  { label: 'Min', shortLabel: 'Min', value: 'MIN' },
+  { label: 'Max', shortLabel: 'Max', value: 'MAX' },
+  { label: 'Count distinct', shortLabel: 'Cnt Dist', value: 'COUNT_DISTINCT' },
 ];
 
 export function SummarizeSection({
@@ -348,17 +342,10 @@ export function SummarizeSection({
   );
 
   const formatMetricLabel = (col: SelectColumn) => {
-    const aggLabel = AGGREGATES.find((a) => a.value === col.aggregate)?.label || col.aggregate;
-    const autoAlias = `${col.aggregate?.toLowerCase()}_${col.column === '*' ? 'all' : col.column}`;
-
-    // Show alias if custom (different from auto-generated)
-    if (col.alias && col.alias !== autoAlias) {
-      const baseLabel = col.column === '*' ? aggLabel : `${aggLabel} of ${col.column}`;
-      return `${baseLabel} as ${col.alias}`;
-    }
-
-    if (col.column === '*') return aggLabel;
-    return `${aggLabel} of ${col.column}`;
+    const aggLabel = AGGREGATES.find((a) => a.value === col.aggregate)?.shortLabel || col.aggregate;
+    const alias = col.alias || `${col.aggregate?.toLowerCase()}_${col.column === '*' ? 'all' : col.column}`;
+    const baseLabel = col.column === '*' ? aggLabel : `${aggLabel}(${col.column})`;
+    return `${baseLabel} as ${alias}`;
   };
 
   const formatDimensionLabel = (dim: GroupByItem) => {
@@ -371,10 +358,10 @@ export function SummarizeSection({
 
   return (
     <Box
-      bg="rgba(255, 255, 255, 0.02)"
+      bg="bg.subtle"
       borderRadius="lg"
       border="1px solid"
-      borderColor="rgba(255, 255, 255, 0.06)"
+      borderColor="border.muted"
       p={3}
     >
       <HStack justify="space-between" mb={2.5}>
@@ -398,7 +385,7 @@ export function SummarizeSection({
       <HStack gap={2} flexWrap="wrap" align="center">
         {/* Metrics */}
         {metrics.map((metric, idx) => (
-          <Popover.Root
+          <PickerPopover
             key={`metric-${idx}`}
             open={editingMetricIndex === idx}
             onOpenChange={(details) => {
@@ -406,8 +393,7 @@ export function SummarizeSection({
                 setEditingMetricIndex(null);
               }
             }}
-          >
-            <Popover.Trigger asChild>
+            trigger={
               <Box>
                 <QueryChip
                   variant="metric"
@@ -419,164 +405,140 @@ export function SummarizeSection({
                   {formatMetricLabel(metric)}
                 </QueryChip>
               </Box>
-            </Popover.Trigger>
-            <Portal>
-              <Popover.Positioner>
-                <Popover.Content width="280px" bg="gray.900" borderColor="gray.700" border="1px solid" p={0} overflow="hidden" borderRadius="lg">
-                  <Popover.Body p={3}>
-                    <VStack gap={3} align="stretch">
-                      <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase">
-                        Edit metric
-                      </Text>
-                      <SelectRoot
-                        collection={createListCollection({
-                          items: AGGREGATES,
-                        })}
-                        value={[selectedAgg]}
-                        onValueChange={(e) => handleAggregateChange(e.value[0] || 'COUNT')}
-                        size="sm"
+            }
+            padding={3}
+          >
+            <HStack justify="space-between" align="center" mb={2.5}>
+              <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
+                Edit metric
+              </Text>
+              <HStack gap={1.5} align="center">
+                <Text fontSize="xs" color="fg.muted">as</Text>
+                <AliasInput
+                  value={editAlias}
+                  onChange={(alias) => setEditAlias(alias || '')}
+                  placeholder="alias"
+                />
+              </HStack>
+            </HStack>
+            <SimpleGrid columns={3} gap={1.5} mb={1}>
+              {AGGREGATES.map((agg) => (
+                <Box
+                  key={agg.value}
+                  as="button"
+                  py={1.5}
+                  borderRadius="md"
+                  fontSize="xs"
+                  fontWeight="600"
+                  textAlign="center"
+                  whiteSpace="nowrap"
+                  cursor="pointer"
+                  bg={selectedAgg === agg.value ? 'accent.teal' : 'bg.subtle'}
+                  color={selectedAgg === agg.value ? 'white' : 'fg.muted'}
+                  _hover={{ bg: selectedAgg === agg.value ? 'accent.teal/80' : 'bg.muted' }}
+                  transition="all 0.15s ease"
+                  onClick={() => handleAggregateChange(agg.value)}
+                >
+                  {agg.shortLabel}
+                </Box>
+              ))}
+            </SimpleGrid>
+            <Box borderTop="1px solid" borderColor="border.muted" mt={1} mx={-3} px={3} pt={2}>
+              <PickerList maxH="200px" searchable searchPlaceholder="Search columns...">
+                {(query) => [
+                  !query && (
+                    <PickerItem
+                      key="*"
+                      selected={metric.column === '*'}
+                      selectedBg="rgba(134, 239, 172, 0.15)"
+                      onClick={() => handleUpdateMetric('*')}
+                    >
+                      * (all rows)
+                    </PickerItem>
+                  ),
+                  ...availableColumns
+                    .filter((col) => !query || col.name.toLowerCase().includes(query.toLowerCase()))
+                    .map((col) => (
+                      <PickerItem
+                        key={col.name}
+                        icon={getColumnIcon(col.type)}
+                        selected={metric.column === col.name}
+                        selectedBg="rgba(134, 239, 172, 0.15)"
+                        onClick={() => handleUpdateMetric(col.name)}
                       >
-                        <SelectTrigger>
-                          <SelectValueText placeholder="Function" />
-                        </SelectTrigger>
-                        <SelectContent >
-                          {AGGREGATES.map((agg) => (
-                            <SelectItem key={agg.value} item={agg.value}>
-                              {agg.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </SelectRoot>
-
-                      <Box>
-                        <Text fontSize="xs" fontWeight="600" color="fg.muted" mb={1}>
-                          Alias (optional)
-                        </Text>
-                        <AliasInput
-                          value={editAlias}
-                          onChange={(alias) => setEditAlias(alias || '')}
-                          placeholder={`${selectedAgg.toLowerCase()}_${metric.column === '*' ? 'all' : metric.column}`}
-                          width="100%"
-                        />
-                        <Text fontSize="xs" color="fg.muted" mt={1}>
-                          Leave blank for auto-generated
-                        </Text>
-                      </Box>
-
-                      <VStack gap={0.5} align="stretch" maxH="200px" overflowY="auto">
-                        <Box
-                          px={2}
-                          py={1.5}
-                          borderRadius="md"
-                          cursor="pointer"
-                          bg={metric.column === '*' ? 'rgba(134, 239, 172, 0.15)' : 'transparent'}
-                          _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
-                          onClick={() => handleUpdateMetric('*')}
-                        >
-                          <Text fontSize="sm">* (all rows)</Text>
-                        </Box>
-                        {availableColumns.map((col) => (
-                          <Box
-                            key={col.name}
-                            px={2}
-                            py={1.5}
-                            borderRadius="md"
-                            cursor="pointer"
-                            bg={metric.column === col.name ? 'rgba(134, 239, 172, 0.15)' : 'transparent'}
-                            _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
-                            onClick={() => handleUpdateMetric(col.name)}
-                          >
-                            <HStack gap={2}>
-                              <Box color="fg.muted">{getColumnIcon(col.type)}</Box>
-                              <Text fontSize="sm">{col.name}</Text>
-                            </HStack>
-                          </Box>
-                        ))}
-                      </VStack>
-                    </VStack>
-                  </Popover.Body>
-                </Popover.Content>
-              </Popover.Positioner>
-            </Portal>
-          </Popover.Root>
+                        {col.name}
+                      </PickerItem>
+                    )),
+                ]}
+              </PickerList>
+            </Box>
+          </PickerPopover>
         ))}
 
         {/* Add metric popover */}
-        <Popover.Root open={addMetricOpen && editingMetricIndex === null} onOpenChange={(details) => setAddMetricOpen(details.open)}>
-          <Popover.Trigger asChild>
+        <PickerPopover
+          open={addMetricOpen && editingMetricIndex === null}
+          onOpenChange={(details) => setAddMetricOpen(details.open)}
+          trigger={
             <Box>
               <AddChipButton onClick={() => setAddMetricOpen(true)} variant="metric" />
             </Box>
-          </Popover.Trigger>
-          <Portal>
-            <Popover.Positioner>
-              <Popover.Content width="280px" bg="gray.900" borderColor="gray.700" border="1px solid" p={0} overflow="hidden" borderRadius="lg">
-                <Popover.Body p={3}>
-                  <VStack gap={3} align="stretch">
-                    <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase">
-                      Add metric
-                    </Text>
-                    <SelectRoot
-                      collection={createListCollection({
-                        items: AGGREGATES,
-                      })}
-                      value={[selectedAgg]}
-                      onValueChange={(e) => setSelectedAgg(e.value[0] || 'COUNT')}
-                      size="sm"
+          }
+          padding={3}
+        >
+          <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" mb={2.5}>
+            Add metric
+          </Text>
+          <SimpleGrid columns={3} gap={1.5} mb={1}>
+            {AGGREGATES.map((agg) => (
+              <Box
+                key={agg.value}
+                as="button"
+                py={1.5}
+                borderRadius="md"
+                fontSize="xs"
+                fontWeight="600"
+                textAlign="center"
+                whiteSpace="nowrap"
+                cursor="pointer"
+                bg={selectedAgg === agg.value ? 'accent.teal' : 'bg.subtle'}
+                color={selectedAgg === agg.value ? 'white' : 'fg.muted'}
+                _hover={{ bg: selectedAgg === agg.value ? 'accent.teal/80' : 'bg.muted' }}
+                transition="all 0.15s ease"
+                onClick={() => setSelectedAgg(agg.value)}
+              >
+                {agg.shortLabel}
+              </Box>
+            ))}
+          </SimpleGrid>
+          <Box borderTop="1px solid" borderColor="border.muted" mt={1} mx={-3} px={3} pt={2}>
+            <PickerList maxH="200px" searchable searchPlaceholder="Search columns...">
+              {(query) => [
+                !query && (
+                  <PickerItem key="*" onClick={() => handleAddMetric('*')}>
+                    * (all rows)
+                  </PickerItem>
+                ),
+                ...availableColumns
+                  .filter((col) => !query || col.name.toLowerCase().includes(query.toLowerCase()))
+                  .map((col) => (
+                    <PickerItem
+                      key={col.name}
+                      icon={getColumnIcon(col.type)}
+                      onClick={() => handleAddMetric(col.name)}
                     >
-                      <SelectTrigger>
-                        <SelectValueText placeholder="Function" />
-                      </SelectTrigger>
-                      <SelectContent >
-                        {AGGREGATES.map((agg) => (
-                          <SelectItem key={agg.value} item={agg.value}>
-                            {agg.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </SelectRoot>
-
-                    <VStack gap={0.5} align="stretch" maxH="200px" overflowY="auto">
-                      <Box
-                        px={2}
-                        py={1.5}
-                        borderRadius="md"
-                        cursor="pointer"
-                        _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
-                        onClick={() => handleAddMetric('*')}
-                      >
-                        <Text fontSize="sm">* (all rows)</Text>
-                      </Box>
-                      {availableColumns.map((col) => (
-                        <Box
-                          key={col.name}
-                          px={2}
-                          py={1.5}
-                          borderRadius="md"
-                          cursor="pointer"
-                          _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
-                          onClick={() => handleAddMetric(col.name)}
-                        >
-                          <HStack gap={2}>
-                            <Box color="fg.muted">{getColumnIcon(col.type)}</Box>
-                            <Text fontSize="sm">{col.name}</Text>
-                          </HStack>
-                        </Box>
-                      ))}
-                    </VStack>
-                  </VStack>
-                </Popover.Body>
-              </Popover.Content>
-            </Popover.Positioner>
-          </Portal>
-        </Popover.Root>
+                      {col.name}
+                    </PickerItem>
+                  )),
+              ]}
+            </PickerList>
+          </Box>
+        </PickerPopover>
 
         {/* "by" separator - only show if we have metrics */}
-        {metrics.length > 0 && (dimensions.length > 0 || true) && (
-          <Text fontSize="xs" color="fg.muted" fontWeight="500" px={1}>
-            by
-          </Text>
-        )}
+        <Text fontSize="xs" color="fg.muted" fontWeight="500" px={1}>
+            group by
+        </Text>
 
         {/* Dimensions */}
         {dimensions.map((dim, idx) => {
@@ -584,7 +546,7 @@ export function SummarizeSection({
           const isDate = isDateColumn(colInfo?.type);
 
           return (
-            <Popover.Root
+            <PickerPopover
               key={`dim-${idx}`}
               open={editingDimensionIndex === idx}
               onOpenChange={(details) => {
@@ -592,8 +554,7 @@ export function SummarizeSection({
                   setEditingDimensionIndex(null);
                 }
               }}
-            >
-              <Popover.Trigger asChild>
+              trigger={
                 <Box>
                   <QueryChip
                     variant="dimension"
@@ -605,160 +566,113 @@ export function SummarizeSection({
                     {formatDimensionLabel(dim)}
                   </QueryChip>
                 </Box>
-              </Popover.Trigger>
-              <Portal>
-                <Popover.Positioner>
-                  <Popover.Content width="240px" bg="gray.900" borderColor="gray.700" border="1px solid" p={0} overflow="hidden" borderRadius="lg">
-                    <Popover.Body p={2} bg="gray.900">
-                      <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" px={2} py={1.5}>
-                        {dim.column}
-                      </Text>
-                      <VStack gap={0.5} align="stretch" bg="gray.900">
-                        <Box
-                          px={2}
-                          py={1.5}
-                          borderRadius="md"
-                          cursor="pointer"
-                          bg={dim.type !== 'expression' ? 'rgba(147, 197, 253, 0.15)' : 'transparent'}
-                          _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
-                          onClick={() => handleUpdateDimension(idx)}
-                        >
-                          <HStack gap={2}>
-                            <Box color="fg.muted">{getColumnIcon(colInfo?.type)}</Box>
-                            <Text fontSize="sm">Raw value</Text>
-                          </HStack>
-                        </Box>
-                        {isDate && DATE_TRUNC_UNITS.map((unit) => (
-                          <Box
-                            key={unit.value}
-                            px={2}
-                            py={1.5}
-                            borderRadius="md"
-                            cursor="pointer"
-                            bg={dim.type === 'expression' && dim.unit === unit.value ? 'rgba(147, 197, 253, 0.15)' : 'transparent'}
-                            _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
-                            onClick={() => handleUpdateDimension(idx, unit.value)}
-                          >
-                            <HStack gap={2}>
-                              <Box color="fg.muted"><LuCalendar size={14} /></Box>
-                              <Text fontSize="sm">By {unit.label}</Text>
-                            </HStack>
-                          </Box>
-                        ))}
-                      </VStack>
-                    </Popover.Body>
-                  </Popover.Content>
-                </Popover.Positioner>
-              </Portal>
-            </Popover.Root>
+              }
+              width="240px"
+            >
+              <PickerHeader>{dim.column}</PickerHeader>
+              <PickerList>
+                <PickerItem
+                  icon={getColumnIcon(colInfo?.type)}
+                  selected={dim.type !== 'expression'}
+                  selectedBg="rgba(147, 197, 253, 0.15)"
+                  onClick={() => handleUpdateDimension(idx)}
+                >
+                  Raw value
+                </PickerItem>
+                {isDate && DATE_TRUNC_UNITS.map((unit) => (
+                  <PickerItem
+                    key={unit.value}
+                    icon={<LuCalendar size={14} />}
+                    selected={dim.type === 'expression' && dim.unit === unit.value}
+                    selectedBg="rgba(147, 197, 253, 0.15)"
+                    onClick={() => handleUpdateDimension(idx, unit.value)}
+                  >
+                    {`By ${unit.label}`}
+                  </PickerItem>
+                ))}
+              </PickerList>
+            </PickerPopover>
           );
         })}
 
         {/* Add dimension */}
-        <Popover.Root
+        <PickerPopover
           open={addDimensionOpen}
           onOpenChange={(details) => {
             setAddDimensionOpen(details.open);
             if (!details.open) setSelectedDateColumn(null);
           }}
-        >
-          <Popover.Trigger asChild>
+          trigger={
             <Box>
               <AddChipButton onClick={() => setAddDimensionOpen(true)} variant="dimension" />
             </Box>
-          </Popover.Trigger>
-          <Portal>
-            <Popover.Positioner>
-              <Popover.Content width="280px" bg="gray.900" borderColor="gray.700" border="1px solid" p={0} overflow="hidden" borderRadius="lg">
-                <Popover.Body p={2} bg="gray.900">
-                  {!selectedDateColumn ? (
-                    <>
-                      <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" px={2} py={1.5}>
-                        Group by
-                      </Text>
-                      <VStack gap={0.5} align="stretch" maxH="250px" overflowY="auto" bg="gray.900">
-                        {availableColumns.map((col) => (
-                          <Box
-                            key={col.name}
-                            px={2}
-                            py={1.5}
-                            borderRadius="md"
-                            cursor="pointer"
-                            _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
-                            onClick={() => {
-                              if (isDateColumn(col.type)) {
-                                setSelectedDateColumn(col);
-                              } else {
-                                handleAddDimension(col.name);
-                              }
-                            }}
-                          >
-                            <HStack gap={2} justify="space-between">
-                              <HStack gap={2}>
-                                <Box color="fg.muted">{getColumnIcon(col.type)}</Box>
-                                <Text fontSize="sm">{col.name}</Text>
-                              </HStack>
-                              {isDateColumn(col.type) && (
-                                <Text fontSize="xs" color="fg.muted">›</Text>
-                              )}
-                            </HStack>
-                          </Box>
-                        ))}
-                      </VStack>
-                    </>
-                  ) : (
-                    <>
-                      <HStack px={2} py={1.5} gap={2}>
-                        <Box
-                          as="button"
-                          color="fg.muted"
-                          _hover={{ color: 'fg' }}
-                          onClick={() => setSelectedDateColumn(null)}
-                        >
-                          ‹
-                        </Box>
-                        <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase">
-                          {selectedDateColumn.name}
-                        </Text>
-                      </HStack>
-                      <VStack gap={0.5} align="stretch" bg="gray.900">
-                        <Box
-                          px={2}
-                          py={1.5}
-                          borderRadius="md"
-                          cursor="pointer"
-                          _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
-                          onClick={() => handleAddDimension(selectedDateColumn.name)}
-                        >
-                          <HStack gap={2}>
-                            <Box color="fg.muted">{getColumnIcon(selectedDateColumn.type)}</Box>
-                            <Text fontSize="sm">Raw value</Text>
-                          </HStack>
-                        </Box>
-                        {DATE_TRUNC_UNITS.map((unit) => (
-                          <Box
-                            key={unit.value}
-                            px={2}
-                            py={1.5}
-                            borderRadius="md"
-                            cursor="pointer"
-                            _hover={{ bg: 'rgba(255, 255, 255, 0.05)' }}
-                            onClick={() => handleAddDimension(selectedDateColumn.name, unit.value)}
-                          >
-                            <HStack gap={2}>
-                              <Box color="fg.muted"><LuCalendar size={14} /></Box>
-                              <Text fontSize="sm">By {unit.label}</Text>
-                            </HStack>
-                          </Box>
-                        ))}
-                      </VStack>
-                    </>
-                  )}
-                </Popover.Body>
-              </Popover.Content>
-            </Popover.Positioner>
-          </Portal>
-        </Popover.Root>
+          }
+        >
+          {!selectedDateColumn ? (
+            <>
+              <PickerHeader>Group by</PickerHeader>
+              <PickerList maxH="250px" searchable searchPlaceholder="Search columns...">
+                {(query) =>
+                  availableColumns
+                    .filter((col) => !query || col.name.toLowerCase().includes(query.toLowerCase()))
+                    .map((col) => (
+                      <PickerItem
+                        key={col.name}
+                        icon={getColumnIcon(col.type)}
+                        onClick={() => {
+                          if (isDateColumn(col.type)) {
+                            setSelectedDateColumn(col);
+                          } else {
+                            handleAddDimension(col.name);
+                          }
+                        }}
+                        rightElement={
+                          isDateColumn(col.type) ? (
+                            <Text fontSize="xs" color="fg.muted">›</Text>
+                          ) : undefined
+                        }
+                      >
+                        {col.name}
+                      </PickerItem>
+                    ))
+                }
+              </PickerList>
+            </>
+          ) : (
+            <>
+              <HStack px={2} py={1.5} gap={2}>
+                <Box
+                  as="button"
+                  color="fg.muted"
+                  _hover={{ color: 'fg' }}
+                  onClick={() => setSelectedDateColumn(null)}
+                >
+                  ‹
+                </Box>
+                <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase">
+                  {selectedDateColumn.name}
+                </Text>
+              </HStack>
+              <PickerList>
+                <PickerItem
+                  icon={getColumnIcon(selectedDateColumn.type)}
+                  onClick={() => handleAddDimension(selectedDateColumn.name)}
+                >
+                  Raw value
+                </PickerItem>
+                {DATE_TRUNC_UNITS.map((unit) => (
+                  <PickerItem
+                    key={unit.value}
+                    icon={<LuCalendar size={14} />}
+                    onClick={() => handleAddDimension(selectedDateColumn.name, unit.value)}
+                  >
+                    {`By ${unit.label}`}
+                  </PickerItem>
+                ))}
+              </PickerList>
+            </>
+          )}
+        </PickerPopover>
 
       </HStack>
     </Box>
