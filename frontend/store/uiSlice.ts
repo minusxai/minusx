@@ -17,6 +17,7 @@ interface UIState {
   dashboardEditMode: Record<number, boolean>;  // fileId -> editMode
   sidebarDrafts: Record<number, string>;  // fileId -> draft input text
   proposedQueries: Record<number, string>;  // fileId -> proposed SQL query (for diff view)
+  selectedToolset: 'classic' | 'native';
 }
 
 const initialState: UIState = {
@@ -34,6 +35,7 @@ const initialState: UIState = {
   dashboardEditMode: {},
   sidebarDrafts: {},
   proposedQueries: {},
+  selectedToolset: 'classic',
 };
 
 const uiSlice = createSlice({
@@ -116,6 +118,9 @@ const uiSlice = createSlice({
     clearProposedQuery: (state, action: PayloadAction<number>) => {
       delete state.proposedQueries[action.payload];
     },
+    setSelectedToolset: (state, action: PayloadAction<'classic' | 'native'>) => {
+      state.selectedToolset = action.payload;
+    },
   },
 });
 
@@ -142,6 +147,7 @@ export const {
   clearSidebarDraft,
   setProposedQuery,
   clearProposedQuery,
+  setSelectedToolset,
 } = uiSlice.actions;
 
 export default uiSlice.reducer;
@@ -173,3 +179,4 @@ export const selectSidebarDraft = (state: RootState, fileId: number | undefined)
   fileId ? state.ui.sidebarDrafts[fileId] ?? '' : '';
 export const selectProposedQuery = (state: RootState, fileId: number | undefined) =>
   fileId ? state.ui.proposedQueries[fileId] : undefined;
+export const selectSelectedToolset = (state: RootState) => state.ui.selectedToolset;
