@@ -22,18 +22,25 @@ def test_prompt_loader():
     keep_files = os.getenv('KEEP_TEST_PROMPTS', '0') == '1'
 
     try:
+        system_variables = {
+            'agent_name': 'MinusX',
+            'schema': '- table: orders\n  columns: [id, customer_id, total, created_at]',
+            'context': 'This is a sample e-commerce database.',
+            'connection_id': 'test-connection-123',
+            'home_folder': '/org',
+            'max_steps': 10
+        }
+        user_variables = {
+            'app_state': '{"fileType": "question", "query": "SELECT * FROM orders"}',
+            'goal': 'Show me total revenue by month',
+            'current_time': '2026-02-04 10:30:00'
+        }
+
         prompts_to_test = [
             {
-                'id': 'system',
-                'filename': 'system.txt',
-                'variables': {
-                    'agent_name': 'MinusX',
-                    'schema': '- table: orders\n  columns: [id, customer_id, total, created_at]',
-                    'context': 'This is a sample e-commerce database.',
-                    'connection_id': 'test-connection-123',
-                    'home_folder': '/org',
-                    'max_steps': 10
-                },
+                'id': 'classic.system',
+                'filename': 'classic_system.txt',
+                'variables': system_variables,
                 'assertions': [
                     ('MinusX', 'Agent name'),
                     ('orders', 'Schema content'),
@@ -46,13 +53,35 @@ def test_prompt_loader():
                 ]
             },
             {
-                'id': 'user',
-                'filename': 'user.txt',
-                'variables': {
-                    'app_state': '{"fileType": "question", "query": "SELECT * FROM orders"}',
-                    'goal': 'Show me total revenue by month',
-                    'current_time': '2026-02-04 10:30:00'
-                },
+                'id': 'classic.user',
+                'filename': 'classic_user.txt',
+                'variables': user_variables,
+                'assertions': [
+                    ('fileType', 'App state'),
+                    ('Show me total revenue', 'Goal'),
+                    ('2026-02-04', 'Current time'),
+                ]
+            },
+            {
+                'id': 'native.system',
+                'filename': 'native_system.txt',
+                'variables': system_variables,
+                'assertions': [
+                    ('MinusX', 'Agent name'),
+                    ('orders', 'Schema content'),
+                    ('e-commerce', 'Context content'),
+                    ('test-connection-123', 'Connection ID'),
+                    ('/org', 'Home folder'),
+                    ('10', 'Max steps'),
+                    ('ReadFiles', 'Tool name'),
+                    ('EditFile', 'Tool name'),
+                    ('SearchDBSchema', 'Tool name'),
+                ]
+            },
+            {
+                'id': 'native.user',
+                'filename': 'native_user.txt',
+                'variables': user_variables,
                 'assertions': [
                     ('fileType', 'App state'),
                     ('Show me total revenue', 'Goal'),

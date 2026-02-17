@@ -1180,6 +1180,19 @@ def extract_llm_calls_from_log_diff(log_diff: ConversationLog) -> Dict[str, LLMC
     return llm_calls
 
 
+@app.get("/api/tools/schema")
+async def get_tool_schemas():
+    """Return OpenAI function schemas for all registered tools (dev tool tester)."""
+    from tasks.llm.client import describe_tool
+    schemas = []
+    for _name, agent_cls in Orchestrator._agent_registry.items():
+        try:
+            schemas.append(describe_tool(agent_cls))
+        except Exception:
+            pass
+    return schemas
+
+
 @app.post("/api/chat/close", response_model=CloseConversationResponse)
 async def close_conversation(request: CloseConversationRequest):
     """

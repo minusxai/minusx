@@ -56,6 +56,13 @@ export function registerFrontendTool(name: string, handler: FrontendToolHandler)
   frontendToolRegistry[name] = handler;
 }
 
+/**
+ * Get all registered frontend tool names
+ */
+export function getRegisteredToolNames(): string[] {
+  return Object.keys(frontendToolRegistry);
+}
+
 // ============================================================================
 // Main Executor
 // ============================================================================

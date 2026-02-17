@@ -5,7 +5,7 @@ import { Box, VStack, Text, Flex, Switch, Button, Heading, Container, Tabs } fro
 import { LuRefreshCw } from 'react-icons/lu';
 import { ColorModeButton } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { setAskForConfirmation, setShowDebug, setShowJson } from '@/store/uiSlice';
+import { setAskForConfirmation, setShowDebug, setShowJson, setSelectedToolset } from '@/store/uiSlice';
 import { IS_DEV } from '@/lib/constants';
 import RecordingControl from '@/components/RecordingControl';
 import DataManagementSection from '@/components/DataManagementSection';
@@ -76,6 +76,7 @@ export default function SettingsPage() {
   const askForConfirmation = useAppSelector((state) => state.ui.askForConfirmation);
   const showDebug = useAppSelector((state) => state.ui.showDebug);
   const showJson = useAppSelector((state) => state.ui.showJson);
+  const selectedToolset = useAppSelector((state) => state.ui.selectedToolset);
   const user = useAppSelector((state) => state.auth.user);
   const [isClearing, setIsClearing] = useState(false);
 
@@ -173,6 +174,20 @@ export default function SettingsPage() {
     },
     {
       tab: 'dev',
+      title: 'Agent Toolset',
+      description: `Current: ${selectedToolset}`,
+      control: (
+        <Flex gap={2}>
+          <Button size="sm" variant={selectedToolset === 'classic' ? 'solid' : 'outline'}
+            onClick={() => dispatch(setSelectedToolset('classic'))}>Classic</Button>
+          <Button size="sm" variant={selectedToolset === 'native' ? 'solid' : 'outline'}
+            onClick={() => dispatch(setSelectedToolset('native'))}>Native</Button>
+        </Flex>
+      ),
+      visible: showDebugOption,
+    },
+    {
+      tab: 'dev',
       title: 'Session Recording',
       description: 'Record your session for debugging and support',
       control: <RecordingControl />,
@@ -188,7 +203,7 @@ export default function SettingsPage() {
         </Button>
       ),
     },
-  ], [askForConfirmation, showDebug, showJson, showDebugOption, isClearing, user?.mode, dispatch, handleClearCache]);
+  ], [askForConfirmation, showDebug, showJson, selectedToolset, showDebugOption, isClearing, user?.mode, dispatch, handleClearCache]);
 
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [

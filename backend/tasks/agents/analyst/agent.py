@@ -12,6 +12,7 @@ from tasks.llm.client import allm_request as real_allm_request, describe_tool
 from tasks.llm.models import ALLMRequest, LlmSettings, UserInfo
 from tasks.llm.config import ANALYST_V2_MODEL, MAX_STEPS_LOWER_LEVEL
 from .tools import ExecuteSQLQuery, SearchDBSchema, EditDashboard, EditReport, GetAllQuestions, SearchFiles, GetFiles, UpdateFileMetadata, Clarify, Navigate
+from .tools import ReadFiles, EditFile, PublishFile, ExecuteQuery  # native toolset
 from .prompt_loader import get_prompt
 
 
@@ -74,6 +75,7 @@ class AnalystAgent(Agent):
         home_folder: Optional[str] = None,
         city: Optional[str] = None,
         agent_name: Optional[str] = None,
+        toolset: str = 'classic',
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
@@ -85,6 +87,7 @@ class AnalystAgent(Agent):
         self.agent_name = agent_name or "MinusX"
         self.home_folder = home_folder or "/"
         self.city = city
+        self.toolset = toolset
         self.tool_thread: List[dict] = []  # Conversation thread with tool calls/responses
         self.child_count = 0
 
@@ -101,9 +104,8 @@ class AnalystAgent(Agent):
         """Generate system message with schema and context."""
         max_steps = MAX_STEPS_LOWER_LEVEL - 5  # Safety margin
 
-        # Get composed prompt from YAML with variable substitution
         content = get_prompt(
-            'system',
+            f'{self.toolset}.system',
             schema=self.schema,
             context=self.context,
             connection_id=self.connection_id,
@@ -115,17 +117,14 @@ class AnalystAgent(Agent):
 
     def _get_user_message(self) -> dict:
         """Generate user message with the goal and app state."""
-        # Format app_state for readability
         app_state_str = json.dumps(self.app_state, indent=2) if self.app_state else "null"
 
-        # Get user message prompt from YAML
         content = get_prompt(
-            'user',
+            f'{self.toolset}.user',
             app_state=app_state_str,
             goal=self.goal,
             current_time=time.strftime("%Y-%m-%d %H:%M:%S")
         )
-
         return {"role": "user", "content": content}
 
     def _get_available_tools(self):
@@ -133,6 +132,10 @@ class AnalystAgent(Agent):
         if len(self.tool_thread) >= MAX_STEPS_LOWER_LEVEL - 5:
             return []
 
+        if self.toolset == 'native':
+            return [ReadFiles, EditFile, PublishFile, ExecuteQuery, Navigate, Clarify, SearchDBSchema, SearchFiles]
+
+        # classic (default)
         return [ExecuteSQLQuery, SearchDBSchema, SearchFiles, GetFiles, UpdateFileMetadata, Navigate, Clarify, EditDashboard, EditReport, GetAllQuestions]
     
     def _get_history(self):
