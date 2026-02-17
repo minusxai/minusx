@@ -108,26 +108,34 @@ export function PickerList({
         <Box px={1} pb={1.5}>
           <HStack
             gap={2}
-            px={2}
-            py={1.5}
+            px={3}
             bg="bg.subtle"
-            borderRadius="md"
             border="1px solid"
-            borderColor="border.muted"
-            _focusWithin={{ borderColor: 'accent.primary' }}
-            transition="border-color 0.15s ease"
+            borderColor="border.default"
+            borderRadius="md"
+            h="32px"
+            _focusWithin={{
+              borderColor: 'accent.teal',
+              boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)',
+            }}
+            transition="all 0.2s"
           >
             <Box color="fg.muted" flexShrink={0}>
-              <LuSearch size={13} />
+              <LuSearch size={14} />
             </Box>
             <Input
               size="xs"
-              variant="unstyled"
               placeholder={searchPlaceholder}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               autoFocus
+              bg="transparent"
+              border="none"
               fontSize="sm"
+              px={0}
+              h="auto"
+              _focus={{ outline: 'none', boxShadow: 'none' }}
+              _placeholder={{ color: 'fg.muted' }}
             />
           </HStack>
         </Box>

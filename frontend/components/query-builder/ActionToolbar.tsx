@@ -49,14 +49,14 @@ function ActionButton({ icon, label, onClick, isActive }: ActionButtonProps) {
       border="1px solid"
       borderColor={isActive ? 'accent.teal' : 'border.muted'}
       bg={isActive ? 'rgba(22, 160, 133, 0.1)' : 'transparent'}
-      cursor="pointer"
+      cursor={isActive ? 'default' : 'pointer'}
       transition="all 0.15s ease"
-      _hover={{
+      _hover={isActive ? {} : {
         bg: 'bg.muted',
         borderColor: 'border.default',
         transform: 'translateY(-1px)',
       }}
-      onClick={onClick}
+      onClick={isActive ? undefined : onClick}
     >
       <Box color={isActive ? 'accent.teal' : 'fg.muted'} fontSize="lg">
         {icon}

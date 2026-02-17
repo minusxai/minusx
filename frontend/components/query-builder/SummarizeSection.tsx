@@ -6,14 +6,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Box, HStack, Text, VStack, createListCollection } from '@chakra-ui/react';
-import {
-  SelectRoot,
-  SelectTrigger,
-  SelectContent,
-  SelectItem,
-  SelectValueText,
-} from '@/components/ui/select';
+import { Box, HStack, Text, VStack, SimpleGrid } from '@chakra-ui/react';
 import { SelectColumn, GroupByClause, GroupByItem } from '@/lib/types';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { QueryChip, AddChipButton, getColumnIcon } from './QueryChip';
@@ -50,12 +43,12 @@ interface SummarizeSectionProps {
 }
 
 const AGGREGATES = [
-  { label: 'Count', value: 'COUNT' },
-  { label: 'Sum', value: 'SUM' },
-  { label: 'Average', value: 'AVG' },
-  { label: 'Min', value: 'MIN' },
-  { label: 'Max', value: 'MAX' },
-  { label: 'Count distinct', value: 'COUNT_DISTINCT' },
+  { label: 'Count', shortLabel: 'Count', value: 'COUNT' },
+  { label: 'Sum', shortLabel: 'Sum', value: 'SUM' },
+  { label: 'Average', shortLabel: 'Avg', value: 'AVG' },
+  { label: 'Min', shortLabel: 'Min', value: 'MIN' },
+  { label: 'Max', shortLabel: 'Max', value: 'MAX' },
+  { label: 'Count distinct', shortLabel: 'Cnt Dist', value: 'COUNT_DISTINCT' },
 ];
 
 export function SummarizeSection({
@@ -349,17 +342,10 @@ export function SummarizeSection({
   );
 
   const formatMetricLabel = (col: SelectColumn) => {
-    const aggLabel = AGGREGATES.find((a) => a.value === col.aggregate)?.label || col.aggregate;
-    const autoAlias = `${col.aggregate?.toLowerCase()}_${col.column === '*' ? 'all' : col.column}`;
-
-    // Show alias if custom (different from auto-generated)
-    if (col.alias && col.alias !== autoAlias) {
-      const baseLabel = col.column === '*' ? aggLabel : `${aggLabel} of ${col.column}`;
-      return `${baseLabel} as ${col.alias}`;
-    }
-
-    if (col.column === '*') return aggLabel;
-    return `${aggLabel} of ${col.column}`;
+    const aggLabel = AGGREGATES.find((a) => a.value === col.aggregate)?.shortLabel || col.aggregate;
+    const alias = col.alias || `${col.aggregate?.toLowerCase()}_${col.column === '*' ? 'all' : col.column}`;
+    const baseLabel = col.column === '*' ? aggLabel : `${aggLabel}(${col.column})`;
+    return `${baseLabel} as ${alias}`;
   };
 
   const formatDimensionLabel = (dim: GroupByItem) => {
@@ -422,66 +408,73 @@ export function SummarizeSection({
             }
             padding={3}
           >
-            <VStack gap={3} align="stretch">
-              <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase">
+            <HStack justify="space-between" align="center" mb={2.5}>
+              <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
                 Edit metric
               </Text>
-              <SelectRoot
-                collection={createListCollection({
-                  items: AGGREGATES,
-                })}
-                value={[selectedAgg]}
-                onValueChange={(e) => handleAggregateChange(e.value[0] || 'COUNT')}
-                size="sm"
-              >
-                <SelectTrigger>
-                  <SelectValueText placeholder="Function" />
-                </SelectTrigger>
-                <SelectContent >
-                  {AGGREGATES.map((agg) => (
-                    <SelectItem key={agg.value} item={agg.value}>
-                      {agg.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </SelectRoot>
-
-              <Box>
-                <Text fontSize="xs" fontWeight="600" color="fg.muted" mb={1}>
-                  Alias (optional)
-                </Text>
+              <HStack gap={1.5} align="center">
+                <Text fontSize="xs" color="fg.muted" flexShrink={0}>as</Text>
                 <AliasInput
                   value={editAlias}
                   onChange={(alias) => setEditAlias(alias || '')}
-                  placeholder={`${selectedAgg.toLowerCase()}_${metric.column === '*' ? 'all' : metric.column}`}
-                  width="100%"
+                  placeholder="alias"
+                  width="90px"
                 />
-                <Text fontSize="xs" color="fg.muted" mt={1}>
-                  Leave blank for auto-generated
-                </Text>
-              </Box>
-
-              <PickerList maxH="200px">
-                <PickerItem
-                  selected={metric.column === '*'}
-                  selectedBg="rgba(134, 239, 172, 0.15)"
-                  onClick={() => handleUpdateMetric('*')}
+              </HStack>
+            </HStack>
+            <SimpleGrid columns={3} gap={1.5} mb={1}>
+              {AGGREGATES.map((agg) => (
+                <Box
+                  key={agg.value}
+                  as="button"
+                  py={1.5}
+                  borderRadius="md"
+                  fontSize="xs"
+                  fontWeight="600"
+                  textAlign="center"
+                  whiteSpace="nowrap"
+                  cursor="pointer"
+                  bg={selectedAgg === agg.value ? 'rgba(134, 239, 172, 0.2)' : 'bg.subtle'}
+                  color={selectedAgg === agg.value ? 'accent.teal' : 'fg.muted'}
+                  border="1px solid"
+                  borderColor={selectedAgg === agg.value ? 'rgba(134, 239, 172, 0.4)' : 'border.muted'}
+                  _hover={{ bg: selectedAgg === agg.value ? 'rgba(134, 239, 172, 0.25)' : 'bg.muted' }}
+                  transition="all 0.15s ease"
+                  onClick={() => handleAggregateChange(agg.value)}
                 >
-                  * (all rows)
-                </PickerItem>
-                {availableColumns.map((col) => (
-                  <PickerItem
-                    key={col.name}
-                    icon={getColumnIcon(col.type)}
-                    selected={metric.column === col.name}
-                    selectedBg="rgba(134, 239, 172, 0.15)"
-                    onClick={() => handleUpdateMetric(col.name)}
-                  >
-                    {col.name}
-                  </PickerItem>
-                ))}
+                  {agg.shortLabel}
+                </Box>
+              ))}
+            </SimpleGrid>
+            <Box borderTop="1px solid" borderColor="border.muted" mt={1} mx={-3} px={3} pt={2}>
+              <PickerList maxH="200px" searchable searchPlaceholder="Search columns...">
+                {(query) => [
+                  !query && (
+                    <PickerItem
+                      key="*"
+                      selected={metric.column === '*'}
+                      selectedBg="rgba(134, 239, 172, 0.15)"
+                      onClick={() => handleUpdateMetric('*')}
+                    >
+                      * (all rows)
+                    </PickerItem>
+                  ),
+                  ...availableColumns
+                    .filter((col) => !query || col.name.toLowerCase().includes(query.toLowerCase()))
+                    .map((col) => (
+                      <PickerItem
+                        key={col.name}
+                        icon={getColumnIcon(col.type)}
+                        selected={metric.column === col.name}
+                        selectedBg="rgba(134, 239, 172, 0.15)"
+                        onClick={() => handleUpdateMetric(col.name)}
+                      >
+                        {col.name}
+                      </PickerItem>
+                    )),
+                ]}
               </PickerList>
-            </VStack>
+            </Box>
           </PickerPopover>
         ))}
 
@@ -496,45 +489,55 @@ export function SummarizeSection({
           }
           padding={3}
         >
-          <VStack gap={3} align="stretch">
-            <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase">
-              Add metric
-            </Text>
-            <SelectRoot
-              collection={createListCollection({
-                items: AGGREGATES,
-              })}
-              value={[selectedAgg]}
-              onValueChange={(e) => setSelectedAgg(e.value[0] || 'COUNT')}
-              size="sm"
-            >
-              <SelectTrigger>
-                <SelectValueText placeholder="Function" />
-              </SelectTrigger>
-              <SelectContent >
-                {AGGREGATES.map((agg) => (
-                  <SelectItem key={agg.value} item={agg.value}>
-                    {agg.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </SelectRoot>
-
-            <PickerList maxH="200px">
-              <PickerItem onClick={() => handleAddMetric('*')}>
-                * (all rows)
-              </PickerItem>
-              {availableColumns.map((col) => (
-                <PickerItem
-                  key={col.name}
-                  icon={getColumnIcon(col.type)}
-                  onClick={() => handleAddMetric(col.name)}
-                >
-                  {col.name}
-                </PickerItem>
-              ))}
+          <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" mb={2.5}>
+            Add metric
+          </Text>
+          <SimpleGrid columns={3} gap={1.5} mb={1}>
+            {AGGREGATES.map((agg) => (
+              <Box
+                key={agg.value}
+                as="button"
+                py={1.5}
+                borderRadius="md"
+                fontSize="xs"
+                fontWeight="600"
+                textAlign="center"
+                whiteSpace="nowrap"
+                cursor="pointer"
+                bg={selectedAgg === agg.value ? 'rgba(134, 239, 172, 0.2)' : 'bg.subtle'}
+                color={selectedAgg === agg.value ? 'accent.teal' : 'fg.muted'}
+                border="1px solid"
+                borderColor={selectedAgg === agg.value ? 'rgba(134, 239, 172, 0.4)' : 'border.muted'}
+                _hover={{ bg: selectedAgg === agg.value ? 'rgba(134, 239, 172, 0.25)' : 'bg.muted' }}
+                transition="all 0.15s ease"
+                onClick={() => setSelectedAgg(agg.value)}
+              >
+                {agg.shortLabel}
+              </Box>
+            ))}
+          </SimpleGrid>
+          <Box borderTop="1px solid" borderColor="border.muted" mt={1} mx={-3} px={3} pt={2}>
+            <PickerList maxH="200px" searchable searchPlaceholder="Search columns...">
+              {(query) => [
+                !query && (
+                  <PickerItem key="*" onClick={() => handleAddMetric('*')}>
+                    * (all rows)
+                  </PickerItem>
+                ),
+                ...availableColumns
+                  .filter((col) => !query || col.name.toLowerCase().includes(query.toLowerCase()))
+                  .map((col) => (
+                    <PickerItem
+                      key={col.name}
+                      icon={getColumnIcon(col.type)}
+                      onClick={() => handleAddMetric(col.name)}
+                    >
+                      {col.name}
+                    </PickerItem>
+                  )),
+              ]}
             </PickerList>
-          </VStack>
+          </Box>
         </PickerPopover>
 
         {/* "by" separator - only show if we have metrics */}
@@ -615,27 +618,31 @@ export function SummarizeSection({
           {!selectedDateColumn ? (
             <>
               <PickerHeader>Group by</PickerHeader>
-              <PickerList maxH="250px">
-                {availableColumns.map((col) => (
-                  <PickerItem
-                    key={col.name}
-                    icon={getColumnIcon(col.type)}
-                    onClick={() => {
-                      if (isDateColumn(col.type)) {
-                        setSelectedDateColumn(col);
-                      } else {
-                        handleAddDimension(col.name);
-                      }
-                    }}
-                    rightElement={
-                      isDateColumn(col.type) ? (
-                        <Text fontSize="xs" color="fg.muted">›</Text>
-                      ) : undefined
-                    }
-                  >
-                    {col.name}
-                  </PickerItem>
-                ))}
+              <PickerList maxH="250px" searchable searchPlaceholder="Search columns...">
+                {(query) =>
+                  availableColumns
+                    .filter((col) => !query || col.name.toLowerCase().includes(query.toLowerCase()))
+                    .map((col) => (
+                      <PickerItem
+                        key={col.name}
+                        icon={getColumnIcon(col.type)}
+                        onClick={() => {
+                          if (isDateColumn(col.type)) {
+                            setSelectedDateColumn(col);
+                          } else {
+                            handleAddDimension(col.name);
+                          }
+                        }}
+                        rightElement={
+                          isDateColumn(col.type) ? (
+                            <Text fontSize="xs" color="fg.muted">›</Text>
+                          ) : undefined
+                        }
+                      >
+                        {col.name}
+                      </PickerItem>
+                    ))
+                }
               </PickerList>
             </>
           ) : (

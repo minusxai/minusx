@@ -185,46 +185,50 @@ export function OrderByBuilder({
           width="240px"
         >
           <PickerHeader>Sort by</PickerHeader>
-          <PickerList maxH="250px">
-            {availableColumns.map((col) => (
-              <PickerItem
-                key={col.name}
-                icon={getColumnIcon(col.type)}
-                onClick={() => handleAddSort(col.name)}
-                rightElement={
-                  <HStack gap={1}>
-                    <Box
-                      as="button"
-                      p={1}
-                      borderRadius="sm"
-                      color="fg.muted"
-                      _hover={{ bg: 'bg.muted', color: 'accent.secondary' }}
-                      onClick={(e: React.MouseEvent) => {
-                        e.stopPropagation();
-                        handleAddSort(col.name, 'ASC');
-                      }}
-                    >
-                      <LuArrowUp size={12} />
-                    </Box>
-                    <Box
-                      as="button"
-                      p={1}
-                      borderRadius="sm"
-                      color="fg.muted"
-                      _hover={{ bg: 'bg.muted', color: 'accent.secondary' }}
-                      onClick={(e: React.MouseEvent) => {
-                        e.stopPropagation();
-                        handleAddSort(col.name, 'DESC');
-                      }}
-                    >
-                      <LuArrowDown size={12} />
-                    </Box>
-                  </HStack>
-                }
-              >
-                {col.name}
-              </PickerItem>
-            ))}
+          <PickerList maxH="250px" searchable searchPlaceholder="Search columns...">
+            {(query) =>
+              availableColumns
+                .filter((col) => !query || col.name.toLowerCase().includes(query.toLowerCase()))
+                .map((col) => (
+                  <PickerItem
+                    key={col.name}
+                    icon={getColumnIcon(col.type)}
+                    onClick={() => handleAddSort(col.name)}
+                    rightElement={
+                      <HStack gap={1}>
+                        <Box
+                          as="button"
+                          p={1}
+                          borderRadius="sm"
+                          color="fg.muted"
+                          _hover={{ bg: 'bg.muted', color: 'accent.secondary' }}
+                          onClick={(e: React.MouseEvent) => {
+                            e.stopPropagation();
+                            handleAddSort(col.name, 'ASC');
+                          }}
+                        >
+                          <LuArrowUp size={12} />
+                        </Box>
+                        <Box
+                          as="button"
+                          p={1}
+                          borderRadius="sm"
+                          color="fg.muted"
+                          _hover={{ bg: 'bg.muted', color: 'accent.secondary' }}
+                          onClick={(e: React.MouseEvent) => {
+                            e.stopPropagation();
+                            handleAddSort(col.name, 'DESC');
+                          }}
+                        >
+                          <LuArrowDown size={12} />
+                        </Box>
+                      </HStack>
+                    }
+                  >
+                    {col.name}
+                  </PickerItem>
+                ))
+            }
           </PickerList>
         </PickerPopover>
 

@@ -219,30 +219,34 @@ export function ColumnsSection({
             width="220px"
           >
             <PickerHeader>Available Columns</PickerHeader>
-            <PickerList maxH="250px">
-              {loading ? (
-                <HStack px={2} py={3} justify="center">
-                  <Spinner size="sm" />
-                </HStack>
-              ) : selectableColumns.length === 0 ? (
-                <Text fontSize="sm" color="fg.muted" px={2} py={2}>
-                  All columns selected
-                </Text>
-              ) : (
-                selectableColumns.map((col) => (
-                  <PickerItem
-                    key={col.name}
-                    onClick={() => handleAddColumn(col.name)}
-                  >
-                    <Text fontSize="sm">{col.name}</Text>
-                    {col.type && (
-                      <Text fontSize="xs" color="fg.muted">
-                        {col.type}
-                      </Text>
-                    )}
-                  </PickerItem>
-                ))
-              )}
+            <PickerList maxH="250px" searchable searchPlaceholder="Search columns...">
+              {(query) =>
+                loading ? (
+                  <HStack px={2} py={3} justify="center">
+                    <Spinner size="sm" />
+                  </HStack>
+                ) : selectableColumns.length === 0 ? (
+                  <Text fontSize="sm" color="fg.muted" px={2} py={2}>
+                    All columns selected
+                  </Text>
+                ) : (
+                  selectableColumns
+                    .filter((col) => !query || col.name.toLowerCase().includes(query.toLowerCase()))
+                    .map((col) => (
+                      <PickerItem
+                        key={col.name}
+                        onClick={() => handleAddColumn(col.name)}
+                      >
+                        <Text fontSize="sm">{col.name}</Text>
+                        {col.type && (
+                          <Text fontSize="xs" color="fg.muted">
+                            {col.type}
+                          </Text>
+                        )}
+                      </PickerItem>
+                    ))
+                )
+              }
             </PickerList>
           </PickerPopover>
         </HStack>

@@ -262,19 +262,23 @@ export function JoinBuilder({
                 {/* Table selection */}
                 <Box mt={2}>
                   <PickerHeader>Table</PickerHeader>
-                  <PickerList maxH="200px">
-                    {availableTables.map((table) => (
-                      <PickerItem
-                        key={table.displayName}
-                        selected={getTableDisplayName(join.table) === table.displayName}
-                        onClick={() => {
-                          handleChangeJoinTable(joinIndex, table.displayName);
-                          setEditingJoinIndex(null);
-                        }}
-                      >
-                        {table.displayName}
-                      </PickerItem>
-                    ))}
+                  <PickerList maxH="200px" searchable searchPlaceholder="Search tables...">
+                    {(query) =>
+                      availableTables
+                        .filter((t) => !query || t.displayName.toLowerCase().includes(query.toLowerCase()))
+                        .map((table) => (
+                          <PickerItem
+                            key={table.displayName}
+                            selected={getTableDisplayName(join.table) === table.displayName}
+                            onClick={() => {
+                              handleChangeJoinTable(joinIndex, table.displayName);
+                              setEditingJoinIndex(null);
+                            }}
+                          >
+                            {table.displayName}
+                          </PickerItem>
+                        ))
+                    }
                   </PickerList>
                 </Box>
               </PickerPopover>
@@ -364,19 +368,23 @@ export function JoinBuilder({
           }
         >
           <PickerHeader>Join Table</PickerHeader>
-          <PickerList maxH="250px">
-            {loading ? (
-              <Text fontSize="sm" color="fg.muted" px={2} py={1.5}>Loading...</Text>
-            ) : (
-              availableTables.map((table) => (
-                <PickerItem
-                  key={table.displayName}
-                  onClick={() => handleAddJoin(table.displayName)}
-                >
-                  {table.displayName}
-                </PickerItem>
-              ))
-            )}
+          <PickerList maxH="250px" searchable searchPlaceholder="Search tables...">
+            {(query) =>
+              loading ? (
+                <Text fontSize="sm" color="fg.muted" px={2} py={1.5}>Loading...</Text>
+              ) : (
+                availableTables
+                  .filter((t) => !query || t.displayName.toLowerCase().includes(query.toLowerCase()))
+                  .map((table) => (
+                    <PickerItem
+                      key={table.displayName}
+                      onClick={() => handleAddJoin(table.displayName)}
+                    >
+                      {table.displayName}
+                    </PickerItem>
+                  ))
+              )
+            }
           </PickerList>
         </PickerPopover>
       </VStack>

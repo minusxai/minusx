@@ -6,11 +6,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Box, HStack, Text, Spinner, Input } from '@chakra-ui/react';
+import { Box, HStack, Text, Spinner } from '@chakra-ui/react';
 import { TableReference } from '@/lib/types';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { QueryChip } from './QueryChip';
 import { PickerPopover, PickerHeader, PickerList, PickerItem } from './PickerPopover';
+import { AliasInput } from './AliasInput';
 import { LuTable, LuDatabase } from 'react-icons/lu';
 
 interface DataSectionProps {
@@ -103,55 +104,48 @@ export function DataSection({ databaseName, value, onChange }: DataSectionProps)
             </Box>
           }
         >
-          {/* Alias input at the top when table is selected */}
-          {value.table && (
-            <Box px={2} py={2} borderBottom="1px solid" borderColor="border.muted" mb={2}>
-              <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" mb={1.5}>
-                Alias
-              </Text>
-              <Input
-                size="sm"
-                placeholder="Optional alias..."
-                value={value.alias || ''}
-                onChange={(e) => handleAliasChange(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    setOpen(false);
-                  }
-                }}
-                bg="bg.subtle"
-                border="1px solid"
-                borderColor="border.default"
-                _hover={{ borderColor: 'border.emphasized' }}
-                _focus={{ borderColor: 'accent.primary', boxShadow: 'none' }}
-              />
-            </Box>
-          )}
-          <PickerHeader>Tables</PickerHeader>
-          <PickerList maxH="250px">
-            {loading ? (
-              <HStack px={2} py={3} justify="center">
-                <Spinner size="sm" />
-                <Text fontSize="sm" color="fg.muted">
-                  Loading...
-                </Text>
+          <HStack justify="space-between" align="center" px={1} mb={1}>
+            <PickerHeader>Tables</PickerHeader>
+            {value.table && (
+              <HStack gap={1.5} align="center">
+                <Text fontSize="xs" color="fg.muted" flexShrink={0}>as</Text>
+                <AliasInput
+                  value={value.alias}
+                  onChange={(alias) => handleAliasChange(alias || '')}
+                  placeholder="alias"
+                  width="80px"
+                />
               </HStack>
-            ) : (
-              tables.map((table) => {
-                const tableDisplayName = table.schema ? `${table.schema}.${table.name}` : table.name;
-                const isSelected = tableDisplayName === (value.schema ? `${value.schema}.${value.table}` : value.table);
-                return (
-                  <PickerItem
-                    key={table.displayName}
-                    icon={<LuTable size={14} />}
-                    selected={isSelected}
-                    onClick={() => handleSelect(table)}
-                  >
-                    {table.displayName}
-                  </PickerItem>
-                );
-              })
             )}
+          </HStack>
+          <PickerList maxH="250px" searchable searchPlaceholder="Search tables...">
+            {(query) =>
+              loading ? (
+                <HStack px={2} py={3} justify="center">
+                  <Spinner size="sm" />
+                  <Text fontSize="sm" color="fg.muted">
+                    Loading...
+                  </Text>
+                </HStack>
+              ) : (
+                tables
+                  .filter((t) => !query || t.displayName.toLowerCase().includes(query.toLowerCase()))
+                  .map((table) => {
+                    const tableDisplayName = table.schema ? `${table.schema}.${table.name}` : table.name;
+                    const isSelected = tableDisplayName === (value.schema ? `${value.schema}.${value.table}` : value.table);
+                    return (
+                      <PickerItem
+                        key={table.displayName}
+                        icon={<LuTable size={14} />}
+                        selected={isSelected}
+                        onClick={() => handleSelect(table)}
+                      >
+                        {table.displayName}
+                      </PickerItem>
+                    );
+                  })
+              )
+            }
           </PickerList>
         </PickerPopover>
       </HStack>

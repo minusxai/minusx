@@ -406,25 +406,32 @@ export function FilterSection({
       {/* Different column selection based on aggregate */}
       {newFilter.isAggregate && newFilter.aggregate === 'COUNT' ? (
         // COUNT: Allow * or column
-        <PickerList maxH="200px">
-          <PickerItem
-            selected={!newFilter.column}
-            selectedBg="rgba(134, 239, 172, 0.15)"
-            onClick={() => setNewFilter(prev => ({ ...prev, column: '' }))}
-          >
-            * (all rows)
-          </PickerItem>
-          {availableColumns.map(col => (
-            <PickerItem
-              key={col.name}
-              icon={getColumnIcon(col.type)}
-              selected={newFilter.column === col.name}
-              selectedBg="rgba(134, 239, 172, 0.15)"
-              onClick={() => setNewFilter(prev => ({ ...prev, column: col.name }))}
-            >
-              {col.name}
-            </PickerItem>
-          ))}
+        <PickerList maxH="200px" searchable searchPlaceholder="Search columns...">
+          {(query) => [
+            !query && (
+              <PickerItem
+                key="*"
+                selected={!newFilter.column}
+                selectedBg="rgba(134, 239, 172, 0.15)"
+                onClick={() => setNewFilter(prev => ({ ...prev, column: '' }))}
+              >
+                * (all rows)
+              </PickerItem>
+            ),
+            ...availableColumns
+              .filter(col => !query || col.name.toLowerCase().includes(query.toLowerCase()))
+              .map(col => (
+                <PickerItem
+                  key={col.name}
+                  icon={getColumnIcon(col.type)}
+                  selected={newFilter.column === col.name}
+                  selectedBg="rgba(134, 239, 172, 0.15)"
+                  onClick={() => setNewFilter(prev => ({ ...prev, column: col.name }))}
+                >
+                  {col.name}
+                </PickerItem>
+              )),
+          ]}
         </PickerList>
       ) : (
         // Regular column selector
