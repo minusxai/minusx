@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Box, Flex, Text, Button, Input, VStack, Icon } from '@chakra-ui/react';
-import { LuChevronLeft, LuDownload, LuUpload, LuCircleCheck, LuCircleX, LuLoader, LuChevronDown, LuChevronRight } from 'react-icons/lu';
+import { LuDownload, LuUpload, LuCircleCheck, LuCircleX, LuLoader, LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import { API } from '@/lib/api/declarations';
 
@@ -34,11 +34,7 @@ interface MigrationResult {
   warnings?: string[];
 }
 
-interface DataManagementSectionProps {
-  onBack: () => void;
-}
-
-export default function DataManagementSection({ onBack }: DataManagementSectionProps) {
+export default function DataManagementSection() {
   const [exportStatus, setExportStatus] = useState<ValidationStatus | null>(null);
   const [validateStatus, setValidateStatus] = useState<ValidationStatus | null>(null);
   const [importStatus, setImportStatus] = useState<ValidationStatus | null>(null);
@@ -448,27 +444,6 @@ export default function DataManagementSection({ onBack }: DataManagementSectionP
 
   return (
     <Box>
-      {/* Header with Back Button */}
-      <Flex
-        align="center"
-        gap={2}
-        py={4}
-        px={4}
-        borderBottomWidth="1px"
-        cursor="pointer"
-        onClick={onBack}
-        _hover={{ bg: 'bg.subtle' }}
-        transition="all 0.15s ease"
-      >
-        <Icon fontSize="lg" color="fg.muted">
-          <LuChevronLeft />
-        </Icon>
-        <Text fontSize="lg" fontWeight="semibold" fontFamily="mono">
-          Data Management
-        </Text>
-      </Flex>
-
-      {/* Content */}
       <VStack align="stretch" gap={0} divideY="1px">
         {/* Export */}
         <Box py={4} px={4}>
