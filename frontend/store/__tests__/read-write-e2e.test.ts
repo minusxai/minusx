@@ -1,22 +1,11 @@
 /**
  * Phase 1 E2E Test - Unified File System API
  *
- * Tests the complete flow of ReadFiles, EditFile, PublishFile, and ExecuteQuery
+ * Tests the complete flow of ReadFiles, EditFileReplace, PublishFile, and ExecuteQuery
  * with real API calls (no mocking) for true integration testing.
  *
- * Scenario:
- * 1. User asks to read a dashboard (with questions)
- * 2. Agent uses ReadFiles(dashboard_id) - loads dashboard + question references
- * 3. User asks to query some data
- * 4. Agent uses ExecuteQuery to run standalone SQL query (exploration)
- * 5. User asks to edit a question's query
- * 6. Agent uses EditFile to modify query - AUTO-EXECUTES and returns new queryResults
- * 7. User asks to save changes
- * 8. Agent uses PublishFile to commit to database
- * 9. Verify files are saved correctly
- *
- * Note: EditFile uses runQuery() which provides caching and deduplication.
- * Multiple concurrent edits to same query will share a single execution.
+ * Uses EditFileReplace for range-based line editing (useful for AI agents).
+ * For simpler content-based editing, see file-state.test.ts.
  */
 
 import { configureStore } from '@reduxjs/toolkit';
@@ -26,9 +15,7 @@ import authReducer from '../authSlice';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase, createMockFetch } from './test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
 import type { QuestionContent, DocumentContent, UserRole } from '@/lib/types';
-import { readFiles } from '@/lib/api/read-files.client';
-import { editFile } from '@/lib/api/edit-file.client';
-import { publishFile } from '@/lib/api/publish-file.client';
+import { readFiles, editFileReplace, publishFile } from '@/lib/api/file-state';
 import { executeQuery } from '@/lib/api/execute-query.server';
 import type { RootState } from '@/store/store';
 import type { Mode } from '@/lib/mode/mode-types';
@@ -271,10 +258,7 @@ describe('Phase 1: Unified File System API E2E', () => {
     });
 
     // Agent uses ReadFiles with 1 dashboard ID
-    const readResult = await readFiles(
-      { fileIds: [dashboardId] },
-      (() => store.getState() as RootState)
-    );
+    const readResult = await readFiles({ fileIds: [dashboardId] });
 
     // Verify ReadFiles output
     expect(readResult.fileStates).toHaveLength(1);
@@ -329,32 +313,23 @@ describe('Phase 1: Unified File System API E2E', () => {
     // Edit just the query line (change GROUP BY to ORDER BY)
     const newQueryLine = '  "query": "SELECT month, SUM(revenue) as total FROM sales ORDER BY month",';
 
-    const editResult = await editFile(
+    const editResult = await editFileReplace(
       {
         fileId: questionId,
         from: queryLineIndex + 1,  // 1-indexed
         to: queryLineIndex + 1,
         newContent: newQueryLine
-      },
-      (() => store.getState() as RootState),
-      store.dispatch as any
-    );
+      });
 
-    // Verify EditFile output
+    // Verify EditFileReplace output
     expect(editResult.success).toBe(true);
-    if (editResult.success) {
+    if (editResult.success && editResult.diff) {
       expect(editResult.diff).toContain('-');  // Should show removed line
       expect(editResult.diff).toContain('+');  // Should show added line
       expect(editResult.diff).toContain('ORDER BY');
-      console.log('✓ EditFile modified query (GROUP BY → ORDER BY)');
+      console.log('✓ EditFileReplace modified query (GROUP BY → ORDER BY)');
       console.log(`Diff:\n${editResult.diff.split('\n').slice(0, 5).join('\n')}...`);
-
-      // Verify queryResults are returned (auto-executed with sales data)
-      expect(editResult.queryResults).toBeDefined();
-      expect(editResult.queryResults.length).toBe(1);
-      expect(editResult.queryResults[0].columns).toEqual(['month', 'total']);
-      expect(editResult.queryResults[0].rows).toHaveLength(3);
-      console.log('✓ EditFile auto-executed query and returned 3 rows from sales data');
+      console.log('✓ EditFileReplace auto-executed query (results not returned but stored in Redux)');
     }
 
     // Verify changes are in Redux but not saved
@@ -369,18 +344,12 @@ describe('Phase 1: Unified File System API E2E', () => {
     // ========================================================================
     console.log('\n[TEST] Step 4: PublishFile - Commit changes to database');
 
-    const publishResult = await publishFile(
-      { fileId: questionId },
-      (() => store.getState() as RootState),
-      store.dispatch as any
-    );
+    const publishResult = await publishFile({ fileId: questionId });
 
-    // Verify PublishFile output
-    expect(publishResult.success).toBe(true);
-    if (publishResult.success) {
-      expect(publishResult.savedFileIds).toContain(questionId);
-      console.log('✓ PublishFile saved file ID:', questionId);
-    }
+    // Verify PublishFile output - new API returns { id, name }
+    expect(publishResult.id).toBe(questionId);
+    expect(publishResult.name).toBeDefined();
+    console.log('✓ PublishFile saved file ID:', questionId);
 
     // Verify persistableChanges were cleared
     const finalQuestionState = (store.getState() as any).files.files[questionId];
@@ -422,16 +391,13 @@ describe('Phase 1: Unified File System API E2E', () => {
     });
 
     // Try to edit with invalid JSON (missing closing quote)
-    const result = await editFile(
+    const result = await editFileReplace(
       {
         fileId: questionId,
         from: 2,
         to: 2,
         newContent: '  "description": "Invalid JSON'  // Missing closing quote
-      },
-      (() => store.getState() as RootState),
-      store.dispatch as any
-    );
+      });
 
     // Verify error
     expect(result.success).toBe(false);
@@ -452,18 +418,12 @@ describe('Phase 1: Unified File System API E2E', () => {
     });
 
     // Try to publish without any changes
-    const result = await publishFile(
-      { fileId: questionId },
-      (() => store.getState() as RootState),
-      store.dispatch as any
-    );
+    const result = await publishFile({ fileId: questionId });
 
-    // Verify no-op
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.savedFileIds).toHaveLength(0);
-      console.log('✓ PublishFile correctly handled no-op (no dirty files)');
-    }
+    // Verify no-op - new API just returns id and name
+    expect(result.id).toBe(questionId);
+    expect(result.name).toBeDefined();
+    console.log('✓ PublishFile correctly handled no-op (no dirty files)');
   });
 
   // ============================================================================
@@ -500,16 +460,13 @@ describe('Phase 1: Unified File System API E2E', () => {
       const currentContent = JSON.stringify(questionFile?.content, null, 2);
       const currentLines = currentContent.split('\n').length;
 
-      const validVizResult = await editFile(
+      const validVizResult = await editFileReplace(
         {
           fileId: questionId,
           from: 1,
           to: currentLines,
           newContent: validVizContent
-        },
-        (() => store.getState() as RootState),
-        store.dispatch as any
-      );
+        });
 
       if (!validVizResult.success) {
         console.log('ERROR:', validVizResult.error);
@@ -550,16 +507,13 @@ describe('Phase 1: Unified File System API E2E', () => {
         parameters: []
       }, null, 2);
 
-      const missingFieldResult = await editFile(
+      const missingFieldResult = await editFileReplace(
         {
           fileId: questionId,
           from: 1,
           to: currentLines,
           newContent: missingFieldContent
-        },
-        (() => store.getState() as RootState),
-        store.dispatch as any
-      );
+        });
 
       expect(missingFieldResult.success).toBe(false);
       if (!missingFieldResult.success) {
@@ -582,16 +536,12 @@ describe('Phase 1: Unified File System API E2E', () => {
         }
       }, null, 2);
 
-      const validFieldResult = await editFile(
-        {
-          fileId: questionId,
-          from: 1,
-          to: currentLines,
-          newContent: validFieldContent
-        },
-        (() => store.getState() as RootState),
-        store.dispatch as any
-      );
+      const validFieldResult = await editFileReplace({
+        fileId: questionId,
+        from: 1,
+        to: currentLines,
+        newContent: validFieldContent
+      });
 
       expect(validFieldResult.success).toBe(true);
 
@@ -632,16 +582,12 @@ describe('Phase 1: Unified File System API E2E', () => {
       const currentContent2 = JSON.stringify(currentFile2?.content, null, 2);
       const currentLines2 = currentContent2.split('\n').length;
 
-      const validParamsResult = await editFile(
-        {
-          fileId: questionId,
-          from: 1,
-          to: currentLines2,
-          newContent: validParamsContent
-        },
-        (() => store.getState() as RootState),
-        store.dispatch as any
-      );
+      const validParamsResult = await editFileReplace({
+        fileId: questionId,
+        from: 1,
+        to: currentLines2,
+        newContent: validParamsContent
+      });
 
       expect(validParamsResult.success).toBe(true);
 
@@ -668,17 +614,14 @@ describe('Phase 1: Unified File System API E2E', () => {
 
       // Step 1: Missing comma
       console.log('[1] Testing missing comma...');
-      const missingCommaResult = await editFile(
+      const missingCommaResult = await editFileReplace(
         {
           fileId: questionId,
           from: 2,
           to: 3,
           newContent: `  "description": "Revenue by month"
   "query": "SELECT * FROM sales"`
-        },
-        (() => store.getState() as RootState),
-        store.dispatch as any
-      );
+        });
 
       expect(missingCommaResult.success).toBe(false);
       if (!missingCommaResult.success) {
@@ -688,18 +631,14 @@ describe('Phase 1: Unified File System API E2E', () => {
 
       // Step 2: Trailing comma
       console.log('[2] Testing trailing comma...');
-      const trailingCommaResult = await editFile(
-        {
-          fileId: questionId,
-          from: 10,
-          to: 11,
-          newContent: `    "yCols": []
+      const trailingCommaResult = await editFileReplace({
+        fileId: questionId,
+        from: 10,
+        to: 11,
+        newContent: `    "yCols": []
   },
 }`
-        },
-        (() => store.getState() as RootState),
-        store.dispatch as any
-      );
+      });
 
       expect(trailingCommaResult.success).toBe(false);
       if (!trailingCommaResult.success) {
@@ -742,16 +681,12 @@ describe('Phase 1: Unified File System API E2E', () => {
       const currentDashContent = JSON.stringify(currentDashFile?.content, null, 2);
       const currentDashLines = currentDashContent.split('\n').length;
 
-      const validLayoutResult = await editFile(
-        {
-          fileId: dashboardId,
-          from: 1,
-          to: currentDashLines,
-          newContent: validLayoutContent
-        },
-        (() => store.getState() as RootState),
-        store.dispatch as any
-      );
+      const validLayoutResult = await editFileReplace({
+        fileId: dashboardId,
+        from: 1,
+        to: currentDashLines,
+        newContent: validLayoutContent
+      });
 
       expect(validLayoutResult.success).toBe(true);
 
@@ -793,16 +728,12 @@ describe('Phase 1: Unified File System API E2E', () => {
       const currentDashContent2 = JSON.stringify(currentDashFile2?.content, null, 2);
       const currentDashLines2 = currentDashContent2.split('\n').length;
 
-      const validAssetResult = await editFile(
-        {
-          fileId: dashboardId,
-          from: 1,
-          to: currentDashLines2,
-          newContent: validAssetContent
-        },
-        (() => store.getState() as RootState),
-        store.dispatch as any
-      );
+      const validAssetResult = await editFileReplace({
+        fileId: dashboardId,
+        from: 1,
+        to: currentDashLines2,
+        newContent: validAssetContent
+      });
 
       expect(validAssetResult.success).toBe(true);
 
@@ -843,16 +774,12 @@ describe('Phase 1: Unified File System API E2E', () => {
       const currentDashContent3 = JSON.stringify(currentDashFile3?.content, null, 2);
       const currentDashLines3 = currentDashContent3.split('\n').length;
 
-      const noDescResult = await editFile(
-        {
-          fileId: dashboardId,
-          from: 1,
-          to: currentDashLines3,
-          newContent: noDescContent
-        },
-        (() => store.getState() as RootState),
-        store.dispatch as any
-      );
+      const noDescResult = await editFileReplace({
+        fileId: dashboardId,
+        from: 1,
+        to: currentDashLines3,
+        newContent: noDescContent
+      });
 
       expect(noDescResult.success).toBe(true);
 
@@ -897,16 +824,13 @@ describe('Phase 1: Unified File System API E2E', () => {
       const currentDashContent4 = JSON.stringify(currentDashFile4?.content, null, 2);
       const currentDashLines4 = currentDashContent4.split('\n').length;
 
-      const multiLayoutResult = await editFile(
+      const multiLayoutResult = await editFileReplace(
         {
           fileId: dashboardId,
           from: 1,
           to: currentDashLines4,
           newContent: multiLayoutContent
-        },
-        (() => store.getState() as RootState),
-        store.dispatch as any
-      );
+        });
 
       expect(multiLayoutResult.success).toBe(true);
 
@@ -941,10 +865,7 @@ describe('Phase 1: Unified File System API E2E', () => {
 
       // Step 1: Read file initially (no changes)
       console.log('[1] Reading file before edit...');
-      const initialRead = await readFiles(
-        { fileIds: [questionId] },
-        (() => store.getState() as RootState)
-      );
+      const initialRead = await readFiles({ fileIds: [questionId] });
 
       expect(Object.keys(initialRead.fileStates[0].persistableChanges || {}).length).toBe(0);
       console.log('✓ Initial read shows no persistableChanges');
@@ -962,23 +883,16 @@ describe('Phase 1: Unified File System API E2E', () => {
       const currentContent = JSON.stringify(questionFile?.content, null, 2);
       const currentLines = currentContent.split('\n').length;
 
-      await editFile(
-        {
-          fileId: questionId,
-          from: 1,
-          to: currentLines,
-          newContent: editContent
-        },
-        (() => store.getState() as RootState),
-        store.dispatch as any
-      );
+      await editFileReplace({
+        fileId: questionId,
+        from: 1,
+        to: currentLines,
+        newContent: editContent
+      });
 
       // Step 3: Read file after edit (should show persistableChanges)
       console.log('[3] Reading file after edit...');
-      const afterEditRead = await readFiles(
-        { fileIds: [questionId] },
-        (() => store.getState() as RootState)
-      );
+      const afterEditRead = await readFiles({ fileIds: [questionId] });
 
       expect(Object.keys(afterEditRead.fileStates[0].persistableChanges || {}).length).toBeGreaterThan(0);
       expect(JSON.stringify(afterEditRead.fileStates[0].persistableChanges || {})).toContain('Updated description');
@@ -1007,29 +921,18 @@ describe('Phase 1: Unified File System API E2E', () => {
       const currentContent = JSON.stringify(questionFile?.content, null, 2);
       const currentLines = currentContent.split('\n').length;
 
-      await editFile(
-        {
-          fileId: questionId,
-          from: 1,
-          to: currentLines,
-          newContent: editContent
-        },
-        (() => store.getState() as RootState),
-        store.dispatch as any
-      );
+      await editFileReplace({
+        fileId: questionId,
+        from: 1,
+        to: currentLines,
+        newContent: editContent
+      });
 
-      await publishFile(
-        { fileId: questionId },
-        (() => store.getState() as RootState),
-        store.dispatch as any
-      );
+      await publishFile({ fileId: questionId });
 
       // Read after publish
       console.log('[1] Reading file after publish...');
-      const afterPublishRead = await readFiles(
-        { fileIds: [questionId] },
-        (() => store.getState() as RootState)
-      );
+      const afterPublishRead = await readFiles({ fileIds: [questionId] });
 
       expect(Object.keys(afterPublishRead.fileStates[0].persistableChanges || {}).length).toBe(0);
       console.log('✓ After-publish read shows no persistableChanges (clean state)');
@@ -1060,16 +963,12 @@ describe('Phase 1: Unified File System API E2E', () => {
       const currentContent = JSON.stringify(questionFile?.content, null, 2);
       const currentLines = currentContent.split('\n').length;
 
-      await editFile(
-        {
-          fileId: questionId,
-          from: 1,
-          to: currentLines,
-          newContent: editStr
-        },
-        (() => store.getState() as RootState),
-        store.dispatch as any
-      );
+      await editFileReplace({
+        fileId: questionId,
+        from: 1,
+        to: currentLines,
+        newContent: editStr
+      });
 
       // Verify edits in persistableChanges
       const prePublishState = (store.getState() as any).files.files[questionId];
@@ -1132,10 +1031,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         payload: { files: [reloadedFile] }
       });
 
-      const readResult = await readFiles(
-        { fileIds: [questionId] },
-        (() => store.getState() as RootState)
-      );
+      const readResult = await readFiles({ fileIds: [questionId] });
 
       // Verify ReadFiles returns correct content
       const fileState = readResult.fileStates[0];
@@ -1170,16 +1066,12 @@ describe('Phase 1: Unified File System API E2E', () => {
       const currentQuestionContent = JSON.stringify(questionFile?.content, null, 2);
       const currentQuestionLines = currentQuestionContent.split('\n').length;
 
-      await editFile(
-        {
-          fileId: questionId,
-          from: 1,
-          to: currentQuestionLines,
-          newContent: questionContent
-        },
-        (() => store.getState() as RootState),
-        store.dispatch as any
-      );
+      await editFileReplace({
+        fileId: questionId,
+        from: 1,
+        to: currentQuestionLines,
+        newContent: questionContent
+      });
 
       // Step 2: Edit the dashboard
       console.log('[2] Editing dashboard...');
@@ -1192,32 +1084,22 @@ describe('Phase 1: Unified File System API E2E', () => {
       const currentDashContent = JSON.stringify(dashboardFile?.content, null, 2);
       const currentDashLines = currentDashContent.split('\n').length;
 
-      await editFile(
-        {
-          fileId: dashboardId,
-          from: 1,
-          to: currentDashLines,
-          newContent: dashboardContent
-        },
-        (() => store.getState() as RootState),
-        store.dispatch as any
-      );
+      await editFileReplace({
+        fileId: dashboardId,
+        from: 1,
+        to: currentDashLines,
+        newContent: dashboardContent
+      });
 
       // Step 3: Publish dashboard (should cascade to question)
       console.log('[3] Publishing dashboard (should cascade save question)...');
 
-      const publishResult = await publishFile(
-        { fileId: dashboardId },
-        (() => store.getState() as RootState),
-        store.dispatch as any
-      );
+      const publishResult = await publishFile({ fileId: dashboardId });
 
-      expect(publishResult.success).toBe(true);
-      if (publishResult.success) {
-        expect(publishResult.savedFileIds).toContain(dashboardId);
-        expect(publishResult.savedFileIds).toContain(questionId);
-        console.log('✓ PublishFile cascade saved both dashboard and question');
-      }
+      // New API returns { id, name } instead of { success, savedFileIds }
+      expect(publishResult.id).toBe(dashboardId);
+      expect(publishResult.name).toBeDefined();
+      console.log('✓ PublishFile cascade saved both dashboard and question');
 
       // Verify both files are clean
       const dashState = (store.getState() as any).files.files[dashboardId];

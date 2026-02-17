@@ -1747,37 +1747,36 @@ registerFrontendTool('ClarifyFrontend', async (args, context) => {
  */
 registerFrontendTool('ReadFiles', async (args, context) => {
   const { fileIds } = args;
-  const { state, dispatch } = context;
 
-  if (!state || !dispatch) {
-    throw new Error('Redux state and dispatch required for ReadFiles');
-  }
-
-  // Import and execute
-  const { readFiles } = await import('./read-files.client');
-  const result = await readFiles({ fileIds }, () => state);
+  // Import and execute (new unified API)
+  const { readFiles } = await import('./file-state');
+  const result = await readFiles({ fileIds });
 
   return result;
 });
 
 /**
- * EditFile - Range-based file editing with validation
+ * EditFile - Apply content changes to a file (deep merge)
  */
 registerFrontendTool('EditFile', async (args, context) => {
+  const { fileId, changes } = args;
+
+  // Import and execute (new unified API with deep merge)
+  const { editFile } = await import('./file-state');
+  await editFile({ fileId, changes });
+
+  return { success: true };
+});
+
+/**
+ * EditFileReplace - Range-based line editing (legacy/precise editing)
+ */
+registerFrontendTool('EditFileReplace', async (args, context) => {
   const { fileId, from, to, newContent } = args;
-  const { state, dispatch } = context;
 
-  if (!state || !dispatch) {
-    throw new Error('Redux state and dispatch required for EditFile');
-  }
-
-  // Import and execute
-  const { editFile } = await import('./edit-file.client');
-  const result = await editFile(
-    { fileId, from, to, newContent },
-    () => state,
-    dispatch
-  );
+  // Import and execute (range-based API for precise editing)
+  const { editFileReplace } = await import('./file-state');
+  const result = await editFileReplace({ fileId, from, to, newContent });
 
   return result;
 });
@@ -1787,15 +1786,10 @@ registerFrontendTool('EditFile', async (args, context) => {
  */
 registerFrontendTool('PublishFile', async (args, context) => {
   const { fileId } = args;
-  const { state, dispatch } = context;
 
-  if (!state || !dispatch) {
-    throw new Error('Redux state and dispatch required for PublishFile');
-  }
-
-  // Import and execute
-  const { publishFile } = await import('./publish-file.client');
-  const result = await publishFile({ fileId }, () => state, dispatch);
+  // Import and execute (new unified API)
+  const { publishFile } = await import('./file-state');
+  const result = await publishFile({ fileId });
 
   return result;
 });

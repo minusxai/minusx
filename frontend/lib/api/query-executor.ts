@@ -10,15 +10,16 @@
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { selectQueryResult } from '@/store/queryResultsSlice';
 import { setQueryResult } from '@/store/queryResultsSlice';
+import { PromiseManager } from '@/lib/utils/promise-manager';
 import type { QueryResult } from '@/lib/types';
 import type { RootState } from '@/store/store';
 import type { Dispatch } from '@reduxjs/toolkit';
 
 /**
- * Global promise store for in-flight queries
- * Maps queryId (hash) -> Promise<QueryResult>
+ * Global promise manager for in-flight queries
+ * Export for testing and debugging (e.g., queryManager.clear(), queryManager.size)
  */
-const queryPromises = new Map<string, Promise<QueryResult>>();
+export const queryManager = new PromiseManager<QueryResult>();
 
 /**
  * Execute a query with caching and deduplication
@@ -53,69 +54,38 @@ export async function runQuery(
     return Promise.resolve(cached.data);
   }
 
-  // Step 2: Check if query is already running (deduplication)
-  if (queryPromises.has(queryId)) {
-    console.log('[runQuery] Query already in-flight, returning existing promise:', queryId);
-    return queryPromises.get(queryId)!;
-  }
-
-  // Step 3: Execute new query via existing /api/query route
-  console.log('[runQuery] Starting new query execution:', queryId);
-  const promise = fetch('/api/query', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      query,
-      database_name: connectionId,
-      parameters: params
-    })
-  })
-    .then(async (response) => {
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || `Query execution failed: ${response.statusText}`);
-      }
-      return response.json();
-    })
-    .then((apiResponse: { data: QueryResult }) => {
-      const result = apiResponse.data;
-      // Update Redux cache with result
-      console.log('[runQuery] Query completed, caching result:', queryId);
-      dispatch(setQueryResult({
+  // Step 2: Execute with deduplication via PromiseManager
+  console.log('[runQuery] Starting query execution:', queryId);
+  return queryManager.execute(queryId, async () => {
+    const response = await fetch('/api/query', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
         query,
-        params,
-        database: connectionId,
-        data: result
-      }));
-      return result;
-    })
-    .catch((error) => {
-      console.error('[runQuery] Query failed:', queryId, error);
-      throw error;
-    })
-    .finally(() => {
-      // Step 4: Cleanup - remove from promise store
-      console.log('[runQuery] Removing from promise store:', queryId);
-      queryPromises.delete(queryId);
+        database_name: connectionId,
+        parameters: params
+      })
     });
 
-  // Store promise for deduplication
-  queryPromises.set(queryId, promise);
-  return promise;
-}
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `Query execution failed: ${response.statusText}`);
+    }
 
-/**
- * Clear all in-flight queries (useful for testing)
- */
-export function clearQueryPromises(): void {
-  queryPromises.clear();
-}
+    const apiResponse: { data: QueryResult } = await response.json();
+    const result = apiResponse.data;
 
-/**
- * Get count of in-flight queries (useful for debugging)
- */
-export function getInFlightQueryCount(): number {
-  return queryPromises.size;
+    // Update Redux cache with result
+    console.log('[runQuery] Query completed, caching result:', queryId);
+    dispatch(setQueryResult({
+      query,
+      params,
+      database: connectionId,
+      data: result
+    }));
+
+    return result;
+  });
 }

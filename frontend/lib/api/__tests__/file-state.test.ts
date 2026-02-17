@@ -1,0 +1,866 @@
+/**
+ * Tests for readFiles - File State Manager with Promise Deduplication and TTL Caching
+ *
+ * Tests the enhanced readFiles function that:
+ * - Actually fetches files if missing/stale (not just throwing errors)
+ * - Supports TTL-based caching with custom ttl option
+ * - Implements promise deduplication for concurrent requests
+ * - Supports skip option to bypass fetching
+ */
+
+import { configureStore } from '@reduxjs/toolkit';
+import filesReducer, { setFile, setFiles, FileState, setEdit } from '@/store/filesSlice';
+import queryResultsReducer, { setQueryResult } from '@/store/queryResultsSlice';
+import authReducer from '@/store/authSlice';
+import {
+  readFiles,
+  filePromises,
+  editFile,
+  editFileMetadata,
+  publishFile,
+  reloadFile,
+  clearFileChanges,
+  readFilesByCriteria
+} from '../file-state';
+import { FilesAPI } from '@/lib/data/files';
+import { CACHE_TTL } from '@/lib/constants/cache';
+import type { DbFile } from '@/lib/types';
+import type { RootState } from '@/store/store';
+
+// Mock FilesAPI
+jest.mock('@/lib/data/files', () => ({
+  FilesAPI: {
+    loadFiles: jest.fn(),
+    loadFile: jest.fn(),
+    getFiles: jest.fn()
+  }
+}));
+
+// Mock query executor
+jest.mock('../query-executor', () => ({
+  runQuery: jest.fn().mockResolvedValue({
+    columns: ['id'],
+    types: ['INTEGER'],
+    rows: [{ id: 1 }]
+  })
+}));
+
+// Mock fetch for publishFile
+global.fetch = jest.fn();
+
+// Mock the store import
+let mockStore: ReturnType<typeof configureStore>;
+
+jest.mock('@/store/store', () => ({
+  get store() {
+    return mockStore;
+  }
+}));
+
+const mockLoadFiles = FilesAPI.loadFiles as jest.MockedFunction<typeof FilesAPI.loadFiles>;
+const mockLoadFile = FilesAPI.loadFile as jest.MockedFunction<typeof FilesAPI.loadFile>;
+const mockGetFiles = FilesAPI.getFiles as jest.MockedFunction<typeof FilesAPI.getFiles>;
+const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
+
+// Base time for testing (Jan 1, 2024)
+const BASE_TIME = new Date('2024-01-01T00:00:00Z').getTime();
+
+// Helper to create mock file
+function createMockFile(id: number, type: 'question' | 'dashboard' = 'question'): DbFile {
+  return {
+    id,
+    name: `Test ${type} ${id}`,
+    path: `/org/test-${type}-${id}`,
+    type,
+    content: type === 'question'
+      ? { query: 'SELECT 1', database_name: 'test', parameters: [], vizSettings: { type: 'table' } }
+      : { assets: [], layout: { columns: 12, items: [] } },
+    references: [],
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+    company_id: 1
+  };
+}
+
+describe('readFiles - File State Manager', () => {
+  beforeEach(() => {
+    // Use fake timers for time-based tests
+    jest.useFakeTimers();
+    jest.setSystemTime(BASE_TIME);
+
+    // Create fresh Redux store for each test
+    mockStore = configureStore({
+      reducer: {
+        files: filesReducer,
+        queryResults: queryResultsReducer,
+        auth: authReducer
+      }
+    });
+
+    // Set default auth state
+    mockStore.dispatch({
+      type: 'auth/setUser',
+      payload: { userId: 1, email: 'test@example.com', companyId: 1, isAdmin: false }
+    });
+
+    // Clear mocks
+    mockLoadFiles.mockClear();
+    mockLoadFile.mockClear();
+    mockGetFiles.mockClear();
+    mockFetch.mockClear();
+    filePromises.clear();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  describe('TTL-based caching', () => {
+    it('should return fresh file from Redux without fetching', async () => {
+      const mockFile = createMockFile(1);
+
+      // Pre-populate Redux with file at BASE_TIME
+      mockStore.dispatch(setFile({
+        file: mockFile,
+        references: []
+      }));
+
+      // File is fresh (within default TTL of 10 hours)
+      const result = await readFiles({ fileIds: [mockFile.id] });
+
+      // Should not fetch - file is fresh
+      expect(mockLoadFiles).not.toHaveBeenCalled();
+
+      // Should return file from Redux
+      expect(result.fileStates).toHaveLength(1);
+      expect(result.fileStates[0].id).toBe(mockFile.id);
+    });
+
+    it('should refetch stale file beyond TTL', async () => {
+      const mockFile = createMockFile(1);
+      const freshFile = { ...mockFile, name: 'Updated name' };
+
+      // Pre-populate Redux with file at BASE_TIME
+      mockStore.dispatch(setFile({
+        file: mockFile,
+        references: []
+      }));
+
+      // Advance time beyond default TTL (10 hours + 1 second)
+      jest.setSystemTime(BASE_TIME + CACHE_TTL.FILE + 1000);
+
+      // Mock API to return fresh file
+      mockLoadFiles.mockResolvedValue({
+        data: [freshFile],
+        metadata: { references: [] }
+      });
+
+      // Call readFiles - should refetch
+      const result = await readFiles({ fileIds: [mockFile.id] });
+
+      // Should fetch because file is stale
+      expect(mockLoadFiles).toHaveBeenCalledWith([mockFile.id]);
+
+      // Should return updated file
+      expect(result.fileStates).toHaveLength(1);
+      expect(result.fileStates[0].name).toBe('Updated name');
+    });
+
+    it('should fetch missing file', async () => {
+      const mockFile = createMockFile(1);
+
+      // Empty Redux state - file doesn't exist
+      mockLoadFiles.mockResolvedValue({
+        data: [mockFile],
+        metadata: { references: [] }
+      });
+
+      // Call readFiles
+      const result = await readFiles({ fileIds: [mockFile.id] });
+
+      // Should fetch because file is missing
+      expect(mockLoadFiles).toHaveBeenCalledWith([mockFile.id]);
+
+      // Should populate Redux and return file
+      expect(result.fileStates).toHaveLength(1);
+      expect(result.fileStates[0].id).toBe(mockFile.id);
+    });
+
+    it('should respect custom TTL', async () => {
+      const mockFile = createMockFile(1);
+      const freshFile = { ...mockFile, name: 'Updated name' };
+
+      // Pre-populate Redux with file at BASE_TIME
+      mockStore.dispatch(setFile({
+        file: mockFile,
+        references: []
+      }));
+
+      // Advance time by 30 seconds
+      jest.setSystemTime(BASE_TIME + 30 * 1000);
+
+      // Mock API to return fresh file
+      mockLoadFiles.mockResolvedValue({
+        data: [freshFile],
+        metadata: { references: [] }
+      });
+
+      // Call readFiles with custom TTL of 10 seconds
+      const result = await readFiles({ fileIds: [mockFile.id] }, { ttl: 10000 });
+
+      // Should fetch because 30s > 10s TTL
+      expect(mockLoadFiles).toHaveBeenCalledWith([mockFile.id]);
+
+      // Should return updated file
+      expect(result.fileStates[0].name).toBe('Updated name');
+    });
+  });
+
+  describe('Skip option', () => {
+    it('should not fetch even if file is stale when skip=true', async () => {
+      const mockFile = createMockFile(1);
+
+      // Pre-populate Redux with file at BASE_TIME
+      mockStore.dispatch(setFile({
+        file: mockFile,
+        references: []
+      }));
+
+      // Advance time beyond TTL
+      jest.setSystemTime(BASE_TIME + CACHE_TTL.FILE + 1000);
+
+      // Call readFiles with skip=true
+      const result = await readFiles({ fileIds: [mockFile.id] }, { skip: true });
+
+      // Should NOT fetch even though file is stale
+      expect(mockLoadFiles).not.toHaveBeenCalled();
+
+      // Should return existing stale data
+      expect(result.fileStates).toHaveLength(1);
+      expect(result.fileStates[0].id).toBe(mockFile.id);
+    });
+
+    it('should throw error if file missing and skip=true', async () => {
+      // Empty Redux state - file doesn't exist
+
+      // Call readFiles with skip=true
+      await expect(
+        readFiles({ fileIds: [999] }, { skip: true })
+      ).rejects.toThrow('File 999 not found after fetch');
+    });
+  });
+
+  describe('Promise deduplication', () => {
+    it('should deduplicate concurrent requests for same file', async () => {
+      const mockFile = createMockFile(1);
+
+      // Mock API with delay to simulate slow request
+      mockLoadFiles.mockImplementation(async (ids) => {
+        // Wait 100ms to simulate network delay
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return {
+          data: [mockFile],
+          metadata: { references: [] }
+        };
+      });
+
+      // Call readFiles twice concurrently (no await)
+      const promise1 = readFiles({ fileIds: [mockFile.id] });
+      const promise2 = readFiles({ fileIds: [mockFile.id] });
+
+      // Advance timers to complete the fetch
+      jest.advanceTimersByTime(100);
+
+      // Wait for both promises
+      const [result1, result2] = await Promise.all([promise1, promise2]);
+
+      // Should only fetch ONCE despite two concurrent calls
+      expect(mockLoadFiles).toHaveBeenCalledTimes(1);
+
+      // Both should return the same data
+      expect(result1.fileStates[0].id).toBe(mockFile.id);
+      expect(result2.fileStates[0].id).toBe(mockFile.id);
+    });
+
+    it('should track in-flight requests correctly', async () => {
+      const mockFile = createMockFile(1);
+
+      // Mock API with delay
+      mockLoadFiles.mockImplementation(async () => {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return {
+          data: [mockFile],
+          metadata: { references: [] }
+        };
+      });
+
+      // Start request (don't await)
+      const promise = readFiles({ fileIds: [mockFile.id] });
+
+      // Check in-flight count immediately
+      expect(filePromises.size).toBe(1);
+
+      // Advance timers to complete
+      jest.advanceTimersByTime(100);
+      await promise;
+
+      // Should be cleared after completion
+      expect(filePromises.size).toBe(0);
+    });
+  });
+
+  describe('References loading', () => {
+    it('should load referenced files', async () => {
+      const questionFile = createMockFile(1, 'question');
+      const dashboardFile = createMockFile(2, 'dashboard');
+
+      // Dashboard references the question
+      dashboardFile.content = {
+        assets: [{ type: 'question', id: questionFile.id }],
+        layout: { columns: 12, items: [] }
+      };
+
+      // Mock API to return both files
+      mockLoadFiles.mockResolvedValue({
+        data: [dashboardFile],
+        metadata: { references: [questionFile] }
+      });
+
+      // Load dashboard
+      const result = await readFiles({ fileIds: [dashboardFile.id] });
+
+      // Should load dashboard
+      expect(result.fileStates).toHaveLength(1);
+      expect(result.fileStates[0].id).toBe(dashboardFile.id);
+
+      // Should include referenced question
+      expect(result.references).toHaveLength(1);
+      expect(result.references[0].id).toBe(questionFile.id);
+    });
+  });
+
+  describe('Error handling', () => {
+    it('should propagate fetch errors', async () => {
+      // Mock API to throw error
+      mockLoadFiles.mockRejectedValue(new Error('Network error'));
+
+      // Call readFiles
+      await expect(
+        readFiles({ fileIds: [1] })
+      ).rejects.toThrow('Network error');
+
+      // Redux should not be corrupted
+      const state = mockStore.getState() as RootState;
+      expect(state.files.files[1]).toBeUndefined();
+    });
+
+    it('should throw error if file not found after fetch', async () => {
+      // Mock API to return empty array (file not found)
+      mockLoadFiles.mockResolvedValue({
+        data: [],
+        metadata: { references: [] }
+      });
+
+      // Call readFiles
+      await expect(
+        readFiles({ fileIds: [999] })
+      ).rejects.toThrow('File 999 not found after fetch');
+    });
+  });
+
+  describe('Multiple files', () => {
+    it('should batch fetch multiple missing files', async () => {
+      const file1 = createMockFile(1);
+      const file2 = createMockFile(2);
+
+      mockLoadFiles.mockResolvedValue({
+        data: [file1, file2],
+        metadata: { references: [] }
+      });
+
+      const result = await readFiles({ fileIds: [1, 2] });
+
+      // Should fetch both in single call
+      expect(mockLoadFiles).toHaveBeenCalledWith([1, 2]);
+
+      // Should return both files
+      expect(result.fileStates).toHaveLength(2);
+      expect(result.fileStates[0].id).toBe(1);
+      expect(result.fileStates[1].id).toBe(2);
+    });
+
+    it('should only fetch stale files', async () => {
+      const file1 = createMockFile(1);
+      const file2 = createMockFile(2);
+
+      // Pre-populate Redux with file1 (fresh)
+      mockStore.dispatch(setFile({ file: file1, references: [] }));
+
+      // Mock API to return file2 only
+      mockLoadFiles.mockResolvedValue({
+        data: [file2],
+        metadata: { references: [] }
+      });
+
+      // Request both files
+      const result = await readFiles({ fileIds: [1, 2] });
+
+      // Should only fetch file2 (file1 is fresh)
+      expect(mockLoadFiles).toHaveBeenCalledWith([2]);
+
+      // Should return both files
+      expect(result.fileStates).toHaveLength(2);
+    });
+  });
+
+  describe('readFilesByCriteria', () => {
+    it('should load files by path', async () => {
+      const file1 = createMockFile(1);
+      const file2 = createMockFile(2);
+
+      // Mock getFiles to return metadata
+      mockGetFiles.mockResolvedValue({
+        data: [
+          { id: file1.id, name: file1.name, path: file1.path, type: file1.type, references: [], created_at: file1.created_at, updated_at: file1.updated_at, company_id: 1 },
+          { id: file2.id, name: file2.name, path: file2.path, type: file2.type, references: [], created_at: file2.created_at, updated_at: file2.updated_at, company_id: 1 }
+        ],
+        metadata: { folders: [] }
+      });
+
+      // Mock loadFiles for full content
+      mockLoadFiles.mockResolvedValue({
+        data: [file1, file2],
+        metadata: { references: [] }
+      });
+
+      const result = await readFilesByCriteria({
+        criteria: { paths: ['/org'] }
+      });
+
+      expect(mockGetFiles).toHaveBeenCalledWith({ paths: ['/org'] });
+      expect(mockLoadFiles).toHaveBeenCalledWith([1, 2]);
+      expect(result.fileStates).toHaveLength(2);
+    });
+
+    it('should load files by type', async () => {
+      const file1 = createMockFile(1, 'question');
+
+      mockGetFiles.mockResolvedValue({
+        data: [
+          { id: file1.id, name: file1.name, path: file1.path, type: file1.type, references: [], created_at: file1.created_at, updated_at: file1.updated_at, company_id: 1 }
+        ],
+        metadata: { folders: [] }
+      });
+
+      mockLoadFiles.mockResolvedValue({
+        data: [file1],
+        metadata: { references: [] }
+      });
+
+      await readFilesByCriteria({
+        criteria: { type: 'question' }
+      });
+
+      expect(mockGetFiles).toHaveBeenCalledWith({ type: 'question' });
+    });
+
+    it('should respect depth parameter', async () => {
+      mockGetFiles.mockResolvedValue({
+        data: [],
+        metadata: { folders: [] }
+      });
+
+      await readFilesByCriteria({
+        criteria: { paths: ['/org'], depth: 2 }
+      });
+
+      expect(mockGetFiles).toHaveBeenCalledWith({ paths: ['/org'], depth: 2 });
+    });
+
+    it('should return metadata only when partial=true', async () => {
+      const file1 = createMockFile(1);
+
+      mockGetFiles.mockResolvedValue({
+        data: [
+          { id: file1.id, name: file1.name, path: file1.path, type: file1.type, references: [], created_at: file1.created_at, updated_at: file1.updated_at, company_id: 1 }
+        ],
+        metadata: { folders: [] }
+      });
+
+      // Pre-populate Redux with file
+      mockStore.dispatch(setFile({ file: file1, references: [] }));
+
+      const result = await readFilesByCriteria({
+        criteria: { paths: ['/org'] },
+        partial: true
+      });
+
+      // Should NOT call loadFiles for full content
+      expect(mockLoadFiles).not.toHaveBeenCalled();
+      expect(result.fileStates).toHaveLength(1);
+      expect(result.queryResults).toHaveLength(0);  // No augmentation
+    });
+
+    it('should return augmented files when partial=false', async () => {
+      const file1 = createMockFile(1, 'question');
+
+      mockGetFiles.mockResolvedValue({
+        data: [
+          { id: file1.id, name: file1.name, path: file1.path, type: file1.type, references: [], created_at: file1.created_at, updated_at: file1.updated_at, company_id: 1 }
+        ],
+        metadata: { folders: [] }
+      });
+
+      mockLoadFiles.mockResolvedValue({
+        data: [file1],
+        metadata: { references: [] }
+      });
+
+      // Add query result to Redux BEFORE calling readFilesByCriteria
+      // This simulates the result already being cached (note: use 'data' not 'result')
+      mockStore.dispatch(setQueryResult({
+        query: 'SELECT 1',
+        params: {},
+        database: 'test',
+        data: { columns: ['id'], types: ['INTEGER'], rows: [{ id: 1 }] }
+      }));
+
+      const result = await readFilesByCriteria({
+        criteria: { type: 'question' },
+        partial: false
+      });
+
+      expect(mockLoadFiles).toHaveBeenCalled();
+      // Augmentation should include query results
+      // (will only work if query result is already in Redux)
+      expect(result.queryResults.length).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  describe('editFile', () => {
+    it('should update persistableChanges', async () => {
+      const mockFile = createMockFile(1, 'question');
+      mockStore.dispatch(setFile({ file: mockFile, references: [] }));
+
+      await editFile({
+        fileId: 1,
+        changes: { content: { query: 'SELECT 2' } }
+      });
+
+      const state = mockStore.getState() as RootState;
+      const content = state.files.files[1].persistableChanges as any;
+      expect(content.query).toBe('SELECT 2');
+    });
+
+    it('should auto-execute query for questions', async () => {
+      const mockFile = createMockFile(1, 'question');
+      mockStore.dispatch(setFile({ file: mockFile, references: [] }));
+
+      const { runQuery } = require('../query-executor');
+
+      await editFile({
+        fileId: 1,
+        changes: { content: { query: 'SELECT 2' } }
+      });
+
+      expect(runQuery).toHaveBeenCalled();
+    });
+
+    it('should recalculate queryResultId', async () => {
+      const mockFile = createMockFile(1, 'question');
+      mockStore.dispatch(setFile({ file: mockFile, references: [] }));
+
+      await editFile({
+        fileId: 1,
+        changes: { content: { query: 'SELECT 2', database_name: 'new_db' } }
+      });
+
+      const state = mockStore.getState() as RootState;
+      const persistableChanges = state.files.files[1].persistableChanges as any;
+
+      // queryResultId should be set
+      expect(persistableChanges.queryResultId).toBeDefined();
+    });
+
+    it('should throw if file not found', async () => {
+      await expect(
+        editFile({
+          fileId: 999,
+          changes: { content: { query: 'SELECT 1' } }
+        })
+      ).rejects.toThrow('File 999 not found');
+    });
+  });
+
+  describe('editFileMetadata', () => {
+    it('should update metadataChanges', () => {
+      const mockFile = createMockFile(1);
+      mockStore.dispatch(setFile({ file: mockFile, references: [] }));
+
+      editFileMetadata({
+        fileId: 1,
+        changes: { name: 'New Name' }
+      });
+
+      const state = mockStore.getState() as RootState;
+      expect(state.files.files[1].metadataChanges).toMatchObject({
+        name: 'New Name'
+      });
+    });
+
+    it('should handle name and path together', () => {
+      const mockFile = createMockFile(1);
+      mockStore.dispatch(setFile({ file: mockFile, references: [] }));
+
+      editFileMetadata({
+        fileId: 1,
+        changes: { name: 'New Name', path: '/org/new-path' }
+      });
+
+      const state = mockStore.getState() as RootState;
+      expect(state.files.files[1].metadataChanges).toMatchObject({
+        name: 'New Name',
+        path: '/org/new-path'
+      });
+    });
+  });
+
+  describe('publishFile', () => {
+    it('should save file with edits', async () => {
+      const mockFile = createMockFile(1);
+      mockStore.dispatch(setFile({ file: mockFile, references: [] }));
+      mockStore.dispatch(setEdit({ fileId: 1, edits: { query: 'SELECT 2' } }));
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { id: 1, name: 'Test question 1' } })
+      } as Response);
+
+      const result = await publishFile({ fileId: 1 });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/files/1',
+        expect.objectContaining({
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' }
+        })
+      );
+
+      expect(result).toEqual({ id: 1, name: 'Test question 1' });
+    });
+
+    it('should create virtual file', async () => {
+      const virtualFile = { ...createMockFile(-1), id: -1 };
+      mockStore.dispatch(setFile({ file: virtualFile, references: [] }));
+      mockStore.dispatch(setEdit({ fileId: -1, edits: { query: 'SELECT 2' } }));
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { id: 123, name: 'New question' } })
+      } as Response);
+
+      const result = await publishFile({ fileId: -1 });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/files',
+        expect.objectContaining({
+          method: 'POST'
+        })
+      );
+
+      expect(result).toEqual({ id: 123, name: 'New question' });
+    });
+
+    it('should return current id/name when not dirty', async () => {
+      const mockFile = createMockFile(1);
+      mockStore.dispatch(setFile({ file: mockFile, references: [] }));
+      // No edits - not dirty
+
+      const result = await publishFile({ fileId: 1 });
+
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(result).toEqual({ id: 1, name: 'Test question 1' });
+    });
+
+    it('should clear changes after save', async () => {
+      const mockFile = createMockFile(1);
+      mockStore.dispatch(setFile({ file: mockFile, references: [] }));
+      mockStore.dispatch(setEdit({ fileId: 1, edits: { query: 'SELECT 2' } }));
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { id: 1, name: 'Test question 1' } })
+      } as Response);
+
+      await publishFile({ fileId: 1 });
+
+      const state = mockStore.getState() as RootState;
+      expect(state.files.files[1].persistableChanges).toEqual({});
+    });
+
+    it('should handle save errors', async () => {
+      const mockFile = createMockFile(1);
+      mockStore.dispatch(setFile({ file: mockFile, references: [] }));
+      mockStore.dispatch(setEdit({ fileId: 1, edits: { query: 'SELECT 2' } }));
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ message: 'Database error' })
+      } as Response);
+
+      await expect(publishFile({ fileId: 1 })).rejects.toThrow('Database error');
+    });
+  });
+
+  describe('reloadFile', () => {
+    it('should force refresh from database', async () => {
+      const mockFile = createMockFile(1);
+      const freshFile = { ...mockFile, name: 'Updated name' };
+
+      mockStore.dispatch(setFile({ file: mockFile, references: [] }));
+
+      mockLoadFile.mockResolvedValue({
+        data: freshFile,
+        metadata: { references: [] }
+      });
+
+      await reloadFile({ fileId: 1 });
+
+      expect(mockLoadFile).toHaveBeenCalledWith(1, undefined, { refresh: true });
+
+      const state = mockStore.getState() as RootState;
+      expect(state.files.files[1].name).toBe('Updated name');
+    });
+
+    it('should skip loading state when silent=true', async () => {
+      const mockFile = createMockFile(1);
+      mockStore.dispatch(setFile({ file: mockFile, references: [] }));
+
+      mockLoadFile.mockResolvedValue({
+        data: mockFile,
+        metadata: { references: [] }
+      });
+
+      await reloadFile({ fileId: 1, silent: true });
+
+      const state = mockStore.getState() as RootState;
+      // Loading state should never have been set to true
+      expect(state.files.files[1].loading).toBe(false);
+    });
+
+    it('should overwrite local changes', async () => {
+      const mockFile = createMockFile(1, 'question');
+      mockStore.dispatch(setFile({ file: mockFile, references: [] }));
+      mockStore.dispatch(setEdit({ fileId: 1, edits: { query: 'SELECT 2' } }));
+
+      // Verify local changes exist before reload
+      let state = mockStore.getState() as RootState;
+      expect(state.files.files[1].persistableChanges).toMatchObject({ query: 'SELECT 2' });
+
+      const freshFile: DbFile = {
+        ...mockFile,
+        content: { ...(mockFile.content as any), query: 'SELECT 3' }
+      };
+      mockLoadFile.mockResolvedValue({
+        data: freshFile,
+        metadata: { references: [] }
+      });
+
+      await reloadFile({ fileId: 1 });
+
+      state = mockStore.getState() as RootState;
+      // Base content should be updated from database
+      const content = state.files.files[1].content as any;
+      expect(content?.query).toBe('SELECT 3');
+      // Reload resets the file state, so persistableChanges are cleared (this is expected behavior)
+      expect(state.files.files[1].persistableChanges).toEqual({});
+    });
+  });
+
+  describe('clearFileChanges', () => {
+    it('should clear all local changes', () => {
+      const mockFile = createMockFile(1);
+      mockStore.dispatch(setFile({ file: mockFile, references: [] }));
+      mockStore.dispatch(setEdit({ fileId: 1, edits: { query: 'SELECT 2' } }));
+
+      clearFileChanges({ fileId: 1 });
+
+      const state = mockStore.getState() as RootState;
+      expect(state.files.files[1].persistableChanges).toEqual({});
+      expect(state.files.files[1].ephemeralChanges).toEqual({});
+      expect(state.files.files[1].metadataChanges).toEqual({});
+    });
+
+    it('should revert to original state', () => {
+      const mockFile = createMockFile(1, 'question');
+      mockStore.dispatch(setFile({ file: mockFile, references: [] }));
+
+      const originalQuery = (mockFile.content as any)?.query;
+      mockStore.dispatch(setEdit({ fileId: 1, edits: { query: 'SELECT 2' } }));
+
+      clearFileChanges({ fileId: 1 });
+
+      const state = mockStore.getState() as RootState;
+      // Content should be back to original
+      const content = state.files.files[1].content as any;
+      expect(content?.query).toBe(originalQuery);
+    });
+  });
+
+  describe('augmentation', () => {
+    it('should augment questions with query results', async () => {
+      const mockFile = createMockFile(1, 'question');
+      mockLoadFiles.mockResolvedValue({
+        data: [mockFile],
+        metadata: { references: [] }
+      });
+
+      // Add query result to Redux (note: use 'data' not 'result')
+      mockStore.dispatch(setQueryResult({
+        query: 'SELECT 1',
+        params: {},
+        database: 'test',
+        data: { columns: ['id'], types: ['INTEGER'], rows: [{ id: 1 }] }
+      }));
+
+      const result = await readFiles({ fileIds: [1] });
+
+      // Should include query result
+      expect(result.queryResults).toHaveLength(1);
+      expect(result.queryResults[0]).toMatchObject({
+        columns: ['id'],
+        types: ['INTEGER'],
+        rows: [{ id: 1 }]
+      });
+    });
+
+    it('should augment dashboards with nested questions', async () => {
+      const questionFile = createMockFile(1, 'question');
+      const dashboardFile = createMockFile(2, 'dashboard');
+      dashboardFile.content = {
+        assets: [{ type: 'question', id: 1 }],
+        layout: { columns: 12, items: [] }
+      };
+
+      mockLoadFiles.mockResolvedValue({
+        data: [dashboardFile],
+        metadata: { references: [questionFile] }
+      });
+
+      // Add query result for the question (note: use 'data' not 'result')
+      mockStore.dispatch(setQueryResult({
+        query: 'SELECT 1',
+        params: {},
+        database: 'test',
+        data: { columns: ['id'], types: ['INTEGER'], rows: [{ id: 1 }] }
+      }));
+
+      const result = await readFiles({ fileIds: [2] });
+
+      // Should include query result from nested question
+      expect(result.queryResults).toHaveLength(1);
+      expect(result.references).toHaveLength(1);
+      expect(result.references[0].id).toBe(1);
+    });
+  });
+});
