@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, ReactNode } from 'react';
 import { Box, VStack, HStack, Text, Icon, IconButton } from '@chakra-ui/react';
-import { LuChevronRight, LuChevronLeft, LuGripVertical, LuChevronDown, LuRefreshCw, LuCamera, LuDownload } from 'react-icons/lu';
+import { LuChevronRight, LuChevronLeft, LuGripVertical, LuChevronDown, LuRefreshCw } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setRightSidebarCollapsed, setRightSidebarWidth, setActiveSidebarSection, selectRightSidebarUIState, selectDashboardEditMode } from '@/store/uiSlice';
 import { setFiles, selectMergedContent, addQuestionToDashboard } from '@/store/filesSlice';
@@ -12,15 +12,14 @@ import { AppState } from '@/lib/appState';
 import SchemaTreeView from './SchemaTreeView';
 import Markdown from './Markdown';
 import ChatInterface from './explore/ChatInterface';
-import AppStateViewer from './AppStateViewer';
 import AccessTokenManager from './AccessTokenManager';
+import DevToolsPanel from './DevToolsPanel';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { Tooltip } from './ui/tooltip';
 import { useContext } from '@/lib/hooks/useContext';
 import { ContextSelector } from './explore/ContextSelector';
 import { selectActiveConversation, selectConversation } from '@/store/chatSlice';
 import { getSidebarSection, SidebarSectionMetadata } from '@/lib/ui/sidebar-sections';
-import { useScreenshot } from '@/lib/hooks/useScreenshot';
 
 // ============================================================================
 // RightSidebar Props Interface
@@ -67,10 +66,6 @@ export default function RightSidebar({
   const [isHoveringButton, setIsHoveringButton] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-
-  // Screenshot functionality
-  const { captureFileView, download } = useScreenshot();
-  const [isCapturingScreenshot, setIsCapturingScreenshot] = useState(false);
 
   // Get active conversation ID from Redux (persists across all pages)
   const conversationID = useAppSelector(selectActiveConversation);
@@ -154,23 +149,6 @@ export default function RightSidebar({
       console.error('[RightSidebar] Refresh failed:', error);
     } finally {
       setIsRefreshing(false);
-    }
-  };
-
-  // Screenshot handler - capture current file view
-  const handleScreenshot = async () => {
-    if (!appState?.fileId) return;
-
-    setIsCapturingScreenshot(true);
-    try {
-      const blob = await captureFileView(appState.fileId, { fullHeight: true });
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
-      const pageType = appState.pageType || 'file';
-      download(blob, `${pageType}-${appState.fileId}-${timestamp}.png`);
-    } catch (error) {
-      console.error('[RightSidebar] Screenshot failed:', error);
-    } finally {
-      setIsCapturingScreenshot(false);
     }
   };
 
@@ -564,46 +542,7 @@ export default function RightSidebar({
                           </Box>
                         )}
                         {section.id === 'dev' && (
-                          <Box p={4}>
-                            <VStack align="stretch" gap={3}>
-                              <Text fontSize="sm" fontFamily="mono" color="accent.teal" fontWeight="600">
-                                Development Mode Active
-                              </Text>
-
-                              {/* Screenshot Download Button */}
-                              {appState?.fileId && (appState.pageType === 'question' || appState.pageType === 'dashboard') && (
-                                <Box
-                                  borderWidth="1px"
-                                  borderColor="border.default"
-                                  borderRadius="md"
-                                  p={3}
-                                  bg="bg.surface"
-                                >
-                                  <VStack align="stretch" gap={2}>
-                                    <HStack justify="space-between">
-                                      <Text fontSize="xs" fontWeight="600" color="fg.muted">
-                                        Screenshot
-                                      </Text>
-                                      <IconButton
-                                        onClick={handleScreenshot}
-                                        aria-label="Download screenshot"
-                                        size="xs"
-                                        variant="subtle"
-                                        loading={isCapturingScreenshot}
-                                      >
-                                        <LuDownload />
-                                      </IconButton>
-                                    </HStack>
-                                    <Text fontSize="2xs" color="fg.subtle">
-                                      Download full-height PNG of current {appState.pageType}
-                                    </Text>
-                                  </VStack>
-                                </Box>
-                              )}
-
-                              <AppStateViewer appState={appState} maxHeight="400px" />
-                            </VStack>
-                          </Box>
+                          <DevToolsPanel appState={appState} />
                         )}
                         {section.id === 'questions' && appState?.fileId && (
                           <Box p={0} maxH="calc(100vh - 200px)" overflowY="auto">
