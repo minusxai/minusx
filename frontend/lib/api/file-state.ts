@@ -18,15 +18,20 @@
  * - Registry pattern for type-specific augmentation
  */
 
-import { store } from '@/store/store';
+import { store as fallbackStore } from '@/store/store';
+import { clientStoreRef } from '@/components/ReduxProvider';
 import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFiles, selectMergedContent, setEdit } from '@/store/filesSlice';
+
+// Helper to get the active store (client store if available, fallback to singleton)
+// This ensures we update the SAME store that components subscribe to
+const getStore = () => clientStoreRef.current || fallbackStore;
 import { selectQueryResult, setQueryResult, setQueryError } from '@/store/queryResultsSlice';
 import { selectSelectedRun } from '@/store/reportRunsSlice';
 import { FilesAPI } from '@/lib/data/files';
 import { PromiseManager } from '@/lib/utils/promise-manager';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import type { RootState } from '@/store/store';
-import type { ReadFilesInput, ReadFilesOutput, FileState, QueryResult, QuestionContent, FileType, DocumentContent, AssetReference, DbFile, BaseFileContent, QuestionParameter } from '@/lib/types';
+import type { ReadFilesInput, ReadFilesOutput, FileState, QueryResult, QuestionContent, FileType, DocumentContent, AssetReference, DbFile, BaseFileContent, QuestionParameter, QuestionReference } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
 import type { AppState, QuestionAppState, DashboardAppState, ReportAppState, GenericAppState } from '@/lib/appState';
 
@@ -140,7 +145,7 @@ export async function readFiles(
 ): Promise<ReadFilesOutput> {
   const { ttl = CACHE_TTL.FILE, skip = false } = options;
   const { fileIds } = input;
-  const state = store.getState();
+  const state = getStore().getState();
 
   // Step 1: Determine which files need fetching
   const needsFetch: number[] = [];
@@ -161,7 +166,7 @@ export async function readFiles(
 
     await filePromises.execute(key, async () => {
       const result = await FilesAPI.loadFiles(needsFetch);
-      store.dispatch(setFiles({
+      getStore().dispatch(setFiles({
         files: result.data,
         references: result.metadata.references || []
       }));
@@ -169,7 +174,7 @@ export async function readFiles(
   }
 
   // Step 3: Collect results from Redux (now guaranteed fresh)
-  const updatedState = store.getState();
+  const updatedState = getStore().getState();
   const fileStates: FileState[] = [];
   const referenceIds = new Set<number>();
   const augmentContext: AugmentContext = {
@@ -249,7 +254,7 @@ export async function readFilesByCriteria(
 
   // Step 2: If partial load, return metadata only (no augmentation)
   if (partial) {
-    const state = store.getState();
+    const state = getStore().getState();
     const fileStates: FileState[] = fileIds.map(id => selectFile(state, id)).filter(Boolean) as FileState[];
 
     return {
@@ -286,7 +291,7 @@ export interface EditFileOptions {
  */
 export async function editFile(options: EditFileOptions): Promise<void> {
   const { fileId, changes } = options;
-  const state = store.getState();
+  const state = getStore().getState();
 
   // Validate file exists
   const fileState = selectFile(state, fileId);
@@ -307,14 +312,16 @@ export async function editFile(options: EditFileOptions): Promise<void> {
 
   // Handle content changes
   if (changes.content !== undefined) {
-    // Deep merge content changes
-    const currentContent = selectMergedContent(state, fileId);
-    const mergedContent = deepMerge(currentContent, changes.content) as DbFile['content'];
+    // Deep merge with existing persistableChanges (NOT full content!)
+    // This way we only store the changes, not the full merged content
+    const currentPersistableChanges = state.files.files[fileId].persistableChanges || {};
+    const mergedChanges = deepMerge(currentPersistableChanges, changes.content);
 
-    // Store in persistableChanges
-    store.dispatch(setEdit({
+    // Store ONLY changes in persistableChanges
+    console.log('Merged changes to persistableChanges for file', fileId, mergedChanges);
+    getStore().dispatch(setEdit({
       fileId,
-      edits: mergedContent
+      edits: mergedChanges
     }));
 
     // NOTE: Removed auto-execute for questions (Phase 3: explicit execute pattern)
@@ -346,7 +353,7 @@ export async function editFileReplace(
   options: EditFileReplaceOptions
 ): Promise<{ success: boolean; diff?: string; error?: string }> {
   const { fileId, from, to, newContent } = options;
-  const state = store.getState();
+  const state = getStore().getState();
 
   // Get file state
   const fileState = selectFile(state, fileId);
@@ -429,7 +436,7 @@ export async function editFileReplace(
   }
 
   // Store edit in Redux
-  store.dispatch(setEdit({
+  getStore().dispatch(setEdit({
     fileId,
     edits: editedContent
   }));
@@ -526,7 +533,7 @@ function editFileMetadata(options: EditFileMetadataOptions): void {
 
   // Import setMetadataEdit from filesSlice
   const { setMetadataEdit } = require('@/store/filesSlice');
-  store.dispatch(setMetadataEdit({ fileId, changes }));
+  getStore().dispatch(setMetadataEdit({ fileId, changes }));
 }
 
 /**
@@ -560,7 +567,7 @@ export async function publishFile(
   options: PublishFileOptions
 ): Promise<PublishFileResult> {
   const { fileId } = options;
-  const state = store.getState();
+  const state = getStore().getState();
 
   // Get file state
   const fileState = selectFile(state, fileId);
@@ -638,12 +645,12 @@ export async function publishFile(
   }
 
   // Clear changes for the main file
-  store.dispatch(clearEdits(fileId));
-  store.dispatch(clearMetadataEdits(fileId));
+  getStore().dispatch(clearEdits(fileId));
+  getStore().dispatch(clearMetadataEdits(fileId));
 
   // Cascade save: Collect and batch-save dirty referenced files
   const references = fileState.references || [];
-  const currentState = store.getState();
+  const currentState = getStore().getState();
   const dirtyRefs: Array<{
     id: number;
     name: string;
@@ -704,8 +711,8 @@ export async function publishFile(
 
     // Clear changes for all saved references
     for (const savedId of savedFileIds) {
-      store.dispatch(clearEdits(savedId));
-      store.dispatch(clearMetadataEdits(savedId));
+      getStore().dispatch(clearEdits(savedId));
+      getStore().dispatch(clearMetadataEdits(savedId));
     }
   }
 
@@ -734,7 +741,7 @@ export async function reloadFile(options: ReloadFileOptions): Promise<void> {
   // Set loading state (unless silent)
   if (!silent) {
     const { setLoading } = require('@/store/filesSlice');
-    store.dispatch(setLoading({ id: fileId, loading: true }));
+    getStore().dispatch(setLoading({ id: fileId, loading: true }));
   }
 
   try {
@@ -743,7 +750,7 @@ export async function reloadFile(options: ReloadFileOptions): Promise<void> {
 
     // Update Redux with fresh data
     const { setFile } = require('@/store/filesSlice');
-    store.dispatch(setFile({
+    getStore().dispatch(setFile({
       file: result.data,
       references: result.metadata.references || []
     }));
@@ -751,7 +758,7 @@ export async function reloadFile(options: ReloadFileOptions): Promise<void> {
     // Clear loading state
     if (!silent) {
       const { setLoading } = require('@/store/filesSlice');
-      store.dispatch(setLoading({ id: fileId, loading: false }));
+      getStore().dispatch(setLoading({ id: fileId, loading: false }));
     }
   }
 }
@@ -778,9 +785,9 @@ export function clearFileChanges(options: ClearFileChangesOptions): void {
   const { clearEdits, clearMetadataEdits, clearEphemeral } = require('@/store/filesSlice');
 
   // Clear all changes
-  store.dispatch(clearEdits(fileId));
-  store.dispatch(clearMetadataEdits(fileId));
-  store.dispatch(clearEphemeral(fileId));
+  getStore().dispatch(clearEdits(fileId));
+  getStore().dispatch(clearMetadataEdits(fileId));
+  getStore().dispatch(clearEphemeral(fileId));
 }
 
 // ============================================================================
@@ -833,7 +840,7 @@ export async function createVirtualFile(
     : -Date.now();
 
   // Get user from Redux for folder resolution and company_id
-  const state = store.getState();
+  const state = getStore().getState();
   const user = state.auth.user;
 
   // Resolve folder path
@@ -868,7 +875,7 @@ export async function createVirtualFile(
 
   // Add to Redux
   const { setFile } = await import('@/store/filesSlice');
-  store.dispatch(setFile({ file: virtualFile, references: [] }));
+  getStore().dispatch(setFile({ file: virtualFile, references: [] }));
 
   return virtualId;
 }
@@ -915,7 +922,7 @@ export async function createFolder(
   });
 
   // Get user from Redux for company_id
-  const state = store.getState();
+  const state = getStore().getState();
   const companyId = state.auth.user?.companyId ?? 0;
 
   // Construct folder file object
@@ -934,7 +941,7 @@ export async function createFolder(
 
   // Add to Redux
   const { addFile } = await import('@/store/filesSlice');
-  store.dispatch(addFile(folderFile));
+  getStore().dispatch(addFile(folderFile));
 
   // Return metadata
   return {
@@ -992,7 +999,7 @@ export async function readFolder(
 ): Promise<ReadFolderResult> {
   const { depth = 1, ttl = CACHE_TTL.FOLDER, forceLoad = false } = options;
 
-  const state = store.getState();
+  const state = getStore().getState();
 
   // Import selectors and actions dynamically
   const {
@@ -1029,7 +1036,7 @@ export async function readFolder(
 
   // Set loading state
   if (folderId) {
-    store.dispatch(setLoading({ id: folderId, loading: true }));
+    getStore().dispatch(setLoading({ id: folderId, loading: true }));
   }
 
   try {
@@ -1039,14 +1046,14 @@ export async function readFolder(
 
     // Store folder file itself (for pathIndex)
     if (response.metadata.folders.length > 0) {
-      store.dispatch(setFileInfo(response.metadata.folders));
+      getStore().dispatch(setFileInfo(response.metadata.folders));
     }
 
     // Store children and update folder.references
-    store.dispatch(setFolderInfo({ path, fileInfos: response.data }));
+    getStore().dispatch(setFolderInfo({ path, fileInfos: response.data }));
 
     // Get updated state after storing
-    const updatedState = store.getState();
+    const updatedState = getStore().getState();
     const updatedFolderId = selectFileIdByPath(updatedState, path);
     const updatedFolder = updatedFolderId ? selectFile(updatedState, updatedFolderId) : undefined;
     const childIds = updatedFolder?.references || [];
@@ -1065,7 +1072,7 @@ export async function readFolder(
 
     // Clear loading state
     if (folderId) {
-      store.dispatch(setLoading({ id: folderId, loading: false }));
+      getStore().dispatch(setLoading({ id: folderId, loading: false }));
     }
 
     // Convert to LoadError
@@ -1086,7 +1093,7 @@ export async function readFolder(
  * Helper: Filter files by user permissions and hidden system paths
  */
 async function filterFilesByPermissions(files: FileState[]): Promise<FileState[]> {
-  const state = store.getState();
+  const state = getStore().getState();
 
   // Get effective user and mode
   const { selectEffectiveUser } = await import('@/store/authSlice');
@@ -1130,6 +1137,7 @@ export interface QueryExecutionParams {
   query: string;
   params: Record<string, any>;
   database: string;
+  references?: QuestionReference[];  // For CTE composition
 }
 
 /**
@@ -1171,14 +1179,14 @@ export async function getQueryResult(
   params: QueryExecutionParams,
   options: GetQueryResultOptions = {}
 ): Promise<QueryResult> {
-  const { query, params: queryParams, database } = params;
+  const { query, params: queryParams, database, references } = params;
   const { ttl = CACHE_TTL.QUERY, skip = false } = options;
 
   if (skip) {
     throw new Error('Cannot execute query with skip=true');
   }
 
-  const state = store.getState();
+  const state = getStore().getState();
 
   // Import query utilities
   const { getQueryHash } = await import('@/lib/utils/query-hash');
@@ -1191,18 +1199,16 @@ export async function getQueryResult(
   const cached = selectQueryResult(state, query, queryParams, database);
 
   if (cached?.data && isFresh) {
-    console.log('[getQueryResult] Cache hit (fresh):', queryId);
     return Promise.resolve(cached.data);
   }
 
   // Step 2: Execute with deduplication via PromiseManager
-  console.log('[getQueryResult] Starting query execution:', queryId);
   return queryPromiseManager.execute(queryId, async () => {
     // Import Redux actions
     const { setQueryLoading, setQueryResult, setQueryError } = await import('@/store/queryResultsSlice');
 
     // Set loading state
-    store.dispatch(setQueryLoading({ query, params: queryParams, database, loading: true }));
+    getStore().dispatch(setQueryLoading({ query, params: queryParams, database, loading: true }));
 
     try {
       const response = await fetch('/api/query', {
@@ -1213,13 +1219,16 @@ export async function getQueryResult(
         body: JSON.stringify({
           query,
           database_name: database,
-          parameters: queryParams
+          parameters: queryParams,
+          references: references || []
         })
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || `Query execution failed: ${response.statusText}`);
+        const errorData = await response.json();
+        // API returns { success: false, error: { code, message, details } }
+        const errorMessage = errorData.error?.message || errorData.error || `Query execution failed: ${response.statusText}`;
+        throw new Error(errorMessage);
       }
 
       const apiResponse: { data: QueryResult } = await response.json();
@@ -1227,7 +1236,7 @@ export async function getQueryResult(
 
       // Update Redux cache with result (clears loading state)
       console.log('[getQueryResult] Query completed, caching result:', queryId);
-      store.dispatch(setQueryResult({
+      getStore().dispatch(setQueryResult({
         query,
         params: queryParams,
         database,
@@ -1240,7 +1249,7 @@ export async function getQueryResult(
 
       // Store error in Redux
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      store.dispatch(setQueryError({
+      getStore().dispatch(setQueryError({
         query,
         params: queryParams,
         database,
@@ -1271,7 +1280,7 @@ export async function getAppState(fileId: number): Promise<AppState | undefined>
   if (!result.fileStates || result.fileStates.length === 0) return undefined;
 
   const file = result.fileStates[0];
-  const state = store.getState();
+  const state = getStore().getState();
   const mergedContent = selectMergedContent(state, fileId);
   if (!mergedContent) return undefined;
 
@@ -1304,7 +1313,7 @@ function buildQuestionAppState(
   path: string,
   content: QuestionContent
 ): QuestionAppState {
-  const state = store.getState();
+  const state = getStore().getState();
 
   // Extract query execution args
   const query = content.query;
@@ -1360,7 +1369,7 @@ function buildDashboardAppState(
   path: string,
   content: DocumentContent
 ): DashboardAppState {
-  const state = store.getState();
+  const state = getStore().getState();
   const questionStates: Record<number, QuestionAppState> = {};
 
   // Process each asset in the dashboard
@@ -1399,7 +1408,7 @@ function buildReportAppState(
   path: string,
   content: any
 ): ReportAppState {
-  const state = store.getState();
+  const state = getStore().getState();
   const selectedRun = selectSelectedRun(state, fileId);
 
   return {

@@ -750,29 +750,32 @@ export function useQueryResult(
     // Skip if already loading
     if (loading) return;
 
+    console.log('[useQueryResult] Executing query:', query.substring(0, 60) + '...');
+
     // Execute query inline (no callback dependency issues)
     (async () => {
       try {
         await getQueryResult({
           query,
           params,
-          database
+          database,
+          references
         }, { ttl });
       } catch (error) {
         console.error('[useQueryResult] Query execution failed:', error);
         // Error is already stored in Redux by getQueryResult
       }
     })();
-  }, [needsFetch, loading, query, params, database, ttl]);
+  }, [needsFetch, loading, query, params, database, references, ttl]);
 
   // Manual refetch function
   const refetch = useCallback(async () => {
     try {
-      await getQueryResult({ query, params, database }, { ttl });
+      await getQueryResult({ query, params, database, references }, { ttl });
     } catch (error) {
       console.error('[useQueryResult] Manual refetch failed:', error);
     }
-  }, [query, params, database, ttl]);
+  }, [query, params, database, references, ttl]);
 
   return {
     data: result?.data || null,

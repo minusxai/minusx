@@ -11,19 +11,19 @@
  * - Shows old results while editing query
  * - Background refetch for stale data
  */
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box } from '@chakra-ui/react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectIsDirty, selectMergedContent, selectEffectiveName, setEphemeral, type FileId } from '@/store/filesSlice';
 import { selectProposedQuery } from '@/store/uiSlice';
-import { useFile } from '@/lib/hooks/file-state-hooks';
-import { useQueryResult } from '@/lib/hooks/file-state-hooks';
+import { useFile, useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { editFile, publishFile, clearFileChanges } from '@/lib/api/file-state';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
 import { QuestionContent, QuestionParameter } from '@/lib/types';
 import { isUserFacingError } from '@/lib/errors';
+import { last } from 'lodash';
 
 interface QuestionContainerV2Props {
   fileId: FileId;
@@ -70,41 +70,25 @@ export default function QuestionContainerV2({
     }
   }, [isDirty, editMode, handleEditModeChange]);
 
-  // Phase 3: Get query to execute (ONLY from ephemeralChanges.lastExecuted)
-  // Do NOT use current edited query - that would execute on every keystroke!
-  const lastExecuted = (file?.ephemeralChanges as any)?.lastExecuted;
-
-  // Initialize lastExecuted in useEffect (NOT during render - that causes issues)
-  useEffect(() => {
-    // Only set on first load when lastExecuted doesn't exist
-    if (!lastExecuted && mergedContent && file) {
-      const initialQuery = {
-        query: mergedContent.query,
-        params: (mergedContent.parameters || []).reduce((acc, p) => ({
-          ...acc,
-          [p.name]: p.value
-        }), {}),
-        database: mergedContent.database_name,
-        references: mergedContent.references || []
-      };
-
-      dispatch(setEphemeral({
-        fileId,
-        changes: { lastExecuted: initialQuery } as any
-      }));
-    }
-  }, [lastExecuted, mergedContent, file, fileId, dispatch]);
-
-  // Use lastExecuted (will be undefined on very first render, then set by effect)
-  const queryToExecute = lastExecuted;
+  // Phase 3: Get query to execute (from ephemeralChanges.lastExecuted or fallback to current)
+  const lastExecuted = file?.ephemeralChanges?.lastExecuted;
+  const queryToExecute = lastExecuted || {
+    query: mergedContent?.query || '',
+    params: (mergedContent?.parameters || []).reduce((acc, p) => ({
+      ...acc,
+      [p.name]: p.value
+    }), {}),
+    database: mergedContent?.database_name || '',
+    references: mergedContent?.references || []
+  };
 
   // Phase 3: Use useQueryResult hook for query execution with caching
   const { data: queryData, loading: queryLoading, error: queryError, isStale: queryStale } = useQueryResult(
-    queryToExecute?.query || '',
-    queryToExecute?.params || {},
-    queryToExecute?.database || '',
-    queryToExecute?.references,
-    { skip: !queryToExecute }  // Skip until query is available
+    queryToExecute.query,
+    queryToExecute.params,
+    queryToExecute.database,
+    queryToExecute.references,
+    { skip: !queryToExecute.query }  // Skip if no query
   );
 
   // Phase 3: Update current state handler - uses editFile from file-state.ts
@@ -117,7 +101,7 @@ export default function QuestionContainerV2({
     editFile({ fileId, changes });
   }, [fileId]);
 
-  // Phase 3: Execute query handler - updates lastExecuted in ephemeralChanges
+  // Phase 3: Execute query handler - updates lastExecuted to trigger execution
   const handleExecute = useCallback((overrideParams?: QuestionParameter[]) => {
     if (!mergedContent) return;
 
@@ -134,9 +118,18 @@ export default function QuestionContainerV2({
 
     dispatch(setEphemeral({
       fileId,
-      changes: { lastExecuted: newQuery } as any
+      changes: { lastExecuted: newQuery }
     }));
   }, [mergedContent, fileId, dispatch]);
+
+  // Execute query on first load
+  useEffect(() => {
+    if (!file || !mergedContent) return;
+    if (lastExecuted) return;  // Already executed
+
+    console.log('[QuestionContainerV2] Auto-executing query on first load');
+    handleExecute();
+  }, [file, mergedContent, lastExecuted, handleExecute]);
 
   // Phase 3: Save handler - uses publishFile from file-state.ts (handles both create and update)
   // Note: Name/description validation is handled by DocumentHeader

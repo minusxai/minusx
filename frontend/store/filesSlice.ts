@@ -5,6 +5,18 @@ import type { RootState } from './store';
 import { getQueryHash } from '@/lib/utils/query-hash';
 
 /**
+ * Ephemeral changes - non-persistent state like lastExecuted query
+ */
+export type EphemeralChanges = Partial<DbFile['content']> & {
+  lastExecuted?: {
+    query: string;
+    params: Record<string, any>;
+    database: string;
+    references: any[];
+  };
+};
+
+/**
  * FileState: Complete file state including metadata and change tracking
  * Extends DbFile with UI state and change tracking
  * Implements Core Patterns architecture from Phase 1
@@ -20,7 +32,7 @@ export interface FileState extends DbFile {
 
   // Change tracking (Phase 2)
   persistableChanges: Partial<DbFile['content']>;
-  ephemeralChanges: Partial<DbFile['content']>;
+  ephemeralChanges: EphemeralChanges;
   metadataChanges: { name?: string; path?: string }; // Phase 5: Metadata edits
 }
 
@@ -315,7 +327,7 @@ const filesSlice = createSlice({
      * Used for non-persistent state like lastExecuted query
      * Merge with existing ephemeralChanges
      */
-    setEphemeral(state, action: PayloadAction<{ fileId: FileId; changes: Partial<DbFile['content']> }>) {
+    setEphemeral(state, action: PayloadAction<{ fileId: FileId; changes: EphemeralChanges }>) {
       const { fileId, changes } = action.payload;
       if (state.files[fileId]) {
         state.files[fileId].ephemeralChanges = {
