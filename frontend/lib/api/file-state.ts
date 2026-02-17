@@ -608,40 +608,29 @@ export async function publishFile(
   let savedName: string;
 
   if (isVirtualFile) {
-    // Create new file
-    const response = await fetch('/api/files', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(fileData)
+    // Create new file using FilesAPI
+    const result = await FilesAPI.createFile({
+      name: fileData.name,
+      path: fileData.path,
+      type: fileData.type as FileType,
+      content: fileData.content
     });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to create file');
-    }
-
-    const result = await response.json();
-    // CreateFileResult wraps DbFile in { data: DbFile }, and successResponse wraps that
-    savedId = result.data.data?.id || result.data.id;
-    savedName = result.data.data?.name || result.data.name;
+    savedId = result.data.id;
+    savedName = result.data.name;
   } else {
-    // Update existing file
-    const response = await fetch(`/api/files/${fileId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(fileData)
-    });
+    // Update existing file using FilesAPI
+    const extractReferences = (await import('@/lib/data/helpers/extract-references')).extractReferencesFromContent;
+    const references = extractReferences(fileData.content, fileData.type as FileType);
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to save file');
-    }
-
-    const result = await response.json();
-    // SaveFileResult wraps DbFile in { data: DbFile }, and successResponse wraps that
-    // So we get { success: true, data: { data: DbFile } }
-    savedId = result.data.data?.id || result.data.id;
-    savedName = result.data.data?.name || result.data.name;
+    const result = await FilesAPI.saveFile(
+      fileId,
+      fileData.name,
+      fileData.path,
+      fileData.content,
+      references
+    );
+    savedId = result.data.id;
+    savedName = result.data.name;
   }
 
   // Clear changes for the main file
@@ -687,27 +676,8 @@ export async function publishFile(
 
   // If there are dirty references, batch-save them atomically
   if (dirtyRefs.length > 0) {
-    const companyId = currentState.auth.user?.companyId;
-    if (!companyId) {
-      throw new Error('Company ID not found in auth state');
-    }
-
-    const response = await fetch('/api/files/batch-save', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        files: dirtyRefs,
-        companyId
-      })
-    });
-
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Failed to batch-save referenced files');
-    }
-
-    const result = await response.json();
-    const savedFileIds: number[] = result.data?.savedFileIds || result.savedFileIds || [];
+    const result = await FilesAPI.batchSaveFiles(dirtyRefs);
+    const savedFileIds = result.savedFileIds;
 
     // Clear changes for all saved references
     for (const savedId of savedFileIds) {
