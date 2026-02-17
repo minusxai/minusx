@@ -4,8 +4,9 @@
  * These control how long data is considered "fresh" before refetching
  */
 
-// 10 hours in milliseconds
+// Cache durations in milliseconds
 const TEN_HOURS = 10 * 60 * 60 * 1000;
+const TWO_MINUTES = 2 * 60 * 1000;
 
 export const CACHE_TTL = {
   /** File cache TTL (used by useFile hook) */
@@ -15,5 +16,5 @@ export const CACHE_TTL = {
   FOLDER: TEN_HOURS,
 
   /** Query result cache TTL (used by useQueryResult hook) */
-  QUERY: TEN_HOURS,
+  QUERY: TWO_MINUTES,  // Short TTL for development - change to TEN_HOURS for production
 } as const;

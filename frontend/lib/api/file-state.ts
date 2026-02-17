@@ -317,25 +317,9 @@ export async function editFile(options: EditFileOptions): Promise<void> {
       edits: mergedContent
     }));
 
-    // Auto-execute query for questions
-    if (fileState.type === 'question') {
-      const updatedState = store.getState();
-      const finalContent = selectMergedContent(updatedState, fileId) as QuestionContent;
-
-      if (finalContent?.query && finalContent?.database_name) {
-        const params = (finalContent.parameters || []).reduce<Record<string, any>>((acc, p) => {
-          acc[p.name] = p.value ?? '';
-          return acc;
-        }, {});
-
-        // Execute query to populate cache (use getQueryResult from this file)
-        await getQueryResult({
-          query: finalContent.query,
-          params,
-          database: finalContent.database_name
-        });
-      }
-    }
+    // NOTE: Removed auto-execute for questions (Phase 3: explicit execute pattern)
+    // Queries should only execute when user clicks Run button (handleExecute)
+    // Not on every edit!
   }
 }
 
@@ -453,25 +437,9 @@ export async function editFileReplace(
   // Generate diff
   const diff = generateDiff(contentStr, editedStr);
 
-  // Auto-execute query for questions
-  if (fileState.type === 'question') {
-    const updatedState = store.getState();
-    const finalContent = selectMergedContent(updatedState, fileId) as QuestionContent;
-
-    if (finalContent?.query && finalContent?.database_name) {
-      const params = (finalContent.parameters || []).reduce<Record<string, any>>((acc, p) => {
-        acc[p.name] = p.value ?? '';
-        return acc;
-      }, {});
-
-      // Execute query to populate cache (use getQueryResult from this file)
-      await getQueryResult({
-        query: finalContent.query,
-        params,
-        database: finalContent.database_name
-      });
-    }
-  }
+  // NOTE: Removed auto-execute for questions (Phase 3: explicit execute pattern)
+  // Queries should only execute when user clicks Run button (handleExecute)
+  // AI agents that edit questions should call handleExecute explicitly if needed
 
   return { success: true, diff };
 }

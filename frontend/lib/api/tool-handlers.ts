@@ -1762,8 +1762,31 @@ registerFrontendTool('EditFile', async (args, context) => {
   const { fileId, changes } = args;
 
   // Import and execute (new unified API with deep merge)
-  const { editFile } = await import('./file-state');
+  const { editFile, getQueryResult } = await import('./file-state');
   await editFile({ fileId, changes });
+
+  // Auto-execute query for questions (agent tool only)
+  // User edits in UI should NOT auto-execute (explicit Run button)
+  const state = store.getState();
+  const fileState = state.files.files[fileId];
+  if (fileState?.type === 'question' && changes.content) {
+    const { selectMergedContent } = await import('@/store/filesSlice');
+    const finalContent = selectMergedContent(state, fileId) as any;
+
+    if (finalContent?.query && finalContent?.database_name) {
+      const params = (finalContent.parameters || []).reduce((acc: any, p: any) => {
+        acc[p.name] = p.value ?? '';
+        return acc;
+      }, {} as Record<string, any>);
+
+      // Execute query to populate cache
+      await getQueryResult({
+        query: finalContent.query,
+        params,
+        database: finalContent.database_name
+      });
+    }
+  }
 
   return { success: true };
 });
@@ -1775,8 +1798,32 @@ registerFrontendTool('EditFileReplace', async (args, context) => {
   const { fileId, from, to, newContent } = args;
 
   // Import and execute (range-based API for precise editing)
-  const { editFileReplace } = await import('./file-state');
+  const { editFileReplace, getQueryResult } = await import('./file-state');
   const result = await editFileReplace({ fileId, from, to, newContent });
+
+  // Auto-execute query for questions (agent tool only)
+  if (result.success) {
+    const state = store.getState();
+    const fileState = state.files.files[fileId];
+    if (fileState?.type === 'question') {
+      const { selectMergedContent } = await import('@/store/filesSlice');
+      const finalContent = selectMergedContent(state, fileId) as any;
+
+      if (finalContent?.query && finalContent?.database_name) {
+        const params = (finalContent.parameters || []).reduce((acc: any, p: any) => {
+          acc[p.name] = p.value ?? '';
+          return acc;
+        }, {} as Record<string, any>);
+
+        // Execute query to populate cache
+        await getQueryResult({
+          query: finalContent.query,
+          params,
+          database: finalContent.database_name
+        });
+      }
+    }
+  }
 
   return result;
 });

@@ -742,34 +742,37 @@ export function useQueryResult(
   // Determine isStale: has data but fetching new data
   const isStale = hasData && loading;
 
-  // Execute query function using getQueryResult from file-state.ts
-  const executeQuery = useCallback(async () => {
-    try {
-      await getQueryResult({
-        query,
-        params,
-        database
-      }, { ttl });
-    } catch (error) {
-      console.error('[useQueryResult] Query execution failed:', error);
-      // Error is already stored in Redux by getQueryResult
-    }
-  }, [query, params, database, ttl]);
-
   // Effect: Execute query if needed
+  // IMPORTANT: Don't use useCallback for executeQuery - inline it to prevent re-execution on edits
   useEffect(() => {
     if (!needsFetch) return;
 
     // Skip if already loading
     if (loading) return;
 
-    executeQuery();
-  }, [needsFetch, loading, executeQuery]);
+    // Execute query inline (no callback dependency issues)
+    (async () => {
+      try {
+        await getQueryResult({
+          query,
+          params,
+          database
+        }, { ttl });
+      } catch (error) {
+        console.error('[useQueryResult] Query execution failed:', error);
+        // Error is already stored in Redux by getQueryResult
+      }
+    })();
+  }, [needsFetch, loading, query, params, database, ttl]);
 
   // Manual refetch function
-  const refetch = useCallback(() => {
-    executeQuery();
-  }, [executeQuery]);
+  const refetch = useCallback(async () => {
+    try {
+      await getQueryResult({ query, params, database }, { ttl });
+    } catch (error) {
+      console.error('[useQueryResult] Manual refetch failed:', error);
+    }
+  }, [query, params, database, ttl]);
 
   return {
     data: result?.data || null,

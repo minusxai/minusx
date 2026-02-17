@@ -11,7 +11,7 @@
  * - Shows old results while editing query
  * - Background refetch for stale data
  */
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box } from '@chakra-ui/react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
@@ -70,48 +70,42 @@ export default function QuestionContainerV2({
     }
   }, [isDirty, editMode, handleEditModeChange]);
 
-  // Phase 3: Get query to execute (from ephemeralChanges.lastExecuted or current query)
+  // Phase 3: Get query to execute (ONLY from ephemeralChanges.lastExecuted)
+  // Do NOT use current edited query - that would execute on every keystroke!
   const lastExecuted = (file?.ephemeralChanges as any)?.lastExecuted;
-  const queryToExecute = lastExecuted || {
-    query: mergedContent?.query || '',
-    params: (mergedContent?.parameters || []).reduce((acc, p) => ({
-      ...acc,
-      [p.name]: p.value
-    }), {}),
-    database: mergedContent?.database_name,
-    references: mergedContent?.references || []
-  };
+
+  // Initialize lastExecuted in useEffect (NOT during render - that causes issues)
+  useEffect(() => {
+    // Only set on first load when lastExecuted doesn't exist
+    if (!lastExecuted && mergedContent && file) {
+      const initialQuery = {
+        query: mergedContent.query,
+        params: (mergedContent.parameters || []).reduce((acc, p) => ({
+          ...acc,
+          [p.name]: p.value
+        }), {}),
+        database: mergedContent.database_name,
+        references: mergedContent.references || []
+      };
+
+      dispatch(setEphemeral({
+        fileId,
+        changes: { lastExecuted: initialQuery } as any
+      }));
+    }
+  }, [lastExecuted, mergedContent, file, fileId, dispatch]);
+
+  // Use lastExecuted (will be undefined on very first render, then set by effect)
+  const queryToExecute = lastExecuted;
 
   // Phase 3: Use useQueryResult hook for query execution with caching
   const { data: queryData, loading: queryLoading, error: queryError, isStale: queryStale } = useQueryResult(
-    queryToExecute.query,
-    queryToExecute.params,
-    queryToExecute.database,
-    queryToExecute.references,
-    { skip: !queryToExecute.query }  // Skip if no query
+    queryToExecute?.query || '',
+    queryToExecute?.params || {},
+    queryToExecute?.database || '',
+    queryToExecute?.references,
+    { skip: !queryToExecute }  // Skip until query is available
   );
-
-  // On first load, set lastExecuted to current query
-  useEffect(() => {
-    if (!file || !mergedContent) return;
-    if (lastExecuted) return;  // Already set
-
-    // Set initial lastExecuted
-    const initialQuery = {
-      query: mergedContent.query,
-      params: (mergedContent.parameters || []).reduce((acc, p) => ({
-        ...acc,
-        [p.name]: p.value
-      }), {}),
-      database: mergedContent.database_name,
-      references: mergedContent.references || []
-    };
-
-    dispatch(setEphemeral({
-      fileId,
-      changes: { lastExecuted: initialQuery } as any
-    }));
-  }, [file, mergedContent, lastExecuted, fileId, dispatch]);
 
   // Phase 3: Update current state handler - uses editFile from file-state.ts
   const handleChange = useCallback((updates: Partial<QuestionContent>) => {
