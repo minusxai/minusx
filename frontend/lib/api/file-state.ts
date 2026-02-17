@@ -701,3 +701,164 @@ export function clearFileChanges(options: ClearFileChangesOptions): void {
   store.dispatch(clearMetadataEdits(fileId));
   store.dispatch(clearEphemeral(fileId));
 }
+
+// ============================================================================
+// Create Virtual File
+// ============================================================================
+
+/**
+ * Options for creating a virtual file
+ */
+export interface CreateVirtualFileOptions {
+  /** Folder path override (defaults to user's home_folder) */
+  folder?: string;
+  /** For questions: pre-populate with this database/connection name */
+  databaseName?: string;
+  /** For questions: pre-populate with this SQL query */
+  query?: string;
+  /** Virtual ID override (defaults to -Date.now()) */
+  virtualId?: number;
+}
+
+/**
+ * createVirtualFile - Create a virtual file for "create mode"
+ *
+ * Virtual files use negative IDs (-Date.now()) to distinguish them from real files.
+ * They exist only in Redux until saved via publishFile.
+ *
+ * @param type - The type of file to create (question, dashboard, etc.)
+ * @param options - Optional configuration (folder, connection, query)
+ * @returns Virtual file ID (negative number)
+ *
+ * Example:
+ * ```typescript
+ * // Create new question with SQL
+ * const virtualId = await createVirtualFile('question', {
+ *   folder: '/org',
+ *   databaseName: 'my_db',
+ *   query: 'SELECT * FROM users LIMIT 100'
+ * });
+ * ```
+ */
+export async function createVirtualFile(
+  type: FileType,
+  options: CreateVirtualFileOptions = {}
+): Promise<number> {
+  const { folder, databaseName, query, virtualId: providedVirtualId } = options;
+
+  // Generate virtual ID (negative timestamp or use provided)
+  const virtualId = providedVirtualId && providedVirtualId < 0
+    ? providedVirtualId
+    : -Date.now();
+
+  // Get user from Redux for folder resolution and company_id
+  const state = store.getState();
+  const user = state.auth.user;
+
+  // Resolve folder path
+  let resolvedFolder = folder;
+  if (!resolvedFolder) {
+    // Import path resolver dynamically to avoid circular deps
+    const { resolveHomeFolderSync } = await import('@/lib/mode/path-resolver');
+    resolvedFolder = user
+      ? resolveHomeFolderSync(user.mode, user.home_folder || '')
+      : '/org';
+  }
+
+  // Fetch template from backend
+  const template = await FilesAPI.getTemplate(type, {
+    path: resolvedFolder,
+    databaseName,
+    query
+  });
+
+  // Create virtual file object
+  const virtualFile: DbFile = {
+    id: virtualId,
+    name: template.fileName,
+    path: `${resolvedFolder}/${template.fileName}`,
+    type: type,
+    references: [],
+    content: template.content,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    company_id: user?.companyId ?? 0
+  };
+
+  // Add to Redux
+  const { setFile } = await import('@/store/filesSlice');
+  store.dispatch(setFile({ file: virtualFile, references: [] }));
+
+  return virtualId;
+}
+
+// ============================================================================
+// Create Folder
+// ============================================================================
+
+/**
+ * Result of folder creation
+ */
+export interface CreateFolderResult {
+  id: number;
+  name: string;
+  path: string;
+}
+
+/**
+ * createFolder - Create a new folder in the file system
+ *
+ * @param folderName - Name of the new folder
+ * @param parentPath - Parent path where folder will be created
+ * @returns Folder metadata (id, name, path)
+ *
+ * Example:
+ * ```typescript
+ * const folder = await createFolder('Sales Reports', '/org');
+ * // Creates folder at /org/Sales Reports
+ * console.log(folder.path); // "/org/sales-reports"
+ * ```
+ */
+export async function createFolder(
+  folderName: string,
+  parentPath: string
+): Promise<CreateFolderResult> {
+  // Call API to create folder
+  const { fetchWithCache } = await import('@/lib/api/fetch-wrapper');
+  const { API } = await import('@/lib/api/declarations');
+
+  const result = await fetchWithCache('/api/folders', {
+    method: 'POST',
+    body: JSON.stringify({ folderName, parentPath }),
+    cacheStrategy: API.folders.create.cache,
+  });
+
+  // Get user from Redux for company_id
+  const state = store.getState();
+  const companyId = state.auth.user?.companyId ?? 0;
+
+  // Construct folder file object
+  const now = new Date().toISOString();
+  const folderFile: DbFile = {
+    id: result.data.id,
+    name: result.data.name,
+    path: result.data.path,
+    type: 'folder',
+    references: [],  // Folder references computed dynamically from children
+    content: { description: '' },
+    created_at: now,
+    updated_at: now,
+    company_id: companyId
+  };
+
+  // Add to Redux
+  const { addFile } = await import('@/store/filesSlice');
+  store.dispatch(addFile(folderFile));
+
+  // Return metadata
+  return {
+    id: result.data.id,
+    name: result.data.name,
+    path: result.data.path
+  };
+}

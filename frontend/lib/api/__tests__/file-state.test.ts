@@ -19,7 +19,9 @@ import {
   publishFile,
   reloadFile,
   clearFileChanges,
-  readFilesByCriteria
+  readFilesByCriteria,
+  createVirtualFile,
+  createFolder
 } from '../file-state';
 import { FilesAPI } from '@/lib/data/files';
 import { CACHE_TTL } from '@/lib/constants/cache';
@@ -860,6 +862,155 @@ describe('readFiles - File State Manager', () => {
       expect(result.queryResults).toHaveLength(1);
       expect(result.references).toHaveLength(1);
       expect(result.references[0].id).toBe(1);
+    });
+  });
+
+  describe('createVirtualFile', () => {
+    it('should create virtual file with generated ID', async () => {
+      const mockTemplate = {
+        fileName: 'Untitled Question',
+        content: { query: 'SELECT 1', vizSettings: {}, database_name: 'test' }
+      };
+
+      const mockGetTemplate = jest.fn().mockResolvedValue(mockTemplate);
+      FilesAPI.getTemplate = mockGetTemplate;
+
+      const virtualId = await createVirtualFile('question', { folder: '/org' });
+
+      // Virtual ID should be negative
+      expect(virtualId).toBeLessThan(0);
+
+      // Should have called getTemplate with correct params
+      expect(mockGetTemplate).toHaveBeenCalledWith('question', {
+        path: '/org',
+        databaseName: undefined,
+        query: undefined
+      });
+
+      // Should be in Redux
+      const state = mockStore.getState() as RootState;
+      expect(state.files.files[virtualId]).toBeDefined();
+      expect(state.files.files[virtualId].name).toBe('Untitled Question');
+      expect(state.files.files[virtualId].path).toBe('/org/Untitled Question');
+    });
+
+    it('should pre-populate question with database and query', async () => {
+      const mockTemplate = {
+        fileName: 'New Query',
+        content: { query: 'SELECT * FROM users', vizSettings: {}, database_name: 'my_db' }
+      };
+
+      const mockGetTemplate = jest.fn().mockResolvedValue(mockTemplate);
+      FilesAPI.getTemplate = mockGetTemplate;
+
+      await createVirtualFile('question', {
+        folder: '/org',
+        databaseName: 'my_db',
+        query: 'SELECT * FROM users'
+      });
+
+      expect(mockGetTemplate).toHaveBeenCalledWith('question', {
+        path: '/org',
+        databaseName: 'my_db',
+        query: 'SELECT * FROM users'
+      });
+    });
+
+    it('should use provided virtual ID', async () => {
+      const mockTemplate = {
+        fileName: 'Test',
+        content: {}
+      };
+
+      const mockGetTemplate = jest.fn().mockResolvedValue(mockTemplate);
+      FilesAPI.getTemplate = mockGetTemplate;
+
+      const customVirtualId = -12345;
+      const virtualId = await createVirtualFile('dashboard', {
+        folder: '/org',
+        virtualId: customVirtualId
+      });
+
+      expect(virtualId).toBe(customVirtualId);
+
+      const state = mockStore.getState() as RootState;
+      expect(state.files.files[customVirtualId]).toBeDefined();
+    });
+
+    it('should resolve home folder from user when not provided', async () => {
+      const mockTemplate = {
+        fileName: 'Test',
+        content: {}
+      };
+
+      const mockGetTemplate = jest.fn().mockResolvedValue(mockTemplate);
+      FilesAPI.getTemplate = mockGetTemplate;
+
+      // User's home folder should be used (from mockStore setup)
+      await createVirtualFile('question');
+
+      // Should have used resolved home folder path
+      expect(mockGetTemplate).toHaveBeenCalledWith('question', expect.objectContaining({
+        path: expect.any(String)
+      }));
+    });
+  });
+
+  describe('createFolder', () => {
+    it('should create folder and add to Redux', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: { id: 100, name: 'Sales', path: '/org/sales' }
+        })
+      } as Response);
+
+      const result = await createFolder('Sales', '/org');
+
+      // Should call POST /api/folders
+      expect(mockFetch).toHaveBeenCalledWith('/api/folders', expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ folderName: 'Sales', parentPath: '/org' })
+      }));
+
+      // Should return folder metadata
+      expect(result).toEqual({
+        id: 100,
+        name: 'Sales',
+        path: '/org/sales'
+      });
+
+      // Should be in Redux
+      const state = mockStore.getState() as RootState;
+      expect(state.files.files[100]).toBeDefined();
+      expect(state.files.files[100].type).toBe('folder');
+      expect(state.files.files[100].name).toBe('Sales');
+      expect(state.files.files[100].path).toBe('/org/sales');
+    });
+
+    it('should handle API errors', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 409,
+        json: async () => ({ error: 'Folder already exists' })
+      } as Response);
+
+      await expect(createFolder('Existing', '/org')).rejects.toThrow();
+    });
+
+    it('should set correct company_id from auth state', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: { id: 101, name: 'Marketing', path: '/org/marketing' }
+        })
+      } as Response);
+
+      await createFolder('Marketing', '/org');
+
+      const state = mockStore.getState() as RootState;
+      // Should use company_id from auth state (set in mockStore setup)
+      expect(state.files.files[101].company_id).toBe(1);
     });
   });
 });
