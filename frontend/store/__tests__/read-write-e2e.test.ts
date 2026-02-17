@@ -1127,7 +1127,7 @@ describe('Phase 1: Unified File System API E2E', () => {
     });
 
     it('should use query result caching via runQuery', async () => {
-      console.log('\n[TEST] Query result caching with runQuery');
+      console.log('\n[TEST] Query result caching with getQueryResult');
 
       // Load question into Redux
       const questionFile = await DocumentDB.getById(questionId, 1);
@@ -1143,14 +1143,12 @@ describe('Phase 1: Unified File System API E2E', () => {
       // First call - should execute
       console.log('[1] First call - should execute query...');
 
-      const { runQuery } = await import('@/lib/api/query-executor');
-      const result1 = await runQuery(
-        testQuery,
-        testParams,
-        testDb,
-        (() => store.getState() as RootState),
-        store.dispatch as any
-      );
+      const { getQueryResult } = await import('@/lib/api/file-state');
+      const result1 = await getQueryResult({
+        query: testQuery,
+        params: testParams,
+        database: testDb
+      });
 
       expect(result1).toBeDefined();
       expect(result1.columns).toEqual(['id']);
@@ -1160,13 +1158,11 @@ describe('Phase 1: Unified File System API E2E', () => {
       // Second call - should return from cache (same result)
       console.log('[2] Second call - should return from cache...');
 
-      const result2 = await runQuery(
-        testQuery,
-        testParams,
-        testDb,
-        (() => store.getState() as RootState),
-        store.dispatch as any
-      );
+      const result2 = await getQueryResult({
+        query: testQuery,
+        params: testParams,
+        database: testDb
+      });
 
       expect(result2).toBeDefined();
       expect(result2).toEqual(result1);

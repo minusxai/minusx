@@ -11,19 +11,15 @@
  * - Loading state management
  * - Error handling
  */
-import { useEffect } from 'react';
-import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { useEffect, useCallback } from 'react';
+import { useAppSelector } from '@/store/hooks';
 import {
   selectQueryResult,
   selectIsQueryFresh,
-  selectHasQueryData,
-  setQueryLoading,
-  setQueryResult,
-  setQueryError
+  selectHasQueryData
 } from '@/store/queryResultsSlice';
+import { getQueryResult } from '@/lib/api/file-state';
 import { CACHE_TTL } from '@/lib/constants/cache';
-import { fetchWithCache } from '@/lib/api/fetch-wrapper';
-import { API } from '@/lib/api/declarations';
 
 import type { QuestionReference } from '@/lib/types';
 
@@ -57,13 +53,15 @@ export interface UseQueryResultOptions {
 }
 
 /**
- * useQueryResult Hook
+ * useQueryResult Hook - Phase 3 (Simplified)
  *
- * Executes queries with TTL-based caching and automatic refetching
+ * Executes queries with TTL-based caching and automatic refetching.
+ * Uses getQueryResult from file-state.ts internally.
  *
  * @param query - SQL query string
  * @param params - Query parameters
  * @param database - Database name (connection)
+ * @param references - Question references (optional)
  * @param options - Hook options (ttl, skip)
  * @returns {data, loading, error, isStale, refetch}
  *
@@ -100,7 +98,6 @@ export function useQueryResult(
   options: UseQueryResultOptions = {}
 ): UseQueryResultReturn {
   const { ttl = CACHE_TTL.QUERY, skip = false } = options;
-  const dispatch = useAppDispatch();
 
   // Select result from Redux
   const result = useAppSelector(state => selectQueryResult(state, query, params, database));
@@ -115,41 +112,24 @@ export function useQueryResult(
   const needsFetch = !skip && !hasError && (!hasData || !isFresh);
 
   // Determine loading state
-  // loading=true if: (1) no data and fetching, or (2) Redis says loading
   const loading = result?.loading || false;
 
   // Determine isStale: has data but fetching new data
   const isStale = hasData && loading;
 
-  // Execute query function
-  const executeQuery = async () => {
-    // Clear error and set loading state
-    // This allows retrying after an error
-    dispatch(setQueryLoading({ query, params, database, loading: true }));
-
+  // Execute query function using getQueryResult from file-state.ts
+  const executeQuery = useCallback(async () => {
     try {
-      // Call query API with automatic deduplication (prevents duplicate in-flight requests)
-      const json = await fetchWithCache('/api/query', {
-        method: 'POST',
-        body: JSON.stringify({
-          query,
-          parameters: params,
-          database_name: database,
-          references: references || []
-        }),
-        cacheStrategy: API.query.execute.cache,
-      });
-
-      const data = json.data || json;
-
-      // Store result in Redux (clears error automatically)
-      dispatch(setQueryResult({ query, params, database, data }));
+      await getQueryResult({
+        query,
+        params,
+        database
+      }, { ttl });
     } catch (error) {
       console.error('[useQueryResult] Query execution failed:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      dispatch(setQueryError({ query, params, database, error: errorMessage }));
+      // Error is already stored in Redux by getQueryResult
     }
-  };
+  }, [query, params, database, ttl]);
 
   // Effect: Execute query if needed
   useEffect(() => {
@@ -159,12 +139,12 @@ export function useQueryResult(
     if (loading) return;
 
     executeQuery();
-  }, [needsFetch, loading, query, params, database, references]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [needsFetch, loading, executeQuery]);
 
   // Manual refetch function
-  const refetch = () => {
+  const refetch = useCallback(() => {
     executeQuery();
-  };
+  }, [executeQuery]);
 
   return {
     data: result?.data || null,

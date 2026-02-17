@@ -26,6 +26,7 @@ import { PromiseManager } from '@/lib/utils/promise-manager';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import type { RootState } from '@/store/store';
 import type { ReadFilesInput, ReadFilesOutput, FileState, QueryResult, QuestionContent, FileType, DocumentContent, AssetReference, DbFile } from '@/lib/types';
+import type { LoadError } from '@/lib/types/errors';
 
 /**
  * Augmentation context passed to augment functions
@@ -312,15 +313,12 @@ export async function editFile(options: EditFileOptions): Promise<void> {
           return acc;
         }, {});
 
-        // Import runQuery dynamically to avoid circular dependency
-        const { runQuery } = await import('./query-executor');
-        await runQuery(
-          finalContent.query,
+        // Execute query to populate cache (use getQueryResult from this file)
+        await getQueryResult({
+          query: finalContent.query,
           params,
-          finalContent.database_name,
-          () => store.getState(),
-          store.dispatch
-        );
+          database: finalContent.database_name
+        });
       }
     }
   }
@@ -418,14 +416,12 @@ export async function editFileReplace(
         return acc;
       }, {});
 
-      const { runQuery } = await import('./query-executor');
-      await runQuery(
-        finalContent.query,
+      // Execute query to populate cache (use getQueryResult from this file)
+      await getQueryResult({
+        query: finalContent.query,
         params,
-        finalContent.database_name,
-        () => store.getState(),
-        store.dispatch
-      );
+        database: finalContent.database_name
+      });
     }
   }
 
@@ -861,4 +857,312 @@ export async function createFolder(
     name: result.data.name,
     path: result.data.path
   };
+}
+
+// ============================================================================
+// Read Folder
+// ============================================================================
+
+/**
+ * Options for reading a folder
+ */
+export interface ReadFolderOptions {
+  depth?: number;      // 1 = direct children, -1 = all descendants (default: 1)
+  ttl?: number;        // Time-to-live in ms (default: CACHE_TTL.FOLDER)
+  forceLoad?: boolean; // Force fresh load, bypassing cache (default: false)
+}
+
+/**
+ * Result of reading a folder
+ */
+export interface ReadFolderResult {
+  files: FileState[];  // Child files (filtered by permissions)
+  loading: boolean;
+  error: LoadError | null;
+}
+
+/**
+ * readFolder - Load folder contents with TTL caching and permission filtering
+ *
+ * Behavior:
+ * 1. Check if folder is fresh (within TTL) - return cached if fresh
+ * 2. If stale/missing, fetch from API (getFiles with path and depth)
+ * 3. Store folder file + children in Redux
+ * 4. Filter files based on user permissions and hidden system paths
+ * 5. Return { files, loading, error }
+ *
+ * @param path - Folder path (e.g., '/org', '/team')
+ * @param options - Options (depth, ttl, forceLoad)
+ * @returns Promise<ReadFolderResult>
+ *
+ * Example:
+ * ```typescript
+ * const result = await readFolder('/org', { depth: 1 });
+ * console.log(result.files); // All accessible files in /org
+ * ```
+ */
+export async function readFolder(
+  path: string,
+  options: ReadFolderOptions = {}
+): Promise<ReadFolderResult> {
+  const { depth = 1, ttl = CACHE_TTL.FOLDER, forceLoad = false } = options;
+
+  const state = store.getState();
+
+  // Import selectors and actions dynamically
+  const {
+    selectFileIdByPath,
+    selectFile,
+    selectIsFolderFresh,
+    selectFiles,
+    setFileInfo,
+    setFolderInfo,
+    setLoading
+  } = await import('@/store/filesSlice');
+
+  // Look up folder ID by path
+  const folderId = selectFileIdByPath(state, path);
+  const folder = folderId ? selectFile(state, folderId) : undefined;
+
+  // Check if folder is fresh
+  const isFresh = selectIsFolderFresh(state, path, ttl);
+
+  // If fresh and not forcing, return cached data
+  if (isFresh && !forceLoad) {
+    const childIds = folder?.references || [];
+    const allFiles = selectFiles(state, childIds);
+
+    // Filter by permissions (done below)
+    const filteredFiles = await filterFilesByPermissions(allFiles);
+
+    return {
+      files: filteredFiles,
+      loading: false,
+      error: null
+    };
+  }
+
+  // Set loading state
+  if (folderId) {
+    store.dispatch(setLoading({ id: folderId, loading: true }));
+  }
+
+  try {
+    // Fetch folder contents from API
+    const { getFiles } = await import('@/lib/data/files');
+    const response = await getFiles({ paths: [path], depth });
+
+    // Store folder file itself (for pathIndex)
+    if (response.metadata.folders.length > 0) {
+      store.dispatch(setFileInfo(response.metadata.folders));
+    }
+
+    // Store children and update folder.references
+    store.dispatch(setFolderInfo({ path, fileInfos: response.data }));
+
+    // Get updated state after storing
+    const updatedState = store.getState();
+    const updatedFolderId = selectFileIdByPath(updatedState, path);
+    const updatedFolder = updatedFolderId ? selectFile(updatedState, updatedFolderId) : undefined;
+    const childIds = updatedFolder?.references || [];
+    const allFiles = selectFiles(updatedState, childIds);
+
+    // Filter by permissions
+    const filteredFiles = await filterFilesByPermissions(allFiles);
+
+    return {
+      files: filteredFiles,
+      loading: false,
+      error: null
+    };
+  } catch (error) {
+    console.error('[readFolder] Failed to load folder:', path, error);
+
+    // Clear loading state
+    if (folderId) {
+      store.dispatch(setLoading({ id: folderId, loading: false }));
+    }
+
+    // Convert to LoadError
+    const loadError: LoadError = {
+      message: error instanceof Error ? error.message : String(error),
+      code: 'SERVER_ERROR'
+    };
+
+    return {
+      files: [],
+      loading: false,
+      error: loadError
+    };
+  }
+}
+
+/**
+ * Helper: Filter files by user permissions and hidden system paths
+ */
+async function filterFilesByPermissions(files: FileState[]): Promise<FileState[]> {
+  const state = store.getState();
+
+  // Get effective user and mode
+  const { selectEffectiveUser } = await import('@/store/authSlice');
+  const effectiveUser = selectEffectiveUser(state);
+  const mode = effectiveUser?.mode || 'org';
+
+  // Import access rules and path helpers
+  const { canViewFileType } = await import('@/lib/auth/access-rules.client');
+  const { isHiddenSystemPath } = await import('@/lib/mode/path-resolver');
+
+  // Filter by permissions
+  return files.filter(file => {
+    // Filter by role-based type permissions
+    if (!canViewFileType(effectiveUser?.role || 'viewer', file.type)) {
+      return false;
+    }
+    // Filter out hidden system folders
+    if (file.type === 'folder' && isHiddenSystemPath(file.path, mode)) {
+      return false;
+    }
+    return true;
+  });
+}
+
+// ============================================================================
+// Get Query Result
+// ============================================================================
+
+/**
+ * Options for query execution
+ */
+export interface GetQueryResultOptions {
+  ttl?: number;      // Time-to-live in ms (default: CACHE_TTL.QUERY)
+  skip?: boolean;    // Skip execution (default: false)
+}
+
+/**
+ * Query execution parameters
+ */
+export interface QueryExecutionParams {
+  query: string;
+  params: Record<string, any>;
+  database: string;
+}
+
+/**
+ * Global promise manager for in-flight queries
+ * Prevents duplicate concurrent queries
+ */
+const queryPromiseManager = new PromiseManager<QueryResult>();
+
+/**
+ * getQueryResult - Execute query with TTL caching and promise deduplication
+ *
+ * Behavior:
+ * 1. Check Redux cache - return immediately if fresh (within TTL)
+ * 2. Check promise store - return existing promise if already running
+ * 3. Execute query - store promise, update Redux on completion
+ * 4. Cleanup - remove from promise store when done
+ *
+ * Features:
+ * - TTL-based caching (default: 10 hours)
+ * - Promise deduplication (same query = same promise)
+ * - Redux cache integration
+ * - Automatic loading state management
+ *
+ * @param params - Query execution parameters (query, params, database)
+ * @param options - Options (ttl, skip)
+ * @returns Promise<QueryResult>
+ *
+ * Example:
+ * ```typescript
+ * const result = await getQueryResult({
+ *   query: 'SELECT * FROM users WHERE id = :userId',
+ *   params: { userId: 123 },
+ *   database: 'default_db'
+ * });
+ * console.log(result.rows); // Query results
+ * ```
+ */
+export async function getQueryResult(
+  params: QueryExecutionParams,
+  options: GetQueryResultOptions = {}
+): Promise<QueryResult> {
+  const { query, params: queryParams, database } = params;
+  const { ttl = CACHE_TTL.QUERY, skip = false } = options;
+
+  if (skip) {
+    throw new Error('Cannot execute query with skip=true');
+  }
+
+  const state = store.getState();
+
+  // Import query utilities
+  const { getQueryHash } = await import('@/lib/utils/query-hash');
+  const { selectQueryResult, selectIsQueryFresh } = await import('@/store/queryResultsSlice');
+
+  const queryId = getQueryHash(query, queryParams, database);
+
+  // Step 1: Check Redux cache first (with TTL check)
+  const isFresh = selectIsQueryFresh(state, query, queryParams, database, ttl);
+  const cached = selectQueryResult(state, query, queryParams, database);
+
+  if (cached?.data && isFresh) {
+    console.log('[getQueryResult] Cache hit (fresh):', queryId);
+    return Promise.resolve(cached.data);
+  }
+
+  // Step 2: Execute with deduplication via PromiseManager
+  console.log('[getQueryResult] Starting query execution:', queryId);
+  return queryPromiseManager.execute(queryId, async () => {
+    // Import Redux actions
+    const { setQueryLoading, setQueryResult, setQueryError } = await import('@/store/queryResultsSlice');
+
+    // Set loading state
+    store.dispatch(setQueryLoading({ query, params: queryParams, database, loading: true }));
+
+    try {
+      const response = await fetch('/api/query', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          query,
+          database_name: database,
+          parameters: queryParams
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || `Query execution failed: ${response.statusText}`);
+      }
+
+      const apiResponse: { data: QueryResult } = await response.json();
+      const result = apiResponse.data;
+
+      // Update Redux cache with result (clears loading state)
+      console.log('[getQueryResult] Query completed, caching result:', queryId);
+      store.dispatch(setQueryResult({
+        query,
+        params: queryParams,
+        database,
+        data: result
+      }));
+
+      return result;
+    } catch (error) {
+      console.error('[getQueryResult] Query execution failed:', error);
+
+      // Store error in Redux
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      store.dispatch(setQueryError({
+        query,
+        params: queryParams,
+        database,
+        error: errorMessage
+      }));
+
+      throw error;
+    }
+  });
 }

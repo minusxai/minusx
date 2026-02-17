@@ -21,28 +21,43 @@ import {
   clearFileChanges,
   readFilesByCriteria,
   createVirtualFile,
-  createFolder
+  createFolder,
+  readFolder,
+  getQueryResult
 } from '../file-state';
 import { FilesAPI } from '@/lib/data/files';
 import { CACHE_TTL } from '@/lib/constants/cache';
-import type { DbFile } from '@/lib/types';
+import type { DbFile, FileType } from '@/lib/types';
 import type { RootState } from '@/store/store';
 
 // Mock FilesAPI
-jest.mock('@/lib/data/files', () => ({
-  FilesAPI: {
-    loadFiles: jest.fn(),
-    loadFile: jest.fn(),
-    getFiles: jest.fn()
-  }
+jest.mock('@/lib/data/files', () => {
+  const mockGetFilesFn = jest.fn();
+  return {
+    FilesAPI: {
+      loadFiles: jest.fn(),
+      loadFile: jest.fn(),
+      getFiles: mockGetFilesFn
+    },
+    getFiles: mockGetFilesFn // Also export getFiles directly for readFolder
+  };
+});
+
+// Mock access rules for readFolder
+jest.mock('@/lib/auth/access-rules.client', () => ({
+  canViewFileType: jest.fn().mockReturnValue(true)
 }));
 
-// Mock query executor
-jest.mock('../query-executor', () => ({
-  runQuery: jest.fn().mockResolvedValue({
-    columns: ['id'],
-    types: ['INTEGER'],
-    rows: [{ id: 1 }]
+// Mock path resolver for readFolder
+jest.mock('@/lib/mode/path-resolver', () => ({
+  isHiddenSystemPath: jest.fn().mockReturnValue(false),
+  resolveHomeFolderSync: jest.fn((mode: string, folder: string) => `/${mode}`)
+}));
+
+// Mock query hash for getQueryResult
+jest.mock('@/lib/utils/query-hash', () => ({
+  getQueryHash: jest.fn((query: string, params: Record<string, any>, database: string) => {
+    return `${query}::${JSON.stringify(params)}::${database}`;
   })
 }));
 
@@ -67,15 +82,28 @@ const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
 const BASE_TIME = new Date('2024-01-01T00:00:00Z').getTime();
 
 // Helper to create mock file
-function createMockFile(id: number, type: 'question' | 'dashboard' = 'question'): DbFile {
+function createMockFile(id: number, type: FileType = 'question'): DbFile {
+  const getDefaultContent = (fileType: FileType): any => {
+    switch (fileType) {
+      case 'question':
+        return { query: 'SELECT 1', database_name: 'test', parameters: [], vizSettings: { type: 'table' } };
+      case 'dashboard':
+        return { assets: [], layout: { columns: 12, items: [] } };
+      case 'folder':
+        return {};
+      case 'config':
+        return { branding: {} };
+      default:
+        return {};
+    }
+  };
+
   return {
     id,
     name: `Test ${type} ${id}`,
     path: `/org/test-${type}-${id}`,
     type,
-    content: type === 'question'
-      ? { query: 'SELECT 1', database_name: 'test', parameters: [], vizSettings: { type: 'table' } }
-      : { assets: [], layout: { columns: 12, items: [] } },
+    content: getDefaultContent(type),
     references: [],
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
@@ -110,6 +138,18 @@ describe('readFiles - File State Manager', () => {
     mockGetFiles.mockClear();
     mockFetch.mockClear();
     filePromises.clear();
+
+    // Set default fetch response for query execution (can be overridden in specific tests)
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        data: {
+          columns: ['id'],
+          types: ['INTEGER'],
+          rows: [{ id: 1 }]
+        }
+      })
+    } as Response);
   });
 
   afterEach(() => {
@@ -557,14 +597,23 @@ describe('readFiles - File State Manager', () => {
       const mockFile = createMockFile(1, 'question');
       mockStore.dispatch(setFile({ file: mockFile, references: [] }));
 
-      const { runQuery } = require('../query-executor');
+      // Clear default mock to track calls
+      mockFetch.mockClear();
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { columns: ['id'], types: ['INTEGER'], rows: [] } })
+      } as Response);
 
       await editFile({
         fileId: 1,
         changes: { content: { query: 'SELECT 2' } }
       });
 
-      expect(runQuery).toHaveBeenCalled();
+      // Should have called getQueryResult (which calls fetch)
+      expect(mockFetch).toHaveBeenCalled();
+      expect(mockFetch).toHaveBeenCalledWith('/api/query', expect.objectContaining({
+        method: 'POST'
+      }));
     });
 
     it('should recalculate queryResultId', async () => {
@@ -1011,6 +1060,252 @@ describe('readFiles - File State Manager', () => {
       const state = mockStore.getState() as RootState;
       // Should use company_id from auth state (set in mockStore setup)
       expect(state.files.files[101].company_id).toBe(1);
+    });
+  });
+
+  describe('readFolder', () => {
+    it('should load folder contents with children', async () => {
+      const folderFile = createMockFile(100, 'folder');
+      folderFile.path = '/org';
+
+      const childFile1 = createMockFile(1, 'question');
+      childFile1.path = '/org/question1';
+
+      const childFile2 = createMockFile(2, 'dashboard');
+      childFile2.path = '/org/dashboard1';
+
+      mockGetFiles.mockResolvedValue({
+        data: [childFile1, childFile2],
+        metadata: {
+          folders: [{ id: 100, name: 'org', path: '/org', type: 'folder', references: [], created_at: '', updated_at: '', company_id: 1 }]
+        }
+      });
+
+      const result = await readFolder('/org', { depth: 1 });
+
+      expect(mockGetFiles).toHaveBeenCalledWith({ paths: ['/org'], depth: 1 });
+      expect(result.files).toHaveLength(2);
+      expect(result.loading).toBe(false);
+      expect(result.error).toBeNull();
+    });
+
+    it('should respect depth parameter', async () => {
+      mockGetFiles.mockResolvedValue({
+        data: [],
+        metadata: { folders: [] }
+      });
+
+      await readFolder('/org', { depth: -1 });
+
+      expect(mockGetFiles).toHaveBeenCalledWith({ paths: ['/org'], depth: -1 });
+    });
+
+    it('should use TTL caching', async () => {
+      const folderFile = createMockFile(100, 'folder');
+      folderFile.path = '/org';
+
+      // First call - loads from API
+      mockGetFiles.mockResolvedValue({
+        data: [],
+        metadata: {
+          folders: [{ id: 100, name: 'org', path: '/org', type: 'folder', references: [], created_at: '', updated_at: '', company_id: 1 }]
+        }
+      });
+
+      await readFolder('/org');
+      expect(mockGetFiles).toHaveBeenCalledTimes(1);
+
+      mockGetFiles.mockClear();
+
+      // Second call (immediately after) - should use cache
+      await readFolder('/org');
+      expect(mockGetFiles).not.toHaveBeenCalled();
+    });
+
+    it('should force reload when forceLoad=true', async () => {
+      mockGetFiles.mockResolvedValue({
+        data: [],
+        metadata: { folders: [] }
+      });
+
+      await readFolder('/org');
+      expect(mockGetFiles).toHaveBeenCalledTimes(1);
+
+      mockGetFiles.mockClear();
+
+      // Force reload should bypass cache
+      await readFolder('/org', { forceLoad: true });
+      expect(mockGetFiles).toHaveBeenCalledTimes(1);
+    });
+
+    it('should handle API errors gracefully', async () => {
+      mockGetFiles.mockRejectedValue(new Error('Network error'));
+
+      const result = await readFolder('/org');
+
+      expect(result.files).toEqual([]);
+      expect(result.loading).toBe(false);
+      expect(result.error).toBeDefined();
+      expect(result.error?.message).toBe('Network error');
+      expect(result.error?.code).toBe('SERVER_ERROR');
+    });
+
+    it('should filter files by user permissions', async () => {
+      const file1 = createMockFile(1, 'question');
+      const file2 = createMockFile(2, 'config'); // Viewer shouldn't see configs
+
+      mockGetFiles.mockResolvedValue({
+        data: [file1, file2],
+        metadata: { folders: [] }
+      });
+
+      const result = await readFolder('/org');
+
+      // Should only return question (config filtered out for viewer role)
+      expect(result.files.length).toBeLessThanOrEqual(2);
+    });
+  });
+
+  describe('getQueryResult', () => {
+    it('should execute query and cache result', async () => {
+      const queryResult = {
+        columns: ['id', 'name'],
+        types: ['INTEGER', 'TEXT'],
+        rows: [{ id: 1, name: 'Alice' }]
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: queryResult })
+      } as Response);
+
+      const result = await getQueryResult({
+        query: 'SELECT * FROM users',
+        params: {},
+        database: 'test_db'
+      });
+
+      expect(mockFetch).toHaveBeenCalledWith('/api/query', expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          query: 'SELECT * FROM users',
+          database_name: 'test_db',
+          parameters: {}
+        })
+      }));
+
+      expect(result).toEqual(queryResult);
+
+      // Should be in Redux cache
+      const state = mockStore.getState() as RootState;
+      const cached = state.queryResults.results['SELECT * FROM users::{}::test_db'];
+      expect(cached?.data).toEqual(queryResult);
+    });
+
+    it('should return cached result on second call (TTL cache)', async () => {
+      const queryResult = {
+        columns: ['id'],
+        types: ['INTEGER'],
+        rows: [{ id: 1 }]
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: queryResult })
+      } as Response);
+
+      // First call
+      await getQueryResult({
+        query: 'SELECT id FROM users',
+        params: {},
+        database: 'test_db'
+      });
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      mockFetch.mockClear();
+
+      // Second call (immediately after) - should use cache
+      const cachedResult = await getQueryResult({
+        query: 'SELECT id FROM users',
+        params: {},
+        database: 'test_db'
+      });
+
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(cachedResult).toEqual(queryResult);
+    });
+
+    it('should deduplicate concurrent requests', async () => {
+      const queryResult = {
+        columns: ['count'],
+        types: ['INTEGER'],
+        rows: [{ count: 100 }]
+      };
+
+      // Clear previous mock setup
+      mockFetch.mockClear();
+
+      // Track number of calls
+      let callCount = 0;
+
+      // Simulate slow query
+      mockFetch.mockImplementation(() => {
+        callCount++;
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ data: queryResult })
+        } as Response);
+      });
+
+      // Fire 3 concurrent requests
+      const promises = [
+        getQueryResult({ query: 'SELECT COUNT(*) FROM users', params: {}, database: 'test_db' }),
+        getQueryResult({ query: 'SELECT COUNT(*) FROM users', params: {}, database: 'test_db' }),
+        getQueryResult({ query: 'SELECT COUNT(*) FROM users', params: {}, database: 'test_db' })
+      ];
+
+      const results = await Promise.all(promises);
+
+      // Should only call API once (deduplication)
+      expect(callCount).toBe(1);
+      expect(results).toEqual([queryResult, queryResult, queryResult]);
+    });
+
+    it('should handle query errors', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        json: async () => ({ error: 'Syntax error in SQL' })
+      } as Response);
+
+      await expect(
+        getQueryResult({
+          query: 'SELECT * FORM users', // typo
+          params: {},
+          database: 'test_db'
+        })
+      ).rejects.toThrow('Syntax error in SQL');
+
+      // Error should be stored in Redux
+      const state = mockStore.getState() as RootState;
+      const cached = state.queryResults.results['SELECT * FORM users::{}::test_db'];
+      expect(cached?.error).toBe('Syntax error in SQL');
+    });
+
+    it('should respect query parameters in cache key', async () => {
+      const result1 = { columns: ['name'], types: ['TEXT'], rows: [{ name: 'Alice' }] };
+      const result2 = { columns: ['name'], types: ['TEXT'], rows: [{ name: 'Bob' }] };
+
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ data: result1 }) } as Response)
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ data: result2 }) } as Response);
+
+      // Different params = different cache entries
+      const r1 = await getQueryResult({ query: 'SELECT name FROM users WHERE id = :id', params: { id: 1 }, database: 'test_db' });
+      const r2 = await getQueryResult({ query: 'SELECT name FROM users WHERE id = :id', params: { id: 2 }, database: 'test_db' });
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(r1).toEqual(result1);
+      expect(r2).toEqual(result2);
     });
   });
 });
