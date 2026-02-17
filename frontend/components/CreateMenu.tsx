@@ -11,7 +11,7 @@
 import { Box, HStack, VStack, Text, Icon, Menu, Portal, Button } from '@chakra-ui/react';
 import { LuPlus, LuRocket } from 'react-icons/lu';
 import { useState } from 'react';
-import { useRouter } from '@/lib/navigation/use-navigation';
+import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import { useAppSelector } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
@@ -40,7 +40,7 @@ export default function CreateMenu({
   placement = 'bottom-start',
   onClose
 }: CreateMenuProps) {
-  const router = useRouter();
+  const { navigate } = useNavigationGuard();
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const [isFolderModalOpen, setIsFolderModalOpen] = useState(false);
   const { canShowInCreateMenu } = useAccessRules();
@@ -62,12 +62,12 @@ export default function CreateMenu({
     }
 
     const folderParam = `?folder=${encodeURIComponent(targetFolder)}`;
-    router.push(`/new/${fileType}${folderParam}`);
+    navigate(`/new/${fileType}${folderParam}`);
     onClose?.();
   };
 
   const handleExplore = () => {
-    router.push('/explore');
+    navigate('/explore');
     onClose?.();
   };
 

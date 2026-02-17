@@ -4,7 +4,7 @@ import { Flex, Text, Menu, Icon, Box } from '@chakra-ui/react';
 import { Link } from '@/components/ui/Link';
 import { LuChevronRight, LuChevronDown } from 'react-icons/lu';
 import { BaseFileMetadata } from '@/lib/types';
-import { useRouter } from '@/lib/navigation/use-navigation';
+import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import { useAppSelector } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
@@ -23,7 +23,7 @@ interface BreadcrumbProps {
 }
 
 export default function Breadcrumb({ items, siblingFiles, currentFileId }: BreadcrumbProps) {
-  const router = useRouter();
+  const { navigate } = useNavigationGuard();
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const isTutorialMode = effectiveUser?.mode === 'tutorial';
   const isLastItem = (index: number) => index === items.length - 1;
@@ -86,7 +86,7 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId }: Bread
                       <Menu.Item
                         key={file.id}
                         value={file.id.toString()}
-                        onClick={() => router.push(`/f/${file.id}`)}
+                        onClick={() => navigate(`/f/${file.id}`)}
                         bg={file.id === currentFileId ? 'bg.subtle' : 'transparent'}
                         fontWeight={file.id === currentFileId ? '600' : '400'}
                         borderRadius="sm"

@@ -14,6 +14,7 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode,
 import { usePathname } from 'next/navigation';
 import { useRouter } from './use-navigation';
 import { useAppSelector } from '@/store/hooks';
+import { selectActiveConversation } from '@/store/chatSlice';
 import { Dialog, Portal, Button, Text } from '@chakra-ui/react';
 import { preserveParams } from './url-utils';
 
@@ -104,19 +105,37 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
 
   const currentFileName = currentFile?.name || dirtyVirtualFile?.name || 'Untitled';
 
+  // Check if agent is running in active conversation
+  const activeConversationID = useAppSelector(selectActiveConversation);
+  const activeConversation = useAppSelector(state =>
+    activeConversationID ? state.chat.conversations[activeConversationID] : undefined
+  );
+  const isAgentRunning = activeConversation?.executionState === 'WAITING'
+    || activeConversation?.executionState === 'EXECUTING'
+    || activeConversation?.executionState === 'STREAMING';
+
+  // Guard navigation if file is dirty OR agent is running
+  const shouldGuardNavigation = isCurrentFileDirty || isAgentRunning;
+
   // Modal state
   const [isOpen, setIsOpen] = useState(false);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
+  const [guardReason, setGuardReason] = useState<'dirty' | 'agent-running' | null>(null);
 
-  // Navigate function that checks for dirty state
+  const openGuardModal = useCallback((href: string) => {
+    setPendingHref(href);
+    setGuardReason(isAgentRunning ? 'agent-running' : 'dirty');
+    setIsOpen(true);
+  }, [isAgentRunning]);
+
+  // Navigate function that checks for dirty state or running agent
   const navigate = useCallback((href: string) => {
-    if (isCurrentFileDirty) {
-      setPendingHref(href);
-      setIsOpen(true);
+    if (shouldGuardNavigation) {
+      openGuardModal(href);
     } else {
       router.push(href);
     }
-  }, [isCurrentFileDirty, router]);
+  }, [shouldGuardNavigation, openGuardModal, router]);
 
   // Confirm navigation
   const handleConfirm = useCallback(() => {
@@ -131,11 +150,19 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
   const handleCancel = useCallback(() => {
     setIsOpen(false);
     setPendingHref(null);
+    setGuardReason(null);
   }, []);
+
+  // Auto-dismiss modal if agent finishes while modal is open for that reason
+  useEffect(() => {
+    if (isOpen && guardReason === 'agent-running' && !isAgentRunning) {
+      handleCancel();
+    }
+  }, [isOpen, guardReason, isAgentRunning, handleCancel]);
 
   // Handle browser beforeunload (tab close, refresh, external navigation)
   useEffect(() => {
-    if (!isCurrentFileDirty) return;
+    if (!shouldGuardNavigation) return;
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
@@ -146,7 +173,7 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [isCurrentFileDirty]);
+  }, [shouldGuardNavigation]);
 
   // Intercept link clicks globally
   useEffect(() => {
@@ -180,22 +207,21 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
         return;
       }
 
-      // Check if the current file has unsaved changes
-      if (isCurrentFileDirty) {
+      // Check if the current file has unsaved changes or agent is running
+      if (shouldGuardNavigation) {
         e.preventDefault();
         e.stopPropagation();
 
         // Preserve URL parameters
         const preservedHref = preserveParams(href);
-        setPendingHref(preservedHref);
-        setIsOpen(true);
+        openGuardModal(preservedHref);
       }
     };
 
     // Use capture phase to intercept before other handlers
     document.addEventListener('click', handleClick, true);
     return () => document.removeEventListener('click', handleClick, true);
-  }, [isCurrentFileDirty]);
+  }, [shouldGuardNavigation, openGuardModal]);
 
   return (
     <NavigationGuardContext.Provider value={{ navigate }}>
@@ -214,11 +240,16 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
               borderColor="border.default"
             >
               <Dialog.Header px={6} py={4} borderBottom="1px solid" borderColor="border.default">
-                <Dialog.Title fontWeight="700" fontSize="xl" fontFamily={"mono"}>Discard Changes?</Dialog.Title>
+                <Dialog.Title fontWeight="700" fontSize="xl" fontFamily={"mono"}>
+                  {guardReason === 'agent-running' ? 'Agent is Running' : 'Discard Changes?'}
+                </Dialog.Title>
               </Dialog.Header>
               <Dialog.Body px={6} py={5}>
                 <Text fontSize="sm" lineHeight="1.6">
-                  You have unsaved changes in "{currentFileName}". Are you sure you want to leave without saving?
+                  {guardReason === 'agent-running'
+                    ? 'An agent is currently running. Are you sure you want to leave? The agent will continue running in the background but you may lose track of its progress.'
+                    : `You have unsaved changes in "${currentFileName}". Are you sure you want to leave without saving?`
+                  }
                 </Text>
               </Dialog.Body>
               <Dialog.Footer px={6} py={4} gap={3} borderTop="1px solid" borderColor="border.default" justifyContent="flex-end">

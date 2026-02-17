@@ -156,7 +156,7 @@ export default function ChatInput({
                     flexShrink={0}
                     px={2}
                   > Stop
-                    <Icon as={LuSquare} boxSize={3.5} />
+                    <Icon as={LuSquare} boxSize={3.5} fill="white"/>
                   </IconButton>
                 ) : (
                   <IconButton

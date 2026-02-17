@@ -2,6 +2,7 @@
 
 import { use, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
+import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import { Box, VStack, HStack, Flex, useBreakpointValue, Button, Icon, Span } from '@chakra-ui/react';
 import { LuPlus, LuGraduationCap } from 'react-icons/lu';
 import Breadcrumb from '@/components/Breadcrumb';
@@ -25,6 +26,7 @@ interface PathPageProps {
 
 export default function PathPage({ params }: PathPageProps) {
   const router = useRouter();
+  const { navigate } = useNavigationGuard();
   const user = useAppSelector(state => state.auth.user);
   const [selectedVersion, setSelectedVersion] = useState<number | undefined>(undefined);
   const [selectedContextPath, setSelectedContextPath] = useState<string | null>(null);
@@ -144,7 +146,7 @@ export default function PathPage({ params }: PathPageProps) {
       elements.push(
         <Button
           key="add-connection"
-          onClick={() => router.push('/new/connection')}
+          onClick={() => navigate('/new/connection')}
           bg="accent.teal"
           color="white"
           size="sm"

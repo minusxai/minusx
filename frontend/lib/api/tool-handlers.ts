@@ -354,7 +354,9 @@ registerFrontendTool('Navigate', async (args, context) => {
   const { getRouter } = await import('@/lib/navigation/use-navigation');
 
   // Check if user confirmation is required
-  const askForConfirmation = state?.ui?.askForConfirmation ?? false;
+//   const askForConfirmation = state?.ui?.askForConfirmation ?? false;
+// All navigation is always confirmed for now since it's a critical action and we don't want accidental navigations.
+  const askForConfirmation = true;
 
   if (askForConfirmation) {
     // Check if user already confirmed
@@ -374,10 +376,10 @@ registerFrontendTool('Navigate', async (args, context) => {
       // First time - ask for confirmation
       throw new UserInputException({
         type: 'confirmation',
-        title: 'Navigate away?',
-        message: `Do you want to navigate to ${destination}?`,
-        confirmText: 'Yes',
-        cancelText: 'No'
+        title: 'Navigation request',
+        message: `The agent wants to navigate to ${destination}. Allow it?`,
+        confirmText: 'Go ahead',
+        cancelText: 'Stay here'
       });
     }
 
