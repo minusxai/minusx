@@ -413,12 +413,11 @@ export function SummarizeSection({
                 Edit metric
               </Text>
               <HStack gap={1.5} align="center">
-                <Text fontSize="xs" color="fg.muted" flexShrink={0}>as</Text>
+                <Text fontSize="xs" color="fg.muted">as</Text>
                 <AliasInput
                   value={editAlias}
                   onChange={(alias) => setEditAlias(alias || '')}
                   placeholder="alias"
-                  width="90px"
                 />
               </HStack>
             </HStack>
@@ -434,11 +433,9 @@ export function SummarizeSection({
                   textAlign="center"
                   whiteSpace="nowrap"
                   cursor="pointer"
-                  bg={selectedAgg === agg.value ? 'rgba(134, 239, 172, 0.2)' : 'bg.subtle'}
-                  color={selectedAgg === agg.value ? 'accent.teal' : 'fg.muted'}
-                  border="1px solid"
-                  borderColor={selectedAgg === agg.value ? 'rgba(134, 239, 172, 0.4)' : 'border.muted'}
-                  _hover={{ bg: selectedAgg === agg.value ? 'rgba(134, 239, 172, 0.25)' : 'bg.muted' }}
+                  bg={selectedAgg === agg.value ? 'accent.teal' : 'bg.subtle'}
+                  color={selectedAgg === agg.value ? 'white' : 'fg.muted'}
+                  _hover={{ bg: selectedAgg === agg.value ? 'accent.teal/80' : 'bg.muted' }}
                   transition="all 0.15s ease"
                   onClick={() => handleAggregateChange(agg.value)}
                 >
@@ -504,11 +501,9 @@ export function SummarizeSection({
                 textAlign="center"
                 whiteSpace="nowrap"
                 cursor="pointer"
-                bg={selectedAgg === agg.value ? 'rgba(134, 239, 172, 0.2)' : 'bg.subtle'}
-                color={selectedAgg === agg.value ? 'accent.teal' : 'fg.muted'}
-                border="1px solid"
-                borderColor={selectedAgg === agg.value ? 'rgba(134, 239, 172, 0.4)' : 'border.muted'}
-                _hover={{ bg: selectedAgg === agg.value ? 'rgba(134, 239, 172, 0.25)' : 'bg.muted' }}
+                bg={selectedAgg === agg.value ? 'accent.teal' : 'bg.subtle'}
+                color={selectedAgg === agg.value ? 'white' : 'fg.muted'}
+                _hover={{ bg: selectedAgg === agg.value ? 'accent.teal/80' : 'bg.muted' }}
                 transition="all 0.15s ease"
                 onClick={() => setSelectedAgg(agg.value)}
               >
@@ -541,11 +536,9 @@ export function SummarizeSection({
         </PickerPopover>
 
         {/* "by" separator - only show if we have metrics */}
-        {metrics.length > 0 && (dimensions.length > 0 || true) && (
-          <Text fontSize="xs" color="fg.muted" fontWeight="500" px={1}>
-            by
-          </Text>
-        )}
+        <Text fontSize="xs" color="fg.muted" fontWeight="500" px={1}>
+            group by
+        </Text>
 
         {/* Dimensions */}
         {dimensions.map((dim, idx) => {

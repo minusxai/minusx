@@ -25,7 +25,7 @@ export function PickerPopover({
   open,
   onOpenChange,
   trigger,
-  width = '280px',
+  width = '350px',
   padding = 2,
   positioning,
   children,
