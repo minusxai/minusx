@@ -20,6 +20,75 @@ import { ActionToolbar } from './ActionToolbar';
 import { JoinBuilder } from './JoinBuilder';
 import { OrderByBuilder } from './OrderByBuilder';
 
+function IRDebugView({ ir }: { ir: QueryIR | null }) {
+  const showDebug = useAppSelector(selectShowDebug);
+  const [showIRJson, setShowIRJson] = useState(false);
+
+  if (!showDebug) return null;
+
+  return (
+    <Box
+      bg="bg.subtle"
+      borderRadius="lg"
+      border="1px solid"
+      borderColor="border.muted"
+      overflow="hidden"
+    >
+      <HStack
+        as="button"
+        width="100%"
+        justify="space-between"
+        px={3}
+        py={2.5}
+        cursor="pointer"
+        _hover={{ bg: 'bg.muted' }}
+        transition="all 0.15s ease"
+        onClick={() => setShowIRJson((prev) => !prev)}
+      >
+        <HStack gap={2}>
+          <Box color="fg.muted">
+            <LuCode size={14} />
+          </Box>
+          <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
+            IR JSON
+          </Text>
+        </HStack>
+        <Box color="fg.muted">
+          {showIRJson ? <LuChevronDown size={14} /> : <LuChevronRight size={14} />}
+        </Box>
+      </HStack>
+      {showIRJson && ir && (
+        <Box
+          px={3}
+          pb={3}
+          maxH="300px"
+          overflowY="auto"
+        >
+          <Box
+            p={3}
+            bg="bg.muted"
+            borderRadius="md"
+            border="1px solid"
+            borderColor="border.muted"
+          >
+            <Text
+              as="pre"
+              fontSize="xs"
+              fontFamily="mono"
+              whiteSpace="pre-wrap"
+              wordBreak="break-all"
+              color="fg.muted"
+              lineHeight="1.6"
+            >
+              {JSON.stringify(ir, null, 2)}
+            </Text>
+          </Box>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
 interface QueryBuilderProps {
   databaseName: string;
   sql: string;
@@ -35,8 +104,6 @@ export function QueryBuilder({
   onExecute,
   isExecuting = false,
 }: QueryBuilderProps) {
-  const showDebug = useAppSelector(selectShowDebug);
-
   const [ir, setIr] = useState<QueryIR | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,7 +120,6 @@ export function QueryBuilder({
   const [showHavingSection, setShowHavingSection] = useState(false);
   const [showJoinPanel, setShowJoinPanel] = useState(false);
   const [showSortPanel, setShowSortPanel] = useState(false);
-  const [showIRJson, setShowIRJson] = useState(false);
 
   // Load IR from SQL when it changes externally
   useEffect(() => {
@@ -81,9 +147,11 @@ export function QueryBuilder({
 
       try {
         const result = await CompletionsAPI.sqlToIR({ sql });
-
+        console.log("[result]", result);
+        if (result.ir) {
+            setIr(result.ir);
+        }
         if (result.success && result.ir) {
-          setIr(result.ir);
           lastSqlSent.current = sql;
 
           // Store original SQL and IR for dirty tracking
@@ -267,6 +335,7 @@ export function QueryBuilder({
             Loading query builder...
           </Text>
         </HStack>
+        <IRDebugView ir={ir} />
       </Box>
     );
   }
@@ -283,6 +352,7 @@ export function QueryBuilder({
             This query cannot be edited in GUI mode. Switch to SQL mode to edit.
           </Text>
         </VStack>
+        <IRDebugView ir={ir} />
       </Box>
     );
   }
@@ -293,7 +363,7 @@ export function QueryBuilder({
       <Box p={4}>
         <VStack align="stretch" gap={4}>
           <HStack gap={2}>
-            <LuSparkles size={16} color="#a5b4fc" />
+            <LuSparkles size={16} />
             <Text fontSize="sm" color="fg.muted">
               Start by selecting a table to query
             </Text>
@@ -305,6 +375,7 @@ export function QueryBuilder({
               onChange={handleFromTableChange}
             />
           )}
+          <IRDebugView ir={ir} />
         </VStack>
       </Box>
     );
@@ -448,67 +519,7 @@ export function QueryBuilder({
         )}
 
         {/* IR JSON Debug View - only visible when showDebug is enabled in settings */}
-        {showDebug && (
-          <Box
-            bg="rgba(255, 255, 255, 0.02)"
-            borderRadius="lg"
-            border="1px solid"
-            borderColor="rgba(255, 255, 255, 0.06)"
-            overflow="hidden"
-          >
-            <HStack
-              as="button"
-              width="100%"
-              justify="space-between"
-              px={3}
-              py={2.5}
-              cursor="pointer"
-              _hover={{ bg: 'rgba(255, 255, 255, 0.03)' }}
-              transition="all 0.15s ease"
-              onClick={() => setShowIRJson((prev) => !prev)}
-            >
-              <HStack gap={2}>
-                <Box color="fg.muted">
-                  <LuCode size={14} />
-                </Box>
-                <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
-                  IR JSON
-                </Text>
-              </HStack>
-              <Box color="fg.muted">
-                {showIRJson ? <LuChevronDown size={14} /> : <LuChevronRight size={14} />}
-              </Box>
-            </HStack>
-            {showIRJson && ir && (
-              <Box
-                px={3}
-                pb={3}
-                maxH="300px"
-                overflowY="auto"
-              >
-                <Box
-                  p={3}
-                  bg="rgba(0, 0, 0, 0.2)"
-                  borderRadius="md"
-                  border="1px solid"
-                  borderColor="rgba(255, 255, 255, 0.04)"
-                >
-                  <Text
-                    as="pre"
-                    fontSize="xs"
-                    fontFamily="mono"
-                    whiteSpace="pre-wrap"
-                    wordBreak="break-all"
-                    color="rgba(148, 163, 184, 0.8)"
-                    lineHeight="1.6"
-                  >
-                    {JSON.stringify(ir, null, 2)}
-                  </Text>
-                </Box>
-              </Box>
-            )}
-          </Box>
-        )}
+        <IRDebugView ir={ir} />
       </VStack>
     </Box>
   );
