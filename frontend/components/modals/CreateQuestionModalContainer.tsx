@@ -3,10 +3,10 @@
 import { useState, useCallback, useEffect, MutableRefObject } from 'react';
 import { Box, Button, Dialog, HStack, Text, VStack } from '@chakra-ui/react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { useNewFile } from '@/lib/hooks/useNewFile';
-import { useFile } from '@/lib/hooks/useFile';
+import { useNewFile } from '@/lib/hooks/file-state-hooks';
+import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile, publishFile, clearFileChanges } from '@/lib/api/file-state';
-import { useQueryResult } from '@/lib/hooks/useQueryResult';
+import { useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { selectIsDirty, selectMergedContent, selectEffectiveName, setEphemeral, deleteFile } from '@/store/filesSlice';
 import { QuestionContent } from '@/lib/types';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';

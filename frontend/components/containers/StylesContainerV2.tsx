@@ -6,7 +6,7 @@
  */
 import { useAppSelector } from '@/store/hooks';
 import { selectIsDirty, isVirtualFileId, type FileId } from '@/store/filesSlice';
-import { useFile } from '@/lib/hooks/useFile';
+import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile, publishFile, reloadFile } from '@/lib/api/file-state';
 import StylesEditor from '@/components/config/StylesEditor';
 import { StylesContent } from '@/lib/types';

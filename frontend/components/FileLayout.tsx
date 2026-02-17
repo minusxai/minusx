@@ -21,7 +21,7 @@ import SearchBar from './SearchBar';
 import { ReactNode } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { DbFile } from '@/lib/types';
-import { useFolder } from '@/lib/hooks/useFolder';
+import { useFolder } from '@/lib/hooks/file-state-hooks';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import { setLeftSidebarCollapsed } from '@/store/uiSlice';
 import { useEffect } from 'react';

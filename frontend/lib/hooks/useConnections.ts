@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { type ConnectionWithSchema } from '@/store/filesSlice';
-import { useFilesByCriteria } from './useFilesByCriteria';
+import { useFilesByCriteria } from './file-state-hooks';
 import type { ConnectionContent } from '@/lib/types';
 import { CACHE_TTL } from '@/lib/constants/cache';
 

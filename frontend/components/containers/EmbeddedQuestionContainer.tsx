@@ -13,7 +13,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { QuestionVisualization, ContainerConfig } from '@/components/question/QuestionVisualization';
 import { QuestionContent, QuestionParameter } from '@/lib/types';
-import { useQueryResult } from '@/lib/hooks/useQueryResult';
+import { useQueryResult } from '@/lib/hooks/file-state-hooks';
 
 interface EmbeddedQuestionContainerProps {
   question: QuestionContent;

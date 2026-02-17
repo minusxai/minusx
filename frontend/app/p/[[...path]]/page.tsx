@@ -14,7 +14,7 @@ import ProductTour from '@/components/ProductTour';
 import { useAppSelector } from '@/store/hooks';
 import { switchMode } from '@/lib/mode/mode-utils';
 import { isAdmin } from '@/lib/auth/role-helpers';
-import { useFolder } from '@/lib/hooks/useFolder';
+import { useFolder } from '@/lib/hooks/file-state-hooks';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { resolvePath, resolveHomeFolderSync, SYSTEM_FOLDERS, isHiddenSystemPath } from '@/lib/mode/path-resolver';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';

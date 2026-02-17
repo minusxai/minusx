@@ -16,7 +16,7 @@ import { Box } from '@chakra-ui/react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { selectIsDirty, selectMergedContent, selectEffectiveName, type FileId } from '@/store/filesSlice';
 import { selectDashboardEditMode, setDashboardEditMode, setRightSidebarCollapsed, setActiveSidebarSection } from '@/store/uiSlice';
-import { useFile } from '@/lib/hooks/useFile';
+import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile, publishFile, clearFileChanges } from '@/lib/api/file-state';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import DashboardView from '@/components/views/DashboardView';

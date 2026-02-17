@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from '@/lib/navigation/use-navigation';
-import { useFile } from '@/lib/hooks/useFile';
+import { useFile } from '@/lib/hooks/file-state-hooks';
 import { Box, Spinner, Text } from '@chakra-ui/react';
 import SessionPlayer from '@/components/SessionPlayer';
 import { SessionRecordingFileContent } from '@/lib/types';

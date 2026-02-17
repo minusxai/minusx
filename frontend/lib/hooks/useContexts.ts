@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useAppSelector } from '@/store/hooks';
-import { useFiles } from './useFiles';
-import { useFilesByCriteria } from './useFilesByCriteria';
+import { useFiles } from './file-state-hooks';
+import { useFilesByCriteria } from './file-state-hooks';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type { DbFile } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';

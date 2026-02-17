@@ -14,7 +14,7 @@
  */
 import { useAppSelector } from '@/store/hooks';
 import { selectIsDirty, type FileId } from '@/store/filesSlice';
-import { useFile } from '@/lib/hooks/useFile';
+import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile, publishFile, reloadFile } from '@/lib/api/file-state';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import PresentationView from '@/components/views/PresentationView';

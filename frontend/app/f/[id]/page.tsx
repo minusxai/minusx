@@ -4,7 +4,7 @@ import { use, useState, useMemo, useEffect } from 'react';
 import { Box, Spinner, Center, Text } from '@chakra-ui/react';
 import FileLayout from '@/components/FileLayout';
 import FileView from '@/components/FileView';
-import { useFile } from '@/lib/hooks/useFile';
+import { useFile } from '@/lib/hooks/file-state-hooks';
 import { parseFileId } from '@/lib/slug-utils';
 import { useAppSelector } from '@/store/hooks';
 import { selectAppState } from '@/lib/appState';

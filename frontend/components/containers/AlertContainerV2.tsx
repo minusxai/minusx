@@ -11,7 +11,7 @@ import { selectIsDirty, selectMergedContent, selectEffectiveName, type FileId } 
 import { setRuns, setSelectedRun, selectAlertRuns, selectSelectedAlertRunId } from '@/store/alertRunsSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { resolvePath } from '@/lib/mode/path-resolver';
-import { useFile } from '@/lib/hooks/useFile';
+import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile, publishFile, clearFileChanges } from '@/lib/api/file-state';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import { FilesAPI } from '@/lib/data/files';

@@ -21,7 +21,7 @@ import {
   LuVideo,
 } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
-import { useFolder } from '@/lib/hooks/useFolder';
+import { useFolder } from '@/lib/hooks/file-state-hooks';
 import FilesList from './FilesList';
 import GettingStartedSection from './GettingStartedSection';
 import GettingStartedV2, { DefaultEmptyState } from './GettingStartedV2';

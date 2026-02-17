@@ -7,7 +7,7 @@
  */
 import { useAppSelector } from '@/store/hooks';
 import { selectIsDirty, selectEffectiveName, type FileId } from '@/store/filesSlice';
-import { useFile } from '@/lib/hooks/useFile';
+import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile, publishFile, clearFileChanges, reloadFile } from '@/lib/api/file-state';
 import ContextEditorV2 from '@/components/context/ContextEditorV2';
 import { ContextContent, ContextVersion, DocEntry } from '@/lib/types';

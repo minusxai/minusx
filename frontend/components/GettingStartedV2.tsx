@@ -23,7 +23,7 @@ import type { IconType } from 'react-icons';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { useContexts } from '@/lib/hooks/useContexts';
-import { useFilesByCriteria } from '@/lib/hooks/useFilesByCriteria';
+import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { resolveHomeFolderSync, SYSTEM_FOLDERS, resolvePath } from '@/lib/mode/path-resolver';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';
