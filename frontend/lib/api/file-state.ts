@@ -25,7 +25,7 @@ import { FilesAPI } from '@/lib/data/files';
 import { PromiseManager } from '@/lib/utils/promise-manager';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import type { RootState } from '@/store/store';
-import type { ReadFilesInput, ReadFilesOutput, FileState, QueryResult, QuestionContent, FileType, DocumentContent, AssetReference, DbFile } from '@/lib/types';
+import type { ReadFilesInput, ReadFilesOutput, FileState, QueryResult, QuestionContent, FileType, DocumentContent, AssetReference, DbFile, BaseFileContent } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
 
 /**
@@ -396,6 +396,39 @@ export async function editFileReplace(
     };
   }
 
+  // Validate required fields based on file type
+  if (fileState.type === 'question') {
+    const questionContent = editedContent as QuestionContent;
+    if (!questionContent.database_name) {
+      return {
+        success: false,
+        error: 'Question requires database_name field'
+      };
+    }
+    if (!questionContent.query) {
+      return {
+        success: false,
+        error: 'Question requires query field'
+      };
+    }
+  }
+
+  if (fileState.type === 'dashboard') {
+    const dashboardContent = editedContent as DocumentContent;
+    if (!dashboardContent.assets) {
+      return {
+        success: false,
+        error: 'Dashboard requires assets field'
+      };
+    }
+    if (!dashboardContent.layout) {
+      return {
+        success: false,
+        error: 'Dashboard requires layout field'
+      };
+    }
+  }
+
   // Store edit in Redux
   store.dispatch(setEdit({
     fileId,
@@ -598,8 +631,9 @@ export async function publishFile(
     }
 
     const result = await response.json();
-    savedId = result.data.id;
-    savedName = result.data.name;
+    // CreateFileResult wraps DbFile in { data: DbFile }, and successResponse wraps that
+    savedId = result.data.data?.id || result.data.id;
+    savedName = result.data.data?.name || result.data.name;
   } else {
     // Update existing file
     const response = await fetch(`/api/files/${fileId}`, {
@@ -614,15 +648,83 @@ export async function publishFile(
     }
 
     const result = await response.json();
-    savedId = result.data.id;
-    savedName = result.data.name;
+    // SaveFileResult wraps DbFile in { data: DbFile }, and successResponse wraps that
+    // So we get { success: true, data: { data: DbFile } }
+    savedId = result.data.data?.id || result.data.id;
+    savedName = result.data.data?.name || result.data.name;
   }
 
-  // Clear changes
+  // Clear changes for the main file
   store.dispatch(clearEdits(fileId));
   store.dispatch(clearMetadataEdits(fileId));
 
-  // TODO: Handle cascade save of dirty references
+  // Cascade save: Collect and batch-save dirty referenced files
+  const references = fileState.references || [];
+  const currentState = store.getState();
+  const dirtyRefs: Array<{
+    id: number;
+    name: string;
+    path: string;
+    content: BaseFileContent;
+    references: number[];
+  }> = [];
+
+  for (const refId of references) {
+    const refState = selectFile(currentState, refId);
+    if (!refState) continue;
+
+    // Check if reference is dirty
+    const hasPersistableChanges = refState.persistableChanges && Object.keys(refState.persistableChanges).length > 0;
+    const hasMetadataChanges = refState.metadataChanges && Object.keys(refState.metadataChanges).length > 0;
+
+    if (hasPersistableChanges || hasMetadataChanges) {
+      // Get merged content and metadata
+      const editedContent = selectMergedContent(currentState, refId);
+      if (!editedContent) continue; // Skip if content is undefined
+
+      const editedName = refState.metadataChanges?.name ?? refState.name;
+      const editedPath = refState.metadataChanges?.path ?? refState.path;
+
+      dirtyRefs.push({
+        id: refId,
+        name: editedName,
+        path: editedPath,
+        content: editedContent,
+        references: refState.references || []
+      });
+    }
+  }
+
+  // If there are dirty references, batch-save them atomically
+  if (dirtyRefs.length > 0) {
+    const companyId = currentState.auth.user?.companyId;
+    if (!companyId) {
+      throw new Error('Company ID not found in auth state');
+    }
+
+    const response = await fetch('/api/files/batch-save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        files: dirtyRefs,
+        companyId
+      })
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to batch-save referenced files');
+    }
+
+    const result = await response.json();
+    const savedFileIds: number[] = result.data?.savedFileIds || result.savedFileIds || [];
+
+    // Clear changes for all saved references
+    for (const savedId of savedFileIds) {
+      store.dispatch(clearEdits(savedId));
+      store.dispatch(clearMetadataEdits(savedId));
+    }
+  }
 
   return { id: savedId, name: savedName };
 }

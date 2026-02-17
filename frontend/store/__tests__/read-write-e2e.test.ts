@@ -20,7 +20,9 @@ import { executeQuery } from '@/lib/api/execute-query.server';
 import type { RootState } from '@/store/store';
 import type { Mode } from '@/lib/mode/mode-types';
 import { POST as queryPostHandler } from '@/app/api/query/route';
+import { POST as batchPostHandler } from '@/app/api/files/batch/route';
 import { POST as batchSavePostHandler } from '@/app/api/files/batch-save/route';
+import { GET as fileGetHandler, PATCH as filePatchHandler } from '@/app/api/files/[id]/route';
 
 // Mock db-config to use test database
 jest.mock('@/lib/database/db-config', () => {
@@ -32,6 +34,29 @@ jest.mock('@/lib/database/db-config', () => {
     getDbType: () => 'sqlite'
   };
 });
+
+// Mock the store import so file-state.ts uses the test store
+let testStore: any;
+jest.mock('@/store/store', () => ({
+  get store() {
+    return testStore;
+  }
+}));
+
+// Mock auth system to return test user
+jest.mock('@/lib/auth/auth-helpers', () => ({
+  getEffectiveUser: jest.fn().mockResolvedValue({
+    userId: 1,
+    email: 'test@example.com',
+    name: 'Test User',
+    role: 'admin',
+    companyId: 1,
+    companyName: 'test-company',
+    home_folder: '/org',
+    mode: 'org'
+  }),
+  isAdmin: jest.fn().mockReturnValue(true)
+}));
 
 // Mock python-backend-client to return realistic test data (no real Python backend in tests)
 jest.mock('@/lib/api/python-backend-client', () => ({
@@ -142,6 +167,71 @@ describe('Phase 1: Unified File System API E2E', () => {
         } as Response;
       }
 
+      // Route /api/files/[id] PATCH/PUT calls to real handler (for updating single file)
+      if (urlStr.match(/\/api\/files\/\d+(\?|$)/) && (init?.method === 'PATCH' || init?.method === 'PUT')) {
+        const fileId = urlStr.match(/\/api\/files\/(\d+)/)?.[1];
+        const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;
+        const request = new NextRequest(fullUrl, {
+          method: 'PATCH',
+          body: init?.body,
+          headers: {
+            ...init?.headers,
+            'x-company-id': '1',
+            'x-user-id': '1'
+          }
+        });
+        const response = await filePatchHandler(request, { params: { id: fileId! } });
+        const data = await response.json();
+        return {
+          ok: response.status === 200,
+          status: response.status,
+          json: async () => data
+        } as Response;
+      }
+
+      // Route /api/files/[id] GET calls to real handler (for loading single file)
+      // Must come before batch check to avoid being caught by it
+      // Matches /api/files/123 or /api/files/123?params
+      if (urlStr.match(/\/api\/files\/\d+(\?|$)/) && (!init?.method || init?.method === 'GET')) {
+        const fileId = urlStr.match(/\/api\/files\/(\d+)/)?.[1];
+        // Preserve query parameters if they exist
+        const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;
+        const request = new NextRequest(fullUrl, {
+          method: 'GET',
+          headers: {
+            'x-company-id': '1',
+            'x-user-id': '1'
+          }
+        });
+        const response = await fileGetHandler(request, { params: { id: fileId! } });
+        const data = await response.json();
+        return {
+          ok: response.status === 200,
+          status: response.status,
+          json: async () => data
+        } as Response;
+      }
+
+      // Route /api/files/batch calls to real handler (for loading multiple files)
+      if (urlStr.includes('/api/files/batch') && !urlStr.includes('batch-save')) {
+        const request = new NextRequest('http://localhost:3000/api/files/batch', {
+          method: init?.method || 'POST',
+          body: init?.body,
+          headers: {
+            ...init?.headers,
+            'x-company-id': '1',
+            'x-user-id': '1'
+          }
+        });
+        const response = await batchPostHandler(request);
+        const data = await response.json();
+        return {
+          ok: response.status === 200,
+          status: response.status,
+          json: async () => data
+        } as Response;
+      }
+
       // Route /api/files/batch-save calls to real handler
       if (urlStr.includes('/api/files/batch-save')) {
         const request = new NextRequest('http://localhost:3000/api/files/batch-save', {
@@ -232,6 +322,9 @@ describe('Phase 1: Unified File System API E2E', () => {
         }
       }
     });
+
+    // Make file-state.ts use the test store
+    testStore = store;
   });
 
   afterAll(async () => {
