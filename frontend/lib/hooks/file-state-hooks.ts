@@ -37,7 +37,8 @@ import {
   readFilesByCriteria,
   readFolder,
   getQueryResult,
-  createVirtualFile
+  createVirtualFile,
+  getAppState
 } from '@/lib/api/file-state';
 import { FilesAPI } from '@/lib/data/files';
 import { CACHE_TTL } from '@/lib/constants/cache';
@@ -46,6 +47,7 @@ import { createLoadErrorFromException } from '@/lib/types/errors';
 import type { GetFilesOptions } from '@/lib/data/types';
 import type { QuestionReference } from '@/lib/types';
 import { FileType } from '@/lib/ui/file-metadata';
+import type { AppState } from '@/lib/appState';
 
 // ============================================================================
 // useFiles - Load multiple files by IDs
@@ -776,4 +778,52 @@ export function useQueryResult(
     isStale,
     refetch
   };
+}
+
+// ============================================================================
+// useAppState Hook
+// ============================================================================
+
+/**
+ * useAppState Hook
+ *
+ * Replaces selectAppState selector with async file loading.
+ * Loads file and builds augmented AppState (Question/Dashboard/Report/etc.)
+ *
+ * Usage:
+ *   const appState = useAppState(fileId);
+ *   if (appState?.pageType === 'question') {
+ *     // Access appState.queryData, etc.
+ *   }
+ */
+export function useAppState(fileId: number | undefined): AppState | undefined {
+  const [appState, setAppState] = useState<AppState | undefined>(undefined);
+
+  useEffect(() => {
+    if (fileId === undefined) {
+      setAppState(undefined);
+      return;
+    }
+
+    let cancelled = false;
+
+    getAppState(fileId)
+      .then(result => {
+        if (!cancelled) {
+          setAppState(result);
+        }
+      })
+      .catch(err => {
+        console.error('useAppState error:', err);
+        if (!cancelled) {
+          setAppState(undefined);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fileId]);
+
+  return appState;
 }

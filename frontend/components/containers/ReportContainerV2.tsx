@@ -18,7 +18,6 @@ import { FilesAPI } from '@/lib/data/files';
 import ReportView from '@/components/views/ReportView';
 import { ReportContent, ReportRunContent } from '@/lib/types';
 import { useContexts } from '@/lib/hooks/useContexts';
-import { selectAppState } from '@/lib/appState';
 import { useCallback, useState, useEffect } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { isUserFacingError } from '@/lib/errors';
@@ -179,21 +178,24 @@ export default function ReportContainerV2({
     try {
       // Build enriched references with app_state for each question/dashboard
       // References are loaded when the report loads (via useFile with include=references)
-      const enrichedReferences = (mergedContent.references || []).map(ref => {
-        const refFile = allFiles[ref.reference.id];
-        // Get the full app state for this reference (includes query, viz, results, etc.)
-        const appState = selectAppState(fullState, ref.reference.id);
-        // Get connection_id from app state
-        const connectionId = (appState as any)?.database_name;
+      const { getAppState } = await import('@/lib/api/file-state');
+      const enrichedReferences = await Promise.all(
+        (mergedContent.references || []).map(async ref => {
+          const refFile = allFiles[ref.reference.id];
+          // Get the full app state for this reference (includes query, viz, results, etc.)
+          const appState = await getAppState(ref.reference.id);
+          // Get connection_id from app state
+          const connectionId = (appState as any)?.database_name;
 
-        return {
-          ...ref,
-          file_name: refFile?.name || `Unknown ${ref.reference.type}`,
-          file_path: refFile?.path || '',
-          app_state: appState,
-          connection_id: connectionId,
-        };
-      });
+          return {
+            ...ref,
+            file_name: refFile?.name || `Unknown ${ref.reference.type}`,
+            file_path: refFile?.path || '',
+            app_state: appState,
+            connection_id: connectionId,
+          };
+        })
+      );
 
       // Get primary connection and context (use first reference's connection)
       const primaryConnectionId = enrichedReferences.find(r => r.connection_id)?.connection_id;

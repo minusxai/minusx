@@ -7,10 +7,8 @@ import FileLayout from '@/components/FileLayout';
 import FileView from '@/components/FileView';
 import { SUPPORTED_FILE_TYPES, FileType } from '@/lib/ui/file-metadata';
 import { useAppSelector } from '@/store/hooks';
-import { useNewFile } from '@/lib/hooks/file-state-hooks';
+import { useNewFile, useAppState, useFile } from '@/lib/hooks/file-state-hooks';
 import { RightSidebarProps } from "@/components/RightSidebar";
-import { selectAppState } from '@/lib/appState';
-import { useFile } from '@/lib/hooks/file-state-hooks';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { ContextContent } from '@/lib/types';
 
@@ -60,7 +58,7 @@ export default function NewFilePage({ params }: NewFilePageProps) {
     virtualId
   });
   const { file, loading, error } = useFile(virtualFileId);
-  const appState = useAppSelector(state => selectAppState(state, virtualFileId));
+  const appState = useAppState(virtualFileId);
 
   // Context version selection (admin only)
   const filesState = useAppSelector(state => state.files.files);

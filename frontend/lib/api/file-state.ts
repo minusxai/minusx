@@ -20,19 +20,22 @@
 
 import { store } from '@/store/store';
 import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFiles, selectMergedContent, setEdit } from '@/store/filesSlice';
-import { selectQueryResult } from '@/store/queryResultsSlice';
+import { selectQueryResult, setQueryResult, setQueryError } from '@/store/queryResultsSlice';
+import { selectSelectedRun } from '@/store/reportRunsSlice';
 import { FilesAPI } from '@/lib/data/files';
 import { PromiseManager } from '@/lib/utils/promise-manager';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import type { RootState } from '@/store/store';
-import type { ReadFilesInput, ReadFilesOutput, FileState, QueryResult, QuestionContent, FileType, DocumentContent, AssetReference, DbFile, BaseFileContent } from '@/lib/types';
+import type { ReadFilesInput, ReadFilesOutput, FileState, QueryResult, QuestionContent, FileType, DocumentContent, AssetReference, DbFile, BaseFileContent, QuestionParameter } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
+import type { AppState, QuestionAppState, DashboardAppState, ReportAppState, GenericAppState } from '@/lib/appState';
 
 /**
  * Augmentation context passed to augment functions
  */
 interface AugmentContext {
   queryResults: Map<string, QueryResult>;
+  reportRuns?: Map<number, any>; // Map fileId to selected run
 }
 
 /**
@@ -97,9 +100,21 @@ function augmentDashboardFile(state: RootState, fileState: FileState, context: A
   });
 }
 
+/**
+ * Augment a report file with selected run data
+ */
+function augmentReportFile(state: RootState, fileState: FileState, context: AugmentContext): void {
+  const selectedRun = selectSelectedRun(state, fileState.id);
+  if (selectedRun) {
+    context.reportRuns = context.reportRuns || new Map();
+    context.reportRuns.set(fileState.id, selectedRun);
+  }
+}
+
 // Register default augmentation functions
 registerAugmentation('question', augmentQuestionFile);
 registerAugmentation('dashboard', augmentDashboardFile);
+registerAugmentation('report', augmentReportFile);
 
 interface ReadFilesOptions {
   ttl?: number;      // Time-to-live in ms (default: CACHE_TTL.FILE)
@@ -1267,4 +1282,203 @@ export async function getQueryResult(
       throw error;
     }
   });
+}
+
+// ============================================================================
+// App State Management
+// ============================================================================
+
+/**
+ * Get app state for a file ID
+ *
+ * Loads file via readFiles (with augmentation), then builds AppState.
+ * This replaces selectAppState selector - uses same logic but loads asynchronously.
+ *
+ * @param fileId - File ID to load
+ * @returns AppState (QuestionAppState | DashboardAppState | etc.)
+ */
+export async function getAppState(fileId: number): Promise<AppState | undefined> {
+  // Load file with augmentation (via readFiles registry)
+  const result = await readFiles({ fileIds: [fileId] });
+  if (!result.fileStates || result.fileStates.length === 0) return undefined;
+
+  const file = result.fileStates[0];
+  const state = store.getState();
+  const mergedContent = selectMergedContent(state, fileId);
+  if (!mergedContent) return undefined;
+
+  // Build AppState based on file type
+  switch (file.type) {
+    case 'question':
+      return buildQuestionAppState(fileId, file.path, mergedContent as QuestionContent);
+
+    case 'dashboard':
+      return buildDashboardAppState(fileId, file.path, mergedContent as DocumentContent);
+
+    case 'report':
+      return buildReportAppState(fileId, file.path, mergedContent as any);
+
+    default:
+      return {
+        pageType: file.type,
+        fileId,
+        path: file.path,
+        ...mergedContent
+      } as GenericAppState;
+  }
+}
+
+/**
+ * Build QuestionAppState with query results
+ */
+function buildQuestionAppState(
+  fileId: number,
+  path: string,
+  content: QuestionContent
+): QuestionAppState {
+  const state = store.getState();
+
+  // Extract query execution args
+  const query = content.query;
+  const database = content.database_name || '';
+  const params = content.parameters?.reduce((acc, param) => {
+    acc[param.name] = param.value;
+    return acc;
+  }, {} as Record<string, any>) || {};
+
+  // Get query result from queryResultsSlice
+  const queryResult = selectQueryResult(state, query, params, database);
+
+  // Transform query result to markdown format
+  const transformedData = transformQueryResultToMarkdown(queryResult?.data);
+
+  // Include referenced question states
+  const referencedQuestions: Record<number, any> = {};
+  content.references?.forEach(ref => {
+    const refFile = state.files.files[ref.id];
+    if (refFile && refFile.type === 'question') {
+      const refContent = selectMergedContent(state, ref.id) as QuestionContent;
+      if (refContent) {
+        referencedQuestions[ref.id] = {
+          type: 'question',
+          fileId: ref.id,
+          path: refFile.path,
+          alias: ref.alias,
+          query: refContent.query,
+          database_name: refContent.database_name,
+          parameters: refContent.parameters,
+        };
+      }
+    }
+  });
+
+  return {
+    pageType: 'question',
+    fileId,
+    path,
+    ...content,
+    queryData: transformedData,
+    loading: queryResult?.loading,
+    error: queryResult?.error,
+    referencedQuestions
+  };
+}
+
+/**
+ * Build DashboardAppState with nested question states
+ */
+function buildDashboardAppState(
+  fileId: number,
+  path: string,
+  content: DocumentContent
+): DashboardAppState {
+  const state = store.getState();
+  const questionStates: Record<number, QuestionAppState> = {};
+
+  // Process each asset in the dashboard
+  content.assets?.forEach((asset: AssetReference) => {
+    if (asset.type === 'question' && 'id' in asset) {
+      const questionId = asset.id;
+      const questionFile = state.files.files[questionId];
+
+      if (questionFile && questionFile.type === 'question') {
+        const questionContent = selectMergedContent(state, questionId) as QuestionContent;
+        if (questionContent) {
+          questionStates[questionId] = buildQuestionAppState(
+            questionId,
+            questionFile.path,
+            questionContent
+          );
+        }
+      }
+    }
+  });
+
+  return {
+    pageType: 'dashboard',
+    fileId,
+    path,
+    ...content,
+    questionStates
+  };
+}
+
+/**
+ * Build ReportAppState with selected run
+ */
+function buildReportAppState(
+  fileId: number,
+  path: string,
+  content: any
+): ReportAppState {
+  const state = store.getState();
+  const selectedRun = selectSelectedRun(state, fileId);
+
+  return {
+    pageType: 'report',
+    fileId,
+    path,
+    ...content,
+    selectedRun: selectedRun ? {
+      id: selectedRun.id,
+      startedAt: selectedRun.content.startedAt,
+      completedAt: selectedRun.content.completedAt,
+      status: selectedRun.content.status,
+      generatedReport: selectedRun.content.generatedReport,
+      error: selectedRun.content.error,
+    } : undefined
+  };
+}
+
+/**
+ * Transform query result to markdown table format
+ */
+function transformQueryResultToMarkdown(queryResult: any): any {
+  if (!queryResult) return undefined;
+
+  const { columns, types, rows } = queryResult;
+
+  if (columns.length === 0 || rows.length === 0) return undefined;
+
+  // Header row
+  const header = `| ${columns.join(' | ')} |`;
+  const separator = `| ${columns.map(() => '---').join(' | ')} |`;
+
+  // Data rows
+  const dataRows = rows.map((row: any) => {
+    const values = Array.isArray(row)
+      ? row
+      : columns.map((col: string) => row[col]);
+    return `| ${values.map((v: any) => v ?? 'null').join(' | ')} |`;
+  });
+
+  const truncated = dataRows.length > 20;
+  const displayRows = truncated ? dataRows.slice(0, 20) : dataRows;
+  const truncationMessage = truncated ? `\n(Truncated to 20 rows. ${dataRows.length - 20} more rows not shown.)` : '';
+
+  return {
+    columns,
+    types,
+    rows: [header, separator, ...displayRows].join('\n') + truncationMessage as any
+  };
 }

@@ -12,7 +12,6 @@ import { store } from '@/store/store';
 import type { UserInput } from './user-input-exception';
 import { UserInputException } from './user-input-exception';
 import { slugify } from '@/lib/slug-utils';
-import { selectAppState } from '../appState';
 import { FilesAPI } from '../data/files';
 import { fetchWithCache } from './fetch-wrapper';
 import { API } from './declarations';
@@ -424,7 +423,8 @@ registerFrontendTool('Navigate', async (args, context) => {
         await FilesAPI.loadFile(file_id)
       }
     }
-    const appState = state ? selectAppState(state, file_id) : {}
+    const { getAppState } = await import('@/lib/api/file-state');
+    const appState = state ? await getAppState(file_id) : undefined;
     const debugMsg = newFileType !== undefined ? `;newFileType=${newFileType} is ignored since file_id provided` : ''
     const debugMsg2 = path !== undefined ? `;path=${path} is ignored since file_id provided` : ''
     return {
