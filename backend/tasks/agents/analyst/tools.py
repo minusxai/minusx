@@ -730,10 +730,16 @@ class PresentFinalAnswer(Tool):
 
 @register_agent
 class ReadFiles(Tool):
-    """Load multiple files with their references and query results.
+    """Load multiple files with their full JSON representation.
 
-    Use this to read file content before editing or to inspect multiple files at once.
-    Returns file states, references, and cached query results.
+    Returns each file as complete JSON: {"id": 123, "name": "...", "path": "...", "type": "question", "content": {...}}
+
+    Use this to:
+    - Read file content before editing (see full structure including name, path, content)
+    - Inspect multiple files at once
+    - Get file metadata and content in one call
+
+    The response includes file states, references, and cached query results.
     """
 
     def __init__(
@@ -756,7 +762,15 @@ class ReadFiles(Tool):
 class EditFile(Tool):
     """Edit a file using string find-and-replace.
 
-    Search for oldMatch in the file content and replace with newMatch.
+    Search for oldMatch in the FULL file JSON and replace with newMatch.
+    The file JSON includes: {"id": 123, "name": "...", "path": "...", "type": "question", "content": {...}}
+
+    You can edit ANY field (name, path, or content) using this tool.
+    Examples:
+    - Change name: oldMatch='"name":"Old Name"', newMatch='"name":"New Name"'
+    - Change query: oldMatch='"query":"SELECT 1"', newMatch='"query":"SELECT * FROM users"'
+    - Change description: oldMatch='"description":"Old"', newMatch='"description":"Updated"'
+
     The tool validates changes and returns a diff.
     Changes are stored in Redux but NOT saved to database until PublishFile is called.
     """
@@ -764,7 +778,7 @@ class EditFile(Tool):
     def __init__(
         self,
         fileId: int = Field(..., description="File ID to edit"),
-        oldMatch: str = Field(..., description="String to search for in file content"),
+        oldMatch: str = Field(..., description="String to search for in full file JSON (including name, path, content)"),
         newMatch: str = Field(..., description="String to replace with"),
         **kwargs
     ):

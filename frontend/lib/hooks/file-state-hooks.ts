@@ -21,6 +21,7 @@ import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import {
   selectFile,
   selectFiles,
+  selectMergedContent,
   isVirtualFileId,
   setFiles,
   setFile,
@@ -48,7 +49,7 @@ import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type { GetFilesOptions } from '@/lib/data/types';
-import type { QuestionReference } from '@/lib/types';
+import type { QuestionReference, QueryResult } from '@/lib/types';
 import { FileType } from '@/lib/ui/file-metadata';
 
 // ============================================================================
@@ -742,67 +743,170 @@ export function useAppState(): AppState | null {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const user = useAppSelector(state => state.auth.user);
-  const [appState, setAppState] = useState<AppState | null>(null);
-  const [loading, setLoading] = useState(false);
+  const filesState = useAppSelector(state => state.files.files);
+  const queryResultsState = useAppSelector(state => state.queryResults.results);
 
   // Parse URL params for new file pages
   const createOptions = useMemo(() => {
-    // Only for /new/{type} routes
     if (!pathname.startsWith('/new/')) return undefined;
 
     const folderParam = searchParams.get('folder');
-    const databaseName = searchParams.get('database');
+    const databaseParam = searchParams.get('database');
     const queryB64 = searchParams.get('query');
     const virtualIdParam = searchParams.get('virtualId');
 
-    // Decode base64 query
     const query = queryB64
       ? new TextDecoder().decode(Uint8Array.from(atob(queryB64), c => c.charCodeAt(0)))
       : undefined;
 
-    // Resolve folder (URL param, or user's home folder, or default)
     const folder = folderParam || (user ? resolveHomeFolderSync(user.mode, user.home_folder || '') : '/org');
 
-    // Parse virtualId
     const virtualId = virtualIdParam ? parseInt(virtualIdParam, 10) : undefined;
     const validVirtualId = virtualId && !isNaN(virtualId) && virtualId < 0 ? virtualId : undefined;
 
     return {
       folder,
-      databaseName: databaseName || undefined,
+      databaseName: databaseParam || undefined,
       query,
       virtualId: validVirtualId
     };
   }, [pathname, searchParams, user]);
 
+  // Determine route type from pathname
+  const routeInfo = useMemo(() => {
+    // File page: /f/{id}
+    const fileMatch = pathname.match(/^\/f\/(\d+)/);
+    if (fileMatch) {
+      return { type: 'file' as const, id: parseInt(fileMatch[1], 10) };
+    }
+
+    // New file page: /new/{type}
+    const newFileMatch = pathname.match(/^\/new\/([^/?]+)/);
+    if (newFileMatch) {
+      return { type: 'newFile' as const, fileType: newFileMatch[1] as FileType };
+    }
+
+    // Folder page: /p/path
+    const folderMatch = pathname.match(/^\/p\/(.*)/);
+    if (folderMatch) {
+      return { type: 'folder' as const, path: '/' + (folderMatch[1] || '') };
+    }
+
+    return { type: null };
+  }, [pathname]);
+
+  // Initialize: Load files from DB, create virtual files
   useEffect(() => {
     let cancelled = false;
 
-    const loadAppState = async () => {
-      setLoading(true);
-      try {
-        const result = await getAppState(pathname, createOptions);
-        if (!cancelled) {
-          setAppState(result);
+    const initialize = async () => {
+      if (routeInfo.type === 'file' && routeInfo.id > 0) {
+        // Load from DB if positive ID
+        await readFiles({ fileIds: [routeInfo.id] });
+      } else if (routeInfo.type === 'newFile') {
+        // Check if virtual file exists
+        const virtualId = createOptions?.virtualId;
+        const existingFile = virtualId ? filesState[virtualId] : null;
+
+        if (!existingFile) {
+          // Find latest virtual file
+          const virtualFiles = Object.values(filesState)
+            .filter(f => f.id < 0 && f.type === routeInfo.fileType)
+            .sort((a, b) => a.id - b.id);
+
+          if (virtualFiles.length === 0) {
+            // Create new virtual file
+            await createVirtualFile(routeInfo.fileType, createOptions);
+          }
         }
-      } catch (error) {
-        console.error("[useAppState] Failed to load app state:", error);
-        if (!cancelled) {
-          setAppState(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+      } else if (routeInfo.type === 'folder') {
+        await readFolder(routeInfo.path);
       }
     };
 
-    loadAppState();
+    initialize();
 
     return () => {
       cancelled = true;
     };
-  }, [pathname, createOptions]);
+  }, [routeInfo, createOptions, filesState]);
 
-  return appState;
+  // Compute appState from Redux (reactive to state changes - NO LOCAL STATE!)
+  return useMemo(() => {
+    if (routeInfo.type === 'file') {
+      const file = filesState[routeInfo.id];
+      if (!file) return null;
+
+      // Get referenced files from Redux (file.references contains IDs)
+      const references = (file.references || [])
+        .map(id => filesState[id])
+        .filter(Boolean) as FileState[];
+
+      const queryResults: QueryResult[] = [];
+
+      return {
+        type: 'file',
+        id: routeInfo.id,
+        fileType: file.type,
+        file,
+        references,
+        queryResults
+      };
+    }
+
+    if (routeInfo.type === 'newFile') {
+      // Use virtualId from URL if provided
+      const virtualId = createOptions?.virtualId;
+      if (virtualId && filesState[virtualId]) {
+        const file = filesState[virtualId];
+        return {
+          type: 'file',
+          id: virtualId,
+          fileType: file.type,
+          file,
+          references: [],
+          queryResults: []
+        };
+      }
+
+      // Find latest virtual file
+      const virtualFiles = Object.values(filesState)
+        .filter(f => f.id < 0 && f.type === routeInfo.fileType)
+        .sort((a, b) => a.id - b.id);
+
+      if (virtualFiles.length > 0) {
+        const file = virtualFiles[0];
+        return {
+          type: 'file',
+          id: file.id,
+          fileType: file.type,
+          file,
+          references: [],
+          queryResults: []
+        };
+      }
+
+      // No virtual file yet (initialization in progress)
+      return null;
+    }
+
+    if (routeInfo.type === 'folder') {
+      const folderFiles = Object.values(filesState).filter(f => {
+        const fileDir = f.path.substring(0, f.path.lastIndexOf('/')) || '/';
+        return fileDir === routeInfo.path;
+      });
+
+      return {
+        type: 'folder',
+        path: routeInfo.path,
+        folder: {
+          files: folderFiles,
+          loading: false,
+          error: null
+        }
+      };
+    }
+
+    return null;
+  }, [routeInfo, filesState, queryResultsState, createOptions]);
 }

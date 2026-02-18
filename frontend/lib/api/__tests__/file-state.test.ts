@@ -37,7 +37,9 @@ jest.mock('@/lib/data/files', () => {
     FilesAPI: {
       loadFiles: jest.fn(),
       loadFile: jest.fn(),
-      getFiles: mockGetFilesFn
+      getFiles: mockGetFilesFn,
+      saveFile: jest.fn(),
+      createFile: jest.fn()
     },
     getFiles: mockGetFilesFn // Also export getFiles directly for readFolder
   };
@@ -76,6 +78,8 @@ jest.mock('@/store/store', () => ({
 const mockLoadFiles = FilesAPI.loadFiles as jest.MockedFunction<typeof FilesAPI.loadFiles>;
 const mockLoadFile = FilesAPI.loadFile as jest.MockedFunction<typeof FilesAPI.loadFile>;
 const mockGetFiles = FilesAPI.getFiles as jest.MockedFunction<typeof FilesAPI.getFiles>;
+const mockSaveFile = FilesAPI.saveFile as jest.MockedFunction<typeof FilesAPI.saveFile>;
+const mockCreateFile = FilesAPI.createFile as jest.MockedFunction<typeof FilesAPI.createFile>;
 const mockFetch = global.fetch as jest.MockedFunction<typeof fetch>;
 
 // Base time for testing (Jan 1, 2024)
@@ -593,27 +597,20 @@ describe('readFiles - File State Manager', () => {
       expect(content.query).toBe('SELECT 2');
     });
 
-    it('should auto-execute query for questions', async () => {
+    it('should NOT auto-execute query for questions (removed in Phase 3)', async () => {
       const mockFile = createMockFile(1, 'question');
       mockStore.dispatch(setFile({ file: mockFile, references: [] }));
 
       // Clear default mock to track calls
       mockFetch.mockClear();
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ data: { columns: ['id'], types: ['INTEGER'], rows: [] } })
-      } as Response);
 
       await editFile({
         fileId: 1,
         changes: { content: { query: 'SELECT 2' } }
       });
 
-      // Should have called getQueryResult (which calls fetch)
-      expect(mockFetch).toHaveBeenCalled();
-      expect(mockFetch).toHaveBeenCalledWith('/api/query', expect.objectContaining({
-        method: 'POST'
-      }));
+      // Should NOT have called getQueryResult (auto-execute removed)
+      expect(mockFetch).not.toHaveBeenCalled();
     });
 
     it('should recalculate queryResultId', async () => {
@@ -681,21 +678,14 @@ describe('readFiles - File State Manager', () => {
       mockStore.dispatch(setFile({ file: mockFile, references: [] }));
       mockStore.dispatch(setEdit({ fileId: 1, edits: { query: 'SELECT 2' } }));
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ data: { id: 1, name: 'Test question 1' } })
-      } as Response);
+      const savedFile = { ...mockFile, name: 'Test question 1' };
+      mockSaveFile.mockResolvedValueOnce({
+        data: savedFile
+      });
 
       const result = await publishFile({ fileId: 1 });
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/files/1',
-        expect.objectContaining({
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' }
-        })
-      );
-
+      expect(mockSaveFile).toHaveBeenCalled();
       expect(result).toEqual({ id: 1, name: 'Test question 1' });
     });
 
@@ -704,20 +694,14 @@ describe('readFiles - File State Manager', () => {
       mockStore.dispatch(setFile({ file: virtualFile, references: [] }));
       mockStore.dispatch(setEdit({ fileId: -1, edits: { query: 'SELECT 2' } }));
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ data: { id: 123, name: 'New question' } })
-      } as Response);
+      const createdFile = { ...virtualFile, id: 123, name: 'New question' };
+      mockCreateFile.mockResolvedValueOnce({
+        data: createdFile
+      });
 
       const result = await publishFile({ fileId: -1 });
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        '/api/files',
-        expect.objectContaining({
-          method: 'POST'
-        })
-      );
-
+      expect(mockCreateFile).toHaveBeenCalled();
       expect(result).toEqual({ id: 123, name: 'New question' });
     });
 
@@ -737,10 +721,10 @@ describe('readFiles - File State Manager', () => {
       mockStore.dispatch(setFile({ file: mockFile, references: [] }));
       mockStore.dispatch(setEdit({ fileId: 1, edits: { query: 'SELECT 2' } }));
 
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ data: { id: 1, name: 'Test question 1' } })
-      } as Response);
+      const savedFile = { ...mockFile, name: 'Test question 1' };
+      mockSaveFile.mockResolvedValueOnce({
+        data: savedFile
+      });
 
       await publishFile({ fileId: 1 });
 
@@ -753,10 +737,7 @@ describe('readFiles - File State Manager', () => {
       mockStore.dispatch(setFile({ file: mockFile, references: [] }));
       mockStore.dispatch(setEdit({ fileId: 1, edits: { query: 'SELECT 2' } }));
 
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: async () => ({ message: 'Database error' })
-      } as Response);
+      mockSaveFile.mockRejectedValueOnce(new Error('Database error'));
 
       await expect(publishFile({ fileId: 1 })).rejects.toThrow('Database error');
     });
@@ -1190,7 +1171,8 @@ describe('readFiles - File State Manager', () => {
         body: JSON.stringify({
           query: 'SELECT * FROM users',
           database_name: 'test_db',
-          parameters: {}
+          parameters: {},
+          references: []
         })
       }));
 

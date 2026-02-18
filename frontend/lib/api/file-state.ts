@@ -158,6 +158,11 @@ export async function readFiles(
   const needsFetch: number[] = [];
 
   for (const fileId of fileIds) {
+    // Virtual files (negative IDs) only exist in Redux, never fetch from API
+    if (fileId < 0) {
+      continue;
+    }
+
     const isLoaded = selectIsFileLoaded(state, fileId);
     const isFresh = selectIsFileFresh(state, fileId, ttl);
 
@@ -407,9 +412,18 @@ export async function readFilesStr(
 
     if (!mergedContent) continue;
 
+    // Return FULL file JSON (including metadata)
+    const fullFile = {
+      id: fileState.id,
+      name: selectEffectiveName(state, fileState.id) || '',
+      path: fileState.path,
+      type: fileState.type,
+      content: mergedContent
+    };
+
     // Stringify without pretty print (compact JSON)
-    const contentStr = JSON.stringify(mergedContent);
-    stringifiedFiles[fileState.id] = contentStr;
+    const fullFileStr = JSON.stringify(fullFile);
+    stringifiedFiles[fileState.id] = fullFileStr;
   }
 
   return { ...result, stringifiedFiles };
@@ -427,7 +441,8 @@ export interface EditFileStrOptions {
 /**
  * EditFileStr - String-based editing using find and replace
  *
- * Searches for oldMatch in the file content and replaces with newMatch.
+ * Searches for oldMatch in the FULL file JSON (including name, path, type, content)
+ * and replaces with newMatch. Detects what changed and updates Redux accordingly.
  * Uses string replace (replaces first occurrence only).
  * Validates JSON after edit.
  * Changes are stored in Redux but NOT saved to database until PublishFile is called.
@@ -453,21 +468,31 @@ export async function editFileStr(
     return { success: false, error: `File ${fileId} has no content` };
   }
 
-  // Convert content to JSON string (compact)
-  const contentStr = JSON.stringify(mergedContent);
+  // Build FULL file JSON (same format as readFilesStr)
+  const currentName = selectEffectiveName(state, fileId) || '';
+  const fullFile = {
+    id: fileState.id,
+    name: currentName,
+    path: fileState.path,
+    type: fileState.type,
+    content: mergedContent
+  };
+
+  // Convert to JSON string (compact)
+  const fullFileStr = JSON.stringify(fullFile);
 
   // Check if oldMatch exists
-  if (!contentStr.includes(oldMatch)) {
-    return { success: false, error: `String "${oldMatch}" not found in file content` };
+  if (!fullFileStr.includes(oldMatch)) {
+    return { success: false, error: `String "${oldMatch}" not found in file` };
   }
 
   // Apply string replace (first occurrence only)
-  const editedStr = contentStr.replace(oldMatch, newMatch);
+  const editedStr = fullFileStr.replace(oldMatch, newMatch);
 
-  // Parse edited content as JSON
-  let editedContent;
+  // Parse edited file as JSON
+  let editedFile: { id: number; name: string; path: string; type: FileType; content: any };
   try {
-    editedContent = JSON.parse(editedStr);
+    editedFile = JSON.parse(editedStr);
   } catch (error) {
     return {
       success: false,
@@ -475,47 +500,74 @@ export async function editFileStr(
     };
   }
 
-  // Validate required fields based on file type (same as editFileLineEncoded)
-  if (fileState.type === 'question') {
-    const questionContent = editedContent as QuestionContent;
-    if (!questionContent.database_name) {
-      return {
-        success: false,
-        error: 'Question requires database_name field'
-      };
+  // Detect what changed and dispatch appropriate Redux actions
+  const metadataChanges: { name?: string; path?: string } = {};
+  let contentChanged = false;
+
+  // Check name change
+  if (editedFile.name !== currentName) {
+    metadataChanges.name = editedFile.name;
+  }
+
+  // Check path change
+  if (editedFile.path !== fileState.path) {
+    metadataChanges.path = editedFile.path;
+  }
+
+  // Check content change
+  if (JSON.stringify(editedFile.content) !== JSON.stringify(mergedContent)) {
+    contentChanged = true;
+  }
+
+  // Validate content if it changed
+  if (contentChanged) {
+    if (fileState.type === 'question') {
+      const questionContent = editedFile.content as QuestionContent;
+      if (!questionContent.database_name) {
+        return {
+          success: false,
+          error: 'Question requires database_name field'
+        };
+      }
+      if (!questionContent.query) {
+        return {
+          success: false,
+          error: 'Question requires query field'
+        };
+      }
     }
-    if (!questionContent.query) {
-      return {
-        success: false,
-        error: 'Question requires query field'
-      };
+
+    if (fileState.type === 'dashboard') {
+      const dashboardContent = editedFile.content as DocumentContent;
+      if (!dashboardContent.assets) {
+        return {
+          success: false,
+          error: 'Dashboard requires assets field'
+        };
+      }
+      if (!dashboardContent.layout) {
+        return {
+          success: false,
+          error: 'Dashboard requires layout field'
+        };
+      }
     }
   }
 
-  if (fileState.type === 'dashboard') {
-    const dashboardContent = editedContent as DocumentContent;
-    if (!dashboardContent.assets) {
-      return {
-        success: false,
-        error: 'Dashboard requires assets field'
-      };
-    }
-    if (!dashboardContent.layout) {
-      return {
-        success: false,
-        error: 'Dashboard requires layout field'
-      };
-    }
+  // Dispatch Redux actions for changes
+  if (Object.keys(metadataChanges).length > 0) {
+    getStore().dispatch(setMetadataEdit({ fileId, changes: metadataChanges }));
   }
 
-  // Store edit in Redux
-  getStore().dispatch(setEdit({
-    fileId,
-    edits: editedContent
-  }));
+  if (contentChanged) {
+    getStore().dispatch(setEdit({
+      fileId,
+      edits: editedFile.content
+    }));
+  }
 
   // Generate diff
-  const diff = generateDiff(contentStr, editedStr);
+  const diff = generateDiff(fullFileStr, editedStr);
 
   return { success: true, diff };
 }

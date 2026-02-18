@@ -543,21 +543,23 @@ const filesSlice = createSlice({
         metadataChanges: {}
       };
 
-      // Update path index
-      state.pathIndex[file.path] = file.id;
+      // Update path index (guard against undefined path)
+      if (file.path) {
+        state.pathIndex[file.path] = file.id;
 
-      // Get parent folder path
-      const parentPath = file.path.substring(0, file.path.lastIndexOf('/')) || '/';
-      const parentFolderId = state.pathIndex[parentPath];
+        // Get parent folder path
+        const parentPath = file.path.substring(0, file.path.lastIndexOf('/')) || '/';
+        const parentFolderId = state.pathIndex[parentPath];
 
-      // Update parent folder to add this file to references
-      if (parentFolderId && state.files[parentFolderId]) {
-        // Add to references if not already there
-        if (!state.files[parentFolderId].references.includes(file.id)) {
-          state.files[parentFolderId].references.push(file.id);
+        // Update parent folder to add this file to references
+        if (parentFolderId && state.files[parentFolderId]) {
+          // Add to references if not already there
+          if (!state.files[parentFolderId].references.includes(file.id)) {
+            state.files[parentFolderId].references.push(file.id);
+          }
+          // Update parent folder's timestamp to invalidate cache
+          state.files[parentFolderId].updatedAt = Date.now();
         }
-        // Update parent folder's timestamp to invalidate cache
-        state.files[parentFolderId].updatedAt = Date.now();
       }
     },
 
