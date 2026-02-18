@@ -5,9 +5,8 @@ import { Dialog, Input, Button, VStack, HStack, Text, Box } from '@chakra-ui/rea
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { SelectRoot, SelectTrigger, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { createListCollection } from '@chakra-ui/react';
-import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { addFile } from '@/store/filesSlice';
-import type { DbFile } from '@/lib/types';
+import { useAppSelector } from '@/store/hooks';
+import { createFolder } from '@/lib/api/file-state';
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import { API } from '@/lib/api/declarations';
 
@@ -18,9 +17,7 @@ interface NewFolderModalProps {
 }
 
 export default function NewFolderModal({ isOpen, onClose, defaultParentPath = '/' }: NewFolderModalProps) {
-  const companyId = useAppSelector((state) => state.auth.user?.companyId ?? 0);
   const router = useRouter();
-  const dispatch = useAppDispatch();
   const [folderName, setFolderName] = useState('');
   const [parentPath, setParentPath] = useState(defaultParentPath);
   const [isCreating, setIsCreating] = useState(false);
@@ -75,39 +72,14 @@ export default function NewFolderModal({ isOpen, onClose, defaultParentPath = '/
       setIsCreating(true);
       setError(null);
 
-      const result = await fetchWithCache('/api/folders', {
-        method: 'POST',
-        body: JSON.stringify({
-          folderName: folderName.trim(),
-          parentPath
-        }),
-        cacheStrategy: API.folders.create.cache,
-      });
-
-      // Construct folder file object for Redux
-      const now = new Date().toISOString();
-      const folderFile: DbFile = {
-        id: result.data.id,
-        name: result.data.name,
-        path: result.data.path,
-        type: 'folder',
-        references: [],  // Phase 6: Folder references computed dynamically from children
-        content: {
-          description: ''
-        },
-        created_at: now,
-        updated_at: now,
-        company_id: companyId
-      };
-
-      // Immediately add to Redux cache
-      dispatch(addFile(folderFile));
+      // Use centralized createFolder function from file-state.ts
+      const result = await createFolder(folderName.trim(), parentPath);
 
       // Close modal and navigate to new folder
       onClose();
       setFolderName('');
       setError(null);
-      router.push(`/p${result.data.path}`);
+      router.push(`/p${result.path}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create folder');

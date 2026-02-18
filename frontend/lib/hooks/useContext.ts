@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useAppSelector } from '@/store/hooks';
 import { selectContextFromPath } from '@/store/filesSlice';
-import { useFiles } from './useFiles';
+import { useFiles } from './file-state-hooks';
 import { useConnections } from './useConnections';
 import { ContextContent, ContextInfo } from '@/lib/types';
 import { getWhitelistedSchemaForUser, getDocumentationForUser, filterSchemaByWhitelist } from '@/lib/sql/schema-filter';

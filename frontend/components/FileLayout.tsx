@@ -21,7 +21,7 @@ import SearchBar from './SearchBar';
 import { ReactNode } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { DbFile } from '@/lib/types';
-import { useFolder } from '@/lib/hooks/useFolder';
+import { useFolder, useAppState } from '@/lib/hooks/file-state-hooks';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import { setLeftSidebarCollapsed } from '@/store/uiSlice';
 import { useEffect } from 'react';
@@ -82,9 +82,10 @@ export default function FileLayout(props: FileLayoutProps) {
   const metadata = getFileTypeMetadata(fileType);
   const dispatch = useAppDispatch();
 
-  // Extract database name from appState (for question pages)
-  const appStateDatabaseName = rightSidebar?.appState?.pageType === 'question'
-    ? (rightSidebar.appState as any).database_name
+  // Get current app state for database name (for question pages)
+  const { appState, loading: appStateLoading } = useAppState();
+  const appStateDatabaseName = appState?.type === 'file' && appState.fileType === 'question'
+    ? (appState.file.content as any)?.database_name
     : undefined;
   
 //   useEffect(() => {

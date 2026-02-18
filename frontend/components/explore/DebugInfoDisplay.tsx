@@ -8,7 +8,7 @@ import { useAppSelector } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { selectShowDebug } from '@/store/uiSlice';
 import { isAdmin } from '@/lib/auth/role-helpers';
-import { useFileByPath } from '@/lib/hooks/useFileByPath';
+import { useFileByPath } from '@/lib/hooks/file-state-hooks';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import type { LLMCallFileContent } from '@/lib/llm-persistence';
 import type { Mode } from '@/lib/mode/mode-types';

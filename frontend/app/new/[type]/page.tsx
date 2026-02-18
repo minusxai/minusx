@@ -1,17 +1,13 @@
 'use client';
 
 import { use, useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { Center, Text, Box } from '@chakra-ui/react';
+import { Center, Text, Box, Spinner } from '@chakra-ui/react';
 import FileLayout from '@/components/FileLayout';
 import FileView from '@/components/FileView';
 import { SUPPORTED_FILE_TYPES, FileType } from '@/lib/ui/file-metadata';
 import { useAppSelector } from '@/store/hooks';
-import { useNewFile } from '@/lib/hooks/useNewFile';
+import { useAppState, useFile } from '@/lib/hooks/file-state-hooks';
 import { RightSidebarProps } from "@/components/RightSidebar";
-import { selectAppState } from '@/lib/appState';
-import { useFile } from '@/lib/hooks/useFile';
-import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { ContextContent } from '@/lib/types';
 
 interface NewFilePageProps {
@@ -19,48 +15,20 @@ interface NewFilePageProps {
 }
 
 export default function NewFilePage({ params }: NewFilePageProps) {
-  const searchParams = useSearchParams();
-  const user = useAppSelector(state => state.auth.user);
-
   // Unwrap params Promise (Next.js 16 requirement)
   const { type: typeParam } = use(params);
   const type = typeParam as FileType;
-  const folderParam = searchParams.get('folder');
-  const databaseName = searchParams.get('databaseName');
-  const queryB64 = searchParams.get('queryB64');
-  const query = queryB64
-    ? new TextDecoder().decode(Uint8Array.from(atob(queryB64), c => c.charCodeAt(0)))
-    : null;
-  const virtualIdParam = searchParams.get('virtualId');
+  const user = useAppSelector(state => state.auth.user);
 
   // Validate type is supported
   const isValidType = SUPPORTED_FILE_TYPES.includes(type);
 
-  // Determine folder path (resolve home_folder with mode)
-  const folder = useMemo(() => {
-    if (folderParam) return folderParam;
-    if (!user) return '/org';
-    return resolveHomeFolderSync(user.mode, user.home_folder || '');
-  }, [folderParam, user]);
+  // Get app state (creates virtual file with URL params automatically)
+  const { appState, loading: appStateLoading } = useAppState();
+  const virtualFileId = appState?.type === 'file' ? appState.id : undefined;
 
-  // Parse virtualId from URL (used by Navigate tool to coordinate)
-  const virtualId = useMemo(() => {
-    if (virtualIdParam) {
-      const parsed = parseInt(virtualIdParam, 10);
-      if (!isNaN(parsed) && parsed < 0) return parsed;
-    }
-    return undefined;
-  }, [virtualIdParam]);
-
-  // Create virtual file using hook
-  const virtualFileId = useNewFile(type, {
-    folder,
-    databaseName: databaseName || undefined,
-    query: query || undefined,
-    virtualId
-  });
+  // Load the virtual file
   const { file, loading, error } = useFile(virtualFileId);
-  const appState = useAppSelector(state => selectAppState(state, virtualFileId));
 
   // Context version selection (admin only)
   const filesState = useAppSelector(state => state.files.files);
@@ -68,11 +36,11 @@ export default function NewFilePage({ params }: NewFilePageProps) {
 
   // Compute context for the folder path
   const currentContext = useMemo(() => {
-    const targetPath = file?.path || folder;
+    if (!file?.path) return null;
 
-    // Extract parent path (for files) or use folder directly
-    const pathParts = targetPath.split('/');
-    if (file?.path) pathParts.pop(); // Remove filename if we have a file path
+    // Extract parent path from file path
+    const pathParts = file.path.split('/');
+    pathParts.pop(); // Remove filename
     const parentPath = pathParts.join('/') || '/';
 
     const contextFile = Object.values(filesState).find(f => {
@@ -89,10 +57,41 @@ export default function NewFilePage({ params }: NewFilePageProps) {
       path: contextFile.path,
       content: contextFile.content as ContextContent
     };
-  }, [filesState, file?.path, folder]);
+  }, [filesState, file?.path]);
 
   // Check if we should show context selector (admin only)
   const shouldShowContextSelector = user?.role === 'admin';
+
+  // Determine file name
+  const fileName = file?.name || '';
+
+  // Extract folder from file path
+  const folder = useMemo(() => {
+    if (!file?.path) return '/org';
+    const pathParts = file.path.split('/');
+    pathParts.pop(); // Remove filename
+    return pathParts.join('/') || '/';
+  }, [file?.path]);
+
+  // Sidebar config based on type - separate useMemo with appState dependency
+  const rightSidebar = useMemo(() => {
+    const config: RightSidebarProps = {
+      filePath: file?.path || '/org',  // Use file's path if available, so selector finds covering context
+      title: `${type} Context`,
+      showChat: false,
+      contextVersion: selectedVersion,
+      selectedContextPath: currentContext?.path || null,
+      onContextChange: shouldShowContextSelector ? (_path: string | null, version?: number) => {
+        setSelectedVersion(version);
+      } : undefined,
+    };
+
+    if (type === 'question' || type === 'dashboard' || type === 'report' || type === 'alert') {
+      config.showChat = true;
+    }
+
+    return config;
+  }, [type, file?.path, selectedVersion, currentContext?.path, shouldShowContextSelector]);
 
   // Show error for invalid type
   if (!isValidType) {
@@ -110,29 +109,14 @@ export default function NewFilePage({ params }: NewFilePageProps) {
     );
   }
 
-  // Determine file name
-  const fileName = file?.name || '';
-
-  // Sidebar config based on type - separate useMemo with appState dependency
-  const rightSidebar = useMemo(() => {
-    const config: RightSidebarProps = {
-      appState: appState,
-      filePath: file?.path || folder,  // Use file's path if available, so selector finds covering context
-      title: `${type} Context`,
-      showChat: false,
-      contextVersion: selectedVersion,
-      selectedContextPath: currentContext?.path || null,
-      onContextChange: shouldShowContextSelector ? (_path: string | null, version?: number) => {
-        setSelectedVersion(version);
-      } : undefined,
-    };
-
-    if (type === 'question' || type === 'dashboard' || type === 'report' || type === 'alert') {
-      config.showChat = true;
-    }
-
-    return config;
-  }, [type, folder, appState, virtualFileId, file?.path, selectedVersion, currentContext?.path, shouldShowContextSelector]);
+  // Show loading while initializing virtual file
+  if (appStateLoading || !virtualFileId) {
+    return (
+      <Center h="100vh" bg="bg.canvas">
+        <Spinner size="lg" />
+      </Center>
+    );
+  }
 
   return (
     <FileLayout
@@ -141,7 +125,7 @@ export default function NewFilePage({ params }: NewFilePageProps) {
       fileType={type}
       rightSidebar={rightSidebar}
     >
-      <FileView fileId={virtualFileId} mode="create" defaultFolder={folder} />
+      <FileView fileId={virtualFileId!} mode="create" defaultFolder={folder} />
     </FileLayout>
   );
 }

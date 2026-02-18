@@ -14,7 +14,7 @@ import ProductTour from '@/components/ProductTour';
 import { useAppSelector } from '@/store/hooks';
 import { switchMode } from '@/lib/mode/mode-utils';
 import { isAdmin } from '@/lib/auth/role-helpers';
-import { useFolder } from '@/lib/hooks/useFolder';
+import { useFolder } from '@/lib/hooks/file-state-hooks';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { resolvePath, resolveHomeFolderSync, SYSTEM_FOLDERS, isHiddenSystemPath } from '@/lib/mode/path-resolver';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';
@@ -46,18 +46,6 @@ export default function PathPage({ params }: PathPageProps) {
 
   // Load folder into Redux (populates pathIndex, uses TTL cache)
   const { files: folderFiles, loading: folderLoading } = useFolder(fullPath);
-
-  // Build folder app state for chat context
-  const folderAppState = useMemo(() => ({
-    pageType: 'folder' as const,
-    path: fullPath,
-    files: folderFiles.map(f => ({
-      id: f.id,
-      name: f.name,
-      type: f.type,
-      path: f.path,
-    })),
-  }), [fullPath, folderFiles]);
 
   // Client-side permission check for folder access
   useEffect(() => {
@@ -219,7 +207,6 @@ export default function PathPage({ params }: PathPageProps) {
               title="Folder Context"
               filePath={fullPath}
               showChat={showChat}
-              appState={folderAppState}
               contextVersion={selectedVersion}
               selectedContextPath={selectedContextPath}
               onContextChange={shouldShowContextSelector ? (_path: string | null, version?: number) => {
@@ -234,7 +221,6 @@ export default function PathPage({ params }: PathPageProps) {
               title="Folder Context"
               filePath={fullPath}
               showChat={showChat}
-              appState={folderAppState}
               contextVersion={selectedVersion}
               selectedContextPath={selectedContextPath}
               onContextChange={shouldShowContextSelector ? (_path: string | null, version?: number) => {

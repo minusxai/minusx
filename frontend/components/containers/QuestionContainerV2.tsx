@@ -17,12 +17,13 @@ import { Box } from '@chakra-ui/react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectIsDirty, selectMergedContent, selectEffectiveName, setEphemeral, type FileId } from '@/store/filesSlice';
 import { selectProposedQuery } from '@/store/uiSlice';
-import { useFile } from '@/lib/hooks/useFile';
-import { useQueryResult } from '@/lib/hooks/useQueryResult';
+import { useFile, useQueryResult } from '@/lib/hooks/file-state-hooks';
+import { editFile, publishFile, clearFileChanges } from '@/lib/api/file-state';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
 import { QuestionContent, QuestionParameter } from '@/lib/types';
 import { isUserFacingError } from '@/lib/errors';
+import { last } from 'lodash';
 
 interface QuestionContainerV2Props {
   fileId: FileId;
@@ -41,8 +42,8 @@ export default function QuestionContainerV2({
   const router = useRouter();
   const dispatch = useAppDispatch();
 
-  // Phase 2: Use useFile hook for file state management
-  const { file, loading: fileLoading, saving, edit, editMetadata, save, cancel } = useFile(fileId);
+  // Phase 3: Use useFile hook for file state management (purely reactive)
+  const { file, loading: fileLoading, saving } = useFile(fileId);
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
 
   // Phase 3: Get merged content (content + persistableChanges + ephemeralChanges)
@@ -69,15 +70,15 @@ export default function QuestionContainerV2({
     }
   }, [isDirty, editMode, handleEditModeChange]);
 
-  // Phase 3: Get query to execute (from ephemeralChanges.lastExecuted or current query)
-  const lastExecuted = (file?.ephemeralChanges as any)?.lastExecuted;
+  // Phase 3: Get query to execute (from ephemeralChanges.lastExecuted or fallback to current)
+  const lastExecuted = file?.ephemeralChanges?.lastExecuted;
   const queryToExecute = lastExecuted || {
     query: mergedContent?.query || '',
     params: (mergedContent?.parameters || []).reduce((acc, p) => ({
       ...acc,
       [p.name]: p.value
     }), {}),
-    database: mergedContent?.database_name,
+    database: mergedContent?.database_name || '',
     references: mergedContent?.references || []
   };
 
@@ -90,40 +91,19 @@ export default function QuestionContainerV2({
     { skip: !queryToExecute.query }  // Skip if no query
   );
 
-  // On first load, set lastExecuted to current query
-  useEffect(() => {
-    if (!file || !mergedContent) return;
-    if (lastExecuted) return;  // Already set
-
-    // Set initial lastExecuted
-    const initialQuery = {
-      query: mergedContent.query,
-      params: (mergedContent.parameters || []).reduce((acc, p) => ({
-        ...acc,
-        [p.name]: p.value
-      }), {}),
-      database: mergedContent.database_name,
-      references: mergedContent.references || []
-    };
-
-    dispatch(setEphemeral({
-      fileId,
-      changes: { lastExecuted: initialQuery } as any
-    }));
-  }, [file, mergedContent, lastExecuted, fileId, dispatch]);
-
-  // Phase 2: Update current state handler - uses edit() from hook
+  // Phase 3: Update current state handler - uses editFile from file-state.ts
   const handleChange = useCallback((updates: Partial<QuestionContent>) => {
-    edit(updates);
-  }, [edit]);
+    editFile({ fileId, changes: { content: updates } });
+  }, [fileId]);
 
-  // Phase 5: Update metadata handler - uses editMetadata() from hook
+  // Phase 3: Update metadata handler - uses editFile from file-state.ts
   const handleMetadataChange = useCallback((changes: { name?: string }) => {
-    editMetadata(changes);
-  }, [editMetadata]);
+    editFile({ fileId, changes });
+  }, [fileId]);
 
-  // Phase 3: Execute query handler - updates lastExecuted in ephemeralChanges
+  // Phase 3: Execute query handler - updates lastExecuted to trigger execution
   const handleExecute = useCallback((overrideParams?: QuestionParameter[]) => {
+    console.log('Executing query', mergedContent)
     if (!mergedContent) return;
 
     const params = overrideParams || mergedContent.parameters || [];
@@ -139,11 +119,20 @@ export default function QuestionContainerV2({
 
     dispatch(setEphemeral({
       fileId,
-      changes: { lastExecuted: newQuery } as any
+      changes: { lastExecuted: newQuery }
     }));
   }, [mergedContent, fileId, dispatch]);
 
-  // Phase 2: Save handler - uses save() from hook (handles both create and update)
+  // Execute query on first load
+  useEffect(() => {
+    if (!file || !mergedContent) return;
+    if (lastExecuted) return;  // Already executed
+
+    console.log('[QuestionContainerV2] Auto-executing query on first load');
+    handleExecute();
+  }, [file, mergedContent, lastExecuted, handleExecute]);
+
+  // Phase 3: Save handler - uses publishFile from file-state.ts (handles both create and update)
   // Note: Name/description validation is handled by DocumentHeader
   const handleSave = useCallback(async () => {
     if (!mergedContent || !file) return;
@@ -152,7 +141,7 @@ export default function QuestionContainerV2({
     setSaveError(null);
 
     try {
-      const result = await save();
+      const result = await publishFile({ fileId });
       redirectAfterSave(result, fileId, router);
     } catch (error) {
       // User-facing errors should be shown in UI
@@ -165,14 +154,14 @@ export default function QuestionContainerV2({
       console.error('Failed to save question:', error);
       setSaveError('An unexpected error occurred. Please try again.');
     }
-  }, [mergedContent, fileId, router, save]);
+  }, [mergedContent, fileId, router, file]);
 
-  // Cancel handler - discard local changes without reloading
+  // Phase 3: Cancel handler - uses clearFileChanges from file-state.ts
   const handleCancel = useCallback(() => {
-    cancel();
+    clearFileChanges({ fileId });
     setEditMode(false);
     setSaveError(null);
-  }, [cancel]);
+  }, [fileId]);
 
   // Get proposed query from UI state (set by UserInputComponent for diff view)
   const proposedQuery = useAppSelector(state =>

@@ -95,8 +95,6 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
     />
   );
 
-  const appState = { pageType: 'explore' as const, path: '/explore' };
-
   // Build breadcrumb items for explore page
   const breadcrumbItems = useMemo(() => [
     { label: 'Home', href: '/' },
@@ -127,7 +125,7 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
               contextPath={contextPath}
               contextVersion={selectedVersion}
               databaseName={null}  // Auto-select first database
-              appState={appState}
+              appState={undefined}
               container="page"
               onContextChange={(path, version) => {
                 setSelectedContextPath(path);
@@ -142,7 +140,6 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
             title="Exploration Context"
             filePath={contextPath}
             contextVersion={selectedVersion}
-            appState={appState}
             showChat={false}
             history={conversationHistory}
         />
@@ -152,7 +149,6 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
             title="Exploration Context"
             filePath={contextPath}
             contextVersion={selectedVersion}
-            appState={appState}
             showChat={false}
             history={conversationHistory}
         />

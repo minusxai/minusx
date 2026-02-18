@@ -11,7 +11,8 @@
  */
 import { useAppSelector } from '@/store/hooks';
 import { selectIsDirty, selectEffectiveName, type FileId } from '@/store/filesSlice';
-import { useFile } from '@/lib/hooks/useFile';
+import { useFile } from '@/lib/hooks/file-state-hooks';
+import { editFile, publishFile, reloadFile } from '@/lib/api/file-state';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import ConnectionFormV2 from '@/components/views/ConnectionFormV2';
 import { ConnectionContent } from '@/lib/types';
@@ -36,7 +37,7 @@ export default function ConnectionContainerV2({
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // Phase 2: Use useFile hook
-  const { file, loading, saving, edit, editMetadata, save, reload } = useFile(fileId);
+  const { file, loading, saving, error } = useFile(fileId);
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
   const effectiveName = useAppSelector(state => selectEffectiveName(state, fileId)) || '';
 
@@ -48,16 +49,16 @@ export default function ConnectionContainerV2({
 
   // Handlers
   const handleChange = useCallback((updates: Partial<ConnectionContent>) => {
-    edit(updates);
-  }, [edit]);
+    editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes: { content: updates } });
+  }, [fileId]);
 
   const handleFileNameChange = useCallback((newName: string) => {
-    editMetadata({ name: newName });
-  }, [editMetadata]);
+    editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes: { name: newName } });
+  }, [fileId]);
 
   // Phase 2: Save handler
   const handleSave = useCallback(async () => {
-    if (!currentContent || !file) return;
+    if (!currentContent || !file || typeof fileId !== 'number') return;
 
     // Clear previous save error
     setSaveError(null);
@@ -87,7 +88,7 @@ export default function ConnectionContainerV2({
         redirectAfterSave(result, fileId, router);
       } else {
         // For edit mode, use the Phase 2 unified PATCH endpoint
-        const result = await save();
+        const result = await publishFile({ fileId });
         redirectAfterSave(result, fileId, router);
       }
     } catch (error) {
@@ -101,7 +102,7 @@ export default function ConnectionContainerV2({
       console.error('[ConnectionContainerV2] Failed to save connection:', error);
       setSaveError('An unexpected error occurred. Please try again.');
     }
-  }, [currentContent, mode, fileId, router, save, effectiveName]);
+  }, [currentContent, mode, fileId, router, effectiveName]);
 
   // Cancel/revert handler
   const handleCancel = useCallback(() => {
@@ -110,15 +111,18 @@ export default function ConnectionContainerV2({
       router.push('/');
     } else {
       // For existing connections, reload original state
-      reload();
+      if (typeof fileId === 'number') {
+        reloadFile({ fileId });
+      }
     }
-  }, [mode, router, reload]);
+  }, [mode, router, fileId]);
 
   // Reload with force refresh to fetch fresh schema from Python backend
   const handleReload = useCallback(() => {
-    // Type assertion needed because useFile's reload is inferred to have different signature
-    (reload as (skipLoading?: boolean, forceRefresh?: boolean) => void)(false, true);
-  }, [reload]);
+    if (typeof fileId === 'number') {
+      reloadFile({ fileId });
+    }
+  }, [fileId]);
 
   // Loading state
   if (loading || !file || !currentContent) {

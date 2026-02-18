@@ -149,7 +149,9 @@ class FilesDataLayerClient implements IFilesDataLayer {
     }
 
     const json = await res.json();
-    return json.data;
+    // API now returns { success: true, data: DbFile }
+    // Return in SaveFileResult format
+    return { data: json.data };
   }
 
   async getTemplate(type: FileType, options: GetTemplateOptions, user?: EffectiveUser): Promise<GetTemplateResult> {
@@ -161,6 +163,29 @@ class FilesDataLayerClient implements IFilesDataLayer {
 
     if (!res.ok) {
       throw new Error(`Failed to get template for type ${type}: ${res.statusText}`);
+    }
+
+    const json = await res.json();
+    return json.data;
+  }
+
+  async batchSaveFiles(files: Array<{
+    id: number;
+    name: string;
+    path: string;
+    content: BaseFileContent;
+    references: number[];
+  }>, user?: EffectiveUser): Promise<{ savedFileIds: number[] }> {
+    const res = await fetch(`${API_BASE}/api/files/batch-save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files })
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      const errorMessage = errorData.error?.message || errorData.message || errorData.error || `Failed to batch save files: ${res.statusText}`;
+      throw new Error(errorMessage);
     }
 
     const json = await res.json();

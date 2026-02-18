@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { type ConnectionWithSchema } from '@/store/filesSlice';
-import { useFiles } from './useFiles';
+import { useFilesByCriteria } from './file-state-hooks';
 import type { ConnectionContent } from '@/lib/types';
 import { CACHE_TTL } from '@/lib/constants/cache';
 
@@ -18,7 +18,7 @@ export interface UseConnectionsOptions {
 export interface UseConnectionsReturn {
   connections: Record<string, ConnectionWithSchema>;
   loading: boolean;
-  reload: () => void;
+  error: Error | null;
 }
 
 /**
@@ -43,7 +43,7 @@ export function useConnections(options: UseConnectionsOptions = {}): UseConnecti
 
   // Delegate to core hook for loading (handles freshness checking internally)
   // Use partial: false to fully load connections with schemas (triggers connection-loader)
-  const { files, loading, reload } = useFiles({
+  const { files, loading, error } = useFilesByCriteria({
     criteria,
     ttl,
     skip,
@@ -77,6 +77,6 @@ export function useConnections(options: UseConnectionsOptions = {}): UseConnecti
   return {
     connections,
     loading,
-    reload
+    error
   };
 }

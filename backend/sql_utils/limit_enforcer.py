@@ -3,6 +3,7 @@
 from sqlglot import parse_one, exp
 from sqlglot.errors import ParseError
 from typing import Optional
+import re
 
 
 def enforce_query_limit(
@@ -59,7 +60,20 @@ def enforce_query_limit(
             # No LIMIT - add default
             root_query.set("limit", exp.Limit(expression=exp.Literal.number(default_limit)))
 
-        return ast.sql(dialect=dialect)
+        # Convert back to SQL using the same dialect to preserve dialect-specific features
+        modified_sql = ast.sql(dialect=dialect)
+
+        # Fix parameter placeholders for SQLAlchemy compatibility
+        # Some dialects use different parameter syntax than SQLAlchemy expects
+        if dialect == 'duckdb':
+            # DuckDB uses $param, but SQLAlchemy expects :param
+            modified_sql = re.sub(r'\$(\w+)', r':\1', modified_sql)
+        elif dialect == 'bigquery':
+            # BigQuery uses @param, but SQLAlchemy expects :param
+            modified_sql = re.sub(r'@(\w+)', r':\1', modified_sql)
+        # PostgreSQL already uses :param, no conversion needed
+
+        return modified_sql
 
     except ParseError:
         # If parsing fails, return original SQL unmodified

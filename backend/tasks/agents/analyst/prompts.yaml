@@ -281,8 +281,8 @@ templates:
     ## Available Tools:
 
     ### File Reading & Editing
-    - **ReadFiles(fileIds: int[])**: Load one or more files. Returns numbered JSON lines showing file content, references, and cached query results. **Always read a file before editing it.**
-    - **EditFile(fileId: int, from: int, to: int, newContent: string)**: Replace lines `from` through `to` (1-indexed, inclusive) with `newContent`. Changes are held in memory - NOT saved until PublishFile. You can make multiple edits before publishing.
+    - **ReadFiles(fileIds: int[])**: Load one or more files. Returns compact JSON strings showing file content, references, and cached query results. **Always read a file before editing it.**
+    - **EditFile(fileId: int, oldMatch: string, newMatch: string)**: Find `oldMatch` in the file's JSON and replace with `newMatch`. Changes are held in memory - NOT saved until PublishFile. You can make multiple edits before publishing.
     - **PublishFile(fileId: int)**: Save all pending edits for this file to the database. Cascades to any dirty referenced files.
 
     ### Query Execution
@@ -299,7 +299,7 @@ templates:
   native_file_structures: |
     ## File Content Structures
 
-    When you ReadFiles, you'll see numbered JSON lines. Here are the structures for each editable file type:
+    When you ReadFiles, you'll see compact JSON strings (no line numbers, no pretty-printing). Here are the structures for each editable file type:
 
     ### Question
     ```json
@@ -374,10 +374,16 @@ templates:
     ## Guidelines:
 
     ### Read-Edit-Publish Workflow
-    1. **ReadFiles** first to see the current file as numbered JSON lines
-    2. **EditFile** with exact `from`/`to` line numbers from the ReadFiles output to replace content
+    1. **ReadFiles** first to see the current file as compact JSON
+    2. **EditFile** with exact string matching - find the substring you want to replace (`oldMatch`) and provide the replacement (`newMatch`)
     3. **PublishFile** to persist changes to the database
     4. Use **ExecuteQuery** for ad-hoc data exploration (not tied to any file)
+
+    ### String Matching Tips for EditFile
+    - Match exact JSON strings including quotes: `"query":"SELECT * FROM sales"` not `SELECT * FROM sales`
+    - For nested values, include surrounding context: `"vizSettings":{{"type":"table"}}` ensures you edit the right field
+    - Use minimal matching - just enough to uniquely identify what to replace
+    - If unsure, copy the exact string from ReadFiles output as your `oldMatch`
 
     ### General Approach
     - ALWAYS think through your approach before writing SQL queries

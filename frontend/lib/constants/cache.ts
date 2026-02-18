@@ -4,7 +4,7 @@
  * These control how long data is considered "fresh" before refetching
  */
 
-// 10 hours in milliseconds
+// Cache durations in milliseconds
 const TEN_HOURS = 10 * 60 * 60 * 1000;
 
 export const CACHE_TTL = {

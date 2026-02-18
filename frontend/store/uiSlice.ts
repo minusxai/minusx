@@ -20,6 +20,17 @@ interface UIState {
   selectedToolset: 'classic' | 'native';
 }
 
+// Load persisted toolset from localStorage (with SSR safety)
+const getPersistedToolset = (): 'classic' | 'native' => {
+  if (typeof window === 'undefined') return 'classic';
+  try {
+    const stored = localStorage.getItem('selectedToolset');
+    return stored === 'native' ? 'native' : 'classic';
+  } catch {
+    return 'classic';
+  }
+};
+
 const initialState: UIState = {
   leftSidebarCollapsed: false,
   rightSidebarCollapsed: true,
@@ -35,7 +46,7 @@ const initialState: UIState = {
   dashboardEditMode: {},
   sidebarDrafts: {},
   proposedQueries: {},
-  selectedToolset: 'classic',
+  selectedToolset: getPersistedToolset(),
 };
 
 const uiSlice = createSlice({
@@ -120,6 +131,14 @@ const uiSlice = createSlice({
     },
     setSelectedToolset: (state, action: PayloadAction<'classic' | 'native'>) => {
       state.selectedToolset = action.payload;
+      // Persist to localStorage
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.setItem('selectedToolset', action.payload);
+        } catch (error) {
+          console.warn('Failed to persist toolset to localStorage:', error);
+        }
+      }
     },
   },
 });

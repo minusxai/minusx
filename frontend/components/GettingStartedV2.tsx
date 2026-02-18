@@ -23,7 +23,7 @@ import type { IconType } from 'react-icons';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { useContexts } from '@/lib/hooks/useContexts';
-import { useFiles } from '@/lib/hooks/useFiles';
+import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { resolveHomeFolderSync, SYSTEM_FOLDERS, resolvePath } from '@/lib/mode/path-resolver';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';
@@ -70,7 +70,7 @@ function useOnboardingState() {
     () => ({ type: 'question' as const, paths: [homeFolder], depth: -1 }),
     [homeFolder]
   );
-  const { files: questions, loading: qLoading } = useFiles({
+  const { files: questions, loading: qLoading } = useFilesByCriteria({
     criteria: questionsCriteria,
     partial: true,
     skip: false
@@ -81,7 +81,7 @@ function useOnboardingState() {
     () => ({ type: 'dashboard' as const, paths: [homeFolder], depth: -1 }),
     [homeFolder]
   );
-  const { files: dashboards, loading: dLoading } = useFiles({
+  const { files: dashboards, loading: dLoading } = useFilesByCriteria({
     criteria: dashboardsCriteria,
     partial: true,
     skip: false
@@ -93,7 +93,7 @@ function useOnboardingState() {
     () => ({ type: 'conversation' as const, paths: [conversationsPath], depth: -1 }),
     [conversationsPath]
   );
-  const { files: conversations, loading: convLoading } = useFiles({
+  const { files: conversations, loading: convLoading } = useFilesByCriteria({
     criteria: conversationsCriteria,
     partial: true,
     skip: false

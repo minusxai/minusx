@@ -11,7 +11,7 @@
  * - Support virtual files (string IDs) for create mode
  */
 import { Box, Spinner, Text } from '@chakra-ui/react';
-import { useFile } from '@/lib/hooks/useFile';
+import { useFile } from '@/lib/hooks/file-state-hooks';
 import { getFileComponent, hasFileComponent } from '@/lib/ui/fileComponents';
 import { type FileId } from '@/store/filesSlice';
 

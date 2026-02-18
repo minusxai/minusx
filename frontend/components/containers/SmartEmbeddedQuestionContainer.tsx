@@ -1,6 +1,6 @@
 'use client';
 
-import { useFile } from '@/lib/hooks/useFile';
+import { useFile } from '@/lib/hooks/file-state-hooks';
 import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent } from '@/store/filesSlice';
 import { QuestionContent, QuestionParameter } from '@/lib/types';

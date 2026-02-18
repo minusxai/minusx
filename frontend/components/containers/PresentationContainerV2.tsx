@@ -14,7 +14,8 @@
  */
 import { useAppSelector } from '@/store/hooks';
 import { selectIsDirty, type FileId } from '@/store/filesSlice';
-import { useFile } from '@/lib/hooks/useFile';
+import { useFile } from '@/lib/hooks/file-state-hooks';
+import { editFile, publishFile, reloadFile } from '@/lib/api/file-state';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import PresentationView from '@/components/views/PresentationView';
 import { DocumentContent } from '@/lib/types';
@@ -39,7 +40,7 @@ export default function PresentationContainerV2({
   const router = useRouter();
 
   // Phase 2: Use useFile hook for state management
-  const { file, loading: fileLoading, saving, edit, save, reload } = useFile(fileId);
+  const { file, loading: fileLoading, saving, error } = useFile(fileId);
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
 
   // Save error state (for user-facing errors)
@@ -62,18 +63,18 @@ export default function PresentationContainerV2({
 
   // Handlers
   const handleChange = useCallback((updates: Partial<DocumentContent>) => {
-    edit(updates);
-  }, [edit]);
+    editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes: { content: updates } });
+  }, [fileId]);
 
   // Phase 2: Save handler - uses save() from hook (handles both create and update)
   const handleSave = useCallback(async () => {
-    if (!currentContent) return;
+    if (!currentContent || typeof fileId !== 'number') return;
 
     // Clear previous save error
     setSaveError(null);
 
     try {
-      const result = await save();
+      const result = await publishFile({ fileId });
       redirectAfterSave(result, fileId, router);
     } catch (error) {
       // User-facing errors should be shown in UI
@@ -86,12 +87,14 @@ export default function PresentationContainerV2({
       console.error('Failed to save presentation:', error);
       setSaveError('An unexpected error occurred. Please try again.');
     }
-  }, [currentContent, fileId, router, save]);
+  }, [currentContent, fileId, router]);
 
   // Phase 2: Revert handler - uses reload() from hook
   const handleRevert = useCallback(() => {
-    reload();
-  }, [reload]);
+    if (typeof fileId === 'number') {
+      reloadFile({ fileId });
+    }
+  }, [fileId]);
 
   // Show loading state while file is loading
   if (fileLoading || !file || !currentContent) {

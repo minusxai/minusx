@@ -79,7 +79,7 @@ export const PATCH = withAuth(async (
     // Phase 6: Client sends pre-extracted references (server is dumb, just saves what it receives)
     const result = await saveFile(id, name, path, content, references || [], user);
 
-    return successResponse(result);
+    return successResponse(result.data);
   } catch (error) {
     return handleApiError(error);
   }

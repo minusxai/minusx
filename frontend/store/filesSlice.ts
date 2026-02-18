@@ -5,6 +5,18 @@ import type { RootState } from './store';
 import { getQueryHash } from '@/lib/utils/query-hash';
 
 /**
+ * Ephemeral changes - non-persistent state like lastExecuted query
+ */
+export type EphemeralChanges = Partial<DbFile['content']> & {
+  lastExecuted?: {
+    query: string;
+    params: Record<string, any>;
+    database: string;
+    references: any[];
+  };
+};
+
+/**
  * FileState: Complete file state including metadata and change tracking
  * Extends DbFile with UI state and change tracking
  * Implements Core Patterns architecture from Phase 1
@@ -20,7 +32,7 @@ export interface FileState extends DbFile {
 
   // Change tracking (Phase 2)
   persistableChanges: Partial<DbFile['content']>;
-  ephemeralChanges: Partial<DbFile['content']>;
+  ephemeralChanges: EphemeralChanges;
   metadataChanges: { name?: string; path?: string }; // Phase 5: Metadata edits
 }
 
@@ -315,7 +327,7 @@ const filesSlice = createSlice({
      * Used for non-persistent state like lastExecuted query
      * Merge with existing ephemeralChanges
      */
-    setEphemeral(state, action: PayloadAction<{ fileId: FileId; changes: Partial<DbFile['content']> }>) {
+    setEphemeral(state, action: PayloadAction<{ fileId: FileId; changes: EphemeralChanges }>) {
       const { fileId, changes } = action.payload;
       if (state.files[fileId]) {
         state.files[fileId].ephemeralChanges = {
@@ -341,12 +353,32 @@ const filesSlice = createSlice({
      */
     setMetadataEdit(state, action: PayloadAction<{ fileId: FileId; changes: { name?: string; path?: string } }>) {
       const { fileId, changes } = action.payload;
-      if (state.files[fileId]) {
-        state.files[fileId].metadataChanges = {
-          ...state.files[fileId].metadataChanges,
-          ...changes
-        };
+      const file = state.files[fileId];
+      if (!file) return;
+
+      // Auto-update path slug when name changes (keep parent folder)
+      let updatedChanges = { ...changes };
+      if (changes.name && !changes.path) {
+        // Get current path (with any pending changes applied)
+        const currentPath = file.metadataChanges?.path || file.path;
+
+        // Extract parent folder (everything before last /)
+        const parentFolder = currentPath.substring(0, currentPath.lastIndexOf('/')) || '/org';
+
+        // Generate new slug from name
+        const newSlug = changes.name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '');
+
+        // Combine parent + slug
+        updatedChanges.path = `${parentFolder}/${newSlug}`;
       }
+
+      file.metadataChanges = {
+        ...file.metadataChanges,
+        ...updatedChanges
+      };
     },
 
     /**
@@ -531,21 +563,23 @@ const filesSlice = createSlice({
         metadataChanges: {}
       };
 
-      // Update path index
-      state.pathIndex[file.path] = file.id;
+      // Update path index (guard against undefined path)
+      if (file.path) {
+        state.pathIndex[file.path] = file.id;
 
-      // Get parent folder path
-      const parentPath = file.path.substring(0, file.path.lastIndexOf('/')) || '/';
-      const parentFolderId = state.pathIndex[parentPath];
+        // Get parent folder path
+        const parentPath = file.path.substring(0, file.path.lastIndexOf('/')) || '/';
+        const parentFolderId = state.pathIndex[parentPath];
 
-      // Update parent folder to add this file to references
-      if (parentFolderId && state.files[parentFolderId]) {
-        // Add to references if not already there
-        if (!state.files[parentFolderId].references.includes(file.id)) {
-          state.files[parentFolderId].references.push(file.id);
+        // Update parent folder to add this file to references
+        if (parentFolderId && state.files[parentFolderId]) {
+          // Add to references if not already there
+          if (!state.files[parentFolderId].references.includes(file.id)) {
+            state.files[parentFolderId].references.push(file.id);
+          }
+          // Update parent folder's timestamp to invalidate cache
+          state.files[parentFolderId].updatedAt = Date.now();
         }
-        // Update parent folder's timestamp to invalidate cache
-        state.files[parentFolderId].updatedAt = Date.now();
       }
     },
 

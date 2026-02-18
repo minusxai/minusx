@@ -7,7 +7,8 @@
  */
 import { useAppSelector } from '@/store/hooks';
 import { selectIsDirty, selectEffectiveName, type FileId } from '@/store/filesSlice';
-import { useFile } from '@/lib/hooks/useFile';
+import { useFile } from '@/lib/hooks/file-state-hooks';
+import { editFile, publishFile, clearFileChanges, reloadFile } from '@/lib/api/file-state';
 import ContextEditorV2 from '@/components/context/ContextEditorV2';
 import { ContextContent, ContextVersion, DocEntry } from '@/lib/types';
 import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
@@ -44,7 +45,7 @@ export default function ContextContainerV2({
   const user = useAppSelector(state => state.auth.user);
 
   // Phase 2: Use useFile hook for state management
-  const { file, loading: fileLoading, saving, edit, editMetadata, save, cancel, reload } = useFile(fileId);
+  const { file, loading: fileLoading, saving, error } = useFile(fileId);
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
 
   // Phase 5: Get effective name (with pending metadata changes)
@@ -82,8 +83,10 @@ export default function ContextContainerV2({
     hasBackgroundRefreshed.current[fileId] = true;
 
     // Silent background refresh (skipLoading = true)
-    reload(true);
-  }, [file?.content, fileId, isDirty, reload]);
+    if (typeof fileId === 'number') {
+      reloadFile({ fileId, silent: true });
+    }
+  }, [file?.content, fileId, isDirty]);
 
   // Merge content with persistableChanges for preview
   const currentContent = useMemo(() => {
@@ -195,23 +198,19 @@ export default function ContextContainerV2({
     const updatedVersions = [...(currentContent.versions || []), newVersion];
 
     // Update content with new version
-    edit({
-      versions: updatedVersions
-    });
+    editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes: { content: { ...currentContent, versions: updatedVersions } as ContextContent } });
 
     // Switch to the new version
     setSelectedVersion(newVersionNumber);
-  }, [currentContent, selectedVersion, user, edit]);
+  }, [currentContent, selectedVersion, user, fileId]);
 
   // Handle publishing version (only publish to all)
   const handlePublishVersion = useCallback(() => {
     if (!currentContent) return;
 
     // Update content with new published state
-    edit({
-      published: { all: selectedVersion }
-    });
-  }, [currentContent, selectedVersion, edit]);
+    editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes: { content: { ...currentContent, published: { all: selectedVersion } } as ContextContent } });
+  }, [currentContent, selectedVersion, fileId]);
 
 
   // Handle deleting version
@@ -226,9 +225,7 @@ export default function ContextContainerV2({
     const updatedVersions = currentContent.versions?.filter(v => v.version !== version);
 
     // Update content
-    edit({
-      versions: updatedVersions
-    });
+    editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes: { content: { ...currentContent, versions: updatedVersions } as ContextContent } });
 
     // Switch to published version if deleted current
     if (selectedVersion === version) {
@@ -236,7 +233,7 @@ export default function ContextContainerV2({
       const publishedVersion = getPublishedVersionForUser(newContent, user.id);
       setSelectedVersion(publishedVersion);
     }
-  }, [currentContent, selectedVersion, user?.id, edit]);
+  }, [currentContent, selectedVersion, user?.id, fileId]);
 
   // Handle updating version description
   const handleUpdateDescription = useCallback((version: number, description: string) => {
@@ -249,15 +246,13 @@ export default function ContextContainerV2({
       return v;
     });
 
-    edit({
-      versions: updatedVersions
-    });
-  }, [currentContent, edit]);
+    editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes: { content: { ...currentContent, versions: updatedVersions } as ContextContent } });
+  }, [currentContent, fileId]);
 
   // Phase 5: Metadata change handler
   const handleMetadataChange = useCallback((changes: { name?: string }) => {
-    editMetadata(changes);
-  }, [editMetadata]);
+    editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes });
+  }, [fileId]);
 
   // Handle saving with validation
   const handleSave = useCallback(async () => {
@@ -276,8 +271,10 @@ export default function ContextContainerV2({
     }
 
     try {
-      const result = await save();
-      redirectAfterSave(result, fileId, router);
+      if (typeof fileId === 'number') {
+        const result = await publishFile({ fileId });
+        redirectAfterSave(result, fileId, router);
+      }
     } catch (error) {
       // User-facing errors should be shown in UI
       if (isUserFacingError(error)) {
@@ -289,14 +286,16 @@ export default function ContextContainerV2({
       console.error('Failed to save context:', error);
       setSaveError('An unexpected error occurred. Please try again.');
     }
-  }, [currentContent, fileId, router, save]);
+  }, [currentContent, fileId, router]);
 
   // Cancel handler - discard local changes without reloading
   const handleCancel = useCallback(() => {
-    cancel();
+    if (typeof fileId === 'number') {
+      clearFileChanges({ fileId });
+    }
     setEditMode(false);
     setSaveError(null);
-  }, [cancel]);
+  }, [fileId]);
 
   // Show loading state while file is loading
   if (fileLoading || !file || !currentContent) {
@@ -322,14 +321,12 @@ export default function ContextContainerV2({
         return v;
       });
 
-      edit({
-        versions: updatedVersions
-      });
+      editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes: { content: { ...currentContent, versions: updatedVersions } as ContextContent } });
     } else {
       // Other updates go through directly
-      edit(updates);
+      editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes: { content: { ...currentContent, ...updates } as ContextContent } });
     }
-  }, [currentContent, currentVersionContent, selectedVersion, user?.id, edit]);
+  }, [currentContent, currentVersionContent, selectedVersion, user?.id, fileId]);
 
   // Build content for editor (includes selected version's data)
   const editorContent = useMemo((): ContextContent => {

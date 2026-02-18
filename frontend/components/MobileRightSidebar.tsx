@@ -15,6 +15,7 @@ import ChatInterface from './explore/ChatInterface';
 import AppStateViewer from './AppStateViewer';
 import { ReactNode } from 'react';
 import { useContext } from '@/lib/hooks/useContext';
+import { useAppState } from '@/lib/hooks/file-state-hooks';
 import { ContextSelector } from './explore/ContextSelector';
 import { selectActiveConversation } from '@/store/chatSlice';
 import { getSidebarSection, SidebarSectionMetadata } from '@/lib/ui/sidebar-sections';
@@ -24,7 +25,6 @@ export interface MobileRightSidebarProps {
   filePath?: string;
   history?: ReactNode;
   showChat?: boolean;
-  appState: AppState | null | undefined;
   contextVersion?: number;  // Selected context version (admin testing)
   selectedContextPath?: string | null;  // Selected context path for dropdown
   onContextChange?: (path: string | null, version?: number) => void;
@@ -35,7 +35,6 @@ export default function MobileRightSidebar({
   filePath = '/',
   history,
   showChat = false,
-  appState = null,
   contextVersion,
   selectedContextPath,
   onContextChange
@@ -43,6 +42,9 @@ export default function MobileRightSidebar({
   const dispatch = useAppDispatch();
   const devMode = useAppSelector((state) => state.ui.devMode);
   const activeSection = useAppSelector((state) => state.ui.activeSidebarSection);
+
+  // Get current page app state
+  const { appState, loading: appStateLoading } = useAppState();
 
   // Read from Redux (loaded by layout.tsx)
   const currentUser = useAppSelector(state => state.auth.user);
@@ -61,14 +63,14 @@ export default function MobileRightSidebar({
   const dragStartPosition = useRef<number>(80);
 
   // Dashboard edit mode detection
-  const isDashboard = appState?.pageType === 'dashboard';
+  const isDashboard = appState?.type === 'file' && appState.fileType === 'dashboard';
   const dashboardEditMode = useAppSelector(state =>
-    appState?.fileId && isDashboard ? selectDashboardEditMode(state, appState.fileId) : false
+    appState?.type === 'file' && isDashboard ? selectDashboardEditMode(state, appState.id) : false
   );
 
   // Get dashboard content for question IDs (needed for excludedIds)
   const dashboardContent = useAppSelector(state =>
-    appState?.fileId && isDashboard ? selectMergedContent(state, appState.fileId) as DocumentContent | undefined : undefined
+    appState?.type === 'file' && isDashboard ? selectMergedContent(state, appState.id) as DocumentContent | undefined : undefined
   );
 
   // Extract folder path from file path (for QuestionBrowserPanel)
@@ -81,8 +83,8 @@ export default function MobileRightSidebar({
 
   // Handler for adding questions to dashboard
   const handleAddQuestionToDashboard = (questionId: number) => {
-    if (appState?.fileId && isDashboard) {
-      dispatch(addQuestionToDashboard({ dashboardId: appState.fileId, questionId }));
+    if (appState?.type === 'file' && isDashboard) {
+      dispatch(addQuestionToDashboard({ dashboardId: appState.id, questionId }));
     }
   };
 
@@ -95,7 +97,7 @@ export default function MobileRightSidebar({
   const sections: SidebarSectionMetadata[] = [];
 
   // Questions section - only visible for dashboards in edit mode (shown first)
-  if (isDashboard && dashboardEditMode && appState?.fileId) {
+  if (isDashboard && dashboardEditMode && appState?.type === 'file') {
     sections.push(getSidebarSection('questions'));
   }
 
@@ -371,7 +373,7 @@ export default function MobileRightSidebar({
                 </Box>
               )}
 
-              {activeSection === 'questions' && appState?.fileId && (
+              {activeSection === 'questions' && appState?.type === 'file' && (
                 <Box p={0} maxH="calc(75vh - 60px)" overflowY="auto">
                   <QuestionBrowserPanel
                     folderPath={dashboardFolderPath}

@@ -42,7 +42,7 @@ export default function ChatInterface({
 }: ChatInterfaceProps) {
   const router = useRouter();
   const dispatch = useAppDispatch();
-  const isExplorePage = appState?.pageType === 'explore';
+  const isExplorePage = !appState || (appState.type !== 'file' && appState.type !== 'folder');
 
   // Load context using useContext hook (reuse existing hook)
   const contextInfo = useContext(contextPath, contextVersion);

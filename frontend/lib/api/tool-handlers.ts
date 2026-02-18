@@ -6,17 +6,19 @@
  */
 
 import { ToolCall, ToolMessage, DatabaseWithSchema, DocumentContent, QuestionContent, ReportContent, ReportReference, AlertContent, AlertSelector, AlertFunction, ComparisonOperator } from '@/lib/types';
-import { setEdit, setEphemeral, setFile, selectMergedContent, type FileId } from '@/store/filesSlice';
+import { setEdit, setEphemeral, setFile, selectMergedContent, setMetadataEdit, type FileId } from '@/store/filesSlice';
 import type { AppDispatch, RootState } from '@/store/store';
-import { store } from '@/store/store';
+import { getStore } from '@/store/store';
 import type { UserInput } from './user-input-exception';
 import { UserInputException } from './user-input-exception';
 import { slugify } from '@/lib/slug-utils';
-import { selectAppState } from '../appState';
 import { FilesAPI } from '../data/files';
 import { fetchWithCache } from './fetch-wrapper';
 import { API } from './declarations';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
+import { getRouter } from '@/lib/navigation/use-navigation';
+import { readFilesLineEncoded, editFileLineEncoded, readFilesStr, editFileStr, publishFile, getQueryResult } from '@/lib/api/file-state';
+import { canCreateFileType } from '@/lib/auth/access-rules.client';
 
 // ============================================================================
 // Frontend Tool Registry
@@ -327,7 +329,6 @@ registerFrontendTool('UpdateFileMetadata', async (args, context) => {
   const fileId = file_id as FileId;
   // Update metadata (name/path)
   if (name !== undefined || path !== undefined) {
-    const { setMetadataEdit } = await import('@/store/filesSlice');
     const changes: { name?: string; path?: string } = {};
     if (name !== undefined) changes.name = name;
     // if (path !== undefined) changes.path = path;
@@ -337,7 +338,6 @@ registerFrontendTool('UpdateFileMetadata', async (args, context) => {
 
   // Update content (description)
   if (description !== undefined) {
-    const { setEdit } = await import('@/store/filesSlice');
     dispatch(setEdit({ fileId, edits: { description } }));
   }
 
@@ -358,7 +358,6 @@ registerFrontendTool('UpdateFileMetadata', async (args, context) => {
 registerFrontendTool('Navigate', async (args, context) => {
   const { file_id, path, newFileType } = args;
   const { state, userInputs } = context;
-  const { getRouter } = await import('@/lib/navigation/use-navigation');
 
   // Check if user confirmation is required
 //   const askForConfirmation = state?.ui?.askForConfirmation ?? false;
@@ -424,20 +423,17 @@ registerFrontendTool('Navigate', async (args, context) => {
         await FilesAPI.loadFile(file_id)
       }
     }
-    const appState = state ? selectAppState(state, file_id) : {}
     const debugMsg = newFileType !== undefined ? `;newFileType=${newFileType} is ignored since file_id provided` : ''
     const debugMsg2 = path !== undefined ? `;path=${path} is ignored since file_id provided` : ''
     return {
       success: true,
-      message: `Navigated to file ${file_id}${debugMsg}${debugMsg2}`,
-      appState
+      message: `Navigated to file ${file_id}${debugMsg}${debugMsg2}`
     };
   }
 
   // Navigate to new file creation page
   if (newFileType !== undefined) {
     // Check if user has permission to create this file type
-    const { canCreateFileType } = await import('@/lib/auth/access-rules.client');
     const canCreate = canCreateFileType(newFileType);
 
     if (!canCreate) {
@@ -555,7 +551,7 @@ registerFrontendTool('EditDashboard', async (args, context) => {
   }
 
   // Get content from passed state or fallback to store
-  const reduxState = state || store.getState();
+  const reduxState = state || getStore().getState();
   const mergedContent = selectMergedContent(reduxState, file_id) as DocumentContent;
 
   if (!mergedContent) {
@@ -690,7 +686,7 @@ registerFrontendTool('EditReport', async (args, context) => {
   }
 
   // Get content from passed state or fallback to store
-  const reduxState = state || store.getState();
+  const reduxState = state || getStore().getState();
   const mergedContent = selectMergedContent(reduxState, file_id) as ReportContent;
 
   if (!mergedContent) {
@@ -911,7 +907,7 @@ registerFrontendTool('EditAlert', async (args, context) => {
     question_id = parseInt(question_id, 10);
   }
 
-  const reduxState = state || store.getState();
+  const reduxState = state || getStore().getState();
   const mergedContent = selectMergedContent(reduxState, file_id) as AlertContent;
 
   if (!mergedContent) {
@@ -1550,7 +1546,7 @@ async function handleUpdateQuestion(
 
     // Get FRESH state after dispatch
     // Note: state from context is passed from chat listener and contains current Redux state
-    // After setEdit, we need to get updated state - but store.getState() in tool context may not work
+    // After setEdit, we need to get updated state - but getStore().getState() in tool context may not work
     // Use the state from context and manually merge the edits
     const currentFile = state.files.files[questionId];
     if (!currentFile || !currentFile.content) {
@@ -1744,40 +1740,86 @@ registerFrontendTool('ClarifyFrontend', async (args, context) => {
 
 /**
  * ReadFiles - Load multiple files with references and query results
+ * Returns compact JSON strings for LLM consumption
  */
 registerFrontendTool('ReadFiles', async (args, context) => {
   const { fileIds } = args;
-  const { state, dispatch } = context;
 
-  if (!state || !dispatch) {
-    throw new Error('Redux state and dispatch required for ReadFiles');
-  }
-
-  // Import and execute
-  const { readFiles } = await import('./read-files.client');
-  const result = await readFiles({ fileIds }, () => state);
+  // Execute with compact JSON strings
+  const result = await readFilesStr({ fileIds }, {});
 
   return result;
 });
 
 /**
- * EditFile - Range-based file editing with validation
+ * EditFile - String-based editing for native toolset
+ * Routes to editFileStr for string find-and-replace with oldMatch/newMatch parameters
  */
 registerFrontendTool('EditFile', async (args, context) => {
-  const { fileId, from, to, newContent } = args;
-  const { state, dispatch } = context;
+  const { fileId, oldMatch, newMatch } = args;
 
-  if (!state || !dispatch) {
-    throw new Error('Redux state and dispatch required for EditFile');
+  // Native toolset uses string-based editing (oldMatch/newMatch parameters)
+  const result = await editFileStr({ fileId, oldMatch, newMatch });
+
+  if (!result.success) {
+    throw new Error(result.error || 'Edit failed');
   }
 
-  // Import and execute
-  const { editFile } = await import('./edit-file.client');
-  const result = await editFile(
-    { fileId, from, to, newContent },
-    () => state,
-    dispatch
-  );
+  // Auto-execute query for questions (agent tool only)
+  const state = getStore().getState();
+  const fileState = state.files.files[fileId];
+  if (fileState?.type === 'question') {
+    const finalContent = selectMergedContent(state, fileId) as any;
+
+    if (finalContent?.query && finalContent?.database_name) {
+      const params = (finalContent.parameters || []).reduce((acc: any, p: any) => {
+        acc[p.name] = p.value ?? '';
+        return acc;
+      }, {} as Record<string, any>);
+
+      // Execute query to populate cache
+      await getQueryResult({
+        query: finalContent.query,
+        params,
+        database: finalContent.database_name
+      });
+    }
+  }
+
+  return result;
+});
+
+/**
+ * EditFileReplace - Range-based line editing (legacy/precise editing)
+ */
+registerFrontendTool('EditFileReplace', async (args, context) => {
+  const { fileId, from, to, newContent } = args;
+
+  // Range-based API for precise editing
+  const result = await editFileLineEncoded({ fileId, from, to, newContent });
+
+  // Auto-execute query for questions (agent tool only)
+  if (result.success) {
+    const state = getStore().getState();
+    const fileState = state.files.files[fileId];
+    if (fileState?.type === 'question') {
+      const finalContent = selectMergedContent(state, fileId) as any;
+
+      if (finalContent?.query && finalContent?.database_name) {
+        const params = (finalContent.parameters || []).reduce((acc: any, p: any) => {
+          acc[p.name] = p.value ?? '';
+          return acc;
+        }, {} as Record<string, any>);
+
+        // Execute query to populate cache
+        await getQueryResult({
+          query: finalContent.query,
+          params,
+          database: finalContent.database_name
+        });
+      }
+    }
+  }
 
   return result;
 });
@@ -1787,15 +1829,19 @@ registerFrontendTool('EditFile', async (args, context) => {
  */
 registerFrontendTool('PublishFile', async (args, context) => {
   const { fileId } = args;
-  const { state, dispatch } = context;
 
-  if (!state || !dispatch) {
-    throw new Error('Redux state and dispatch required for PublishFile');
+  // Execute (new unified API)
+  const result = await publishFile({ fileId });
+  if (fileId < 0 && result.id) {
+    const router = getRouter();
+    if (!router) {
+      return {
+        success: false,
+        message: 'Router not available'
+      };
+    }
+    router.push(`/f/${result.id}`)
   }
-
-  // Import and execute
-  const { publishFile } = await import('./publish-file.client');
-  const result = await publishFile({ fileId }, () => state, dispatch);
 
   return result;
 });

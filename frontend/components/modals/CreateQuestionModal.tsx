@@ -5,6 +5,7 @@ import { Dialog, HStack, Text, Button, Portal } from '@chakra-ui/react';
 import { LuExternalLink } from 'react-icons/lu';
 import Link from 'next/link';
 import CreateQuestionModalContainer from './CreateQuestionModalContainer';
+import { preserveParams } from '@/lib/navigation/url-utils';
 
 interface CreateQuestionModalProps {
   isOpen: boolean;
@@ -67,7 +68,7 @@ export default function CreateQuestionModal({
           <HStack p={3} justify="space-between">
             <Text fontFamily="mono" fontSize="lg">{questionId ? "Edit Question" : "Create Question"}</Text>
             {questionId && (
-              <Link href={`/f/${questionId}`} target="_blank">
+              <Link href={preserveParams(`/f/${questionId}`)} target="_blank">
                 <Button size="xs" variant="ghost">
                   <LuExternalLink />
                   Go to Question

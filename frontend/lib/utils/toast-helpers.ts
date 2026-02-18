@@ -1,5 +1,5 @@
 import { toaster } from '@/components/ui/toaster';
-import { store } from '@/store/store';
+import { getStore } from '@/store/store';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { isAdmin } from '@/lib/auth/role-helpers';
 
@@ -15,7 +15,7 @@ interface ToastOptions {
  * Regular users won't see any toasts (silent error handling)
  */
 export function showAdminToast(options: ToastOptions) {
-  const state = store.getState();
+  const state = getStore().getState();
   const user = selectEffectiveUser(state);
 
   // Only show toasts to admins

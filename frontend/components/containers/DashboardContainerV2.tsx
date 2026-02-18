@@ -16,7 +16,8 @@ import { Box } from '@chakra-ui/react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { selectIsDirty, selectMergedContent, selectEffectiveName, type FileId } from '@/store/filesSlice';
 import { selectDashboardEditMode, setDashboardEditMode, setRightSidebarCollapsed, setActiveSidebarSection } from '@/store/uiSlice';
-import { useFile } from '@/lib/hooks/useFile';
+import { useFile } from '@/lib/hooks/file-state-hooks';
+import { editFile, publishFile, clearFileChanges } from '@/lib/api/file-state';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import DashboardView from '@/components/views/DashboardView';
 import { DocumentContent } from '@/lib/types';
@@ -42,7 +43,7 @@ export default function DashboardContainerV2({
   const dispatch = useAppDispatch();
 
   // Phase 2: Use useFile hook for state management
-  const { file, loading: fileLoading, saving, edit, editMetadata, save, cancel } = useFile(fileId);
+  const { file, loading: fileLoading, saving } = useFile(fileId);
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
   const effectiveName = useAppSelector(state => selectEffectiveName(state, fileId)) || '';
 
@@ -74,15 +75,15 @@ export default function DashboardContainerV2({
 
   // Handlers
   const handleChange = useCallback((updates: Partial<DocumentContent>) => {
-    edit(updates);
-  }, [edit]);
+    editFile({ fileId, changes: { content: updates } });
+  }, [fileId]);
 
   // Phase 5: Metadata change handler
   const handleMetadataChange = useCallback((changes: { name?: string }) => {
-    editMetadata(changes);
-  }, [editMetadata]);
+    editFile({ fileId, changes });
+  }, [fileId]);
 
-  // Phase 2: Save handler - uses save() from hook (handles both create and update)
+  // Phase 3: Save handler - uses publishFile from file-state.ts (handles both create and update)
   const handleSave = useCallback(async () => {
     if (!mergedContent) return;
 
@@ -90,7 +91,7 @@ export default function DashboardContainerV2({
     setSaveError(null);
 
     try {
-      const result = await save();
+      const result = await publishFile({ fileId });
       redirectAfterSave(result, fileId, router);
     } catch (error) {
       // User-facing errors should be shown in UI
@@ -103,14 +104,14 @@ export default function DashboardContainerV2({
       console.error('Failed to save dashboard:', error);
       setSaveError('An unexpected error occurred. Please try again.');
     }
-  }, [mergedContent, fileId, router, save]);
+  }, [mergedContent, fileId, router]);
 
   // Phase 2: Revert handler - discard local changes without reloading
   const handleRevert = useCallback(() => {
-    cancel();
+    clearFileChanges({ fileId });
     dispatch(setDashboardEditMode({ fileId, editMode: false }));
     setSaveError(null);
-  }, [cancel, dispatch, fileId]);
+  }, [fileId, dispatch]);
 
   // Handler for edit mode changes from view
   const handleEditModeChange = useCallback((newEditMode: boolean) => {
