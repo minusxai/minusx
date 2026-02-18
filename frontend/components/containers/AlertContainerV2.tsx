@@ -87,15 +87,15 @@ export default function AlertContainerV2({
     }
 
     try {
+      // Fetch alert_run files using centralized readFilesByCriteria
+      const { readFilesByCriteria } = await import('@/lib/api/file-state');
       const runsPath = resolvePath(userMode, `/logs/alerts/${fileId}`);
-      const response = await fetch(`/api/files?paths=${encodeURIComponent(runsPath)}&type=alert_run&depth=-1&includeContent=true`);
-      if (!response.ok) {
-        console.error('Failed to load alert runs:', response.status);
-        return;
-      }
 
-      const result = await response.json();
-      const runFiles = result.data || [];
+      const result = await readFilesByCriteria({
+        criteria: { type: 'alert_run', paths: [runsPath], depth: -1 },
+      });
+
+      const runFiles = result.fileStates || [];
 
       const sortedRuns = runFiles
         .filter((f: any) => f.content?.startedAt)
@@ -180,24 +180,20 @@ export default function AlertContainerV2({
 
       const questionContent = (questionFile as any).content as QuestionContent;
 
-      // 2. Execute the query
-      const queryResponse = await fetch('/api/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: questionContent.query,
-          database_name: questionContent.database_name,
-          parameters: questionContent.parameters,
-        })
+      // 2. Execute the query using centralized getQueryResult
+      const { getQueryResult } = await import('@/lib/api/file-state');
+      const params = (questionContent.parameters || []).reduce<Record<string, any>>((acc, p) => {
+        acc[p.name] = p.value ?? '';
+        return acc;
+      }, {});
+
+      const queryResult = await getQueryResult({
+        query: questionContent.query,
+        params,
+        database: questionContent.database_name,
       });
 
-      if (!queryResponse.ok) {
-        const error = await queryResponse.json();
-        throw new Error(error.message || 'Query execution failed');
-      }
-
-      const queryResult = await queryResponse.json();
-      const rows = queryResult.data?.rows || [];
+      const rows = queryResult.rows || [];
 
       // 3. Extract metric value based on selector + function
       let actualValue: number;

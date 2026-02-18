@@ -5,10 +5,8 @@ import { Dialog, Input, Button, VStack, HStack, Text, Box } from '@chakra-ui/rea
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { SelectRoot, SelectTrigger, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { createListCollection } from '@chakra-ui/react';
-import { useAppSelector } from '@/store/hooks';
 import { createFolder } from '@/lib/api/file-state';
-import { fetchWithCache } from '@/lib/api/fetch-wrapper';
-import { API } from '@/lib/api/declarations';
+import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 
 interface NewFolderModalProps {
   isOpen: boolean;
@@ -22,38 +20,29 @@ export default function NewFolderModal({ isOpen, onClose, defaultParentPath = '/
   const [parentPath, setParentPath] = useState(defaultParentPath);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [folders, setFolders] = useState<string[]>([]);
 
-  // Fetch existing folders for dropdown
-  useEffect(() => {
-    if (isOpen) {
-      fetchWithCache('/api/documents', {
-        method: 'GET',
-        cacheStrategy: API.documents.list.cache,
-      })
-        .then(data => {
-          // Extract unique folder paths from all files
-          const paths = new Set<string>();
-          paths.add('/'); // Always include root
+  // Load folders using centralized hook
+  const { files: folderFiles } = useFilesByCriteria({
+    criteria: { type: 'folder' },
+    skip: !isOpen,
+  });
 
-          // Add paths from existing files (API returns { documents: [...] })
-          const files = data.data?.documents || data.documents || data;
-          files.forEach((file: any) => {
-            if (file.type === 'folder') {
-              paths.add(file.path);
-            }
-            // Also add parent directories of files
-            const pathParts = file.path.split('/').filter(Boolean);
-            for (let i = 1; i <= pathParts.length - 1; i++) {
-              paths.add('/' + pathParts.slice(0, i).join('/'));
-            }
-          });
+  // Extract unique folder paths from loaded files
+  const folders = (() => {
+    const paths = new Set<string>();
+    paths.add('/'); // Always include root
 
-          setFolders(Array.from(paths).sort());
-        })
-        .catch(err => console.error('Failed to fetch folders:', err));
-    }
-  }, [isOpen]);
+    folderFiles.forEach(file => {
+      paths.add(file.path);
+      // Also add parent directories
+      const pathParts = file.path.split('/').filter(Boolean);
+      for (let i = 1; i <= pathParts.length - 1; i++) {
+        paths.add('/' + pathParts.slice(0, i).join('/'));
+      }
+    });
+
+    return Array.from(paths).sort();
+  })();
 
   // Update parent path when defaultParentPath changes
   useEffect(() => {

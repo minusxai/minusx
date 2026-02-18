@@ -86,19 +86,17 @@ export default function ReportContainerV2({
 
     setRunsLoading(true);
     try {
-      // Fetch report_run files from the logs path (mode-aware)
-      // Include content to get the generated report
+      // Fetch report_run files using centralized readFilesByCriteria
+      const { readFilesByCriteria } = await import('@/lib/api/file-state');
       const runsPath = resolvePath(userMode, `/logs/reports/${fileId}`);
       console.log('[Report] Loading runs from path:', runsPath);
-      const response = await fetch(`/api/files?paths=${encodeURIComponent(runsPath)}&type=report_run&depth=-1&includeContent=true`);
-      if (!response.ok) {
-        console.error('Failed to load runs:', response.status, response.statusText);
-        return;
-      }
 
-      const result = await response.json();
-      console.log('[Report] Runs API result:', result);
-      const runFiles = result.data || [];
+      const result = await readFilesByCriteria({
+        criteria: { type: 'report_run', paths: [runsPath], depth: -1 },
+      });
+
+      const runFiles = result.fileStates || [];
+      console.log('[Report] Runs loaded:', runFiles.length);
 
       // Sort by startedAt descending, take latest 10
       const sortedRuns = runFiles

@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 MinusX is an agentic, file-system based BI Tool that combines:
 - **Frontend**: Next.js 16 + React 19 + Chakra UI v3 + Redux
 - **Backend**: Python FastAPI for query execution and data pipeline orchestration
-- **Storage**: SQLite for documents (questions, dashboards), DuckDB/BigQuery/PostgreSQL for analytics
+- **Storage**: SQLite/Postgres for documents (questions, dashboards), DuckDB/BigQuery/PostgreSQL for analytics
 - **Architecture**: Dual-database system with integer ID-based file access, hierarchical permissions, and mode-based file system isolation
 
 ## Common Development Commands
@@ -464,21 +464,6 @@ Pipeline execution flow:
 
 ## Development Workflow
 
-### Adding New Questions
-1. Navigate to "New Question" in UI
-2. Write SQL query with optional `:parameters`
-3. Select visualization type (table, line, bar, area, scatter)
-4. Configure chart axes with ChartBuilder
-5. Save → Creates document in SQLite with auto-generated integer ID
-
-### Adding New Dashboards
-1. Navigate to "New Dashboard" in UI
-2. Add questions by reference (question IDs)
-3. Add inline text (markdown), images, dividers
-4. Arrange in grid layout with drag-and-drop
-5. Parameters merge automatically at dashboard level
-6. Save → Creates document in SQLite
-
 ### Database Schema Changes
 When modifying SQLite schema:
 1. Update schema in `lib/database/documents-db.ts`
@@ -488,7 +473,7 @@ When modifying SQLite schema:
 5. Re-initialize: `npm run import-db -- --replace-db=y`
 6. Test with existing seed data
 
-### Adding Backend Endpoints
+### Adding Python Backend Endpoints
 1. Add route handler in `backend/main.py`
 2. Define Pydantic models for request/response
 3. Use `connection_manager` for database connections

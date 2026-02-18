@@ -3,6 +3,10 @@ import { successResponse, handleApiError, ApiErrors } from '@/lib/api/api-respon
 import { withAuth } from '@/lib/api/with-auth';
 import { loadFile, saveFile } from '@/lib/data/files.server';
 import { validateFileId } from '@/lib/data/helpers/validation';
+import { DocumentDB } from '@/lib/database/documents-db';
+import { canDeleteFileType } from '@/lib/auth/access-rules';
+import { isAdmin } from '@/lib/auth/role-helpers';
+import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 
 // Route segment config: optimize for API routes
 export const dynamic = 'force-dynamic';
@@ -80,6 +84,66 @@ export const PATCH = withAuth(async (
     const result = await saveFile(id, name, path, content, references || [], user);
 
     return successResponse(result.data);
+  } catch (error) {
+    return handleApiError(error);
+  }
+});
+
+/**
+ * DELETE /api/files/[id]
+ * Delete a file (and recursively delete folder contents)
+ */
+export const DELETE = withAuth(async (
+  request: NextRequest,
+  user,
+  { params }: { params: Promise<{ id: string }> }
+) => {
+  try {
+    const { id: idStr } = await params;
+    const id = validateFileId(idStr);
+
+    // Check access before allowing delete
+    const file = await DocumentDB.getById(id, user.companyId);
+    if (!file) {
+      return ApiErrors.notFound('File');
+    }
+
+    // Check if file type can be deleted (blocks config/styles universally)
+    if (!canDeleteFileType(file.type)) {
+      return ApiErrors.forbidden(
+        `Files of type '${file.type}' cannot be deleted. They are critical system files.`
+      );
+    }
+
+    // Check if non-admin is trying to delete file outside their home folder
+    if (!isAdmin(user.role)) {
+      const resolvedHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder);
+      if (!file.path.startsWith(resolvedHomeFolder)) {
+        return ApiErrors.forbidden('You can only delete files in your home folder');
+      }
+    }
+
+    // If it's a folder, recursively delete all contents
+    if (file.type === 'folder') {
+      // Use optimized path filtering with depth=-1 for all descendants
+      const filesToDelete = await DocumentDB.listAll(user.companyId, undefined, [file.path], -1);
+
+      console.log(`[DELETE] Deleting folder "${file.name}" and ${filesToDelete.length} items inside it`);
+
+      // Delete all files and subfolders
+      for (const fileToDelete of filesToDelete) {
+        await DocumentDB.delete(fileToDelete.id, user.companyId);
+      }
+    }
+
+    // Delete the folder/file itself
+    const success = await DocumentDB.delete(id, user.companyId);
+
+    if (!success) {
+      return ApiErrors.notFound('File');
+    }
+
+    return successResponse({ message: 'File deleted successfully' });
   } catch (error) {
     return handleApiError(error);
   }

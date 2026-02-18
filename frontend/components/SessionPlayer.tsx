@@ -68,13 +68,8 @@ export default function SessionPlayer({ content, fileName, fileId, onDelete }: S
     }
 
     try {
-      const response = await fetch(`/api/files/${fileId}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete recording');
-      }
+      const { deleteFile } = await import('@/lib/api/file-state');
+      await deleteFile({ fileId });
 
       if (onDelete) {
         onDelete();

@@ -4,8 +4,6 @@ import { Box, IconButton, Menu, Portal, HStack, Icon, Button, Text, Dialog, Clos
 import { LuEllipsis, LuExternalLink, LuCopy, LuTrash2 } from 'react-icons/lu';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { useState } from 'react';
-import { useAppDispatch } from '@/store/hooks';
-import { deleteFile } from '@/store/filesSlice';
 import { useAccessRules } from '@/lib/auth/access-rules.client';
 import { FileType } from '@/lib/types';
 
@@ -19,7 +17,6 @@ interface FileActionMenuProps {
 
 export default function FileActionMenu({ fileId, fileName, filePath, fileType, size = 'sm' }: FileActionMenuProps) {
   const router = useRouter();
-  const dispatch = useAppDispatch();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const { canDeleteFileType } = useAccessRules();
   const canDelete = canDeleteFileType(fileType);
@@ -30,16 +27,8 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
 
   const handleDeleteConfirm = async () => {
     try {
-      const response = await fetch(`/api/documents/${fileId}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete file');
-      }
-
-      // Immediately remove from Redux cache
-      dispatch(deleteFile({ id: fileId, path: filePath }));
+      const { deleteFile } = await import('@/lib/api/file-state');
+      await deleteFile({ fileId });
 
       setIsDeleteDialogOpen(false);
       // Refresh the page to show updated list

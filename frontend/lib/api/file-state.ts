@@ -969,6 +969,44 @@ export async function publishFile(
 }
 
 /**
+ * Options for deleteFile
+ */
+export interface DeleteFileOptions {
+  fileId: number;
+}
+
+/**
+ * DeleteFile - Delete a file from database and Redux
+ *
+ * Handles deletion of files including folders (recursive delete on server).
+ * Removes file from Redux on success.
+ *
+ * @param options - File ID to delete
+ */
+export async function deleteFile(options: DeleteFileOptions): Promise<void> {
+  const { fileId } = options;
+
+  // Call API to delete file
+  const response = await fetch(`/api/files/${fileId}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    const errorMessage = errorData.error?.message || errorData.error || 'Failed to delete file';
+    throw new Error(errorMessage);
+  }
+
+  // Remove from Redux
+  const state = getStore().getState();
+  const file = selectFile(state, fileId);
+  if (file) {
+    const { deleteFile: deleteFileAction } = await import('@/store/filesSlice');
+    getStore().dispatch(deleteFileAction({ id: fileId, path: file.path }));
+  }
+}
+
+/**
  * Options for reloadFile
  */
 export interface ReloadFileOptions {
