@@ -20,7 +20,7 @@
 
 import { store as fallbackStore } from '@/store/store';
 import { clientStoreRef } from '@/components/ReduxProvider';
-import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, clearEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving } from '@/store/filesSlice';
+import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, clearEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, selectEffectivePath } from '@/store/filesSlice';
 import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, setQueryLoading } from '@/store/queryResultsSlice';
 import { selectSelectedRun } from '@/store/reportRunsSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
@@ -36,7 +36,7 @@ import { getQueryHash } from '@/lib/utils/query-hash';
 import type { RootState } from '@/store/store';
 import type { ReadFilesInput, ReadFilesOutput, FileState, QueryResult, QuestionContent, FileType, DocumentContent, AssetReference, DbFile, BaseFileContent, QuestionParameter, QuestionReference } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
-import type { AppState, QuestionAppState, DashboardAppState, ReportAppState, GenericAppState } from '@/lib/appState';
+import type { AppState, FolderState } from '@/lib/appState';
 
 // Helper to get the active store (client store if available, fallback to singleton)
 // This ensures we update the SAME store that components subscribe to
@@ -1182,79 +1182,75 @@ export async function readFolder(
 
 
   // Look up folder ID by path
-  const folderId = selectFileIdByPath(state, path);
-  const folder = folderId ? selectFile(state, folderId) : undefined;
+  let folderId = selectFileIdByPath(state, path);
 
   // Check if folder is fresh
   const isFresh = selectIsFolderFresh(state, path, ttl);
 
-  // If fresh and not forcing, return cached data
-  if (isFresh && !forceLoad) {
-    const childIds = folder?.references || [];
-    const allFiles = selectFiles(state, childIds);
-
-    // Filter by permissions (done below)
-    const filteredFiles = await filterFilesByPermissions(allFiles);
-
-    return {
-      files: filteredFiles,
-      loading: false,
-      error: null
-    };
-  }
-
-  // Set loading state
-  if (folderId) {
-    getStore().dispatch(setLoading({ id: folderId, loading: true }));
-  }
-
-  try {
-    // Fetch folder contents from API
-    const response = await getFiles({ paths: [path], depth });
-
-    // Store folder file itself (for pathIndex)
-    if (response.metadata.folders.length > 0) {
-      getStore().dispatch(setFileInfo(response.metadata.folders));
-    }
-
-    // Store children and update folder.references
-    getStore().dispatch(setFolderInfo({ path, fileInfos: response.data }));
-
-    // Get updated state after storing
-    const updatedState = getStore().getState();
-    const updatedFolderId = selectFileIdByPath(updatedState, path);
-    const updatedFolder = updatedFolderId ? selectFile(updatedState, updatedFolderId) : undefined;
-    const childIds = updatedFolder?.references || [];
-    const allFiles = selectFiles(updatedState, childIds);
-
-    // Filter by permissions
-    const filteredFiles = await filterFilesByPermissions(allFiles);
-
-    return {
-      files: filteredFiles,
-      loading: false,
-      error: null
-    };
-  } catch (error) {
-    console.error('[readFolder] Failed to load folder:', path, error);
-
-    // Clear loading state
+  // Fetch from API if not fresh or forcing reload
+  if (!isFresh || forceLoad) {
+    // Set loading state
     if (folderId) {
-      getStore().dispatch(setLoading({ id: folderId, loading: false }));
+      getStore().dispatch(setLoading({ id: folderId, loading: true }));
     }
 
-    // Convert to LoadError
-    const loadError: LoadError = {
-      message: error instanceof Error ? error.message : String(error),
-      code: 'SERVER_ERROR'
-    };
+    try {
+      // Fetch folder contents from API
+      const response = await getFiles({ paths: [path], depth });
 
-    return {
-      files: [],
-      loading: false,
-      error: loadError
-    };
+      // Store folder file itself (for pathIndex)
+      if (response.metadata.folders.length > 0) {
+        getStore().dispatch(setFileInfo(response.metadata.folders));
+      }
+
+      // Store children and update folder.references
+      getStore().dispatch(setFolderInfo({ path, fileInfos: response.data }));
+
+      // Update folderId after storing
+      const updatedState = getStore().getState();
+      folderId = selectFileIdByPath(updatedState, path);
+    } catch (error) {
+      console.error('[readFolder] Failed to load folder:', path, error);
+
+      // Clear loading state
+      if (folderId) {
+        getStore().dispatch(setLoading({ id: folderId, loading: false }));
+      }
+
+      // Convert to LoadError
+      const loadError: LoadError = {
+        message: error instanceof Error ? error.message : String(error),
+        code: 'SERVER_ERROR'
+      };
+
+      return {
+        files: [],
+        loading: false,
+        error: loadError
+      };
+    }
   }
+
+  // Common return path: get from cache (now fresh), strip metadata, filter
+  const currentState = getStore().getState();
+  const folder = folderId ? selectFile(currentState, folderId) : undefined;
+  const childIds = folder?.references || [];
+  const allFiles = selectFiles(currentState, childIds);
+
+  // Strip content and edit state to avoid bloating app state
+  const metadataOnly = allFiles.map(f => {
+    const { content, persistableChanges, ephemeralChanges, metadataChanges, ...rest } = f;
+    return rest as FileState;
+  });
+
+  // Filter by permissions
+  const filteredFiles = await filterFilesByPermissions(metadataOnly);
+
+  return {
+    files: filteredFiles,
+    loading: false,
+    error: null
+  };
 }
 
 /**
@@ -1428,196 +1424,75 @@ export async function getQueryResult(
 // ============================================================================
 
 /**
- * Get app state for a file ID
+ * Get app state from current navigation pathname
  *
- * Loads file via readFiles (with augmentation), then builds AppState.
- * This replaces selectAppState selector - uses same logic but loads asynchronously.
+ * Determines page type from pathname and loads appropriate data:
+ * - /f/{id} → file page → readFiles
+ * - /p/path → folder page → readFolder
  *
- * @param fileId - File ID to load
- * @returns AppState (QuestionAppState | DashboardAppState | etc.)
+ * @param pathname - Current pathname from usePathname()
+ * @returns AppState (file or folder context)
  */
-export async function getAppState(fileId: number): Promise<AppState | undefined> {
-  // Load file with augmentation (via readFiles registry)
-  const result = await readFiles({ fileIds: [fileId] });
-  if (!result.fileStates || result.fileStates.length === 0) return undefined;
+export async function getAppState(pathname: string): Promise<AppState | null> {
+  // File page: /f/{id} or /f/{id}-{slug}
+  const fileMatch = pathname.match(/^\/f\/(\d+)/);
+  if (fileMatch) {
+    const id = parseInt(fileMatch[1], 10);
+    const result = await readFiles({ fileIds: [id] }, { skip: id < 0 });
+    if (!result.fileStates || result.fileStates.length === 0) return null;
 
-  const file = result.fileStates[0];
-  const state = getStore().getState();
-  const mergedContent = selectMergedContent(state, fileId);
-  if (!mergedContent) return undefined;
-
-  // Build AppState based on file type
-  switch (file.type) {
-    case 'question':
-      return buildQuestionAppState(fileId, file.path, mergedContent as QuestionContent);
-
-    case 'dashboard':
-      return buildDashboardAppState(fileId, file.path, mergedContent as DocumentContent);
-
-    case 'report':
-      return buildReportAppState(fileId, file.path, mergedContent as any);
-
-    default:
-      return {
-        pageType: file.type,
-        fileId,
-        path: file.path,
-        ...mergedContent
-      } as GenericAppState;
+    const file = result.fileStates[0];
+    return {
+      type: 'file',
+      id,
+      fileType: file.type,
+      file,
+      references: result.references,
+      queryResults: result.queryResults
+    };
   }
-}
 
-/**
- * Build QuestionAppState with query results
- */
-function buildQuestionAppState(
-  fileId: number,
-  path: string,
-  content: QuestionContent
-): QuestionAppState {
-  const state = getStore().getState();
+  // New file page: /new/{type}
+  const newFileMatch = pathname.match(/^\/new\/([^/?]+)/);
+  if (newFileMatch) {
+    const fileType = newFileMatch[1] as FileType;
+    const state = getStore().getState();
 
-  // Extract query execution args
-  const query = content.query;
-  const database = content.database_name || '';
-  const params = content.parameters?.reduce((acc, param) => {
-    acc[param.name] = param.value;
-    return acc;
-  }, {} as Record<string, any>) || {};
+    // Find the latest virtual file (most negative ID, since ID = -Date.now()) of this type
+    const virtualFiles = Object.values(state.files.files)
+      .filter(f => f.id < 0 && f.type === fileType)
+      .sort((a, b) => a.id - b.id); // Sort ascending: most negative (newest) first
 
-  // Get query result from queryResultsSlice
-  const queryResult = selectQueryResult(state, query, params, database);
-
-  // Transform query result to markdown format
-  const transformedData = transformQueryResultToMarkdown(queryResult?.data);
-
-  // Include referenced question states
-  const referencedQuestions: Record<number, any> = {};
-  content.references?.forEach(ref => {
-    const refFile = state.files.files[ref.id];
-    if (refFile && refFile.type === 'question') {
-      const refContent = selectMergedContent(state, ref.id) as QuestionContent;
-      if (refContent) {
-        referencedQuestions[ref.id] = {
-          type: 'question',
-          fileId: ref.id,
-          path: refFile.path,
-          alias: ref.alias,
-          query: refContent.query,
-          database_name: refContent.database_name,
-          parameters: refContent.parameters,
-        };
-      }
+    if (virtualFiles.length > 0) {
+      const file = virtualFiles[0];
+      return {
+        type: 'file',
+        id: file.id,
+        fileType: file.type,
+        file,
+        references: [],
+        queryResults: []
+      };
     }
-  });
 
-  return {
-    pageType: 'question',
-    fileId,
-    path,
-    ...content,
-    queryData: transformedData,
-    loading: queryResult?.loading,
-    error: queryResult?.error,
-    referencedQuestions
-  };
-}
+    return null;
+  }
 
-/**
- * Build DashboardAppState with nested question states
- */
-function buildDashboardAppState(
-  fileId: number,
-  path: string,
-  content: DocumentContent
-): DashboardAppState {
-  const state = getStore().getState();
-  const questionStates: Record<number, QuestionAppState> = {};
-
-  // Process each asset in the dashboard
-  content.assets?.forEach((asset: AssetReference) => {
-    if (asset.type === 'question' && 'id' in asset) {
-      const questionId = asset.id;
-      const questionFile = state.files.files[questionId];
-
-      if (questionFile && questionFile.type === 'question') {
-        const questionContent = selectMergedContent(state, questionId) as QuestionContent;
-        if (questionContent) {
-          questionStates[questionId] = buildQuestionAppState(
-            questionId,
-            questionFile.path,
-            questionContent
-          );
-        }
+  // Folder page: /p/path or /p/nested/path
+  const folderMatch = pathname.match(/^\/p\/(.*)/);
+  if (folderMatch) {
+    const path = '/' + (folderMatch[1] || '');
+    const result = await readFolder(path);
+    return {
+      type: 'folder',
+      path,
+      folder: {
+        files: result.files,
+        loading: false,
+        error: null
       }
-    }
-  });
+    };
+  }
 
-  return {
-    pageType: 'dashboard',
-    fileId,
-    path,
-    ...content,
-    questionStates
-  };
-}
-
-/**
- * Build ReportAppState with selected run
- */
-function buildReportAppState(
-  fileId: number,
-  path: string,
-  content: any
-): ReportAppState {
-  const state = getStore().getState();
-  const selectedRun = selectSelectedRun(state, fileId);
-
-  return {
-    pageType: 'report',
-    fileId,
-    path,
-    ...content,
-    selectedRun: selectedRun ? {
-      id: selectedRun.id,
-      startedAt: selectedRun.content.startedAt,
-      completedAt: selectedRun.content.completedAt,
-      status: selectedRun.content.status,
-      generatedReport: selectedRun.content.generatedReport,
-      error: selectedRun.content.error,
-    } : undefined
-  };
-}
-
-/**
- * Transform query result to markdown table format
- */
-function transformQueryResultToMarkdown(queryResult: any): any {
-  if (!queryResult) return undefined;
-
-  const { columns, types, rows } = queryResult;
-
-  if (columns.length === 0 || rows.length === 0) return undefined;
-
-  // Header row
-  const header = `| ${columns.join(' | ')} |`;
-  const separator = `| ${columns.map(() => '---').join(' | ')} |`;
-
-  // Data rows
-  const dataRows = rows.map((row: any) => {
-    const values = Array.isArray(row)
-      ? row
-      : columns.map((col: string) => row[col]);
-    return `| ${values.map((v: any) => v ?? 'null').join(' | ')} |`;
-  });
-
-  const truncated = dataRows.length > 20;
-  const displayRows = truncated ? dataRows.slice(0, 20) : dataRows;
-  const truncationMessage = truncated ? `\n(Truncated to 20 rows. ${dataRows.length - 20} more rows not shown.)` : '';
-
-  return {
-    columns,
-    types,
-    rows: [header, separator, ...displayRows].join('\n') + truncationMessage as any
-  };
+  return null;
 }

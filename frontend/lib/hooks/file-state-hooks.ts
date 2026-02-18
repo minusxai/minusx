@@ -16,6 +16,7 @@
  */
 
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { usePathname } from 'next/navigation';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import {
   selectFile,
@@ -40,6 +41,7 @@ import {
   createVirtualFile,
   getAppState
 } from '@/lib/api/file-state';
+import type { AppState } from '@/lib/appState';
 import { FilesAPI } from '@/lib/data/files';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import type { LoadError } from '@/lib/types/errors';
@@ -47,7 +49,6 @@ import { createLoadErrorFromException } from '@/lib/types/errors';
 import type { GetFilesOptions } from '@/lib/data/types';
 import type { QuestionReference } from '@/lib/types';
 import { FileType } from '@/lib/ui/file-metadata';
-import type { AppState } from '@/lib/appState';
 
 // ============================================================================
 // useFiles - Load multiple files by IDs
@@ -788,6 +789,7 @@ export function useQueryResult(
   };
 }
 
+
 // ============================================================================
 // useAppState Hook
 // ============================================================================
@@ -795,43 +797,53 @@ export function useQueryResult(
 /**
  * useAppState Hook
  *
- * Replaces selectAppState selector with async file loading.
- * Loads file and builds augmented AppState (Question/Dashboard/Report/etc.)
+ * Watches navigation and returns current page context (file or folder).
+ * Gets pathname from usePathname() and calls getAppState when it changes.
  *
  * Usage:
- *   const appState = useAppState(fileId);
- *   if (appState?.pageType === 'question') {
- *     // Access appState.queryData, etc.
- *   }
+ * ```typescript
+ * const appState = useAppState();
+ *
+ * if (appState?.type === "file") {
+ *   // Access appState.file (already augmented FileState)
+ * } else if (appState?.type === "folder") {
+ *   // Access appState.folder.files
+ * }
+ * ```
  */
-export function useAppState(fileId: number | undefined): AppState | undefined {
-  const [appState, setAppState] = useState<AppState | undefined>(undefined);
+export function useAppState(): AppState | null {
+  const pathname = usePathname();
+  const [appState, setAppState] = useState<AppState | null>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (fileId === undefined) {
-      setAppState(undefined);
-      return;
-    }
-
     let cancelled = false;
 
-    getAppState(fileId)
-      .then(result => {
+    const loadAppState = async () => {
+      setLoading(true);
+      try {
+        const result = await getAppState(pathname);
         if (!cancelled) {
           setAppState(result);
         }
-      })
-      .catch(err => {
-        console.error('useAppState error:', err);
+      } catch (error) {
+        console.error("[useAppState] Failed to load app state:", error);
         if (!cancelled) {
-          setAppState(undefined);
+          setAppState(null);
         }
-      });
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadAppState();
 
     return () => {
       cancelled = true;
     };
-  }, [fileId]);
+  }, [pathname]);
 
   return appState;
 }

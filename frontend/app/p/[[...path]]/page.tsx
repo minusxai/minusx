@@ -47,18 +47,6 @@ export default function PathPage({ params }: PathPageProps) {
   // Load folder into Redux (populates pathIndex, uses TTL cache)
   const { files: folderFiles, loading: folderLoading } = useFolder(fullPath);
 
-  // Build folder app state for chat context
-  const folderAppState = useMemo(() => ({
-    pageType: 'folder' as const,
-    path: fullPath,
-    files: folderFiles.map(f => ({
-      id: f.id,
-      name: f.name,
-      type: f.type,
-      path: f.path,
-    })),
-  }), [fullPath, folderFiles]);
-
   // Client-side permission check for folder access
   useEffect(() => {
     if (!user) return;
@@ -219,7 +207,6 @@ export default function PathPage({ params }: PathPageProps) {
               title="Folder Context"
               filePath={fullPath}
               showChat={showChat}
-              appState={folderAppState}
               contextVersion={selectedVersion}
               selectedContextPath={selectedContextPath}
               onContextChange={shouldShowContextSelector ? (_path: string | null, version?: number) => {
@@ -234,7 +221,6 @@ export default function PathPage({ params }: PathPageProps) {
               title="Folder Context"
               filePath={fullPath}
               showChat={showChat}
-              appState={folderAppState}
               contextVersion={selectedVersion}
               selectedContextPath={selectedContextPath}
               onContextChange={shouldShowContextSelector ? (_path: string | null, version?: number) => {

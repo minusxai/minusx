@@ -7,7 +7,6 @@ import FileView from '@/components/FileView';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { parseFileId } from '@/lib/slug-utils';
 import { useAppSelector } from '@/store/hooks';
-import { useAppState } from '@/lib/hooks/file-state-hooks';
 import FileNotFound from '@/components/FileNotFound';
 import { ContextContent } from '@/lib/types';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
@@ -25,9 +24,6 @@ export default function FilePage({ params }: FilePageProps) {
 
   // Load file using client-side hook
   const { file, loading, error } = useFile(intId);
-
-  // Get augmented app state
-  const appState = useAppState(intId);
 
   // Context version selection (admin only)
   const user = useAppSelector(state => state.auth.user);
@@ -90,7 +86,8 @@ export default function FilePage({ params }: FilePageProps) {
     showChat: true,
     filePath: file.path,  // Use file's actual path so selector can find covering context
     title: `${file.type} Context`,
-    appState: appState,
+    fileId: file.id,
+    fileType: file.type,
     contextVersion: selectedVersion,  // Pass selected context version for admin testing
     selectedContextPath: currentContext?.path || null,
     onContextChange: shouldShowContextSelector ? (_path: string | null, version?: number) => {

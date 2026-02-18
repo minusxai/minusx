@@ -183,7 +183,7 @@ export default function ReportContainerV2({
         (mergedContent.references || []).map(async ref => {
           const refFile = allFiles[ref.reference.id];
           // Get the full app state for this reference (includes query, viz, results, etc.)
-          const appState = await getAppState(ref.reference.id);
+          const appState = await getAppState(`/f/${ref.reference.id}`);
           // Get connection_id from app state
           const connectionId = (appState as any)?.database_name;
 

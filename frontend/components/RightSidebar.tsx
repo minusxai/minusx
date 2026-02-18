@@ -7,8 +7,7 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setRightSidebarCollapsed, setRightSidebarWidth, setActiveSidebarSection, selectRightSidebarUIState, selectDashboardEditMode } from '@/store/uiSlice';
 import { setFiles, selectMergedContent, addQuestionToDashboard } from '@/store/filesSlice';
 import { QuestionBrowserPanel } from './QuestionBrowserPanel';
-import { DocumentContent } from '@/lib/types';
-import { AppState } from '@/lib/appState';
+import { DocumentContent, FileType } from '@/lib/types';
 import SchemaTreeView from './SchemaTreeView';
 import Markdown from './Markdown';
 import ChatInterface from './explore/ChatInterface';
@@ -17,6 +16,7 @@ import DevToolsPanel from './DevToolsPanel';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { Tooltip } from './ui/tooltip';
 import { useContext } from '@/lib/hooks/useContext';
+import { useAppState } from '@/lib/hooks/file-state-hooks';
 import { ContextSelector } from './explore/ContextSelector';
 import { selectActiveConversation, selectConversation } from '@/store/chatSlice';
 import { getSidebarSection, SidebarSectionMetadata } from '@/lib/ui/sidebar-sections';
@@ -30,7 +30,8 @@ export interface RightSidebarProps {
   filePath?: string;  // File path for context filtering
   history?: ReactNode;
   showChat?: boolean;
-  appState: AppState | null | undefined;
+  fileId?: number;
+  fileType?: FileType;
   contextVersion?: number;  // Selected context version (admin testing)
   selectedContextPath?: string | null;  // Selected context path for dropdown
   onContextChange?: (path: string | null, version?: number) => void;  // Context change callback
@@ -45,13 +46,17 @@ export default function RightSidebar({
   filePath = '/',
   history,
   showChat = false,
-  appState = null,
+  fileId,
+  fileType,
   contextVersion,
   selectedContextPath,
   onContextChange
 }: RightSidebarProps) {
   const dispatch = useAppDispatch();
   const { isCollapsed, width, devMode, colorMode, activeSidebarSection } = useAppSelector(selectRightSidebarUIState);
+
+  // Get current page app state
+  const appState = useAppState();
 
   // Read from Redux (loaded by layout.tsx)
   const currentUser = useAppSelector(state => state.auth.user);
@@ -83,9 +88,9 @@ export default function RightSidebar({
   );
 
   // Dashboard edit mode detection
-  const isDashboard = appState?.pageType === 'dashboard';
+  const isDashboard = appState?.type === 'file' && appState.fileType === 'dashboard';
   const dashboardEditMode = useAppSelector(state =>
-    appState?.fileId && isDashboard ? selectDashboardEditMode(state, appState.fileId) : false
+    appState?.type === 'file' && isDashboard ? selectDashboardEditMode(state, appState.id) : false
   );
 
   // Auto-open sidebar sections based on state changes
@@ -106,7 +111,7 @@ export default function RightSidebar({
 
   // Get dashboard content for question IDs (needed for excludedIds)
   const dashboardContent = useAppSelector(state =>
-    appState?.fileId && isDashboard ? selectMergedContent(state, appState.fileId) as DocumentContent | undefined : undefined
+    appState?.type === 'file' && isDashboard ? selectMergedContent(state, appState.id) as DocumentContent | undefined : undefined
   );
 
   // Extract folder path from file path (for QuestionBrowserPanel)
@@ -119,8 +124,8 @@ export default function RightSidebar({
 
   // Handler for adding questions to dashboard
   const handleAddQuestionToDashboard = (questionId: number) => {
-    if (appState?.fileId && isDashboard) {
-      dispatch(addQuestionToDashboard({ dashboardId: appState.fileId, questionId }));
+    if (appState?.type === 'file' && isDashboard) {
+      dispatch(addQuestionToDashboard({ dashboardId: appState.id, questionId }));
     }
   };
 
@@ -197,7 +202,7 @@ export default function RightSidebar({
   const sections: SidebarSectionMetadata[] = [];
 
   // Questions section - only visible for dashboards in edit mode (shown first)
-  if (isDashboard && dashboardEditMode && appState?.fileId) {
+  if (isDashboard && dashboardEditMode && appState?.type === 'file') {
     sections.push(getSidebarSection('questions'));
   }
 
@@ -531,20 +536,20 @@ export default function RightSidebar({
                               contextPath={filePath}
                               contextVersion={contextVersion}
                               databaseName={null}  // Auto-select from context
-                              appState={appState || null}
+                              appState={appState}
                               container="sidebar"
                             />
                           </Box>
                         )}
-                        {section.id === 'share' && appState?.fileId && currentUser && (
+                        {section.id === 'share' && appState?.type === 'file' && currentUser && (
                           <Box p={4}>
-                            <AccessTokenManager fileId={appState.fileId} currentUser={currentUser} />
+                            <AccessTokenManager fileId={appState.id} currentUser={currentUser} />
                           </Box>
                         )}
                         {section.id === 'dev' && (
                           <DevToolsPanel appState={appState} />
                         )}
-                        {section.id === 'questions' && appState?.fileId && (
+                        {section.id === 'questions' && appState?.type === 'file' && (
                           <Box p={0} maxH="calc(100vh - 200px)" overflowY="auto">
                             <QuestionBrowserPanel
                               folderPath={dashboardFolderPath}

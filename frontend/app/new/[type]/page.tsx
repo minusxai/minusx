@@ -58,7 +58,7 @@ export default function NewFilePage({ params }: NewFilePageProps) {
     virtualId
   });
   const { file, loading, error } = useFile(virtualFileId);
-  const appState = useAppState(virtualFileId);
+  const appState = useAppState();
 
   // Context version selection (admin only)
   const filesState = useAppSelector(state => state.files.files);
@@ -114,7 +114,6 @@ export default function NewFilePage({ params }: NewFilePageProps) {
   // Sidebar config based on type - separate useMemo with appState dependency
   const rightSidebar = useMemo(() => {
     const config: RightSidebarProps = {
-      appState: appState,
       filePath: file?.path || folder,  // Use file's path if available, so selector finds covering context
       title: `${type} Context`,
       showChat: false,

@@ -17,7 +17,7 @@ import { fetchWithCache } from './fetch-wrapper';
 import { API } from './declarations';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 import { getRouter } from '@/lib/navigation/use-navigation';
-import { getAppState, readFilesLineEncoded, editFileLineEncoded, readFilesStr, editFileStr, publishFile, getQueryResult } from '@/lib/api/file-state';
+import { readFilesLineEncoded, editFileLineEncoded, readFilesStr, editFileStr, publishFile, getQueryResult } from '@/lib/api/file-state';
 import { canCreateFileType } from '@/lib/auth/access-rules.client';
 
 // ============================================================================
@@ -423,13 +423,11 @@ registerFrontendTool('Navigate', async (args, context) => {
         await FilesAPI.loadFile(file_id)
       }
     }
-    const appState = state ? await getAppState(file_id) : undefined;
     const debugMsg = newFileType !== undefined ? `;newFileType=${newFileType} is ignored since file_id provided` : ''
     const debugMsg2 = path !== undefined ? `;path=${path} is ignored since file_id provided` : ''
     return {
       success: true,
-      message: `Navigated to file ${file_id}${debugMsg}${debugMsg2}`,
-      appState
+      message: `Navigated to file ${file_id}${debugMsg}${debugMsg2}`
     };
   }
 
