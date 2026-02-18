@@ -12,7 +12,7 @@ import { setRuns, setSelectedRun, selectRuns, selectSelectedRunId } from '@/stor
 import { selectEffectiveUser } from '@/store/authSlice';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { useFile } from '@/lib/hooks/file-state-hooks';
-import { editFile, publishFile, clearFileChanges } from '@/lib/api/file-state';
+import { editFile, publishFile, clearFileChanges, readFilesByCriteria, getAppState } from '@/lib/api/file-state';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import { FilesAPI } from '@/lib/data/files';
 import ReportView from '@/components/views/ReportView';
@@ -87,7 +87,6 @@ export default function ReportContainerV2({
     setRunsLoading(true);
     try {
       // Fetch report_run files using centralized readFilesByCriteria
-      const { readFilesByCriteria } = await import('@/lib/api/file-state');
       const runsPath = resolvePath(userMode, `/logs/reports/${fileId}`);
       console.log('[Report] Loading runs from path:', runsPath);
 
@@ -176,7 +175,6 @@ export default function ReportContainerV2({
     try {
       // Build enriched references with app_state for each question/dashboard
       // References are loaded when the report loads (via useFile with include=references)
-      const { getAppState } = await import('@/lib/api/file-state');
       const enrichedReferences = await Promise.all(
         (mergedContent.references || []).map(async ref => {
           const refFile = allFiles[ref.reference.id];

@@ -1,11 +1,12 @@
 'use client';
 
 import { Box, IconButton, Menu, Portal, HStack, Icon, Button, Text, Dialog, CloseButton } from '@chakra-ui/react';
-import { LuEllipsis, LuExternalLink, LuCopy, LuTrash2 } from 'react-icons/lu';
+import { LuEllipsis, LuCopy, LuTrash2 } from 'react-icons/lu';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { useState } from 'react';
 import { useAccessRules } from '@/lib/auth/access-rules.client';
 import { FileType } from '@/lib/types';
+import { deleteFile } from '@/lib/api/file-state';
 
 interface FileActionMenuProps {
   fileId: number;
@@ -27,7 +28,6 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
 
   const handleDeleteConfirm = async () => {
     try {
-      const { deleteFile } = await import('@/lib/api/file-state');
       await deleteFile({ fileId });
 
       setIsDeleteDialogOpen(false);

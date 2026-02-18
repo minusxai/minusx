@@ -12,11 +12,11 @@ import { setRuns, setSelectedRun, selectAlertRuns, selectSelectedAlertRunId } fr
 import { selectEffectiveUser } from '@/store/authSlice';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { useFile } from '@/lib/hooks/file-state-hooks';
-import { editFile, publishFile, clearFileChanges } from '@/lib/api/file-state';
+import { editFile, publishFile, clearFileChanges, getQueryResult, readFilesByCriteria } from '@/lib/api/file-state';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import { FilesAPI } from '@/lib/data/files';
 import AlertView from '@/components/views/AlertView';
-import { AlertContent, AlertRunContent, QuestionContent, ComparisonOperator, AlertSelector, AlertFunction } from '@/lib/types';
+import { AlertContent, AlertRunContent, QuestionContent, ComparisonOperator } from '@/lib/types';
 import { useCallback, useState, useEffect } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { isUserFacingError } from '@/lib/errors';
@@ -88,7 +88,6 @@ export default function AlertContainerV2({
 
     try {
       // Fetch alert_run files using centralized readFilesByCriteria
-      const { readFilesByCriteria } = await import('@/lib/api/file-state');
       const runsPath = resolvePath(userMode, `/logs/alerts/${fileId}`);
 
       const result = await readFilesByCriteria({
@@ -181,7 +180,6 @@ export default function AlertContainerV2({
       const questionContent = (questionFile as any).content as QuestionContent;
 
       // 2. Execute the query using centralized getQueryResult
-      const { getQueryResult } = await import('@/lib/api/file-state');
       const params = (questionContent.parameters || []).reduce<Record<string, any>>((acc, p) => {
         acc[p.name] = p.value ?? '';
         return acc;

@@ -6,6 +6,7 @@ import rrwebPlayer from 'rrweb-player';
 import 'rrweb-player/dist/style.css';
 import { decompressEvents } from '@/lib/recordings-client';
 import { SessionRecordingFileContent } from '@/lib/types';
+import { deleteFile } from '@/lib/api/file-state';
 
 interface SessionPlayerProps {
   content: SessionRecordingFileContent;
@@ -68,7 +69,6 @@ export default function SessionPlayer({ content, fileName, fileId, onDelete }: S
     }
 
     try {
-      const { deleteFile } = await import('@/lib/api/file-state');
       await deleteFile({ fileId });
 
       if (onDelete) {

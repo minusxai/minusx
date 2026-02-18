@@ -36,7 +36,6 @@ uv run uvicorn main:app --reload --reload-include='*.yaml' --port 8001    # Star
 
 The backend runs at http://localhost:8001 and handles:
 - SQL query execution (`POST /api/execute-query`)
-- Data pipeline execution (Singer taps and targets)
 - Connection management and pooling
 
 ### Database Management
@@ -106,8 +105,7 @@ To add a data migration:
 ├─────────────────────────────────────────────────────────────┤
 │  ├─ Query Execution (SQLAlchemy)                            │
 │  ├─ Connection Pooling                                      │
-│  ├─ Schema Introspection                                    │
-│  └─ Data Pipelines (Singer taps/targets)                    │
+│  └─ Schema Introspection                                    │
 │                                                             │
 │  DuckDB / BigQuery / PostgreSQL                             │
 │  └─ Actual business data for analytics                      │
@@ -133,7 +131,6 @@ To add a data migration:
 - `context` - Schema whitelist + team documentation
 - `users` - User management
 - `folder` - Organizational containers
-- `connector` - Data pipeline configurations (Singer taps and targets)
 - `conversation` - AI chat conversation logs
 - `config` - Company configuration (branding, settings)
 
@@ -216,39 +213,13 @@ const displayName = finalBranding.displayName;
 
 ```
 minusx/
-├── frontend/              # Next.js application
-│   ├── app/              # Next.js App Router
-│   │   ├── api/         # API routes (documents, query, connections)
-│   │   ├── f/[id]/      # File detail page (by integer ID)
-│   │   ├── p/[[...path]]/ # Folder browser
-│   │   ├── explore/     # AI explore interface
-│   │   └── new/[type]/  # File creation
-│   ├── components/       # React components
-│   │   ├── plotx/       # Visualization components
-│   │   ├── explore/     # Explore/chat interface
-│   │   └── ui/          # UI primitives
-│   ├── lib/             # Utilities and services
-│   │   ├── api/         # API client modules
-│   │   ├── auth/        # Authentication helpers
-│   │   ├── database/    # DocumentDB (SQLite operations)
-│   │   └── types.ts     # TypeScript interfaces
-│   ├── store/           # Redux store and slices
-│   └── scripts/         # Database initialization scripts
-├── backend/              # Python FastAPI backend
-│   ├── main.py          # FastAPI app with endpoints
-│   ├── connection_manager.py  # Connection lifecycle
-│   ├── connectors/      # Database connectors
-│   │   ├── duckdb_connector.py
-│   │   ├── bigquery_connector.py
-│   │   ├── tap_installer.py  # Dynamic Singer tap installation
-│   │   └── tap_registry.py   # Registry of supported taps
-│   └── pipelines/       # Data pipeline execution
-│       ├── executor.py  # Singer pipeline orchestration
-│       ├── tap_tester.py # Tap validation
-│       └── target_mapper.py # Target configuration
-├── data/                # Database files
-│   ├── atlas_documents.db  # SQLite (documents)
-│   └── default_db.duckdb   # DuckDB (sample data)
+├── frontend/         # Next.js 16 application (React 19, Chakra UI, Redux)
+│   ├── app/         # Next.js App Router (pages, API routes)
+│   ├── components/  # React components
+│   ├── lib/         # Utilities, API clients, types
+│   └── store/       # Redux store and slices
+├── backend/         # Python FastAPI backend (query execution, connections)
+└── data/            # Database files (SQLite documents, DuckDB analytics)
 ```
 
 ## Key Design Patterns
@@ -269,6 +240,16 @@ minusx/
   - Avoid cascading effects that trigger other effects
   - Prefer declarative patterns over imperative effect chains
   - If you find yourself writing multiple interdependent useEffects, refactor
+- **Inline/dynamic imports** - ALWAYS import at the top of the file
+  - Inline imports like `const { foo } = await import('./bar')` are a code smell
+  - They indicate circular dependencies or poor module design
+  - Fix the architecture instead of using inline imports as a workaround
+  - ESLint rule `no-restricted-syntax` prevents inline imports
+- **Circular dependencies** - Design around them, don't inline import
+  - Circular dependencies indicate architectural issues
+  - Extract shared code to a separate module
+  - Use dependency inversion or other design patterns
+  - Never use inline imports to "fix" circular dependencies
 - **Direct Redux state mutation** - Always use slice actions
 - **Prop drilling** - Use Redux or context for deeply nested data
 - **Inline API calls in components** - Use custom hooks or listener middleware
@@ -277,6 +258,22 @@ minusx/
 - **Container/View separation**: Containers (smart) connect to Redux, Views (dumb) are pure presentation
 - **Composition over inheritance**: Build complex UIs from simple, reusable components
 - **Single responsibility**: Each component should do one thing well
+
+**ESLint Configuration**
+To prevent inline imports, add this to your `.eslintrc`:
+```json
+{
+  "rules": {
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "ImportExpression",
+        "message": "Dynamic imports are not allowed. Use static imports at the top of the file. Inline imports indicate circular dependencies or poor architecture."
+      }
+    ]
+  }
+}
+```
 
 **Progressive Onboarding (GettingStartedV2)**
 - `components/GettingStartedV2.tsx` - Progressive onboarding banner/empty state
@@ -363,7 +360,7 @@ The application supports mode-based file system isolation, similar to the `as_us
   - `resolvePath(mode='org', home_folder='sales/team1')` → `/org/sales/team1`
   - `resolvePath(mode='tutorial', home_folder='')` → `/tutorial`
 - **Mode + Impersonation**: Both patterns work together - admin can use `?as_user=bob@co.com&mode=tutorial`
-- **Storage isolation**: All file operations (documents, conversations, data pipelines) respect mode
+- **Storage isolation**: All file operations (documents, conversations) respect mode
 
 **Pattern consistency**: Mode follows exact same propagation pattern as `as_user` for architectural consistency.
 
@@ -447,21 +444,6 @@ The application uses an internal orchestration API for AI-powered chat functiona
 - Conversation forking for concurrent edits
 - Redux state management for reactivity
 
-### Data Pipeline Architecture
-The backend supports Singer-based data pipelines (Meltano ecosystem):
-- **Taps**: Extract data from sources (Facebook Ads, Google Analytics, databases)
-- **Targets**: Load data into destinations (DuckDB, PostgreSQL, etc.)
-- **Dynamic installation**: Taps installed on-demand via `tap_installer.py`
-- **Execution**: Background pipeline execution with status tracking
-- **Registry**: `tap_registry.py` maintains list of supported taps and targets
-
-Pipeline execution flow:
-1. User configures connector (tap config + target connection)
-2. `POST /api/pipelines/run` → PipelineExecutor
-3. Backend installs tap if needed, generates target config
-4. Executes tap → target pipeline, streams data
-5. Returns execution status and metrics
-
 ## Development Workflow
 
 ### Database Schema Changes
@@ -495,7 +477,6 @@ When modifying SQLite schema:
 - **FastAPI** with uvicorn
 - **SQLAlchemy** for database operations
 - **DuckDB**, **BigQuery**, **PostgreSQL** connectors
-- **Singer** ecosystem for data pipelines
 - **Connection pooling** for performance
 - **Path Resolution**: DuckDB file paths are resolved relative to `BASE_DUCKDB_DATA_PATH` environment variable
   - Absolute paths (starting with `/`) are used as-is
@@ -524,9 +505,13 @@ When modifying SQLite schema:
 
 ## Key Files Reference
 
-### Frontend
+### Frontend Core Modules
+- `frontend/lib/api/file-state.ts` - **Centralized file operations** (readFiles, editFile, publishFile, deleteFile, getQueryResult)
+- `frontend/lib/hooks/file-state-hooks.ts` - **React hooks** for file operations (useFile, useFolder, useFilesByCriteria, useQueryResult)
 - `frontend/lib/database/documents-db.ts` - SQLite CRUD operations
 - `frontend/lib/types.ts` - TypeScript interfaces including FileReference
+
+### Frontend State & Components
 - `frontend/store/` - Redux store with multiple domain slices:
   - `filesSlice.ts` - File/document state management
   - `chatSlice.ts` - Chat conversation state
@@ -537,6 +522,8 @@ When modifying SQLite schema:
 - `frontend/components/containers/` - Smart container components (QuestionContainerV2, DashboardContainerV2)
 - `frontend/components/views/` - View components (QuestionViewV2, DashboardView)
 - `frontend/app/f/[id]/page.tsx` - File detail page route
+
+### Frontend Other
 - `frontend/scripts/import-db.ts` - Database import/initialization script
 - `frontend/lib/auth/access-rules.ts` - Server-side permission helpers (canEditFileType, canDeleteFileType, etc.)
 - `frontend/lib/auth/access-rules.client.ts` - Client-side permission helpers (mirrors server functions)
@@ -544,8 +531,7 @@ When modifying SQLite schema:
 ### Backend
 - `backend/main.py` - FastAPI application with all endpoints
 - `backend/connection_manager.py` - Database connection pooling
-- `backend/connectors/` - Database and data pipeline connectors
-- `backend/pipelines/executor.py` - Singer pipeline orchestration
+- `backend/connectors/` - Database connectors (DuckDB, BigQuery, PostgreSQL)
 
 ### Writing New Tests
 

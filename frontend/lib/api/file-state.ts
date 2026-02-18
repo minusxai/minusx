@@ -19,7 +19,7 @@
  */
 
 import { getStore } from '@/store/store';
-import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, clearEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, selectEffectivePath } from '@/store/filesSlice';
+import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, clearEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, selectEffectivePath, deleteFile as deleteFileAction } from '@/store/filesSlice';
 import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, setQueryLoading } from '@/store/queryResultsSlice';
 import { selectSelectedRun } from '@/store/reportRunsSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
@@ -1001,7 +1001,6 @@ export async function deleteFile(options: DeleteFileOptions): Promise<void> {
   const state = getStore().getState();
   const file = selectFile(state, fileId);
   if (file) {
-    const { deleteFile: deleteFileAction } = await import('@/store/filesSlice');
     getStore().dispatch(deleteFileAction({ id: fileId, path: file.path }));
   }
 }

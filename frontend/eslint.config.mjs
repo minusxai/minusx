@@ -33,6 +33,14 @@ const eslintConfig = defineConfig([
           argsIgnorePattern: "^_",
         },
       ],
+      // Prevent inline/dynamic imports (code smell indicating circular dependencies)
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "ImportExpression",
+          message: "Dynamic imports (await import()) are not allowed. Use static imports at the top of the file. Inline imports indicate circular dependencies or poor architecture - fix the design instead.",
+        },
+      ],
     },
   },
 ]);
