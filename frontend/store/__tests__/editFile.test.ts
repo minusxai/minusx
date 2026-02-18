@@ -27,7 +27,8 @@ let testStore: any;
 jest.mock('@/store/store', () => ({
   get store() {
     return testStore;
-  }
+  },
+  getStore: () => testStore
 }));
 
 // Mock auth system to return test user

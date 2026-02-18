@@ -72,7 +72,8 @@ let mockStore: ReturnType<typeof configureStore>;
 jest.mock('@/store/store', () => ({
   get store() {
     return mockStore;
-  }
+  },
+  getStore: () => mockStore
 }));
 
 const mockLoadFiles = FilesAPI.loadFiles as jest.MockedFunction<typeof FilesAPI.loadFiles>;
