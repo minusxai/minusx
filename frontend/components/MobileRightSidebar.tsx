@@ -44,7 +44,7 @@ export default function MobileRightSidebar({
   const activeSection = useAppSelector((state) => state.ui.activeSidebarSection);
 
   // Get current page app state
-  const appState = useAppState();
+  const { appState, loading: appStateLoading } = useAppState();
 
   // Read from Redux (loaded by layout.tsx)
   const currentUser = useAppSelector(state => state.auth.user);

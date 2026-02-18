@@ -83,7 +83,7 @@ export default function FileLayout(props: FileLayoutProps) {
   const dispatch = useAppDispatch();
 
   // Get current app state for database name (for question pages)
-  const appState = useAppState();
+  const { appState, loading: appStateLoading } = useAppState();
   const appStateDatabaseName = appState?.type === 'file' && appState.fileType === 'question'
     ? (appState.file.content as any)?.database_name
     : undefined;

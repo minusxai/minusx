@@ -353,12 +353,32 @@ const filesSlice = createSlice({
      */
     setMetadataEdit(state, action: PayloadAction<{ fileId: FileId; changes: { name?: string; path?: string } }>) {
       const { fileId, changes } = action.payload;
-      if (state.files[fileId]) {
-        state.files[fileId].metadataChanges = {
-          ...state.files[fileId].metadataChanges,
-          ...changes
-        };
+      const file = state.files[fileId];
+      if (!file) return;
+
+      // Auto-update path slug when name changes (keep parent folder)
+      let updatedChanges = { ...changes };
+      if (changes.name && !changes.path) {
+        // Get current path (with any pending changes applied)
+        const currentPath = file.metadataChanges?.path || file.path;
+
+        // Extract parent folder (everything before last /)
+        const parentFolder = currentPath.substring(0, currentPath.lastIndexOf('/')) || '/org';
+
+        // Generate new slug from name
+        const newSlug = changes.name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-+|-+$/g, '');
+
+        // Combine parent + slug
+        updatedChanges.path = `${parentFolder}/${newSlug}`;
       }
+
+      file.metadataChanges = {
+        ...file.metadataChanges,
+        ...updatedChanges
+      };
     },
 
     /**

@@ -1,7 +1,7 @@
 'use client';
 
 import { use, useMemo, useState } from 'react';
-import { Center, Text, Box } from '@chakra-ui/react';
+import { Center, Text, Box, Spinner } from '@chakra-ui/react';
 import FileLayout from '@/components/FileLayout';
 import FileView from '@/components/FileView';
 import { SUPPORTED_FILE_TYPES, FileType } from '@/lib/ui/file-metadata';
@@ -24,7 +24,7 @@ export default function NewFilePage({ params }: NewFilePageProps) {
   const isValidType = SUPPORTED_FILE_TYPES.includes(type);
 
   // Get app state (creates virtual file with URL params automatically)
-  const appState = useAppState();
+  const { appState, loading: appStateLoading } = useAppState();
   const virtualFileId = appState?.type === 'file' ? appState.id : undefined;
 
   // Load the virtual file
@@ -62,22 +62,6 @@ export default function NewFilePage({ params }: NewFilePageProps) {
   // Check if we should show context selector (admin only)
   const shouldShowContextSelector = user?.role === 'admin';
 
-  // Show error for invalid type
-  if (!isValidType) {
-    return (
-      <Center h="100vh" bg="bg.canvas">
-        <Box textAlign="center">
-          <Text fontSize="xl" fontWeight="bold" mb={2}>
-            Invalid File Type
-          </Text>
-          <Text color="fg.muted">
-            The file type "{type}" is not supported.
-          </Text>
-        </Box>
-      </Center>
-    );
-  }
-
   // Determine file name
   const fileName = file?.name || '';
 
@@ -108,6 +92,31 @@ export default function NewFilePage({ params }: NewFilePageProps) {
 
     return config;
   }, [type, file?.path, selectedVersion, currentContext?.path, shouldShowContextSelector]);
+
+  // Show error for invalid type
+  if (!isValidType) {
+    return (
+      <Center h="100vh" bg="bg.canvas">
+        <Box textAlign="center">
+          <Text fontSize="xl" fontWeight="bold" mb={2}>
+            Invalid File Type
+          </Text>
+          <Text color="fg.muted">
+            The file type "{type}" is not supported.
+          </Text>
+        </Box>
+      </Center>
+    );
+  }
+
+  // Show loading while initializing virtual file
+  if (appStateLoading || !virtualFileId) {
+    return (
+      <Center h="100vh" bg="bg.canvas">
+        <Spinner size="lg" />
+      </Center>
+    );
+  }
 
   return (
     <FileLayout

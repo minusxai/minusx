@@ -1832,6 +1832,16 @@ registerFrontendTool('PublishFile', async (args, context) => {
 
   // Execute (new unified API)
   const result = await publishFile({ fileId });
+  if (fileId < 0 && result.id) {
+    const router = getRouter();
+    if (!router) {
+      return {
+        success: false,
+        message: 'Router not available'
+      };
+    }
+    router.push(`/f/${result.id}`)
+  }
 
   return result;
 });

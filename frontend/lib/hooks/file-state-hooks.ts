@@ -739,20 +739,23 @@ export function useQueryResult(
  * }
  * ```
  */
-export function useAppState(): AppState | null {
+export function useAppState(): { appState: AppState | null; loading: boolean } {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const user = useAppSelector(state => state.auth.user);
   const filesState = useAppSelector(state => state.files.files);
   const queryResultsState = useAppSelector(state => state.queryResults.results);
 
+  // Track created virtual file ID in local state
+  const [createdVirtualId, setCreatedVirtualId] = useState<number | undefined>(undefined);
+
   // Parse URL params for new file pages
   const createOptions = useMemo(() => {
     if (!pathname.startsWith('/new/')) return undefined;
 
     const folderParam = searchParams.get('folder');
-    const databaseParam = searchParams.get('database');
-    const queryB64 = searchParams.get('query');
+    const databaseParam = searchParams.get('databaseName'); // Match URL param name
+    const queryB64 = searchParams.get('queryB64'); // Match URL param name
     const virtualIdParam = searchParams.get('virtualId');
 
     const query = queryB64
@@ -771,6 +774,11 @@ export function useAppState(): AppState | null {
       virtualId: validVirtualId
     };
   }, [pathname, searchParams, user]);
+
+  // Clear created virtual ID when route changes
+  useEffect(() => {
+    setCreatedVirtualId(undefined);
+  }, [pathname]);
 
   // Determine route type from pathname
   const routeInfo = useMemo(() => {
@@ -804,20 +812,14 @@ export function useAppState(): AppState | null {
         // Load from DB if positive ID
         await readFiles({ fileIds: [routeInfo.id] });
       } else if (routeInfo.type === 'newFile') {
-        // Check if virtual file exists
-        const virtualId = createOptions?.virtualId;
+        // Check if virtual file exists (from URL or local state)
+        const virtualId = createOptions?.virtualId || createdVirtualId;
         const existingFile = virtualId ? filesState[virtualId] : null;
 
         if (!existingFile) {
-          // Find latest virtual file
-          const virtualFiles = Object.values(filesState)
-            .filter(f => f.id < 0 && f.type === routeInfo.fileType)
-            .sort((a, b) => a.id - b.id);
-
-          if (virtualFiles.length === 0) {
-            // Create new virtual file
-            await createVirtualFile(routeInfo.fileType, createOptions);
-          }
+          // Create new virtual file and store its ID
+          const newVirtualId = await createVirtualFile(routeInfo.fileType, createOptions);
+          setCreatedVirtualId(newVirtualId);
         }
       } else if (routeInfo.type === 'folder') {
         await readFolder(routeInfo.path);
@@ -829,13 +831,20 @@ export function useAppState(): AppState | null {
     return () => {
       cancelled = true;
     };
-  }, [routeInfo, createOptions, filesState]);
+  }, [routeInfo, createOptions, filesState, createdVirtualId]);
 
   // Compute appState from Redux (reactive to state changes - NO LOCAL STATE!)
   return useMemo(() => {
     if (routeInfo.type === 'file') {
       const file = filesState[routeInfo.id];
-      if (!file) return null;
+
+      // File doesn't exist in Redux yet - might be loading or doesn't exist
+      if (!file) {
+        return { appState: null, loading: true };
+      }
+
+      // File exists - check if it's still loading
+      const loading = file.loading || false;
 
       // Get referenced files from Redux (file.references contains IDs)
       const references = (file.references || [])
@@ -845,49 +854,38 @@ export function useAppState(): AppState | null {
       const queryResults: QueryResult[] = [];
 
       return {
-        type: 'file',
-        id: routeInfo.id,
-        fileType: file.type,
-        file,
-        references,
-        queryResults
+        appState: {
+          type: 'file',
+          id: routeInfo.id,
+          fileType: file.type,
+          file,
+          references,
+          queryResults
+        },
+        loading
       };
     }
 
     if (routeInfo.type === 'newFile') {
-      // Use virtualId from URL if provided
-      const virtualId = createOptions?.virtualId;
+      // Use virtualId from URL, or fallback to created ID from local state
+      const virtualId = createOptions?.virtualId || createdVirtualId;
       if (virtualId && filesState[virtualId]) {
         const file = filesState[virtualId];
         return {
-          type: 'file',
-          id: virtualId,
-          fileType: file.type,
-          file,
-          references: [],
-          queryResults: []
-        };
-      }
-
-      // Find latest virtual file
-      const virtualFiles = Object.values(filesState)
-        .filter(f => f.id < 0 && f.type === routeInfo.fileType)
-        .sort((a, b) => a.id - b.id);
-
-      if (virtualFiles.length > 0) {
-        const file = virtualFiles[0];
-        return {
-          type: 'file',
-          id: file.id,
-          fileType: file.type,
-          file,
-          references: [],
-          queryResults: []
+          appState: {
+            type: 'file',
+            id: virtualId,
+            fileType: file.type,
+            file,
+            references: [],
+            queryResults: []
+          },
+          loading: false
         };
       }
 
       // No virtual file yet (initialization in progress)
-      return null;
+      return { appState: null, loading: true };
     }
 
     if (routeInfo.type === 'folder') {
@@ -897,16 +895,19 @@ export function useAppState(): AppState | null {
       });
 
       return {
-        type: 'folder',
-        path: routeInfo.path,
-        folder: {
-          files: folderFiles,
-          loading: false,
-          error: null
-        }
+        appState: {
+          type: 'folder',
+          path: routeInfo.path,
+          folder: {
+            files: folderFiles,
+            loading: false,
+            error: null
+          }
+        },
+        loading: false
       };
     }
 
-    return null;
+    return { appState: null, loading: false };
   }, [routeInfo, filesState, queryResultsState, createOptions]);
 }

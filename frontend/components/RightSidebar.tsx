@@ -56,7 +56,7 @@ export default function RightSidebar({
   const { isCollapsed, width, devMode, colorMode, activeSidebarSection } = useAppSelector(selectRightSidebarUIState);
 
   // Get current page app state
-  const appState = useAppState();
+  const { appState, loading: appStateLoading } = useAppState();
 
   // Read from Redux (loaded by layout.tsx)
   const currentUser = useAppSelector(state => state.auth.user);
