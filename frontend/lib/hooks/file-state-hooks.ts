@@ -11,12 +11,12 @@
  * - useFilesByCriteria - Load files by criteria (path, type, depth)
  * - useFileByPath - Load a file by path (read-only)
  * - useFolder - Load folder contents with permissions
- * - useNewFile - Create a virtual file for create mode
+ * - useAppState - Get current page app state (file or folder)
  * - useQueryResult - Execute queries with TTL caching
  */
 
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import {
   selectFile,
@@ -46,6 +46,7 @@ import { FilesAPI } from '@/lib/data/files';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
+import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type { GetFilesOptions } from '@/lib/data/types';
 import type { QuestionReference } from '@/lib/types';
 import { FileType } from '@/lib/ui/file-metadata';
@@ -572,80 +573,6 @@ export function useFolder(path: string, options: UseFolderOptions = {}): UseFold
 }
 
 // ============================================================================
-// useNewFile - Create virtual file for create mode
-// ============================================================================
-
-/**
- * Options for creating a new file
- */
-export interface NewFileOptions {
-  /** Folder path override (defaults to user's home_folder) */
-  folder?: string;
-  /** For questions: pre-populate with this database/connection name */
-  databaseName?: string;
-  /** For questions: pre-populate with this SQL query */
-  query?: string;
-  virtualId?: number;
-}
-
-/**
- * useNewFile Hook - Phase 3 (Simplified)
- *
- * Creates and initializes a virtual file for "create mode" in the file editor.
- * Uses createVirtualFile from file-state.ts internally.
- *
- * Virtual files use negative IDs (-Date.now()) to distinguish them from real files.
- *
- * @param type - The type of file to create (question, dashboard, etc.)
- * @param options - Optional configuration (folder, connection, query)
- * @returns Virtual file ID (negative number)
- *
- * Example:
- * ```tsx
- * function NewFilePage({ params }: { params: { type: string } }) {
- *   const virtualFileId = useNewFile(params.type as FileType, { folder: '/org/sales' });
- *   return <FileView fileId={virtualFileId} mode="create" />;
- * }
- *
- * // Pre-populate a question with SQL
- * const virtualFileId = useNewFile('question', {
- *   folder: '/org',
- *   databaseName: 'my_db',
- *   query: 'SELECT * FROM users LIMIT 100'
- * });
- * ```
- */
-export function useNewFile(type: FileType, options?: NewFileOptions): number {
-  // Generate stable virtual ID
-  const virtualId = useMemo(() => {
-    if (options?.virtualId && options.virtualId < 0) {
-      return options.virtualId;
-    }
-    return -Date.now();
-  }, [options?.virtualId]);
-
-  // Track initialization state
-  const [initialized, setInitialized] = useState(false);
-
-  // Create virtual file on mount
-  useEffect(() => {
-    if (initialized) return;
-    setInitialized(true);
-
-    createVirtualFile(type, {
-      folder: options?.folder,
-      databaseName: options?.databaseName,
-      query: options?.query,
-      virtualId
-    }).catch(err => {
-      console.error('[useNewFile] Failed to create virtual file:', err);
-    });
-  }, [initialized, type, options?.folder, options?.databaseName, options?.query, virtualId]);
-
-  return virtualId;
-}
-
-// ============================================================================
 // useQueryResult - Execute queries with TTL caching
 // ============================================================================
 
@@ -813,8 +740,40 @@ export function useQueryResult(
  */
 export function useAppState(): AppState | null {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const user = useAppSelector(state => state.auth.user);
   const [appState, setAppState] = useState<AppState | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Parse URL params for new file pages
+  const createOptions = useMemo(() => {
+    // Only for /new/{type} routes
+    if (!pathname.startsWith('/new/')) return undefined;
+
+    const folderParam = searchParams.get('folder');
+    const databaseName = searchParams.get('database');
+    const queryB64 = searchParams.get('query');
+    const virtualIdParam = searchParams.get('virtualId');
+
+    // Decode base64 query
+    const query = queryB64
+      ? new TextDecoder().decode(Uint8Array.from(atob(queryB64), c => c.charCodeAt(0)))
+      : undefined;
+
+    // Resolve folder (URL param, or user's home folder, or default)
+    const folder = folderParam || (user ? resolveHomeFolderSync(user.mode, user.home_folder || '') : '/org');
+
+    // Parse virtualId
+    const virtualId = virtualIdParam ? parseInt(virtualIdParam, 10) : undefined;
+    const validVirtualId = virtualId && !isNaN(virtualId) && virtualId < 0 ? virtualId : undefined;
+
+    return {
+      folder,
+      databaseName: databaseName || undefined,
+      query,
+      virtualId: validVirtualId
+    };
+  }, [pathname, searchParams, user]);
 
   useEffect(() => {
     let cancelled = false;
@@ -822,7 +781,7 @@ export function useAppState(): AppState | null {
     const loadAppState = async () => {
       setLoading(true);
       try {
-        const result = await getAppState(pathname);
+        const result = await getAppState(pathname, createOptions);
         if (!cancelled) {
           setAppState(result);
         }
@@ -843,7 +802,7 @@ export function useAppState(): AppState | null {
     return () => {
       cancelled = true;
     };
-  }, [pathname]);
+  }, [pathname, createOptions]);
 
   return appState;
 }

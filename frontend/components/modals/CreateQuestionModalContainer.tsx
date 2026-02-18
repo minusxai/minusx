@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useCallback, useEffect, MutableRefObject } from 'react';
+import { useState, useCallback, useEffect, MutableRefObject, useMemo } from 'react';
 import { Box, Button, Dialog, HStack, Text, VStack } from '@chakra-ui/react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { useNewFile } from '@/lib/hooks/file-state-hooks';
 import { useFile } from '@/lib/hooks/file-state-hooks';
-import { editFile, publishFile, clearFileChanges } from '@/lib/api/file-state';
+import { editFile, publishFile, clearFileChanges, createVirtualFile } from '@/lib/api/file-state';
 import { useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { selectIsDirty, selectMergedContent, selectEffectiveName, setEphemeral, deleteFile } from '@/store/filesSlice';
 import { QuestionContent } from '@/lib/types';
@@ -35,16 +34,24 @@ export default function CreateQuestionModalContainer({
   onAttemptCloseRef,
 }: CreateQuestionModalContainerProps) {
   const dispatch = useAppDispatch();
+  const [virtualId, setVirtualId] = useState<number | undefined>(undefined);
 
-  // Create virtual file for question creation, OR use provided ID for editing
-  const virtualId = useNewFile('question', { folder: folderPath });
+  // Create virtual file for question creation (only once)
+  useEffect(() => {
+    if (questionId || virtualId !== undefined) return; // Skip if editing or already created
+
+    createVirtualFile('question', { folder: folderPath })
+      .then(id => setVirtualId(id))
+      .catch(err => console.error('[CreateQuestionModal] Failed to create virtual file:', err));
+  }, [questionId, virtualId, folderPath]);
+
   const effectiveId = questionId ?? virtualId;
 
-  // Use useFile hook for state management
+  // Use useFile hook for state management (skip if no ID yet)
   const { file, loading: fileLoading, saving, error } = useFile(effectiveId);
-  const isDirty = useAppSelector(state => selectIsDirty(state, effectiveId));
-  const mergedContent = useAppSelector(state => selectMergedContent(state, effectiveId)) as QuestionContent | undefined;
-  const effectiveName = useAppSelector(state => selectEffectiveName(state, effectiveId)) || '';
+  const isDirty = useAppSelector(state => effectiveId ? selectIsDirty(state, effectiveId) : false);
+  const mergedContent = useAppSelector(state => effectiveId ? selectMergedContent(state, effectiveId) as QuestionContent | undefined : undefined);
+  const effectiveName = useAppSelector(state => effectiveId ? selectEffectiveName(state, effectiveId) || '' : '');
 
   // Local state
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -75,7 +82,7 @@ export default function CreateQuestionModalContainer({
 
   // Set initial lastExecuted (only once when file is ready)
   useEffect(() => {
-    if (!file || !mergedContent) return;
+    if (!file || !mergedContent || !effectiveId) return;
     if (lastExecuted) return; // Already set
 
     const initialQuery = {
@@ -105,7 +112,7 @@ export default function CreateQuestionModalContainer({
 
   // Handle query execution
   const handleExecute = useCallback(() => {
-    if (!mergedContent) return;
+    if (!mergedContent || !effectiveId) return;
 
     const newQuery = {
       query: mergedContent.query,

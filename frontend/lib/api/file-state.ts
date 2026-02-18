@@ -1429,11 +1429,16 @@ export async function getQueryResult(
  * Determines page type from pathname and loads appropriate data:
  * - /f/{id} → file page → readFiles
  * - /p/path → folder page → readFolder
+ * - /new/{type} → new file page → create virtual file with options
  *
  * @param pathname - Current pathname from usePathname()
+ * @param createOptions - Options for creating virtual files (for /new routes)
  * @returns AppState (file or folder context)
  */
-export async function getAppState(pathname: string): Promise<AppState | null> {
+export async function getAppState(
+  pathname: string,
+  createOptions?: CreateVirtualFileOptions
+): Promise<AppState | null> {
   // File page: /f/{id} or /f/{id}-{slug}
   const fileMatch = pathname.match(/^\/f\/(\d+)/);
   if (fileMatch) {
@@ -1458,24 +1463,44 @@ export async function getAppState(pathname: string): Promise<AppState | null> {
     const fileType = newFileMatch[1] as FileType;
     const state = getStore().getState();
 
-    // Find the latest virtual file (most negative ID, since ID = -Date.now()) of this type
-    const virtualFiles = Object.values(state.files.files)
-      .filter(f => f.id < 0 && f.type === fileType)
-      .sort((a, b) => a.id - b.id); // Sort ascending: most negative (newest) first
-
-    if (virtualFiles.length > 0) {
-      const file = virtualFiles[0];
-      return {
-        type: 'file',
-        id: file.id,
-        fileType: file.type,
-        file,
-        references: [],
-        queryResults: []
-      };
+    // Check if virtual file with specific ID already exists (from createOptions.virtualId)
+    let virtualId: number | undefined;
+    if (createOptions?.virtualId && createOptions.virtualId < 0) {
+      const existingFile = selectFile(state, createOptions.virtualId);
+      if (existingFile) {
+        virtualId = createOptions.virtualId;
+      }
     }
 
-    return null;
+    // If no specific virtual ID, find or create latest virtual file of this type
+    if (!virtualId) {
+      const virtualFiles = Object.values(state.files.files)
+        .filter(f => f.id < 0 && f.type === fileType)
+        .sort((a, b) => a.id - b.id); // Sort ascending: most negative (newest) first
+
+      if (virtualFiles.length > 0) {
+        // Use existing virtual file
+        virtualId = virtualFiles[0].id;
+      } else {
+        // Create new virtual file with options
+        virtualId = await createVirtualFile(fileType, createOptions);
+      }
+    }
+
+    // Get the file from Redux
+    const updatedState = getStore().getState();
+    const file = selectFile(updatedState, virtualId);
+
+    if (!file) return null;
+
+    return {
+      type: 'file',
+      id: virtualId,
+      fileType: file.type,
+      file,
+      references: [],
+      queryResults: []
+    };
   }
 
   // Folder page: /p/path or /p/nested/path
