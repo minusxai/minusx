@@ -20,7 +20,7 @@
 
 import { store as fallbackStore } from '@/store/store';
 import { clientStoreRef } from '@/components/ReduxProvider';
-import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, clearEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles } from '@/store/filesSlice';
+import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, clearEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving } from '@/store/filesSlice';
 import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, setQueryLoading } from '@/store/queryResultsSlice';
 import { selectSelectedRun } from '@/store/reportRunsSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
@@ -773,8 +773,12 @@ export async function publishFile(
     return { id: fileId, name: fileState.name };
   }
 
-  // Get merged content
-  const mergedContent = selectMergedContent(state, fileId);
+  // Set saving state
+  getStore().dispatch(setSaving({ id: fileId, saving: true }));
+
+  try {
+    // Get merged content
+    const mergedContent = selectMergedContent(state, fileId);
   if (!mergedContent) {
     throw new Error(`File ${fileId} has no content`);
   }
@@ -896,7 +900,11 @@ export async function publishFile(
     }
   }
 
-  return { id: savedId, name: savedName };
+    return { id: savedId, name: savedName };
+  } finally {
+    // Always clear saving state
+    getStore().dispatch(setSaving({ id: fileId, saving: false }));
+  }
 }
 
 /**

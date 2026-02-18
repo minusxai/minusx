@@ -147,6 +147,7 @@ chatListenerMiddleware.startListening({
       const decoder = new TextDecoder();
       let buffer = '';
       let doneEventData: any = null;
+      let errorData: any = null;
 
       try {
         while (true) {
@@ -172,8 +173,8 @@ chatListenerMiddleware.startListening({
             } else if (event === 'done') {
               doneEventData = data;
             } else if (event === 'error') {
-              // Handle error events from server
-              throw new Error(data.error);
+              // Save error but continue reading to get done event
+              errorData = data;
             } else if (event === 'user_input_request') {
               listenerApi.dispatch(addUserInputRequest({
                 conversationID,
@@ -197,6 +198,11 @@ chatListenerMiddleware.startListening({
             completed_tool_calls: doneEventData.completed_tool_calls,
             pending_tool_calls: doneEventData.pending_tool_calls
           }));
+        }
+
+        // Now throw error if we had one (after processing done event)
+        if (errorData) {
+          throw new Error(errorData.error);
         }
       } finally {
         reader.releaseLock();
@@ -308,6 +314,7 @@ chatListenerMiddleware.startListening({
       const decoder = new TextDecoder();
       let buffer = '';
       let doneEventData: any = null;
+      let errorData: any = null;
 
       try {
         while (true) {
@@ -346,8 +353,9 @@ chatListenerMiddleware.startListening({
                 break;
 
               case 'error':
-                // Always process error event
-                throw new Error(data.error);
+                // Save error but continue reading to get done event
+                errorData = data;
+                break;
 
               default:
                 console.warn('Unknown SSE event:', event);
@@ -358,28 +366,36 @@ chatListenerMiddleware.startListening({
         reader.releaseLock();
       }
 
-      // Process done event
+      // Process done event if we have it
+      if (doneEventData) {
+        // Use real conversation ID for clearing streaming (it might have forked)
+        const realConversationID = doneEventData.conversationID || conversationID;
+
+        // Clear streaming state on the correct conversation
+        listenerApi.dispatch(clearStreamingContent({ conversationID: realConversationID }));
+
+        // Update conversation with final results
+        listenerApi.dispatch(updateConversation({
+          conversationID,
+          newConversationID: doneEventData.conversationID,
+          log_index: doneEventData.log_index,
+          completed_tool_calls: doneEventData.completed_tool_calls,
+          pending_tool_calls: doneEventData.pending_tool_calls
+        }));
+
+        // Cleanup AbortController (using stable _id)
+        abortControllers.delete(conversation._id);
+      }
+
+      // Now throw error if we had one (after processing done event)
+      if (errorData) {
+        throw new Error(errorData.error);
+      }
+
+      // If we didn't get done event and no error, that's a problem
       if (!doneEventData) {
         throw new Error('Stream ended without done event');
       }
-
-      // Use real conversation ID for clearing streaming (it might have forked)
-      const realConversationID = doneEventData.conversationID || conversationID;
-
-      // Clear streaming state on the correct conversation
-      listenerApi.dispatch(clearStreamingContent({ conversationID: realConversationID }));
-
-      // Update conversation with final results
-      listenerApi.dispatch(updateConversation({
-        conversationID,
-        newConversationID: doneEventData.conversationID,
-        log_index: doneEventData.log_index,
-        completed_tool_calls: doneEventData.completed_tool_calls,
-        pending_tool_calls: doneEventData.pending_tool_calls
-      }));
-
-      // Cleanup AbortController (using stable _id)
-      abortControllers.delete(conversation._id);
 
     } catch (error: any) {
       listenerApi.dispatch(setError({
@@ -489,6 +505,7 @@ chatListenerMiddleware.startListening({
       const decoder = new TextDecoder();
       let buffer = '';
       let doneEventData: any = null;
+      let errorData: any = null;
 
       try {
         while (true) {
@@ -527,8 +544,9 @@ chatListenerMiddleware.startListening({
                 break;
 
               case 'error':
-                // Always process error event
-                throw new Error(data.error);
+                // Save error but continue reading to get done event
+                errorData = data;
+                break;
 
               default:
                 console.warn('Unknown SSE event:', event);
@@ -539,28 +557,36 @@ chatListenerMiddleware.startListening({
         reader.releaseLock();
       }
 
-      // Process done event
+      // Process done event if we have it
+      if (doneEventData) {
+        // Use real conversation ID for clearing streaming (it might have forked)
+        const realConversationID = doneEventData.conversationID || conversationID;
+
+        // Clear streaming state on the correct conversation
+        listenerApi.dispatch(clearStreamingContent({ conversationID: realConversationID }));
+
+        // Update conversation with final results
+        listenerApi.dispatch(updateConversation({
+          conversationID,
+          newConversationID: doneEventData.conversationID,
+          log_index: doneEventData.log_index,
+          completed_tool_calls: doneEventData.completed_tool_calls,
+          pending_tool_calls: doneEventData.pending_tool_calls
+        }));
+
+        // Cleanup AbortController (using stable _id)
+        abortControllers.delete(conversation._id);
+      }
+
+      // Now throw error if we had one (after processing done event)
+      if (errorData) {
+        throw new Error(errorData.error);
+      }
+
+      // If we didn't get done event and no error, that's a problem
       if (!doneEventData) {
         throw new Error('Stream ended without done event');
       }
-
-      // Use real conversation ID for clearing streaming (it might have forked)
-      const realConversationID = doneEventData.conversationID || conversationID;
-
-      // Clear streaming state on the correct conversation
-      listenerApi.dispatch(clearStreamingContent({ conversationID: realConversationID }));
-
-      // Update conversation with final results
-      listenerApi.dispatch(updateConversation({
-        conversationID,
-        newConversationID: doneEventData.conversationID,
-        log_index: doneEventData.log_index,
-        completed_tool_calls: doneEventData.completed_tool_calls,
-        pending_tool_calls: doneEventData.pending_tool_calls
-      }));
-
-      // Cleanup AbortController (using stable _id)
-      abortControllers.delete(conversation._id);
 
     } catch (error: any) {
       listenerApi.dispatch(setError({
