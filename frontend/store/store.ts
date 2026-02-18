@@ -43,8 +43,32 @@ export function makeStore(preloadedState?: PreloadedState) {
   });
 }
 
-// Default singleton store for non-SSR contexts
-export const store = makeStore();
+// Client-side singleton store
+let clientStore: ReturnType<typeof makeStore> | undefined;
 
-export type RootState = ReturnType<typeof store.getState>;
-export type AppDispatch = typeof store.dispatch;
+export function getOrCreateStore(preloadedState?: PreloadedState): ReturnType<typeof makeStore> {
+  const isServer = typeof window === 'undefined';
+
+  // Server-side: always create a new store per request
+  if (isServer) {
+    return makeStore(preloadedState);
+  }
+
+  // Client-side: create once with preloadedState, reuse thereafter
+  if (!clientStore) {
+    clientStore = makeStore(preloadedState);
+  }
+
+  return clientStore;
+}
+
+// For client-only code (like file-state.ts)
+export function getStore(): ReturnType<typeof makeStore> {
+  if (!clientStore) {
+    clientStore = makeStore();
+  }
+  return clientStore;
+}
+
+export type RootState = ReturnType<ReturnType<typeof makeStore>['getState']>;
+export type AppDispatch = ReturnType<typeof makeStore>['dispatch'];

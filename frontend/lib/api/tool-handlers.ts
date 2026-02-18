@@ -8,7 +8,7 @@
 import { ToolCall, ToolMessage, DatabaseWithSchema, DocumentContent, QuestionContent, ReportContent, ReportReference, AlertContent, AlertSelector, AlertFunction, ComparisonOperator } from '@/lib/types';
 import { setEdit, setEphemeral, setFile, selectMergedContent, setMetadataEdit, type FileId } from '@/store/filesSlice';
 import type { AppDispatch, RootState } from '@/store/store';
-import { store } from '@/store/store';
+import { getStore } from '@/store/store';
 import type { UserInput } from './user-input-exception';
 import { UserInputException } from './user-input-exception';
 import { slugify } from '@/lib/slug-utils';
@@ -551,7 +551,7 @@ registerFrontendTool('EditDashboard', async (args, context) => {
   }
 
   // Get content from passed state or fallback to store
-  const reduxState = state || store.getState();
+  const reduxState = state || getStore().getState();
   const mergedContent = selectMergedContent(reduxState, file_id) as DocumentContent;
 
   if (!mergedContent) {
@@ -686,7 +686,7 @@ registerFrontendTool('EditReport', async (args, context) => {
   }
 
   // Get content from passed state or fallback to store
-  const reduxState = state || store.getState();
+  const reduxState = state || getStore().getState();
   const mergedContent = selectMergedContent(reduxState, file_id) as ReportContent;
 
   if (!mergedContent) {
@@ -907,7 +907,7 @@ registerFrontendTool('EditAlert', async (args, context) => {
     question_id = parseInt(question_id, 10);
   }
 
-  const reduxState = state || store.getState();
+  const reduxState = state || getStore().getState();
   const mergedContent = selectMergedContent(reduxState, file_id) as AlertContent;
 
   if (!mergedContent) {
@@ -1546,7 +1546,7 @@ async function handleUpdateQuestion(
 
     // Get FRESH state after dispatch
     // Note: state from context is passed from chat listener and contains current Redux state
-    // After setEdit, we need to get updated state - but store.getState() in tool context may not work
+    // After setEdit, we need to get updated state - but getStore().getState() in tool context may not work
     // Use the state from context and manually merge the edits
     const currentFile = state.files.files[questionId];
     if (!currentFile || !currentFile.content) {
@@ -1766,7 +1766,7 @@ registerFrontendTool('EditFile', async (args, context) => {
   }
 
   // Auto-execute query for questions (agent tool only)
-  const state = store.getState();
+  const state = getStore().getState();
   const fileState = state.files.files[fileId];
   if (fileState?.type === 'question') {
     const finalContent = selectMergedContent(state, fileId) as any;
@@ -1800,7 +1800,7 @@ registerFrontendTool('EditFileReplace', async (args, context) => {
 
   // Auto-execute query for questions (agent tool only)
   if (result.success) {
-    const state = store.getState();
+    const state = getStore().getState();
     const fileState = state.files.files[fileId];
     if (fileState?.type === 'question') {
       const finalContent = selectMergedContent(state, fileId) as any;

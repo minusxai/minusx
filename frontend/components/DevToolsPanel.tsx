@@ -9,7 +9,7 @@ import AppStateViewer from './AppStateViewer';
 import { useScreenshot } from '@/lib/hooks/useScreenshot';
 import { getRegisteredToolNames, executeToolCall } from '@/lib/api/tool-handlers';
 import { UserInputException, type UserInputProps, type UserInput } from '@/lib/api/user-input-exception';
-import { store } from '@/store/store';
+import { getStore } from '@/store/store';
 import { useAppDispatch } from '@/store/hooks';
 import { BACKEND_URL } from '@/lib/constants';
 import type { ToolCall, DatabaseWithSchema } from '@/lib/types';
@@ -92,7 +92,7 @@ function ToolTester() {
     setPendingInput(null);
     try {
       const parsedArgs = JSON.parse(argsJson);
-      const state = store.getState();
+      const state = getStore().getState();
       const database: DatabaseWithSchema = { databaseName: '', schemas: [] };
 
       const toolCall: ToolCall = {
