@@ -16,9 +16,11 @@ import { Box, VStack, Text, Icon } from '@chakra-ui/react';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { MentionItem } from '@/lib/data/completions/types';
 import { FILE_TYPE_METADATA, TABLE_MENTION_METADATA, ACCENT_HEX } from '@/lib/ui/file-metadata';
+import { DatabaseWithSchema } from '@/lib/types';
 
 interface MentionsPluginProps {
   databaseName?: string;
+  whitelistedSchemas?: DatabaseWithSchema[];
 }
 
 // Map semantic token to hex value
@@ -52,7 +54,7 @@ function getMentionBadgeInfo(type: 'table' | 'question' | 'dashboard') {
   };
 }
 
-export function MentionsPlugin({ databaseName }: MentionsPluginProps) {
+export function MentionsPlugin({ databaseName, whitelistedSchemas }: MentionsPluginProps) {
   const [editor] = useLexicalComposerContext();
   const [mentions, setMentions] = useState<MentionItem[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -71,7 +73,8 @@ export function MentionsPlugin({ databaseName }: MentionsPluginProps) {
       const result = await CompletionsAPI.getMentions({
         prefix,
         mentionType: type,
-        databaseName
+        databaseName,
+        whitelistedSchemas
       });
 
       // Only update if this is still the latest request
@@ -86,7 +89,7 @@ export function MentionsPlugin({ databaseName }: MentionsPluginProps) {
         setMentions([]);
       }
     }
-  }, [databaseName]);
+  }, [databaseName, whitelistedSchemas]);
 
   const insertMention = useCallback((mention: MentionItem, triggerLength: number) => {
     editor.update(() => {

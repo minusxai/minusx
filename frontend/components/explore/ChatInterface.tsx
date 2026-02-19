@@ -685,6 +685,7 @@ export default function ChatInterface({
               selectedContextPath={contextPath}
               selectedVersion={contextVersion}
               onContextChange={onContextChange}
+              whitelistedSchemas={databases}
             />
           </Box>
         </Box>

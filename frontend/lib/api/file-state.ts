@@ -27,7 +27,7 @@ import { FilesAPI, getFiles } from '@/lib/data/files';
 import { PromiseManager } from '@/lib/utils/promise-manager';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
-import { resolveHomeFolderSync, isHiddenSystemPath } from '@/lib/mode/path-resolver';
+import { resolveHomeFolderSync, isHiddenSystemPath, isFileTypeAllowedInPath, getModeRoot } from '@/lib/mode/path-resolver';
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import { API } from '@/lib/api/declarations';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
@@ -1132,6 +1132,21 @@ export async function createVirtualFile(
     resolvedFolder = user
       ? resolveHomeFolderSync(user.mode, user.home_folder || '')
       : '/org';
+  }
+
+  // Check if file type is allowed in this folder
+  // If not allowed in system folder, redirect to user's home folder or mode root
+  const mode = user?.mode || 'org';
+  if (!isFileTypeAllowedInPath(type, resolvedFolder, mode)) {
+    const originalFolder = resolvedFolder;
+    // Redirect to user's home folder
+    resolvedFolder = user
+      ? resolveHomeFolderSync(user.mode, user.home_folder || '')
+      : getModeRoot(mode);
+    console.log(`[createVirtualFile] Redirected ${type} from restricted folder:`, {
+      originalFolder,
+      redirectedFolder: resolvedFolder
+    });
   }
 
   // Fetch template from backend

@@ -11,6 +11,7 @@ import DatabaseSelector from '@/components/DatabaseSelector';
 import { ContextSelector } from './ContextSelector';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { LexicalMentionEditor } from '@/components/chat/LexicalMentionEditor';
+import { DatabaseWithSchema } from '@/lib/types';
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -26,6 +27,7 @@ interface ChatInputProps {
   selectedContextPath?: string | null;
   selectedVersion?: number;
   onContextChange?: (contextPath: string | null, version?: number) => void;
+  whitelistedSchemas?: DatabaseWithSchema[];
 }
 
 export default function ChatInput({
@@ -42,6 +44,7 @@ export default function ChatInput({
   selectedContextPath,
   selectedVersion,
   onContextChange,
+  whitelistedSchemas,
 }: ChatInputProps) {
   const dispatch = useAppDispatch();
   const companyName = useAppSelector(selectCompanyName);
@@ -103,6 +106,7 @@ export default function ChatInput({
                     disabled={disabled || isAgentRunning}
                     onSubmit={handleSend}
                     onChange={setInput}
+                    whitelistedSchemas={whitelistedSchemas}
                   />
                 </Box>
 

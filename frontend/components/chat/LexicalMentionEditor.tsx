@@ -12,6 +12,7 @@ import { MentionsPlugin } from './lexical/MentionsPlugin';
 import { EditorState, $getRoot, $createParagraphNode, $getSelection, $isRangeSelection, $createTextNode, COMMAND_PRIORITY_HIGH, KEY_ENTER_COMMAND, PASTE_COMMAND, LexicalEditor, FOCUS_COMMAND, BLUR_COMMAND } from 'lexical';
 import { useEffect } from 'react';
 import { $createMentionNode, MentionData as MentionNodeData } from './lexical/MentionNode';
+import { DatabaseWithSchema } from '@/lib/types';
 
 export interface MentionData {
   id?: number;
@@ -29,6 +30,7 @@ interface LexicalMentionEditorProps {
   singleLine?: boolean;
   onFocus?: () => void;
   onBlur?: () => void;
+  whitelistedSchemas?: DatabaseWithSchema[];
 }
 
 export interface LexicalMentionEditorRef {
@@ -208,6 +210,7 @@ export const LexicalMentionEditor = forwardRef<LexicalMentionEditorRef, LexicalM
       singleLine = false,
       onFocus,
       onBlur,
+      whitelistedSchemas,
     },
     ref
   ) {
@@ -289,7 +292,7 @@ export const LexicalMentionEditor = forwardRef<LexicalMentionEditorRef, LexicalM
             <EditablePlugin disabled={disabled} />
             <PastePlugin />
             <FocusPlugin onFocus={onFocus} onBlur={onBlur} editorRef={editorRef} />
-            <MentionsPlugin databaseName={databaseName} />
+            <MentionsPlugin databaseName={databaseName} whitelistedSchemas={whitelistedSchemas} />
           </Box>
         </LexicalComposer>
       </Box>

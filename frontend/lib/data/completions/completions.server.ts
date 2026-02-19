@@ -27,11 +27,13 @@ import { extractReferencesFromSQL, parseReferenceAlias } from '@/lib/sql/sql-ref
  */
 class CompletionsDataLayerServer implements ICompletionsDataLayer {
   async getMentions(options: MentionsOptions, user: EffectiveUser): Promise<MentionsResult> {
-    const { prefix, mentionType, databaseName } = options;
+    const { prefix, mentionType, databaseName, whitelistedSchemas } = options;
 
-    // Get schema data if database name provided
-    let schemaData: DatabaseWithSchema[] = [];
-    if (databaseName) {
+    // Use whitelisted schemas if provided (from context), otherwise load from connections
+    let schemaData: DatabaseWithSchema[] = whitelistedSchemas || [];
+
+    // Only load from connections if no whitelisted schemas provided
+    if (!whitelistedSchemas && databaseName) {
       try {
         // Load all connections and find the one matching databaseName
         const connectionsResult = await FilesAPI.getFiles({ type: 'connection' }, user);

@@ -14,6 +14,7 @@ export interface MentionsOptions {
   prefix: string;
   mentionType: 'all' | 'questions';  // @ = all, @@ = questions only
   databaseName?: string;
+  whitelistedSchemas?: DatabaseWithSchema[];  // From context - if provided, only show these tables
 }
 
 /**
