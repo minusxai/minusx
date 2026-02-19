@@ -53,7 +53,9 @@ jest.mock('@/lib/auth/access-rules.client', () => ({
 // Mock path resolver for readFolder
 jest.mock('@/lib/mode/path-resolver', () => ({
   isHiddenSystemPath: jest.fn().mockReturnValue(false),
-  resolveHomeFolderSync: jest.fn((mode: string, folder: string) => `/${mode}`)
+  resolveHomeFolderSync: jest.fn((mode: string, folder: string) => `/${mode}`),
+  isFileTypeAllowedInPath: jest.fn().mockReturnValue(true), // Allow all file types in all paths for tests
+  getModeRoot: jest.fn((mode: string) => `/${mode}`)
 }));
 
 // Mock query hash for getQueryResult
