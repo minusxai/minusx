@@ -1024,6 +1024,13 @@ export interface ReloadFileOptions {
 export async function reloadFile(options: ReloadFileOptions): Promise<void> {
   const { fileId, silent = false } = options;
 
+  // Skip reloading virtual files (negative IDs)
+  // Virtual files only exist in Redux and have no database representation
+  if (fileId < 0) {
+    console.warn(`[reloadFile] Skipping reload of virtual file ${fileId} - virtual files cannot be reloaded from database`);
+    return;
+  }
+
   // Set loading state (unless silent)
   if (!silent) {
     getStore().dispatch(setLoading({ id: fileId, loading: true }));
