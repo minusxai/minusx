@@ -903,6 +903,9 @@ export async function publishFile(
   getStore().dispatch(setFile({ file: updatedFile }));
 
   // Clear changes for the main file
+  // Note: We don't delete the virtual file entry here to avoid potential 404 flash
+  // during redirect. The virtual file entry is harmless and will be garbage collected
+  // on next page load or can be cleaned up by a background task.
   getStore().dispatch(clearEdits(fileId));
   getStore().dispatch(clearMetadataEdits(fileId));
 
@@ -951,14 +954,16 @@ export async function publishFile(
     const result = await FilesAPI.batchSaveFiles(dirtyRefs);
     const savedFileIds = result.savedFileIds;
 
-    // Reload saved references to update their base content
+    // Reload saved references to update their base content IN PARALLEL
     // This ensures their content doesn't revert after clearing changes
-    for (const savedId of savedFileIds) {
-      const reloadResult = await FilesAPI.loadFile(savedId);
-      getStore().dispatch(setFile({ file: reloadResult.data, references: reloadResult.metadata.references }));
-      getStore().dispatch(clearEdits(savedId));
-      getStore().dispatch(clearMetadataEdits(savedId));
-    }
+    await Promise.all(
+      savedFileIds.map(async (savedId) => {
+        const reloadResult = await FilesAPI.loadFile(savedId);
+        getStore().dispatch(setFile({ file: reloadResult.data, references: reloadResult.metadata.references }));
+        getStore().dispatch(clearEdits(savedId));
+        getStore().dispatch(clearMetadataEdits(savedId));
+      })
+    );
   }
 
     return { id: savedId, name: savedName };
