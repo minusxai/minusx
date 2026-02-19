@@ -164,7 +164,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
     });
 
     try {
-      const response = await fetch(`/api/documents/${fileId}`, {
+      const response = await fetch(`/api/files/${fileId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

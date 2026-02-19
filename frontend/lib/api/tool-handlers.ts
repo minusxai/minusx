@@ -1277,19 +1277,12 @@ async function handleAddNewQuestion(
   try {
     // Execute file creation and query in parallel for better performance
     const [fileResult, queryResult] = await Promise.allSettled([
-      // Create question file via API
-      fetchWithCache('/api/documents', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: questionName,
-          path: questionPath,
-          type: 'question',
-          content: questionContent
-        }),
-        cacheStrategy: {
-          ttl: 0,  // No caching for mutations
-          deduplicate: false,  // Allow creating multiple questions
-        },
+      // Create question file via FilesAPI
+      FilesAPI.createFile({
+        name: questionName,
+        path: questionPath,
+        type: 'question',
+        content: questionContent
       }),
       // Execute SQL query to get results
       fetchWithCache('/api/query', {
@@ -1327,7 +1320,7 @@ async function handleAddNewQuestion(
 
     // File creation succeeded - extract question data
     const json = fileResult.value;
-    const newQuestion = json.data.data; // API returns { success: true, data: { data: newFile } }
+    const newQuestion = json.data; // FilesAPI.createFile returns { data: DbFile }
     const newQuestionId = newQuestion.id;
 
     // Add question to Redux

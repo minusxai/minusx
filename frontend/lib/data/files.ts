@@ -80,7 +80,7 @@ class FilesDataLayerClient implements IFilesDataLayer {
   }
 
   async createFile(input: CreateFileInput, user?: EffectiveUser): Promise<CreateFileResult> {
-    const res = await fetch(`${API_BASE}/api/documents`, {
+    const res = await fetch(`${API_BASE}/api/files`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input)
@@ -114,7 +114,7 @@ class FilesDataLayerClient implements IFilesDataLayer {
     }
 
     const json = await res.json();
-    return json.data;
+    return { data: json.data };
   }
 
   async saveFile(id: number, name: string, path: string, content: BaseFileContent, references: number[], user?: EffectiveUser): Promise<SaveFileResult> {

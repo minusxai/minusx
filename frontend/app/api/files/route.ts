@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { handleApiError } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
-import { getFiles, loadFiles } from '@/lib/data/files.server';
+import { getFiles, loadFiles, createFile } from '@/lib/data/files.server';
 import { FileType } from '@/lib/types';
+import { CreateFileInput } from '@/lib/data/types';
 
 /**
  * GET /api/files?paths=...&type=...&depth=...&includeContent=...
@@ -53,6 +54,43 @@ export const GET = withAuth(async (
       success: true,
       data: result.data,
       metadata: result.metadata
+    });
+  } catch (error) {
+    return handleApiError(error);
+  }
+});
+
+/**
+ * POST /api/files
+ * Create a new file
+ *
+ * Body: CreateFileInput
+ * {
+ *   name: string;
+ *   path: string;
+ *   type: FileType;
+ *   content: BaseFileContent;
+ *   references?: number[];
+ *   options?: {
+ *     returnExisting?: boolean;
+ *     createPath?: boolean;
+ *   }
+ * }
+ *
+ * Response:
+ * - data: DbFile - The created file
+ */
+export const POST = withAuth(async (
+  request: NextRequest,
+  user
+) => {
+  try {
+    const input: CreateFileInput = await request.json();
+    const result = await createFile(input, user);
+
+    return NextResponse.json({
+      success: true,
+      data: result.data
     });
   } catch (error) {
     return handleApiError(error);

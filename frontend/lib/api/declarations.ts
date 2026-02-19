@@ -403,26 +403,6 @@ export const API = {
       },
     },
   },
-
-  // Documents API (generic file operations)
-  documents: {
-    create: {
-      url: '/api/documents',
-      method: 'POST',
-      cache: {
-        ttl: 0,  // No caching for mutations
-        deduplicate: false,
-      },
-    },
-    list: {
-      url: '/api/documents',
-      method: 'GET',
-      cache: {
-        ttl: 2 * 60 * 1000,  // 2 minutes
-        deduplicate: true,
-      },
-    },
-  },
 } as const;
 
 // Type helpers for API declarations
