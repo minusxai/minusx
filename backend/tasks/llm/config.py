@@ -2,9 +2,13 @@
 
 import os
 
+# MODEL LIST 19-02-2026
+CODING_MODEL = "claude-sonnet-4-6"
+SUMMARIZE_FILTER_MODEL = "gpt-5-mini-2025-08-07"
+
 # Model configurations
-DEFAULT_MODEL = "gpt-4o"
-ANALYST_V2_MODEL = "claude-sonnet-4-5-20250929"
+DEFAULT_MODEL = CODING_MODEL
+ANALYST_V2_MODEL = CODING_MODEL
 
 # Token and step limits
 MAX_TOKENS = 4000
