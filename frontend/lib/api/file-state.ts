@@ -1363,10 +1363,7 @@ export async function readFolder(
   const allFiles = selectFiles(currentState, childIds);
 
   // Strip content and edit state to avoid bloating app state
-  const metadataOnly = allFiles.map(f => {
-    const { content, persistableChanges, ephemeralChanges, metadataChanges, ...rest } = f;
-    return rest as FileState;
-  });
+  const metadataOnly = stripFileContent(allFiles);
 
   // Filter by permissions
   const filteredFiles = await filterFilesByPermissions(metadataOnly);
@@ -1376,6 +1373,17 @@ export async function readFolder(
     loading: false,
     error: null
   };
+}
+
+/**
+ * Strip content and edit state from files to avoid bloating app state.
+ * Used by readFolder() and useAppState() folder path.
+ */
+export function stripFileContent(files: FileState[]): FileState[] {
+  return files.map(f => {
+    const { content, persistableChanges, ephemeralChanges, metadataChanges, ...rest } = f;
+    return rest as FileState;
+  });
 }
 
 /**
