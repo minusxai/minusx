@@ -193,7 +193,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   const axisMapping = useMemo(() => {
     if (xAxisColumns.length <= 1) return null
 
-    const shouldReorderByCardinality = ['line', 'bar', 'area', 'scatter'].includes(chartType)
+    // const shouldReorderByCardinality = ['line', 'bar', 'area', 'scatter'].includes(chartType)
+    const shouldReorderByCardinality = false
 
     if (shouldReorderByCardinality) {
       const cardinalities = xAxisColumns.map(col => {
