@@ -533,6 +533,12 @@ export function useFolder(path: string, options: UseFolderOptions = {}): UseFold
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<LoadError | null>(null);
 
+  // Re-derive when folder references change in Redux (e.g., after file delete/create)
+  const folderRefCount = useAppSelector(state => {
+    const folderId = state.files.pathIndex[path];
+    return folderId ? state.files.files[folderId]?.references?.length : undefined;
+  });
+
   // Effect: Load folder using readFolder from file-state.ts
   useEffect(() => {
     let cancelled = false;
@@ -565,7 +571,7 @@ export function useFolder(path: string, options: UseFolderOptions = {}): UseFold
     return () => {
       cancelled = true;
     };
-  }, [path, depth, ttl, forceLoad]);
+  }, [path, depth, ttl, forceLoad, folderRefCount]);
 
   return {
     files,
