@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Box, HStack, VStack, Text } from '@chakra-ui/react'
+import { Checkbox } from '@/components/ui/checkbox'
 import { LuChevronDown } from 'react-icons/lu'
 import { resolveColumnType } from './AxisComponents'
 import { AxisBuilder, type AxisZone } from './AxisBuilder'
@@ -226,6 +227,29 @@ export const PivotAxisBuilder = ({
 
   return (
     <AxisBuilder columns={columns} types={types} zones={zones} columnFormats={columnFormats} onColumnFormatChange={onColumnFormatChange}>
+      <HStack gap={4} pt={1}>
+        <Checkbox
+          checked={config.showRowTotals !== false}
+          onCheckedChange={(e) => onPivotConfigChange({ ...config, showRowTotals: e.checked })}
+          size="sm"
+        >
+          <Text fontSize="xs" color="fg.muted">Row Totals</Text>
+        </Checkbox>
+        <Checkbox
+          checked={config.showColumnTotals !== false}
+          onCheckedChange={(e) => onPivotConfigChange({ ...config, showColumnTotals: e.checked })}
+          size="sm"
+        >
+          <Text fontSize="xs" color="fg.muted">Column Totals</Text>
+        </Checkbox>
+        <Checkbox
+          checked={config.showHeatmap !== false}
+          onCheckedChange={(e) => onPivotConfigChange({ ...config, showHeatmap: e.checked })}
+          size="sm"
+        >
+          <Text fontSize="xs" color="fg.muted">Heatmap</Text>
+        </Checkbox>
+      </HStack>
       {(showRowFormulas || showColFormulas) && (
         <HStack
           gap={4}

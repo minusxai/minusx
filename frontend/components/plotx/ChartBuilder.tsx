@@ -193,7 +193,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   const axisMapping = useMemo(() => {
     if (xAxisColumns.length <= 1) return null
 
-    const shouldReorderByCardinality = ['line', 'bar', 'area', 'scatter'].includes(chartType)
+    // const shouldReorderByCardinality = ['line', 'bar', 'area', 'scatter'].includes(chartType)
+    const shouldReorderByCardinality = false
 
     if (shouldReorderByCardinality) {
       const cardinalities = xAxisColumns.map(col => {
@@ -363,6 +364,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
           {pivotHasData ? (
             <PivotTable
               pivotData={pivotData!}
+              showRowTotals={pivotConfig?.showRowTotals !== false}
+              showColTotals={pivotConfig?.showColumnTotals !== false}
               showHeatmap={pivotConfig?.showHeatmap !== false}
               rowDimNames={pivotConfig?.rows.map(col => columnFormats[col]?.alias || col)}
               colDimNames={pivotConfig?.columns.map(col => columnFormats[col]?.alias || col)}

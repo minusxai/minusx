@@ -73,7 +73,8 @@ export const aggregateData = (
 
   // If we have multiple X columns, create series per category
   if (xAxisColumns.length > 1) {
-    const shouldReorderByCardinality = ['line', 'bar', 'area', 'scatter'].includes(chartType)
+    // const shouldReorderByCardinality = ['line', 'bar', 'area', 'scatter'].includes(chartType)
+    const shouldReorderByCardinality = false;
 
     let xAxisCol: string
     let groupingCols: string[]

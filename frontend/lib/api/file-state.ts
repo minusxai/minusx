@@ -900,7 +900,13 @@ export async function publishFile(
   }
 
   // Update file state with response from API (so base content is updated)
-  getStore().dispatch(setFile({ file: updatedFile }));
+  // For new files, use addFile to also update parent folder references
+  // (so the folder view refreshes immediately without a page reload)
+  if (isVirtualFile) {
+    getStore().dispatch(addFile(updatedFile));
+  } else {
+    getStore().dispatch(setFile({ file: updatedFile }));
+  }
 
   // Clear changes for the main file
   // Note: We don't delete the virtual file entry here to avoid potential 404 flash

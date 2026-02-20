@@ -108,7 +108,7 @@ function LinkButton({ href, icon, children, variant, bg = 'accent.primary' }: {
       transition="all 0.15s ease"
       _hover={{ opacity: 0.8 }}
     >
-      <Link href={href} style={{ textDecoration: 'none' }}>
+      <Link href={href} style={{ textDecoration: 'none', color: 'white' }}>
         {icon}
         {children}
       </Link>

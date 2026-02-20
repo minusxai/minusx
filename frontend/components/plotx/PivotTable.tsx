@@ -107,8 +107,11 @@ export const PivotTable = ({
     if (!showHeatmap) return undefined
     if (maxValue === minValue) return 'accent.teal/75'
     const normalized = (value - minValue) / (maxValue - minValue)
-    const opacityPercent = Math.round(10 + normalized * 90)
-    return `accent.teal/${opacityPercent}`
+    // Blend from danger (low) to teal (high)
+    const dangerOpacity = Math.round(10 + (1 - normalized) * 65)
+    const tealOpacity = Math.round(10 + normalized * 65)
+    if (normalized < 0.5) return `accent.danger/${dangerOpacity}`
+    return `accent.teal/${tealOpacity}`
   }
 
   // Column entries: interleave regular data columns with formula columns
@@ -386,12 +389,20 @@ export const PivotTable = ({
     return result
   }, [rowHeaders, cells, numRowDims, numDataCols, rowTotals, formulaResults])
 
-  // Filter visible rows based on collapsed groups (formula rows always visible)
+  // Filter visible rows based on collapsed groups and showRowTotals (formula rows always visible)
   const visibleRows = useMemo((): DisplayRow[] => {
-    if (collapsedGroups.size === 0 || numRowDims < 2) return displayRows
-
     return displayRows.filter(dr => {
       if (dr.type === 'formula-row') return true
+
+      if (dr.type === 'subtotal') {
+        // Hide subtotals when row totals are disabled
+        if (!showRowTotals) return false
+        for (let parentLevel = 0; parentLevel < dr.level; parentLevel++) {
+          const parentKey = makeGroupKey(dr.groupValues.slice(0, parentLevel + 1))
+          if (collapsedGroups.has(parentKey)) return false
+        }
+        return true
+      }
 
       if (dr.type === 'data') {
         for (let level = 0; level < numRowDims - 1; level++) {
@@ -401,17 +412,9 @@ export const PivotTable = ({
         return true
       }
 
-      if (dr.type === 'subtotal') {
-        for (let parentLevel = 0; parentLevel < dr.level; parentLevel++) {
-          const parentKey = makeGroupKey(dr.groupValues.slice(0, parentLevel + 1))
-          if (collapsedGroups.has(parentKey)) return false
-        }
-        return true
-      }
-
       return true
     })
-  }, [displayRows, collapsedGroups, rowHeaders, numRowDims])
+  }, [displayRows, collapsedGroups, rowHeaders, numRowDims, showRowTotals])
 
   // Build row header spans for nested grouping based on visibleRows
   const rowSpans = useMemo(() => {
