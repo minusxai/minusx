@@ -40,14 +40,15 @@ import {
   readFolder,
   getQueryResult,
   createVirtualFile,
-  getAppState
+  getAppState,
+  stripFileContent
 } from '@/lib/api/file-state';
 import type { AppState } from '@/lib/appState';
 import { FilesAPI } from '@/lib/data/files';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
-import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
+import { resolveHomeFolderSync, isHiddenSystemPath } from '@/lib/mode/path-resolver';
 import type { GetFilesOptions } from '@/lib/data/types';
 import type { QuestionReference, QueryResult } from '@/lib/types';
 import { FileType } from '@/lib/ui/file-metadata';
@@ -889,10 +890,16 @@ export function useAppState(): { appState: AppState | null; loading: boolean } {
     }
 
     if (routeInfo.type === 'folder') {
-      const folderFiles = Object.values(filesState).filter(f => {
-        const fileDir = f.path.substring(0, f.path.lastIndexOf('/')) || '/';
-        return fileDir === routeInfo.path;
-      });
+      const mode = user?.mode || 'org';
+      const folderFiles = stripFileContent(
+        Object.values(filesState).filter(f => {
+          const fileDir = f.path.substring(0, f.path.lastIndexOf('/')) || '/';
+          if (fileDir !== routeInfo.path) return false;
+          // Hide system folders (e.g., /org/database, /org/logs)
+          if (f.type === 'folder' && isHiddenSystemPath(f.path, mode)) return false;
+          return true;
+        })
+      );
 
       return {
         appState: {
