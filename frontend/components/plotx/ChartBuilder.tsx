@@ -363,6 +363,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
           {pivotHasData ? (
             <PivotTable
               pivotData={pivotData!}
+              showRowTotals={pivotConfig?.showRowTotals !== false}
+              showColTotals={pivotConfig?.showColumnTotals !== false}
               showHeatmap={pivotConfig?.showHeatmap !== false}
               rowDimNames={pivotConfig?.rows.map(col => columnFormats[col]?.alias || col)}
               colDimNames={pivotConfig?.columns.map(col => columnFormats[col]?.alias || col)}
