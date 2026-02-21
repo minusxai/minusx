@@ -72,11 +72,7 @@ function augmentQuestionSelector(state: RootState, fileState: FileState): Map<st
   const queryResult = selectQueryResult(state, query, params, database_name);
   if (queryResult?.data) {
     const key = `${database_name}|||${query}|||${JSON.stringify(params)}`;
-    result.set(key, {
-      columns: queryResult.data.columns || [],
-      types: queryResult.data.types || [],
-      rows: queryResult.data.rows || []
-    });
+    result.set(key, queryResult.data);
   }
   return result;
 }
