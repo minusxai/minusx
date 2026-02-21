@@ -206,6 +206,47 @@ export function selectAugmentedFiles(state: RootState, fileIds: number[]): Augme
 }
 
 /**
+ * AugmentedFolder - Result of selectAugmentedFolder
+ */
+export interface AugmentedFolder {
+  files: FileState[];
+  loading: boolean;
+  error: LoadError | null;
+}
+
+/**
+ * selectAugmentedFolder - Pure selector: read folder children from Redux
+ *
+ * Maps folder references to FileState[], filters by user permissions and hidden paths.
+ * No async, no side-effects. Pair with readFolder() to ensure data is loaded.
+ *
+ * @param state - Redux state
+ * @param path - Folder path (e.g. '/org')
+ * @returns AugmentedFolder
+ */
+export function selectAugmentedFolder(state: RootState, path: string): AugmentedFolder {
+  const folderId = selectFileIdByPath(state, path);
+  const folder = folderId ? selectFile(state, folderId) : undefined;
+
+  if (!folder) return { files: [], loading: true, error: null };
+
+  const user = state.auth.user;
+  const mode = user?.mode || 'org';
+  const role = user?.role || 'viewer';
+
+  const files = (folder.references || [])
+    .map(id => selectFile(state, id))
+    .filter((f): f is FileState => {
+      if (!f) return false;
+      if (!canViewFileType(role, f.type)) return false;
+      if (f.type === 'folder' && isHiddenSystemPath(f.path, mode)) return false;
+      return true;
+    });
+
+  return { files, loading: folder.loading ?? false, error: folder.loadError ?? null };
+}
+
+/**
  * ReadFiles - Load multiple files with references and query results
  *
  * @param input - File IDs to load
