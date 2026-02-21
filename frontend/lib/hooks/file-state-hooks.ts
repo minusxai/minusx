@@ -658,7 +658,7 @@ export function useQueryResult(
   references?: QuestionReference[],
   options: UseQueryResultOptions = {}
 ): UseQueryResultReturn {
-  console.log('Executing query', options.skip, query)
+//   console.log('Executing query', options.skip, query)
   const { ttl = CACHE_TTL.QUERY, skip = false } = options;
 
   // Select result from Redux

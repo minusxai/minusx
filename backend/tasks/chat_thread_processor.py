@@ -7,11 +7,22 @@ from .types import ChatCompletionMessageToolCallParamMX
 
 
 def parse_json(json_str: str) -> Any:
-    """Parse JSON string, return string if parsing fails."""
+    """Parse JSON string, return string if parsing fails.
+    If the result is a dict, also coerce any stringified nested dicts/lists."""
     try:
-        return json.loads(json_str)
+        result = json.loads(json_str)
     except json.JSONDecodeError:
         return json_str
+    if isinstance(result, dict):
+        for key, value in result.items():
+            if isinstance(value, str):
+                try:
+                    parsed = json.loads(value)
+                    if isinstance(parsed, (dict, list)):
+                        result[key] = parsed
+                except (json.JSONDecodeError, TypeError):
+                    pass
+    return result
 
 
 def tool_calls_to_agent_calls(

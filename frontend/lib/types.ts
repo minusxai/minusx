@@ -726,7 +726,8 @@ export const ToolNames = {
   PRESENT_FINAL_ANSWER: 'PresentFinalAnswer',
   TALK_TO_USER: 'TalkToUser',
   ANALYST_AGENT: 'AnalystAgent',
-  ATLAS_ANALYST_AGENT: 'AtlasAnalystAgent'
+  ATLAS_ANALYST_AGENT: 'AtlasAnalystAgent',
+  EXECUTE_QUERY: 'ExecuteQuery',
 } as const;
 
 export type ToolName = typeof ToolNames[keyof typeof ToolNames];
