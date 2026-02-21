@@ -247,6 +247,30 @@ export function selectAugmentedFolder(state: RootState, path: string): Augmented
 }
 
 /**
+ * selectFilesByCriteria - Pure selector: filter files from Redux by criteria
+ *
+ * No async, no side-effects. Pair with readFilesByCriteria() to ensure data is loaded.
+ * Uses startsWith for path matching (equivalent to unlimited depth), matching the
+ * server-populated Redux state.
+ *
+ * @param state - Redux state
+ * @param criteria - Filter criteria (type, paths)
+ * @returns FileState[] matching criteria
+ */
+export function selectFilesByCriteria(
+  state: RootState,
+  criteria: { type?: FileType; paths?: string[] }
+): FileState[] {
+  return Object.values(state.files.files).filter(file => {
+    if (criteria.type && file.type !== criteria.type) return false;
+    if (criteria.paths) {
+      return criteria.paths.some(path => file.path.startsWith(path));
+    }
+    return true;
+  });
+}
+
+/**
  * ReadFiles - Load multiple files with references and query results
  *
  * @param input - File IDs to load
