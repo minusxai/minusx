@@ -7,6 +7,7 @@ import { AuthProvider } from './AuthProvider';
 import ReduxProvider from './ReduxProvider';
 import { DataLoader } from './DataLoader';
 import { ColorModeSync } from './ColorModeSync';
+import { NavigationSync } from './NavigationSync';
 import { NavigationGuardProvider } from '@/lib/navigation/NavigationGuardProvider';
 import { AnalyticsProvider } from './AnalyticsProvider';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
@@ -61,6 +62,7 @@ export function Providers({ children, initialData }: ProvidersProps) {
           <AuthProvider>
             <AnalyticsProvider>
               <ColorModeSync />
+              <NavigationSync />
               <DataLoader />
               <NavigationGuardProvider>
                 {children}

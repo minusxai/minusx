@@ -16,14 +16,10 @@
  */
 
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { usePathname, useSearchParams } from 'next/navigation';
 import { shallowEqual } from 'react-redux';
 import { useAppSelector } from '@/store/hooks';
 import {
-  selectFiles,
-  selectMergedContent,
   isVirtualFileId,
-  setLoading,
   type FileId,
   type FileState
 } from '@/store/filesSlice';
@@ -33,15 +29,11 @@ import {
   selectHasQueryData
 } from '@/store/queryResultsSlice';
 import {
-  readFiles,
   readFilesByCriteria,
   readFolder,
   loadFiles,
   loadFileByPath,
   getQueryResult,
-  createVirtualFile,
-  getAppState,
-  stripFileContent,
   selectAugmentedFiles,
   selectAugmentedFolder,
   selectFilesByCriteria,
@@ -49,12 +41,11 @@ import {
   type AugmentedFolder
 } from '@/lib/api/file-state';
 import type { AppState } from '@/lib/appState';
+import { selectAppState } from '@/store/navigationSlice';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import type { LoadError } from '@/lib/types/errors';
-import { resolveHomeFolderSync, isHiddenSystemPath } from '@/lib/mode/path-resolver';
-import { canViewFileType } from '@/lib/auth/access-rules.client';
 import type { GetFilesOptions } from '@/lib/data/types';
-import type { AugmentedFile, QuestionReference, QueryResult } from '@/lib/types';
+import type { AugmentedFile, QuestionReference } from '@/lib/types';
 import { FileType } from '@/lib/ui/file-metadata';
 
 // ============================================================================
@@ -521,12 +512,13 @@ export function useQueryResult(
 /**
  * useAppState Hook
  *
- * Watches navigation and returns current page context (file or folder).
- * Gets pathname from usePathname() and calls getAppState when it changes.
+ * Returns current page context (file or folder) derived from Redux navigation state.
+ * All business logic (URL parsing, file loading, virtual file creation) lives in
+ * navigationSlice + navigationListener — this hook is a pure selector.
  *
  * Usage:
  * ```typescript
- * const appState = useAppState();
+ * const { appState, loading } = useAppState();
  *
  * if (appState?.type === "file") {
  *   // Access appState.file (already augmented FileState)
@@ -536,180 +528,5 @@ export function useQueryResult(
  * ```
  */
 export function useAppState(): { appState: AppState | null; loading: boolean } {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const user = useAppSelector(state => state.auth.user);
-  const filesState = useAppSelector(state => state.files.files);
-  const queryResultsState = useAppSelector(state => state.queryResults.results);
-
-  // Track created virtual file ID in local state
-  const [createdVirtualId, setCreatedVirtualId] = useState<number | undefined>(undefined);
-
-  // Parse URL params for new file pages
-  const createOptions = useMemo(() => {
-    if (!pathname.startsWith('/new/')) return undefined;
-
-    const folderParam = searchParams.get('folder');
-    const databaseParam = searchParams.get('databaseName'); // Match URL param name
-    const queryB64 = searchParams.get('queryB64'); // Match URL param name
-    const virtualIdParam = searchParams.get('virtualId');
-
-    const query = queryB64
-      ? new TextDecoder().decode(Uint8Array.from(atob(queryB64), c => c.charCodeAt(0)))
-      : undefined;
-
-    const folder = folderParam || (user ? resolveHomeFolderSync(user.mode, user.home_folder || '') : '/org');
-
-    const virtualId = virtualIdParam ? parseInt(virtualIdParam, 10) : undefined;
-    const validVirtualId = virtualId && !isNaN(virtualId) && virtualId < 0 ? virtualId : undefined;
-
-    return {
-      folder,
-      databaseName: databaseParam || undefined,
-      query,
-      virtualId: validVirtualId
-    };
-  }, [pathname, searchParams, user]);
-
-  // Clear created virtual ID when route changes
-  useEffect(() => {
-    setCreatedVirtualId(undefined);
-  }, [pathname]);
-
-  // Determine route type from pathname
-  const routeInfo = useMemo(() => {
-    // File page: /f/{id}
-    const fileMatch = pathname.match(/^\/f\/(\d+)/);
-    if (fileMatch) {
-      return { type: 'file' as const, id: parseInt(fileMatch[1], 10) };
-    }
-
-    // New file page: /new/{type}
-    const newFileMatch = pathname.match(/^\/new\/([^/?]+)/);
-    if (newFileMatch) {
-      return { type: 'newFile' as const, fileType: newFileMatch[1] as FileType };
-    }
-
-    // Folder page: /p/path
-    const folderMatch = pathname.match(/^\/p\/(.*)/);
-    if (folderMatch) {
-      return { type: 'folder' as const, path: '/' + (folderMatch[1] || '') };
-    }
-
-    return { type: null };
-  }, [pathname]);
-
-  // Initialize: Load files from DB, create virtual files
-  useEffect(() => {
-    let cancelled = false;
-
-    const initialize = async () => {
-      if (routeInfo.type === 'file' && routeInfo.id > 0) {
-        // Load from DB if positive ID
-        await readFiles([routeInfo.id]);
-      } else if (routeInfo.type === 'newFile') {
-        // Check if virtual file exists (from URL or local state)
-        const virtualId = createOptions?.virtualId || createdVirtualId;
-        const existingFile = virtualId ? filesState[virtualId] : null;
-
-        if (!existingFile) {
-          // Create new virtual file and store its ID
-          const newVirtualId = await createVirtualFile(routeInfo.fileType, createOptions);
-          setCreatedVirtualId(newVirtualId);
-        }
-      } else if (routeInfo.type === 'folder') {
-        await readFolder(routeInfo.path);
-      }
-    };
-
-    initialize();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [routeInfo, createOptions, filesState, createdVirtualId]);
-
-  // Compute appState from Redux (reactive to state changes - NO LOCAL STATE!)
-  return useMemo(() => {
-    if (routeInfo.type === 'file') {
-      const file = filesState[routeInfo.id];
-
-      // File doesn't exist in Redux yet - might be loading or doesn't exist
-      if (!file) {
-        return { appState: null, loading: true };
-      }
-
-      // File exists - check if it's still loading
-      const loading = file.loading || false;
-
-      // Get referenced files from Redux (file.references contains IDs)
-      const references = (file.references || [])
-        .map(id => filesState[id])
-        .filter(Boolean) as FileState[];
-
-      const queryResults: QueryResult[] = [];
-
-      return {
-        appState: {
-          type: 'file',
-          id: routeInfo.id,
-          fileType: file.type,
-          file,
-          references,
-          queryResults
-        },
-        loading
-      };
-    }
-
-    if (routeInfo.type === 'newFile') {
-      // Use virtualId from URL, or fallback to created ID from local state
-      const virtualId = createOptions?.virtualId || createdVirtualId;
-      if (virtualId && filesState[virtualId]) {
-        const file = filesState[virtualId];
-        return {
-          appState: {
-            type: 'file',
-            id: virtualId,
-            fileType: file.type,
-            file,
-            references: [],
-            queryResults: []
-          },
-          loading: false
-        };
-      }
-
-      // No virtual file yet (initialization in progress)
-      return { appState: null, loading: true };
-    }
-
-    if (routeInfo.type === 'folder') {
-      const mode = user?.mode || 'org';
-      const folderFiles = stripFileContent(
-        Object.values(filesState).filter(f => {
-          const fileDir = f.path.substring(0, f.path.lastIndexOf('/')) || '/';
-          if (fileDir !== routeInfo.path) return false;
-          // Hide system folders (e.g., /org/database, /org/logs)
-          if (f.type === 'folder' && isHiddenSystemPath(f.path, mode)) return false;
-          return true;
-        })
-      );
-
-      return {
-        appState: {
-          type: 'folder',
-          path: routeInfo.path,
-          folder: {
-            files: folderFiles,
-            loading: false,
-            error: null
-          }
-        },
-        loading: false
-      };
-    }
-
-    return { appState: null, loading: false };
-  }, [routeInfo, filesState, queryResultsState, createOptions]);
+  return useAppSelector(selectAppState, shallowEqual);
 }
