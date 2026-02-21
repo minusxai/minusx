@@ -15,16 +15,14 @@
  * - useQueryResult - Execute queries with TTL caching
  */
 
-import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { shallowEqual } from 'react-redux';
-import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { useAppSelector } from '@/store/hooks';
 import {
-  selectFile,
   selectFiles,
   selectMergedContent,
   isVirtualFileId,
-  setFile,
   setLoading,
   type FileId,
   type FileState
@@ -39,6 +37,7 @@ import {
   readFilesByCriteria,
   readFolder,
   loadFiles,
+  loadFileByPath,
   getQueryResult,
   createVirtualFile,
   getAppState,
@@ -46,10 +45,10 @@ import {
   selectAugmentedFiles,
   selectAugmentedFolder,
   selectFilesByCriteria,
+  selectFileByPath,
   type AugmentedFolder
 } from '@/lib/api/file-state';
 import type { AppState } from '@/lib/appState';
-import { FilesAPI } from '@/lib/data/files';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
@@ -108,6 +107,19 @@ function useFilesByCriteriaSelector(
   return useAppSelector(
     state => selectFilesByCriteria(state, criteria),
     shallowEqual
+  );
+}
+
+/**
+ * useFileByPathSelector - Pure reactive selector hook for a file looked up by path
+ *
+ * No side-effects, no fetching — pair with loadFileByPath() to ensure data is loaded.
+ * Reference equality — Redux/immer keeps unchanged refs stable.
+ */
+function useFileByPathSelector(path: string | null | undefined): FileState | undefined {
+  return useAppSelector(
+    state => selectFileByPath(state, path ?? null),
+    (a, b) => a === b
   );
 }
 
@@ -284,62 +296,20 @@ export interface UseFileByPathReturn {
  */
 export function useFileByPath(path: string | null | undefined, options: UseFileByPathOptions = {}): UseFileByPathReturn {
   const { ttl = CACHE_TTL.FILE, skip = false } = options;
-  const dispatch = useAppDispatch();
-
-  // Track error and loaded file ID locally
+  const [loading, setLoading] = useState(!skip && !!path);
   const [error, setError] = useState<LoadError | null>(null);
-  const [loadedFileId, setLoadedFileId] = useState<number | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
 
-  // Reset state when path changes
-  const prevPathRef = useRef(path);
-  if (prevPathRef.current !== path) {
-    prevPathRef.current = path;
-    setError(null);
-    setLoadedFileId(null);
-    setIsLoading(false);
-  }
-
-  // Select file from Redux (if we've loaded it before)
-  const file = useAppSelector(state => loadedFileId ? selectFile(state, loadedFileId) : undefined);
-
-  // Determine if we need to fetch
-  const needsFetch = !skip && !!path && !loadedFileId && !error && !isLoading;
-
-  // Effect: Load file if needed
   useEffect(() => {
-    if (!needsFetch) return;
-
-    setIsLoading(true);
+    if (skip || !path) { setLoading(false); return; }
+    setLoading(true);
     setError(null);
+    loadFileByPath(path, ttl).catch(err => {
+      setError(createLoadErrorFromException(err));
+    }).finally(() => setLoading(false));
+  }, [path, ttl, skip]);
 
-    // Fetch file by path
-    FilesAPI.loadFileByPath(path!)
-      .then(response => {
-        const { data: file } = response;
-
-        // Store in Redux by ID
-        dispatch(setFile({ file, references: [] }));
-
-        // Track the file ID so we can find it in Redux
-        setLoadedFileId(file.id);
-        setIsLoading(false);
-      })
-      .catch(err => {
-        console.error(`[useFileByPath] Failed to load file at ${path}:`, err);
-
-        // Store structured error in local state
-        const loadError = createLoadErrorFromException(err);
-        setError(loadError);
-        setIsLoading(false);
-      });
-  }, [needsFetch, path, dispatch]);
-
-  return {
-    file,
-    loading: isLoading || (!file && needsFetch),
-    error
-  };
+  const file = useFileByPathSelector(path);
+  return { file, loading: loading && !file, error };
 }
 
 // ============================================================================

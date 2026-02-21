@@ -271,6 +271,37 @@ export function selectFilesByCriteria(
 }
 
 /**
+ * selectFileByPath - Pure selector: get a file by path from Redux
+ *
+ * @param state - Redux state
+ * @param path - File path
+ * @returns FileState if found, undefined otherwise
+ */
+export function selectFileByPath(state: RootState, path: string | null): FileState | undefined {
+  if (!path) return undefined;
+  const id = selectFileIdByPath(state, path);
+  return id ? selectFile(state, id) : undefined;
+}
+
+/**
+ * loadFileByPath - Fetch a file by path into Redux
+ *
+ * Never re-throws — callers handle errors in local state.
+ *
+ * @param path - File path to load
+ * @param ttl - Time-to-live in ms for cache freshness
+ */
+export async function loadFileByPath(path: string, ttl: number = CACHE_TTL.FILE): Promise<void> {
+  const state = getStore().getState();
+  const existingId = selectFileIdByPath(state, path);
+  if (existingId && selectIsFileLoaded(state, existingId) && selectIsFileFresh(state, existingId, ttl)) {
+    return;
+  }
+  const response = await FilesAPI.loadFileByPath(path);
+  getStore().dispatch(setFile({ file: response.data, references: [] }));
+}
+
+/**
  * ReadFiles - Load multiple files with references and query results
  *
  * @param input - File IDs to load
