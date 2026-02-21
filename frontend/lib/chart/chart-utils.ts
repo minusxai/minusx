@@ -56,22 +56,41 @@ export const calculateAxisInterval = (
   return interval - 1 // ECharts uses 0-based interval (0 = show all, 1 = show every other)
 }
 
-// Format large numbers with k, M, B suffixes (1 decimal point)
+// Format large numbers with k, M, B suffixes for compact display (axis labels)
 export const formatLargeNumber = (value: number): string => {
   const absValue = Math.abs(value)
   const sign = value < 0 ? '-' : ''
 
   if (absValue >= 1e9) {
-    return `${sign}${(absValue / 1e9).toFixed(2)}B`
+    return `${sign}${(absValue / 1e9).toFixed(1)}B`
   }
   if (absValue >= 1e6) {
-    return `${sign}${(absValue / 1e6).toFixed(2)}M`
+    return `${sign}${(absValue / 1e6).toFixed(1)}M`
   }
   if (absValue >= 1e3) {
     return `${sign}${(absValue / 1e3).toFixed(1)}k`
   }
 
   return `${sign}${absValue.toFixed(1)}`
+}
+
+// Determine a consistent scale suffix based on the max absolute value across all series
+type NumberScale = { divisor: number; suffix: string }
+export const getNumberScale = (series: Array<{ data: number[] }>): NumberScale => {
+  const maxAbs = Math.max(...series.flatMap(s => s.data.map(v => Math.abs(v || 0))))
+  if (maxAbs >= 1e9) return { divisor: 1e9, suffix: 'B' }
+  if (maxAbs >= 1e6) return { divisor: 1e6, suffix: 'M' }
+  if (maxAbs >= 1e3) return { divisor: 1e3, suffix: 'k' }
+  return { divisor: 1, suffix: '' }
+}
+
+// Format a number using a fixed scale (for consistent axis labels)
+export const formatWithScale = (value: number, scale: NumberScale): string => {
+  if (scale.divisor === 1) return value.toFixed(1)
+  const scaled = value / scale.divisor
+  // Use more decimal places for small scaled values to avoid "0.0M"
+  const decimals = Math.abs(scaled) < 1 ? 2 : 1
+  return `${scaled.toFixed(decimals)}${scale.suffix}`
 }
 
 // Format number with explicit decimal points (full number with commas)
@@ -301,6 +320,9 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   // Resolve format configs for axes
   const { yDecimalPoints, xDateFormat } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
 
+  // Determine consistent Y-axis scale across all series
+  const yScale = getNumberScale(series)
+
   // Determine if we need dual Y-axes
   // Only use dual Y-axis when there are 2+ Y-axis columns (distinct metrics)
   // NOT when there are multiple series from the same metric due to splits
@@ -420,7 +442,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           name: getAxisName(0), // Left axis shows names of series on left
           position: 'left' as const,
           axisLabel: {
-            formatter: (value: number) => formatNumber(value, yDecimalPoints),
+            formatter: (value: number) => formatWithScale(value, yScale),
           },
         },
         {
@@ -428,7 +450,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           name: getAxisName(1), // Right axis shows names of series on right
           position: 'right' as const,
           axisLabel: {
-            formatter: (value: number) => formatNumber(value, yDecimalPoints),
+            formatter: (value: number) => formatWithScale(value, yScale),
           },
         },
       ]
@@ -436,7 +458,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         type: 'value' as const,
         name: wrapAxisName(yAxisLabel, maxAxisNameLength),
         axisLabel: {
-          formatter: (value: number) => formatNumber(value, yDecimalPoints),
+          formatter: (value: number) => formatWithScale(value, yScale),
         },
       }
 
