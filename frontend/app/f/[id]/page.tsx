@@ -23,7 +23,7 @@ export default function FilePage({ params }: FilePageProps) {
   const { intId } = parseFileId(id);
 
   // Load file using client-side hook
-  const file = useFile(intId);
+  const { fileState: file } = useFile(intId) ?? {};
 
   // Context version selection (admin only)
   const user = useAppSelector(state => state.auth.user);

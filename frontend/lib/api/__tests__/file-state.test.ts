@@ -180,8 +180,8 @@ describe('readFiles - File State Manager', () => {
       expect(mockLoadFiles).not.toHaveBeenCalled();
 
       // Should return file from Redux
-      expect(result.fileStates).toHaveLength(1);
-      expect(result.fileStates[0].id).toBe(mockFile.id);
+      expect(result).toHaveLength(1);
+      expect(result[0].fileState.id).toBe(mockFile.id);
     });
 
     it('should refetch stale file beyond TTL', async () => {
@@ -210,8 +210,8 @@ describe('readFiles - File State Manager', () => {
       expect(mockLoadFiles).toHaveBeenCalledWith([mockFile.id]);
 
       // Should return updated file
-      expect(result.fileStates).toHaveLength(1);
-      expect(result.fileStates[0].name).toBe('Updated name');
+      expect(result).toHaveLength(1);
+      expect(result[0].fileState.name).toBe('Updated name');
     });
 
     it('should fetch missing file', async () => {
@@ -230,8 +230,8 @@ describe('readFiles - File State Manager', () => {
       expect(mockLoadFiles).toHaveBeenCalledWith([mockFile.id]);
 
       // Should populate Redux and return file
-      expect(result.fileStates).toHaveLength(1);
-      expect(result.fileStates[0].id).toBe(mockFile.id);
+      expect(result).toHaveLength(1);
+      expect(result[0].fileState.id).toBe(mockFile.id);
     });
 
     it('should respect custom TTL', async () => {
@@ -260,7 +260,7 @@ describe('readFiles - File State Manager', () => {
       expect(mockLoadFiles).toHaveBeenCalledWith([mockFile.id]);
 
       // Should return updated file
-      expect(result.fileStates[0].name).toBe('Updated name');
+      expect(result[0].fileState.name).toBe('Updated name');
     });
   });
 
@@ -284,16 +284,16 @@ describe('readFiles - File State Manager', () => {
       expect(mockLoadFiles).not.toHaveBeenCalled();
 
       // Should return existing stale data
-      expect(result.fileStates).toHaveLength(1);
-      expect(result.fileStates[0].id).toBe(mockFile.id);
+      expect(result).toHaveLength(1);
+      expect(result[0].fileState.id).toBe(mockFile.id);
     });
 
     it('should return empty fileStates if file missing and skip=true', async () => {
       // Empty Redux state - file doesn't exist, loadFiles skips due to skip=true
 
       const result = await readFiles({ fileIds: [999] }, { skip: true });
-      // File was never in Redux and loadFiles skipped → not in fileStates
-      expect(result.fileStates).toHaveLength(0);
+      // File was never in Redux and loadFiles skipped → empty result
+      expect(result).toHaveLength(0);
     });
   });
 
@@ -325,8 +325,8 @@ describe('readFiles - File State Manager', () => {
       expect(mockLoadFiles).toHaveBeenCalledTimes(1);
 
       // Both should return the same data
-      expect(result1.fileStates[0].id).toBe(mockFile.id);
-      expect(result2.fileStates[0].id).toBe(mockFile.id);
+      expect(result1[0].fileState.id).toBe(mockFile.id);
+      expect(result2[0].fileState.id).toBe(mockFile.id);
     });
 
     it('should track in-flight requests correctly', async () => {
@@ -377,12 +377,12 @@ describe('readFiles - File State Manager', () => {
       const result = await readFiles({ fileIds: [dashboardFile.id] });
 
       // Should load dashboard
-      expect(result.fileStates).toHaveLength(1);
-      expect(result.fileStates[0].id).toBe(dashboardFile.id);
+      expect(result).toHaveLength(1);
+      expect(result[0].fileState.id).toBe(dashboardFile.id);
 
       // Should include referenced question
-      expect(result.references).toHaveLength(1);
-      expect(result.references[0].id).toBe(questionFile.id);
+      expect(result[0].references).toHaveLength(1);
+      expect(result[0].references[0].id).toBe(questionFile.id);
     });
   });
 
@@ -393,8 +393,8 @@ describe('readFiles - File State Manager', () => {
 
       // readFiles no longer throws — error is stored in Redux on file.loadError
       const result = await readFiles({ fileIds: [1] });
-      expect(result.fileStates).toHaveLength(1);
-      expect(result.fileStates[0].loadError).toMatchObject({ message: 'Network error' });
+      expect(result).toHaveLength(1);
+      expect(result[0].fileState.loadError).toMatchObject({ message: 'Network error' });
 
       // File should have loadError set in Redux (not corrupted, just marked with error)
       const state = mockStore.getState() as RootState;
@@ -412,8 +412,8 @@ describe('readFiles - File State Manager', () => {
 
       // readFiles no longer throws — NOT_FOUND is stored on file.loadError
       const result = await readFiles({ fileIds: [999] });
-      expect(result.fileStates).toHaveLength(1);
-      expect(result.fileStates[0].loadError).toMatchObject({ code: 'NOT_FOUND' });
+      expect(result).toHaveLength(1);
+      expect(result[0].fileState.loadError).toMatchObject({ code: 'NOT_FOUND' });
     });
   });
 
@@ -433,9 +433,9 @@ describe('readFiles - File State Manager', () => {
       expect(mockLoadFiles).toHaveBeenCalledWith([1, 2]);
 
       // Should return both files
-      expect(result.fileStates).toHaveLength(2);
-      expect(result.fileStates[0].id).toBe(1);
-      expect(result.fileStates[1].id).toBe(2);
+      expect(result).toHaveLength(2);
+      expect(result[0].fileState.id).toBe(1);
+      expect(result[1].fileState.id).toBe(2);
     });
 
     it('should only fetch stale files', async () => {
@@ -458,7 +458,7 @@ describe('readFiles - File State Manager', () => {
       expect(mockLoadFiles).toHaveBeenCalledWith([2]);
 
       // Should return both files
-      expect(result.fileStates).toHaveLength(2);
+      expect(result).toHaveLength(2);
     });
   });
 
@@ -488,7 +488,7 @@ describe('readFiles - File State Manager', () => {
 
       expect(mockGetFiles).toHaveBeenCalledWith({ paths: ['/org'] });
       expect(mockLoadFiles).toHaveBeenCalledWith([1, 2]);
-      expect(result.fileStates).toHaveLength(2);
+      expect(result).toHaveLength(2);
     });
 
     it('should load files by type', async () => {
@@ -546,8 +546,8 @@ describe('readFiles - File State Manager', () => {
 
       // Should NOT call loadFiles for full content
       expect(mockLoadFiles).not.toHaveBeenCalled();
-      expect(result.fileStates).toHaveLength(1);
-      expect(result.queryResults).toHaveLength(0);  // No augmentation
+      expect(result).toHaveLength(1);
+      expect(result[0].queryResults).toHaveLength(0);  // No augmentation
     });
 
     it('should return augmented files when partial=false', async () => {
@@ -580,9 +580,9 @@ describe('readFiles - File State Manager', () => {
       });
 
       expect(mockLoadFiles).toHaveBeenCalled();
-      // Augmentation should include query results
+      // Augmentation should include query results per file
       // (will only work if query result is already in Redux)
-      expect(result.queryResults.length).toBeGreaterThanOrEqual(0);
+      expect(result[0].queryResults.length).toBeGreaterThanOrEqual(0);
     });
   });
 
@@ -861,8 +861,8 @@ describe('readFiles - File State Manager', () => {
       const result = await readFiles({ fileIds: [1] });
 
       // Should include query result
-      expect(result.queryResults).toHaveLength(1);
-      expect(result.queryResults[0]).toMatchObject({
+      expect(result[0].queryResults).toHaveLength(1);
+      expect(result[0].queryResults[0]).toMatchObject({
         columns: ['id'],
         types: ['INTEGER'],
         rows: [{ id: 1 }]
@@ -893,9 +893,9 @@ describe('readFiles - File State Manager', () => {
       const result = await readFiles({ fileIds: [2] });
 
       // Should include query result from nested question
-      expect(result.queryResults).toHaveLength(1);
-      expect(result.references).toHaveLength(1);
-      expect(result.references[0].id).toBe(1);
+      expect(result[0].queryResults).toHaveLength(1);
+      expect(result[0].references).toHaveLength(1);
+      expect(result[0].references[0].id).toBe(1);
     });
   });
 

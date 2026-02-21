@@ -43,7 +43,7 @@ export default function QuestionContainerV2({
   const dispatch = useAppDispatch();
 
   // Phase 3: Use useFile hook for file state management (purely reactive)
-  const file = useFile(fileId);
+  const { fileState: file } = useFile(fileId) ?? {};
   const fileLoading = !file || file.loading;
   const saving = file?.saving ?? false;
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));

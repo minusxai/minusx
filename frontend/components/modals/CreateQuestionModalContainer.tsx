@@ -48,7 +48,7 @@ export default function CreateQuestionModalContainer({
   const effectiveId = questionId ?? virtualId;
 
   // Use useFile hook for state management (skip if no ID yet)
-  const file = useFile(effectiveId);
+  const { fileState: file } = useFile(effectiveId) ?? {};
   const fileLoading = !file || file.loading;
   const saving = file?.saving ?? false;
   const error = file?.loadError ?? null;

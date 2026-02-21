@@ -39,7 +39,7 @@ export default function ConfigContainerV2({
   const dispatch = useAppDispatch();
 
   // Use useFile hook for state management (but we'll handle save ourselves)
-  const file = useFile(fileId);
+  const { fileState: file } = useFile(fileId) ?? {};
   const fileLoading = !file || file.loading;
   const saving = file?.saving ?? false;
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));

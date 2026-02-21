@@ -53,72 +53,32 @@ import { createLoadErrorFromException } from '@/lib/types/errors';
 import { resolveHomeFolderSync, isHiddenSystemPath } from '@/lib/mode/path-resolver';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
 import type { GetFilesOptions } from '@/lib/data/types';
-import type { AugmentedFiles, QuestionReference, QueryResult } from '@/lib/types';
+import type { AugmentedFile, QuestionReference, QueryResult } from '@/lib/types';
 import { FileType } from '@/lib/ui/file-metadata';
 
 // ============================================================================
-// useFiles - Load multiple files by IDs
+// useAugmentedFiles - Internal reactive selector hook
 // ============================================================================
-
-/**
- * Options for useFiles hook
- */
-export interface UseFilesOptions {
-  /** Load specific files by ID */
-  ids: number[];
-  /** Time-to-live for cache freshness (ms) */
-  ttl?: number;
-  /** Skip loading (for conditional fetching) */
-  skip?: boolean;
-}
 
 /**
  * useAugmentedFiles - Pure reactive selector hook for augmented file data
  *
  * Selects files + references + query results from Redux using selectAugmentedFiles.
- * No side-effects, no fetching — pair with useFiles (or readFiles) to ensure data is loaded.
+ * No side-effects, no fetching — pair with useFile (or readFiles) to ensure data is loaded.
  *
- * Re-renders only when fileStates, references, or queryResults change by shallow equality.
+ * Re-renders only when fileState, references, or queryResults change by shallow equality.
  */
-export function useAugmentedFiles(fileIds: number[]): AugmentedFiles {
+function useAugmentedFiles(fileIds: number[]): AugmentedFile[] {
   return useAppSelector(
     state => selectAugmentedFiles(state, fileIds),
     (a, b) =>
-      shallowEqual(a.fileStates, b.fileStates) &&
-      shallowEqual(a.references, b.references) &&
-      shallowEqual(a.queryResults, b.queryResults)
+      a.length === b.length &&
+      a.every((f, i) =>
+        f.fileState === b[i].fileState &&
+        shallowEqual(f.references, b[i].references) &&
+        shallowEqual(f.queryResults, b[i].queryResults)
+      )
   );
-}
-
-/**
- * useFiles - Load files by IDs, returns full AugmentedFiles (fileStates + references + queryResults)
- *
- * Triggers fetch via readFiles (which stores results in Redux), then returns
- * the reactive selection via useAugmentedFiles.
- *
- * Usage:
- * ```typescript
- * const { fileStates, references, queryResults } = useFiles({ ids: [1, 2, 3] });
- * ```
- */
-export function useFiles(options: UseFilesOptions): AugmentedFiles {
-  const { ids, ttl = 60000, skip = false } = options;
-
-  // Stable key from options for dependency tracking
-  const optionsKey = useMemo(
-    () => JSON.stringify({ ids, ttl, skip }),
-    [ids, ttl, skip]
-  );
-
-  // Trigger fetch — readFiles owns loading state in Redux
-  useEffect(() => {
-    if (skip || ids.length === 0) return;
-    readFiles({ fileIds: ids }, { ttl, skip: false }).catch(() => {
-      // Error already stored in Redux by readFiles
-    });
-  }, [optionsKey]);
-
-  return useAugmentedFiles(ids);
 }
 
 // ============================================================================
@@ -134,62 +94,40 @@ export interface UseFileOptions {
 }
 
 /**
- * Return type for useFile hook
- * loading, saving, and loadError are available directly on the returned FileState
- */
-export type UseFileReturn = FileState | undefined;
-
-/**
  * useFile Hook - Phase 3 (Simplified)
  *
  * Purely reactive hook that loads a file by ID. No methods - components use
  * file-state.ts exports directly for mutations (editFile, publishFile, reloadFile, clearFileChanges).
  *
- * Uses useFiles internally for consistent caching and augmentation.
- *
  * @param id - File ID (positive number for real files, negative number for virtual files)
  * @param options - Hook options (ttl, skip)
- * @returns {file, loading, saving, error}
+ * @returns AugmentedFile | undefined — access .fileState for file data, .references, .queryResults
  *
  * Example:
  * ```tsx
- * import { editFile, publishFile, reloadFile, clearFileChanges } from '@/lib/api/file-state';
- *
- * function FileComponent({ fileId }: { fileId: FileId }) {
- *   const { file, loading, saving } = useFile(fileId);
- *
- *   if (loading) return <Spinner />;
- *   if (!file) return <NotFound />;
- *
- *   // Use file-state.ts exports directly
- *   const handleEdit = () => {
- *     editFile({ fileId, changes: { content: { query: 'SELECT 1' } } });
- *   };
- *
- *   const handleSave = async () => {
- *     const result = await publishFile({ fileId });
- *     router.push(`/f/${result.id}`);
- *   };
- *
- *   return <FileContent file={file} onEdit={handleEdit} onSave={handleSave} />;
- * }
+ * const { fileState: file } = useFile(fileId) ?? {};
+ * if (!file || file.loading) return <Spinner />;
  * ```
  */
-export function useFile(id: FileId | undefined, options: UseFileOptions = {}): FileState | undefined {
+export function useFile(id: FileId | undefined, options: UseFileOptions = {}): AugmentedFile | undefined {
   const { ttl = CACHE_TTL.FILE, skip = false } = options;
 
   // Virtual files (negative IDs) are pre-populated in Redux, so skip loading
   const shouldSkip = skip || (id !== undefined && isVirtualFileId(id));
 
-  // Trigger fetch via useFiles — loading state is owned by Redux (file.loading)
-  useFiles({
-    ids: id !== undefined ? [id] : [],
-    ttl,
-    skip: shouldSkip
-  });
+  const optionsKey = useMemo(
+    () => JSON.stringify({ id, ttl, skip: shouldSkip }),
+    [id, ttl, shouldSkip]
+  );
 
-  // Return FileState directly — consumers read file.loading, file.loadError, file.saving
-  return useAppSelector(state => id ? selectFile(state, id) : undefined);
+  // Trigger fetch — loading state is owned by Redux (file.loading)
+  useEffect(() => {
+    if (shouldSkip || id === undefined) return;
+    readFiles({ fileIds: [id] }, { ttl, skip: false }).catch(() => {});
+  }, [optionsKey]);
+
+  const results = useAugmentedFiles(id !== undefined ? [id] : []);
+  return results[0];
 }
 
 // ============================================================================
@@ -295,8 +233,9 @@ export function useFilesByCriteria(options: UseFilesByCriteriaOptions): UseFiles
           });
 
           // Update Redux with loaded files
-          if (result.fileStates && result.fileStates.length > 0) {
-            dispatch(setFiles({ files: result.fileStates }));
+          const fileStates = result.map(a => a.fileState);
+          if (fileStates.length > 0) {
+            dispatch(setFiles({ files: fileStates }));
           }
         }
       } catch (err) {

@@ -28,7 +28,7 @@ export default function NewFilePage({ params }: NewFilePageProps) {
   const virtualFileId = appState?.type === 'file' ? appState.id : undefined;
 
   // Load the virtual file
-  const file = useFile(virtualFileId);
+  const { fileState: file } = useFile(virtualFileId) ?? {};
   const loading = !file || file.loading;
   const error = file?.loadError ?? null;
 

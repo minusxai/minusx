@@ -9,7 +9,7 @@ import { FileComponentProps } from '@/lib/ui/fileComponents';
 
 export default function SessionContainerV2({ fileId }: FileComponentProps) {
   const router = useRouter();
-  const file = useFile(fileId);
+  const { fileState: file } = useFile(fileId) ?? {};
   const loading = !file || file.loading;
   const error = file?.loadError ?? null;
 

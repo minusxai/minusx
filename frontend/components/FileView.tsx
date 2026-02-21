@@ -23,7 +23,7 @@ export interface FileViewProps {
 
 export default function FileView({ fileId, mode = 'view', defaultFolder }: FileViewProps) {
   // Load file using useFile hook (no useEffect in component!)
-  const file = useFile(fileId);
+  const { fileState: file } = useFile(fileId) ?? {};
 
   // Loading state
   if (!file || file.loading) {

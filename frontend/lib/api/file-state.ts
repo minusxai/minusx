@@ -32,7 +32,7 @@ import { API } from '@/lib/api/declarations';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import type { RootState } from '@/store/store';
-import type { ReadFilesInput, AugmentedFiles, FileState, QueryResult, QuestionContent, FileType, DocumentContent, DbFile, BaseFileContent, QuestionReference } from '@/lib/types';
+import type { ReadFilesInput, AugmentedFile, FileState, QueryResult, QuestionContent, FileType, DocumentContent, DbFile, BaseFileContent, QuestionReference } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
 import type { AppState } from '@/lib/appState';
@@ -183,36 +183,26 @@ export async function loadFiles(fileIds: number[], ttl: number, skip: boolean): 
  * @param fileIds - File IDs to select
  * @returns ReadFilesOutput
  */
-export function selectAugmentedFiles(state: RootState, fileIds: number[]): AugmentedFiles {
-  const fileStates = fileIds
+export function selectAugmentedFiles(state: RootState, fileIds: number[]): AugmentedFile[] {
+  return fileIds
     .map(id => {
-      const file = selectFile(state, id);
-      if (!file && id < 0) {
-        console.error(`[selectAugmentedFiles] Virtual file ${id} not found in Redux`);
+      const fileState = selectFile(state, id);
+      if (!fileState) {
+        if (id < 0) console.error(`[selectAugmentedFiles] Virtual file ${id} not found in Redux`);
+        return undefined;
       }
-      return file;
+      const references = (fileState.references || [])
+        .map(refId => selectFile(state, refId))
+        .filter((f): f is FileState => f !== undefined);
+      const queryResultMap = new Map<string, QueryResult>();
+      for (const file of [fileState, ...references]) {
+        const augmentFn = augmentRegistry.get(file.type);
+        if (!augmentFn) continue;
+        for (const [key, qr] of augmentFn(state, file)) queryResultMap.set(key, qr);
+      }
+      return { fileState, references, queryResults: Array.from(queryResultMap.values()) };
     })
-    .filter((f): f is FileState => f !== undefined);
-
-  const referenceIds = new Set(fileStates.flatMap(f => f.references || []));
-  const references = [...referenceIds]
-    .map(id => selectFile(state, id))
-    .filter((f): f is FileState => f !== undefined);
-
-  const queryResultMap = new Map<string, QueryResult>();
-  for (const file of [...fileStates, ...references]) {
-    const augmentFn = augmentRegistry.get(file.type);
-    if (!augmentFn) continue;
-    for (const [key, qr] of augmentFn(state, file)) {
-      queryResultMap.set(key, qr);
-    }
-  }
-
-  return {
-    fileStates,
-    references,
-    queryResults: Array.from(queryResultMap.values())
-  };
+    .filter((a): a is AugmentedFile => a !== undefined);
 }
 
 /**
@@ -225,7 +215,7 @@ export function selectAugmentedFiles(state: RootState, fileIds: number[]): Augme
 export async function readFiles(
   input: ReadFilesInput,
   options: ReadFilesOptions = {}
-): Promise<AugmentedFiles> {
+): Promise<AugmentedFile[]> {
   const { ttl = CACHE_TTL.FILE, skip = false } = options;
   const { fileIds } = input;
 
@@ -255,7 +245,7 @@ export interface ReadFilesByCriteriaOptions {
  */
 export async function readFilesByCriteria(
   options: ReadFilesByCriteriaOptions
-): Promise<AugmentedFiles> {
+): Promise<AugmentedFile[]> {
   const { criteria, ttl = CACHE_TTL.FILE, skip = false, partial = false } = options;
 
   // Step 1: Get file metadata matching criteria
@@ -265,13 +255,10 @@ export async function readFilesByCriteria(
   // Step 2: If partial load, return metadata only (no augmentation)
   if (partial) {
     const state = getStore().getState();
-    const fileStates: FileState[] = fileIds.map(id => selectFile(state, id)).filter(Boolean) as FileState[];
-
-    return {
-      fileStates,
-      references: [],
-      queryResults: []
-    };
+    return fileIds
+      .map(id => selectFile(state, id))
+      .filter((f): f is FileState => Boolean(f))
+      .map(fileState => ({ fileState, references: [], queryResults: [] }));
   }
 
   // Step 3: Full load with augmentation
@@ -350,40 +337,27 @@ export async function editFile(options: EditFileOptions): Promise<void> {
  * @param options - TTL and skip options
  * @returns ReadFilesOutput with additional lineEncodedFiles map
  */
+function formatLineEncoded(content: object): string {
+  const contentStr = JSON.stringify(content, null, 2);
+  const lines = contentStr.split('\n');
+  const maxLineNum = lines.length;
+  const padding = String(maxLineNum).length;
+  return lines
+    .map((line, idx) => `${String(idx + 1).padStart(padding)} | ${line}`)
+    .join('\n');
+}
+
 export async function readFilesLineEncoded(
   input: ReadFilesInput,
   options: ReadFilesOptions = {}
-): Promise<AugmentedFiles & { lineEncodedFiles: Record<number, string> }> {
-  const result = await readFiles(input, options);
-
-  const lineEncodedFiles: Record<number, string> = {};
-
-  for (const fileState of result.fileStates) {
-    // Get merged content (same as editFileReplace uses)
-    const state = getStore().getState();
-    const mergedContent = selectMergedContent(state, fileState.id);
-
-    if (!mergedContent) continue;
-
-    // Format content as JSON (same as editFileReplace line 378)
-    const contentStr = JSON.stringify(mergedContent, null, 2);
-    const lines = contentStr.split('\n');
-
-    // Add 1-indexed line numbers with padding for alignment
-    const maxLineNum = lines.length;
-    const padding = String(maxLineNum).length;
-
-    const encoded = lines
-      .map((line, idx) => {
-        const lineNum = idx + 1; // 1-indexed (matching editFileReplace)
-        return `${String(lineNum).padStart(padding)} | ${line}`;
-      })
-      .join('\n');
-
-    lineEncodedFiles[fileState.id] = encoded;
-  }
-
-  return { ...result, lineEncodedFiles };
+): Promise<(AugmentedFile & { lineEncodedContent: string })[]> {
+  const files = await readFiles(input, options);
+  const state = getStore().getState();
+  return files.map(augmented => {
+    const mergedContent = selectMergedContent(state, augmented.fileState.id);
+    const lineEncodedContent = mergedContent ? formatLineEncoded(mergedContent) : '';
+    return { ...augmented, lineEncodedContent };
+  });
 }
 
 /**
@@ -399,18 +373,12 @@ export async function readFilesLineEncoded(
 export async function readFilesStr(
   input: ReadFilesInput,
   options: ReadFilesOptions = {}
-): Promise<AugmentedFiles & { stringifiedFiles: Record<number, string> }> {
-  const result = await readFiles(input, options);
-
-  const stringifiedFiles: Record<number, string> = {};
-
-  for (const fileState of result.fileStates) {
-    const state = getStore().getState();
+): Promise<(AugmentedFile & { stringifiedContent: string })[]> {
+  const files = await readFiles(input, options);
+  const state = getStore().getState();
+  return files.map(augmented => {
+    const { fileState } = augmented;
     const mergedContent = selectMergedContent(state, fileState.id);
-
-    if (!mergedContent) continue;
-
-    // Return FULL file JSON (including metadata)
     const fullFile = {
       id: fileState.id,
       name: selectEffectiveName(state, fileState.id) || '',
@@ -418,13 +386,8 @@ export async function readFilesStr(
       type: fileState.type,
       content: mergedContent
     };
-
-    // Stringify without pretty print (compact JSON)
-    const fullFileStr = JSON.stringify(fullFile);
-    stringifiedFiles[fileState.id] = fullFileStr;
-  }
-
-  return { ...result, stringifiedFiles };
+    return { ...augmented, stringifiedContent: JSON.stringify(fullFile) };
+  });
 }
 
 /**
@@ -1565,15 +1528,16 @@ export async function getAppState(
   if (fileMatch) {
     const id = parseInt(fileMatch[1], 10);
     const result = await readFiles({ fileIds: [id] }, { skip: id < 0 });
-    const file = result.fileStates[0];
-    if (!file || file.loadError) return null;
+    const augmented = result[0];
+    if (!augmented || augmented.fileState.loadError) return null;
+    const { fileState: file, references, queryResults } = augmented;
     return {
       type: 'file',
       id,
       fileType: file.type,
       file,
-      references: result.references,
-      queryResults: result.queryResults
+      references,
+      queryResults
     };
   }
 

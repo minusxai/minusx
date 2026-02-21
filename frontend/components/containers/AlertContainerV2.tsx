@@ -47,7 +47,7 @@ export default function AlertContainerV2({
   const dispatch = useAppDispatch();
 
   // Use useFile hook for state management
-  const file = useFile(fileId);
+  const { fileState: file } = useFile(fileId) ?? {};
   const fileLoading = !file || file.loading;
   const saving = file?.saving ?? false;
   const error = file?.loadError ?? null;
@@ -97,7 +97,7 @@ export default function AlertContainerV2({
         criteria: { type: 'alert_run', paths: [runsPath], depth: -1 },
       });
 
-      const runFiles = result.fileStates || [];
+      const runFiles = result.map(a => a.fileState);
 
       const sortedRuns = runFiles
         .filter((f: any) => f.content?.startedAt)

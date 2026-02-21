@@ -355,10 +355,10 @@ describe('Phase 1: Unified File System API E2E', () => {
     const readResult = await readFiles({ fileIds: [dashboardId] });
 
     // Verify ReadFiles output
-    expect(readResult.fileStates).toHaveLength(1);
-    expect(readResult.fileStates[0].id).toBe(dashboardId);
-    expect(readResult.references).toHaveLength(1);
-    expect(readResult.references[0].id).toBe(questionId);
+    expect(readResult).toHaveLength(1);
+    expect(readResult[0].fileState.id).toBe(dashboardId);
+    expect(readResult[0].references).toHaveLength(1);
+    expect(readResult[0].references[0].id).toBe(questionId);
     console.log('✓ ReadFiles(dashboard_id) loaded dashboard + 1 question reference');
 
     // ========================================================================
@@ -961,7 +961,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       console.log('[1] Reading file before edit...');
       const initialRead = await readFiles({ fileIds: [questionId] });
 
-      expect(Object.keys(initialRead.fileStates[0].persistableChanges || {}).length).toBe(0);
+      expect(Object.keys(initialRead[0].fileState.persistableChanges || {}).length).toBe(0);
       console.log('✓ Initial read shows no persistableChanges');
 
       // Step 2: Edit the file
@@ -988,8 +988,8 @@ describe('Phase 1: Unified File System API E2E', () => {
       console.log('[3] Reading file after edit...');
       const afterEditRead = await readFiles({ fileIds: [questionId] });
 
-      expect(Object.keys(afterEditRead.fileStates[0].persistableChanges || {}).length).toBeGreaterThan(0);
-      expect(JSON.stringify(afterEditRead.fileStates[0].persistableChanges || {})).toContain('Updated description');
+      expect(Object.keys(afterEditRead[0].fileState.persistableChanges || {}).length).toBeGreaterThan(0);
+      expect(JSON.stringify(afterEditRead[0].fileState.persistableChanges || {})).toContain('Updated description');
       console.log('✓ After-edit read shows persistableChanges with edits');
     });
 
@@ -1028,7 +1028,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       console.log('[1] Reading file after publish...');
       const afterPublishRead = await readFiles({ fileIds: [questionId] });
 
-      expect(Object.keys(afterPublishRead.fileStates[0].persistableChanges || {}).length).toBe(0);
+      expect(Object.keys(afterPublishRead[0].fileState.persistableChanges || {}).length).toBe(0);
       console.log('✓ After-publish read shows no persistableChanges (clean state)');
     });
   });
@@ -1128,7 +1128,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       const readResult = await readFiles({ fileIds: [questionId] });
 
       // Verify ReadFiles returns correct content
-      const fileState = readResult.fileStates[0];
+      const fileState = readResult[0].fileState;
       const content = fileState.content as QuestionContent;
       expect(content.description).toBe('Published test description');
       expect(content.query).toContain('WHERE active = true');
@@ -1296,13 +1296,12 @@ describe('Phase 1: Unified File System API E2E', () => {
         const result = await readFilesStr({ fileIds: [questionId] });
 
         // Verify result structure
-        expect(result.fileStates).toHaveLength(1);
-        expect(result.fileStates[0].id).toBe(questionId);
-        expect(result.stringifiedFiles).toBeDefined();
-        expect(result.stringifiedFiles[questionId]).toBeDefined();
+        expect(result).toHaveLength(1);
+        expect(result[0].fileState.id).toBe(questionId);
+        expect(result[0].stringifiedContent).toBeDefined();
 
         // Verify it's compact JSON (no newlines or extra spaces)
-        const compactStr = result.stringifiedFiles[questionId];
+        const compactStr = result[0].stringifiedContent;
         expect(compactStr).not.toContain('\n');
         expect(compactStr).not.toMatch(/\s{2,}/); // No multiple spaces
         expect(compactStr).toContain('"query"');
@@ -1327,13 +1326,13 @@ describe('Phase 1: Unified File System API E2E', () => {
         const result = await readFilesStr({ fileIds: [questionId, dashboardId] });
 
         // Verify both files returned
-        expect(result.fileStates).toHaveLength(2);
-        expect(result.stringifiedFiles[questionId]).toBeDefined();
-        expect(result.stringifiedFiles[dashboardId]).toBeDefined();
+        expect(result).toHaveLength(2);
+        expect(result[0].stringifiedContent).toBeDefined();
+        expect(result[1].stringifiedContent).toBeDefined();
 
         // Verify both are compact JSON
-        expect(result.stringifiedFiles[questionId]).not.toContain('\n');
-        expect(result.stringifiedFiles[dashboardId]).not.toContain('\n');
+        expect(result[0].stringifiedContent).not.toContain('\n');
+        expect(result[1].stringifiedContent).not.toContain('\n');
 
         console.log('✓ readFilesStr handled multiple files correctly');
       });

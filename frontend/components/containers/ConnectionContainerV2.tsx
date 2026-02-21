@@ -37,7 +37,7 @@ export default function ConnectionContainerV2({
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // Phase 2: Use useFile hook
-  const file = useFile(fileId);
+  const { fileState: file } = useFile(fileId) ?? {};
   const loading = !file || file.loading;
   const saving = file?.saving ?? false;
   const error = file?.loadError ?? null;

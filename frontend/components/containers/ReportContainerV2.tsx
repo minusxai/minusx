@@ -35,7 +35,7 @@ export default function ReportContainerV2({
   const dispatch = useAppDispatch();
 
   // Use useFile hook for state management
-  const file = useFile(fileId);
+  const { fileState: file } = useFile(fileId) ?? {};
   const fileLoading = !file || file.loading;
   const saving = file?.saving ?? false;
   const error = file?.loadError ?? null;
@@ -97,7 +97,7 @@ export default function ReportContainerV2({
         criteria: { type: 'report_run', paths: [runsPath], depth: -1 },
       });
 
-      const runFiles = result.fileStates || [];
+      const runFiles = result.map(a => a.fileState);
       console.log('[Report] Runs loaded:', runFiles.length);
 
       // Sort by startedAt descending, take latest 10

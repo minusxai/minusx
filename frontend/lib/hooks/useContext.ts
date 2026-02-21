@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useAppSelector } from '@/store/hooks';
 import { selectContextFromPath } from '@/store/filesSlice';
-import { useFiles } from './file-state-hooks';
+import { useFile } from './file-state-hooks';
 import { useConnections } from './useConnections';
 import { ContextContent, ContextInfo } from '@/lib/types';
 import { getWhitelistedSchemaForUser, getDocumentationForUser, filterSchemaByWhitelist } from '@/lib/sql/schema-filter';
@@ -42,12 +42,8 @@ export function useContext(path: string, version?: number): ContextInfo {
   const contextFile = useAppSelector(state => selectContextFromPath(state, path));
 
   // 2. Load context content if we have a context file
-  //    useFiles handles caching, loading states, and triggering fetches
-  const contextFiles = useFiles({
-    ids: contextFile ? [contextFile.id] : [],
-    skip: !contextFile
-  });
-  const loadedContext = contextFiles.fileStates[0];
+  //    useFile handles caching, loading states, and triggering fetches
+  const loadedContext = useFile(contextFile?.id, { skip: !contextFile })?.fileState;
   const contextLoading = contextFile ? (!loadedContext || loadedContext.loading) : false;
 
   // 3. Get connections for fallback (when no context exists)

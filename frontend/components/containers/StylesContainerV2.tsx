@@ -32,7 +32,7 @@ export default function StylesContainerV2({
   const router = useRouter();
 
   // Use useFile hook for state management
-  const file = useFile(fileId);
+  const { fileState: file } = useFile(fileId) ?? {};
   const fileLoading = !file || file.loading;
   const saving = file?.saving ?? false;
   const error = file?.loadError ?? null;
