@@ -40,7 +40,10 @@ export default function PresentationContainerV2({
   const router = useRouter();
 
   // Phase 2: Use useFile hook for state management
-  const { file, loading: fileLoading, saving, error } = useFile(fileId);
+  const file = useFile(fileId);
+  const fileLoading = !file || file.loading;
+  const saving = file?.saving ?? false;
+  const error = file?.loadError ?? null;
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
 
   // Save error state (for user-facing errors)

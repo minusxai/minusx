@@ -39,7 +39,9 @@ export default function ConfigContainerV2({
   const dispatch = useAppDispatch();
 
   // Use useFile hook for state management (but we'll handle save ourselves)
-  const { file, loading: fileLoading, saving } = useFile(fileId);
+  const file = useFile(fileId);
+  const fileLoading = !file || file.loading;
+  const saving = file?.saving ?? false;
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
 
   // For JSON editor: use persistableChanges as FULL content (not merged)

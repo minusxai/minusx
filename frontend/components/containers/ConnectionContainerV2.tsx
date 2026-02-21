@@ -37,7 +37,10 @@ export default function ConnectionContainerV2({
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // Phase 2: Use useFile hook
-  const { file, loading, saving, error } = useFile(fileId);
+  const file = useFile(fileId);
+  const loading = !file || file.loading;
+  const saving = file?.saving ?? false;
+  const error = file?.loadError ?? null;
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
   const effectiveName = useAppSelector(state => selectEffectiveName(state, fileId)) || '';
 

@@ -43,7 +43,9 @@ export default function DashboardContainerV2({
   const dispatch = useAppDispatch();
 
   // Phase 2: Use useFile hook for state management
-  const { file, loading: fileLoading, saving } = useFile(fileId);
+  const file = useFile(fileId);
+  const fileLoading = !file || file.loading;
+  const saving = file?.saving ?? false;
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
   const effectiveName = useAppSelector(state => selectEffectiveName(state, fileId)) || '';
 

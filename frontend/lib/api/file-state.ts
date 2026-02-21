@@ -19,7 +19,7 @@
  */
 
 import { getStore } from '@/store/store';
-import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, clearEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, selectEffectivePath, deleteFile as deleteFileAction } from '@/store/filesSlice';
+import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setLoadError, clearEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, selectEffectivePath, deleteFile as deleteFileAction } from '@/store/filesSlice';
 import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, setQueryLoading } from '@/store/queryResultsSlice';
 import { selectSelectedRun } from '@/store/reportRunsSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
@@ -35,6 +35,7 @@ import { getQueryHash } from '@/lib/utils/query-hash';
 import type { RootState } from '@/store/store';
 import type { ReadFilesInput, ReadFilesOutput, FileState, QueryResult, QuestionContent, FileType, DocumentContent, AssetReference, DbFile, BaseFileContent, QuestionParameter, QuestionReference } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
+import { createLoadErrorFromException } from '@/lib/types/errors';
 import type { AppState, FolderState } from '@/lib/appState';
 
 /**
@@ -171,13 +172,23 @@ export async function readFiles(
     // Sort IDs for consistent cache key
     const key = needsFetch.sort((a, b) => a - b).join(',');
 
-    await filePromises.execute(key, async () => {
-      const result = await FilesAPI.loadFiles(needsFetch);
-      getStore().dispatch(setFiles({
-        files: result.data,
-        references: result.metadata.references || []
-      }));
-    });
+    // Set loading state for files being fetched
+    needsFetch.forEach(id => getStore().dispatch(setLoading({ id, loading: true })));
+
+    try {
+      await filePromises.execute(key, async () => {
+        const result = await FilesAPI.loadFiles(needsFetch);
+        getStore().dispatch(setFiles({
+          files: result.data,
+          references: result.metadata.references || []
+        }));
+        // setFiles sets loading: false on all stored files
+      });
+    } catch (error) {
+      const loadError = createLoadErrorFromException(error);
+      getStore().dispatch(setLoadError({ ids: needsFetch, error: loadError }));
+      throw error;  // Re-throw so callers can also handle
+    }
   }
 
   // Step 3: Collect results from Redux (now guaranteed fresh)
@@ -190,20 +201,18 @@ export async function readFiles(
 
   for (const fileId of fileIds) {
     const fileState = selectFile(updatedState, fileId);
-    if (!fileState) {
-      // Debug: Log what files ARE in Redux
-      const allFileIds = Object.keys(updatedState.files.files);
-      const virtualFileIds = allFileIds.filter(id => parseInt(id) < 0);
-      console.error('[readFiles] File not found in Redux:', {
-        requestedId: fileId,
-        isVirtual: fileId < 0,
-        allVirtualIds: virtualFileIds,
-        allFileCount: allFileIds.length
-      });
-
+    // A file is genuinely missing if it doesn't exist OR is still a loading placeholder (updatedAt === 0)
+    const isPlaceholder = fileState && fileState.updatedAt === 0;
+    if (!fileState || isPlaceholder) {
       if (fileId < 0) {
+        const allFileIds = Object.keys(updatedState.files.files);
+        const virtualFileIds = allFileIds.filter(id => parseInt(id) < 0);
         throw new Error(`Virtual file ${fileId} not found in Redux. Available virtual files: [${virtualFileIds.join(', ')}]. Virtual files must exist in Redux before calling readFiles.`);
       } else {
+        // Dispatch error for placeholder so the UI can show it
+        if (isPlaceholder) {
+          getStore().dispatch(setLoadError({ ids: [fileId], error: { message: `File ${fileId} not found`, code: 'NOT_FOUND' } }));
+        }
         throw new Error(`File ${fileId} not found after fetch`);
       }
     }

@@ -397,9 +397,11 @@ describe('readFiles - File State Manager', () => {
         readFiles({ fileIds: [1] })
       ).rejects.toThrow('Network error');
 
-      // Redux should not be corrupted
+      // File should have loadError set in Redux (not corrupted, just marked with error)
       const state = mockStore.getState() as RootState;
-      expect(state.files.files[1]).toBeUndefined();
+      expect(state.files.files[1]).toBeDefined();
+      expect(state.files.files[1].loading).toBe(false);
+      expect(state.files.files[1].loadError).toMatchObject({ message: 'Network error' });
     });
 
     it('should throw error if file not found after fetch', async () => {

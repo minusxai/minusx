@@ -72,15 +72,18 @@ export function useContexts(options: UseContextsOptions = {}): UseContextsReturn
   }, [allContexts, homeFolder]);
 
   // Fully load home context (triggers context loader for fullSchema/fullDocs)
-  const { files: homeContextFiles, loading: homeContextLoading, error: homeContextError } = useFiles({
+  const homeContextFiles = useFiles({
     ids: homeContextMeta ? [homeContextMeta.id] : [],
     skip: !homeContextMeta,
     ttl
   });
+  const homeContext = homeContextFiles[0];
+  const homeContextLoading = homeContextMeta ? (!homeContext || homeContext.loading) : false;
+  const homeContextError = homeContext?.loadError ?? null;
 
   return {
     contexts: allContexts,
-    homeContext: homeContextFiles[0],
+    homeContext,
     loading: metadataLoading || homeContextLoading,
     error: metadataError || homeContextError
   };

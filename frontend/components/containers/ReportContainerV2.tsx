@@ -35,7 +35,10 @@ export default function ReportContainerV2({
   const dispatch = useAppDispatch();
 
   // Use useFile hook for state management
-  const { file, loading: fileLoading, saving, error } = useFile(fileId);
+  const file = useFile(fileId);
+  const fileLoading = !file || file.loading;
+  const saving = file?.saving ?? false;
+  const error = file?.loadError ?? null;
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
   const effectiveName = useAppSelector(state => selectEffectiveName(state, fileId)) || '';
   const effectiveUser = useAppSelector(selectEffectiveUser);

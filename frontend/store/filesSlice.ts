@@ -3,6 +3,7 @@ import type { DbFile, FileType, DocumentContent, AssetReference, QuestionContent
 import type { FileInfo } from '@/lib/data/types';
 import type { RootState } from './store';
 import { getQueryHash } from '@/lib/utils/query-hash';
+import type { LoadError } from '@/lib/types/errors';
 
 /**
  * Ephemeral changes - non-persistent state like lastExecuted query
@@ -29,6 +30,7 @@ export interface FileState extends DbFile {
   loading: boolean;
   saving: boolean;    // Phase 2: Track save operations
   updatedAt: number;  // Timestamp of last fetch (for TTL checks)
+  loadError: LoadError | null;  // Error from last load attempt
 
   // Change tracking (Phase 2)
   persistableChanges: Partial<DbFile['content']>;
@@ -106,6 +108,7 @@ const filesSlice = createSlice({
         loading: false,
         saving: false,
         updatedAt: Date.now(),
+        loadError: null,
         persistableChanges: {},
         ephemeralChanges: {},
         metadataChanges: {}
@@ -125,6 +128,7 @@ const filesSlice = createSlice({
           loading: false,
           saving: false,
           updatedAt: Date.now(),
+          loadError: null,
           persistableChanges: {},
           ephemeralChanges: {},
           metadataChanges: {}
@@ -154,6 +158,7 @@ const filesSlice = createSlice({
           loading: false,
           saving: false,
           updatedAt: Date.now(),
+          loadError: null,
           persistableChanges: {},
           ephemeralChanges: {},
           metadataChanges: {}
@@ -172,6 +177,7 @@ const filesSlice = createSlice({
           loading: false,
           saving: false,
           updatedAt: Date.now(),
+          loadError: null,
           persistableChanges: {},
           ephemeralChanges: {},
           metadataChanges: {}
@@ -208,6 +214,7 @@ const filesSlice = createSlice({
             loading: false,
             saving: false,
             updatedAt: Date.now(),
+            loadError: null,
             persistableChanges: {},
             ephemeralChanges: {},
             metadataChanges: {}
@@ -226,6 +233,7 @@ const filesSlice = createSlice({
       const { id, loading } = action.payload;
       if (state.files[id]) {
         state.files[id].loading = loading;
+        if (loading) state.files[id].loadError = null;  // Clear error on new fetch
       } else {
         // Create placeholder state with loading flag
         state.files[id] = {
@@ -241,6 +249,7 @@ const filesSlice = createSlice({
           loading,
           saving: false,
           updatedAt: 0,
+          loadError: null,
           persistableChanges: {},
           ephemeralChanges: {},
           metadataChanges: {}
@@ -460,6 +469,7 @@ const filesSlice = createSlice({
           loading: false,
           saving: false,
           updatedAt: Date.now(),
+          loadError: null,
           persistableChanges: {},
           ephemeralChanges: {},
           metadataChanges: {}
@@ -497,6 +507,7 @@ const filesSlice = createSlice({
             loading: false,
             saving: false,
             updatedAt: Date.now(),
+            loadError: null,
             persistableChanges: {},
             ephemeralChanges: {},
             metadataChanges: {}
@@ -558,6 +569,7 @@ const filesSlice = createSlice({
         loading: false,
         saving: false,
         updatedAt: Date.now(),
+        loadError: null,
         persistableChanges: {},
         ephemeralChanges: {},
         metadataChanges: {}
@@ -581,6 +593,20 @@ const filesSlice = createSlice({
           state.files[parentFolderId].updatedAt = Date.now();
         }
       }
+    },
+
+    /**
+     * Set load error for one or more files
+     * Also clears loading state for all affected files
+     */
+    setLoadError(state, action: PayloadAction<{ ids: FileId[]; error: LoadError }>) {
+      const { ids, error } = action.payload;
+      ids.forEach(id => {
+        if (state.files[id]) {
+          state.files[id].loadError = error;
+          state.files[id].loading = false;
+        }
+      });
     },
 
     /**
@@ -733,6 +759,7 @@ export const {
   setFiles,
   setFileInfo,
   setLoading,
+  setLoadError,
   setEdit,
   setFullContent,
   clearEdits,
@@ -893,6 +920,13 @@ export const selectHasMetadataChanges = (state: RootState, id: FileId): boolean 
   const file = state.files.files[id];
   if (!file) return false;
   return file.metadataChanges.name !== undefined || file.metadataChanges.path !== undefined;
+};
+
+/**
+ * Get load error for a file (returns null if no error)
+ */
+export const selectFileLoadError = (state: RootState, id: FileId): LoadError | null => {
+  return state.files.files[id]?.loadError ?? null;
 };
 
 // ============================================================================

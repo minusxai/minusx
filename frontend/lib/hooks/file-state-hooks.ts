@@ -17,6 +17,7 @@
 
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
+import { shallowEqual } from 'react-redux';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import {
   selectFile,
@@ -71,12 +72,9 @@ export interface UseFilesOptions {
 
 /**
  * Return type for useFiles hook
+ * loading and error are available directly on each FileState
  */
-export interface UseFilesReturn {
-  files: FileState[];
-  loading: boolean;
-  error: LoadError | null;
-}
+export type UseFilesReturn = FileState[];
 
 /**
  * useFiles - Simple hook for loading files by IDs
@@ -97,12 +95,8 @@ export interface UseFilesReturn {
  * });
  * ```
  */
-export function useFiles(options: UseFilesOptions): UseFilesReturn {
+export function useFiles(options: UseFilesOptions): FileState[] {
   const { ids, ttl = 60000, skip = false } = options;
-  const dispatch = useAppDispatch();
-
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<LoadError | null>(null);
 
   // Stable key from options for dependency tracking
   const optionsKey = useMemo(
@@ -110,49 +104,24 @@ export function useFiles(options: UseFilesOptions): UseFilesReturn {
     [ids, ttl, skip]
   );
 
-  // Get existing files from Redux (memoized to prevent unnecessary re-renders)
-  const allFiles = useAppSelector(state => state.files.files);
-  const existingFiles = useMemo(() => {
-    return ids
-      .map(id => allFiles[id])
-      .filter((file): file is FileState => file !== undefined);
-  }, [ids, allFiles]);
+  // Select only the requested files — shallowEqual prevents re-renders when
+  // unrelated files in Redux change (array elements compared by reference)
+  const files = useAppSelector(
+    state => ids
+      .map(id => state.files.files[id])
+      .filter((f): f is FileState => f !== undefined),
+    shallowEqual
+  );
 
-  // Main fetch effect
+  // Trigger fetch — readFiles owns loading state in Redux
   useEffect(() => {
     if (skip || ids.length === 0) return;
+    readFiles({ fileIds: ids }, { ttl, skip: false }).catch(() => {
+      // Error already stored in Redux by readFiles
+    });
+  }, [optionsKey]);
 
-    const fetchFiles = async () => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        // Use file-state.ts for consistent caching and augmentation
-        const result = await readFiles(
-          { fileIds: ids },
-          { ttl, skip: false }
-        );
-
-        // Update Redux with loaded files
-        if (result.fileStates && result.fileStates.length > 0) {
-          dispatch(setFiles({ files: result.fileStates }));
-        }
-      } catch (err) {
-        console.error('[useFiles] Failed to fetch:', err);
-        setError(err as LoadError);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchFiles();
-  }, [optionsKey, dispatch]);
-
-  return {
-    files: existingFiles,
-    loading,
-    error
-  };
+  return files;
 }
 
 // ============================================================================
@@ -169,13 +138,9 @@ export interface UseFileOptions {
 
 /**
  * Return type for useFile hook
+ * loading, saving, and loadError are available directly on the returned FileState
  */
-export interface UseFileReturn {
-  file: FileState | undefined;
-  loading: boolean;
-  saving: boolean;
-  error: LoadError | null;
-}
+export type UseFileReturn = FileState | undefined;
 
 /**
  * useFile Hook - Phase 3 (Simplified)
@@ -213,35 +178,21 @@ export interface UseFileReturn {
  * }
  * ```
  */
-export function useFile(id: FileId | undefined, options: UseFileOptions = {}): UseFileReturn {
+export function useFile(id: FileId | undefined, options: UseFileOptions = {}): FileState | undefined {
   const { ttl = CACHE_TTL.FILE, skip = false } = options;
 
   // Virtual files (negative IDs) are pre-populated in Redux, so skip loading
   const shouldSkip = skip || (id !== undefined && isVirtualFileId(id));
 
-  // Use useFiles internally for consistent loading logic
-  const { files, loading, error } = useFiles({
+  // Trigger fetch via useFiles — loading state is owned by Redux (file.loading)
+  useFiles({
     ids: id !== undefined ? [id] : [],
     ttl,
     skip: shouldSkip
   });
 
-  // Extract the single file from the array
-  const file = useAppSelector(state => id ? selectFile(state, id) : undefined);
-
-  // Get saving state from Redux
-  const saving = file?.saving || false;
-
-  // Show loading if file doesn't exist in Redux yet (prevents flash of 404)
-  // This applies to both real and virtual files on first render
-  const effectiveLoading = loading || Boolean(id && !file);
-
-  return {
-    file,
-    loading: effectiveLoading,
-    saving,
-    error
-  };
+  // Return FileState directly — consumers read file.loading, file.loadError, file.saving
+  return useAppSelector(state => id ? selectFile(state, id) : undefined);
 }
 
 // ============================================================================

@@ -28,7 +28,9 @@ export default function NewFilePage({ params }: NewFilePageProps) {
   const virtualFileId = appState?.type === 'file' ? appState.id : undefined;
 
   // Load the virtual file
-  const { file, loading, error } = useFile(virtualFileId);
+  const file = useFile(virtualFileId);
+  const loading = !file || file.loading;
+  const error = file?.loadError ?? null;
 
   // Context version selection (admin only)
   const filesState = useAppSelector(state => state.files.files);

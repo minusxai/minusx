@@ -43,11 +43,12 @@ export function useContext(path: string, version?: number): ContextInfo {
 
   // 2. Load context content if we have a context file
   //    useFiles handles caching, loading states, and triggering fetches
-  const { files: contextFiles, loading: contextLoading } = useFiles({
+  const contextFiles = useFiles({
     ids: contextFile ? [contextFile.id] : [],
     skip: !contextFile
   });
   const loadedContext = contextFiles[0];
+  const contextLoading = contextFile ? (!loadedContext || loadedContext.loading) : false;
 
   // 3. Get connections for fallback (when no context exists)
   //    useConnections handles loading, caching, and ensures connections are available

@@ -23,7 +23,7 @@ export default function FilePage({ params }: FilePageProps) {
   const { intId } = parseFileId(id);
 
   // Load file using client-side hook
-  const { file, loading, error } = useFile(intId);
+  const file = useFile(intId);
 
   // Context version selection (admin only)
   const user = useAppSelector(state => state.auth.user);
@@ -58,7 +58,7 @@ export default function FilePage({ params }: FilePageProps) {
   }, [filesState, file]);
 
   // Show loading state
-  if (loading) {
+  if (!file || file.loading) {
     return (
       <Center h="100vh" bg="bg.canvas">
         <Spinner size="xl" color="primary" />
@@ -67,7 +67,7 @@ export default function FilePage({ params }: FilePageProps) {
   }
 
   // Show error state
-  if (error || !file) {
+  if (file?.loadError || !file) {
     return (
       <FileNotFound/>
     );

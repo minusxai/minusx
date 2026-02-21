@@ -43,7 +43,9 @@ export default function QuestionContainerV2({
   const dispatch = useAppDispatch();
 
   // Phase 3: Use useFile hook for file state management (purely reactive)
-  const { file, loading: fileLoading, saving } = useFile(fileId);
+  const file = useFile(fileId);
+  const fileLoading = !file || file.loading;
+  const saving = file?.saving ?? false;
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
 
   // Phase 3: Get merged content (content + persistableChanges + ephemeralChanges)
