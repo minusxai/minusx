@@ -42,7 +42,8 @@ import {
   getQueryResult,
   createVirtualFile,
   getAppState,
-  stripFileContent
+  stripFileContent,
+  selectAugmentedFiles
 } from '@/lib/api/file-state';
 import type { AppState } from '@/lib/appState';
 import { FilesAPI } from '@/lib/data/files';
@@ -52,7 +53,7 @@ import { createLoadErrorFromException } from '@/lib/types/errors';
 import { resolveHomeFolderSync, isHiddenSystemPath } from '@/lib/mode/path-resolver';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
 import type { GetFilesOptions } from '@/lib/data/types';
-import type { QuestionReference, QueryResult } from '@/lib/types';
+import type { AugmentedFiles, QuestionReference, QueryResult } from '@/lib/types';
 import { FileType } from '@/lib/ui/file-metadata';
 
 // ============================================================================
@@ -72,46 +73,41 @@ export interface UseFilesOptions {
 }
 
 /**
- * Return type for useFiles hook
- * loading and error are available directly on each FileState
+ * useAugmentedFiles - Pure reactive selector hook for augmented file data
+ *
+ * Selects files + references + query results from Redux using selectAugmentedFiles.
+ * No side-effects, no fetching — pair with useFiles (or readFiles) to ensure data is loaded.
+ *
+ * Re-renders only when fileStates, references, or queryResults change by shallow equality.
  */
-export type UseFilesReturn = FileState[];
+export function useAugmentedFiles(fileIds: number[]): AugmentedFiles {
+  return useAppSelector(
+    state => selectAugmentedFiles(state, fileIds),
+    (a, b) =>
+      shallowEqual(a.fileStates, b.fileStates) &&
+      shallowEqual(a.references, b.references) &&
+      shallowEqual(a.queryResults, b.queryResults)
+  );
+}
 
 /**
- * useFiles - Simple hook for loading files by IDs
+ * useFiles - Load files by IDs, returns full AugmentedFiles (fileStates + references + queryResults)
  *
- * Uses file-state.ts readFiles internally for consistent caching and augmentation.
- * For criteria-based queries (path, type, depth), use useFilesByCriteria instead.
+ * Triggers fetch via readFiles (which stores results in Redux), then returns
+ * the reactive selection via useAugmentedFiles.
  *
  * Usage:
  * ```typescript
- * // Load by IDs
- * const { files, loading, error } = useFiles({ ids: [1, 2, 3] });
- *
- * // With cache control
- * const { files, loading } = useFiles({
- *   ids: [1],
- *   ttl: 300000,
- *   skip: false
- * });
+ * const { fileStates, references, queryResults } = useFiles({ ids: [1, 2, 3] });
  * ```
  */
-export function useFiles(options: UseFilesOptions): FileState[] {
+export function useFiles(options: UseFilesOptions): AugmentedFiles {
   const { ids, ttl = 60000, skip = false } = options;
 
   // Stable key from options for dependency tracking
   const optionsKey = useMemo(
     () => JSON.stringify({ ids, ttl, skip }),
     [ids, ttl, skip]
-  );
-
-  // Select only the requested files — shallowEqual prevents re-renders when
-  // unrelated files in Redux change (array elements compared by reference)
-  const files = useAppSelector(
-    state => ids
-      .map(id => state.files.files[id])
-      .filter((f): f is FileState => f !== undefined),
-    shallowEqual
   );
 
   // Trigger fetch — readFiles owns loading state in Redux
@@ -122,7 +118,7 @@ export function useFiles(options: UseFilesOptions): FileState[] {
     });
   }, [optionsKey]);
 
-  return files;
+  return useAugmentedFiles(ids);
 }
 
 // ============================================================================

@@ -47,7 +47,7 @@ export function useContext(path: string, version?: number): ContextInfo {
     ids: contextFile ? [contextFile.id] : [],
     skip: !contextFile
   });
-  const loadedContext = contextFiles[0];
+  const loadedContext = contextFiles.fileStates[0];
   const contextLoading = contextFile ? (!loadedContext || loadedContext.loading) : false;
 
   // 3. Get connections for fallback (when no context exists)

@@ -77,7 +77,7 @@ export function useContexts(options: UseContextsOptions = {}): UseContextsReturn
     skip: !homeContextMeta,
     ttl
   });
-  const homeContext = homeContextFiles[0];
+  const homeContext = homeContextFiles.fileStates[0];
   const homeContextLoading = homeContextMeta ? (!homeContext || homeContext.loading) : false;
   const homeContextError = homeContext?.loadError ?? null;
 
