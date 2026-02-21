@@ -51,7 +51,6 @@ import {
 import type { AppState } from '@/lib/appState';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import type { LoadError } from '@/lib/types/errors';
-import { createLoadErrorFromException } from '@/lib/types/errors';
 import { resolveHomeFolderSync, isHiddenSystemPath } from '@/lib/mode/path-resolver';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
 import type { GetFilesOptions } from '@/lib/data/types';
@@ -114,12 +113,18 @@ function useFilesByCriteriaSelector(
  * useFileByPathSelector - Pure reactive selector hook for a file looked up by path
  *
  * No side-effects, no fetching — pair with loadFileByPath() to ensure data is loaded.
- * Reference equality — Redux/immer keeps unchanged refs stable.
+ * Returns AugmentedFile (with references and queryResults) or undefined.
  */
-function useFileByPathSelector(path: string | null | undefined): FileState | undefined {
+function useFileByPathSelector(path: string | null | undefined): AugmentedFile | undefined {
   return useAppSelector(
-    state => selectFileByPath(state, path ?? null),
-    (a, b) => a === b
+    state => {
+      const fileState = selectFileByPath(state, path ?? null);
+      return fileState ? selectAugmentedFiles(state, [fileState.id])[0] : undefined;
+    },
+    (a, b) =>
+      a?.fileState === b?.fileState &&
+      shallowEqual(a?.references, b?.references) &&
+      shallowEqual(a?.queryResults, b?.queryResults)
   );
 }
 
@@ -256,7 +261,7 @@ export interface UseFileByPathOptions {
  * Return type for useFileByPath hook
  */
 export interface UseFileByPathReturn {
-  file: FileState | undefined;
+  file: AugmentedFile | undefined;
   loading: boolean;
   error: LoadError | null;
 }
@@ -296,20 +301,19 @@ export interface UseFileByPathReturn {
  */
 export function useFileByPath(path: string | null | undefined, options: UseFileByPathOptions = {}): UseFileByPathReturn {
   const { ttl = CACHE_TTL.FILE, skip = false } = options;
-  const [loading, setLoading] = useState(!skip && !!path);
-  const [error, setError] = useState<LoadError | null>(null);
 
   useEffect(() => {
-    if (skip || !path) { setLoading(false); return; }
-    setLoading(true);
-    setError(null);
-    loadFileByPath(path, ttl).catch(err => {
-      setError(createLoadErrorFromException(err));
-    }).finally(() => setLoading(false));
+    if (skip || !path) return;
+    loadFileByPath(path, ttl).catch(() => {}); // errors land in Redux placeholder
   }, [path, ttl, skip]);
 
   const file = useFileByPathSelector(path);
-  return { file, loading: loading && !file, error };
+  return {
+    file,
+    // If no placeholder yet (first render before effect fires): infer from intent
+    loading: file ? (file.fileState.loading ?? false) : (!skip && !!path),
+    error: file?.fileState.loadError ?? null
+  };
 }
 
 // ============================================================================

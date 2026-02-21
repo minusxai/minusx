@@ -19,7 +19,7 @@
  */
 
 import { getStore } from '@/store/store';
-import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, selectEffectivePath, deleteFile as deleteFileAction } from '@/store/filesSlice';
+import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, selectEffectivePath, deleteFile as deleteFileAction, setFilePlaceholder, generateVirtualId, pathToVirtualId } from '@/store/filesSlice';
 import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, setQueryLoading } from '@/store/queryResultsSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { FilesAPI, getFiles } from '@/lib/data/files';
@@ -294,11 +294,24 @@ export function selectFileByPath(state: RootState, path: string | null): FileSta
 export async function loadFileByPath(path: string, ttl: number = CACHE_TTL.FILE): Promise<void> {
   const state = getStore().getState();
   const existingId = selectFileIdByPath(state, path);
-  if (existingId && selectIsFileLoaded(state, existingId) && selectIsFileFresh(state, existingId, ttl)) {
+  // Skip if a real (positive-ID) file is already fresh
+  if (existingId && existingId > 0
+      && selectIsFileLoaded(state, existingId)
+      && selectIsFileFresh(state, existingId, ttl)) {
     return;
   }
-  const response = await FilesAPI.loadFileByPath(path);
-  getStore().dispatch(setFile({ file: response.data, references: [] }));
+  // Synchronously create loading placeholder in Redux (pathIndex updated too)
+  getStore().dispatch(setFilePlaceholder(path));
+  try {
+    const response = await FilesAPI.loadFileByPath(path);
+    // setFile reducer auto-deletes the placeholder and updates pathIndex
+    getStore().dispatch(setFile({ file: response.data, references: [] }));
+  } catch (err) {
+    getStore().dispatch(setLoadError({
+      ids: [pathToVirtualId(path)],
+      error: createLoadErrorFromException(err)
+    }));
+  }
 }
 
 /**
@@ -1181,10 +1194,10 @@ export async function createVirtualFile(
 ): Promise<number> {
   const { folder, databaseName, query, virtualId: providedVirtualId } = options;
 
-  // Generate virtual ID (negative timestamp or use provided)
+  // Generate virtual ID (namespaced or use provided)
   const virtualId = providedVirtualId && providedVirtualId < 0
     ? providedVirtualId
-    : -Date.now();
+    : generateVirtualId();
 
   // Get user from Redux for folder resolution and company_id
   const state = getStore().getState();

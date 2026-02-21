@@ -71,6 +71,32 @@ export function getNextVirtualFileId(files: Record<FileId, FileState>): FileId {
   return minId - 1;
 }
 
+// djb2-style hash — stays within 32-bit range
+function hashString(str: string): number {
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) ^ str.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash;
+}
+
+/**
+ * Generate a virtual ID for a new user-created file (namespace 1)
+ * ID is always 10 digits: -(1_000_000_000 + Date.now() % 1_000_000_000)
+ */
+export function generateVirtualId(): number {
+  return -(1_000_000_000 + (Date.now() % 1_000_000_000));
+}
+
+/**
+ * Deterministic virtual ID for a path-loading placeholder (namespace 2)
+ * ID is always 10 digits: -(2_000_000_000 + |hash(path)| % 1_000_000_000)
+ */
+export function pathToVirtualId(path: string): number {
+  return -(2_000_000_000 + (Math.abs(hashString(path)) % 1_000_000_000));
+}
+
 /**
  * Redux state structure for files
  */
@@ -115,7 +141,12 @@ const filesSlice = createSlice({
       };
 
       // Update path index (only for real files with positive IDs)
+      // Cleanup: remove path-placeholder when real file arrives
       if (file.id > 0) {
+        const oldId = state.pathIndex[file.path];
+        if (oldId !== undefined && oldId < 0) {
+          delete state.files[oldId];
+        }
         state.pathIndex[file.path] = file.id;
       }
 
@@ -255,6 +286,39 @@ const filesSlice = createSlice({
           metadataChanges: {}
         };
       }
+    },
+
+    /**
+     * Create a loading placeholder for a file being fetched by path.
+     * Uses a deterministic namespace-2 virtual ID derived from the path.
+     * No-ops if a real (positive-ID) file is already indexed at that path.
+     */
+    setFilePlaceholder(state, action: PayloadAction<string>) {
+      const path = action.payload;
+      // Don't overwrite a real (positive-ID) file already at this path
+      const existingId = state.pathIndex[path];
+      if (existingId !== undefined && existingId > 0) return;
+
+      const placeholderId = pathToVirtualId(path);
+      state.files[placeholderId] = {
+        id: placeholderId,
+        name: '',
+        path,
+        type: 'folder',  // stand-in type — same pattern as setFolderLoading
+        references: [],
+        content: null,
+        created_at: '',
+        updated_at: '',
+        company_id: 0,
+        loading: true,
+        saving: false,
+        updatedAt: 0,
+        loadError: null,
+        persistableChanges: {},
+        ephemeralChanges: {},
+        metadataChanges: {}
+      };
+      state.pathIndex[path] = placeholderId;
     },
 
     /**
@@ -796,6 +860,7 @@ export const {
   setFiles,
   setFileInfo,
   setLoading,
+  setFilePlaceholder,
   setFolderLoading,
   setLoadError,
   setEdit,
