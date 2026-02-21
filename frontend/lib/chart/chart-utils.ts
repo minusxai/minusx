@@ -335,7 +335,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   // Character height for vertical text ≈ fontSize (18px) since rotation makes line-height affect horizontal spacing
   const calculateMaxAxisNameLength = (): number => {
     if (!containerHeight) return 40 // Fallback (fits ~840px height)
-    const gridPadding = 80 // Only subtract actual vertical padding
+    const gridPadding = 50 // Only subtract actual vertical padding
     const availableHeight = Math.max(containerHeight - gridPadding, 150)
     const charHeight = 14 // fontSize for vertical text
     return Math.floor(availableHeight / charHeight)
