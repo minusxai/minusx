@@ -32,7 +32,7 @@ import { API } from '@/lib/api/declarations';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import type { RootState } from '@/store/store';
-import type { ReadFilesInput, ReadFilesOutput, FileState, QueryResult, QuestionContent, FileType, DocumentContent, DbFile, BaseFileContent, QuestionReference } from '@/lib/types';
+import type { ReadFilesInput, AugmentedFiles, FileState, QueryResult, QuestionContent, FileType, DocumentContent, DbFile, BaseFileContent, QuestionReference } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
 import type { AppState } from '@/lib/appState';
@@ -183,7 +183,7 @@ export async function loadFiles(fileIds: number[], ttl: number, skip: boolean): 
  * @param fileIds - File IDs to select
  * @returns ReadFilesOutput
  */
-export function selectAugmentedFiles(state: RootState, fileIds: number[]): ReadFilesOutput {
+export function selectAugmentedFiles(state: RootState, fileIds: number[]): AugmentedFiles {
   const fileStates = fileIds
     .map(id => {
       const file = selectFile(state, id);
@@ -225,7 +225,7 @@ export function selectAugmentedFiles(state: RootState, fileIds: number[]): ReadF
 export async function readFiles(
   input: ReadFilesInput,
   options: ReadFilesOptions = {}
-): Promise<ReadFilesOutput> {
+): Promise<AugmentedFiles> {
   const { ttl = CACHE_TTL.FILE, skip = false } = options;
   const { fileIds } = input;
 
@@ -255,7 +255,7 @@ export interface ReadFilesByCriteriaOptions {
  */
 export async function readFilesByCriteria(
   options: ReadFilesByCriteriaOptions
-): Promise<ReadFilesOutput> {
+): Promise<AugmentedFiles> {
   const { criteria, ttl = CACHE_TTL.FILE, skip = false, partial = false } = options;
 
   // Step 1: Get file metadata matching criteria
@@ -353,7 +353,7 @@ export async function editFile(options: EditFileOptions): Promise<void> {
 export async function readFilesLineEncoded(
   input: ReadFilesInput,
   options: ReadFilesOptions = {}
-): Promise<ReadFilesOutput & { lineEncodedFiles: Record<number, string> }> {
+): Promise<AugmentedFiles & { lineEncodedFiles: Record<number, string> }> {
   const result = await readFiles(input, options);
 
   const lineEncodedFiles: Record<number, string> = {};
@@ -399,7 +399,7 @@ export async function readFilesLineEncoded(
 export async function readFilesStr(
   input: ReadFilesInput,
   options: ReadFilesOptions = {}
-): Promise<ReadFilesOutput & { stringifiedFiles: Record<number, string> }> {
+): Promise<AugmentedFiles & { stringifiedFiles: Record<number, string> }> {
   const result = await readFiles(input, options);
 
   const stringifiedFiles: Record<number, string> = {};

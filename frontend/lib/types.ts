@@ -861,7 +861,7 @@ export interface ReadFilesInput {
   fileIds: number[];  // Array of file IDs to load
 }
 
-export interface ReadFilesOutput {
+export interface AugmentedFiles {
   fileStates: FileState[];     // One FileState per requested fileId
   references: FileState[];     // All unique referenced files across all loaded files
   queryResults: QueryResult[]; // All unique query results for questions
