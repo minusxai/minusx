@@ -288,13 +288,12 @@ describe('readFiles - File State Manager', () => {
       expect(result.fileStates[0].id).toBe(mockFile.id);
     });
 
-    it('should throw error if file missing and skip=true', async () => {
-      // Empty Redux state - file doesn't exist
+    it('should return empty fileStates if file missing and skip=true', async () => {
+      // Empty Redux state - file doesn't exist, loadFiles skips due to skip=true
 
-      // Call readFiles with skip=true
-      await expect(
-        readFiles({ fileIds: [999] }, { skip: true })
-      ).rejects.toThrow('File 999 not found after fetch');
+      const result = await readFiles({ fileIds: [999] }, { skip: true });
+      // File was never in Redux and loadFiles skipped → not in fileStates
+      expect(result.fileStates).toHaveLength(0);
     });
   });
 
@@ -388,14 +387,14 @@ describe('readFiles - File State Manager', () => {
   });
 
   describe('Error handling', () => {
-    it('should propagate fetch errors', async () => {
+    it('should propagate fetch errors via loadError (no throw)', async () => {
       // Mock API to throw error
       mockLoadFiles.mockRejectedValue(new Error('Network error'));
 
-      // Call readFiles
-      await expect(
-        readFiles({ fileIds: [1] })
-      ).rejects.toThrow('Network error');
+      // readFiles no longer throws — error is stored in Redux on file.loadError
+      const result = await readFiles({ fileIds: [1] });
+      expect(result.fileStates).toHaveLength(1);
+      expect(result.fileStates[0].loadError).toMatchObject({ message: 'Network error' });
 
       // File should have loadError set in Redux (not corrupted, just marked with error)
       const state = mockStore.getState() as RootState;
@@ -404,17 +403,17 @@ describe('readFiles - File State Manager', () => {
       expect(state.files.files[1].loadError).toMatchObject({ message: 'Network error' });
     });
 
-    it('should throw error if file not found after fetch', async () => {
+    it('should set loadError on file not found after fetch (no throw)', async () => {
       // Mock API to return empty array (file not found)
       mockLoadFiles.mockResolvedValue({
         data: [],
         metadata: { references: [] }
       });
 
-      // Call readFiles
-      await expect(
-        readFiles({ fileIds: [999] })
-      ).rejects.toThrow('File 999 not found after fetch');
+      // readFiles no longer throws — NOT_FOUND is stored on file.loadError
+      const result = await readFiles({ fileIds: [999] });
+      expect(result.fileStates).toHaveLength(1);
+      expect(result.fileStates[0].loadError).toMatchObject({ code: 'NOT_FOUND' });
     });
   });
 
