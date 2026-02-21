@@ -19,7 +19,7 @@
  */
 
 import { getStore } from '@/store/store';
-import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setLoadError, clearEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, selectEffectivePath, deleteFile as deleteFileAction } from '@/store/filesSlice';
+import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, selectEffectivePath, deleteFile as deleteFileAction } from '@/store/filesSlice';
 import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, setQueryLoading } from '@/store/queryResultsSlice';
 import { selectSelectedRun } from '@/store/reportRunsSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
@@ -1329,10 +1329,8 @@ export async function readFolder(
 
   // Fetch from API if not fresh or forcing reload
   if (!isFresh || forceLoad) {
-    // Set loading state
-    if (folderId) {
-      getStore().dispatch(setLoading({ id: folderId, loading: true }));
-    }
+    // Set loading state (creates placeholder if folder not yet in Redux)
+    getStore().dispatch(setFolderLoading({ path, loading: true }));
 
     try {
       // Fetch folder contents from API
@@ -1352,22 +1350,17 @@ export async function readFolder(
     } catch (error) {
       console.error('[readFolder] Failed to load folder:', path, error);
 
-      // Clear loading state
-      if (folderId) {
-        getStore().dispatch(setLoading({ id: folderId, loading: false }));
-      }
-
-      // Convert to LoadError
       const loadError: LoadError = {
         message: error instanceof Error ? error.message : String(error),
         code: 'SERVER_ERROR'
       };
 
-      return {
-        files: [],
-        loading: false,
-        error: loadError
-      };
+      const updatedFolderId = selectFileIdByPath(getStore().getState(), path);
+      if (updatedFolderId) {
+        getStore().dispatch(setLoadError({ ids: [updatedFolderId], error: loadError }));
+      }
+
+      return { files: [], loading: false, error: loadError };
     }
   }
 

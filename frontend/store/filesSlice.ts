@@ -258,6 +258,43 @@ const filesSlice = createSlice({
     },
 
     /**
+     * Set loading state for a folder by path
+     * Creates a placeholder entry for unseen folders (when loading=true)
+     */
+    setFolderLoading(state, action: PayloadAction<{ path: string; loading: boolean }>) {
+      const { path, loading } = action.payload;
+      const folderId = state.pathIndex[path];
+
+      if (folderId && state.files[folderId]) {
+        state.files[folderId].loading = loading;
+        if (loading) state.files[folderId].loadError = null;  // clear on retry
+      } else if (loading) {
+        // Create a placeholder for an unseen folder (same pattern as setFolderInfo)
+        const syntheticId = -(Object.keys(state.files).length + 1);
+        const folderName = path.split('/').pop() || path;
+        state.files[syntheticId] = {
+          id: syntheticId,
+          name: folderName,
+          path,
+          type: 'folder',
+          references: [],
+          content: null,
+          created_at: '',
+          updated_at: '',
+          company_id: 0,
+          loading: true,
+          saving: false,
+          updatedAt: 0,
+          loadError: null,
+          persistableChanges: {},
+          ephemeralChanges: {},
+          metadataChanges: {}
+        };
+        state.pathIndex[path] = syntheticId;
+      }
+    },
+
+    /**
      * Track edits (Phase 2 - currently unused)
      * Merge with existing persistableChanges
      */
@@ -759,6 +796,7 @@ export const {
   setFiles,
   setFileInfo,
   setLoading,
+  setFolderLoading,
   setLoadError,
   setEdit,
   setFullContent,

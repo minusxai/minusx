@@ -50,6 +50,7 @@ import { CACHE_TTL } from '@/lib/constants/cache';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
 import { resolveHomeFolderSync, isHiddenSystemPath } from '@/lib/mode/path-resolver';
+import { canViewFileType } from '@/lib/auth/access-rules.client';
 import type { GetFilesOptions } from '@/lib/data/types';
 import type { QuestionReference, QueryResult } from '@/lib/types';
 import { FileType } from '@/lib/ui/file-metadata';
@@ -480,55 +481,41 @@ export interface UseFolderReturn {
 export function useFolder(path: string, options: UseFolderOptions = {}): UseFolderReturn {
   const { depth = 1, ttl = CACHE_TTL.FOLDER, forceLoad = false } = options;
 
-  const [files, setFiles] = useState<FileState[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<LoadError | null>(null);
-
-  // Re-derive when folder references change in Redux (e.g., after file delete/create)
-  const folderRefCount = useAppSelector(state => {
-    const folderId = state.files.pathIndex[path];
-    return folderId ? state.files.files[folderId]?.references?.length : undefined;
-  });
-
-  // Effect: Load folder using readFolder from file-state.ts
+  // Trigger fetch — readFolder owns loading/error state in Redux
   useEffect(() => {
-    let cancelled = false;
+    readFolder(path, { depth, ttl, forceLoad }).catch(() => {
+      // Error already stored in Redux by readFolder
+    });
+  }, [path, depth, ttl, forceLoad]);
 
-    setLoading(true);
-    setError(null);
+  // Derive all state from Redux — no local useState
+  return useAppSelector(state => {
+    const folderId = state.files.pathIndex[path];
+    const folder = folderId ? state.files.files[folderId] : undefined;
 
-    readFolder(path, { depth, ttl, forceLoad })
-      .then(result => {
-        if (!cancelled) {
-          setFiles(result.files);
-          setLoading(result.loading);
-          setError(result.error);
-        }
-      })
-      .catch(err => {
-        console.error(`[useFolder] Failed to load folder ${path}:`, err);
-        if (!cancelled) {
-          setFiles([]);
-          setLoading(false);
-          // Convert to LoadError
-          const loadError: LoadError = {
-            message: err instanceof Error ? err.message : String(err),
-            code: 'SERVER_ERROR'
-          };
-          setError(loadError);
-        }
+    if (!folder) {
+      return { files: [], loading: true, error: null };
+    }
+
+    const user = state.auth.user;
+    const mode = user?.mode || 'org';
+    const role = user?.role || 'viewer';
+
+    const files = (folder.references || [])
+      .map(id => state.files.files[id])
+      .filter((f): f is FileState => {
+        if (!f) return false;
+        if (!canViewFileType(role, f.type)) return false;
+        if (f.type === 'folder' && isHiddenSystemPath(f.path, mode)) return false;
+        return true;
       });
 
-    return () => {
-      cancelled = true;
+    return {
+      files,
+      loading: folder.loading,
+      error: folder.loadError
     };
-  }, [path, depth, ttl, forceLoad, folderRefCount]);
-
-  return {
-    files,
-    loading,
-    error
-  };
+  }, shallowEqual);
 }
 
 // ============================================================================
