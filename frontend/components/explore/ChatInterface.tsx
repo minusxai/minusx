@@ -524,11 +524,10 @@ export default function ChatInterface({
                 })
               }
 
-              {(isAgentRunning || isStreaming) && (() => {
+              {/* Streaming info: show thinking text and tool calls while streaming */}
+              {isStreaming && (() => {
                 const { thinkingText, toolCalls } = streamingInfo;
-
-                // Show streaming info if available and not showing full thinking
-                if (!showThinking && (thinkingText || toolCalls.length > 0)) {
+                if (thinkingText || toolCalls.length > 0) {
                   return (
                     <Box p={3} bg="bg.muted" borderRadius="md" my={2}>
                       <HStack gap={2} justify="space-between" align="flex-start">
@@ -543,8 +542,6 @@ export default function ChatInterface({
                             {thinkingText || `Running: ${toolCalls.join(', ')}`}
                           </Text>
                         </HStack>
-
-                        {/* Show tool count on the right when we have thinking text */}
                         {thinkingText && toolCalls.length > 0 && (
                           <Text
                             color="fg.subtle"
@@ -559,9 +556,7 @@ export default function ChatInterface({
                     </Box>
                   );
                 }
-
-                // Otherwise show generic ThinkingIndicator
-                return <ThinkingIndicator waitingForInput={isWaitingForUserInput} />;
+                return null;
               })()}
 
               {/* Note: Pending user inputs are rendered via ToolCallDisplay in the message stream */}
@@ -592,6 +587,11 @@ export default function ChatInterface({
               </Grid>
             );
           })()}
+
+          {/* Thinking indicator - shown whenever agent is running */}
+          {(isAgentRunning || isStreaming) && (
+            <ThinkingIndicator waitingForInput={isWaitingForUserInput} />
+          )}
             </VStack>
           </Box>
         </Box>
