@@ -198,7 +198,7 @@ describe('editFile - Question Editing Flow', () => {
     const fileId = questionId1;
 
     // Load the file into Redux
-    await readFiles({ fileIds: [fileId] });
+    await readFiles([fileId]);
 
     // Verify file exists and is not dirty initially
     const initialState = store.getState();
@@ -255,7 +255,7 @@ describe('editFile - Question Editing Flow', () => {
     const fileId = questionId2;
 
     // Load the file into Redux
-    await readFiles({ fileIds: [fileId] });
+    await readFiles([fileId]);
 
     // Get original content
     const initialState = store.getState();
@@ -312,7 +312,7 @@ describe('editFile - Question Editing Flow', () => {
     const fileId = questionId1;
 
     // Load the file into Redux
-    await readFiles({ fileIds: [fileId] });
+    await readFiles([fileId]);
 
     // Get initial values from selectors (like QuestionContainerV2 does)
     const initialState = store.getState();
@@ -356,7 +356,7 @@ describe('editFile - Question Editing Flow', () => {
     const fileId = questionId3;
 
     // Load the file into Redux
-    await readFiles({ fileIds: [fileId] });
+    await readFiles([fileId]);
 
     // Edit vizSettings.type
     editFile({

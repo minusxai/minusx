@@ -352,7 +352,7 @@ describe('Phase 1: Unified File System API E2E', () => {
     });
 
     // Agent uses ReadFiles with 1 dashboard ID
-    const readResult = await readFiles({ fileIds: [dashboardId] });
+    const readResult = await readFiles([dashboardId]);
 
     // Verify ReadFiles output
     expect(readResult).toHaveLength(1);
@@ -959,7 +959,7 @@ describe('Phase 1: Unified File System API E2E', () => {
 
       // Step 1: Read file initially (no changes)
       console.log('[1] Reading file before edit...');
-      const initialRead = await readFiles({ fileIds: [questionId] });
+      const initialRead = await readFiles([questionId]);
 
       expect(Object.keys(initialRead[0].fileState.persistableChanges || {}).length).toBe(0);
       console.log('✓ Initial read shows no persistableChanges');
@@ -986,7 +986,7 @@ describe('Phase 1: Unified File System API E2E', () => {
 
       // Step 3: Read file after edit (should show persistableChanges)
       console.log('[3] Reading file after edit...');
-      const afterEditRead = await readFiles({ fileIds: [questionId] });
+      const afterEditRead = await readFiles([questionId]);
 
       expect(Object.keys(afterEditRead[0].fileState.persistableChanges || {}).length).toBeGreaterThan(0);
       expect(JSON.stringify(afterEditRead[0].fileState.persistableChanges || {})).toContain('Updated description');
@@ -1026,7 +1026,7 @@ describe('Phase 1: Unified File System API E2E', () => {
 
       // Read after publish
       console.log('[1] Reading file after publish...');
-      const afterPublishRead = await readFiles({ fileIds: [questionId] });
+      const afterPublishRead = await readFiles([questionId]);
 
       expect(Object.keys(afterPublishRead[0].fileState.persistableChanges || {}).length).toBe(0);
       console.log('✓ After-publish read shows no persistableChanges (clean state)');
@@ -1125,7 +1125,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         payload: { files: [reloadedFile] }
       });
 
-      const readResult = await readFiles({ fileIds: [questionId] });
+      const readResult = await readFiles([questionId]);
 
       // Verify ReadFiles returns correct content
       const fileState = readResult[0].fileState;
@@ -1293,7 +1293,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         });
 
         // Call readFilesStr
-        const result = await readFilesStr({ fileIds: [questionId] });
+        const result = await readFilesStr([questionId]);
 
         // Verify result structure
         expect(result).toHaveLength(1);
@@ -1323,7 +1323,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         });
 
         // Call readFilesStr with multiple IDs
-        const result = await readFilesStr({ fileIds: [questionId, dashboardId] });
+        const result = await readFilesStr([questionId, dashboardId]);
 
         // Verify both files returned
         expect(result).toHaveLength(2);

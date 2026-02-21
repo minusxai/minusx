@@ -174,7 +174,7 @@ describe('readFiles - File State Manager', () => {
       }));
 
       // File is fresh (within default TTL of 10 hours)
-      const result = await readFiles({ fileIds: [mockFile.id] });
+      const result = await readFiles([mockFile.id]);
 
       // Should not fetch - file is fresh
       expect(mockLoadFiles).not.toHaveBeenCalled();
@@ -204,7 +204,7 @@ describe('readFiles - File State Manager', () => {
       });
 
       // Call readFiles - should refetch
-      const result = await readFiles({ fileIds: [mockFile.id] });
+      const result = await readFiles([mockFile.id]);
 
       // Should fetch because file is stale
       expect(mockLoadFiles).toHaveBeenCalledWith([mockFile.id]);
@@ -224,7 +224,7 @@ describe('readFiles - File State Manager', () => {
       });
 
       // Call readFiles
-      const result = await readFiles({ fileIds: [mockFile.id] });
+      const result = await readFiles([mockFile.id]);
 
       // Should fetch because file is missing
       expect(mockLoadFiles).toHaveBeenCalledWith([mockFile.id]);
@@ -254,7 +254,7 @@ describe('readFiles - File State Manager', () => {
       });
 
       // Call readFiles with custom TTL of 10 seconds
-      const result = await readFiles({ fileIds: [mockFile.id] }, { ttl: 10000 });
+      const result = await readFiles([mockFile.id], { ttl: 10000 });
 
       // Should fetch because 30s > 10s TTL
       expect(mockLoadFiles).toHaveBeenCalledWith([mockFile.id]);
@@ -278,7 +278,7 @@ describe('readFiles - File State Manager', () => {
       jest.setSystemTime(BASE_TIME + CACHE_TTL.FILE + 1000);
 
       // Call readFiles with skip=true
-      const result = await readFiles({ fileIds: [mockFile.id] }, { skip: true });
+      const result = await readFiles([mockFile.id], { skip: true });
 
       // Should NOT fetch even though file is stale
       expect(mockLoadFiles).not.toHaveBeenCalled();
@@ -291,7 +291,7 @@ describe('readFiles - File State Manager', () => {
     it('should return empty fileStates if file missing and skip=true', async () => {
       // Empty Redux state - file doesn't exist, loadFiles skips due to skip=true
 
-      const result = await readFiles({ fileIds: [999] }, { skip: true });
+      const result = await readFiles([999], { skip: true });
       // File was never in Redux and loadFiles skipped → empty result
       expect(result).toHaveLength(0);
     });
@@ -312,8 +312,8 @@ describe('readFiles - File State Manager', () => {
       });
 
       // Call readFiles twice concurrently (no await)
-      const promise1 = readFiles({ fileIds: [mockFile.id] });
-      const promise2 = readFiles({ fileIds: [mockFile.id] });
+      const promise1 = readFiles([mockFile.id]);
+      const promise2 = readFiles([mockFile.id]);
 
       // Advance timers to complete the fetch
       jest.advanceTimersByTime(100);
@@ -342,7 +342,7 @@ describe('readFiles - File State Manager', () => {
       });
 
       // Start request (don't await)
-      const promise = readFiles({ fileIds: [mockFile.id] });
+      const promise = readFiles([mockFile.id]);
 
       // Check in-flight count immediately
       expect(filePromises.size).toBe(1);
@@ -374,7 +374,7 @@ describe('readFiles - File State Manager', () => {
       });
 
       // Load dashboard
-      const result = await readFiles({ fileIds: [dashboardFile.id] });
+      const result = await readFiles([dashboardFile.id]);
 
       // Should load dashboard
       expect(result).toHaveLength(1);
@@ -392,7 +392,7 @@ describe('readFiles - File State Manager', () => {
       mockLoadFiles.mockRejectedValue(new Error('Network error'));
 
       // readFiles no longer throws — error is stored in Redux on file.loadError
-      const result = await readFiles({ fileIds: [1] });
+      const result = await readFiles([1]);
       expect(result).toHaveLength(1);
       expect(result[0].fileState.loadError).toMatchObject({ message: 'Network error' });
 
@@ -411,7 +411,7 @@ describe('readFiles - File State Manager', () => {
       });
 
       // readFiles no longer throws — NOT_FOUND is stored on file.loadError
-      const result = await readFiles({ fileIds: [999] });
+      const result = await readFiles([999]);
       expect(result).toHaveLength(1);
       expect(result[0].fileState.loadError).toMatchObject({ code: 'NOT_FOUND' });
     });
@@ -427,7 +427,7 @@ describe('readFiles - File State Manager', () => {
         metadata: { references: [] }
       });
 
-      const result = await readFiles({ fileIds: [1, 2] });
+      const result = await readFiles([1, 2]);
 
       // Should fetch both in single call
       expect(mockLoadFiles).toHaveBeenCalledWith([1, 2]);
@@ -452,7 +452,7 @@ describe('readFiles - File State Manager', () => {
       });
 
       // Request both files
-      const result = await readFiles({ fileIds: [1, 2] });
+      const result = await readFiles([1, 2]);
 
       // Should only fetch file2 (file1 is fresh)
       expect(mockLoadFiles).toHaveBeenCalledWith([2]);
@@ -858,7 +858,7 @@ describe('readFiles - File State Manager', () => {
         data: { columns: ['id'], types: ['INTEGER'], rows: [{ id: 1 }] }
       }));
 
-      const result = await readFiles({ fileIds: [1] });
+      const result = await readFiles([1]);
 
       // Should include query result
       expect(result[0].queryResults).toHaveLength(1);
@@ -890,7 +890,7 @@ describe('readFiles - File State Manager', () => {
         data: { columns: ['id'], types: ['INTEGER'], rows: [{ id: 1 }] }
       }));
 
-      const result = await readFiles({ fileIds: [2] });
+      const result = await readFiles([2]);
 
       // Should include query result from nested question
       expect(result[0].queryResults).toHaveLength(1);

@@ -39,6 +39,7 @@ import {
   readFiles,
   readFilesByCriteria,
   readFolder,
+  loadFiles,
   getQueryResult,
   createVirtualFile,
   getAppState,
@@ -123,7 +124,7 @@ export function useFile(id: FileId | undefined, options: UseFileOptions = {}): A
   // Trigger fetch — loading state is owned by Redux (file.loading)
   useEffect(() => {
     if (shouldSkip || id === undefined) return;
-    readFiles({ fileIds: [id] }, { ttl, skip: false }).catch(() => {});
+    loadFiles([id], ttl, false).catch(() => {});
   }, [optionsKey]);
 
   const results = useAugmentedFiles(id !== undefined ? [id] : []);
@@ -690,7 +691,7 @@ export function useAppState(): { appState: AppState | null; loading: boolean } {
     const initialize = async () => {
       if (routeInfo.type === 'file' && routeInfo.id > 0) {
         // Load from DB if positive ID
-        await readFiles({ fileIds: [routeInfo.id] });
+        await readFiles([routeInfo.id]);
       } else if (routeInfo.type === 'newFile') {
         // Check if virtual file exists (from URL or local state)
         const virtualId = createOptions?.virtualId || createdVirtualId;

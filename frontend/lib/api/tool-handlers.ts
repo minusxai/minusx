@@ -1739,7 +1739,7 @@ registerFrontendTool('ReadFiles', async (args, context) => {
   const { fileIds } = args;
 
   // Execute with compact JSON strings
-  const result = await readFilesStr({ fileIds }, {});
+  const result = await readFilesStr(fileIds, {});
 
   return result;
 });

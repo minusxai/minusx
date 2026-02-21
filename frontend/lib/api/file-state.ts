@@ -32,7 +32,7 @@ import { API } from '@/lib/api/declarations';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import type { RootState } from '@/store/store';
-import type { ReadFilesInput, AugmentedFile, FileState, QueryResult, QuestionContent, FileType, DocumentContent, DbFile, BaseFileContent, QuestionReference } from '@/lib/types';
+import type { AugmentedFile, FileState, QueryResult, QuestionContent, FileType, DocumentContent, DbFile, BaseFileContent, QuestionReference } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
 import type { AppState } from '@/lib/appState';
@@ -213,11 +213,10 @@ export function selectAugmentedFiles(state: RootState, fileIds: number[]): Augme
  * @returns Augmented files with references and query results
  */
 export async function readFiles(
-  input: ReadFilesInput,
+  fileIds: number[],
   options: ReadFilesOptions = {}
 ): Promise<AugmentedFile[]> {
   const { ttl = CACHE_TTL.FILE, skip = false } = options;
-  const { fileIds } = input;
 
   await loadFiles(fileIds, ttl, skip);
   return selectAugmentedFiles(getStore().getState(), fileIds);
@@ -262,7 +261,7 @@ export async function readFilesByCriteria(
   }
 
   // Step 3: Full load with augmentation
-  return readFiles({ fileIds }, { ttl, skip });
+  return readFiles(fileIds, { ttl, skip });
 }
 
 /**
@@ -348,10 +347,10 @@ function formatLineEncoded(content: object): string {
 }
 
 export async function readFilesLineEncoded(
-  input: ReadFilesInput,
+  fileIds: number[],
   options: ReadFilesOptions = {}
 ): Promise<(AugmentedFile & { lineEncodedContent: string })[]> {
-  const files = await readFiles(input, options);
+  const files = await readFiles(fileIds, options);
   const state = getStore().getState();
   return files.map(augmented => {
     const mergedContent = selectMergedContent(state, augmented.fileState.id);
@@ -371,10 +370,10 @@ export async function readFilesLineEncoded(
  * @returns File states and stringified content (id -> string)
  */
 export async function readFilesStr(
-  input: ReadFilesInput,
+  fileIds: number[],
   options: ReadFilesOptions = {}
 ): Promise<(AugmentedFile & { stringifiedContent: string })[]> {
-  const files = await readFiles(input, options);
+  const files = await readFiles(fileIds, options);
   const state = getStore().getState();
   return files.map(augmented => {
     const { fileState } = augmented;
@@ -1527,7 +1526,7 @@ export async function getAppState(
   const fileMatch = pathname.match(/^\/f\/(\d+)/);
   if (fileMatch) {
     const id = parseInt(fileMatch[1], 10);
-    const result = await readFiles({ fileIds: [id] }, { skip: id < 0 });
+    const result = await readFiles([id], { skip: id < 0 });
     const augmented = result[0];
     if (!augmented || augmented.fileState.loadError) return null;
     const { fileState: file, references, queryResults } = augmented;
