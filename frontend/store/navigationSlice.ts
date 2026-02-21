@@ -173,36 +173,17 @@ export const selectAppState = createSelector(
     if (pathState.type === 'file') {
       const file = filesState[pathState.id];
       if (!file) return { appState: null, loading: true };
-      const loading = file.loading || false;
-      const references = (file.references || [])
-        .map(id => filesState[id])
-        .filter((f): f is FileState => f !== undefined);
       return {
-        appState: {
-          type: 'file',
-          id: pathState.id,
-          fileType: file.type,
-          file,
-          references,
-          queryResults: [],
-        },
-        loading,
+        appState: { type: 'file', state: file },
+        loading: file.loading || false,
       };
     }
 
     if (pathState.type === 'newFile') {
       const virtualId = pathState.createOptions.virtualId;
       if (virtualId !== undefined && filesState[virtualId]) {
-        const file = filesState[virtualId];
         return {
-          appState: {
-            type: 'file',
-            id: virtualId,
-            fileType: file.type,
-            file,
-            references: [],
-            queryResults: [],
-          },
+          appState: { type: 'file', state: filesState[virtualId] },
           loading: false,
         };
       }
@@ -218,31 +199,26 @@ export const selectAppState = createSelector(
         return {
           appState: {
             type: 'folder',
-            path: pathState.path,
-            folder: { files: [], loading: true, error: null },
+            state: { files: [], loading: true, error: null },
           },
           loading: true,
         };
       }
 
-      const childFiles = (folder.references || [])
+      const files = (folder.references || [])
         .map(id => filesState[id])
         .filter((f): f is FileState => {
           if (!f) return false;
           if (f.type === 'folder' && isHiddenSystemPath(f.path, mode)) return false;
           return true;
-        })
-        .map(({ content, persistableChanges, ephemeralChanges, metadataChanges, ...rest }) =>
-          rest as FileState
-        );
+        });
 
       const folderLoading = folder.loading ?? false;
       return {
         appState: {
           type: 'folder',
-          path: pathState.path,
-          folder: {
-            files: childFiles,
+          state: {
+            files,
             loading: folderLoading,
             error: folder.loadError?.message ?? null,
           },

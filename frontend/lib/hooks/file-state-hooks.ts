@@ -521,9 +521,9 @@ export function useQueryResult(
  * const { appState, loading } = useAppState();
  *
  * if (appState?.type === "file") {
- *   // Access appState.file (already augmented FileState)
+ *   // Access appState.state (FileState)
  * } else if (appState?.type === "folder") {
- *   // Access appState.folder.files
+ *   // Access appState.state.files
  * }
  * ```
  */

@@ -63,14 +63,14 @@ export default function MobileRightSidebar({
   const dragStartPosition = useRef<number>(80);
 
   // Dashboard edit mode detection
-  const isDashboard = appState?.type === 'file' && appState.fileType === 'dashboard';
+  const isDashboard = appState?.type === 'file' && appState.state.type === 'dashboard';
   const dashboardEditMode = useAppSelector(state =>
-    appState?.type === 'file' && isDashboard ? selectDashboardEditMode(state, appState.id) : false
+    appState?.type === 'file' && isDashboard ? selectDashboardEditMode(state, appState.state.id) : false
   );
 
   // Get dashboard content for question IDs (needed for excludedIds)
   const dashboardContent = useAppSelector(state =>
-    appState?.type === 'file' && isDashboard ? selectMergedContent(state, appState.id) as DocumentContent | undefined : undefined
+    appState?.type === 'file' && isDashboard ? selectMergedContent(state, appState.state.id) as DocumentContent | undefined : undefined
   );
 
   // Extract folder path from file path (for QuestionBrowserPanel)
@@ -84,7 +84,7 @@ export default function MobileRightSidebar({
   // Handler for adding questions to dashboard
   const handleAddQuestionToDashboard = (questionId: number) => {
     if (appState?.type === 'file' && isDashboard) {
-      dispatch(addQuestionToDashboard({ dashboardId: appState.id, questionId }));
+      dispatch(addQuestionToDashboard({ dashboardId: appState.state.id, questionId }));
     }
   };
 

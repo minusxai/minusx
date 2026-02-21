@@ -1634,15 +1634,7 @@ export async function getAppState(
     const result = await readFiles([id], { skip: id < 0 });
     const augmented = result[0];
     if (!augmented || augmented.fileState.loadError) return null;
-    const { fileState: file, references, queryResults } = augmented;
-    return {
-      type: 'file',
-      id,
-      fileType: file.type,
-      file,
-      references,
-      queryResults
-    };
+    return { type: 'file', state: augmented.fileState };
   }
 
   // New file page: /new/{type}
@@ -1681,14 +1673,7 @@ export async function getAppState(
 
     if (!file) return null;
 
-    return {
-      type: 'file',
-      id: virtualId,
-      fileType: file.type,
-      file,
-      references: [],
-      queryResults: []
-    };
+    return { type: 'file', state: file };
   }
 
   // Folder page: /p/path or /p/nested/path
@@ -1698,12 +1683,7 @@ export async function getAppState(
     const result = await readFolder(path);
     return {
       type: 'folder',
-      path,
-      folder: {
-        files: result.files,
-        loading: false,
-        error: null
-      }
+      state: { files: result.files, loading: false, error: null }
     };
   }
 

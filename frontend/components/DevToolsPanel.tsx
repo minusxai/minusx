@@ -224,7 +224,7 @@ export default function DevToolsPanel({ appState }: DevToolsPanelProps) {
 
     setIsCapturingScreenshot(true);
     try {
-      const blob = await captureFileView(appState.id, { fullHeight: true });
+      const blob = await captureFileView(appState.state.id, { fullHeight: true });
       // Revoke previous URL to avoid memory leaks
       if (screenshotUrl) URL.revokeObjectURL(screenshotUrl);
       setScreenshotUrl(URL.createObjectURL(blob));
@@ -243,7 +243,7 @@ export default function DevToolsPanel({ appState }: DevToolsPanelProps) {
         </Text>
 
         {/* Screenshot Capture */}
-        {appState?.type === 'file' && (appState.fileType === 'question' || appState.fileType === 'dashboard') && (
+        {appState?.type === 'file' && (appState.state.type === 'question' || appState.state.type === 'dashboard') && (
           <Box
             borderWidth="1px"
             borderColor="border.default"
@@ -282,7 +282,7 @@ export default function DevToolsPanel({ appState }: DevToolsPanelProps) {
                 </Box>
               ) : (
                 <Text fontSize="2xs" color="fg.subtle">
-                  Capture a screenshot of the current {appState.fileType}
+                  Capture a screenshot of the current {appState.state.type}
                 </Text>
               )}
             </VStack>
