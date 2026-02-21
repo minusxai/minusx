@@ -5,6 +5,7 @@
  */
 
 import type { FileState } from '@/store/filesSlice';
+import type { AugmentedFile } from '@/lib/types';
 
 /**
  * Folder state (from useFolder / navigationSlice)
@@ -21,7 +22,7 @@ export interface FolderState {
 export type AppState =
   | {
       type: 'file';
-      state: FileState;
+      state: AugmentedFile;
     }
   | {
       type: 'folder';

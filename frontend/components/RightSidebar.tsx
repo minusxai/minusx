@@ -88,9 +88,9 @@ export default function RightSidebar({
   );
 
   // Dashboard edit mode detection
-  const isDashboard = appState?.type === 'file' && appState.state.type === 'dashboard';
+  const isDashboard = appState?.type === 'file' && appState.state.fileState.type === 'dashboard';
   const dashboardEditMode = useAppSelector(state =>
-    appState?.type === 'file' && isDashboard ? selectDashboardEditMode(state, appState.state.id) : false
+    appState?.type === 'file' && isDashboard ? selectDashboardEditMode(state, appState.state.fileState.id) : false
   );
 
   // Auto-open sidebar sections based on state changes
@@ -111,7 +111,7 @@ export default function RightSidebar({
 
   // Get dashboard content for question IDs (needed for excludedIds)
   const dashboardContent = useAppSelector(state =>
-    appState?.type === 'file' && isDashboard ? selectMergedContent(state, appState.state.id) as DocumentContent | undefined : undefined
+    appState?.type === 'file' && isDashboard ? selectMergedContent(state, appState.state.fileState.id) as DocumentContent | undefined : undefined
   );
 
   // Extract folder path from file path (for QuestionBrowserPanel)
@@ -125,7 +125,7 @@ export default function RightSidebar({
   // Handler for adding questions to dashboard
   const handleAddQuestionToDashboard = (questionId: number) => {
     if (appState?.type === 'file' && isDashboard) {
-      dispatch(addQuestionToDashboard({ dashboardId: appState.state.id, questionId }));
+      dispatch(addQuestionToDashboard({ dashboardId: appState.state.fileState.id, questionId }));
     }
   };
 
@@ -543,7 +543,7 @@ export default function RightSidebar({
                         )}
                         {section.id === 'share' && appState?.type === 'file' && currentUser && (
                           <Box p={4}>
-                            <AccessTokenManager fileId={appState.state.id} currentUser={currentUser} />
+                            <AccessTokenManager fileId={appState.state.fileState.id} currentUser={currentUser} />
                           </Box>
                         )}
                         {section.id === 'dev' && (

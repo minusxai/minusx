@@ -25,7 +25,7 @@ export default function NewFilePage({ params }: NewFilePageProps) {
 
   // Get app state (creates virtual file with URL params automatically)
   const { appState, loading: appStateLoading } = useAppState();
-  const virtualFileId = appState?.type === 'file' ? appState.state.id : undefined;
+  const virtualFileId = appState?.type === 'file' ? appState.state.fileState.id : undefined;
 
   // Load the virtual file
   const { fileState: file } = useFile(virtualFileId) ?? {};

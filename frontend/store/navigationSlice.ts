@@ -5,6 +5,7 @@ import type { FileType } from '@/lib/types';
 import type { Mode } from '@/lib/mode/mode-types';
 import type { AppState } from '@/lib/appState';
 import { resolveHomeFolderSync, isHiddenSystemPath } from '@/lib/mode/path-resolver';
+import { selectAugmentedFiles } from '@/lib/api/file-state';
 
 // ============================================================================
 // Types
@@ -160,21 +161,28 @@ export const selectAppState = createSelector(
   (state: RootState) => state.files.files,
   (state: RootState) => state.files.pathIndex,
   (state: RootState) => state.auth.user,
+  (state: RootState) => state.queryResults.results,
   (
     pathname,
     searchParams,
     activeVirtualId,
     filesState,
     pathIndex,
-    user
+    user,
+    queryResultsMap
   ): { appState: AppState | null; loading: boolean } => {
     const pathState = computePathState(pathname, searchParams, activeVirtualId, user);
+
+    // Minimal partial state for selectAugmentedFiles — it only reads files.files and queryResults.results
+    const partialState = { files: { files: filesState }, queryResults: { results: queryResultsMap } } as RootState;
 
     if (pathState.type === 'file') {
       const file = filesState[pathState.id];
       if (!file) return { appState: null, loading: true };
+      const [augmented] = selectAugmentedFiles(partialState, [pathState.id]);
+      if (!augmented) return { appState: null, loading: true };
       return {
-        appState: { type: 'file', state: file },
+        appState: { type: 'file', state: augmented },
         loading: file.loading || false,
       };
     }
@@ -182,9 +190,12 @@ export const selectAppState = createSelector(
     if (pathState.type === 'newFile') {
       const virtualId = pathState.createOptions.virtualId;
       if (virtualId !== undefined && filesState[virtualId]) {
+        const file = filesState[virtualId];
+        const [augmented] = selectAugmentedFiles(partialState, [virtualId]);
+        if (!augmented) return { appState: null, loading: true };
         return {
-          appState: { type: 'file', state: filesState[virtualId] },
-          loading: false,
+          appState: { type: 'file', state: augmented },
+          loading: file.loading || false,
         };
       }
       return { appState: null, loading: true };

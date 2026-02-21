@@ -65,7 +65,7 @@ function augmentQuestionSelector(state: RootState, fileState: FileState): Map<st
 
   const { query, parameters, database_name } = mergedContent;
   const params = (parameters || []).reduce<Record<string, any>>((acc, p) => {
-    acc[p.name] = p.value ?? '';
+    acc[p.name] = p.value;
     return acc;
   }, {});
 
@@ -1634,7 +1634,7 @@ export async function getAppState(
     const result = await readFiles([id], { skip: id < 0 });
     const augmented = result[0];
     if (!augmented || augmented.fileState.loadError) return null;
-    return { type: 'file', state: augmented.fileState };
+    return { type: 'file', state: augmented };
   }
 
   // New file page: /new/{type}
@@ -1673,7 +1673,7 @@ export async function getAppState(
 
     if (!file) return null;
 
-    return { type: 'file', state: file };
+    return { type: 'file', state: { fileState: file, references: [], queryResults: [] } };
   }
 
   // Folder page: /p/path or /p/nested/path
