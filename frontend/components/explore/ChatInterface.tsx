@@ -590,7 +590,14 @@ export default function ChatInterface({
 
           {/* Thinking indicator - shown whenever agent is running */}
           {(isAgentRunning || isStreaming) && (
-            <ThinkingIndicator waitingForInput={isWaitingForUserInput} />
+            <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }}
+                      gap={2}
+                      w="100%"
+                  >
+              <GridItem colSpan={colSpan} colStart={colStart}>
+                  <ThinkingIndicator waitingForInput={isWaitingForUserInput} />
+              </GridItem>
+            </Grid>
           )}
             </VStack>
           </Box>
