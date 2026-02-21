@@ -832,12 +832,14 @@ class ExecuteQuery(Tool):
         query: str = Field(..., description="SQL query to execute"),
         connectionId: str = Field(..., description="Database connection name"),
         parameters: Optional[Dict[str, Any]] = Field(None, description="Query parameters as key-value pairs"),
+        vizSettings: Optional[str] = Field(None, description=f"settings to visualize the output of the query; schema: {vizSettingsJsonStr}"),
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
         self.query = query
         self.connectionId = connectionId
         self.parameters = parameters or {}
+        self.vizSettings = vizSettings
 
     async def reduce(self, child_batches):
         pass
