@@ -837,12 +837,6 @@ class ExecuteQuery(Tool):
         super().__init__(**kwargs)  # type: ignore
         self.query = query
         self.connectionId = connectionId
-        # LLMs sometimes send parameters as a JSON string instead of a dict
-        if isinstance(parameters, str):
-            try:
-                parameters = json.loads(parameters)
-            except (json.JSONDecodeError, TypeError):
-                parameters = {}
         self.parameters = parameters or {}
 
     async def reduce(self, child_batches):
