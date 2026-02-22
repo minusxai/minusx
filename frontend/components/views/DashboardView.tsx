@@ -8,11 +8,11 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Layout, WidthProvider, Responsive } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
-import CreateQuestionModal from '../modals/CreateQuestionModal';
 import JsonEditor from '../slides/JsonEditor';
 import DocumentHeader from '../DocumentHeader';
-import { useAppSelector } from '@/store/hooks';
+import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectMergedContent } from '@/store/filesSlice';
+import { openFileModal } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
 import { shallowEqual } from 'react-redux';
@@ -92,6 +92,8 @@ export default function DashboardView({
   onRevert,
   onEditModeChange
 }: DashboardViewProps) {
+  const dispatch = useAppDispatch();
+
   // Tab switcher for visual/json view
   const [activeTab, setActiveTab] = useState<'visual' | 'json'>('visual');
 
@@ -103,9 +105,6 @@ export default function DashboardView({
     const mergedContent = selectMergedContent(state, fileId) as DocumentContent;
     return mergedContent?.parameterValues || {};
   });
-
-  // State for edit question modal
-  const [editQuestionId, setEditQuestionId] = useState<number | null>(null);
 
   // Get agent name from config
   const { config } = useConfigs();
@@ -327,7 +326,7 @@ export default function DashboardView({
             showTitle={true}
             editMode={editMode}
             index={index}
-            onEdit={editMode ? () => setEditQuestionId(questionId) : undefined}
+            onEdit={editMode ? () => dispatch(openFileModal(questionId)) : undefined}
             onRemove={() => handleRemoveQuestion(questionId.toString())}
           />
         </Box>
@@ -528,18 +527,6 @@ export default function DashboardView({
         </>
       )}
 
-      {/* Edit Question Modal */}
-      <CreateQuestionModal
-        isOpen={editQuestionId !== null}
-        onClose={() => setEditQuestionId(null)}
-        onQuestionCreated={() => {
-          // Question was saved - just close modal
-          // No need to add to dashboard (it's already there)
-          setEditQuestionId(null);
-        }}
-        folderPath={folderPath}
-        questionId={editQuestionId || undefined}
-      />
     </Box>
   );
 }

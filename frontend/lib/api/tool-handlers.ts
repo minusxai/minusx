@@ -17,8 +17,11 @@ import { fetchWithCache } from './fetch-wrapper';
 import { API } from './declarations';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 import { getRouter } from '@/lib/navigation/use-navigation';
-import { readFilesStr, editFileStr, publishFile, getQueryResult } from '@/lib/api/file-state';
+import { readFilesStr, editFileStr, publishFile, getQueryResult, createVirtualFile, editFile as editFileOp, clearFileChanges } from '@/lib/api/file-state';
 import { canCreateFileType } from '@/lib/auth/access-rules.client';
+import { openFileModal } from '@/store/uiSlice';
+import { selectPathState } from '@/store/navigationSlice';
+import { preserveParams } from '@/lib/navigation/url-utils';
 
 // ============================================================================
 // Frontend Tool Registry
@@ -416,10 +419,11 @@ registerFrontendTool('Navigate', async (args, context) => {
         message: `Invalid file_id: ${file_id}. If you do not want to provide it, don't pass it at all.`
       }
     }
+
     router.push(`/f/${file_id}`);
     if (state) {
       const fileState = state.files.files[file_id]
-      if (!fileState.content) {
+      if (!fileState?.content) {
         await FilesAPI.loadFile(file_id)
       }
     }
@@ -1777,9 +1781,68 @@ registerFrontendTool('EditFile', async (args, context) => {
         database: finalContent.database_name
       });
     }
+
+    // If editing a question while viewing a different file → auto-save + open modal
+    const pathState = selectPathState(state);
+    const isViewingDifferentFile = pathState.type === 'file' && pathState.id !== fileId;
+    if (isViewingDifferentFile) {
+      await publishFile({ fileId });
+      context.dispatch!(openFileModal(fileId));
+    }
   }
 
   return result;
+});
+
+/**
+ * CreateFile - Create a new file with context-aware behavior:
+ * - Creating a question while viewing a file → creates, saves, opens in modal
+ * - Creating a dashboard, or from a folder context → navigate to new file page
+ */
+registerFrontendTool('CreateFile', async (args, context) => {
+  const { file_type, name, query, database_name, viz_settings, folder } = args;
+  const { dispatch } = context;
+  const currentState = getStore().getState();
+  const pathState = selectPathState(currentState);
+  const isInFileContext = pathState.type === 'file';
+
+  if (file_type === 'question' && isInFileContext) {
+    // Create virtual file, edit it, save, and open in modal
+    const virtualId = await createVirtualFile('question', { folder, query, databaseName: database_name });
+
+    if (name) {
+      await editFileOp({ fileId: virtualId, changes: { name } });
+    }
+    if (viz_settings) {
+      await editFileOp({ fileId: virtualId, changes: { content: { vizSettings: viz_settings } } });
+    }
+
+    const saveResult = await publishFile({ fileId: virtualId });
+    const realId = saveResult.id ?? virtualId;
+
+    dispatch!(openFileModal(realId));
+    return {
+      success: true,
+      questionId: realId,
+      message: `Created question "${name}" (id: ${realId}) and opened in modal. To add it to a dashboard, call EditDashboard with operation="add_existing_question", question_id=${realId}.`
+    };
+  }
+
+  // Dashboard or folder context → navigate to new file creation page
+  const router = getRouter();
+  if (!router) {
+    return { success: false, message: 'Router not available' };
+  }
+  const virtualFileId = -Date.now();
+  const params = new URLSearchParams();
+  params.set('virtualId', String(virtualFileId));
+  if (folder) params.set('folder', folder);
+  const url = preserveParams(`/new/${file_type}?${params.toString()}`);
+  router.push(url);
+  return {
+    success: true,
+    message: `Navigating to create new ${file_type}`
+  };
 });
 
 /**

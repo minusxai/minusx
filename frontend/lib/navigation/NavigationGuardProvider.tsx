@@ -15,8 +15,9 @@ import { usePathname } from 'next/navigation';
 import { useRouter } from './use-navigation';
 import { useAppSelector } from '@/store/hooks';
 import { selectActiveConversation } from '@/store/chatSlice';
-import { Dialog, Portal, Button, Text } from '@chakra-ui/react';
+import { Dialog, Portal, Button, Text, HStack } from '@chakra-ui/react';
 import { preserveParams } from './url-utils';
+import { publishFile, clearFileChanges } from '@/lib/api/file-state';
 
 /**
  * Extract file ID from pathname
@@ -121,6 +122,8 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
   const [isOpen, setIsOpen] = useState(false);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [guardReason, setGuardReason] = useState<'dirty' | 'agent-running' | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const openGuardModal = useCallback((href: string) => {
     setPendingHref(href);
@@ -137,21 +140,48 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
     }
   }, [shouldGuardNavigation, openGuardModal, router]);
 
-  // Confirm navigation
+  // Confirm navigation (leave page, discard changes)
   const handleConfirm = useCallback(() => {
+    const fileIdToAct = currentFileId ?? (dirtyVirtualFile?.id as number | undefined) ?? null;
+    if (fileIdToAct !== null) {
+      clearFileChanges({ fileId: fileIdToAct });
+    }
     if (pendingHref) {
       router.push(pendingHref);
     }
     setIsOpen(false);
     setPendingHref(null);
-  }, [pendingHref, router]);
+    setSaveError(null);
+  }, [pendingHref, router, currentFileId, dirtyVirtualFile]);
 
-  // Cancel navigation
+  // Cancel navigation (stay on page)
   const handleCancel = useCallback(() => {
     setIsOpen(false);
     setPendingHref(null);
     setGuardReason(null);
+    setSaveError(null);
   }, []);
+
+  // Save and continue navigation
+  const handleSaveAndContinue = useCallback(async () => {
+    const fileIdToAct = currentFileId ?? (dirtyVirtualFile?.id as number | undefined) ?? null;
+    if (fileIdToAct === null) {
+      handleConfirm();
+      return;
+    }
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await publishFile({ fileId: fileIdToAct });
+      if (pendingHref) router.push(pendingHref);
+      setIsOpen(false);
+      setPendingHref(null);
+    } catch (err: any) {
+      setSaveError(err?.message || 'Failed to save. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [currentFileId, dirtyVirtualFile, pendingHref, router, handleConfirm]);
 
   // Auto-dismiss modal if agent finishes while modal is open for that reason
   useEffect(() => {
@@ -241,7 +271,7 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
             >
               <Dialog.Header px={6} py={4} borderBottom="1px solid" borderColor="border.default">
                 <Dialog.Title fontWeight="700" fontSize="xl" fontFamily={"mono"}>
-                  {guardReason === 'agent-running' ? 'Agent is Running' : 'Discard Changes?'}
+                  {guardReason === 'agent-running' ? 'Agent is Running' : 'Unsaved Changes'}
                 </Dialog.Title>
               </Dialog.Header>
               <Dialog.Body px={6} py={5}>
@@ -251,16 +281,35 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
                     : `You have unsaved changes in "${currentFileName}". Are you sure you want to leave without saving?`
                   }
                 </Text>
+                {saveError && (
+                  <Text fontSize="sm" color="accent.danger" mt={2}>{saveError}</Text>
+                )}
               </Dialog.Body>
               <Dialog.Footer px={6} py={4} gap={3} borderTop="1px solid" borderColor="border.default" justifyContent="flex-end">
-                <Dialog.ActionTrigger asChild>
-                  <Button variant="outline" onClick={handleCancel}>
-                    Stay on Page
-                  </Button>
-                </Dialog.ActionTrigger>
-                <Button bg="accent.danger" color="white" onClick={handleConfirm}>
-                  Leave Page
-                </Button>
+                {guardReason === 'dirty' ? (
+                  <HStack gap={2}>
+                    <Button variant="outline" onClick={handleCancel} disabled={isSaving}>
+                      Cancel
+                    </Button>
+                    <Button bg="accent.danger" color="white" onClick={handleConfirm} disabled={isSaving}>
+                      Discard Changes
+                    </Button>
+                    <Button bg="accent.teal" color="white" onClick={handleSaveAndContinue} loading={isSaving}>
+                      Save &amp; Continue
+                    </Button>
+                  </HStack>
+                ) : (
+                  <HStack gap={2}>
+                    <Dialog.ActionTrigger asChild>
+                      <Button variant="outline" onClick={handleCancel}>
+                        Stay on Page
+                      </Button>
+                    </Dialog.ActionTrigger>
+                    <Button bg="accent.danger" color="white" onClick={handleConfirm}>
+                      Leave Page
+                    </Button>
+                  </HStack>
+                )}
               </Dialog.Footer>
               <Dialog.CloseTrigger />
             </Dialog.Content>

@@ -11,7 +11,7 @@ from tasks.chat_thread_processor import root_tasks_to_thread, task_batch_to_thre
 from tasks.llm.client import allm_request as real_allm_request, describe_tool
 from tasks.llm.models import ALLMRequest, LlmSettings, UserInfo
 from tasks.llm.config import ANALYST_V2_MODEL, MAX_STEPS_LOWER_LEVEL
-from .tools import ExecuteSQLQuery, SearchDBSchema, EditDashboard, EditReport, GetAllQuestions, SearchFiles, GetFiles, UpdateFileMetadata, Clarify, Navigate
+from .tools import ExecuteSQLQuery, SearchDBSchema, EditDashboard, EditReport, GetAllQuestions, SearchFiles, GetFiles, UpdateFileMetadata, Clarify, Navigate, CreateFile
 from .tools import ReadFiles, EditFile, PublishFile, ExecuteQuery  # native toolset
 from .prompt_loader import get_prompt
 
@@ -133,10 +133,10 @@ class AnalystAgent(Agent):
             return []
 
         if self.toolset == 'native':
-            return [ReadFiles, EditFile, PublishFile, ExecuteQuery, Navigate, Clarify, SearchDBSchema, SearchFiles]
+            return [ReadFiles, EditFile, PublishFile, ExecuteQuery, Navigate, Clarify, SearchDBSchema, SearchFiles, CreateFile]
 
         # classic (default)
-        return [ExecuteSQLQuery, SearchDBSchema, SearchFiles, GetFiles, UpdateFileMetadata, Navigate, Clarify, EditDashboard, EditReport, GetAllQuestions]
+        return [ExecuteSQLQuery, SearchDBSchema, SearchFiles, GetFiles, UpdateFileMetadata, Navigate, Clarify, EditDashboard, EditReport, GetAllQuestions, CreateFile]
     
     def _get_history(self):
         previous_root_tasks = self._orchestrator.get_previous_root_tasks()

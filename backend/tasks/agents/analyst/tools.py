@@ -773,6 +773,10 @@ class EditFile(Tool):
 
     The tool validates changes and returns a diff.
     Changes are stored in Redux but NOT saved to database until PublishFile is called.
+
+    Note: When editing a question while currently viewing a different file, the question will be
+    automatically saved and shown in a modal overlay on the current page.
+    No need to call Navigate or PublishFile afterward — it is handled automatically.
     """
 
     def __init__(
@@ -816,6 +820,44 @@ class PublishFile(Tool):
 
     async def run(self) -> str:
         # Frontend tool - executes in browser with Redux access
+        raise UserInputException(self._unique_id)
+
+
+@register_agent
+class CreateFile(Tool):
+    """Create a new file (question or dashboard).
+
+    Behavior depends on context:
+    - Creating a *question* while viewing any file → question is created, saved,
+      and shown in a modal overlay on the current page. No page navigation occurs.
+      Do NOT call Navigate after this.
+      Returns questionId in the result — use it to add the question to a dashboard:
+        EditDashboard(operation="add_existing_question", question_id=<questionId>, file_id=<dashboardId>)
+    - Creating a *dashboard*, or any file from a folder → navigates to the new file page.
+    """
+
+    def __init__(
+        self,
+        file_type: str = Field(..., description="File type to create: 'question' or 'dashboard'"),
+        name: Optional[str] = Field(None, description="Display name for the new file"),
+        query: Optional[str] = Field(None, description="Initial SQL query (questions only)"),
+        database_name: Optional[str] = Field(None, description="Database connection name (questions only)"),
+        viz_settings: Optional[dict] = Field(None, description="Initial visualization settings (questions only)"),
+        folder: Optional[str] = Field(None, description="Folder path to create the file in"),
+        **kwargs
+    ):
+        super().__init__(**kwargs)  # type: ignore
+        self.file_type = file_type
+        self.name = name
+        self.query = query
+        self.database_name = database_name
+        self.viz_settings = viz_settings
+        self.folder = folder
+
+    async def reduce(self, child_batches):
+        pass
+
+    async def run(self) -> str:
         raise UserInputException(self._unique_id)
 
 

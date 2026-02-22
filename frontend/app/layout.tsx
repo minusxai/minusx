@@ -8,6 +8,7 @@ import { getConfigs, getConfigsByCompanyId, getCompanyStyles, getCompanyStylesBy
 import { CompanyConfig, DEFAULT_CONFIG, DEFAULT_STYLES } from '@/lib/branding/whitelabel';
 import { GlobalErrorHandler } from '@/components/ErrorHandler';
 import { Toaster } from '@/components/ui/toaster';
+import FileModal from '@/components/modals/FileModal';
 import { CompanyDB } from '@/lib/database/company-db';
 import { headers } from 'next/headers';
 import { extractSubdomain, isSubdomainRoutingEnabled } from '@/lib/utils/subdomain';
@@ -215,6 +216,7 @@ export default async function RootLayout({
       <body suppressHydrationWarning>
         <Providers initialData={initialData}>
           <GlobalErrorHandler />
+          <FileModal />
           <LayoutWrapper>
             {children}
           </LayoutWrapper>

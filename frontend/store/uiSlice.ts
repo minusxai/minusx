@@ -18,6 +18,7 @@ interface UIState {
   sidebarDrafts: Record<number, string>;  // fileId -> draft input text
   proposedQueries: Record<number, string>;  // fileId -> proposed SQL query (for diff view)
   selectedToolset: 'classic' | 'native';
+  modalFile: { fileId: number; state: 'ACTIVE' | 'COLLAPSED' } | null;
 }
 
 // Load persisted toolset from localStorage (with SSR safety)
@@ -47,6 +48,7 @@ const initialState: UIState = {
   sidebarDrafts: {},
   proposedQueries: {},
   selectedToolset: getPersistedToolset(),
+  modalFile: null,
 };
 
 const uiSlice = createSlice({
@@ -140,6 +142,18 @@ const uiSlice = createSlice({
         }
       }
     },
+    openFileModal: (state, action: PayloadAction<number>) => {
+      state.modalFile = { fileId: action.payload, state: 'ACTIVE' };
+    },
+    closeFileModal: (state) => {
+      state.modalFile = null;
+    },
+    collapseFileModal: (state) => {
+      if (state.modalFile) state.modalFile.state = 'COLLAPSED';
+    },
+    expandFileModal: (state) => {
+      if (state.modalFile) state.modalFile.state = 'ACTIVE';
+    },
   },
 });
 
@@ -167,6 +181,10 @@ export const {
   setProposedQuery,
   clearProposedQuery,
   setSelectedToolset,
+  openFileModal,
+  closeFileModal,
+  collapseFileModal,
+  expandFileModal,
 } = uiSlice.actions;
 
 export default uiSlice.reducer;
@@ -199,3 +217,4 @@ export const selectSidebarDraft = (state: RootState, fileId: number | undefined)
 export const selectProposedQuery = (state: RootState, fileId: number | undefined) =>
   fileId ? state.ui.proposedQueries[fileId] : undefined;
 export const selectSelectedToolset = (state: RootState) => state.ui.selectedToolset;
+export const selectModalFile = (state: RootState) => state.ui.modalFile;
