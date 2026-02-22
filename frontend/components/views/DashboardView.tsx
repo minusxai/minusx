@@ -72,8 +72,8 @@ const generateDefaultLayout = (assets: AssetReference[]): Layout[] => {
     y: Math.floor(i / 2) * 6,
     w: 6,
     h: 6,
-    minW: 2,
-    minH: 2,
+    minW: 3,
+    minH: 3,
   }));
 };
 
@@ -125,8 +125,8 @@ export default function DashboardView({
         y: item.y,
         w: item.w,
         h: item.h,
-        minW: 2,
-        minH: 2,
+        minW: 3,
+        minH: 3,
       }));
     } else {
       baseLayout = generateDefaultLayout(document.assets);
