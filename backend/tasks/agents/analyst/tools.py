@@ -1,74 +1,15 @@
 """Analyst Tools - executed by Next.js backend."""
 from typing import Optional, List, Any, Dict
 from tasks import Tool, UserInputException, register_agent
-from enum import Enum
-from pydantic import Field, BaseModel
+from pydantic import Field
 import json
 
-
-class VisualizationType(str, Enum):
-    TABLE = "table"
-    BAR = "bar"
-    LINE = "line"
-    SCATTER = "scatter"
-    AREA = "area"
-    FUNNEL = "funnel"
-    PIE = "pie"
-    PIVOT = "pivot"
-    TREND = "trend"
-
-class AggregationFunction(str, Enum):
-    SUM = "SUM"
-    AVG = "AVG"
-    COUNT = "COUNT"
-    MIN = "MIN"
-    MAX = "MAX"
-
-class FormulaOperator(str, Enum):
-    ADD = "+"
-    SUBTRACT = "-"
-    MULTIPLY = "*"
-    DIVIDE = "/"
-
-class PivotValueConfig(BaseModel):
-    """A measure column with its aggregation function."""
-    column: str = Field(..., description="column name for the measure")
-    aggFunction: AggregationFunction = Field(AggregationFunction.SUM, description="aggregation function to apply (SUM, AVG, COUNT, MIN, MAX)")
-
-class PivotFormula(BaseModel):
-    """A derived row/column computed from two top-level dimension values."""
-    name: str = Field(..., description="display label, e.g. 'YoY Change'")
-    operandA: str = Field(..., description="top-level dimension value, e.g. '2024'")
-    operandB: str = Field(..., description="top-level dimension value, e.g. '2023'")
-    operator: FormulaOperator = Field(..., description="arithmetic operator: +, -, *, /")
-
-class PivotConfig(BaseModel):
-    """Configuration for pivot table visualization."""
-    rows: List[str] = Field(..., description="dimension columns for row headers")
-    columns: List[str] = Field(..., description="dimension columns for column headers")
-    values: List[PivotValueConfig] = Field(..., description="measures with per-value aggregation functions")
-    rowFormulas: Optional[List[PivotFormula]] = Field(None, description="formulas combining top-level row dimension values")
-    columnFormulas: Optional[List[PivotFormula]] = Field(None, description="formulas combining top-level column dimension values")
-
-class ColumnFormatConfig(BaseModel):
-    """Per-column display formatting. Only set when the user explicitly asks to change formatting."""
-    alias: Optional[str] = Field(None, description="display name override for the column header")
-    decimalPoints: Optional[int] = Field(None, description="number of decimal places (0-4) for numeric columns")
-    dateFormat: Optional[str] = Field(None, description="date display format: 'iso', 'us', 'eu', 'short', 'month-year', or 'year'")
-
-class VisualizationSettings(BaseModel):
-    """visualization settings"""
-    type: VisualizationType = Field(..., description="type of the visualization (default is table)")
-    xCols: Optional[List[str]] = Field([], description="list of column names in the x axis (for non-pivot chart types)")
-    yCols: Optional[List[str]] = Field([], description="list of column names in the y axis (for non-pivot chart types)")
-    pivotConfig: Optional[PivotConfig] = Field(None, description="pivot table configuration (only used when type is 'pivot')")
-    columnFormats: Optional[Dict[str, ColumnFormatConfig]] = Field(None, description="per-column display formatting keyed by column name. Only set when user asks to rename columns, change decimal places, or change date format. Good defaults are applied automatically.")
-    model_config = {
-        "populate_by_name": True,
-        "title": "VisualizationSettings"
-    }
-
-vizSettingsJsonStr = json.dumps(VisualizationSettings.model_json_schema())
+from tasks.agents.analyst.file_schema import (
+    VisualizationType, AggregationFunction, FormulaOperator,
+    PivotValueConfig, PivotFormula, PivotConfig,
+    ColumnFormatConfig, VisualizationSettings,
+    vizSettingsJsonStr, ATLAS_FILE_SCHEMA_JSON,
+)
 
 @register_agent
 class ExecuteSQLQuery(Tool):
@@ -783,7 +724,7 @@ class EditFile(Tool):
         self,
         fileId: int = Field(..., description="File ID to edit"),
         oldMatch: str = Field(..., description="String to search for in full file JSON (including name, path, content)"),
-        newMatch: str = Field(..., description="String to replace with"),
+        newMatch: str = Field(..., description=f"String to replace with. File JSON schema: {ATLAS_FILE_SCHEMA_JSON}"),
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
