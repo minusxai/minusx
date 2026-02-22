@@ -12,7 +12,7 @@ import { setRuns, setSelectedRun, selectRuns, selectSelectedRunId } from '@/stor
 import { selectEffectiveUser } from '@/store/authSlice';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { useFile } from '@/lib/hooks/file-state-hooks';
-import { editFile, publishFile, clearFileChanges, readFilesByCriteria, getAppState } from '@/lib/api/file-state';
+import { editFile, publishFile, clearFileChanges, readFilesByCriteria, readFiles } from '@/lib/api/file-state';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import { FilesAPI } from '@/lib/data/files';
 import ReportView from '@/components/views/ReportView';
@@ -182,9 +182,9 @@ export default function ReportContainerV2({
         (mergedContent.references || []).map(async ref => {
           const refFile = allFiles[ref.reference.id];
           // Get the full app state for this reference (includes query, viz, results, etc.)
-          const appState = await getAppState(`/f/${ref.reference.id}`);
-          // Get connection_id from app state
-          const connectionId = (appState as any)?.database_name;
+          const [augmented] = await readFiles([ref.reference.id]);
+          const appState = augmented ? { type: 'file' as const, state: augmented } : null;
+          const connectionId = (augmented?.fileState.content as { database_name?: string })?.database_name;
 
           return {
             ...ref,
