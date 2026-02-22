@@ -152,6 +152,24 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
     );
   };
 
+  // Fallback: if no <thinking>/<answer> tags were found, render raw content directly
+  if (!parsed && content) {
+    return (
+            <>
+            <GridItem
+                colSpan={12}
+                colStart={1}
+                my={2}
+            >
+                <Box px={3} py={1}>
+                    <Markdown variant="compact">{content}</Markdown>
+                </Box>
+            </GridItem>
+            {citations.length > 0 && renderCitations(false)}
+            </>
+    );
+  }
+
   return (
             <>
             {showThinking && parsed?.thinking.map((block, idx) => (
