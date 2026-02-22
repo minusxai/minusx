@@ -1,11 +1,8 @@
 /**
  * Phase 1 E2E Test - Unified File System API
  *
- * Tests the complete flow of ReadFiles, EditFileLineEncoded, PublishFile, and ExecuteQuery
+ * Tests the complete flow of ReadFiles, EditFileStr, PublishFile, and ExecuteQuery
  * with real API calls (no mocking) for true integration testing.
- *
- * Uses EditFileLineEncoded for range-based line editing (useful for AI agents).
- * For simpler content-based editing, see file-state.test.ts.
  */
 
 import { configureStore } from '@reduxjs/toolkit';
@@ -15,7 +12,7 @@ import authReducer from '../authSlice';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase, createMockFetch } from './test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
 import type { QuestionContent, DocumentContent, UserRole } from '@/lib/types';
-import { readFiles, editFileLineEncoded, publishFile, readFilesStr, editFileStr } from '@/lib/api/file-state';
+import { readFiles, publishFile, readFilesStr, editFileStr } from '@/lib/api/file-state';
 import { executeQuery } from '@/lib/api/execute-query.server';
 import type { RootState } from '@/store/store';
 import type { Mode } from '@/lib/mode/mode-types';
@@ -359,51 +356,23 @@ describe('Phase 1: Unified File System API E2E', () => {
     console.log('✓ ExecuteQuery completed (returned 2 rows from products query)');
 
     // ========================================================================
-    // Step 3: EditFile - Modify the question's query (AUTO-EXECUTES)
+    // Step 3: EditFile - Modify the question's query
     // ========================================================================
-    console.log('\n[TEST] Step 3: EditFile - Modify question query (auto-executes)');
+    console.log('\n[TEST] Step 3: EditFile - Modify question query');
 
-    // Get current question content as JSON string
-    const currentContent = JSON.stringify({
-      description: 'Total revenue by month',
-      query: 'SELECT month, SUM(revenue) as total FROM sales GROUP BY month',
-      database_name: 'test_db',
-      parameters: [],
-      vizSettings: {
-        type: 'table',
-        xCols: [],
-        yCols: []
-      }
-    }, null, 2);
+    const editResult = await editFileStr({
+      fileId: questionId,
+      oldMatch: '"query":"SELECT month, SUM(revenue) as total FROM sales GROUP BY month"',
+      newMatch: '"query":"SELECT month, SUM(revenue) as total FROM sales ORDER BY month"'
+    });
 
-    // Count lines
-    const lines = currentContent.split('\n');
-    console.log(`Current content has ${lines.length} lines`);
-
-    // Find the line with "query" (should be line 3)
-    const queryLineIndex = lines.findIndex(line => line.includes('"query"'));
-    expect(queryLineIndex).toBeGreaterThan(-1);
-
-    // Edit just the query line (change GROUP BY to ORDER BY)
-    const newQueryLine = '  "query": "SELECT month, SUM(revenue) as total FROM sales ORDER BY month",';
-
-    const editResult = await editFileLineEncoded(
-      {
-        fileId: questionId,
-        from: queryLineIndex + 1,  // 1-indexed
-        to: queryLineIndex + 1,
-        newContent: newQueryLine
-      });
-
-    // Verify EditFileReplace output
     expect(editResult.success).toBe(true);
     if (editResult.success && editResult.diff) {
       expect(editResult.diff).toContain('-');  // Should show removed line
       expect(editResult.diff).toContain('+');  // Should show added line
       expect(editResult.diff).toContain('ORDER BY');
-      console.log('✓ EditFileReplace modified query (GROUP BY → ORDER BY)');
+      console.log('✓ EditFile modified query (GROUP BY → ORDER BY)');
       console.log(`Diff:\n${editResult.diff.split('\n').slice(0, 5).join('\n')}...`);
-      console.log('✓ EditFileReplace auto-executed query (results not returned but stored in Redux)');
     }
 
     // Verify changes are in Redux but not saved
@@ -448,37 +417,10 @@ describe('Phase 1: Unified File System API E2E', () => {
     console.log('\n[TEST] ========== E2E Test Summary ==========');
     console.log('✓ ReadFiles: Loaded dashboard with 1 question reference');
     console.log('✓ ExecuteQuery: Standalone exploration query, got 2 rows (products data)');
-    console.log('✓ EditFile: Modified query (GROUP BY → ORDER BY) + auto-executed, got 3 rows (sales data)');
+    console.log('✓ EditFile: Modified query (GROUP BY → ORDER BY)');
     console.log('✓ PublishFile: Saved changes to database');
     console.log('✓ Verification: Redux and database state consistent');
     console.log('==========================================\n');
-  });
-
-  it('should handle EditFile validation errors', async () => {
-    console.log('\n[TEST] EditFile validation - Invalid JSON');
-
-    // Load question into Redux
-    const questionFile = await DocumentDB.getById(questionId, 1);
-    (store.dispatch as any)({
-      type: 'files/setFiles',
-      payload: { files: [questionFile] }
-    });
-
-    // Try to edit with invalid JSON (missing closing quote)
-    const result = await editFileLineEncoded(
-      {
-        fileId: questionId,
-        from: 2,
-        to: 2,
-        newContent: '  "description": "Invalid JSON'  // Missing closing quote
-      });
-
-    // Verify error
-    expect(result.success).toBe(false);
-    if (!result.success) {
-      expect(result.error).toContain('Invalid JSON');
-      console.log('✓ EditFile correctly rejected invalid JSON');
-    }
   });
 
   it('should handle PublishFile with no changes', async () => {
@@ -498,428 +440,6 @@ describe('Phase 1: Unified File System API E2E', () => {
     expect(result.id).toBe(questionId);
     expect(result.name).toBeDefined();
     console.log('✓ PublishFile correctly handled no-op (no dirty files)');
-  });
-
-  // ============================================================================
-  // Comprehensive Validation Tests
-  // ============================================================================
-
-  describe('Question Validation', () => {
-    it('should validate question vizSettings structure', async () => {
-      console.log('\n[TEST] Question vizSettings validation');
-
-      // Test valid viz type with bar chart
-      console.log('[1] Testing valid viz type (bar chart)...');
-
-      // Load question into Redux (fresh state)
-      const questionFile = await DocumentDB.getById(questionId, 1);
-      (store.dispatch as any)({
-        type: 'files/setFiles',
-        payload: { files: [questionFile] }
-      });
-
-      const validVizContent = JSON.stringify({
-        description: 'Total revenue by month',
-        query: 'SELECT month, SUM(revenue) as total FROM sales GROUP BY month',
-        database_name: 'test_db',
-        parameters: [],
-        vizSettings: {
-          type: 'bar',  // Valid type
-          xCols: ['month'],
-          yCols: ['total']
-        }
-      }, null, 2);
-
-      // Get current file line count
-      const currentContent = JSON.stringify(questionFile?.content, null, 2);
-      const currentLines = currentContent.split('\n').length;
-
-      const validVizResult = await editFileLineEncoded(
-        {
-          fileId: questionId,
-          from: 1,
-          to: currentLines,
-          newContent: validVizContent
-        });
-
-      if (!validVizResult.success) {
-        console.log('ERROR:', validVizResult.error);
-      }
-      expect(validVizResult.success).toBe(true);
-
-      // Verify changes stored in Redux with correct content
-      const vizState = (store.getState() as any).files.files[questionId];
-      expect(vizState.persistableChanges.vizSettings).toBeDefined();
-      expect(vizState.persistableChanges.vizSettings.type).toBe('bar');
-      expect(vizState.persistableChanges.vizSettings.xCols).toEqual(['month']);
-      expect(vizState.persistableChanges.vizSettings.yCols).toEqual(['total']);
-      console.log('✓ EditFile accepted valid vizSettings structure');
-      console.log('✓ Correct vizSettings changes stored in Redux');
-    });
-
-    it('should validate question required fields', async () => {
-      console.log('\n[TEST] Question required fields validation');
-
-      // Load question into Redux
-      const questionFile = await DocumentDB.getById(questionId, 1);
-      (store.dispatch as any)({
-        type: 'files/setFiles',
-        payload: { files: [questionFile] }
-      });
-
-      // Step 1: Remove required field (database_name)
-      console.log('[1] Testing missing database_name...');
-
-      // Get current line count
-      const currentFile = await DocumentDB.getById(questionId, 1);
-      const currentContent = JSON.stringify(currentFile?.content, null, 2);
-      const currentLines = currentContent.split('\n').length;
-
-      const missingFieldContent = JSON.stringify({
-        description: "Total revenue by month",
-        query: "SELECT month, SUM(revenue) as total FROM sales GROUP BY month",
-        parameters: []
-      }, null, 2);
-
-      const missingFieldResult = await editFileLineEncoded(
-        {
-          fileId: questionId,
-          from: 1,
-          to: currentLines,
-          newContent: missingFieldContent
-        });
-
-      expect(missingFieldResult.success).toBe(false);
-      if (!missingFieldResult.success) {
-        expect(missingFieldResult.error).toContain('database_name');
-        console.log('✓ EditFile rejected missing database_name field');
-      }
-
-      // Step 2: Restore required field
-      console.log('[2] Testing with database_name restored...');
-
-      const validFieldContent = JSON.stringify({
-        description: "Total revenue by month",
-        query: "SELECT month, SUM(revenue) as total FROM sales GROUP BY month",
-        database_name: "test_db",
-        parameters: [],
-        vizSettings: {
-          type: "table",
-          xCols: [],
-          yCols: []
-        }
-      }, null, 2);
-
-      const validFieldResult = await editFileLineEncoded({
-        fileId: questionId,
-        from: 1,
-        to: currentLines,
-        newContent: validFieldContent
-      });
-
-      expect(validFieldResult.success).toBe(true);
-
-      // Verify correct changes stored in Redux
-      const fieldState = (store.getState() as any).files.files[questionId];
-      expect(fieldState.persistableChanges.database_name).toBe('test_db');
-      expect(fieldState.persistableChanges.query).toContain('SELECT month');
-      console.log('✓ EditFile accepted question with all required fields');
-      console.log('✓ Correct field changes stored in Redux');
-    });
-
-    it('should validate question parameters array', async () => {
-      console.log('\n[TEST] Question parameters array validation');
-
-      // Load question into Redux
-      const questionFile = await DocumentDB.getById(questionId, 1);
-      (store.dispatch as any)({
-        type: 'files/setFiles',
-        payload: { files: [questionFile] }
-      });
-
-      // Step 1: Valid parameters array with parameter
-      console.log('[1] Testing valid parameters array with parameter...');
-      const validParamsContent = JSON.stringify({
-        description: 'Total revenue by month',
-        query: 'SELECT month, SUM(revenue) as total FROM sales GROUP BY month LIMIT :limit',
-        database_name: 'test_db',
-        parameters: [{ name: 'limit', type: 'number', value: 10 }],
-        vizSettings: {
-          type: 'table',
-          xCols: [],
-          yCols: []
-        }
-      }, null, 2);
-
-      // Get current file line count
-      const currentFile2 = await DocumentDB.getById(questionId, 1);
-      const currentContent2 = JSON.stringify(currentFile2?.content, null, 2);
-      const currentLines2 = currentContent2.split('\n').length;
-
-      const validParamsResult = await editFileLineEncoded({
-        fileId: questionId,
-        from: 1,
-        to: currentLines2,
-        newContent: validParamsContent
-      });
-
-      expect(validParamsResult.success).toBe(true);
-
-      // Verify correct changes stored in Redux
-      const paramsState = (store.getState() as any).files.files[questionId];
-      expect(paramsState.persistableChanges.parameters).toBeDefined();
-      expect(paramsState.persistableChanges.parameters).toHaveLength(1);
-      expect(paramsState.persistableChanges.parameters[0].name).toBe('limit');
-      expect(paramsState.persistableChanges.parameters[0].value).toBe(10);
-      expect(paramsState.persistableChanges.query).toContain(':limit');
-      console.log('✓ EditFile accepted valid parameters array');
-      console.log('✓ Correct parameter changes stored in Redux');
-    });
-
-    it('should handle malformed JSON in question edits', async () => {
-      console.log('\n[TEST] Malformed JSON in question edits');
-
-      // Load question into Redux
-      const questionFile = await DocumentDB.getById(questionId, 1);
-      (store.dispatch as any)({
-        type: 'files/setFiles',
-        payload: { files: [questionFile] }
-      });
-
-      // Step 1: Missing comma
-      console.log('[1] Testing missing comma...');
-      const missingCommaResult = await editFileLineEncoded(
-        {
-          fileId: questionId,
-          from: 2,
-          to: 3,
-          newContent: `  "description": "Revenue by month"
-  "query": "SELECT * FROM sales"`
-        });
-
-      expect(missingCommaResult.success).toBe(false);
-      if (!missingCommaResult.success) {
-        expect(missingCommaResult.error).toContain('Invalid JSON');
-        console.log('✓ EditFile rejected JSON with missing comma');
-      }
-
-      // Step 2: Trailing comma
-      console.log('[2] Testing trailing comma...');
-      const trailingCommaResult = await editFileLineEncoded({
-        fileId: questionId,
-        from: 10,
-        to: 11,
-        newContent: `    "yCols": []
-  },
-}`
-      });
-
-      expect(trailingCommaResult.success).toBe(false);
-      if (!trailingCommaResult.success) {
-        expect(trailingCommaResult.error).toContain('Invalid JSON');
-        console.log('✓ EditFile rejected JSON with trailing comma');
-      }
-    });
-  });
-
-  describe('Dashboard Validation', () => {
-    it('should validate dashboard layout structure', async () => {
-      console.log('\n[TEST] Dashboard layout validation');
-
-      // Load dashboard into Redux
-      const dashboardFile = await DocumentDB.getById(dashboardId, 1);
-      (store.dispatch as any)({
-        type: 'files/setFiles',
-        payload: { files: [dashboardFile] }
-      });
-
-      // Test valid layout with grid properties
-      console.log('[1] Testing valid layout with grid properties...');
-      const validLayoutContent = JSON.stringify({
-        description: 'Monthly revenue overview',
-        assets: [
-          {
-            type: 'question',
-            id: questionId
-          }
-        ],
-        layout: {
-          lg: [
-            { i: `q-${questionId}`, x: 0, y: 0, w: 6, h: 4 }
-          ]
-        }
-      }, null, 2);
-
-      // Get current file line count
-      const currentDashFile = await DocumentDB.getById(dashboardId, 1);
-      const currentDashContent = JSON.stringify(currentDashFile?.content, null, 2);
-      const currentDashLines = currentDashContent.split('\n').length;
-
-      const validLayoutResult = await editFileLineEncoded({
-        fileId: dashboardId,
-        from: 1,
-        to: currentDashLines,
-        newContent: validLayoutContent
-      });
-
-      expect(validLayoutResult.success).toBe(true);
-
-      // Verify correct changes stored in Redux
-      const layoutState = (store.getState() as any).files.files[dashboardId];
-      expect(layoutState.persistableChanges.layout).toBeDefined();
-      expect(layoutState.persistableChanges.layout.lg).toBeDefined();
-      expect(layoutState.persistableChanges.layout.lg[0].w).toBe(6);
-      expect(layoutState.persistableChanges.layout.lg[0].h).toBe(4);
-      console.log('✓ EditFile accepted valid dashboard layout');
-      console.log('✓ Correct layout changes stored in Redux');
-    });
-
-    it('should validate dashboard assets array', async () => {
-      console.log('\n[TEST] Dashboard assets array validation');
-
-      // Load dashboard into Redux
-      const dashboardFile = await DocumentDB.getById(dashboardId, 1);
-      (store.dispatch as any)({
-        type: 'files/setFiles',
-        payload: { files: [dashboardFile] }
-      });
-
-      // Test valid asset structure with multiple questions
-      console.log('[1] Testing valid assets with multiple questions...');
-      const validAssetContent = JSON.stringify({
-        description: 'Monthly revenue overview',
-        assets: [
-          {
-            type: 'question',
-            id: questionId
-          }
-        ],
-        layout: {}
-      }, null, 2);
-
-      // Get current file line count
-      const currentDashFile2 = await DocumentDB.getById(dashboardId, 1);
-      const currentDashContent2 = JSON.stringify(currentDashFile2?.content, null, 2);
-      const currentDashLines2 = currentDashContent2.split('\n').length;
-
-      const validAssetResult = await editFileLineEncoded({
-        fileId: dashboardId,
-        from: 1,
-        to: currentDashLines2,
-        newContent: validAssetContent
-      });
-
-      expect(validAssetResult.success).toBe(true);
-
-      // Verify correct changes stored in Redux
-      const assetState = (store.getState() as any).files.files[dashboardId];
-      expect(assetState.persistableChanges.assets).toBeDefined();
-      expect(assetState.persistableChanges.assets).toHaveLength(1);
-      expect(assetState.persistableChanges.assets[0].type).toBe('question');
-      expect(assetState.persistableChanges.assets[0].id).toBe(questionId);
-      console.log('✓ EditFile accepted valid dashboard assets');
-      console.log('✓ Correct asset changes stored in Redux');
-    });
-
-    it('should validate dashboard required fields', async () => {
-      console.log('\n[TEST] Dashboard required fields validation');
-
-      // Load dashboard into Redux
-      const dashboardFile = await DocumentDB.getById(dashboardId, 1);
-      (store.dispatch as any)({
-        type: 'files/setFiles',
-        payload: { files: [dashboardFile] }
-      });
-
-      // Test dashboard without description (optional field)
-      console.log('[1] Testing dashboard without description...');
-      const noDescContent = JSON.stringify({
-        assets: [
-          {
-            type: 'question',
-            id: questionId
-          }
-        ],
-        layout: {}
-      }, null, 2);
-
-      // Get current file line count
-      const currentDashFile3 = await DocumentDB.getById(dashboardId, 1);
-      const currentDashContent3 = JSON.stringify(currentDashFile3?.content, null, 2);
-      const currentDashLines3 = currentDashContent3.split('\n').length;
-
-      const noDescResult = await editFileLineEncoded({
-        fileId: dashboardId,
-        from: 1,
-        to: currentDashLines3,
-        newContent: noDescContent
-      });
-
-      expect(noDescResult.success).toBe(true);
-
-      // Verify correct changes stored in Redux (no description field)
-      const noDescState = (store.getState() as any).files.files[dashboardId];
-      expect(noDescState.persistableChanges.description).toBeUndefined();
-      expect(noDescState.persistableChanges.assets).toBeDefined();
-      expect(noDescState.persistableChanges.layout).toBeDefined();
-      console.log('✓ EditFile accepted dashboard without optional description');
-      console.log('✓ Correct changes stored in Redux (no description)');
-    });
-
-    it('should handle complex dashboard layout edits', async () => {
-      console.log('\n[TEST] Complex dashboard layout edits');
-
-      // Load dashboard into Redux
-      const dashboardFile = await DocumentDB.getById(dashboardId, 1);
-      (store.dispatch as any)({
-        type: 'files/setFiles',
-        payload: { files: [dashboardFile] }
-      });
-
-      // Test multi-breakpoint layout
-      console.log('[1] Testing multi-breakpoint layout...');
-      const multiLayoutContent = JSON.stringify({
-        description: 'Monthly revenue overview',
-        assets: [
-          {
-            type: 'question',
-            id: questionId
-          }
-        ],
-        layout: {
-          lg: [{ i: `q-${questionId}`, x: 0, y: 0, w: 12, h: 6 }],
-          md: [{ i: `q-${questionId}`, x: 0, y: 0, w: 8, h: 6 }],
-          sm: [{ i: `q-${questionId}`, x: 0, y: 0, w: 6, h: 6 }]
-        }
-      }, null, 2);
-
-      // Get current file line count
-      const currentDashFile4 = await DocumentDB.getById(dashboardId, 1);
-      const currentDashContent4 = JSON.stringify(currentDashFile4?.content, null, 2);
-      const currentDashLines4 = currentDashContent4.split('\n').length;
-
-      const multiLayoutResult = await editFileLineEncoded(
-        {
-          fileId: dashboardId,
-          from: 1,
-          to: currentDashLines4,
-          newContent: multiLayoutContent
-        });
-
-      expect(multiLayoutResult.success).toBe(true);
-
-      // Verify correct changes stored in Redux (multiple breakpoints)
-      const multiLayoutState = (store.getState() as any).files.files[dashboardId];
-      expect(multiLayoutState.persistableChanges.layout).toBeDefined();
-      expect(multiLayoutState.persistableChanges.layout.lg).toBeDefined();
-      expect(multiLayoutState.persistableChanges.layout.md).toBeDefined();
-      expect(multiLayoutState.persistableChanges.layout.sm).toBeDefined();
-      expect(multiLayoutState.persistableChanges.layout.lg[0].w).toBe(12);
-      expect(multiLayoutState.persistableChanges.layout.md[0].w).toBe(8);
-      expect(multiLayoutState.persistableChanges.layout.sm[0].w).toBe(6);
-      console.log('✓ EditFile accepted multi-breakpoint layout');
-      console.log('✓ Correct multi-breakpoint changes stored in Redux');
-    });
   });
 
   // ============================================================================
@@ -946,22 +466,10 @@ describe('Phase 1: Unified File System API E2E', () => {
 
       // Step 2: Edit the file
       console.log('[2] Editing file...');
-      const editContent = JSON.stringify({
-        description: 'Updated description',
-        query: 'SELECT * FROM sales WHERE amount > 100',
-        database_name: 'test_db',
-        parameters: [],
-        vizSettings: { type: 'table', xCols: [], yCols: [] }
-      }, null, 2);
-
-      const currentContent = JSON.stringify(questionFile?.content, null, 2);
-      const currentLines = currentContent.split('\n').length;
-
-      await editFileLineEncoded({
+      await editFileStr({
         fileId: questionId,
-        from: 1,
-        to: currentLines,
-        newContent: editContent
+        oldMatch: '"description":"Total revenue by month"',
+        newMatch: '"description":"Updated description"'
       });
 
       // Step 3: Read file after edit (should show persistableChanges)
@@ -984,22 +492,10 @@ describe('Phase 1: Unified File System API E2E', () => {
       });
 
       // Edit
-      const editContent = JSON.stringify({
-        description: 'Final description',
-        query: 'SELECT COUNT(*) FROM sales',
-        database_name: 'test_db',
-        parameters: [],
-        vizSettings: { type: 'table', xCols: [], yCols: [] }
-      }, null, 2);
-
-      const currentContent = JSON.stringify(questionFile?.content, null, 2);
-      const currentLines = currentContent.split('\n').length;
-
-      await editFileLineEncoded({
+      await editFileStr({
         fileId: questionId,
-        from: 1,
-        to: currentLines,
-        newContent: editContent
+        oldMatch: '"description":"Total revenue by month"',
+        newMatch: '"description":"Final description"'
       });
 
       await publishFile({ fileId: questionId });
@@ -1033,15 +529,11 @@ describe('Phase 1: Unified File System API E2E', () => {
         parameters: [{ name: 'active', type: 'text', value: 'true' }],
         vizSettings: { type: 'line', xCols: ['id'], yCols: ['name'] }
       };
-      const editStr = JSON.stringify(editedContent, null, 2);
-      const currentContent = JSON.stringify(questionFile?.content, null, 2);
-      const currentLines = currentContent.split('\n').length;
 
-      await editFileLineEncoded({
+      await editFileStr({
         fileId: questionId,
-        from: 1,
-        to: currentLines,
-        newContent: editStr
+        oldMatch: `"content":${JSON.stringify(questionFile?.content)}`,
+        newMatch: `"content":${JSON.stringify(editedContent)}`
       });
 
       // Verify edits in persistableChanges
@@ -1506,72 +998,6 @@ describe('Phase 1: Unified File System API E2E', () => {
         expect(questionState2.persistableChanges.description).toBe('Revenue Report');
         expect(questionState2.persistableChanges.query).toContain('WHERE month = :month');
         console.log('✓ Both edits accumulated in persistableChanges');
-      });
-    });
-
-    describe('String vs Line-Encoded Comparison', () => {
-      it('should produce equivalent results for same edit', async () => {
-        console.log('\n[TEST] String vs Line-Encoded - Equivalent edits');
-
-        // Setup: Load question twice (separate test scenarios)
-        const questionFile = await DocumentDB.getById(questionId, 1);
-
-        // Get current query to replace
-        const currentContent = JSON.stringify(questionFile?.content);
-        const queryMatch = currentContent.match(/"query":"[^"]+"/);
-        expect(queryMatch).toBeTruthy();
-        const originalQuery = queryMatch![0];
-
-        // Scenario 1: String-based edit
-        console.log('[1] Testing string-based edit...');
-        (store.dispatch as any)({
-          type: 'files/setFiles',
-          payload: { files: [questionFile] }
-        });
-
-        const strResult = await editFileStr({
-          fileId: questionId,
-          oldMatch: originalQuery,
-          newMatch: '"query":"SELECT month, total FROM comparison_test"'
-        });
-
-        expect(strResult.success).toBe(true);
-        const strState = (store.getState() as any).files.files[questionId];
-        const strQuery = strState.persistableChanges.query;
-        console.log('✓ String-based edit completed');
-
-        // Clear state for next test
-        (store.dispatch as any)({
-          type: 'files/clearEdits',
-          payload: questionId
-        });
-
-        // Scenario 2: Line-encoded edit
-        console.log('[2] Testing line-encoded edit...');
-        (store.dispatch as any)({
-          type: 'files/setFiles',
-          payload: { files: [questionFile] }
-        });
-
-        const prettyContent = JSON.stringify(questionFile?.content, null, 2);
-        const lines = prettyContent.split('\n');
-        const queryLineIdx = lines.findIndex(line => line.includes('"query"'));
-
-        const lineResult = await editFileLineEncoded({
-          fileId: questionId,
-          from: queryLineIdx + 1,
-          to: queryLineIdx + 1,
-          newContent: '  "query": "SELECT month, total FROM comparison_test",'
-        });
-
-        expect(lineResult.success).toBe(true);
-        const lineState = (store.getState() as any).files.files[questionId];
-        const lineQuery = lineState.persistableChanges.query;
-        console.log('✓ Line-encoded edit completed');
-
-        // Compare results
-        expect(strQuery).toBe(lineQuery);
-        console.log('✓ Both methods produced identical query results');
       });
     });
   });
