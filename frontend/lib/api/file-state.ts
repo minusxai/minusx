@@ -1014,69 +1014,8 @@ export async function publishFile(
     getStore().dispatch(setFile({ file: updatedFile }));
   }
 
-  // Clear changes for the main file
-  // Note: We don't delete the virtual file entry here to avoid potential 404 flash
-  // during redirect. The virtual file entry is harmless and will be garbage collected
-  // on next page load or can be cleaned up by a background task.
   getStore().dispatch(clearEdits(fileId));
   getStore().dispatch(clearMetadataEdits(fileId));
-
-  // Cascade save: Collect and batch-save dirty referenced files
-  const references = fileState.references || [];
-  const currentState = getStore().getState();
-  const dirtyRefs: Array<{
-    id: number;
-    name: string;
-    path: string;
-    content: BaseFileContent;
-    references: number[];
-  }> = [];
-
-  for (const refId of references) {
-    const refState = selectFile(currentState, refId);
-    if (!refState) continue;
-
-    // Check if reference is dirty
-    const hasPersistableChanges = refState.persistableChanges && Object.keys(refState.persistableChanges).length > 0;
-    const hasMetadataChanges = refState.metadataChanges && Object.keys(refState.metadataChanges).length > 0;
-
-    if (hasPersistableChanges || hasMetadataChanges) {
-      // Get content for saving: merge only persistable changes, NOT ephemeral
-      const contentToSave: BaseFileContent | null = refState.persistableChanges
-        ? { ...refState.content, ...refState.persistableChanges }
-        : refState.content;
-
-      if (!contentToSave) continue; // Skip if content is undefined
-
-      const editedName = refState.metadataChanges?.name ?? refState.name;
-      const editedPath = refState.metadataChanges?.path ?? refState.path;
-
-      dirtyRefs.push({
-        id: refId,
-        name: editedName,
-        path: editedPath,
-        content: contentToSave as BaseFileContent,  // Safe after null check
-        references: refState.references || []
-      });
-    }
-  }
-
-  // If there are dirty references, batch-save them atomically
-  if (dirtyRefs.length > 0) {
-    const result = await FilesAPI.batchSaveFiles(dirtyRefs);
-    const savedFileIds = result.savedFileIds;
-
-    // Reload saved references to update their base content IN PARALLEL
-    // This ensures their content doesn't revert after clearing changes
-    await Promise.all(
-      savedFileIds.map(async (savedId) => {
-        const reloadResult = await FilesAPI.loadFile(savedId);
-        getStore().dispatch(setFile({ file: reloadResult.data, references: reloadResult.metadata.references }));
-        getStore().dispatch(clearEdits(savedId));
-        getStore().dispatch(clearMetadataEdits(savedId));
-      })
-    );
-  }
 
     return { id: savedId, name: savedName };
   } finally {

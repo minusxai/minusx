@@ -169,28 +169,6 @@ class FilesDataLayerClient implements IFilesDataLayer {
     return json.data;
   }
 
-  async batchSaveFiles(files: Array<{
-    id: number;
-    name: string;
-    path: string;
-    content: BaseFileContent;
-    references: number[];
-  }>, user?: EffectiveUser): Promise<{ savedFileIds: number[] }> {
-    const res = await fetch(`${API_BASE}/api/files/batch-save`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ files })
-    });
-
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}));
-      const errorMessage = errorData.error?.message || errorData.message || errorData.error || `Failed to batch save files: ${res.statusText}`;
-      throw new Error(errorMessage);
-    }
-
-    const json = await res.json();
-    return json.data;
-  }
 }
 
 // Export singleton instance - PREFER using this

@@ -21,7 +21,6 @@ import type { RootState } from '@/store/store';
 import type { Mode } from '@/lib/mode/mode-types';
 import { POST as queryPostHandler } from '@/app/api/query/route';
 import { POST as batchPostHandler } from '@/app/api/files/batch/route';
-import { POST as batchSavePostHandler } from '@/app/api/files/batch-save/route';
 import { GET as fileGetHandler, PATCH as filePatchHandler } from '@/app/api/files/[id]/route';
 
 // Mock db-config to use test database
@@ -233,25 +232,6 @@ describe('Phase 1: Unified File System API E2E', () => {
         } as Response;
       }
 
-      // Route /api/files/batch-save calls to real handler
-      if (urlStr.includes('/api/files/batch-save')) {
-        const request = new NextRequest('http://localhost:3000/api/files/batch-save', {
-          method: init?.method || 'POST',
-          body: init?.body,
-          headers: {
-            ...init?.headers,
-            'x-company-id': '1',
-            'x-user-id': '1'
-          }
-        });
-        const response = await batchSavePostHandler(request);
-        const data = await response.json();
-        return {
-          ok: response.status === 200,
-          status: response.status,
-          json: async () => data
-        } as Response;
-      }
 
       throw new Error(`Unmocked fetch call to ${urlStr}`);
     });
@@ -1136,72 +1116,6 @@ describe('Phase 1: Unified File System API E2E', () => {
       console.log('✓ ReadFiles returns correct content with no persistableChanges');
     });
 
-    it('should handle cascade save with multiple dirty files', async () => {
-      console.log('\n[TEST] PublishFile cascade save with dashboard + question');
-
-      // Load dashboard and question
-      const dashboardFile = await DocumentDB.getById(dashboardId, 1);
-      const questionFile = await DocumentDB.getById(questionId, 1);
-      (store.dispatch as any)({
-        type: 'files/setFiles',
-        payload: { files: [dashboardFile, questionFile] }
-      });
-
-      // Step 1: Edit the question
-      console.log('[1] Editing question...');
-      const questionContent = JSON.stringify({
-        description: 'Cascade test question',
-        query: 'SELECT * FROM products',
-        database_name: 'test_db',
-        parameters: [],
-        vizSettings: { type: 'table', xCols: [], yCols: [] }
-      }, null, 2);
-
-      const currentQuestionContent = JSON.stringify(questionFile?.content, null, 2);
-      const currentQuestionLines = currentQuestionContent.split('\n').length;
-
-      await editFileLineEncoded({
-        fileId: questionId,
-        from: 1,
-        to: currentQuestionLines,
-        newContent: questionContent
-      });
-
-      // Step 2: Edit the dashboard
-      console.log('[2] Editing dashboard...');
-      const dashboardContent = JSON.stringify({
-        description: 'Cascade test dashboard',
-        assets: [{ type: 'question', id: questionId }],
-        layout: {}
-      }, null, 2);
-
-      const currentDashContent = JSON.stringify(dashboardFile?.content, null, 2);
-      const currentDashLines = currentDashContent.split('\n').length;
-
-      await editFileLineEncoded({
-        fileId: dashboardId,
-        from: 1,
-        to: currentDashLines,
-        newContent: dashboardContent
-      });
-
-      // Step 3: Publish dashboard (should cascade to question)
-      console.log('[3] Publishing dashboard (should cascade save question)...');
-
-      const publishResult = await publishFile({ fileId: dashboardId });
-
-      // New API returns { id, name } instead of { success, savedFileIds }
-      expect(publishResult.id).toBe(dashboardId);
-      expect(publishResult.name).toBeDefined();
-      console.log('✓ PublishFile cascade saved both dashboard and question');
-
-      // Verify both files are clean
-      const dashState = (store.getState() as any).files.files[dashboardId];
-      const qState = (store.getState() as any).files.files[questionId];
-      expect(Object.keys(dashState.persistableChanges).length).toBe(0);
-      expect(Object.keys(qState.persistableChanges).length).toBe(0);
-      console.log('✓ Both files have clean persistableChanges after publish');
-    });
   });
 
   describe('ExecuteQuery Integration', () => {
