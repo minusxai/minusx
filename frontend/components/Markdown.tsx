@@ -4,11 +4,12 @@ import { Box, Text } from '@chakra-ui/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Link from 'next/link';
-import { LuChartColumnIncreasing, LuFilePlus2, LuRocket } from 'react-icons/lu';
+import { LuChartColumnIncreasing, LuChevronDown, LuFilePlus2, LuRocket, LuShieldCheck, LuShieldAlert, LuShieldQuestion } from 'react-icons/lu';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import { FileType } from '@/lib/types';
 import { ReactNode, useMemo, useState } from 'react';
 import { useAppSelector } from '@/store/hooks';
+import { useConfigs } from '@/lib/hooks/useConfigs';
 import { ReportQueryResult, QuestionContent } from '@/lib/types';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
 
@@ -112,6 +113,129 @@ function LinkButton({ href, icon, children, variant, bg = 'accent.primary' }: {
         {icon}
         {children}
       </Link>
+    </Box>
+  );
+}
+
+// Trust level section for AI confidence indicators
+const trustConfig = {
+  high: {
+    label: 'High',
+    icon: LuShieldCheck,
+    bgColor: 'accent.teal/85',
+    borderColor: 'accent.teal/30',
+    moreDetailsTitle: 'What does this mean?',
+    moreDetails: 'Queries in the analysis are directly from saved questions or very slight modifications. All metrics are well-defined in the context with no assumptions made.',
+    readMoreLink: 'https://minusx.ai',
+  },
+  medium: {
+    label: 'Medium',
+    icon: LuShieldAlert,
+    bgColor: 'accent.warning/85',
+    borderColor: 'accent.warning/30',
+    moreDetailsTitle: 'How to improve?',
+    moreDetails: 'Analysis uses queries that deviate from saved questions, and some metrics were tweaked. You can improve confidence by saving verified queries, defining metrics in your context docs, and validating assumptions with your team.',
+    readMoreLink: 'https://minusx.ai',
+  },
+  low: {
+    label: 'Low',
+    icon: LuShieldQuestion,
+    bgColor: 'accent.danger/85',
+    borderColor: 'accent.danger/30',
+    moreDetailsTitle: 'How to improve?',
+    moreDetails: 'Analysis required building queries from scratch with significant assumptions about metric definitions. You can improve confidence by creating base queries for common analyses, and adding well-defined metrics and documentation to the Knowledge Base.',
+    readMoreLink: 'https://minusx.ai',
+  },
+} as const;
+
+function TrustBadge({ level, variant }: { level: 'high' | 'medium' | 'low'; variant: 'default' | 'compact' | 'presentation' }) {
+  const [expanded, setExpanded] = useState(false);
+  const { config: appConfig } = useConfigs({ skip: false });
+  const agentName = appConfig.branding.agentName;
+  const config = trustConfig[level];
+  const Icon = config.icon;
+  const hasMoreDetails = 'moreDetails' in config;
+
+  return (
+    <Box
+      w="100%"
+      mt="3"
+      borderRadius="md"
+      border="1px solid"
+      borderColor={config.borderColor}
+      overflow="hidden"
+      css={{ '& p, & span, & button': { fontSize: 'var(--chakra-font-sizes-xs) !important' } }}
+    >
+      <Box
+        display="flex"
+        alignItems="center"
+        justifyContent="space-between"
+        px="3"
+        py="2"
+      >
+        <Box display="flex" alignItems="center" gap="1.5">
+          <Text fontSize="2xs" color="fg.muted" textTransform="uppercase">
+            {agentName} trust score
+          </Text>
+          <Box
+            display="flex"
+            alignItems="center"
+            gap="1"
+            bg={config.bgColor}
+            px="2"
+            py="0.5"
+            borderRadius="lg"
+          >
+            <Box color="white" display="flex" alignItems="center">
+              <Icon />
+            </Box>
+            <Text fontSize="2xs" fontWeight="600" color="white">
+              {config.label}
+            </Text>
+          </Box>
+        </Box>
+        {hasMoreDetails && (
+          <Box
+            asChild
+            display="flex"
+            alignItems="center"
+            gap="1"
+            cursor="pointer"
+            color="fg.muted"
+            fontSize="2xs"
+            _hover={{ color: 'fg.default' }}
+            transition="all 0.15s ease"
+          >
+            <button onClick={() => setExpanded(!expanded)} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'inherit' }}>
+              <Text fontSize="2xs">{config.moreDetailsTitle}</Text>
+              <Box
+                transition="transform 0.2s ease"
+                transform={expanded ? 'rotate(180deg)' : 'rotate(0deg)'}
+                display="flex"
+                alignItems="center"
+              >
+                <LuChevronDown size={12} />
+              </Box>
+            </button>
+          </Box>
+        )}
+      </Box>
+      {hasMoreDetails && expanded && (
+        <Box
+          px="3"
+          pb="2.5"
+          pt="0"
+          borderTop="1px solid"
+          borderColor={config.borderColor}
+        >
+          <Text fontSize="2xs" color="fg.muted" lineHeight="1.6" mt="2">
+            {config.moreDetails}{' '}
+            {/* <a href={config.readMoreLink} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600 }}>
+              Read more
+            </a> */}
+          </Text>
+        </Box>
+      )}
     </Box>
   );
 }
@@ -421,45 +545,36 @@ export default function Markdown({
     </Box>
   );
 
-  // Parse content and split on query references
+  // Parse content and split on special patterns ({{query:id}}, {{trust:level}})
   function renderContent() {
-    // If no queries, render plain markdown
-    if (!queries || Object.keys(queries).length === 0) {
+    // Combined pattern for special references: {{query:id}} and [[trust:level]]
+    const specialPattern = /(?:\{\{(query):([^}]+)\}\}|\[\[(trust):([^\]]+)\]\])/g;
+    const parts: Array<{ type: 'text' | 'query' | 'trust'; content: string }> = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = specialPattern.exec(children)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push({ type: 'text', content: children.slice(lastIndex, match.index) });
+      }
+      // match[1]+match[2] for {{query:id}}, match[3]+match[4] for [[trust:level]]
+      const type = (match[1] || match[3]) as 'query' | 'trust';
+      const content = match[2] || match[4];
+      parts.push({ type, content });
+      lastIndex = match.index + match[0].length;
+    }
+
+    if (lastIndex < children.length) {
+      parts.push({ type: 'text', content: children.slice(lastIndex) });
+    }
+
+    // If no special patterns found, render plain markdown
+    if (parts.length === 1 && parts[0].type === 'text') {
       return (
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
           {children}
         </ReactMarkdown>
       );
-    }
-
-    // Split content on {{query:id}} pattern
-    const queryPattern = /\{\{query:([^}]+)\}\}/g;
-    const parts: Array<{ type: 'text' | 'query'; content: string }> = [];
-    let lastIndex = 0;
-    let match;
-
-    while ((match = queryPattern.exec(children)) !== null) {
-      // Add text before the match
-      if (match.index > lastIndex) {
-        parts.push({
-          type: 'text',
-          content: children.slice(lastIndex, match.index)
-        });
-      }
-      // Add the query reference
-      parts.push({
-        type: 'query',
-        content: match[1] // The query ID
-      });
-      lastIndex = match.index + match[0].length;
-    }
-
-    // Add remaining text
-    if (lastIndex < children.length) {
-      parts.push({
-        type: 'text',
-        content: children.slice(lastIndex)
-      });
     }
 
     // Render parts
@@ -476,13 +591,18 @@ export default function Markdown({
                 {part.content}
               </ReactMarkdown>
             );
+          } else if (part.type === 'trust') {
+            const level = part.content as 'high' | 'medium' | 'low';
+            if (level in trustConfig) {
+              return <TrustBadge key={index} level={level} variant={variant} />;
+            }
+            return null;
           } else {
             // Query reference
-            const queryData = queries[part.content];
+            const queryData = queries?.[part.content];
             if (queryData) {
               return <InlineChart key={index} queryData={queryData} />;
             } else {
-              // Query not found - show placeholder
               return (
                 <Box
                   key={index}
