@@ -83,7 +83,7 @@ templates:
       - **ONLY** include a parameter in the tool call if you have an actual value to pass
 
     - Dashboard parameters merge automatically: questions with same parameter name+type share values
-    - **CRITICAL (EditFile)**: If you use EditFile to change a question's SQL query, you MUST also update the `parameters` array in the same newMatch if :paramName tokens are added or removed. The UI auto-syncs on user edit, but EditFile bypasses that — include both fields together, e.g. `"query":"SELECT * FROM t WHERE id = :user_id","parameters":[{"name":"user_id","type":"number"}]`
+    - **CRITICAL (EditFile)**: If you use EditFile to change a question's SQL query, you MUST also update the `parameters` array in the same newMatch if :paramName tokens are added or removed. The UI auto-syncs on user edit, but EditFile bypasses that — include both fields together, e.g. `"query":"SELECT * FROM t WHERE id = :user_id","parameters":[{{"name":"user_id","type":"number"}}]`
 
   composed_questions_guidelines: |
     ### Composed Questions (Question References)
