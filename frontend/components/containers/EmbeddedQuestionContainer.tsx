@@ -64,7 +64,6 @@ export default function EmbeddedQuestionContainer({
     loading,
     error,
     isStale,
-    refetch
   } = useQueryResult(
     localQuestion.query || '',
     queryParams,

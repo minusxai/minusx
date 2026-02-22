@@ -15,7 +15,7 @@
  * - useQueryResult - Execute queries with TTL caching
  */
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { shallowEqual } from 'react-redux';
 import { useAppSelector } from '@/store/hooks';
 import {
@@ -25,7 +25,6 @@ import {
 } from '@/store/filesSlice';
 import {
   selectQueryResult,
-  selectIsQueryFresh,
   selectHasQueryData
 } from '@/store/queryResultsSlice';
 import {
@@ -382,7 +381,6 @@ export interface UseQueryResultReturn {
   loading: boolean;              // Currently fetching
   error: string | null;          // Error message if fetch failed
   isStale: boolean;              // Data exists but is stale (being refetched)
-  refetch: () => void;           // Manually trigger refetch
 }
 
 /**
@@ -394,22 +392,45 @@ export interface UseQueryResultOptions {
 }
 
 /**
- * useQueryResult Hook - Phase 3 (Simplified)
+ * useQueryResultSelector - Pure reactive selector hook for query results
+ *
+ * No side-effects, no fetching — pair with useQueryResult to ensure data is fetched.
+ * Re-renders only when data, loading, or error change (shallowEqual).
+ */
+function useQueryResultSelector(
+  query: string,
+  params: Record<string, any>,
+  database: string,
+): UseQueryResultReturn {
+  return useAppSelector(
+    state => {
+      const result = selectQueryResult(state, query, params, database);
+      const hasData = selectHasQueryData(state, query, params, database);
+      const loading = result?.loading || false;
+      return {
+        data: result?.data || null,
+        loading,
+        error: result?.error || null,
+        isStale: hasData && loading,
+      };
+    },
+    shallowEqual
+  );
+}
+
+/**
+ * useQueryResult Hook
  *
  * Executes queries with TTL-based caching and automatic refetching.
- * Uses getQueryResult from file-state.ts internally.
+ * Uses getQueryResult from file-state.ts internally for caching, deduplication,
+ * and error handling. Direct callers can bypass the cache via getQueryResult({ ... }, { forceLoad: true }).
  *
  * @param query - SQL query string
  * @param params - Query parameters
  * @param database - Database name (connection)
  * @param references - Question references (optional)
  * @param options - Hook options (ttl, skip)
- * @returns {data, loading, error, isStale, refetch}
- *
- * Behavior:
- * 1. No data → Execute query, set loading true
- * 2. Data exists & fresh → Return cached data
- * 3. Data exists & stale → Return stale data, refetch in background
+ * @returns {data, loading, error, isStale}
  *
  * Example:
  * ```tsx
@@ -417,17 +438,6 @@ export interface UseQueryResultOptions {
  *   'SELECT * FROM users WHERE id = :userId',
  *   { userId: 123 },
  *   'default_db'
- * );
- *
- * if (loading && !data) return <Spinner />;
- * if (error) return <Error message={error} />;
- * if (!data) return <NoData />;
- *
- * return (
- *   <>
- *     {isStale && <Badge>Refetching...</Badge>}
- *     <Table data={data} />
- *   </>
  * );
  * ```
  */
@@ -438,70 +448,14 @@ export function useQueryResult(
   references?: QuestionReference[],
   options: UseQueryResultOptions = {}
 ): UseQueryResultReturn {
-//   console.log('Executing query', options.skip, query)
   const { ttl = CACHE_TTL.QUERY, skip = false } = options;
 
-  // Select result from Redux
-  const result = useAppSelector(state => selectQueryResult(state, query, params, database));
-
-  // Check if result exists and is fresh
-  const hasData = useAppSelector(state => selectHasQueryData(state, query, params, database));
-  const isFresh = useAppSelector(state => selectIsQueryFresh(state, query, params, database, ttl));
-
-  // Determine if we need to fetch
-  // Don't auto-fetch if there's an error (user must explicitly refetch)
-  const hasError = result?.error != null;
-  const needsFetch = !skip && !hasError && (!hasData || !isFresh);
-
-  // Determine loading state
-  const loading = result?.loading || false;
-
-  // Determine isStale: has data but fetching new data
-  const isStale = hasData && loading;
-
-  // Effect: Execute query if needed
-  // IMPORTANT: Don't use useCallback for executeQuery - inline it to prevent re-execution on edits
   useEffect(() => {
-    console.log('[useQueryResult] Checking if query needs fetch:', { needsFetch, hasData, isFresh, loading, error: result?.error });
-    if (!needsFetch) return;
+    if (skip) return;
+    getQueryResult({ query, params, database, references }, { ttl }).catch(() => {});
+  }, [query, params, database, references, ttl, skip]);
 
-    // Skip if already loading
-    if (loading) return;
-
-    console.log('[useQueryResult] Executing query:', query.substring(0, 60) + '...');
-
-    // Execute query inline (no callback dependency issues)
-    (async () => {
-      try {
-        await getQueryResult({
-          query,
-          params,
-          database,
-          references
-        }, { ttl });
-      } catch (error) {
-        console.error('[useQueryResult] Query execution failed:', error);
-        // Error is already stored in Redux by getQueryResult
-      }
-    })();
-  }, [needsFetch, loading, query, params, database, references, ttl]);
-
-  // Manual refetch function
-  const refetch = useCallback(async () => {
-    try {
-      await getQueryResult({ query, params, database, references }, { ttl });
-    } catch (error) {
-      console.error('[useQueryResult] Manual refetch failed:', error);
-    }
-  }, [query, params, database, references, ttl]);
-
-  return {
-    data: result?.data || null,
-    loading,
-    error: result?.error || null,
-    isStale,
-    refetch
-  };
+  return useQueryResultSelector(query, params, database);
 }
 
 

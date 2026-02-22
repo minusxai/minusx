@@ -1277,8 +1277,9 @@ async function filterFilesByPermissions(files: FileState[]): Promise<FileState[]
  * Options for query execution
  */
 export interface GetQueryResultOptions {
-  ttl?: number;      // Time-to-live in ms (default: CACHE_TTL.QUERY)
-  skip?: boolean;    // Skip execution (default: false)
+  ttl?: number;        // Time-to-live in ms (default: CACHE_TTL.QUERY)
+  skip?: boolean;      // Skip execution (default: false)
+  forceLoad?: boolean; // Bypass TTL cache and re-execute even if fresh (default: false)
 }
 
 /**
@@ -1331,7 +1332,7 @@ export async function getQueryResult(
   options: GetQueryResultOptions = {}
 ): Promise<QueryResult> {
   const { query, params: queryParams, database, references } = params;
-  const { ttl = CACHE_TTL.QUERY, skip = false } = options;
+  const { ttl = CACHE_TTL.QUERY, skip = false, forceLoad = false } = options;
 
   if (skip) {
     throw new Error('Cannot execute query with skip=true');
@@ -1347,7 +1348,7 @@ export async function getQueryResult(
   const isFresh = selectIsQueryFresh(state, query, queryParams, database, ttl);
   const cached = selectQueryResult(state, query, queryParams, database);
 
-  if (cached?.data && isFresh) {
+  if (cached?.data && isFresh && !forceLoad) {
     return Promise.resolve(cached.data);
   }
 
