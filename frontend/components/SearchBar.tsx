@@ -127,6 +127,7 @@ export default function SearchBar({
                       onFocus={() => setIsFocused(true)}
                       onBlur={() => setIsFocused(false)}
                       databaseName={databaseName}
+                      whitelistedSchemas={contextInfo.databases}
                     />
 
                     {/* Send Button */}

@@ -34,7 +34,8 @@ class CompletionsDataLayerClient implements ICompletionsDataLayer {
     return JSON.stringify({
       prefix: options.prefix.toLowerCase(), // Normalize for case-insensitive caching
       mentionType: options.mentionType,
-      databaseName: options.databaseName
+      databaseName: options.databaseName,
+      whitelistedSchemas: options.whitelistedSchemas
     });
   }
 
@@ -60,7 +61,8 @@ class CompletionsDataLayerClient implements ICompletionsDataLayer {
       body: JSON.stringify({
         prefix: options.prefix,
         mentionType: options.mentionType,
-        databaseName: options.databaseName
+        databaseName: options.databaseName,
+        whitelistedSchemas: options.whitelistedSchemas
       })
     });
 

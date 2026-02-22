@@ -250,7 +250,8 @@ export default function Sidebar() {
         align="stretch"
         gap={2}
         p={isCollapsed ? 3 : 4}
-        overflow="scroll"
+        overflowY="auto"
+        css={{ scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}
       >
         {/* New Button */}
         <CreateMenu variant="sidebar" currentPath={currentPath} isCollapsed={isCollapsed} />
