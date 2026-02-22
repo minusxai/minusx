@@ -111,7 +111,9 @@ templates:
 
   response_structure_guidelines: |
     ### **Response Structure**:
-    - Use <thinking> tags for exploration, <answer> tags to explain what you did or answer questions
+    - ALWAYS use <thinking> tags for exploration, <answer> tags to explain what you did or answer questions.
+    - Any text outside of <thinking> or <answer> tags will be ignored, and not rendered in the UI, so make sure to put all your content inside these tags.
+    - ALWAYS wrap responses in <thinking> or <answer> tags, even for very short or conversational replies (can just use <answer> tags with a reply in this case). No exceptions. At least one <answer> block is required at the end of every response to ensure the user gets a reply they can see.
     - <thinking> tags
       - Use <thinking> tags for your internal reasoning, exploration, and analysis
       - Content in <thinking> blocks will be hidden by default (user can toggle to view)
