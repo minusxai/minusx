@@ -14,6 +14,7 @@ interface ParameterInputProps {
   onTypeChange: (type: 'text' | 'number' | 'date') => void;
   onSubmit?: (paramName?: string, value?: string | number) => void;
   disableTypeChange?: boolean;
+  onHoverParam?: (key: string | null) => void;
 }
 
 export default function ParameterInput({
@@ -23,7 +24,9 @@ export default function ParameterInput({
   onTypeChange,
   onSubmit,
   disableTypeChange = false,
+  onHoverParam,
 }: ParameterInputProps) {
+  const paramKey = `${parameter.name}-${parameter.type}`;
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = parameter.type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value;
     onChange(newValue);
@@ -67,6 +70,8 @@ export default function ParameterInput({
       borderRadius="md"
       border="1px solid"
       borderColor="border.default"
+      onMouseEnter={() => onHoverParam?.(paramKey)}
+      onMouseLeave={() => onHoverParam?.(null)}
     >
       {/* Parameter name - top left */}
       <Text

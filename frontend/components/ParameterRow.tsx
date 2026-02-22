@@ -10,13 +10,15 @@ interface ParameterRowProps {
   onSubmit: (parameters: QuestionParameter[]) => void;
   onParametersChange?: (parameters: QuestionParameter[]) => void;
   disableTypeChange?: boolean;
+  onHoverParam?: (key: string | null) => void;
 }
 
 export default function ParameterRow({
   parameters,
   onSubmit,
   onParametersChange,
-  disableTypeChange = false
+  disableTypeChange = false,
+  onHoverParam,
 }: ParameterRowProps) {
   const [localParameters, setLocalParameters] = useState<QuestionParameter[]>(parameters);
 
@@ -68,6 +70,7 @@ export default function ParameterRow({
           onTypeChange={(type) => handleTypeChange(param.name, type)}
           onSubmit={handleSubmit}
           disableTypeChange={disableTypeChange}
+          onHoverParam={onHoverParam}
         />
       ))}
     </HStack>

@@ -181,6 +181,24 @@ export default function DashboardView({
     return Array.from(paramMap.values());
   }, [questionContents]);
 
+  // Map each param key to the question IDs that use it (for hover highlighting)
+  const paramToQuestionIds = useMemo(() => {
+    const map = new Map<string, number[]>();
+    questionContents.forEach((content, index) => {
+      if (!content?.query) return;
+      const params = syncParametersWithSQL(content.query, content.parameters || []);
+      params.forEach(param => {
+        const key = `${param.name}-${param.type}`;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push(questionIds[index]);
+      });
+    });
+    return map;
+  }, [questionContents, questionIds]);
+
+  // Hover state for param filter chips
+  const [hoveredParamKey, setHoveredParamKey] = useState<string | null>(null);
+
   // Merge parameter structure (from questions) with saved values (from Redux)
   const parameterValuesForDisplay = useMemo(() => {
     return mergedParameters.map(param => ({
@@ -274,16 +292,30 @@ export default function DashboardView({
 
   // Memoize the question grid items to prevent re-rendering on every keystroke
   const questionGridItems = useMemo(() => {
+    const highlightedIds = hoveredParamKey ? (paramToQuestionIds.get(hoveredParamKey) ?? []) : null;
+
     return questionIds?.map((questionId, index) => {
+      const isHighlighted = highlightedIds ? highlightedIds.includes(questionId) : null;
+
       return (
         <Box
           key={questionId || index}
           bg="bg.surface"
           borderWidth={editMode ? '2px' : '1px'}
-          borderColor={editMode ? 'accent.teal' : 'border.default'}
+          borderColor={
+            editMode ? 'accent.teal' :
+            isHighlighted === true ? 'accent.teal' :
+            isHighlighted === false ? 'border.subtle' :
+            'border.default'
+          }
           borderRadius="md"
           shadow={editMode ? 'lg' : 'sm'}
-          boxShadow={editMode ? '0 0 20px rgba(22, 160, 133, 0.3)' : undefined}
+          boxShadow={
+            editMode ? '0 0 20px rgba(22, 160, 133, 0.3)' :
+            isHighlighted === true ? '0 0 12px rgba(22, 160, 133, 0.35)' :
+            undefined
+          }
+          opacity={isHighlighted === false ? 0.5 : 1}
           overflow="hidden"
           display="flex"
           flexDirection="column"
@@ -301,7 +333,7 @@ export default function DashboardView({
         </Box>
       );
     });
-  }, [questionIds, editMode, handleRemoveQuestion, parameterValuesForDisplay]);
+  }, [questionIds, editMode, handleRemoveQuestion, parameterValuesForDisplay, hoveredParamKey, paramToQuestionIds]);
 
   const handleLayoutChange = (newLayout: Layout[]) => {
     if (!document) return;
@@ -410,6 +442,7 @@ export default function DashboardView({
                   onChange({ parameterValues: valuesDict });
                 }}
                 disableTypeChange={true}
+                onHoverParam={setHoveredParamKey}
               />
             </Box>
           )}
