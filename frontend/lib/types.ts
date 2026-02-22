@@ -7,6 +7,21 @@ export type { FileType };
 // Re-export FileState for convenience
 export type { FileState };
 
+// Generated from backend/tasks/agents/analyst/file_schema.py
+// Regenerate: cd frontend && npm run generate-types
+import type {
+  QuestionContent as QuestionContentBase,
+  FileReference, InlineAsset, VizSettings,
+} from './types.gen';
+export type {
+  AggregationFunction, FormulaOperator, VisualizationType, ParameterType,
+  PivotValueConfig, PivotFormula, PivotConfig, ColumnFormatConfig, VizSettings,
+  QuestionParameter, QuestionReference,
+  FileReference, InlineAsset,
+  DashboardContent, DashboardLayout, DashboardLayoutItem,
+  AtlasQuestionFile, AtlasDashboardFile,
+} from './types.gen';
+
 // Re-export SQL IR types
 export type {
   QueryIR,
@@ -42,78 +57,11 @@ export interface BaseFileMetadata extends BaseEntity {
   references: number[];  // Phase 6: Array of file IDs this file references (cached from content)
 }
 
-export interface QuestionParameter {
-  name: string;
-  type: 'text' | 'number' | 'date';
-  label?: string;
-  value?: string | number;  // Current/default value
-}
-
-export interface QuestionReference {
-  id: number;        // Referenced question ID
-  alias: string;     // Alias for use in SQL (e.g., "users")
-}
-
-export type AggregationFunction = 'SUM' | 'AVG' | 'COUNT' | 'MIN' | 'MAX';
-
-export interface PivotValueConfig {
-  column: string;
-  aggFunction: AggregationFunction;
-}
-
-export type FormulaOperator = '+' | '-' | '*' | '/'
-
-export interface PivotFormula {
-  name: string         // Display label, e.g. "YoY Change"
-  operandA: string     // Top-level dimension value, e.g. "2024"
-  operandB: string     // Top-level dimension value, e.g. "2023"
-  operator: FormulaOperator
-}
-
-export interface PivotConfig {
-  rows: string[];           // Dimension columns for row headers
-  columns: string[];        // Dimension columns for column headers
-  values: PivotValueConfig[]; // Measures with per-value aggregation
-  showRowTotals?: boolean;    // Show row totals column (default: true)
-  showColumnTotals?: boolean; // Show column totals row (default: true)
-  showHeatmap?: boolean;      // Show heatmap conditional formatting (default: true)
-  rowFormulas?: PivotFormula[]     // Formulas combining top-level row dimension values
-  columnFormulas?: PivotFormula[]  // Formulas combining top-level column dimension values
-}
-
-export interface ColumnFormatConfig {
-  alias?: string
-  decimalPoints?: number    // 0, 1, 2, 3, 4
-  dateFormat?: string       // 'iso' | 'us' | 'eu' | 'short' | 'month-year' | 'year'
-}
-
-export interface VizSettings {
-  type: 'table' | 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend';
-  xCols?: string[];
-  yCols?: string[];
-  pivotConfig?: PivotConfig;  // Only used when type === 'pivot'
-  columnFormats?: Record<string, ColumnFormatConfig>;
-}
-
 // Document-based architecture types
 export type QuestionContainer = AnalyticsFileType | 'explore' | 'sidebar';
 
 
-// NEW: File references (external files to load)
-export interface FileReference {
-  type: 'question';  // Can extend to 'dashboard' | 'notebook' later
-  id: number;        // Required - integer ID of referenced file (Phase 2 migration)
-  slug?: string;     // DEPRECATED: not used anymore
-}
-
-// NEW: Inline assets (no external loading)
-export interface InlineAsset {
-  type: 'text' | 'image' | 'divider';
-  id?: string;       // Optional - for internal referencing (e.g., in presentations)
-  content?: string;  // Markdown for text, URL for image
-}
-
-// MODIFIED: AssetReference is now a union of FileReference and InlineAsset
+// Named alias for the discriminated union (inlined in generated DashboardContent.assets)
 export type AssetReference = FileReference | InlineAsset;
 
 // Type guards for AssetReference
@@ -123,19 +71,6 @@ export function isFileReference(asset: AssetReference): asset is FileReference {
 
 export function isInlineAsset(asset: AssetReference): asset is InlineAsset {
   return ['text', 'image', 'divider'].includes(asset.type);
-}
-
-export interface DashboardLayoutItem {
-  id: number;  // Question ID (integer, Phase 2 migration)
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
-
-export interface DashboardLayout {
-  columns?: number;
-  items?: DashboardLayoutItem[];
 }
 
 export interface NotebookLayout {
@@ -360,14 +295,9 @@ export interface BaseFileContent {
 }
 
 // Database-backed document types
-export interface QuestionContent extends BaseFileContent {
-  description?: string;
-  query: string;
-  vizSettings: VizSettings;
-  parameters?: QuestionParameter[];
-  database_name: string;  // Database connection name, or empty string if no database available
-  references?: QuestionReference[];  // Composed questions (single-level only)
-  queryResultId?: string;  // Hash of query+params+database for result lookup (saved questions only)
+// Extend generated QuestionContent with frontend-only fields
+export interface QuestionContent extends QuestionContentBase {
+  queryResultId?: string;  // Frontend-only: hash of query+params+database for result cache
 }
 
 export interface DocumentContent extends BaseFileContent {

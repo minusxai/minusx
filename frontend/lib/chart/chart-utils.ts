@@ -140,7 +140,7 @@ export const resolveChartFormats = (
 ) => {
   const yDecimalPoints = yAxisColumns
     ?.map(col => columnFormats?.[col]?.decimalPoints)
-    .find(dp => dp !== undefined)
+    .find((dp): dp is number => dp != null)
   const xDateFormat = xAxisColumns
     ?.map(col => columnFormats?.[col]?.dateFormat)
     .find(Boolean)

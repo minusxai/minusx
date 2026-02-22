@@ -16,7 +16,8 @@
     "import-db": "tsx scripts/import-db.ts",
     "migrate-db": "tsx scripts/migrate-db.ts",
     "validate-db": "tsx scripts/validate-db.ts",
-    "setup-postgres": "tsx scripts/setup-postgres.ts"
+    "setup-postgres": "tsx scripts/setup-postgres.ts",
+    "generate-types": "(cd ../backend && uv run python scripts/export_schema.py) | node_modules/.bin/json2ts --unreachableDefinitions --additionalProperties=false > lib/types.gen.ts"
   },
   "dependencies": {
     "@chakra-ui/react": "^3.30.0",
@@ -83,6 +84,7 @@
     "eslint-plugin-unused-imports": "^4.3.0",
     "express": "^5.2.1",
     "jest": "^30.2.0",
+    "json-schema-to-typescript": "^15.0.4",
     "postcss": "^8.5.6",
     "tailwindcss": "^4",
     "tree-kill": "^1.2.2",

@@ -405,7 +405,7 @@ export default function QuestionViewV2({
         <Box p={3} pb={2} borderBottomWidth="1px" borderColor="border.muted">
           <DocumentHeader
             name={fileName}
-            description={content.description}
+            description={content.description ?? undefined}
             fileType="question"
             editMode={editMode}
             isDirty={isDirty}

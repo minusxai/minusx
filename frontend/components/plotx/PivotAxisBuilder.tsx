@@ -214,7 +214,7 @@ export const PivotAxisBuilder = ({
       label: 'Values',
       items: config.values.map(v => ({
         column: v.column,
-        extra: <AggSelector column={v.column} aggFunction={v.aggFunction} />,
+        extra: <AggSelector column={v.column} aggFunction={v.aggFunction ?? 'SUM'} />,
       })),
       emptyText: 'Drop measures here',
       onDrop: handleDropValues,

@@ -103,7 +103,7 @@ export function aggregatePivotData(
     for (const colKey of colKeys) {
       const buckets = rowAcc.get(colKey) || valueConfigs.map(() => [])
       for (let vi = 0; vi < valueConfigs.length; vi++) {
-        const aggValue = applyAggregation(buckets[vi], valueConfigs[vi].aggFunction)
+        const aggValue = applyAggregation(buckets[vi], valueConfigs[vi].aggFunction ?? 'SUM')
         cellRow.push(aggValue)
       }
     }

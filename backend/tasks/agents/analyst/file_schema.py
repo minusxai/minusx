@@ -55,6 +55,9 @@ class PivotConfig(BaseModel):
     rows: List[str] = Field(..., description="dimension columns for row headers")
     columns: List[str] = Field(..., description="dimension columns for column headers")
     values: List[PivotValueConfig] = Field(..., description="measures with per-value aggregation functions")
+    showRowTotals: Optional[bool] = Field(None, description="show row totals column")
+    showColumnTotals: Optional[bool] = Field(None, description="show column totals row")
+    showHeatmap: Optional[bool] = Field(None, description="show heatmap conditional formatting")
     rowFormulas: Optional[List[PivotFormula]] = Field(None, description="formulas combining top-level row dimension values")
     columnFormulas: Optional[List[PivotFormula]] = Field(None, description="formulas combining top-level column dimension values")
 
@@ -73,7 +76,7 @@ class VisualizationSettings(BaseModel):
     columnFormats: Optional[Dict[str, ColumnFormatConfig]] = Field(None, description="per-column display formatting keyed by column name. Only set when user asks to rename columns, change decimal places, or change date format. Good defaults are applied automatically.")
     model_config = {
         "populate_by_name": True,
-        "title": "VisualizationSettings"
+        "title": "VizSettings"
     }
 
 vizSettingsJsonStr = json.dumps(VisualizationSettings.model_json_schema())
@@ -116,6 +119,7 @@ class FileAssetRef(BaseModel):
     """A reference to another question embedded in the dashboard."""
     type: Literal['question']
     id: int
+    model_config = {"title": "FileReference"}
 
 class InlineAsset(BaseModel):
     """Inline content block (text, image, divider) — no external file."""
@@ -126,7 +130,7 @@ class InlineAsset(BaseModel):
 AssetReference = Annotated[Union[FileAssetRef, InlineAsset], Field(discriminator='type')]
 
 class DashboardLayoutItem(BaseModel):
-    id: str  # question ID as string (grid-layout key)
+    id: int  # question ID
     x: int
     y: int
     w: int = Field(..., ge=3, description="width in grid units (min 3)")

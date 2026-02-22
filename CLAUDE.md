@@ -24,6 +24,7 @@ npm run import-db          # Initialize database if missing, skip if exists (saf
 npm run import-db -- --replace-db=y  # Force replace existing database
 npm run export-db          # Export database to STDOUT
 npm run create-empty-db    # Create empty database
+npm run generate-types     # Regenerate frontend/lib/types.gen.ts from Pydantic models
 ```
 
 **IMPORTANT: Always use `npm run typecheck` or `npm run validate` to quickly verify code correctness. Do NOT use `npm run build` for validation - it's too slow and memory-intensive. Only run `npm run build` before deployment.**
@@ -512,7 +513,8 @@ When modifying SQLite schema:
 - `frontend/lib/api/file-state.ts` - **CORE: Centralized file operations** — the only place file fetching, editing, saving, deleting, folder loading, and query execution logic should live. Key exports: `loadFiles`, `readFiles`, `readFolder`, `editFile`, `publishFile`, `deleteFile`, `getQueryResult`, `createVirtualFile`.
 - `frontend/lib/hooks/file-state-hooks.ts` - **CORE: React hooks** wrapping `file-state.ts` — the only hooks components should use for file/query data. Key exports: `useFile`, `useFolder`, `useFileByPath`, `useFilesByCriteria`, `useQueryResult`.
 - `frontend/lib/database/documents-db.ts` - SQLite CRUD operations
-- `frontend/lib/types.ts` - TypeScript interfaces including FileReference
+- `frontend/lib/types.ts` - TypeScript interfaces. Imports shared types from `types.gen.ts`; defines frontend-only types and extends generated ones (e.g. `QuestionContent` adds `queryResultId`)
+- `frontend/lib/types.gen.ts` - **Generated file — do not edit by hand.** Regenerate with `cd frontend && npm run generate-types` after changing Pydantic models in `backend/tasks/agents/analyst/file_schema.py`
 
 ### Frontend State & Components
 - `frontend/store/` - Redux store with multiple domain slices:
@@ -571,6 +573,26 @@ describe('My New Feature', () => {
 See `store/__tests__/test-utils.ts` for available utilities and `chatE2E.test.ts` for complete examples.
 
 **Test Ports:** Tests use ports 8002-8006 (distinct from dev servers on 3000 and 8001). Always check for stale test processes before running tests.
+
+## Pydantic → TypeScript Type Codegen
+
+**Single source of truth:** `backend/tasks/agents/analyst/file_schema.py` defines Pydantic models for all shared Atlas file types (`VizSettings`, `PivotConfig`, `QuestionContent`, `DashboardContent`, `FileReference`, `DashboardLayoutItem`, etc.).
+
+**Pipeline:**
+1. Pydantic models emit a JSON schema via `ATLAS_FILE_SCHEMA_JSON`
+2. `backend/scripts/export_schema.py` prints the schema to stdout
+3. `json-schema-to-typescript` converts it to `frontend/lib/types.gen.ts`
+4. `frontend/lib/types.ts` re-exports generated types and extends them with frontend-only fields
+
+**When to regenerate:**
+- After changing any Pydantic model in `file_schema.py`, run: `cd frontend && npm run generate-types`
+- Commit the updated `types.gen.ts` — it's a tracked artifact (CI typechecks without Python)
+
+**Key rules:**
+- **Never edit `types.gen.ts` by hand** — changes are overwritten on next codegen
+- Frontend-only fields (e.g. `queryResultId` on `QuestionContent`) go in `types.ts` as interface extensions, not in Pydantic
+- Pydantic `Optional[T]` generates `T | null` in TypeScript (not `T | undefined`) — fix call sites with `?? undefined` where needed
+- `DocumentContent` (frontend abstraction for dashboards/notebooks) lives in `types.ts` only — it's more general than the generated `DashboardContent`
 
 ## Previous Mistakes
 

@@ -41,7 +41,7 @@ export const TrendPlot = ({ series, columnFormats, yAxisColumns }: TrendPlotProp
         {series.map((s, index) => {
           // Resolve decimal points for this series
           const colName = yAxisColumns?.[index]
-          const dp = colName ? columnFormats?.[colName]?.decimalPoints : undefined
+          const dp = colName ? (columnFormats?.[colName]?.decimalPoints ?? undefined) : undefined
           const fmtVal = (v: number) => formatNumber(v, dp)
 
           // Get the last (most recent) value and the second-to-last (previous) value

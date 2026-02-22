@@ -65,7 +65,7 @@ export default function ParameterRow({
         <ParameterInput
           key={param.name}
           parameter={param}
-          value={param.value}
+          value={param.value ?? undefined}
           onChange={(value) => handleValueChange(param.name, value)}
           onTypeChange={(type) => handleTypeChange(param.name, type)}
           onSubmit={handleSubmit}

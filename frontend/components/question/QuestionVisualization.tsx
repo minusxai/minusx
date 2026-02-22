@@ -297,17 +297,17 @@ export function QuestionVisualization({
                       types={data.types}
                       rows={data.rows}
                       chartType={currentState.vizSettings.type}
-                      initialXCols={currentState.vizSettings?.xCols}
-                      initialYCols={currentState.vizSettings?.yCols}
+                      initialXCols={currentState.vizSettings?.xCols ?? undefined}
+                      initialYCols={currentState.vizSettings?.yCols ?? undefined}
                       onAxisChange={onAxisChange}
                       showAxisBuilder={config.viz.showChartBuilder}
                       useCompactView={useCompactLayout}
                       fillHeight={true}
-                      initialPivotConfig={currentState.vizSettings?.pivotConfig}
+                      initialPivotConfig={currentState.vizSettings?.pivotConfig ?? undefined}
                       onPivotConfigChange={onPivotConfigChange}
                       sql={currentState?.query}
                       databaseName={currentState?.database_name}
-                      initialColumnFormats={currentState.vizSettings?.columnFormats}
+                      initialColumnFormats={currentState.vizSettings?.columnFormats ?? undefined}
                       onColumnFormatsChange={onColumnFormatsChange}
                       settingsExpanded={useCompactLayout ? vizSettingsExpanded : undefined}
                     />

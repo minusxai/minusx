@@ -59,7 +59,7 @@ export const PivotTable = ({
     if (columnFormats && valueColumns && valueIndex !== undefined) {
       const colName = valueColumns[valueIndex % (valueColumns.length || 1)]
       const dp = colName ? columnFormats[colName]?.decimalPoints : undefined
-      if (dp !== undefined) return formatNumber(value, dp)
+      if (dp != null) return formatNumber(value, dp)
     }
     return formatLargeNumber(value)
   }, [columnFormats, valueColumns])
