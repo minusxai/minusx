@@ -32,98 +32,125 @@ import { API } from '@/lib/api/declarations';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import type { RootState } from '@/store/store';
-import type { AugmentedFile, FileState, QueryResult, QuestionContent, FileType, DocumentContent, DbFile, BaseFileContent, QuestionReference } from '@/lib/types';
+import type { AugmentedFile, FileState, QueryResult, QuestionContent, QuestionParameter, FileType, DocumentContent, DbFile, BaseFileContent, QuestionReference } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
 import type { AppState } from '@/lib/appState';
 
 /**
- * Type-specific augmentation selector
- * Takes state and a file state, returns a map of query results keyed by cache key
+ * Extracts the initial inherited params for the root file being augmented.
+ *
+ * Dashboards store their current effective parameter values in
+ * content.parameterValues (a flat {name: value} dict). These are the values
+ * the user has set (or the question defaults where not overridden), and they
+ * cascade to every embedded reference.
+ *
+ * For questions viewed on their own page there is no parent, so we return {}
+ * and each question uses its own saved parameter defaults.
  */
-type AugmentSelector = (state: RootState, fileState: FileState) => Map<string, QueryResult>;
-
-/**
- * Registry of augmentation selectors by file type
- */
-const augmentRegistry = new Map<FileType, AugmentSelector>();
-
-/**
- * Register an augmentation selector for a file type
- */
-export function registerAugmentation(type: FileType, augmentFn: AugmentSelector): void {
-  augmentRegistry.set(type, augmentFn);
+function getRootParams(state: RootState, fileState: FileState): Record<string, any> {
+  if (fileState.type === 'dashboard') {
+    const content = selectMergedContent(state, fileState.id) as DocumentContent;
+    return content?.parameterValues || {};
+  }
+  return {};
 }
 
 /**
- * Look up a question's query result using the question's own parameters,
- * optionally overriding values with dashboard-level param values.
+ * Applies inheritedParams as overrides to a question's own stored parameter defaults.
+ * Returns both forms needed downstream:
+ *   array — patched QuestionParameter[] for display in the app state
+ *   dict  — flat {name: value} for cache hash computation
  *
- * @param paramOverrides - Dashboard-level parameter values (e.g., from DocumentContent.parameterValues)
+ * Only params the question itself defines are included; unrelated inherited
+ * params are dropped (prevents sibling-question param pollution in the hash).
  */
-function lookupQuestionResult(
+function resolveEffectiveParams(
+  parameters: QuestionParameter[],
+  inheritedParams: Record<string, any>
+): { array: QuestionParameter[]; dict: Record<string, any> } {
+  const array = parameters.map(p => ({
+    ...p,
+    value: Object.prototype.hasOwnProperty.call(inheritedParams, p.name)
+      ? inheritedParams[p.name]
+      : p.value,
+  }));
+  const dict = array.reduce<Record<string, any>>((acc, p) => { acc[p.name] = p.value; return acc; }, {});
+  return { array, dict };
+}
+
+/**
+ * Builds an effective FileState for a reference viewed in a parent's context.
+ *   - Strips ephemeralChanges: the reference's transient state (lastExecuted, etc.)
+ *     pertains to its own page, not to the parent context.
+ *   - Patches question parameters + queryResultId to reflect effective inherited values.
+ */
+function buildEffectiveReference(refFile: FileState, inheritedParams: Record<string, any>): FileState {
+  const stripped = { ...refFile, ephemeralChanges: {} };
+  if (refFile.type !== 'question' || !refFile.content) return stripped;
+  const content = refFile.content as QuestionContent;
+  if (!content.parameters?.length) return stripped;
+
+  const { array: effectiveParameters, dict: effectiveParamsDict } = resolveEffectiveParams(
+    content.parameters, inheritedParams
+  );
+  const effectiveQueryResultId = content.query && content.database_name
+    ? getQueryHash(content.query, effectiveParamsDict, content.database_name)
+    : content.queryResultId;
+  return {
+    ...stripped,
+    content: { ...content, parameters: effectiveParameters, queryResultId: effectiveQueryResultId },
+  };
+}
+
+/**
+ * Recursively collects query results for a file and all its references,
+ * cascading inherited params down the hierarchy.
+ *
+ * Mental model: params always flow down the reference stack.
+ * - A dashboard passes its parameterValues to its questions.
+ * - A question passes those same params to any questions it references.
+ * - Each file uses inheritedParams as overrides for the params it defines.
+ *   Params the file does not define are not included in its cache hash
+ *   (no cross-question pollution).
+ */
+function augmentWithParams(
   state: RootState,
   fileState: FileState,
-  paramOverrides: Record<string, any>
+  inheritedParams: Record<string, any>
 ): Map<string, QueryResult> {
   const result = new Map<string, QueryResult>();
-  const mergedContent = selectMergedContent(state, fileState.id) as QuestionContent;
-  if (!mergedContent) return result;
 
-  const { query, parameters, database_name } = mergedContent;
-  // Use question's own params, applying dashboard overrides where available.
-  // Only the question's own params are included — unrelated params from other
-  // dashboard questions are excluded so the hash always matches EmbeddedQuestionContainer.
-  const params = (parameters || []).reduce<Record<string, any>>((acc, p) => {
-    acc[p.name] = Object.prototype.hasOwnProperty.call(paramOverrides, p.name)
-      ? paramOverrides[p.name]
-      : p.value;
-    return acc;
-  }, {});
-
-  const queryResult = selectQueryResult(state, query, params, database_name);
-  if (queryResult?.data) {
-    result.set(getQueryHash(query, params, database_name), queryResult.data);
-  }
-  return result;
-}
-
-/**
- * Augment a question file with its query result
- */
-function augmentQuestionSelector(state: RootState, fileState: FileState): Map<string, QueryResult> {
-  return lookupQuestionResult(state, fileState, {});
-}
-
-/**
- * Augment a dashboard file with nested question states
- * Recursively augments each referenced question
- */
-function augmentDashboardSelector(state: RootState, fileState: FileState): Map<string, QueryResult> {
-  const result = new Map<string, QueryResult>();
-  const dashboardContent = selectMergedContent(state, fileState.id) as DocumentContent;
-  if (!dashboardContent?.assets) return result;
-
-  // Apply dashboard-level parameter overrides when looking up each question's result.
-  // This matches the logic in EmbeddedQuestionContainer / DashboardView.
-  const dashboardParamValues: Record<string, any> = dashboardContent.parameterValues || {};
-
-  for (const asset of dashboardContent.assets) {
-    if (asset.type === 'question' && 'id' in asset) {
-      const questionState = selectFile(state, asset.id);
-      if (questionState) {
-        for (const [key, qr] of lookupQuestionResult(state, questionState, dashboardParamValues)) {
-          result.set(key, qr);
-        }
+  // Questions execute SQL — look up the cached result using effective params.
+  // Dashboards do not execute their own query; only their references do.
+  if (fileState.type === 'question') {
+    const content = selectMergedContent(state, fileState.id) as QuestionContent;
+    if (content?.query) {
+      const { dict: params } = resolveEffectiveParams(content.parameters || [], inheritedParams);
+      const qr = selectQueryResult(state, content.query, params, content.database_name);
+      if (qr?.data) {
+        const id = getQueryHash(content.query, params, content.database_name)
+        result.set(id, {
+          ...(qr.data || {}),
+          id
+        });
       }
     }
   }
+
+  // Cascade the same inherited params to all references.
+  // Covers: dashboard → questions, question → referenced questions, etc.
+  for (const refId of fileState.references || []) {
+    const refFile = selectFile(state, refId);
+    if (refFile) {
+      for (const [key, qr] of augmentWithParams(state, refFile, inheritedParams)) {
+        result.set(key, qr);
+      }
+    }
+  }
+
   return result;
 }
-
-// Register default augmentation selectors
-registerAugmentation('question', augmentQuestionSelector);
-registerAugmentation('dashboard', augmentDashboardSelector);
 
 interface ReadFilesOptions {
   ttl?: number;      // Time-to-live in ms (default: CACHE_TTL.FILE)
@@ -212,13 +239,14 @@ export function selectAugmentedFiles(state: RootState, fileIds: number[]): Augme
       const references = (fileState.references || [])
         .map(refId => selectFile(state, refId))
         .filter((f): f is FileState => f !== undefined);
-      const queryResultMap = new Map<string, QueryResult>();
-      for (const file of [fileState, ...references]) {
-        const augmentFn = augmentRegistry.get(file.type);
-        if (!augmentFn) continue;
-        for (const [key, qr] of augmentFn(state, file)) queryResultMap.set(key, qr);
-      }
-      return { fileState, references, queryResults: Array.from(queryResultMap.values()) };
+
+      // Collect query results: start with the root file's effective params and
+      // let augmentWithParams cascade them through the entire reference tree.
+      const inheritedParams = getRootParams(state, fileState);
+      const queryResultMap = augmentWithParams(state, fileState, inheritedParams);
+
+      const effectiveReferences = references.map(ref => buildEffectiveReference(ref, inheritedParams));
+      return { fileState, references: effectiveReferences, queryResults: Array.from(queryResultMap.values()) };
     })
     .filter((a): a is AugmentedFile => a !== undefined);
 }
