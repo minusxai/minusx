@@ -56,25 +56,43 @@ export function registerAugmentation(type: FileType, augmentFn: AugmentSelector)
 }
 
 /**
- * Augment a question file with its query result
+ * Look up a question's query result using the question's own parameters,
+ * optionally overriding values with dashboard-level param values.
+ *
+ * @param paramOverrides - Dashboard-level parameter values (e.g., from DocumentContent.parameterValues)
  */
-function augmentQuestionSelector(state: RootState, fileState: FileState): Map<string, QueryResult> {
+function lookupQuestionResult(
+  state: RootState,
+  fileState: FileState,
+  paramOverrides: Record<string, any>
+): Map<string, QueryResult> {
   const result = new Map<string, QueryResult>();
   const mergedContent = selectMergedContent(state, fileState.id) as QuestionContent;
   if (!mergedContent) return result;
 
   const { query, parameters, database_name } = mergedContent;
+  // Use question's own params, applying dashboard overrides where available.
+  // Only the question's own params are included — unrelated params from other
+  // dashboard questions are excluded so the hash always matches EmbeddedQuestionContainer.
   const params = (parameters || []).reduce<Record<string, any>>((acc, p) => {
-    acc[p.name] = p.value;
+    acc[p.name] = Object.prototype.hasOwnProperty.call(paramOverrides, p.name)
+      ? paramOverrides[p.name]
+      : p.value;
     return acc;
   }, {});
 
   const queryResult = selectQueryResult(state, query, params, database_name);
   if (queryResult?.data) {
-    const key = `${database_name}|||${query}|||${JSON.stringify(params)}`;
-    result.set(key, queryResult.data);
+    result.set(getQueryHash(query, params, database_name), queryResult.data);
   }
   return result;
+}
+
+/**
+ * Augment a question file with its query result
+ */
+function augmentQuestionSelector(state: RootState, fileState: FileState): Map<string, QueryResult> {
+  return lookupQuestionResult(state, fileState, {});
 }
 
 /**
@@ -83,14 +101,18 @@ function augmentQuestionSelector(state: RootState, fileState: FileState): Map<st
  */
 function augmentDashboardSelector(state: RootState, fileState: FileState): Map<string, QueryResult> {
   const result = new Map<string, QueryResult>();
-  const content = selectMergedContent(state, fileState.id) as DocumentContent;
-  if (!content?.assets) return result;
+  const dashboardContent = selectMergedContent(state, fileState.id) as DocumentContent;
+  if (!dashboardContent?.assets) return result;
 
-  for (const asset of content.assets) {
+  // Apply dashboard-level parameter overrides when looking up each question's result.
+  // This matches the logic in EmbeddedQuestionContainer / DashboardView.
+  const dashboardParamValues: Record<string, any> = dashboardContent.parameterValues || {};
+
+  for (const asset of dashboardContent.assets) {
     if (asset.type === 'question' && 'id' in asset) {
       const questionState = selectFile(state, asset.id);
       if (questionState) {
-        for (const [key, qr] of augmentQuestionSelector(state, questionState)) {
+        for (const [key, qr] of lookupQuestionResult(state, questionState, dashboardParamValues)) {
           result.set(key, qr);
         }
       }
