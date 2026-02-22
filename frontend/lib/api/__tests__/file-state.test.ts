@@ -174,14 +174,14 @@ describe('readFiles - File State Manager', () => {
       }));
 
       // File is fresh (within default TTL of 10 hours)
-      const result = await readFiles({ fileIds: [mockFile.id] });
+      const result = await readFiles([mockFile.id]);
 
       // Should not fetch - file is fresh
       expect(mockLoadFiles).not.toHaveBeenCalled();
 
       // Should return file from Redux
-      expect(result.fileStates).toHaveLength(1);
-      expect(result.fileStates[0].id).toBe(mockFile.id);
+      expect(result).toHaveLength(1);
+      expect(result[0].fileState.id).toBe(mockFile.id);
     });
 
     it('should refetch stale file beyond TTL', async () => {
@@ -204,14 +204,14 @@ describe('readFiles - File State Manager', () => {
       });
 
       // Call readFiles - should refetch
-      const result = await readFiles({ fileIds: [mockFile.id] });
+      const result = await readFiles([mockFile.id]);
 
       // Should fetch because file is stale
       expect(mockLoadFiles).toHaveBeenCalledWith([mockFile.id]);
 
       // Should return updated file
-      expect(result.fileStates).toHaveLength(1);
-      expect(result.fileStates[0].name).toBe('Updated name');
+      expect(result).toHaveLength(1);
+      expect(result[0].fileState.name).toBe('Updated name');
     });
 
     it('should fetch missing file', async () => {
@@ -224,14 +224,14 @@ describe('readFiles - File State Manager', () => {
       });
 
       // Call readFiles
-      const result = await readFiles({ fileIds: [mockFile.id] });
+      const result = await readFiles([mockFile.id]);
 
       // Should fetch because file is missing
       expect(mockLoadFiles).toHaveBeenCalledWith([mockFile.id]);
 
       // Should populate Redux and return file
-      expect(result.fileStates).toHaveLength(1);
-      expect(result.fileStates[0].id).toBe(mockFile.id);
+      expect(result).toHaveLength(1);
+      expect(result[0].fileState.id).toBe(mockFile.id);
     });
 
     it('should respect custom TTL', async () => {
@@ -254,13 +254,13 @@ describe('readFiles - File State Manager', () => {
       });
 
       // Call readFiles with custom TTL of 10 seconds
-      const result = await readFiles({ fileIds: [mockFile.id] }, { ttl: 10000 });
+      const result = await readFiles([mockFile.id], { ttl: 10000 });
 
       // Should fetch because 30s > 10s TTL
       expect(mockLoadFiles).toHaveBeenCalledWith([mockFile.id]);
 
       // Should return updated file
-      expect(result.fileStates[0].name).toBe('Updated name');
+      expect(result[0].fileState.name).toBe('Updated name');
     });
   });
 
@@ -278,23 +278,22 @@ describe('readFiles - File State Manager', () => {
       jest.setSystemTime(BASE_TIME + CACHE_TTL.FILE + 1000);
 
       // Call readFiles with skip=true
-      const result = await readFiles({ fileIds: [mockFile.id] }, { skip: true });
+      const result = await readFiles([mockFile.id], { skip: true });
 
       // Should NOT fetch even though file is stale
       expect(mockLoadFiles).not.toHaveBeenCalled();
 
       // Should return existing stale data
-      expect(result.fileStates).toHaveLength(1);
-      expect(result.fileStates[0].id).toBe(mockFile.id);
+      expect(result).toHaveLength(1);
+      expect(result[0].fileState.id).toBe(mockFile.id);
     });
 
-    it('should throw error if file missing and skip=true', async () => {
-      // Empty Redux state - file doesn't exist
+    it('should return empty fileStates if file missing and skip=true', async () => {
+      // Empty Redux state - file doesn't exist, loadFiles skips due to skip=true
 
-      // Call readFiles with skip=true
-      await expect(
-        readFiles({ fileIds: [999] }, { skip: true })
-      ).rejects.toThrow('File 999 not found after fetch');
+      const result = await readFiles([999], { skip: true });
+      // File was never in Redux and loadFiles skipped → empty result
+      expect(result).toHaveLength(0);
     });
   });
 
@@ -313,8 +312,8 @@ describe('readFiles - File State Manager', () => {
       });
 
       // Call readFiles twice concurrently (no await)
-      const promise1 = readFiles({ fileIds: [mockFile.id] });
-      const promise2 = readFiles({ fileIds: [mockFile.id] });
+      const promise1 = readFiles([mockFile.id]);
+      const promise2 = readFiles([mockFile.id]);
 
       // Advance timers to complete the fetch
       jest.advanceTimersByTime(100);
@@ -326,8 +325,8 @@ describe('readFiles - File State Manager', () => {
       expect(mockLoadFiles).toHaveBeenCalledTimes(1);
 
       // Both should return the same data
-      expect(result1.fileStates[0].id).toBe(mockFile.id);
-      expect(result2.fileStates[0].id).toBe(mockFile.id);
+      expect(result1[0].fileState.id).toBe(mockFile.id);
+      expect(result2[0].fileState.id).toBe(mockFile.id);
     });
 
     it('should track in-flight requests correctly', async () => {
@@ -343,7 +342,7 @@ describe('readFiles - File State Manager', () => {
       });
 
       // Start request (don't await)
-      const promise = readFiles({ fileIds: [mockFile.id] });
+      const promise = readFiles([mockFile.id]);
 
       // Check in-flight count immediately
       expect(filePromises.size).toBe(1);
@@ -375,44 +374,46 @@ describe('readFiles - File State Manager', () => {
       });
 
       // Load dashboard
-      const result = await readFiles({ fileIds: [dashboardFile.id] });
+      const result = await readFiles([dashboardFile.id]);
 
       // Should load dashboard
-      expect(result.fileStates).toHaveLength(1);
-      expect(result.fileStates[0].id).toBe(dashboardFile.id);
+      expect(result).toHaveLength(1);
+      expect(result[0].fileState.id).toBe(dashboardFile.id);
 
       // Should include referenced question
-      expect(result.references).toHaveLength(1);
-      expect(result.references[0].id).toBe(questionFile.id);
+      expect(result[0].references).toHaveLength(1);
+      expect(result[0].references[0].id).toBe(questionFile.id);
     });
   });
 
   describe('Error handling', () => {
-    it('should propagate fetch errors', async () => {
+    it('should propagate fetch errors via loadError (no throw)', async () => {
       // Mock API to throw error
       mockLoadFiles.mockRejectedValue(new Error('Network error'));
 
-      // Call readFiles
-      await expect(
-        readFiles({ fileIds: [1] })
-      ).rejects.toThrow('Network error');
+      // readFiles no longer throws — error is stored in Redux on file.loadError
+      const result = await readFiles([1]);
+      expect(result).toHaveLength(1);
+      expect(result[0].fileState.loadError).toMatchObject({ message: 'Network error' });
 
-      // Redux should not be corrupted
+      // File should have loadError set in Redux (not corrupted, just marked with error)
       const state = mockStore.getState() as RootState;
-      expect(state.files.files[1]).toBeUndefined();
+      expect(state.files.files[1]).toBeDefined();
+      expect(state.files.files[1].loading).toBe(false);
+      expect(state.files.files[1].loadError).toMatchObject({ message: 'Network error' });
     });
 
-    it('should throw error if file not found after fetch', async () => {
+    it('should set loadError on file not found after fetch (no throw)', async () => {
       // Mock API to return empty array (file not found)
       mockLoadFiles.mockResolvedValue({
         data: [],
         metadata: { references: [] }
       });
 
-      // Call readFiles
-      await expect(
-        readFiles({ fileIds: [999] })
-      ).rejects.toThrow('File 999 not found after fetch');
+      // readFiles no longer throws — NOT_FOUND is stored on file.loadError
+      const result = await readFiles([999]);
+      expect(result).toHaveLength(1);
+      expect(result[0].fileState.loadError).toMatchObject({ code: 'NOT_FOUND' });
     });
   });
 
@@ -426,15 +427,15 @@ describe('readFiles - File State Manager', () => {
         metadata: { references: [] }
       });
 
-      const result = await readFiles({ fileIds: [1, 2] });
+      const result = await readFiles([1, 2]);
 
       // Should fetch both in single call
       expect(mockLoadFiles).toHaveBeenCalledWith([1, 2]);
 
       // Should return both files
-      expect(result.fileStates).toHaveLength(2);
-      expect(result.fileStates[0].id).toBe(1);
-      expect(result.fileStates[1].id).toBe(2);
+      expect(result).toHaveLength(2);
+      expect(result[0].fileState.id).toBe(1);
+      expect(result[1].fileState.id).toBe(2);
     });
 
     it('should only fetch stale files', async () => {
@@ -451,13 +452,13 @@ describe('readFiles - File State Manager', () => {
       });
 
       // Request both files
-      const result = await readFiles({ fileIds: [1, 2] });
+      const result = await readFiles([1, 2]);
 
       // Should only fetch file2 (file1 is fresh)
       expect(mockLoadFiles).toHaveBeenCalledWith([2]);
 
       // Should return both files
-      expect(result.fileStates).toHaveLength(2);
+      expect(result).toHaveLength(2);
     });
   });
 
@@ -487,7 +488,7 @@ describe('readFiles - File State Manager', () => {
 
       expect(mockGetFiles).toHaveBeenCalledWith({ paths: ['/org'] });
       expect(mockLoadFiles).toHaveBeenCalledWith([1, 2]);
-      expect(result.fileStates).toHaveLength(2);
+      expect(result).toHaveLength(2);
     });
 
     it('should load files by type', async () => {
@@ -545,8 +546,8 @@ describe('readFiles - File State Manager', () => {
 
       // Should NOT call loadFiles for full content
       expect(mockLoadFiles).not.toHaveBeenCalled();
-      expect(result.fileStates).toHaveLength(1);
-      expect(result.queryResults).toHaveLength(0);  // No augmentation
+      expect(result).toHaveLength(1);
+      expect(result[0].queryResults).toHaveLength(0);  // No augmentation
     });
 
     it('should return augmented files when partial=false', async () => {
@@ -579,9 +580,9 @@ describe('readFiles - File State Manager', () => {
       });
 
       expect(mockLoadFiles).toHaveBeenCalled();
-      // Augmentation should include query results
+      // Augmentation should include query results per file
       // (will only work if query result is already in Redux)
-      expect(result.queryResults.length).toBeGreaterThanOrEqual(0);
+      expect(result[0].queryResults.length).toBeGreaterThanOrEqual(0);
     });
   });
 
@@ -857,11 +858,11 @@ describe('readFiles - File State Manager', () => {
         data: { columns: ['id'], types: ['INTEGER'], rows: [{ id: 1 }] }
       }));
 
-      const result = await readFiles({ fileIds: [1] });
+      const result = await readFiles([1]);
 
       // Should include query result
-      expect(result.queryResults).toHaveLength(1);
-      expect(result.queryResults[0]).toMatchObject({
+      expect(result[0].queryResults).toHaveLength(1);
+      expect(result[0].queryResults[0]).toMatchObject({
         columns: ['id'],
         types: ['INTEGER'],
         rows: [{ id: 1 }]
@@ -889,12 +890,12 @@ describe('readFiles - File State Manager', () => {
         data: { columns: ['id'], types: ['INTEGER'], rows: [{ id: 1 }] }
       }));
 
-      const result = await readFiles({ fileIds: [2] });
+      const result = await readFiles([2]);
 
       // Should include query result from nested question
-      expect(result.queryResults).toHaveLength(1);
-      expect(result.references).toHaveLength(1);
-      expect(result.references[0].id).toBe(1);
+      expect(result[0].queryResults).toHaveLength(1);
+      expect(result[0].references).toHaveLength(1);
+      expect(result[0].references[0].id).toBe(1);
     });
   });
 

@@ -8,7 +8,9 @@ import chatReducer from './chatSlice';
 import recordingsReducer from './recordingsSlice';
 import reportRunsReducer from './reportRunsSlice';
 import alertRunsReducer from './alertRunsSlice';
+import navigationReducer from './navigationSlice';
 import { chatListenerMiddleware } from './chatListener';
+import { navigationListenerMiddleware } from './navigationListener';
 import { analyticsMiddleware } from '@/lib/analytics/middleware';
 
 function getAllReducers() {
@@ -22,6 +24,7 @@ function getAllReducers() {
     recordings: recordingsReducer,  // Session recording state
     reportRuns: reportRunsReducer,  // Report run state (runs list, selected run)
     alertRuns: alertRunsReducer,    // Alert run state (runs list, selected run)
+    navigation: navigationReducer,  // Navigation state (pathname, searchParams, activeVirtualId)
   }
 }
 
@@ -37,6 +40,7 @@ export function makeStore(preloadedState?: PreloadedState) {
     reducer: getAllReducers(),
     middleware: (getDefaultMiddleware) =>
       getDefaultMiddleware()
+        .prepend(navigationListenerMiddleware.middleware)
         .prepend(chatListenerMiddleware.middleware)
         .concat(analyticsMiddleware),
     ...(preloadedState && { preloadedState }),

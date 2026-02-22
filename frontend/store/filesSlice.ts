@@ -3,6 +3,7 @@ import type { DbFile, FileType, DocumentContent, AssetReference, QuestionContent
 import type { FileInfo } from '@/lib/data/types';
 import type { RootState } from './store';
 import { getQueryHash } from '@/lib/utils/query-hash';
+import type { LoadError } from '@/lib/types/errors';
 
 /**
  * Ephemeral changes - non-persistent state like lastExecuted query
@@ -29,6 +30,7 @@ export interface FileState extends DbFile {
   loading: boolean;
   saving: boolean;    // Phase 2: Track save operations
   updatedAt: number;  // Timestamp of last fetch (for TTL checks)
+  loadError: LoadError | null;  // Error from last load attempt
 
   // Change tracking (Phase 2)
   persistableChanges: Partial<DbFile['content']>;
@@ -69,6 +71,32 @@ export function getNextVirtualFileId(files: Record<FileId, FileState>): FileId {
   return minId - 1;
 }
 
+// djb2-style hash — stays within 32-bit range
+function hashString(str: string): number {
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) ^ str.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash;
+}
+
+/**
+ * Generate a virtual ID for a new user-created file (namespace 1)
+ * ID is always 10 digits: -(1_000_000_000 + Date.now() % 1_000_000_000)
+ */
+export function generateVirtualId(): number {
+  return -(1_000_000_000 + (Date.now() % 1_000_000_000));
+}
+
+/**
+ * Deterministic virtual ID for a path-loading placeholder (namespace 2)
+ * ID is always 10 digits: -(2_000_000_000 + |hash(path)| % 1_000_000_000)
+ */
+export function pathToVirtualId(path: string): number {
+  return -(2_000_000_000 + (Math.abs(hashString(path)) % 1_000_000_000));
+}
+
 /**
  * Redux state structure for files
  */
@@ -106,13 +134,19 @@ const filesSlice = createSlice({
         loading: false,
         saving: false,
         updatedAt: Date.now(),
+        loadError: null,
         persistableChanges: {},
         ephemeralChanges: {},
         metadataChanges: {}
       };
 
       // Update path index (only for real files with positive IDs)
+      // Cleanup: remove path-placeholder when real file arrives
       if (file.id > 0) {
+        const oldId = state.pathIndex[file.path];
+        if (oldId !== undefined && oldId < 0) {
+          delete state.files[oldId];
+        }
         state.pathIndex[file.path] = file.id;
       }
 
@@ -125,6 +159,7 @@ const filesSlice = createSlice({
           loading: false,
           saving: false,
           updatedAt: Date.now(),
+          loadError: null,
           persistableChanges: {},
           ephemeralChanges: {},
           metadataChanges: {}
@@ -154,6 +189,7 @@ const filesSlice = createSlice({
           loading: false,
           saving: false,
           updatedAt: Date.now(),
+          loadError: null,
           persistableChanges: {},
           ephemeralChanges: {},
           metadataChanges: {}
@@ -172,6 +208,7 @@ const filesSlice = createSlice({
           loading: false,
           saving: false,
           updatedAt: Date.now(),
+          loadError: null,
           persistableChanges: {},
           ephemeralChanges: {},
           metadataChanges: {}
@@ -208,6 +245,7 @@ const filesSlice = createSlice({
             loading: false,
             saving: false,
             updatedAt: Date.now(),
+            loadError: null,
             persistableChanges: {},
             ephemeralChanges: {},
             metadataChanges: {}
@@ -226,6 +264,7 @@ const filesSlice = createSlice({
       const { id, loading } = action.payload;
       if (state.files[id]) {
         state.files[id].loading = loading;
+        if (loading) state.files[id].loadError = null;  // Clear error on new fetch
       } else {
         // Create placeholder state with loading flag
         state.files[id] = {
@@ -241,10 +280,81 @@ const filesSlice = createSlice({
           loading,
           saving: false,
           updatedAt: 0,
+          loadError: null,
           persistableChanges: {},
           ephemeralChanges: {},
           metadataChanges: {}
         };
+      }
+    },
+
+    /**
+     * Create a loading placeholder for a file being fetched by path.
+     * Uses a deterministic namespace-2 virtual ID derived from the path.
+     * No-ops if a real (positive-ID) file is already indexed at that path.
+     */
+    setFilePlaceholder(state, action: PayloadAction<string>) {
+      const path = action.payload;
+      // Don't overwrite a real (positive-ID) file already at this path
+      const existingId = state.pathIndex[path];
+      if (existingId !== undefined && existingId > 0) return;
+
+      const placeholderId = pathToVirtualId(path);
+      state.files[placeholderId] = {
+        id: placeholderId,
+        name: '',
+        path,
+        type: 'folder',  // stand-in type — same pattern as setFolderLoading
+        references: [],
+        content: null,
+        created_at: '',
+        updated_at: '',
+        company_id: 0,
+        loading: true,
+        saving: false,
+        updatedAt: 0,
+        loadError: null,
+        persistableChanges: {},
+        ephemeralChanges: {},
+        metadataChanges: {}
+      };
+      state.pathIndex[path] = placeholderId;
+    },
+
+    /**
+     * Set loading state for a folder by path
+     * Creates a placeholder entry for unseen folders (when loading=true)
+     */
+    setFolderLoading(state, action: PayloadAction<{ path: string; loading: boolean }>) {
+      const { path, loading } = action.payload;
+      const folderId = state.pathIndex[path];
+
+      if (folderId && state.files[folderId]) {
+        state.files[folderId].loading = loading;
+        if (loading) state.files[folderId].loadError = null;  // clear on retry
+      } else if (loading) {
+        // Create a placeholder for an unseen folder (same pattern as setFolderInfo)
+        const syntheticId = -(Object.keys(state.files).length + 1);
+        const folderName = path.split('/').pop() || path;
+        state.files[syntheticId] = {
+          id: syntheticId,
+          name: folderName,
+          path,
+          type: 'folder',
+          references: [],
+          content: null,
+          created_at: '',
+          updated_at: '',
+          company_id: 0,
+          loading: true,
+          saving: false,
+          updatedAt: 0,
+          loadError: null,
+          persistableChanges: {},
+          ephemeralChanges: {},
+          metadataChanges: {}
+        };
+        state.pathIndex[path] = syntheticId;
       }
     },
 
@@ -460,6 +570,7 @@ const filesSlice = createSlice({
           loading: false,
           saving: false,
           updatedAt: Date.now(),
+          loadError: null,
           persistableChanges: {},
           ephemeralChanges: {},
           metadataChanges: {}
@@ -497,6 +608,7 @@ const filesSlice = createSlice({
             loading: false,
             saving: false,
             updatedAt: Date.now(),
+            loadError: null,
             persistableChanges: {},
             ephemeralChanges: {},
             metadataChanges: {}
@@ -558,6 +670,7 @@ const filesSlice = createSlice({
         loading: false,
         saving: false,
         updatedAt: Date.now(),
+        loadError: null,
         persistableChanges: {},
         ephemeralChanges: {},
         metadataChanges: {}
@@ -581,6 +694,20 @@ const filesSlice = createSlice({
           state.files[parentFolderId].updatedAt = Date.now();
         }
       }
+    },
+
+    /**
+     * Set load error for one or more files
+     * Also clears loading state for all affected files
+     */
+    setLoadError(state, action: PayloadAction<{ ids: FileId[]; error: LoadError }>) {
+      const { ids, error } = action.payload;
+      ids.forEach(id => {
+        if (state.files[id]) {
+          state.files[id].loadError = error;
+          state.files[id].loading = false;
+        }
+      });
     },
 
     /**
@@ -733,6 +860,9 @@ export const {
   setFiles,
   setFileInfo,
   setLoading,
+  setFilePlaceholder,
+  setFolderLoading,
+  setLoadError,
   setEdit,
   setFullContent,
   clearEdits,
@@ -893,6 +1023,13 @@ export const selectHasMetadataChanges = (state: RootState, id: FileId): boolean 
   const file = state.files.files[id];
   if (!file) return false;
   return file.metadataChanges.name !== undefined || file.metadataChanges.path !== undefined;
+};
+
+/**
+ * Get load error for a file (returns null if no error)
+ */
+export const selectFileLoadError = (state: RootState, id: FileId): LoadError | null => {
+  return state.files.files[id]?.loadError ?? null;
 };
 
 // ============================================================================

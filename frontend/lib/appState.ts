@@ -2,14 +2,13 @@
  * App State Types
  *
  * Represents the current page context - either a file page or folder page.
- * Contains the augmented state from useFile/useFolder.
  */
 
-import { FileType, QueryResult } from '@/lib/types';
 import type { FileState } from '@/store/filesSlice';
+import type { AugmentedFile } from '@/lib/types';
 
 /**
- * Folder state (from useFolder)
+ * Folder state (from useFolder / navigationSlice)
  */
 export interface FolderState {
   files: FileState[];
@@ -23,14 +22,9 @@ export interface FolderState {
 export type AppState =
   | {
       type: 'file';
-      id: number;
-      fileType: FileType;
-      file: FileState;
-      references: FileState[];      // Referenced files (e.g., questions in dashboard)
-      queryResults: QueryResult[];  // Query results from augmentation
+      state: AugmentedFile;
     }
   | {
       type: 'folder';
-      path: string;
-      folder: FolderState;
+      state: FolderState;
     };

@@ -30,7 +30,8 @@ export default function SmartEmbeddedQuestionContainer({
   index
 }: SmartEmbeddedQuestionContainerProps) {
   // Load question file
-  const { file, loading } = useFile(questionId);
+  const { fileState: file } = useFile(questionId) ?? {};
+  const loading = !file || file.loading;
 
   // Get merged content (includes any edits)
   const mergedContent = useAppSelector(state =>

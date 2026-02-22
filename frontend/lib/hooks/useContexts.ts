@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { useAppSelector } from '@/store/hooks';
-import { useFiles } from './file-state-hooks';
+import { useFile } from './file-state-hooks';
 import { useFilesByCriteria } from './file-state-hooks';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type { DbFile } from '@/lib/types';
@@ -72,15 +72,13 @@ export function useContexts(options: UseContextsOptions = {}): UseContextsReturn
   }, [allContexts, homeFolder]);
 
   // Fully load home context (triggers context loader for fullSchema/fullDocs)
-  const { files: homeContextFiles, loading: homeContextLoading, error: homeContextError } = useFiles({
-    ids: homeContextMeta ? [homeContextMeta.id] : [],
-    skip: !homeContextMeta,
-    ttl
-  });
+  const homeContext = useFile(homeContextMeta?.id, { skip: !homeContextMeta, ttl })?.fileState;
+  const homeContextLoading = homeContextMeta ? (!homeContext || homeContext.loading) : false;
+  const homeContextError = homeContext?.loadError ?? null;
 
   return {
     contexts: allContexts,
-    homeContext: homeContextFiles[0],
+    homeContext,
     loading: metadataLoading || homeContextLoading,
     error: metadataError || homeContextError
   };

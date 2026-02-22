@@ -19,9 +19,8 @@
  */
 
 import { getStore } from '@/store/store';
-import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, clearEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, selectEffectivePath, deleteFile as deleteFileAction } from '@/store/filesSlice';
+import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, selectEffectivePath, deleteFile as deleteFileAction, setFilePlaceholder, generateVirtualId, pathToVirtualId } from '@/store/filesSlice';
 import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, setQueryLoading } from '@/store/queryResultsSlice';
-import { selectSelectedRun } from '@/store/reportRunsSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { FilesAPI, getFiles } from '@/lib/data/files';
 import { PromiseManager } from '@/lib/utils/promise-manager';
@@ -33,95 +32,125 @@ import { API } from '@/lib/api/declarations';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import type { RootState } from '@/store/store';
-import type { ReadFilesInput, ReadFilesOutput, FileState, QueryResult, QuestionContent, FileType, DocumentContent, AssetReference, DbFile, BaseFileContent, QuestionParameter, QuestionReference } from '@/lib/types';
+import type { AugmentedFile, FileState, QueryResult, QuestionContent, QuestionParameter, FileType, DocumentContent, DbFile, BaseFileContent, QuestionReference } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
-import type { AppState, FolderState } from '@/lib/appState';
+import { createLoadErrorFromException } from '@/lib/types/errors';
+import type { AppState } from '@/lib/appState';
 
 /**
- * Augmentation context passed to augment functions
+ * Extracts the initial inherited params for the root file being augmented.
+ *
+ * Dashboards store their current effective parameter values in
+ * content.parameterValues (a flat {name: value} dict). These are the values
+ * the user has set (or the question defaults where not overridden), and they
+ * cascade to every embedded reference.
+ *
+ * For questions viewed on their own page there is no parent, so we return {}
+ * and each question uses its own saved parameter defaults.
  */
-interface AugmentContext {
-  queryResults: Map<string, QueryResult>;
-  reportRuns?: Map<number, any>; // Map fileId to selected run
-}
-
-/**
- * Type-specific augmentation function
- * Takes a file state and context, and augments the context with additional data
- */
-type AugmentFunction = (state: RootState, fileState: FileState, context: AugmentContext) => void;
-
-/**
- * Registry of augmentation functions by file type
- */
-const augmentRegistry = new Map<FileType, AugmentFunction>();
-
-/**
- * Register an augmentation function for a file type
- */
-export function registerAugmentation(type: FileType, augmentFn: AugmentFunction): void {
-  augmentRegistry.set(type, augmentFn);
-}
-
-/**
- * Augment a question file with its query result
- */
-function augmentQuestionFile(state: RootState, fileState: FileState, context: AugmentContext): void {
-  const mergedContent = selectMergedContent(state, fileState.id) as QuestionContent;
-  if (!mergedContent) return;
-
-  const { query, parameters, database_name } = mergedContent;
-  const params = (parameters || []).reduce<Record<string, any>>((acc, p) => {
-    acc[p.name] = p.value ?? '';
-    return acc;
-  }, {});
-
-  const queryResult = selectQueryResult(state, query, params, database_name);
-  if (queryResult?.data) {
-    const key = `${database_name}|||${query}|||${JSON.stringify(params)}`;
-    context.queryResults.set(key, {
-      columns: queryResult.data.columns || [],
-      types: queryResult.data.types || [],
-      rows: queryResult.data.rows || []
-    });
+function getRootParams(state: RootState, fileState: FileState): Record<string, any> {
+  if (fileState.type === 'dashboard') {
+    const content = selectMergedContent(state, fileState.id) as DocumentContent;
+    return content?.parameterValues || {};
   }
+  return {};
 }
 
 /**
- * Augment a dashboard file with nested question states
- * Recursively augments each referenced question
+ * Applies inheritedParams as overrides to a question's own stored parameter defaults.
+ * Returns both forms needed downstream:
+ *   array — patched QuestionParameter[] for display in the app state
+ *   dict  — flat {name: value} for cache hash computation
+ *
+ * Only params the question itself defines are included; unrelated inherited
+ * params are dropped (prevents sibling-question param pollution in the hash).
  */
-function augmentDashboardFile(state: RootState, fileState: FileState, context: AugmentContext): void {
-  const content = selectMergedContent(state, fileState.id) as DocumentContent;
-  if (!content?.assets) return;
+function resolveEffectiveParams(
+  parameters: QuestionParameter[],
+  inheritedParams: Record<string, any>
+): { array: QuestionParameter[]; dict: Record<string, any> } {
+  const array = parameters.map(p => ({
+    ...p,
+    value: Object.prototype.hasOwnProperty.call(inheritedParams, p.name)
+      ? inheritedParams[p.name]
+      : p.value,
+  }));
+  const dict = array.reduce<Record<string, any>>((acc, p) => { acc[p.name] = p.value; return acc; }, {});
+  return { array, dict };
+}
 
-  // Augment each referenced question
-  content.assets.forEach((asset: AssetReference) => {
-    if (asset.type === 'question' && 'id' in asset) {
-      const questionState = selectFile(state, asset.id);
-      if (questionState) {
-        // Recursively augment the question
-        augmentQuestionFile(state, questionState, context);
+/**
+ * Builds an effective FileState for a reference viewed in a parent's context.
+ *   - Strips ephemeralChanges: the reference's transient state (lastExecuted, etc.)
+ *     pertains to its own page, not to the parent context.
+ *   - Patches question parameters + queryResultId to reflect effective inherited values.
+ */
+function buildEffectiveReference(refFile: FileState, inheritedParams: Record<string, any>): FileState {
+  const stripped = { ...refFile, ephemeralChanges: {} };
+  if (refFile.type !== 'question' || !refFile.content) return stripped;
+  const content = refFile.content as QuestionContent;
+  if (!content.parameters?.length) return stripped;
+
+  const { array: effectiveParameters, dict: effectiveParamsDict } = resolveEffectiveParams(
+    content.parameters, inheritedParams
+  );
+  const effectiveQueryResultId = content.query && content.database_name
+    ? getQueryHash(content.query, effectiveParamsDict, content.database_name)
+    : content.queryResultId;
+  return {
+    ...stripped,
+    content: { ...content, parameters: effectiveParameters, queryResultId: effectiveQueryResultId },
+  };
+}
+
+/**
+ * Recursively collects query results for a file and all its references,
+ * cascading inherited params down the hierarchy.
+ *
+ * Mental model: params always flow down the reference stack.
+ * - A dashboard passes its parameterValues to its questions.
+ * - A question passes those same params to any questions it references.
+ * - Each file uses inheritedParams as overrides for the params it defines.
+ *   Params the file does not define are not included in its cache hash
+ *   (no cross-question pollution).
+ */
+function augmentWithParams(
+  state: RootState,
+  fileState: FileState,
+  inheritedParams: Record<string, any>
+): Map<string, QueryResult> {
+  const result = new Map<string, QueryResult>();
+
+  // Questions execute SQL — look up the cached result using effective params.
+  // Dashboards do not execute their own query; only their references do.
+  if (fileState.type === 'question') {
+    const content = selectMergedContent(state, fileState.id) as QuestionContent;
+    if (content?.query) {
+      const { dict: params } = resolveEffectiveParams(content.parameters || [], inheritedParams);
+      const qr = selectQueryResult(state, content.query, params, content.database_name);
+      if (qr?.data) {
+        const id = getQueryHash(content.query, params, content.database_name)
+        result.set(id, {
+          ...(qr.data || {}),
+          id
+        });
       }
     }
-  });
-}
-
-/**
- * Augment a report file with selected run data
- */
-function augmentReportFile(state: RootState, fileState: FileState, context: AugmentContext): void {
-  const selectedRun = selectSelectedRun(state, fileState.id);
-  if (selectedRun) {
-    context.reportRuns = context.reportRuns || new Map();
-    context.reportRuns.set(fileState.id, selectedRun);
   }
-}
 
-// Register default augmentation functions
-registerAugmentation('question', augmentQuestionFile);
-registerAugmentation('dashboard', augmentDashboardFile);
-registerAugmentation('report', augmentReportFile);
+  // Cascade the same inherited params to all references.
+  // Covers: dashboard → questions, question → referenced questions, etc.
+  for (const refId of fileState.references || []) {
+    const refFile = selectFile(state, refId);
+    if (refFile) {
+      for (const [key, qr] of augmentWithParams(state, refFile, inheritedParams)) {
+        result.set(key, qr);
+      }
+    }
+  }
+
+  return result;
+}
 
 interface ReadFilesOptions {
   ttl?: number;      // Time-to-live in ms (default: CACHE_TTL.FILE)
@@ -135,6 +164,203 @@ interface ReadFilesOptions {
 export const filePromises = new PromiseManager<void>();
 
 /**
+ * LoadFiles - Fetch missing/stale files into Redux (Steps 1+2 of readFiles)
+ *
+ * Never re-throws — all errors end up in file.loadError in Redux.
+ *
+ * @param fileIds - File IDs to check and potentially fetch
+ * @param ttl - Time-to-live in ms for cache freshness
+ * @param skip - If true, skip fetching entirely
+ */
+export async function loadFiles(fileIds: number[], ttl: number, skip: boolean): Promise<void> {
+  const state = getStore().getState();
+
+  // Determine which files need fetching
+  const needsFetch = fileIds.filter(id => {
+    if (id < 0) return false;   // virtual files live only in Redux
+    if (skip) return false;
+    return !selectIsFileLoaded(state, id) || !selectIsFileFresh(state, id, ttl);
+  });
+
+  if (needsFetch.length === 0) return;
+
+  // Sort IDs for consistent cache key
+  const key = [...needsFetch].sort((a, b) => a - b).join(',');
+
+  // Set loading state for files being fetched
+  needsFetch.forEach(id => getStore().dispatch(setLoading({ id, loading: true })));
+
+  try {
+    await filePromises.execute(key, async () => {
+      const result = await FilesAPI.loadFiles(needsFetch);
+      getStore().dispatch(setFiles({
+        files: result.data,
+        references: result.metadata.references || []
+      }));
+      // setFiles sets loading: false on all stored files
+    });
+  } catch (error) {
+    // Store error in Redux — do NOT re-throw
+    getStore().dispatch(setLoadError({ ids: needsFetch, error: createLoadErrorFromException(error) }));
+    return;
+  }
+
+  // Post-fetch: mark files not returned by the API as NOT_FOUND
+  const afterState = getStore().getState();
+  const notFound = needsFetch.filter(id => {
+    const file = selectFile(afterState, id);
+    return !file || file.updatedAt === 0;
+  });
+  if (notFound.length > 0) {
+    getStore().dispatch(setLoadError({
+      ids: notFound,
+      error: { message: 'File not found', code: 'NOT_FOUND' }
+    }));
+  }
+}
+
+/**
+ * SelectAugmentedFiles - Pure selector: read files + references + query results from Redux
+ *
+ * No async, no side-effects. Can be used in hooks via useSelector.
+ *
+ * @param state - Redux state
+ * @param fileIds - File IDs to select
+ * @returns ReadFilesOutput
+ */
+export function selectAugmentedFiles(state: RootState, fileIds: number[]): AugmentedFile[] {
+  return fileIds
+    .map(id => {
+      const fileState = selectFile(state, id);
+      if (!fileState) {
+        if (id < 0) console.error(`[selectAugmentedFiles] Virtual file ${id} not found in Redux`);
+        return undefined;
+      }
+      const references = (fileState.references || [])
+        .map(refId => selectFile(state, refId))
+        .filter((f): f is FileState => f !== undefined);
+
+      // Collect query results: start with the root file's effective params and
+      // let augmentWithParams cascade them through the entire reference tree.
+      const inheritedParams = getRootParams(state, fileState);
+      const queryResultMap = augmentWithParams(state, fileState, inheritedParams);
+
+      const effectiveReferences = references.map(ref => buildEffectiveReference(ref, inheritedParams));
+      return { fileState, references: effectiveReferences, queryResults: Array.from(queryResultMap.values()) };
+    })
+    .filter((a): a is AugmentedFile => a !== undefined);
+}
+
+/**
+ * AugmentedFolder - Result of selectAugmentedFolder
+ */
+export interface AugmentedFolder {
+  files: FileState[];
+  loading: boolean;
+  error: LoadError | null;
+}
+
+/**
+ * selectAugmentedFolder - Pure selector: read folder children from Redux
+ *
+ * Maps folder references to FileState[], filters by user permissions and hidden paths.
+ * No async, no side-effects. Pair with readFolder() to ensure data is loaded.
+ *
+ * @param state - Redux state
+ * @param path - Folder path (e.g. '/org')
+ * @returns AugmentedFolder
+ */
+export function selectAugmentedFolder(state: RootState, path: string): AugmentedFolder {
+  const folderId = selectFileIdByPath(state, path);
+  const folder = folderId ? selectFile(state, folderId) : undefined;
+
+  if (!folder) return { files: [], loading: true, error: null };
+
+  const user = state.auth.user;
+  const mode = user?.mode || 'org';
+  const role = user?.role || 'viewer';
+
+  const files = (folder.references || [])
+    .map(id => selectFile(state, id))
+    .filter((f): f is FileState => {
+      if (!f) return false;
+      if (!canViewFileType(role, f.type)) return false;
+      if (f.type === 'folder' && isHiddenSystemPath(f.path, mode)) return false;
+      return true;
+    });
+
+  return { files, loading: folder.loading ?? false, error: folder.loadError ?? null };
+}
+
+/**
+ * selectFilesByCriteria - Pure selector: filter files from Redux by criteria
+ *
+ * No async, no side-effects. Pair with readFilesByCriteria() to ensure data is loaded.
+ * Uses startsWith for path matching (equivalent to unlimited depth), matching the
+ * server-populated Redux state.
+ *
+ * @param state - Redux state
+ * @param criteria - Filter criteria (type, paths)
+ * @returns FileState[] matching criteria
+ */
+export function selectFilesByCriteria(
+  state: RootState,
+  criteria: { type?: FileType; paths?: string[] }
+): FileState[] {
+  return Object.values(state.files.files).filter(file => {
+    if (criteria.type && file.type !== criteria.type) return false;
+    if (criteria.paths) {
+      return criteria.paths.some(path => file.path.startsWith(path));
+    }
+    return true;
+  });
+}
+
+/**
+ * selectFileByPath - Pure selector: get a file by path from Redux
+ *
+ * @param state - Redux state
+ * @param path - File path
+ * @returns FileState if found, undefined otherwise
+ */
+export function selectFileByPath(state: RootState, path: string | null): FileState | undefined {
+  if (!path) return undefined;
+  const id = selectFileIdByPath(state, path);
+  return id ? selectFile(state, id) : undefined;
+}
+
+/**
+ * loadFileByPath - Fetch a file by path into Redux
+ *
+ * Never re-throws — callers handle errors in local state.
+ *
+ * @param path - File path to load
+ * @param ttl - Time-to-live in ms for cache freshness
+ */
+export async function loadFileByPath(path: string, ttl: number = CACHE_TTL.FILE): Promise<void> {
+  const state = getStore().getState();
+  const existingId = selectFileIdByPath(state, path);
+  // Skip if a real (positive-ID) file is already fresh
+  if (existingId && existingId > 0
+      && selectIsFileLoaded(state, existingId)
+      && selectIsFileFresh(state, existingId, ttl)) {
+    return;
+  }
+  // Synchronously create loading placeholder in Redux (pathIndex updated too)
+  getStore().dispatch(setFilePlaceholder(path));
+  try {
+    const response = await FilesAPI.loadFileByPath(path);
+    // setFile reducer auto-deletes the placeholder and updates pathIndex
+    getStore().dispatch(setFile({ file: response.data, references: [] }));
+  } catch (err) {
+    getStore().dispatch(setLoadError({
+      ids: [pathToVirtualId(path)],
+      error: createLoadErrorFromException(err)
+    }));
+  }
+}
+
+/**
  * ReadFiles - Load multiple files with references and query results
  *
  * @param input - File IDs to load
@@ -142,106 +368,13 @@ export const filePromises = new PromiseManager<void>();
  * @returns Augmented files with references and query results
  */
 export async function readFiles(
-  input: ReadFilesInput,
+  fileIds: number[],
   options: ReadFilesOptions = {}
-): Promise<ReadFilesOutput> {
+): Promise<AugmentedFile[]> {
   const { ttl = CACHE_TTL.FILE, skip = false } = options;
-  const { fileIds } = input;
-  const state = getStore().getState();
 
-  // Step 1: Determine which files need fetching
-  const needsFetch: number[] = [];
-
-  for (const fileId of fileIds) {
-    // Virtual files (negative IDs) only exist in Redux, never fetch from API
-    if (fileId < 0) {
-      continue;
-    }
-
-    const isLoaded = selectIsFileLoaded(state, fileId);
-    const isFresh = selectIsFileFresh(state, fileId, ttl);
-
-    if (!skip && (!isLoaded || !isFresh)) {
-      needsFetch.push(fileId);
-    }
-  }
-
-  // Step 2: Fetch missing/stale files with deduplication
-  if (needsFetch.length > 0) {
-    // Sort IDs for consistent cache key
-    const key = needsFetch.sort((a, b) => a - b).join(',');
-
-    await filePromises.execute(key, async () => {
-      const result = await FilesAPI.loadFiles(needsFetch);
-      getStore().dispatch(setFiles({
-        files: result.data,
-        references: result.metadata.references || []
-      }));
-    });
-  }
-
-  // Step 3: Collect results from Redux (now guaranteed fresh)
-  const updatedState = getStore().getState();
-  const fileStates: FileState[] = [];
-  const referenceIds = new Set<number>();
-  const augmentContext: AugmentContext = {
-    queryResults: new Map<string, QueryResult>()
-  };
-
-  for (const fileId of fileIds) {
-    const fileState = selectFile(updatedState, fileId);
-    if (!fileState) {
-      // Debug: Log what files ARE in Redux
-      const allFileIds = Object.keys(updatedState.files.files);
-      const virtualFileIds = allFileIds.filter(id => parseInt(id) < 0);
-      console.error('[readFiles] File not found in Redux:', {
-        requestedId: fileId,
-        isVirtual: fileId < 0,
-        allVirtualIds: virtualFileIds,
-        allFileCount: allFileIds.length
-      });
-
-      if (fileId < 0) {
-        throw new Error(`Virtual file ${fileId} not found in Redux. Available virtual files: [${virtualFileIds.join(', ')}]. Virtual files must exist in Redux before calling readFiles.`);
-      } else {
-        throw new Error(`File ${fileId} not found after fetch`);
-      }
-    }
-
-    fileStates.push(fileState);
-
-    // Collect reference IDs
-    if (fileState.references) {
-      fileState.references.forEach(refId => referenceIds.add(refId));
-    }
-
-    // Augment file with type-specific data (e.g., query results for questions)
-    const augmentFn = augmentRegistry.get(fileState.type);
-    if (augmentFn) {
-      augmentFn(updatedState, fileState, augmentContext);
-    }
-  }
-
-  // Step 4: Load all unique references and augment them
-  const references: FileState[] = [];
-  for (const refId of referenceIds) {
-    const refState = selectFile(updatedState, refId);
-    if (refState) {
-      references.push(refState);
-
-      // Augment referenced files as well
-      const augmentFn = augmentRegistry.get(refState.type);
-      if (augmentFn) {
-        augmentFn(updatedState, refState, augmentContext);
-      }
-    }
-  }
-
-  return {
-    fileStates,
-    references,
-    queryResults: Array.from(augmentContext.queryResults.values())
-  };
+  await loadFiles(fileIds, ttl, skip);
+  return selectAugmentedFiles(getStore().getState(), fileIds);
 }
 
 /**
@@ -266,7 +399,7 @@ export interface ReadFilesByCriteriaOptions {
  */
 export async function readFilesByCriteria(
   options: ReadFilesByCriteriaOptions
-): Promise<ReadFilesOutput> {
+): Promise<AugmentedFile[]> {
   const { criteria, ttl = CACHE_TTL.FILE, skip = false, partial = false } = options;
 
   // Step 1: Get file metadata matching criteria
@@ -276,17 +409,14 @@ export async function readFilesByCriteria(
   // Step 2: If partial load, return metadata only (no augmentation)
   if (partial) {
     const state = getStore().getState();
-    const fileStates: FileState[] = fileIds.map(id => selectFile(state, id)).filter(Boolean) as FileState[];
-
-    return {
-      fileStates,
-      references: [],
-      queryResults: []
-    };
+    return fileIds
+      .map(id => selectFile(state, id))
+      .filter((f): f is FileState => Boolean(f))
+      .map(fileState => ({ fileState, references: [], queryResults: [] }));
   }
 
   // Step 3: Full load with augmentation
-  return readFiles({ fileIds }, { ttl, skip });
+  return readFiles(fileIds, { ttl, skip });
 }
 
 /**
@@ -322,13 +452,13 @@ export async function editFile(options: EditFileOptions): Promise<void> {
 
   // Handle metadata changes (name, path)
   if (changes.name !== undefined || changes.path !== undefined) {
-    editFileMetadata({
+    getStore().dispatch(setMetadataEdit({
       fileId,
       changes: {
         ...(changes.name !== undefined && { name: changes.name }),
         ...(changes.path !== undefined && { path: changes.path })
       }
-    });
+    }));
   }
 
   // Handle content changes
@@ -352,52 +482,6 @@ export async function editFile(options: EditFileOptions): Promise<void> {
 }
 
 /**
- * Read files with line-encoded content for LLM consumption
- *
- * Formats each file's content as JSON with line numbers (1-indexed)
- * matching the format expected by editFileReplace.
- *
- * @param input - File IDs to load
- * @param options - TTL and skip options
- * @returns ReadFilesOutput with additional lineEncodedFiles map
- */
-export async function readFilesLineEncoded(
-  input: ReadFilesInput,
-  options: ReadFilesOptions = {}
-): Promise<ReadFilesOutput & { lineEncodedFiles: Record<number, string> }> {
-  const result = await readFiles(input, options);
-
-  const lineEncodedFiles: Record<number, string> = {};
-
-  for (const fileState of result.fileStates) {
-    // Get merged content (same as editFileReplace uses)
-    const state = getStore().getState();
-    const mergedContent = selectMergedContent(state, fileState.id);
-
-    if (!mergedContent) continue;
-
-    // Format content as JSON (same as editFileReplace line 378)
-    const contentStr = JSON.stringify(mergedContent, null, 2);
-    const lines = contentStr.split('\n');
-
-    // Add 1-indexed line numbers with padding for alignment
-    const maxLineNum = lines.length;
-    const padding = String(maxLineNum).length;
-
-    const encoded = lines
-      .map((line, idx) => {
-        const lineNum = idx + 1; // 1-indexed (matching editFileReplace)
-        return `${String(lineNum).padStart(padding)} | ${line}`;
-      })
-      .join('\n');
-
-    lineEncodedFiles[fileState.id] = encoded;
-  }
-
-  return { ...result, lineEncodedFiles };
-}
-
-/**
  * Read files and return stringified content (no pretty print)
  *
  * Loads files and returns their content as compact JSON strings.
@@ -408,20 +492,14 @@ export async function readFilesLineEncoded(
  * @returns File states and stringified content (id -> string)
  */
 export async function readFilesStr(
-  input: ReadFilesInput,
+  fileIds: number[],
   options: ReadFilesOptions = {}
-): Promise<ReadFilesOutput & { stringifiedFiles: Record<number, string> }> {
-  const result = await readFiles(input, options);
-
-  const stringifiedFiles: Record<number, string> = {};
-
-  for (const fileState of result.fileStates) {
-    const state = getStore().getState();
+): Promise<(AugmentedFile & { stringifiedContent: string })[]> {
+  const files = await readFiles(fileIds, options);
+  const state = getStore().getState();
+  return files.map(augmented => {
+    const { fileState } = augmented;
     const mergedContent = selectMergedContent(state, fileState.id);
-
-    if (!mergedContent) continue;
-
-    // Return FULL file JSON (including metadata)
     const fullFile = {
       id: fileState.id,
       name: selectEffectiveName(state, fileState.id) || '',
@@ -429,13 +507,8 @@ export async function readFilesStr(
       type: fileState.type,
       content: mergedContent
     };
-
-    // Stringify without pretty print (compact JSON)
-    const fullFileStr = JSON.stringify(fullFile);
-    stringifiedFiles[fileState.id] = fullFileStr;
-  }
-
-  return { ...result, stringifiedFiles };
+    return { ...augmented, stringifiedContent: JSON.stringify(fullFile) };
+  });
 }
 
 /**
@@ -582,127 +655,6 @@ export async function editFileStr(
 }
 
 /**
- * Options for editFileLineEncoded (line-based editing)
- */
-export interface EditFileLineEncodedOptions {
-  fileId: number;
-  from: number;    // Line number (1-indexed)
-  to: number;      // Line number (1-indexed)
-  newContent: string;  // Replacement text
-}
-
-/**
- * EditFileLineEncoded - Range-based line editing
- *
- * Useful for precise line-by-line editing of JSON content.
- * Validates JSON after edit and auto-executes queries for questions.
- *
- * @param options - File ID and line range to replace
- * @returns Success status with diff
- */
-export async function editFileLineEncoded(
-  options: EditFileLineEncodedOptions
-): Promise<{ success: boolean; diff?: string; error?: string }> {
-  const { fileId, from, to, newContent } = options;
-  const state = getStore().getState();
-
-  // Get file state
-  const fileState = selectFile(state, fileId);
-  if (!fileState) {
-    return { success: false, error: `File ${fileId} not found` };
-  }
-
-  // Get merged content
-  const mergedContent = selectMergedContent(state, fileId);
-  if (!mergedContent) {
-    return { success: false, error: `File ${fileId} has no content` };
-  }
-
-  // Convert content to JSON string for line-based editing
-  const contentStr = JSON.stringify(mergedContent, null, 2);
-  const lines = contentStr.split('\n');
-
-  // Validate range
-  if (from < 1 || from > lines.length + 1) {
-    return { success: false, error: `Invalid 'from' line number: ${from} (file has ${lines.length} lines)` };
-  }
-
-  if (to < 1 || to > lines.length + 1) {
-    return { success: false, error: `Invalid 'to' line number: ${to} (file has ${lines.length} lines)` };
-  }
-
-  if (from > to) {
-    return { success: false, error: `Invalid range: 'from' (${from}) must be <= 'to' (${to})` };
-  }
-
-  // Apply edit (line numbers are 1-indexed)
-  const beforeLines = lines.slice(0, from - 1);
-  const afterLines = lines.slice(to);
-  const newLines = newContent.split('\n');
-  const editedLines = [...beforeLines, ...newLines, ...afterLines];
-  const editedStr = editedLines.join('\n');
-
-  // Parse edited content as JSON
-  let editedContent;
-  try {
-    editedContent = JSON.parse(editedStr);
-  } catch (error) {
-    return {
-      success: false,
-      error: `Invalid JSON after edit: ${error instanceof Error ? error.message : 'Unknown error'}`
-    };
-  }
-
-  // Validate required fields based on file type
-  if (fileState.type === 'question') {
-    const questionContent = editedContent as QuestionContent;
-    if (!questionContent.database_name) {
-      return {
-        success: false,
-        error: 'Question requires database_name field'
-      };
-    }
-    if (!questionContent.query) {
-      return {
-        success: false,
-        error: 'Question requires query field'
-      };
-    }
-  }
-
-  if (fileState.type === 'dashboard') {
-    const dashboardContent = editedContent as DocumentContent;
-    if (!dashboardContent.assets) {
-      return {
-        success: false,
-        error: 'Dashboard requires assets field'
-      };
-    }
-    if (!dashboardContent.layout) {
-      return {
-        success: false,
-        error: 'Dashboard requires layout field'
-      };
-    }
-  }
-
-  // Store edit in Redux
-  getStore().dispatch(setEdit({
-    fileId,
-    edits: editedContent
-  }));
-
-  // Generate diff
-  const diff = generateDiff(contentStr, editedStr);
-
-  // NOTE: Removed auto-execute for questions (Phase 3: explicit execute pattern)
-  // Queries should only execute when user clicks Run button (handleExecute)
-  // AI agents that edit questions should call handleExecute explicitly if needed
-
-  return { success: true, diff };
-}
-
-/**
  * Deep merge two objects
  * @param target - Base object
  * @param source - Changes to merge in
@@ -763,28 +715,6 @@ function generateDiff(oldStr: string, newStr: string): string {
   return diffLines.join('\n');
 }
 
-/**
- * Options for editFileMetadata
- */
-interface EditFileMetadataOptions {
-  fileId: number;
-  changes: { name?: string; path?: string };
-}
-
-/**
- * EditFileMetadata - Edit file name/path (internal only)
- *
- * Stores changes in metadataChanges (doesn't save to database).
- * External callers should use editFile() instead.
- *
- * @param options - File ID and metadata changes
- */
-function editFileMetadata(options: EditFileMetadataOptions): void {
-  const { fileId, changes } = options;
-
-  // Import setMetadataEdit from filesSlice
-  getStore().dispatch(setMetadataEdit({ fileId, changes }));
-}
 
 /**
  * Options for publishFile
@@ -837,13 +767,6 @@ export async function publishFile(
   // Set saving state
   getStore().dispatch(setSaving({ id: fileId, saving: true }));
 
-  try {
-    // Get merged content
-    const mergedContent = selectMergedContent(state, fileId);
-  if (!mergedContent) {
-    throw new Error(`File ${fileId} has no content`);
-  }
-
   // Determine if this is a create or update
   const isVirtualFile = fileId < 0;
 
@@ -871,22 +794,22 @@ export async function publishFile(
   let savedName: string;
   let updatedFile: DbFile;
 
+  const extractReferences = extractReferencesFromContent;
+  const references = extractReferences(fileData.content, fileData.type as FileType);
+
   if (isVirtualFile) {
     // Create new file using FilesAPI
     const result = await FilesAPI.createFile({
       name: fileData.name,
       path: fileData.path,
       type: fileData.type as FileType,
-      content: fileData.content
+      content: fileData.content,
+      references
     });
     savedId = result.data.id;
     savedName = result.data.name;
     updatedFile = result.data;
   } else {
-    // Update existing file using FilesAPI
-    const extractReferences = extractReferencesFromContent;
-    const references = extractReferences(fileData.content, fileData.type as FileType);
-
     const result = await FilesAPI.saveFile(
       fileId,
       fileData.name,
@@ -908,75 +831,10 @@ export async function publishFile(
     getStore().dispatch(setFile({ file: updatedFile }));
   }
 
-  // Clear changes for the main file
-  // Note: We don't delete the virtual file entry here to avoid potential 404 flash
-  // during redirect. The virtual file entry is harmless and will be garbage collected
-  // on next page load or can be cleaned up by a background task.
   getStore().dispatch(clearEdits(fileId));
   getStore().dispatch(clearMetadataEdits(fileId));
 
-  // Cascade save: Collect and batch-save dirty referenced files
-  const references = fileState.references || [];
-  const currentState = getStore().getState();
-  const dirtyRefs: Array<{
-    id: number;
-    name: string;
-    path: string;
-    content: BaseFileContent;
-    references: number[];
-  }> = [];
-
-  for (const refId of references) {
-    const refState = selectFile(currentState, refId);
-    if (!refState) continue;
-
-    // Check if reference is dirty
-    const hasPersistableChanges = refState.persistableChanges && Object.keys(refState.persistableChanges).length > 0;
-    const hasMetadataChanges = refState.metadataChanges && Object.keys(refState.metadataChanges).length > 0;
-
-    if (hasPersistableChanges || hasMetadataChanges) {
-      // Get content for saving: merge only persistable changes, NOT ephemeral
-      const contentToSave: BaseFileContent | null = refState.persistableChanges
-        ? { ...refState.content, ...refState.persistableChanges }
-        : refState.content;
-
-      if (!contentToSave) continue; // Skip if content is undefined
-
-      const editedName = refState.metadataChanges?.name ?? refState.name;
-      const editedPath = refState.metadataChanges?.path ?? refState.path;
-
-      dirtyRefs.push({
-        id: refId,
-        name: editedName,
-        path: editedPath,
-        content: contentToSave as BaseFileContent,  // Safe after null check
-        references: refState.references || []
-      });
-    }
-  }
-
-  // If there are dirty references, batch-save them atomically
-  if (dirtyRefs.length > 0) {
-    const result = await FilesAPI.batchSaveFiles(dirtyRefs);
-    const savedFileIds = result.savedFileIds;
-
-    // Reload saved references to update their base content IN PARALLEL
-    // This ensures their content doesn't revert after clearing changes
-    await Promise.all(
-      savedFileIds.map(async (savedId) => {
-        const reloadResult = await FilesAPI.loadFile(savedId);
-        getStore().dispatch(setFile({ file: reloadResult.data, references: reloadResult.metadata.references }));
-        getStore().dispatch(clearEdits(savedId));
-        getStore().dispatch(clearMetadataEdits(savedId));
-      })
-    );
-  }
-
-    return { id: savedId, name: savedName };
-  } finally {
-    // Always clear saving state
-    getStore().dispatch(setSaving({ id: fileId, saving: false }));
-  }
+  return { id: savedId, name: savedName };
 }
 
 /**
@@ -1134,10 +992,10 @@ export async function createVirtualFile(
 ): Promise<number> {
   const { folder, databaseName, query, virtualId: providedVirtualId } = options;
 
-  // Generate virtual ID (negative timestamp or use provided)
+  // Generate virtual ID (namespaced or use provided)
   const virtualId = providedVirtualId && providedVirtualId < 0
     ? providedVirtualId
-    : -Date.now();
+    : generateVirtualId();
 
   // Get user from Redux for folder resolution and company_id
   const state = getStore().getState();
@@ -1320,10 +1178,8 @@ export async function readFolder(
 
   // Fetch from API if not fresh or forcing reload
   if (!isFresh || forceLoad) {
-    // Set loading state
-    if (folderId) {
-      getStore().dispatch(setLoading({ id: folderId, loading: true }));
-    }
+    // Set loading state (creates placeholder if folder not yet in Redux)
+    getStore().dispatch(setFolderLoading({ path, loading: true }));
 
     try {
       // Fetch folder contents from API
@@ -1343,22 +1199,17 @@ export async function readFolder(
     } catch (error) {
       console.error('[readFolder] Failed to load folder:', path, error);
 
-      // Clear loading state
-      if (folderId) {
-        getStore().dispatch(setLoading({ id: folderId, loading: false }));
-      }
-
-      // Convert to LoadError
       const loadError: LoadError = {
         message: error instanceof Error ? error.message : String(error),
         code: 'SERVER_ERROR'
       };
 
-      return {
-        files: [],
-        loading: false,
-        error: loadError
-      };
+      const updatedFolderId = selectFileIdByPath(getStore().getState(), path);
+      if (updatedFolderId) {
+        getStore().dispatch(setLoadError({ ids: [updatedFolderId], error: loadError }));
+      }
+
+      return { files: [], loading: false, error: loadError };
     }
   }
 
@@ -1426,8 +1277,9 @@ async function filterFilesByPermissions(files: FileState[]): Promise<FileState[]
  * Options for query execution
  */
 export interface GetQueryResultOptions {
-  ttl?: number;      // Time-to-live in ms (default: CACHE_TTL.QUERY)
-  skip?: boolean;    // Skip execution (default: false)
+  ttl?: number;        // Time-to-live in ms (default: CACHE_TTL.QUERY)
+  skip?: boolean;      // Skip execution (default: false)
+  forceLoad?: boolean; // Bypass TTL cache and re-execute even if fresh (default: false)
 }
 
 /**
@@ -1480,7 +1332,7 @@ export async function getQueryResult(
   options: GetQueryResultOptions = {}
 ): Promise<QueryResult> {
   const { query, params: queryParams, database, references } = params;
-  const { ttl = CACHE_TTL.QUERY, skip = false } = options;
+  const { ttl = CACHE_TTL.QUERY, skip = false, forceLoad = false } = options;
 
   if (skip) {
     throw new Error('Cannot execute query with skip=true');
@@ -1496,7 +1348,7 @@ export async function getQueryResult(
   const isFresh = selectIsQueryFresh(state, query, queryParams, database, ttl);
   const cached = selectQueryResult(state, query, queryParams, database);
 
-  if (cached?.data && isFresh) {
+  if (cached?.data && isFresh && !forceLoad) {
     return Promise.resolve(cached.data);
   }
 
@@ -1558,105 +1410,3 @@ export async function getQueryResult(
   });
 }
 
-// ============================================================================
-// App State Management
-// ============================================================================
-
-/**
- * Get app state from current navigation pathname
- *
- * Determines page type from pathname and loads appropriate data:
- * - /f/{id} → file page → readFiles
- * - /p/path → folder page → readFolder
- * - /new/{type} → new file page → create virtual file with options
- *
- * @param pathname - Current pathname from usePathname()
- * @param createOptions - Options for creating virtual files (for /new routes)
- * @returns AppState (file or folder context)
- */
-export async function getAppState(
-  pathname: string,
-  createOptions?: CreateVirtualFileOptions
-): Promise<AppState | null> {
-  // File page: /f/{id} or /f/{id}-{slug}
-  const fileMatch = pathname.match(/^\/f\/(\d+)/);
-  if (fileMatch) {
-    const id = parseInt(fileMatch[1], 10);
-    const result = await readFiles({ fileIds: [id] }, { skip: id < 0 });
-    if (!result.fileStates || result.fileStates.length === 0) return null;
-
-    const file = result.fileStates[0];
-    return {
-      type: 'file',
-      id,
-      fileType: file.type,
-      file,
-      references: result.references,
-      queryResults: result.queryResults
-    };
-  }
-
-  // New file page: /new/{type}
-  const newFileMatch = pathname.match(/^\/new\/([^/?]+)/);
-  if (newFileMatch) {
-    const fileType = newFileMatch[1] as FileType;
-    const state = getStore().getState();
-
-    // Check if virtual file with specific ID already exists (from createOptions.virtualId)
-    let virtualId: number | undefined;
-    if (createOptions?.virtualId && createOptions.virtualId < 0) {
-      const existingFile = selectFile(state, createOptions.virtualId);
-      if (existingFile) {
-        virtualId = createOptions.virtualId;
-      }
-    }
-
-    // If no specific virtual ID, find or create latest virtual file of this type
-    if (!virtualId) {
-      const virtualFiles = Object.values(state.files.files)
-        .filter(f => f.id < 0 && f.type === fileType)
-        .sort((a, b) => a.id - b.id); // Sort ascending: most negative (newest) first
-
-      if (virtualFiles.length > 0) {
-        // Use existing virtual file
-        virtualId = virtualFiles[0].id;
-      } else {
-        // Create new virtual file with options
-        virtualId = await createVirtualFile(fileType, createOptions);
-      }
-    }
-
-    // Get the file from Redux
-    const updatedState = getStore().getState();
-    const file = selectFile(updatedState, virtualId);
-
-    if (!file) return null;
-
-    return {
-      type: 'file',
-      id: virtualId,
-      fileType: file.type,
-      file,
-      references: [],
-      queryResults: []
-    };
-  }
-
-  // Folder page: /p/path or /p/nested/path
-  const folderMatch = pathname.match(/^\/p\/(.*)/);
-  if (folderMatch) {
-    const path = '/' + (folderMatch[1] || '');
-    const result = await readFolder(path);
-    return {
-      type: 'folder',
-      path,
-      folder: {
-        files: result.files,
-        loading: false,
-        error: null
-      }
-    };
-  }
-
-  return null;
-}

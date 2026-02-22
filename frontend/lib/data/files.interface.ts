@@ -55,15 +55,4 @@ export interface IFilesDataLayer {
    */
   getTemplate(type: FileType, options: GetTemplateOptions, user: EffectiveUser): Promise<GetTemplateResult>;
 
-  /**
-   * Batch save multiple files atomically (cascade save for references)
-   * Updates multiple files in a single transaction
-   */
-  batchSaveFiles(files: Array<{
-    id: number;
-    name: string;
-    path: string;
-    content: BaseFileContent;
-    references: number[];
-  }>, user?: EffectiveUser): Promise<{ savedFileIds: number[] }>;
 }

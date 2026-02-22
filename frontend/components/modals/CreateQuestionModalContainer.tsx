@@ -48,7 +48,10 @@ export default function CreateQuestionModalContainer({
   const effectiveId = questionId ?? virtualId;
 
   // Use useFile hook for state management (skip if no ID yet)
-  const { file, loading: fileLoading, saving, error } = useFile(effectiveId);
+  const { fileState: file } = useFile(effectiveId) ?? {};
+  const fileLoading = !file || file.loading;
+  const saving = file?.saving ?? false;
+  const error = file?.loadError ?? null;
   const isDirty = useAppSelector(state => effectiveId ? selectIsDirty(state, effectiveId) : false);
   const mergedContent = useAppSelector(state => effectiveId ? selectMergedContent(state, effectiveId) as QuestionContent | undefined : undefined);
   const effectiveName = useAppSelector(state => effectiveId ? selectEffectiveName(state, effectiveId) || '' : '');

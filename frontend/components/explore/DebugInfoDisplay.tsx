@@ -60,17 +60,17 @@ function LLMCallDetails({ llmCallId, userId, mode }: { llmCallId: string; userId
   }
 
   // Verify it's an LLM call file
-  if (file.type !== 'llm_call') {
+  if (file.fileState.type !== 'llm_call') {
     return (
       <Box p={2}>
         <Text fontSize="2xs" color="accent.danger">
-          Error: File at path is not an LLM call file (type: {file.type})
+          Error: File at path is not an LLM call file (type: {file.fileState.type})
         </Text>
       </Box>
     );
   }
 
-  const content = file.content as unknown as LLMCallFileContent;
+  const content = file.fileState.content as unknown as LLMCallFileContent;
 
   return (
     <VStack gap={2} align="stretch">

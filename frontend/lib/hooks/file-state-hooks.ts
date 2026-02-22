@@ -15,144 +15,107 @@
  * - useQueryResult - Execute queries with TTL caching
  */
 
-import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
-import { usePathname, useSearchParams } from 'next/navigation';
-import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { useEffect, useMemo, useState } from 'react';
+import { shallowEqual } from 'react-redux';
+import { useAppSelector } from '@/store/hooks';
 import {
-  selectFile,
-  selectFiles,
-  selectMergedContent,
   isVirtualFileId,
-  setFiles,
-  setFile,
-  setLoading,
   type FileId,
   type FileState
 } from '@/store/filesSlice';
 import {
   selectQueryResult,
-  selectIsQueryFresh,
   selectHasQueryData
 } from '@/store/queryResultsSlice';
 import {
-  readFiles,
   readFilesByCriteria,
   readFolder,
+  loadFiles,
+  loadFileByPath,
   getQueryResult,
-  createVirtualFile,
-  getAppState,
-  stripFileContent
+  selectAugmentedFiles,
+  selectAugmentedFolder,
+  selectFilesByCriteria,
+  selectFileByPath,
+  type AugmentedFolder
 } from '@/lib/api/file-state';
 import type { AppState } from '@/lib/appState';
-import { FilesAPI } from '@/lib/data/files';
+import { selectAppState } from '@/store/navigationSlice';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import type { LoadError } from '@/lib/types/errors';
-import { createLoadErrorFromException } from '@/lib/types/errors';
-import { resolveHomeFolderSync, isHiddenSystemPath } from '@/lib/mode/path-resolver';
 import type { GetFilesOptions } from '@/lib/data/types';
-import type { QuestionReference, QueryResult } from '@/lib/types';
+import type { AugmentedFile, QuestionReference } from '@/lib/types';
 import { FileType } from '@/lib/ui/file-metadata';
 
 // ============================================================================
-// useFiles - Load multiple files by IDs
+// useAugmentedFile / useAugmentedFolder - Internal reactive selector hooks
 // ============================================================================
 
 /**
- * Options for useFiles hook
- */
-export interface UseFilesOptions {
-  /** Load specific files by ID */
-  ids: number[];
-  /** Time-to-live for cache freshness (ms) */
-  ttl?: number;
-  /** Skip loading (for conditional fetching) */
-  skip?: boolean;
-}
-
-/**
- * Return type for useFiles hook
- */
-export interface UseFilesReturn {
-  files: FileState[];
-  loading: boolean;
-  error: LoadError | null;
-}
-
-/**
- * useFiles - Simple hook for loading files by IDs
+ * useAugmentedFile - Pure reactive selector hook for a single augmented file
  *
- * Uses file-state.ts readFiles internally for consistent caching and augmentation.
- * For criteria-based queries (path, type, depth), use useFilesByCriteria instead.
- *
- * Usage:
- * ```typescript
- * // Load by IDs
- * const { files, loading, error } = useFiles({ ids: [1, 2, 3] });
- *
- * // With cache control
- * const { files, loading } = useFiles({
- *   ids: [1],
- *   ttl: 300000,
- *   skip: false
- * });
- * ```
+ * No side-effects, no fetching — pair with useFile (or loadFiles) to ensure data is loaded.
+ * Re-renders only when fileState, references, or queryResults change by shallow equality.
  */
-export function useFiles(options: UseFilesOptions): UseFilesReturn {
-  const { ids, ttl = 60000, skip = false } = options;
-  const dispatch = useAppDispatch();
-
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<LoadError | null>(null);
-
-  // Stable key from options for dependency tracking
-  const optionsKey = useMemo(
-    () => JSON.stringify({ ids, ttl, skip }),
-    [ids, ttl, skip]
+function useAugmentedFile(id: number | undefined): AugmentedFile | undefined {
+  return useAppSelector(
+    state => id !== undefined ? selectAugmentedFiles(state, [id])[0] : undefined,
+    (a, b) =>
+      a?.fileState === b?.fileState &&
+      shallowEqual(a?.references, b?.references) &&
+      shallowEqual(a?.queryResults, b?.queryResults)
   );
+}
 
-  // Get existing files from Redux (memoized to prevent unnecessary re-renders)
-  const allFiles = useAppSelector(state => state.files.files);
-  const existingFiles = useMemo(() => {
-    return ids
-      .map(id => allFiles[id])
-      .filter((file): file is FileState => file !== undefined);
-  }, [ids, allFiles]);
+/**
+ * useAugmentedFolder - Pure reactive selector hook for folder children
+ *
+ * No side-effects, no fetching — pair with readFolder() to ensure data is loaded.
+ * Re-renders only when files, loading, or error change by shallow equality.
+ */
+function useAugmentedFolder(path: string): AugmentedFolder {
+  return useAppSelector(
+    state => selectAugmentedFolder(state, path),
+    (a, b) =>
+      a.loading === b.loading &&
+      a.error === b.error &&
+      shallowEqual(a.files, b.files)
+  );
+}
 
-  // Main fetch effect
-  useEffect(() => {
-    if (skip || ids.length === 0) return;
+/**
+ * useFilesByCriteriaSelector - Pure reactive selector hook for criteria-matched files
+ *
+ * No side-effects, no fetching — pair with readFilesByCriteria() to ensure data is loaded.
+ * shallowEqual on the returned array checks each FileState element by reference —
+ * Redux/immer keeps unchanged file references stable, preventing unnecessary re-renders.
+ */
+function useFilesByCriteriaSelector(
+  criteria: { type?: FileType; paths?: string[] }
+): FileState[] {
+  return useAppSelector(
+    state => selectFilesByCriteria(state, criteria),
+    shallowEqual
+  );
+}
 
-    const fetchFiles = async () => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        // Use file-state.ts for consistent caching and augmentation
-        const result = await readFiles(
-          { fileIds: ids },
-          { ttl, skip: false }
-        );
-
-        // Update Redux with loaded files
-        if (result.fileStates && result.fileStates.length > 0) {
-          dispatch(setFiles({ files: result.fileStates }));
-        }
-      } catch (err) {
-        console.error('[useFiles] Failed to fetch:', err);
-        setError(err as LoadError);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchFiles();
-  }, [optionsKey, dispatch]);
-
-  return {
-    files: existingFiles,
-    loading,
-    error
-  };
+/**
+ * useFileByPathSelector - Pure reactive selector hook for a file looked up by path
+ *
+ * No side-effects, no fetching — pair with loadFileByPath() to ensure data is loaded.
+ * Returns AugmentedFile (with references and queryResults) or undefined.
+ */
+function useFileByPathSelector(path: string | null | undefined): AugmentedFile | undefined {
+  return useAppSelector(
+    state => {
+      const fileState = selectFileByPath(state, path ?? null);
+      return fileState ? selectAugmentedFiles(state, [fileState.id])[0] : undefined;
+    },
+    (a, b) =>
+      a?.fileState === b?.fileState &&
+      shallowEqual(a?.references, b?.references) &&
+      shallowEqual(a?.queryResults, b?.queryResults)
+  );
 }
 
 // ============================================================================
@@ -168,80 +131,39 @@ export interface UseFileOptions {
 }
 
 /**
- * Return type for useFile hook
- */
-export interface UseFileReturn {
-  file: FileState | undefined;
-  loading: boolean;
-  saving: boolean;
-  error: LoadError | null;
-}
-
-/**
  * useFile Hook - Phase 3 (Simplified)
  *
  * Purely reactive hook that loads a file by ID. No methods - components use
  * file-state.ts exports directly for mutations (editFile, publishFile, reloadFile, clearFileChanges).
  *
- * Uses useFiles internally for consistent caching and augmentation.
- *
  * @param id - File ID (positive number for real files, negative number for virtual files)
  * @param options - Hook options (ttl, skip)
- * @returns {file, loading, saving, error}
+ * @returns AugmentedFile | undefined — access .fileState for file data, .references, .queryResults
  *
  * Example:
  * ```tsx
- * import { editFile, publishFile, reloadFile, clearFileChanges } from '@/lib/api/file-state';
- *
- * function FileComponent({ fileId }: { fileId: FileId }) {
- *   const { file, loading, saving } = useFile(fileId);
- *
- *   if (loading) return <Spinner />;
- *   if (!file) return <NotFound />;
- *
- *   // Use file-state.ts exports directly
- *   const handleEdit = () => {
- *     editFile({ fileId, changes: { content: { query: 'SELECT 1' } } });
- *   };
- *
- *   const handleSave = async () => {
- *     const result = await publishFile({ fileId });
- *     router.push(`/f/${result.id}`);
- *   };
- *
- *   return <FileContent file={file} onEdit={handleEdit} onSave={handleSave} />;
- * }
+ * const { fileState: file } = useFile(fileId) ?? {};
+ * if (!file || file.loading) return <Spinner />;
  * ```
  */
-export function useFile(id: FileId | undefined, options: UseFileOptions = {}): UseFileReturn {
+export function useFile(id: FileId | undefined, options: UseFileOptions = {}): AugmentedFile | undefined {
   const { ttl = CACHE_TTL.FILE, skip = false } = options;
 
   // Virtual files (negative IDs) are pre-populated in Redux, so skip loading
   const shouldSkip = skip || (id !== undefined && isVirtualFileId(id));
 
-  // Use useFiles internally for consistent loading logic
-  const { files, loading, error } = useFiles({
-    ids: id !== undefined ? [id] : [],
-    ttl,
-    skip: shouldSkip
-  });
+  const optionsKey = useMemo(
+    () => JSON.stringify({ id, ttl, skip: shouldSkip }),
+    [id, ttl, shouldSkip]
+  );
 
-  // Extract the single file from the array
-  const file = useAppSelector(state => id ? selectFile(state, id) : undefined);
+  // Trigger fetch — loading state is owned by Redux (file.loading)
+  useEffect(() => {
+    if (shouldSkip || id === undefined) return;
+    loadFiles([id], ttl, false).catch(() => {});
+  }, [optionsKey]);
 
-  // Get saving state from Redux
-  const saving = file?.saving || false;
-
-  // Show loading if file doesn't exist in Redux yet (prevents flash of 404)
-  // This applies to both real and virtual files on first render
-  const effectiveLoading = loading || Boolean(id && !file);
-
-  return {
-    file,
-    loading: effectiveLoading,
-    saving,
-    error
-  };
+  return useAugmentedFile(id);
 }
 
 // ============================================================================
@@ -272,13 +194,6 @@ export interface UseFilesByCriteriaReturn {
 }
 
 /**
- * Check if a file is stale based on TTL
- */
-function isFileStale(file: FileState, ttl: number = 60000): boolean {
-  return Date.now() - file.updatedAt > ttl;
-}
-
-/**
  * useFilesByCriteria - Load files by criteria (path, type, depth)
  *
  * Uses file-state.ts readFilesByCriteria internally for consistent caching and augmentation.
@@ -299,74 +214,25 @@ function isFileStale(file: FileState, ttl: number = 60000): boolean {
  */
 export function useFilesByCriteria(options: UseFilesByCriteriaOptions): UseFilesByCriteriaReturn {
   const { criteria, partial = false, ttl = 60000, skip = false } = options;
-  const dispatch = useAppDispatch();
-
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(!skip);
   const [error, setError] = useState<Error | null>(null);
-  const [reloadCounter, setReloadCounter] = useState(0);
 
-  // Stable key from options for dependency tracking
   const optionsKey = useMemo(
     () => JSON.stringify({ criteria, partial, ttl, skip }),
     [criteria, partial, ttl, skip]
   );
 
-  // Get existing files from Redux (memoized to prevent unnecessary re-renders)
-  const allFiles = useAppSelector(state => state.files.files);
-  const existingFiles = useMemo(() => {
-    return Object.values(allFiles).filter(file => {
-      if (criteria.type && file.type !== criteria.type) return false;
-      if (criteria.paths) {
-        return criteria.paths.some(path => file.path.startsWith(path));
-      }
-      return true;
-    });
-  }, [criteria, allFiles]);
-
-  // Main fetch effect
   useEffect(() => {
-    if (skip) return;
+    if (skip) { setLoading(false); return; }
+    setLoading(true);
+    setError(null);
+    readFilesByCriteria({ criteria, partial }).catch(err => {
+      setError(err instanceof Error ? err : new Error(String(err)));
+    }).finally(() => setLoading(false));
+  }, [optionsKey]);
 
-    const fetchFiles = async () => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        // Check if we need to fetch
-        const needsFetch =
-          reloadCounter > 0 ||
-          existingFiles.length === 0 ||
-          existingFiles.some(file => isFileStale(file, ttl));
-
-        if (needsFetch) {
-          // Use file-state.ts for consistent caching and augmentation
-          const result = await readFilesByCriteria({
-            criteria,
-            partial,
-            skip: false
-          });
-
-          // Update Redux with loaded files
-          if (result.fileStates && result.fileStates.length > 0) {
-            dispatch(setFiles({ files: result.fileStates }));
-          }
-        }
-      } catch (err) {
-        console.error('[useFilesByCriteria] Failed to fetch:', err);
-        setError(err instanceof Error ? err : new Error(String(err)));
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchFiles();
-  }, [optionsKey, reloadCounter, dispatch]);
-
-  return {
-    files: existingFiles,
-    loading,
-    error
-  };
+  const files = useFilesByCriteriaSelector(criteria);
+  return { files, loading, error };
 }
 
 // ============================================================================
@@ -385,7 +251,7 @@ export interface UseFileByPathOptions {
  * Return type for useFileByPath hook
  */
 export interface UseFileByPathReturn {
-  file: FileState | undefined;
+  file: AugmentedFile | undefined;
   loading: boolean;
   error: LoadError | null;
 }
@@ -425,61 +291,18 @@ export interface UseFileByPathReturn {
  */
 export function useFileByPath(path: string | null | undefined, options: UseFileByPathOptions = {}): UseFileByPathReturn {
   const { ttl = CACHE_TTL.FILE, skip = false } = options;
-  const dispatch = useAppDispatch();
 
-  // Track error and loaded file ID locally
-  const [error, setError] = useState<LoadError | null>(null);
-  const [loadedFileId, setLoadedFileId] = useState<number | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-
-  // Reset state when path changes
-  const prevPathRef = useRef(path);
-  if (prevPathRef.current !== path) {
-    prevPathRef.current = path;
-    setError(null);
-    setLoadedFileId(null);
-    setIsLoading(false);
-  }
-
-  // Select file from Redux (if we've loaded it before)
-  const file = useAppSelector(state => loadedFileId ? selectFile(state, loadedFileId) : undefined);
-
-  // Determine if we need to fetch
-  const needsFetch = !skip && !!path && !loadedFileId && !error && !isLoading;
-
-  // Effect: Load file if needed
   useEffect(() => {
-    if (!needsFetch) return;
+    if (skip || !path) return;
+    loadFileByPath(path, ttl).catch(() => {}); // errors land in Redux placeholder
+  }, [path, ttl, skip]);
 
-    setIsLoading(true);
-    setError(null);
-
-    // Fetch file by path
-    FilesAPI.loadFileByPath(path!)
-      .then(response => {
-        const { data: file } = response;
-
-        // Store in Redux by ID
-        dispatch(setFile({ file, references: [] }));
-
-        // Track the file ID so we can find it in Redux
-        setLoadedFileId(file.id);
-        setIsLoading(false);
-      })
-      .catch(err => {
-        console.error(`[useFileByPath] Failed to load file at ${path}:`, err);
-
-        // Store structured error in local state
-        const loadError = createLoadErrorFromException(err);
-        setError(loadError);
-        setIsLoading(false);
-      });
-  }, [needsFetch, path, dispatch]);
-
+  const file = useFileByPathSelector(path);
   return {
     file,
-    loading: isLoading || (!file && needsFetch),
-    error
+    // If no placeholder yet (first render before effect fires): infer from intent
+    loading: file ? (file.fileState.loading ?? false) : (!skip && !!path),
+    error: file?.fileState.loadError ?? null
   };
 }
 
@@ -529,55 +352,11 @@ export interface UseFolderReturn {
 export function useFolder(path: string, options: UseFolderOptions = {}): UseFolderReturn {
   const { depth = 1, ttl = CACHE_TTL.FOLDER, forceLoad = false } = options;
 
-  const [files, setFiles] = useState<FileState[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<LoadError | null>(null);
-
-  // Re-derive when folder references change in Redux (e.g., after file delete/create)
-  const folderRefCount = useAppSelector(state => {
-    const folderId = state.files.pathIndex[path];
-    return folderId ? state.files.files[folderId]?.references?.length : undefined;
-  });
-
-  // Effect: Load folder using readFolder from file-state.ts
   useEffect(() => {
-    let cancelled = false;
+    readFolder(path, { depth, ttl, forceLoad }).catch(() => {});
+  }, [path, depth, ttl, forceLoad]);
 
-    setLoading(true);
-    setError(null);
-
-    readFolder(path, { depth, ttl, forceLoad })
-      .then(result => {
-        if (!cancelled) {
-          setFiles(result.files);
-          setLoading(result.loading);
-          setError(result.error);
-        }
-      })
-      .catch(err => {
-        console.error(`[useFolder] Failed to load folder ${path}:`, err);
-        if (!cancelled) {
-          setFiles([]);
-          setLoading(false);
-          // Convert to LoadError
-          const loadError: LoadError = {
-            message: err instanceof Error ? err.message : String(err),
-            code: 'SERVER_ERROR'
-          };
-          setError(loadError);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [path, depth, ttl, forceLoad, folderRefCount]);
-
-  return {
-    files,
-    loading,
-    error
-  };
+  return useAugmentedFolder(path);
 }
 
 // ============================================================================
@@ -602,7 +381,6 @@ export interface UseQueryResultReturn {
   loading: boolean;              // Currently fetching
   error: string | null;          // Error message if fetch failed
   isStale: boolean;              // Data exists but is stale (being refetched)
-  refetch: () => void;           // Manually trigger refetch
 }
 
 /**
@@ -614,22 +392,45 @@ export interface UseQueryResultOptions {
 }
 
 /**
- * useQueryResult Hook - Phase 3 (Simplified)
+ * useQueryResultSelector - Pure reactive selector hook for query results
+ *
+ * No side-effects, no fetching — pair with useQueryResult to ensure data is fetched.
+ * Re-renders only when data, loading, or error change (shallowEqual).
+ */
+function useQueryResultSelector(
+  query: string,
+  params: Record<string, any>,
+  database: string,
+): UseQueryResultReturn {
+  return useAppSelector(
+    state => {
+      const result = selectQueryResult(state, query, params, database);
+      const hasData = selectHasQueryData(state, query, params, database);
+      const loading = result?.loading || false;
+      return {
+        data: result?.data || null,
+        loading,
+        error: result?.error || null,
+        isStale: hasData && loading,
+      };
+    },
+    shallowEqual
+  );
+}
+
+/**
+ * useQueryResult Hook
  *
  * Executes queries with TTL-based caching and automatic refetching.
- * Uses getQueryResult from file-state.ts internally.
+ * Uses getQueryResult from file-state.ts internally for caching, deduplication,
+ * and error handling. Direct callers can bypass the cache via getQueryResult({ ... }, { forceLoad: true }).
  *
  * @param query - SQL query string
  * @param params - Query parameters
  * @param database - Database name (connection)
  * @param references - Question references (optional)
  * @param options - Hook options (ttl, skip)
- * @returns {data, loading, error, isStale, refetch}
- *
- * Behavior:
- * 1. No data → Execute query, set loading true
- * 2. Data exists & fresh → Return cached data
- * 3. Data exists & stale → Return stale data, refetch in background
+ * @returns {data, loading, error, isStale}
  *
  * Example:
  * ```tsx
@@ -637,17 +438,6 @@ export interface UseQueryResultOptions {
  *   'SELECT * FROM users WHERE id = :userId',
  *   { userId: 123 },
  *   'default_db'
- * );
- *
- * if (loading && !data) return <Spinner />;
- * if (error) return <Error message={error} />;
- * if (!data) return <NoData />;
- *
- * return (
- *   <>
- *     {isStale && <Badge>Refetching...</Badge>}
- *     <Table data={data} />
- *   </>
  * );
  * ```
  */
@@ -658,70 +448,14 @@ export function useQueryResult(
   references?: QuestionReference[],
   options: UseQueryResultOptions = {}
 ): UseQueryResultReturn {
-//   console.log('Executing query', options.skip, query)
   const { ttl = CACHE_TTL.QUERY, skip = false } = options;
 
-  // Select result from Redux
-  const result = useAppSelector(state => selectQueryResult(state, query, params, database));
-
-  // Check if result exists and is fresh
-  const hasData = useAppSelector(state => selectHasQueryData(state, query, params, database));
-  const isFresh = useAppSelector(state => selectIsQueryFresh(state, query, params, database, ttl));
-
-  // Determine if we need to fetch
-  // Don't auto-fetch if there's an error (user must explicitly refetch)
-  const hasError = result?.error != null;
-  const needsFetch = !skip && !hasError && (!hasData || !isFresh);
-
-  // Determine loading state
-  const loading = result?.loading || false;
-
-  // Determine isStale: has data but fetching new data
-  const isStale = hasData && loading;
-
-  // Effect: Execute query if needed
-  // IMPORTANT: Don't use useCallback for executeQuery - inline it to prevent re-execution on edits
   useEffect(() => {
-    console.log('[useQueryResult] Checking if query needs fetch:', { needsFetch, hasData, isFresh, loading, error: result?.error });
-    if (!needsFetch) return;
+    if (skip) return;
+    getQueryResult({ query, params, database, references }, { ttl }).catch(() => {});
+  }, [query, params, database, references, ttl, skip]);
 
-    // Skip if already loading
-    if (loading) return;
-
-    console.log('[useQueryResult] Executing query:', query.substring(0, 60) + '...');
-
-    // Execute query inline (no callback dependency issues)
-    (async () => {
-      try {
-        await getQueryResult({
-          query,
-          params,
-          database,
-          references
-        }, { ttl });
-      } catch (error) {
-        console.error('[useQueryResult] Query execution failed:', error);
-        // Error is already stored in Redux by getQueryResult
-      }
-    })();
-  }, [needsFetch, loading, query, params, database, references, ttl]);
-
-  // Manual refetch function
-  const refetch = useCallback(async () => {
-    try {
-      await getQueryResult({ query, params, database, references }, { ttl });
-    } catch (error) {
-      console.error('[useQueryResult] Manual refetch failed:', error);
-    }
-  }, [query, params, database, references, ttl]);
-
-  return {
-    data: result?.data || null,
-    loading,
-    error: result?.error || null,
-    isStale,
-    refetch
-  };
+  return useQueryResultSelector(query, params, database);
 }
 
 
@@ -732,195 +466,21 @@ export function useQueryResult(
 /**
  * useAppState Hook
  *
- * Watches navigation and returns current page context (file or folder).
- * Gets pathname from usePathname() and calls getAppState when it changes.
+ * Returns current page context (file or folder) derived from Redux navigation state.
+ * All business logic (URL parsing, file loading, virtual file creation) lives in
+ * navigationSlice + navigationListener — this hook is a pure selector.
  *
  * Usage:
  * ```typescript
- * const appState = useAppState();
+ * const { appState, loading } = useAppState();
  *
  * if (appState?.type === "file") {
- *   // Access appState.file (already augmented FileState)
+ *   // Access appState.state (FileState)
  * } else if (appState?.type === "folder") {
- *   // Access appState.folder.files
+ *   // Access appState.state.files
  * }
  * ```
  */
 export function useAppState(): { appState: AppState | null; loading: boolean } {
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const user = useAppSelector(state => state.auth.user);
-  const filesState = useAppSelector(state => state.files.files);
-  const queryResultsState = useAppSelector(state => state.queryResults.results);
-
-  // Track created virtual file ID in local state
-  const [createdVirtualId, setCreatedVirtualId] = useState<number | undefined>(undefined);
-
-  // Parse URL params for new file pages
-  const createOptions = useMemo(() => {
-    if (!pathname.startsWith('/new/')) return undefined;
-
-    const folderParam = searchParams.get('folder');
-    const databaseParam = searchParams.get('databaseName'); // Match URL param name
-    const queryB64 = searchParams.get('queryB64'); // Match URL param name
-    const virtualIdParam = searchParams.get('virtualId');
-
-    const query = queryB64
-      ? new TextDecoder().decode(Uint8Array.from(atob(queryB64), c => c.charCodeAt(0)))
-      : undefined;
-
-    const folder = folderParam || (user ? resolveHomeFolderSync(user.mode, user.home_folder || '') : '/org');
-
-    const virtualId = virtualIdParam ? parseInt(virtualIdParam, 10) : undefined;
-    const validVirtualId = virtualId && !isNaN(virtualId) && virtualId < 0 ? virtualId : undefined;
-
-    return {
-      folder,
-      databaseName: databaseParam || undefined,
-      query,
-      virtualId: validVirtualId
-    };
-  }, [pathname, searchParams, user]);
-
-  // Clear created virtual ID when route changes
-  useEffect(() => {
-    setCreatedVirtualId(undefined);
-  }, [pathname]);
-
-  // Determine route type from pathname
-  const routeInfo = useMemo(() => {
-    // File page: /f/{id}
-    const fileMatch = pathname.match(/^\/f\/(\d+)/);
-    if (fileMatch) {
-      return { type: 'file' as const, id: parseInt(fileMatch[1], 10) };
-    }
-
-    // New file page: /new/{type}
-    const newFileMatch = pathname.match(/^\/new\/([^/?]+)/);
-    if (newFileMatch) {
-      return { type: 'newFile' as const, fileType: newFileMatch[1] as FileType };
-    }
-
-    // Folder page: /p/path
-    const folderMatch = pathname.match(/^\/p\/(.*)/);
-    if (folderMatch) {
-      return { type: 'folder' as const, path: '/' + (folderMatch[1] || '') };
-    }
-
-    return { type: null };
-  }, [pathname]);
-
-  // Initialize: Load files from DB, create virtual files
-  useEffect(() => {
-    let cancelled = false;
-
-    const initialize = async () => {
-      if (routeInfo.type === 'file' && routeInfo.id > 0) {
-        // Load from DB if positive ID
-        await readFiles({ fileIds: [routeInfo.id] });
-      } else if (routeInfo.type === 'newFile') {
-        // Check if virtual file exists (from URL or local state)
-        const virtualId = createOptions?.virtualId || createdVirtualId;
-        const existingFile = virtualId ? filesState[virtualId] : null;
-
-        if (!existingFile) {
-          // Create new virtual file and store its ID
-          const newVirtualId = await createVirtualFile(routeInfo.fileType, createOptions);
-          setCreatedVirtualId(newVirtualId);
-        }
-      } else if (routeInfo.type === 'folder') {
-        await readFolder(routeInfo.path);
-      }
-    };
-
-    initialize();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [routeInfo, createOptions, filesState, createdVirtualId]);
-
-  // Compute appState from Redux (reactive to state changes - NO LOCAL STATE!)
-  return useMemo(() => {
-    if (routeInfo.type === 'file') {
-      const file = filesState[routeInfo.id];
-
-      // File doesn't exist in Redux yet - might be loading or doesn't exist
-      if (!file) {
-        return { appState: null, loading: true };
-      }
-
-      // File exists - check if it's still loading
-      const loading = file.loading || false;
-
-      // Get referenced files from Redux (file.references contains IDs)
-      const references = (file.references || [])
-        .map(id => filesState[id])
-        .filter(Boolean) as FileState[];
-
-      const queryResults: QueryResult[] = [];
-
-      return {
-        appState: {
-          type: 'file',
-          id: routeInfo.id,
-          fileType: file.type,
-          file,
-          references,
-          queryResults
-        },
-        loading
-      };
-    }
-
-    if (routeInfo.type === 'newFile') {
-      // Use virtualId from URL, or fallback to created ID from local state
-      const virtualId = createOptions?.virtualId || createdVirtualId;
-      if (virtualId && filesState[virtualId]) {
-        const file = filesState[virtualId];
-        return {
-          appState: {
-            type: 'file',
-            id: virtualId,
-            fileType: file.type,
-            file,
-            references: [],
-            queryResults: []
-          },
-          loading: false
-        };
-      }
-
-      // No virtual file yet (initialization in progress)
-      return { appState: null, loading: true };
-    }
-
-    if (routeInfo.type === 'folder') {
-      const mode = user?.mode || 'org';
-      const folderFiles = stripFileContent(
-        Object.values(filesState).filter(f => {
-          const fileDir = f.path.substring(0, f.path.lastIndexOf('/')) || '/';
-          if (fileDir !== routeInfo.path) return false;
-          // Hide system folders (e.g., /org/database, /org/logs)
-          if (f.type === 'folder' && isHiddenSystemPath(f.path, mode)) return false;
-          return true;
-        })
-      );
-
-      return {
-        appState: {
-          type: 'folder',
-          path: routeInfo.path,
-          folder: {
-            files: folderFiles,
-            loading: false,
-            error: null
-          }
-        },
-        loading: false
-      };
-    }
-
-    return { appState: null, loading: false };
-  }, [routeInfo, filesState, queryResultsState, createOptions]);
+  return useAppSelector(selectAppState, shallowEqual);
 }

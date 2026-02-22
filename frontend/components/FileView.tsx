@@ -23,10 +23,10 @@ export interface FileViewProps {
 
 export default function FileView({ fileId, mode = 'view', defaultFolder }: FileViewProps) {
   // Load file using useFile hook (no useEffect in component!)
-  const { file, loading, error } = useFile(fileId);
+  const { fileState: file } = useFile(fileId) ?? {};
 
   // Loading state
-  if (loading) {
+  if (!file || file.loading) {
     return (
       <Box display="flex" alignItems="center" justifyContent="center" minH="400px">
         <Spinner size="lg" colorScheme="blue" />
@@ -35,20 +35,20 @@ export default function FileView({ fileId, mode = 'view', defaultFolder }: FileV
   }
 
   // Error state
-  if (error) {
+  if (file?.loadError) {
     return (
       <Box p={8}>
         <Text fontSize="lg" color="accent.danger" fontWeight="semibold">
           Failed to load file
         </Text>
         <Text fontSize="sm" color="fg.muted" mt={2}>
-          {error.message}
+          {file.loadError.message}
         </Text>
       </Box>
     );
   }
 
-  // Not found state
+  // Not found state (file is a placeholder but no content — shouldn't normally reach here)
   if (!file) {
     return (
       <Box p={8}>

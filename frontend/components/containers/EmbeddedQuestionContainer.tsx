@@ -43,11 +43,18 @@ export default function EmbeddedQuestionContainer({
 
   // Phase 3: Convert parameters to format useQueryResult expects
   const queryParams = useMemo(() => {
-    // Use external params if provided (from dashboard), otherwise use question params
-    const paramsToUse = externalParameters || localQuestion.parameters || [];
-    return paramsToUse.reduce((acc, p) => ({
+    const questionParams = localQuestion.parameters || [];
+    if (!externalParameters) {
+      // No external params — use question's own defaults
+      return questionParams.reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {} as Record<string, any>);
+    }
+    // Apply external values only for params the question actually uses.
+    // This prevents unrelated dashboard params (from other questions) from
+    // polluting this question's cache key.
+    const externalByName = new Map(externalParameters.map(p => [p.name, p]));
+    return questionParams.reduce((acc, p) => ({
       ...acc,
-      [p.name]: p.value
+      [p.name]: externalByName.get(p.name)?.value ?? p.value
     }), {} as Record<string, any>);
   }, [externalParameters, localQuestion.parameters]);
 
@@ -57,7 +64,6 @@ export default function EmbeddedQuestionContainer({
     loading,
     error,
     isStale,
-    refetch
   } = useQueryResult(
     localQuestion.query || '',
     queryParams,

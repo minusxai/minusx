@@ -45,7 +45,10 @@ export default function ContextContainerV2({
   const user = useAppSelector(state => state.auth.user);
 
   // Phase 2: Use useFile hook for state management
-  const { file, loading: fileLoading, saving, error } = useFile(fileId);
+  const { fileState: file } = useFile(fileId) ?? {};
+  const fileLoading = !file || file.loading;
+  const saving = file?.saving ?? false;
+  const error = file?.loadError ?? null;
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
 
   // Phase 5: Get effective name (with pending metadata changes)

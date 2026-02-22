@@ -854,17 +854,11 @@ export interface DisplayProps {
 // Phase 1: Unified File System API Types
 // ============================================================================
 
-/**
- * ReadFiles Tool - Load multiple files with references and query results
- */
-export interface ReadFilesInput {
-  fileIds: number[];  // Array of file IDs to load
-}
 
-export interface ReadFilesOutput {
-  fileStates: FileState[];     // One FileState per requested fileId
-  references: FileState[];     // All unique referenced files across all loaded files
-  queryResults: QueryResult[]; // All unique query results for questions
+export interface AugmentedFile {
+  fileState: FileState;        // The requested file (always defined when item exists in Redux)
+  references: FileState[];     // Referenced files belonging to this file
+  queryResults: QueryResult[]; // Query results for this file and its references
 }
 
 /**

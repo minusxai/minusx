@@ -17,7 +17,7 @@ import { fetchWithCache } from './fetch-wrapper';
 import { API } from './declarations';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 import { getRouter } from '@/lib/navigation/use-navigation';
-import { readFilesLineEncoded, editFileLineEncoded, readFilesStr, editFileStr, publishFile, getQueryResult } from '@/lib/api/file-state';
+import { readFilesStr, editFileStr, publishFile, getQueryResult } from '@/lib/api/file-state';
 import { canCreateFileType } from '@/lib/auth/access-rules.client';
 
 // ============================================================================
@@ -1739,7 +1739,7 @@ registerFrontendTool('ReadFiles', async (args, context) => {
   const { fileIds } = args;
 
   // Execute with compact JSON strings
-  const result = await readFilesStr({ fileIds }, {});
+  const result = await readFilesStr(fileIds, {});
 
   return result;
 });
@@ -1776,41 +1776,6 @@ registerFrontendTool('EditFile', async (args, context) => {
         params,
         database: finalContent.database_name
       });
-    }
-  }
-
-  return result;
-});
-
-/**
- * EditFileReplace - Range-based line editing (legacy/precise editing)
- */
-registerFrontendTool('EditFileReplace', async (args, context) => {
-  const { fileId, from, to, newContent } = args;
-
-  // Range-based API for precise editing
-  const result = await editFileLineEncoded({ fileId, from, to, newContent });
-
-  // Auto-execute query for questions (agent tool only)
-  if (result.success) {
-    const state = getStore().getState();
-    const fileState = state.files.files[fileId];
-    if (fileState?.type === 'question') {
-      const finalContent = selectMergedContent(state, fileId) as any;
-
-      if (finalContent?.query && finalContent?.database_name) {
-        const params = (finalContent.parameters || []).reduce((acc: any, p: any) => {
-          acc[p.name] = p.value ?? '';
-          return acc;
-        }, {} as Record<string, any>);
-
-        // Execute query to populate cache
-        await getQueryResult({
-          query: finalContent.query,
-          params,
-          database: finalContent.database_name
-        });
-      }
     }
   }
 
