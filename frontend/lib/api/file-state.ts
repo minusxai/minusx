@@ -943,13 +943,6 @@ export async function publishFile(
   // Set saving state
   getStore().dispatch(setSaving({ id: fileId, saving: true }));
 
-  try {
-    // Get merged content
-    const mergedContent = selectMergedContent(state, fileId);
-  if (!mergedContent) {
-    throw new Error(`File ${fileId} has no content`);
-  }
-
   // Determine if this is a create or update
   const isVirtualFile = fileId < 0;
 
@@ -977,22 +970,22 @@ export async function publishFile(
   let savedName: string;
   let updatedFile: DbFile;
 
+  const extractReferences = extractReferencesFromContent;
+  const references = extractReferences(fileData.content, fileData.type as FileType);
+
   if (isVirtualFile) {
     // Create new file using FilesAPI
     const result = await FilesAPI.createFile({
       name: fileData.name,
       path: fileData.path,
       type: fileData.type as FileType,
-      content: fileData.content
+      content: fileData.content,
+      references
     });
     savedId = result.data.id;
     savedName = result.data.name;
     updatedFile = result.data;
   } else {
-    // Update existing file using FilesAPI
-    const extractReferences = extractReferencesFromContent;
-    const references = extractReferences(fileData.content, fileData.type as FileType);
-
     const result = await FilesAPI.saveFile(
       fileId,
       fileData.name,
@@ -1017,11 +1010,7 @@ export async function publishFile(
   getStore().dispatch(clearEdits(fileId));
   getStore().dispatch(clearMetadataEdits(fileId));
 
-    return { id: savedId, name: savedName };
-  } finally {
-    // Always clear saving state
-    getStore().dispatch(setSaving({ id: fileId, saving: false }));
-  }
+  return { id: savedId, name: savedName };
 }
 
 /**
