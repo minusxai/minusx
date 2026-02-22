@@ -75,6 +75,8 @@ templates:
       - *_date, *_time → "date"
       - *_id, *_count, *_amount, limit, offset → "number"
       - Default to "text" if unclear
+    - **Escaping colons**: If SQL contains a literal colon that should NOT become a parameter (e.g., inside a `-- comment` or a string like `':value'`), prefix it with a backslash: `\:foo` is passed through as `:foo` without creating a parameter. This is the fix for unexpected parameters appearing in the UI.
+    - **Casting a parameter**: Write `:param ::TYPE` (space before `::`) not `:param::TYPE` — the latter is not recognized as a parameter due to the `::` lookahead.
     - **CRITICAL**: For optional tool parameters:
       - **DO NOT** pass the parameter key at all if you don't have a value
       - **DO NOT** pass null, "null", [], "[]", "", {{}}, or any empty/placeholder values

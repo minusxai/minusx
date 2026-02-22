@@ -3,23 +3,25 @@ import { LuType, LuHash, LuCalendar } from 'react-icons/lu';
 import { IconType } from 'react-icons/lib';
 
 /**
- * Extract parameter names from SQL query using :param_name syntax
- * Note: Ignores DuckDB type casts like ::VARCHAR (double colon)
+ * Extract parameter names from SQL query using :param_name syntax.
+ *
+ * Uses the same regex as SQLAlchemy's TextClause._bind_params_regex:
+ * https://github.com/sqlalchemy/sqlalchemy/blob/0138954e28096199a3b2fd8553183a599c83cdab/lib/sqlalchemy/sql/elements.py#L2571C5-L2571C23
+ *
+ * Negative lookbehind (?<![:\w\\]) skips :: type casts, word-char-preceded colons
+ * (e.g. digits in '10:30:00'), and \: escaped colons.
+ * Negative lookahead (?!:) skips the left side of :: type casts.
+ *
+ * Limitation: does not skip :param inside string literals or SQL comments.
+ * Use \:name to prevent a colon from being treated as a parameter.
  */
 export function extractParametersFromSQL(sql: string): string[] {
-  // Match :param_name pattern (word characters after colon)
-  // Use negative lookbehind to exclude :: (type casts)
-  if (!sql) {
-    return []
-  }
-  const regex = /(?<!:):(\w+)/g;
-  const matches = sql.matchAll(regex);
+  if (!sql) return [];
+  const regex = /(?<![:\w\\]):(\w+)(?!:)/gu;
   const paramNames = new Set<string>();
-
-  for (const match of matches) {
+  for (const match of sql.matchAll(regex)) {
     paramNames.add(match[1]);
   }
-
   return Array.from(paramNames);
 }
 
