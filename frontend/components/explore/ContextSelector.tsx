@@ -7,6 +7,7 @@ import { LuNotebookText } from 'react-icons/lu';
 import { useEffect, useMemo } from 'react';
 import { ContextContent } from '@/lib/types';
 import GenericSelector, { SelectorOption } from '@/components/GenericSelector';
+import { useContexts } from '@/lib/hooks/useContexts';
 
 interface ContextSelectorProps {
   selectedContextPath: string | null;
@@ -17,15 +18,14 @@ interface ContextSelectorProps {
 export function ContextSelector({ selectedContextPath, selectedVersion, onSelectContext }: ContextSelectorProps) {
   const user = useAppSelector(state => state.auth.user);
 
+  // Triggers context loading and provides accurate loading state.
+  // Must be called before early returns to satisfy Rules of Hooks.
+  const { loading: contextsLoading } = useContexts();
+
   if (!user) return null;
 
   const homeFolder = resolveHomeFolderSync(user.mode, user.home_folder || '');
   const filesState = useAppSelector(state => state.files.files);
-
-  // Check if contexts are still loading
-  const contextsLoading = useAppSelector(state =>
-    Object.values(state.files.files).some(f => f.type === 'context' && f.loading === true)
-  );
 
   const allContexts = Object.values(filesState)
     .filter(file => file.type === 'context')

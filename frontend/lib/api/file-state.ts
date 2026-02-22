@@ -406,8 +406,12 @@ export async function readFilesByCriteria(
   const result = await FilesAPI.getFiles(criteria);
   const fileIds = result.data.map(f => f.id);
 
-  // Step 2: If partial load, return metadata only (no augmentation)
+  // Step 2: If partial load, store metadata in Redux and return without augmentation
   if (partial) {
+    // Store file metadata in Redux so reactive selectors (useFilesByCriteria) can find them
+    if (result.data.length > 0) {
+      getStore().dispatch(setFileInfo(result.data));
+    }
     const state = getStore().getState();
     return fileIds
       .map(id => selectFile(state, id))
