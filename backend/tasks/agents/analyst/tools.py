@@ -711,6 +711,12 @@ class EditFile(Tool):
     - Change name: oldMatch='"name":"Old Name"', newMatch='"name":"New Name"'
     - Change query: oldMatch='"query":"SELECT 1"', newMatch='"query":"SELECT * FROM users"'
     - Change description: oldMatch='"description":"Old"', newMatch='"description":"Updated"'
+    - Add a parameter: oldMatch='"query":"SELECT * FROM t"', newMatch='"query":"SELECT * FROM t WHERE id = :user_id","parameters":[{"name":"user_id","type":"number"}]'
+
+    CRITICAL — query + parameters must stay in sync:
+    If your newMatch adds or removes :paramName tokens in the query, you MUST update the
+    parameters array in the same newMatch. The frontend auto-syncs on user edit, but EditFile
+    bypasses that — orphaned or missing parameters will cause query execution to fail.
 
     The tool validates changes and returns a diff.
     Changes are stored in Redux but NOT saved to database until PublishFile is called.
