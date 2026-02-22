@@ -506,8 +506,11 @@ When modifying SQLite schema:
 ## Key Files Reference
 
 ### Frontend Core Modules
-- `frontend/lib/api/file-state.ts` - **Centralized file operations** (readFiles, editFile, publishFile, deleteFile, getQueryResult)
-- `frontend/lib/hooks/file-state-hooks.ts` - **React hooks** for file operations (useFile, useFolder, useFilesByCriteria, useQueryResult)
+
+> **CRITICAL — always reuse, never re-implement.** `file-state.ts` and `file-state-hooks.ts` are the single source of truth for all file and query operations in the frontend. Before writing any new fetch, Redux read, or file-operation logic, read these files first. Duplicating their functionality elsewhere is a code smell.
+
+- `frontend/lib/api/file-state.ts` - **CORE: Centralized file operations** — the only place file fetching, editing, saving, deleting, folder loading, and query execution logic should live. Key exports: `loadFiles`, `readFiles`, `readFolder`, `editFile`, `publishFile`, `deleteFile`, `getQueryResult`, `createVirtualFile`.
+- `frontend/lib/hooks/file-state-hooks.ts` - **CORE: React hooks** wrapping `file-state.ts` — the only hooks components should use for file/query data. Key exports: `useFile`, `useFolder`, `useFileByPath`, `useFilesByCriteria`, `useQueryResult`.
 - `frontend/lib/database/documents-db.ts` - SQLite CRUD operations
 - `frontend/lib/types.ts` - TypeScript interfaces including FileReference
 
