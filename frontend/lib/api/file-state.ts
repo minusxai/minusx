@@ -452,13 +452,13 @@ export async function editFile(options: EditFileOptions): Promise<void> {
 
   // Handle metadata changes (name, path)
   if (changes.name !== undefined || changes.path !== undefined) {
-    editFileMetadata({
+    getStore().dispatch(setMetadataEdit({
       fileId,
       changes: {
         ...(changes.name !== undefined && { name: changes.name }),
         ...(changes.path !== undefined && { path: changes.path })
       }
-    });
+    }));
   }
 
   // Handle content changes
@@ -869,28 +869,6 @@ function generateDiff(oldStr: string, newStr: string): string {
   return diffLines.join('\n');
 }
 
-/**
- * Options for editFileMetadata
- */
-interface EditFileMetadataOptions {
-  fileId: number;
-  changes: { name?: string; path?: string };
-}
-
-/**
- * EditFileMetadata - Edit file name/path (internal only)
- *
- * Stores changes in metadataChanges (doesn't save to database).
- * External callers should use editFile() instead.
- *
- * @param options - File ID and metadata changes
- */
-function editFileMetadata(options: EditFileMetadataOptions): void {
-  const { fileId, changes } = options;
-
-  // Import setMetadataEdit from filesSlice
-  getStore().dispatch(setMetadataEdit({ fileId, changes }));
-}
 
 /**
  * Options for publishFile
