@@ -1755,18 +1755,37 @@ registerFrontendTool('ReadFiles', async (args, context) => {
 registerFrontendTool('EditFile', async (args, context) => {
   const { fileId, oldMatch, newMatch } = args;
 
-  // Native toolset uses string-based editing (oldMatch/newMatch parameters)
-  const result = await editFileStr({ fileId, oldMatch, newMatch });
+  const state = getStore().getState();
+  const fileState = state.files.files[fileId];
+  const pathState = selectPathState(state);
 
+  // Pre-compute navigation intent
+  const isCurrentFile = pathState.type === 'file' && pathState.id === fileId;
+  const shouldNavigate = !isCurrentFile && (
+    pathState.type === 'folder' ||
+    (pathState.type === 'file' && fileState?.type === 'dashboard')
+  );
+  const shouldOpenModal = !isCurrentFile &&
+    pathState.type === 'file' && fileState?.type === 'question';
+
+  // Navigate/open modal FIRST so the user sees the edit applied live
+  if (shouldNavigate) {
+    const router = getRouter();
+    router?.push(preserveParams(`/f/${fileId}`));
+  } else if (shouldOpenModal) {
+    context.dispatch!(openFileModal(fileId));
+  }
+
+  // THEN edit (user sees changes applied live in the UI)
+  const result = await editFileStr({ fileId, oldMatch, newMatch });
   if (!result.success) {
     throw new Error(result.error || 'Edit failed');
   }
 
   // Auto-execute query for questions (agent tool only)
-  const state = getStore().getState();
-  const fileState = state.files.files[fileId];
   if (fileState?.type === 'question') {
-    const finalContent = selectMergedContent(state, fileId) as any;
+    const updatedState = getStore().getState();
+    const finalContent = selectMergedContent(updatedState, fileId) as any;
 
     if (finalContent?.query && finalContent?.database_name) {
       const params = (finalContent.parameters || []).reduce((acc: any, p: any) => {
@@ -1774,21 +1793,17 @@ registerFrontendTool('EditFile', async (args, context) => {
         return acc;
       }, {} as Record<string, any>);
 
-      // Execute query to populate cache
       await getQueryResult({
         query: finalContent.query,
         params,
         database: finalContent.database_name
       });
     }
+  }
 
-    // If editing a question while viewing a different file → auto-save + open modal
-    const pathState = selectPathState(state);
-    const isViewingDifferentFile = pathState.type === 'file' && pathState.id !== fileId;
-    if (isViewingDifferentFile) {
-      await publishFile({ fileId });
-      context.dispatch!(openFileModal(fileId));
-    }
+  // Save after edit
+  if (shouldNavigate || shouldOpenModal) {
+    await publishFile({ fileId });
   }
 
   return result;
