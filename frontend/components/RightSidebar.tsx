@@ -503,7 +503,7 @@ export default function RightSidebar({
                                 Loading documentation...
                               </Text>
                             ) : documentation ? (
-                              <Markdown variant="compact">{documentation}</Markdown>
+                              <Markdown context="sidebar">{documentation}</Markdown>
                             ) : (
                               <Text fontSize="sm" color="fg.muted" fontFamily="mono">
                                 No documentation available

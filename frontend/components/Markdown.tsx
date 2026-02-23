@@ -4,7 +4,7 @@ import { Box, Text } from '@chakra-ui/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Link from 'next/link';
-import { LuChartColumnIncreasing, LuChevronDown, LuFilePlus2, LuRocket, LuShieldCheck, LuShieldAlert, LuShieldQuestion } from 'react-icons/lu';
+import { LuChartColumnIncreasing, LuChevronDown, LuCircleHelp, LuFilePlus2, LuRocket, LuShieldCheck, LuShieldAlert, LuShieldQuestion } from 'react-icons/lu';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import { FileType } from '@/lib/types';
 import { ReactNode, useMemo, useState } from 'react';
@@ -85,11 +85,10 @@ function InlineChart({ queryData }: { queryData: ReportQueryResult }) {
 }
 
 // Custom link button for internal links
-function LinkButton({ href, icon, children, variant, bg = 'accent.primary' }: {
+function LinkButton({ href, icon, children, bg = 'accent.primary' }: {
   href: string;
   icon: ReactNode;
   children: ReactNode;
-  variant: 'default' | 'compact' | 'presentation';
   bg?: string;
 }) {
   return (
@@ -102,7 +101,7 @@ function LinkButton({ href, icon, children, variant, bg = 'accent.primary' }: {
       py="0.5"
       bg={bg}
       borderRadius="sm"
-      fontSize={variant === 'compact' ? 'xs' : 'sm'}
+      fontSize={'sm'}
       fontWeight="500"
       color="white"
       textDecoration="none"
@@ -148,7 +147,7 @@ const trustConfig = {
   },
 } as const;
 
-function TrustBadge({ level, variant }: { level: 'high' | 'medium' | 'low'; variant: 'default' | 'compact' | 'presentation' }) {
+function TrustBadge({ level, context }: { level: 'high' | 'medium' | 'low'; context: 'sidebar' | 'mainpage' }) {
   const [expanded, setExpanded] = useState(false);
   const { config: appConfig } = useConfigs({ skip: false });
   const agentName = appConfig.branding.agentName;
@@ -207,15 +206,21 @@ function TrustBadge({ level, variant }: { level: 'high' | 'medium' | 'low'; vari
             transition="all 0.15s ease"
           >
             <button onClick={() => setExpanded(!expanded)} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'inherit' }}>
-              <Text fontSize="2xs">{config.moreDetailsTitle}</Text>
-              <Box
-                transition="transform 0.2s ease"
-                transform={expanded ? 'rotate(180deg)' : 'rotate(0deg)'}
-                display="flex"
-                alignItems="center"
-              >
-                <LuChevronDown size={12} />
-              </Box>
+              {context === 'sidebar' ? (
+                <LuCircleHelp size={14} />
+              ) : (
+                <>
+                  <Text fontSize="2xs">{config.moreDetailsTitle}</Text>
+                  <Box
+                    transition="transform 0.2s ease"
+                    transform={expanded ? 'rotate(180deg)' : 'rotate(0deg)'}
+                    display="flex"
+                    alignItems="center"
+                  >
+                    <LuChevronDown size={12} />
+                  </Box>
+                </>
+              )}
             </button>
           </Box>
         )}
@@ -242,7 +247,7 @@ function TrustBadge({ level, variant }: { level: 'high' | 'medium' | 'low'; vari
 
 interface MarkdownProps {
   children: string;
-  variant?: 'default' | 'compact' | 'presentation';
+  context?: 'sidebar' | 'mainpage';
   textAlign?: 'left' | 'center' | 'right';
   textColor?: string;
   queries?: Record<string, ReportQueryResult>;  // Query results for {{query:id}} references
@@ -251,65 +256,31 @@ interface MarkdownProps {
 /**
  * Unified Markdown component with consistent styling across the app.
  *
- * Variants:
- * - default: Standard markdown styling for documents and content blocks
- * - compact: Smaller fonts and spacing for chat messages and previews
- * - presentation: Large, bold fonts for slides and presentations
+ * Context:
+ * - sidebar: Smaller fonts and spacing for chat messages, sidebars, and previews
+ * - mainpage: Standard markdown styling for documents, reports, slides, and content blocks
  */
 export default function Markdown({
   children,
-  variant = 'default',
+  context = 'mainpage',
   textAlign = 'left',
   textColor,
   queries
 }: MarkdownProps) {
-  // Variant-specific styles
-  const variantStyles = {
-    default: {
-      h1: { fontSize: '2em', fontWeight: '800', mb: 3, mt: 2, lineHeight: '1.2', letterSpacing: '-0.03em' },
-      h2: { fontSize: '1.5em', fontWeight: '700', mb: 3, mt: 2, lineHeight: '1.3', letterSpacing: '-0.02em' },
-      h3: { fontSize: '1.17em', fontWeight: '700', mb: 2, mt: 2, lineHeight: '1.4' },
-      h4: { fontSize: '1em', fontWeight: '700', mb: 2, mt: 2 },
-      p: { fontSize: 'sm', lineHeight: '1.6' },
-      code: { fontSize: 'sm' },
-      pre: { mb: 3, p: 3 },
-      list: { ml: 6, mb: 3, fontSize: 'sm', lineHeight: '1.6' },
-      li: { mb: 0.5 },
-      table: { mb: 4, fontSize: 'sm', mt: 3 },
-      th: { py: 3, px: 4 },
-      td: { py: 3, px: 4 },
-    },
-    compact: {
-      h1: { fontSize: 'xl', fontWeight: '700', mb: 3, mt: 2, lineHeight: '1.3' },
-      h2: { fontSize: 'lg', fontWeight: '600', mb: 2.5, mt: 2, lineHeight: '1.4' },
-      h3: { fontSize: 'md', fontWeight: '600', mb: 2, mt: 2, lineHeight: '1.4' },
-      h4: { fontSize: 'sm', fontWeight: '600', mb: 1.5, mt: 1.5 },
-      p: { fontSize: 'sm', lineHeight: '1.7', fontWeight: '400' },
-      code: { fontSize: 'sm' },
-      pre: { mb: 3, p: 2.5 },
-      list: { ml: 5, mb: 2.5, fontSize: 'sm', lineHeight: '1.7' },
-      li: { mb: 1 },
-      table: { mb: 3, fontSize: 'sm', mt: 2 },
-      th: { py: 2, px: 3 },
-      td: { py: 2, px: 3 },
-    },
-    presentation: {
-      h1: { fontSize: '4xl', fontWeight: '900', mb: 4, mt: 2, lineHeight: '1.1', letterSpacing: '-0.02em' },
-      h2: { fontSize: '3xl', fontWeight: '800', mb: 3, mt: 2, lineHeight: '1.2', letterSpacing: '-0.01em' },
-      h3: { fontSize: '2xl', fontWeight: '700', mb: 3, mt: 2, lineHeight: '1.3' },
-      h4: { fontSize: 'xl', fontWeight: '700', mb: 2, mt: 2 },
-      p: { fontSize: 'lg', lineHeight: '1.7' },
-      code: { fontSize: 'md' },
-      pre: { mb: 4, p: 4 },
-      list: { ml: 6, mb: 3, fontSize: 'lg', lineHeight: '1.7' },
-      li: { mb: 1.5 },
-      table: { mb: 5, fontSize: 'md', mt: 4 },
-      th: { py: 4, px: 5 },
-      td: { py: 3, px: 5 },
-    },
+  const styles = {
+    h1: { fontSize: 'xl', fontWeight: '700', mb: 3, mt: 2, lineHeight: '1.3' },
+    h2: { fontSize: 'lg', fontWeight: '600', mb: 2.5, mt: 2, lineHeight: '1.4' },
+    h3: { fontSize: 'md', fontWeight: '600', mb: 2, mt: 2, lineHeight: '1.4' },
+    h4: { fontSize: 'sm', fontWeight: '600', mb: 1.5, mt: 1.5 },
+    p: { fontSize: 'sm', lineHeight: '1.7', fontWeight: '400' },
+    code: { fontSize: 'sm' },
+    pre: { mb: 3, p: 2.5 },
+    list: { ml: 5, mb: 2.5, fontSize: 'sm', lineHeight: '1.7' },
+    li: { mb: 1 },
+    table: { mb: 3, fontSize: 'sm', mt: 2 },
+    th: { py: 2, px: 3 },
+    td: { py: 2, px: 3 },
   };
-
-  const styles = variantStyles[variant];
 
   // Get mode from Redux to preserve in internal links
   const mode = useAppSelector(state => state.auth.user?.mode);
@@ -346,14 +317,14 @@ export default function Markdown({
     a: ({ node, href, children, ...props }: any) => {
       if (isInternalFileLink(href)) {
         return (
-          <LinkButton href={withMode(href)} icon={<LuChartColumnIncreasing size={14} />} variant={variant}>
+          <LinkButton href={withMode(href)} icon={<LuChartColumnIncreasing size={14} />}>
             {children}
           </LinkButton>
         );
       }
       if (isExplorePageLink(href)) {
         return (
-          <LinkButton href={withMode(href)} icon={<LuRocket size={14} />} variant={variant} bg="accent.teal">
+          <LinkButton href={withMode(href)} icon={<LuRocket size={14} />} bg="accent.teal">
             Explore Page
           </LinkButton>
         );
@@ -366,7 +337,6 @@ export default function Markdown({
           <LinkButton
             href={withMode(href)}
             icon={<Icon size={14} />}
-            variant={variant}
             bg={metadata?.color ?? 'accent.danger/90'}
           >
             New {metadata?.label ?? fileType}
@@ -392,7 +362,7 @@ export default function Markdown({
           marginBottom: `${styles.h1.mb * 0.25}rem`,
           marginTop: `${styles.h1.mt * 0.25}rem`,
           lineHeight: styles.h1.lineHeight,
-          letterSpacing: 'letterSpacing' in styles.h1 ? styles.h1.letterSpacing : undefined,
+          letterSpacing: undefined,
         },
         '& h2': {
           fontSize: styles.h2.fontSize,
@@ -400,7 +370,7 @@ export default function Markdown({
           marginBottom: `${styles.h2.mb * 0.25}rem`,
           marginTop: `${styles.h2.mt * 0.25}rem`,
           lineHeight: styles.h2.lineHeight,
-          letterSpacing: 'letterSpacing' in styles.h2 ? styles.h2.letterSpacing : undefined,
+          letterSpacing: undefined,
         },
         '& h3': {
           fontSize: styles.h3.fontSize,
@@ -420,8 +390,8 @@ export default function Markdown({
           lineHeight: styles.p.lineHeight,
         },
         '& strong': {
-          fontWeight: variant === 'presentation' ? '900' : '800',
-          color: variant === 'presentation' ? 'var(--chakra-colors-accent-secondary)' : 'inherit',
+          fontWeight: '800',
+          color: 'inherit',
         },
         '& em': {
           fontStyle: 'italic',
@@ -430,11 +400,11 @@ export default function Markdown({
         '& code': {
           fontFamily: 'JetBrains Mono, monospace',
           fontSize: styles.code.fontSize,
-          backgroundColor: variant === 'presentation' ? 'var(--chakra-colors-accent-secondary)' : 'var(--chakra-colors-bg-muted)',
-          color: variant === 'presentation' ? 'white' : 'inherit',
-          padding: variant === 'presentation' ? '0.25rem 0.5rem' : '0.125rem 0.5rem',
-          borderRadius: variant === 'presentation' ? '0.375rem' : '0.125rem',
-          fontWeight: variant === 'presentation' ? '600' : '500',
+          backgroundColor: 'var(--chakra-colors-bg-muted)',
+          color: 'inherit',
+          padding: '0.125rem 0.5rem',
+          borderRadius: '0.125rem',
+          fontWeight: '500',
           display: 'inline-block',
         },
         '& pre': {
@@ -488,8 +458,8 @@ export default function Markdown({
           fontWeight: '600',
         },
         '& hr': {
-          marginTop: variant === 'compact' ? '0.25rem' : '0.5rem',
-          marginBottom: variant === 'compact' ? '0.25rem' : '0.5rem',
+          marginTop: '0.25rem',
+          marginBottom: '0.25rem',
           border: 'none',
           borderTop: '1px solid var(--chakra-colors-border-emphasized)',
           opacity: 0.6,
@@ -594,7 +564,7 @@ export default function Markdown({
           } else if (part.type === 'trust') {
             const level = part.content as 'high' | 'medium' | 'low';
             if (level in trustConfig) {
-              return <TrustBadge key={index} level={level} variant={variant} />;
+              return <TrustBadge key={index} level={level} context={context} />;
             }
             return null;
           } else {

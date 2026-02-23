@@ -9,7 +9,7 @@ import UserInputComponent from './UserInputComponent';
 import { DisplayProps } from '@/lib/types';
 
 
-export default function ToolCallDisplay({ toolCallTuple, databaseName, isCompact, showThinking}: DisplayProps) {
+export default function ToolCallDisplay({ toolCallTuple, databaseName, isCompact, showThinking, markdownContext}: DisplayProps) {
   const [toolCall] = toolCallTuple;
   const functionName = toolCall.function.name;
 
@@ -69,6 +69,7 @@ export default function ToolCallDisplay({ toolCallTuple, databaseName, isCompact
             databaseName={databaseName}
             isCompact={isCompact}
             showThinking={showThinking}
+            markdownContext={markdownContext}
         />
     )
 }

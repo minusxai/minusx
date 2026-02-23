@@ -630,7 +630,7 @@ export default function ContextEditorV2({
                       bg="bg.muted"
                       opacity={0.7}
                     >
-                      <Markdown variant="compact">{docEntry.content}</Markdown>
+                      <Markdown context="mainpage">{docEntry.content}</Markdown>
                     </Box>
                   ))}
                 </VStack>
@@ -709,7 +709,7 @@ export default function ContextEditorV2({
                       borderColor="border.default"
                     >
                       {docEntry.content.trim() ? (
-                        <Markdown variant="compact">{docEntry.content}</Markdown>
+                        <Markdown context="mainpage">{docEntry.content}</Markdown>
                       ) : (
                         <Text color="fg.muted" fontSize="sm">
                           Preview will appear here...

@@ -17,9 +17,10 @@ interface ChatMessageProps {
   databaseName?: string;
   isCompact?: boolean;
   showThinking?: boolean; // Show thinking blocks (exploratory context) or hide them (presentation context)
+  markdownContext?: 'sidebar' | 'mainpage';
 }
 
-export default function ChatMessage({ message, databaseName, isCompact = false, showThinking = false }: ChatMessageProps) {
+export default function ChatMessage({ message, databaseName, isCompact = false, showThinking = false, markdownContext = 'mainpage' }: ChatMessageProps) {
   // Handle debug messages (admin-only) - only show if there are LLM calls
   if (message.role === 'debug') {
     const debugInfo = message as any as MessageDebugInfo;
@@ -64,11 +65,11 @@ export default function ChatMessage({ message, databaseName, isCompact = false, 
             {isUser ? (
               <MessageWithMentions
                 content={message.content || ''}
-                variant="compact"
+                context={markdownContext}
                 textAlign="left"
               />
             ) : (
-              <Markdown variant="compact" textAlign='left'>
+              <Markdown context={markdownContext} textAlign='left'>
                 {message.content || ''}
               </Markdown>
             )}
@@ -137,7 +138,7 @@ export default function ChatMessage({ message, databaseName, isCompact = false, 
                         colStart={assistantColStart}
                       >
                         <Box px={3} py={1}>
-                          <Markdown variant="compact">{content}</Markdown>
+                          <Markdown context={markdownContext}>{content}</Markdown>
                         </Box>
                       </GridItem>
                     );
@@ -155,7 +156,7 @@ export default function ChatMessage({ message, databaseName, isCompact = false, 
                           colStart={assistantColStart}
                         >
                           <Box px={3} py={1}>
-                            <Markdown variant="compact">{block}</Markdown>
+                            <Markdown context={markdownContext}>{block}</Markdown>
                           </Box>
                         </GridItem>
                       ))}
@@ -167,7 +168,7 @@ export default function ChatMessage({ message, databaseName, isCompact = false, 
                           colStart={assistantColStart}
                         >
                           <Box px={3} py={1}>
-                            <Markdown variant="compact">{parsed.unparsed}</Markdown>
+                            <Markdown context={markdownContext}>{parsed.unparsed}</Markdown>
                           </Box>
                         </GridItem>
                       )}
@@ -180,7 +181,7 @@ export default function ChatMessage({ message, databaseName, isCompact = false, 
                           colStart={assistantColStart}
                         >
                           <Box px={3} py={1}>
-                            <Markdown variant="compact">{answerBlock}</Markdown>
+                            <Markdown context={markdownContext}>{answerBlock}</Markdown>
                           </Box>
                         </GridItem>
                       ))}
@@ -192,7 +193,7 @@ export default function ChatMessage({ message, databaseName, isCompact = false, 
                 {regularTools.map((toolCallTuple) => {
                       const [toolCall] = toolCallTuple;
                       return (
-                        <ToolCallDisplay key={toolCall.id} toolCallTuple={toolCallTuple} databaseName={databaseName} isCompact={isCompact} showThinking={showThinking}/>
+                        <ToolCallDisplay key={toolCall.id} toolCallTuple={toolCallTuple} databaseName={databaseName} isCompact={isCompact} showThinking={showThinking} markdownContext={markdownContext}/>
                       );
                     })}
 

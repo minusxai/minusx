@@ -29,7 +29,7 @@ export default function RectangleContent({
         height="100%"
         overflow="auto"
       >
-        <Markdown variant="presentation" textAlign={textAlign} textColor={textColor}>
+        <Markdown context="mainpage" textAlign={textAlign} textColor={textColor}>
           {content}
         </Markdown>
       </Box>

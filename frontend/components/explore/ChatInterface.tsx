@@ -520,6 +520,7 @@ export default function ChatInterface({
                         isCompact={isCompact}
                         showThinking={showThinking}
                         toggleShowThinking={() => setShowThinking(!showThinking)}
+                        markdownContext={container === 'sidebar' ? 'sidebar' : 'mainpage'}
                     />
                 })
               }

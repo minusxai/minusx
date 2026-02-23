@@ -20,9 +20,10 @@ interface ChatMessageProps {
   isCompact?: boolean;
   showThinking: boolean;
   toggleShowThinking: () => void;
+  markdownContext?: 'sidebar' | 'mainpage';
 }
 
-export default function SimpleChatMessage({ message, databaseName, isCompact = false, showThinking = false, toggleShowThinking }: ChatMessageProps) {
+export default function SimpleChatMessage({ message, databaseName, isCompact = false, showThinking = false, toggleShowThinking, markdownContext = 'mainpage' }: ChatMessageProps) {
   // Handle debug messages (admin-only) - only show if there are LLM calls
   if (message.role === 'debug') {
     const debugInfo = message as any as MessageDebugInfo;
@@ -63,7 +64,7 @@ export default function SimpleChatMessage({ message, databaseName, isCompact = f
             >
               <MessageWithMentions
                 content={message.content || ''}
-                variant="compact"
+                context={markdownContext}
                 textAlign="left"
               />
             </Box>
@@ -122,7 +123,7 @@ export default function SimpleChatMessage({ message, databaseName, isCompact = f
         gap={2}
         w="100%"
         >
-            <ToolCallDisplay key={message.tool_call_id} toolCallTuple={toolCallTuple} databaseName={databaseName} isCompact={isCompact} showThinking={showThinking}/>
+            <ToolCallDisplay key={message.tool_call_id} toolCallTuple={toolCallTuple} databaseName={databaseName} isCompact={isCompact} showThinking={showThinking} markdownContext={markdownContext}/>
         </Grid>
     )
   }

@@ -778,6 +778,7 @@ export interface DisplayProps {
   databaseName?: string;
   isCompact?: boolean;
   showThinking: boolean;
+  markdownContext?: 'sidebar' | 'mainpage';
 }
 
 // ============================================================================

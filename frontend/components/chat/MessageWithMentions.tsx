@@ -11,11 +11,11 @@ interface MentionData {
 
 interface MessageWithMentionsProps {
   content: string;
-  variant?: 'compact' | 'default';
+  context?: 'sidebar' | 'mainpage';
   textAlign?: 'left' | 'right' | 'center';
 }
 
-export function MessageWithMentions({ content, variant = 'compact', textAlign = 'left' }: MessageWithMentionsProps) {
+export function MessageWithMentions({ content, context = 'sidebar', textAlign = 'left' }: MessageWithMentionsProps) {
   // Parse message content to extract mentions and text parts
   const parts = parseMessageContent(content);
 
@@ -23,7 +23,7 @@ export function MessageWithMentions({ content, variant = 'compact', textAlign = 
   const hasMentions = parts.some(p => p.type === 'mention');
   if (!hasMentions) {
     return (
-      <Markdown variant={variant} textAlign={textAlign}>
+      <Markdown context={context} textAlign={textAlign}>
         {content}
       </Markdown>
     );
