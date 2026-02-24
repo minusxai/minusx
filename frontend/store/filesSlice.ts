@@ -4,6 +4,7 @@ import type { FileInfo } from '@/lib/data/types';
 import type { RootState } from './store';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import type { LoadError } from '@/lib/types/errors';
+import { replaceNegativeIdsInContent } from '@/lib/data/helpers/replace-references';
 
 // System file types that save in-place and are excluded from bulk Publish.
 // Defined as a Set here (instead of importing from file-metadata) to avoid
@@ -825,6 +826,41 @@ const filesSlice = createSlice({
         ...changes,
         references: currentRefs.filter((ref: QuestionReference) => ref.id !== referencedQuestionId)
       };
+    },
+
+    /**
+     * Atomically replace virtual (negative) IDs with real (positive) IDs across
+     * all dirty real files in Redux.
+     *
+     * Called by publishAll() after batch-creating virtual files — rewrites any
+     * negative-ID references in persistableChanges so the subsequent batch-save
+     * persists correct real IDs to the database.
+     *
+     * @param idMap - mapping of { virtualId: realId }
+     */
+    replaceVirtualIds(state, action: PayloadAction<Record<number, number>>) {
+      const idMap = action.payload;
+      if (Object.keys(idMap).length === 0) return;
+
+      for (const fileIdStr of Object.keys(state.files)) {
+        const fileId = Number(fileIdStr);
+        const file = state.files[fileId];
+
+        // Skip virtual files themselves and files with no pending changes
+        if (!file || fileId < 0) continue;
+        if (!file.persistableChanges || Object.keys(file.persistableChanges).length === 0) continue;
+
+        // Merge base content + pending changes, then rewrite any negative IDs
+        const merged = { ...file.content, ...file.persistableChanges } as any;
+        const updated = replaceNegativeIdsInContent(merged, file.type as FileType, idMap);
+
+        if (JSON.stringify(updated) !== JSON.stringify(merged)) {
+          state.files[fileId].persistableChanges = {
+            ...file.persistableChanges,
+            ...updated
+          };
+        }
+      }
     }
   }
 });
@@ -883,7 +919,8 @@ export const {
   addFile,
   addQuestionToDashboard,
   addReferenceToQuestion,
-  removeReferenceFromQuestion
+  removeReferenceFromQuestion,
+  replaceVirtualIds
 } = filesSlice.actions;
 
 // Selectors

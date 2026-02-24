@@ -19,7 +19,7 @@
  */
 
 import { getStore } from '@/store/store';
-import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, selectEffectivePath, deleteFile as deleteFileAction, setFilePlaceholder, generateVirtualId, pathToVirtualId, selectDirtyFiles } from '@/store/filesSlice';
+import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, selectEffectivePath, deleteFile as deleteFileAction, setFilePlaceholder, generateVirtualId, pathToVirtualId, selectDirtyFiles, replaceVirtualIds } from '@/store/filesSlice';
 export { selectDirtyFiles } from '@/store/filesSlice';
 import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, setQueryLoading } from '@/store/queryResultsSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
@@ -27,7 +27,6 @@ import { FilesAPI, getFiles } from '@/lib/data/files';
 import { PromiseManager } from '@/lib/utils/promise-manager';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
-import { replaceNegativeIdsInContent } from '@/lib/data/helpers/replace-references';
 import { resolveHomeFolderSync, isHiddenSystemPath, isFileTypeAllowedInPath, getModeRoot } from '@/lib/mode/path-resolver';
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import { API } from '@/lib/api/declarations';
@@ -857,18 +856,10 @@ export async function publishAll(): Promise<void> {
     }
   }
 
-  // Step 2: Replace stale negative IDs in real dirty files (Redux only)
+  // Step 2: Atomically replace stale negative IDs across all dirty real files (single dispatch)
   const realDirty = allDirty.filter(f => f.id > 0);
   if (Object.keys(idMap).length > 0) {
-    for (const rFile of realDirty) {
-      const merged = selectMergedContent(getStore().getState(), rFile.id) as any;
-      if (merged) {
-        const updated = replaceNegativeIdsInContent(merged, rFile.type as FileType, idMap);
-        if (JSON.stringify(updated) !== JSON.stringify(merged)) {
-          getStore().dispatch(setEdit({ fileId: rFile.id, edits: updated as any }));
-        }
-      }
-    }
+    getStore().dispatch(replaceVirtualIds(idMap));
   }
 
   // Step 3: Batch-save real dirty files
