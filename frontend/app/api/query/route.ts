@@ -25,8 +25,8 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     if (Array.isArray(parameters)) {
       // Array format: [{name: 'param1', value: 'val1', type: 'text'}, ...]
       (parameters as QuestionParameter[]).forEach(p => {
-        if (p.value !== undefined && p.value !== null && p.value !== '') {
-          paramValues[p.name] = p.value;
+        if (p.defaultValue !== undefined && p.defaultValue !== null && p.defaultValue !== '') {
+          paramValues[p.name] = p.defaultValue;
         }
       });
     } else if (typeof parameters === 'object' && parameters !== null) {

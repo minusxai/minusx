@@ -90,7 +90,7 @@ export function QuestionVisualization({
   const isChartType = currentState?.vizSettings?.type && currentState.vizSettings.type !== 'table';
   return (
     <VStack gap={0} width="full" align="stretch" flex="1" overflow="hidden"
-    borderRadius={'lg'}>
+    borderRadius={'lg'} border={'1px solid'} borderColor={'border.muted'}>
       {useCompactLayout && config.viz.showTypeButtons && data && !error && (
         <Box display="flex" flexWrap="wrap" alignItems="center" justifyContent="space-between" bg="bg.muted" shadow="sm" p={2} gap={1}>
           <Box flexShrink={1} minWidth={0}>

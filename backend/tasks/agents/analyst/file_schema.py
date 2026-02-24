@@ -95,7 +95,7 @@ class QuestionParameter(BaseModel):
     name: str
     type: ParameterType
     label: Optional[str] = None
-    value: Optional[Union[str, float]] = None
+    defaultValue: Optional[Union[str, float]] = None
 
 class QuestionReference(BaseModel):
     """Composed question reference — lets this query use @alias as a CTE."""

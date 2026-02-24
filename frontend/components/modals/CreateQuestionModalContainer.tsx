@@ -64,7 +64,7 @@ export default function CreateQuestionModalContainer({
     query: mergedContent?.query || '',
     params: (mergedContent?.parameters || []).reduce((acc, p) => ({
       ...acc,
-      [p.name]: p.value
+      [p.name]: p.defaultValue
     }), {}),
     database: mergedContent?.database_name,
     references: mergedContent?.references || []
@@ -97,7 +97,7 @@ export default function CreateQuestionModalContainer({
       query: mergedContent.query || '',
       params: (mergedContent.parameters || []).reduce((acc, p) => ({
         ...acc,
-        [p.name]: p.value
+        [p.name]: p.defaultValue
       }), {}),
       database: mergedContent.database_name
     };
@@ -126,7 +126,7 @@ export default function CreateQuestionModalContainer({
       query: mergedContent.query,
       params: (mergedContent.parameters || []).reduce((acc, p) => ({
         ...acc,
-        [p.name]: p.value
+        [p.name]: p.defaultValue
       }), {}),
       database: mergedContent.database_name,
       references: mergedContent.references || []

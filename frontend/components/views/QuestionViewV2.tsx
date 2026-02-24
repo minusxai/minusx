@@ -63,8 +63,15 @@ interface QuestionViewV2Props {
 
   // Content-only state/handlers (header state lives in FileHeader via Redux)
   proposedQuery?: string;          // Proposed query for diff view (from pending confirmation)
+
+  // Ephemeral parameter state
+  ephemeralParamValues?: Record<string, any>;
+
+  // Handlers
   onChange: (updates: Partial<QuestionContent>) => void;
-  onExecute: (overrideParams?: QuestionParameter[]) => void;  // Phase 3: Explicit execute
+  onParameterValueChange?: (paramName: string, value: string | number) => void;  // Ephemeral
+  onSetDefault?: (paramName: string, value: string | number | undefined) => void;  // Persistable
+  onExecute: (overrideParamValues?: Record<string, any>) => void;  // Phase 3: Explicit execute
 }
 
 export default function QuestionViewV2({
@@ -76,8 +83,11 @@ export default function QuestionViewV2({
   queryLoading,
   queryError,
   queryStale,
+  ephemeralParamValues,
   proposedQuery,
   onChange,
+  onParameterValueChange,
+  onSetDefault,
   onExecute,
 }: QuestionViewV2Props) {
   const fullMode = viewMode === 'page';
@@ -251,15 +261,28 @@ export default function QuestionViewV2({
     };
   }, []);
 
-  // Handle parameter change
-  const handleParametersChange = (updatedParams: QuestionParameter[]) => {
+  // Handle structural parameter changes (type, label, etc.) — persistable
+  const handleParametersStructuralChange = (updatedParams: QuestionParameter[]) => {
     onChange({ parameters: updatedParams });
   };
 
+  // Handle parameter value change — ephemeral (not persisted)
+  const handleParameterValueChange = (paramName: string, value: string | number) => {
+    if (onParameterValueChange) {
+      onParameterValueChange(paramName, value);
+    }
+  };
+
+  // Handle set default — persistable (updates parameter's defaultValue)
+  const handleSetDefault = (paramName: string, value: string | number | undefined) => {
+    if (onSetDefault) {
+      onSetDefault(paramName, value);
+    }
+  };
+
   // Handle parameter submit (when user presses Enter or clicks Run)
-  const handleParametersSubmit = (updatedParams: QuestionParameter[]) => {
-    onChange({ parameters: updatedParams });
-    onExecute(updatedParams);  // Pass updated params directly to avoid stale state
+  const handleParametersSubmit = (paramValues: Record<string, any>) => {
+    onExecute(paramValues);
   };
 
   // Handle database change
@@ -337,10 +360,14 @@ export default function QuestionViewV2({
   }, [content.parameters, referencedQuestions]);
 
   // Handle query execution (Run button / Cmd+Enter)
-  // Always pass merged parameters to include referenced question params
+  // Build effective param values dict from ephemeral overrides + defaults
   const handleExecute = useCallback(() => {
-    onExecute(parameters);  // Pass merged parameters
-  }, [onExecute, parameters]);
+    const paramValues: Record<string, any> = {};
+    for (const p of parameters) {
+      paramValues[p.name] = ephemeralParamValues?.[p.name] ?? p.defaultValue ?? '';
+    }
+    onExecute(paramValues);
+  }, [onExecute, parameters, ephemeralParamValues]);
 
   // Handle query change with debounced param/ref sync
   const handleQueryChange = useCallback((newQuery: string) => {
@@ -606,15 +633,6 @@ export default function QuestionViewV2({
               </Box>
             )}
           </Box>
-
-            {/* Parameters Section */}
-            {parameters.length > 0 && (
-              <ParameterRow
-                parameters={parameters}
-                onSubmit={handleParametersSubmit}
-                onParametersChange={handleParametersChange}
-              />
-            )}
           </Box>
           {/* End Left Panel */}
 
@@ -742,14 +760,20 @@ export default function QuestionViewV2({
             flexDirection="column"
             minHeight="0"
             overflow="hidden"
-            bg="bg.surface"
-            borderRadius={!useCompactLayout ? 'lg' : undefined}
             my={!useCompactLayout ? 2 : 0}
             mr={!useCompactLayout ? 2 : 0}
-            border={!useCompactLayout ? '1px solid' : undefined}
-            borderColor="border.muted"
           >
             {/* SQL Preview - shows when reference chip is clicked */}
+            {parameters.length > 0 && (
+              <ParameterRow
+                parameters={parameters}
+                parameterValues={ephemeralParamValues}
+                onValueChange={handleParameterValueChange}
+                onSubmit={handleParametersSubmit}
+                onParametersChange={handleParametersStructuralChange}
+                onSetDefault={handleSetDefault}
+              />
+            )}
             {sqlPreviewId ? (
               <Box p={4} flex={1} overflow="auto">
                 <HStack justify="space-between" mb={3}>

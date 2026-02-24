@@ -70,7 +70,8 @@ templates:
   question_params_guidelines: |
     ### Question Parameters
     - Questions can use :paramName syntax in SQL for user-provided values (e.g., WHERE date > :start_date AND status = :status)
-    - Parameter structure: {{"name": str, "type": "text"|"number"|"date", "label": str (optional), "value": any (optional)}}
+    - Parameter structure: {{"name": str, "type": "text"|"number"|"date", "label": str (optional), "defaultValue": any (optional, persisted default/reset value)}}
+    - **defaultValue**: Set sensible defaults for new parameterized queries (e.g., default date ranges, limits). The `defaultValue` is the initial/reset value shown to users. Users can change values at runtime without making the file dirty.
     - Infer types from naming conventions:
       - *_date, *_time → "date"
       - *_id, *_count, *_amount, limit, offset → "number"

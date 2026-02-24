@@ -21,6 +21,7 @@ export type EphemeralChanges = Partial<DbFile['content']> & {
     database: string;
     references: any[];
   };
+  parameterValues?: Record<string, any>;  // Ephemeral runtime param overrides (not persisted)
 };
 
 /**
@@ -390,7 +391,7 @@ const filesSlice = createSlice({
             } as QuestionContent;
 
             const params = (mergedContent.parameters || []).reduce((acc, p) => {
-              acc[p.name] = p.value ?? '';
+              acc[p.name] = p.defaultValue ?? '';
               return acc;
             }, {} as Record<string, any>);
 
@@ -416,7 +417,7 @@ const filesSlice = createSlice({
         if (state.files[fileId].type === 'question' && content) {
           const questionContent = content as QuestionContent;
           const params = (questionContent.parameters || []).reduce((acc, p) => {
-            acc[p.name] = p.value ?? '';
+            acc[p.name] = p.defaultValue ?? '';
             return acc;
           }, {} as Record<string, any>);
           const queryResultId = getQueryHash(questionContent.query, params, questionContent.database_name);
@@ -1148,5 +1149,13 @@ export const selectContextFromPath = createSelector(
     return sortedContexts[0];
   }
 );
+
+/**
+ * Get ephemeral parameter values for a file
+ * Used by question/dashboard views to get runtime param overrides
+ */
+export const selectEphemeralParamValues = (state: RootState, id: FileId): Record<string, any> => {
+  return (state.files.files[id]?.ephemeralChanges as EphemeralChanges)?.parameterValues || {};
+};
 
 export default filesSlice.reducer;

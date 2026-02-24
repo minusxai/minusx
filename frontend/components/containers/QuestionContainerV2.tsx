@@ -13,12 +13,12 @@
  */
 import { useCallback, useEffect, useRef } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectMergedContent, setEphemeral, type FileId } from '@/store/filesSlice';
+import { selectMergedContent, selectEphemeralParamValues, setEphemeral, type FileId } from '@/store/filesSlice';
 import { selectProposedQuery } from '@/store/uiSlice';
 import { useFile, useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { editFile } from '@/lib/api/file-state';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
-import { QuestionContent, QuestionParameter } from '@/lib/types';
+import { QuestionContent } from '@/lib/types';
 
 interface QuestionContainerV2Props {
   fileId: FileId;
@@ -41,6 +41,9 @@ export default function QuestionContainerV2({ fileId }: QuestionContainerV2Props
   // Phase 3: Get merged content (content + persistableChanges + ephemeralChanges)
   const mergedContent = useAppSelector(state => selectMergedContent(state, fileId)) as QuestionContent | undefined;
 
+  // Get ephemeral parameter values
+  const ephemeralParamValues = useAppSelector(state => selectEphemeralParamValues(state, fileId));
+
   // Phase 3: Get query to execute (from ephemeralChanges.lastExecuted or fallback to current)
   // lastExecuted tracks what was most recently *explicitly* executed (user click or auto-execute).
   // We display results for lastExecuted so edits don't wipe out visible results mid-typing.
@@ -49,7 +52,7 @@ export default function QuestionContainerV2({ fileId }: QuestionContainerV2Props
     query: mergedContent?.query || '',
     params: (mergedContent?.parameters || []).reduce((acc, p) => ({
       ...acc,
-      [p.name]: p.value
+      [p.name]: ephemeralParamValues[p.name] ?? p.defaultValue
     }), {}),
     database: mergedContent?.database_name || '',
     references: mergedContent?.references || []
@@ -76,16 +79,18 @@ export default function QuestionContainerV2({ fileId }: QuestionContainerV2Props
   }, [fileId]);
 
   // Phase 3: Execute query handler - updates lastExecuted to trigger execution
-  const handleExecute = useCallback((overrideParams?: QuestionParameter[]) => {
+  const handleExecute = useCallback((overrideParamValues?: Record<string, any>) => {
     if (!mergedContent) return;
 
-    const params = overrideParams || mergedContent.parameters || [];
+    const params = mergedContent.parameters || [];
+    const effectiveValues = overrideParamValues || params.reduce((acc, p) => ({
+      ...acc,
+      [p.name]: ephemeralParamValues[p.name] ?? p.defaultValue
+    }), {} as Record<string, any>);
+
     const newQuery = {
       query: mergedContent.query,
-      params: params.reduce((acc, p) => ({
-        ...acc,
-        [p.name]: p.value
-      }), {}),
+      params: effectiveValues,
       database: mergedContent.database_name,
       references: mergedContent.references || []
     };
@@ -94,7 +99,7 @@ export default function QuestionContainerV2({ fileId }: QuestionContainerV2Props
       fileId,
       changes: { lastExecuted: newQuery }
     }));
-  }, [mergedContent, fileId, dispatch]);
+  }, [mergedContent, fileId, dispatch, ephemeralParamValues]);
 
   // Auto-execute once per mount with current mergedContent (includes persistableChanges).
   // Using a ref (not lastExecuted) as the guard so every fresh mount runs the current query —
@@ -106,6 +111,23 @@ export default function QuestionContainerV2({ fileId }: QuestionContainerV2Props
     hasAutoExecutedRef.current = true;
     handleExecute();
   }, [file, mergedContent, handleExecute]);
+
+  // Handle ephemeral parameter value change
+  const handleParameterValueChange = useCallback((paramName: string, value: string | number) => {
+    dispatch(setEphemeral({
+      fileId,
+      changes: { parameterValues: { ...ephemeralParamValues, [paramName]: value } }
+    }));
+  }, [fileId, dispatch, ephemeralParamValues]);
+
+  // Handle setting a parameter's default value (persistable)
+  const handleSetDefault = useCallback((paramName: string, value: string | number | undefined) => {
+    if (!mergedContent) return;
+    const updatedParams = (mergedContent.parameters || []).map(p =>
+      p.name === paramName ? { ...p, defaultValue: value ?? null } : p
+    );
+    handleChange({ parameters: updatedParams });
+  }, [mergedContent, handleChange]);
 
   // Get proposed query from UI state (set by UserInputComponent for diff view)
   const proposedQuery = useAppSelector(state =>
@@ -130,8 +152,11 @@ export default function QuestionContainerV2({ fileId }: QuestionContainerV2Props
       queryLoading={queryLoading}
       queryError={queryError}
       queryStale={queryStale}
+      ephemeralParamValues={ephemeralParamValues}
       proposedQuery={proposedQuery}
       onChange={handleChange}
+      onParameterValueChange={handleParameterValueChange}
+      onSetDefault={handleSetDefault}
       onExecute={handleExecute}
     />
   );

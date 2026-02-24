@@ -28,8 +28,8 @@ export async function executeQuery(
   if (Array.isArray(parameters)) {
     // Array format: [{name: 'param1', value: 'val1', type: 'text'}, ...]
     parameters.forEach(p => {
-      if (p.value !== undefined && p.value !== null && p.value !== '') {
-        paramValues[p.name] = p.value;
+      if (p.defaultValue !== undefined && p.defaultValue !== null && p.defaultValue !== '') {
+        paramValues[p.name] = p.defaultValue;
       }
     });
   } else if (typeof parameters === 'object' && parameters !== null) {

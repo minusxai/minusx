@@ -104,7 +104,7 @@ export type Parameters = QuestionParameter[] | null;
 export type Name2 = string;
 export type ParameterType = "text" | "number" | "date";
 export type Label = string | null;
-export type Value = string | number | null;
+export type Defaultvalue = string | number | null;
 /**
  * connection name (empty string if none)
  */
@@ -215,7 +215,7 @@ export interface QuestionParameter {
   name: Name2;
   type: ParameterType;
   label?: Label;
-  value?: Value;
+  defaultValue?: Defaultvalue;
 }
 /**
  * Composed question reference — lets this query use @alias as a CTE.

@@ -588,7 +588,51 @@ export const MIGRATIONS: MigrationEntry[] = [
       return data;
     },
     description: 'Make subdomain NOT NULL constraint in companies table'
-  }
+  },
+  {
+    dataVersion: 15,
+    schemaVersion: undefined,  // No schema change
+    dataMigration: (data: InitData) => {
+      // Migrate question parameter value → defaultValue
+      // For all questions: set defaultValue = defaultValue ?? value, then strip value
+
+      for (const companyData of data.companies as CompanyData[]) {
+        let migratedCount = 0;
+
+        for (const doc of companyData.documents) {
+          if (doc.type !== 'question') continue;
+
+          const content = doc.content as any;
+          if (!content?.parameters || !Array.isArray(content.parameters)) continue;
+
+          let changed = false;
+          for (const param of content.parameters) {
+            if (param.defaultValue === undefined || param.defaultValue === null) {
+              if (param.value !== undefined && param.value !== null) {
+                param.defaultValue = param.value;
+                changed = true;
+              }
+            }
+            if ('value' in param) {
+              delete param.value;
+              changed = true;
+            }
+          }
+
+          if (changed) {
+            migratedCount++;
+          }
+        }
+
+        if (migratedCount > 0) {
+          console.log(`  ✅ Migrated ${migratedCount} question parameters for ${companyData.name}`);
+        }
+      }
+
+      return data;
+    },
+    description: 'Migrate question parameter value → defaultValue'
+  },
 ];
 
 /**

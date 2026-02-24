@@ -73,11 +73,11 @@ function resolveEffectiveParams(
 ): { array: QuestionParameter[]; dict: Record<string, any> } {
   const array = parameters.map(p => ({
     ...p,
-    value: Object.prototype.hasOwnProperty.call(inheritedParams, p.name)
+    defaultValue: Object.prototype.hasOwnProperty.call(inheritedParams, p.name)
       ? inheritedParams[p.name]
-      : p.value,
+      : (p.defaultValue),
   }));
-  const dict = array.reduce<Record<string, any>>((acc, p) => { acc[p.name] = p.value; return acc; }, {});
+  const dict = array.reduce<Record<string, any>>((acc, p) => { acc[p.name] = p.defaultValue; return acc; }, {});
   return { array, dict };
 }
 
@@ -751,9 +751,23 @@ export async function publishFile(
 
   // Prepare content for saving: merge only persistable changes, NOT ephemeral
   // Ephemeral changes (lastExecuted, parameterValues, etc.) should not be persisted
-  const contentToSave = fileState.persistableChanges
+  let contentToSave = fileState.persistableChanges
     ? { ...fileState.content, ...fileState.persistableChanges }
     : fileState.content;
+
+  // Normalize parameters on save: migrate value → defaultValue, strip value
+  if (fileState.type === 'question' && contentToSave) {
+    const qContent = contentToSave as QuestionContent;
+    if (qContent.parameters?.length) {
+      contentToSave = {
+        ...qContent,
+        parameters: qContent.parameters.map(p => {
+          const normalized = { ...p, defaultValue: p.defaultValue ?? null };
+          return normalized;
+        })
+      };
+    }
+  }
 
   if (!contentToSave) {
     throw new Error(`File ${fileId} has no content to save`);

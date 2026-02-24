@@ -309,7 +309,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
       const questionContent = content as QuestionContent;
       // Build params object from parameter values
       const params = (questionContent.parameters || []).reduce((acc, p) => {
-        acc[p.name] = p.value ?? '';
+        acc[p.name] = p.defaultValue ?? '';
         return acc;
       }, {} as Record<string, any>);
       // Compute hash and add to content
@@ -380,7 +380,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
       const questionContent = content as QuestionContent;
       // Build params object from parameter values
       const params = (questionContent.parameters || []).reduce((acc, p) => {
-        acc[p.name] = p.value ?? '';
+        acc[p.name] = p.defaultValue ?? '';
         return acc;
       }, {} as Record<string, any>);
       // Compute hash and add to content
