@@ -71,7 +71,6 @@ interface QuestionViewV2Props {
   // Handlers
   onChange: (updates: Partial<QuestionContent>) => void;
   onParameterValueChange?: (paramName: string, value: string | number) => void;  // Ephemeral
-  onSetDefault?: (paramName: string, value: string | number | undefined) => void;  // Persistable
   onExecute: (overrideParamValues?: Record<string, any>) => void;  // Phase 3: Explicit execute
 }
 
@@ -89,7 +88,6 @@ export default function QuestionViewV2({
   proposedQuery,
   onChange,
   onParameterValueChange,
-  onSetDefault,
   onExecute,
 }: QuestionViewV2Props) {
   const fullMode = viewMode === 'page';
@@ -275,11 +273,12 @@ export default function QuestionViewV2({
     }
   };
 
-  // Handle set default — persistable (updates parameter's defaultValue)
+  // Handle set default — persistable (updates parameter's defaultValue via onChange)
   const handleSetDefault = (paramName: string, value: string | number | undefined) => {
-    if (onSetDefault) {
-      onSetDefault(paramName, value);
-    }
+    const updatedParams = (content.parameters || []).map(p =>
+      p.name === paramName ? { ...p, defaultValue: value ?? null } : p
+    );
+    onChange({ parameters: updatedParams });
   };
 
   // Handle parameter submit (when user presses Enter or clicks Run)

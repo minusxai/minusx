@@ -120,15 +120,6 @@ export default function QuestionContainerV2({ fileId }: QuestionContainerV2Props
     }));
   }, [fileId, dispatch, ephemeralParamValues]);
 
-  // Handle setting a parameter's default value (persistable)
-  const handleSetDefault = useCallback((paramName: string, value: string | number | undefined) => {
-    if (!mergedContent) return;
-    const updatedParams = (mergedContent.parameters || []).map(p =>
-      p.name === paramName ? { ...p, defaultValue: value ?? null } : p
-    );
-    handleChange({ parameters: updatedParams });
-  }, [mergedContent, handleChange]);
-
   // Get proposed query from UI state (set by UserInputComponent for diff view)
   const proposedQuery = useAppSelector(state =>
     selectProposedQuery(state, typeof fileId === 'number' ? fileId : undefined)
@@ -157,7 +148,6 @@ export default function QuestionContainerV2({ fileId }: QuestionContainerV2Props
       proposedQuery={proposedQuery}
       onChange={handleChange}
       onParameterValueChange={handleParameterValueChange}
-      onSetDefault={handleSetDefault}
       onExecute={handleExecute}
     />
   );
