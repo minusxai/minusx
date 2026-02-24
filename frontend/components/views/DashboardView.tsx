@@ -83,8 +83,10 @@ export default function DashboardView({
   // Read ephemeral parameter values from Redux
   const ephemeralParamValues = useAppSelector(state => selectEphemeralParamValues(state, fileId));
 
-  // Submitted param values: only these flow to query execution
-  const [submittedParamValues, setSubmittedParamValues] = useState<Record<string, any>>({});
+  // Last-submitted param values from lastExecuted (gates execution)
+  const lastExecutedParams = useAppSelector(
+    state => (state.files.files[fileId]?.ephemeralChanges as any)?.lastExecuted?.params as Record<string, any> | undefined
+  ) ?? {};
 
   // Get agent name from config
   const { config } = useConfigs();
@@ -187,10 +189,10 @@ export default function DashboardView({
   const effectiveSubmittedValues = useMemo(() => {
     const values: Record<string, any> = {};
     for (const p of mergedParameters) {
-      values[p.name] = submittedParamValues[p.name] ?? p.defaultValue ?? '';
+      values[p.name] = lastExecutedParams[p.name] ?? p.defaultValue ?? '';
     }
     return values;
-  }, [mergedParameters, submittedParamValues]);
+  }, [mergedParameters, lastExecutedParams]);
 
   // Handler for removing questions (needs to be defined before questionGridItems)
   const handleRemoveQuestion = useCallback((questionIdStr: string) => {
@@ -369,12 +371,14 @@ export default function DashboardView({
                   }));
                 }}
                 onSubmit={(paramValues) => {
-                  // Update ephemeral state AND submitted values for execution
+                  // Update ephemeral typing state + lastExecuted.params to trigger execution
                   dispatch(setEphemeral({
                     fileId,
-                    changes: { parameterValues: paramValues }
+                    changes: {
+                      parameterValues: paramValues,
+                      lastExecuted: { query: '', params: paramValues, database: '', references: [] }
+                    }
                   }));
-                  setSubmittedParamValues(paramValues);
                 }}
                 disableTypeChange={true}
                 disableSetDefault={true}

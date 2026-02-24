@@ -806,6 +806,40 @@ class CreateFile(Tool):
 
 
 @register_agent
+class SetRuntimeValues(Tool):
+    """Set ephemeral runtime values on a file (question or dashboard).
+
+    Currently supports setting parameter values. These are runtime-only (not persisted to file content)
+    and trigger re-execution of queries with the new values.
+
+    Works for both questions and dashboards:
+    - Question: sets parameter values and re-executes the query
+    - Dashboard: sets merged parameter values across all dashboard questions and re-executes them
+
+    Parameters:
+    - fileId: The file ID (question or dashboard) to set values on
+    - parameter_values: Dict of {paramName: value} to set (e.g., {"start_date": "2024-01-01", "limit": 100})
+    """
+
+    def __init__(
+        self,
+        fileId: int = Field(..., description="Target file ID (question or dashboard)"),
+        parameter_values: dict = Field(..., description="Dict of parameter values to set: {paramName: value}"),
+        **kwargs
+    ):
+        super().__init__(**kwargs)  # type: ignore
+        self.fileId = fileId
+        self.parameter_values = parameter_values
+
+    async def reduce(self, child_batches):
+        pass
+
+    async def run(self) -> str:
+        # Frontend tool - executes in browser with Redux access
+        raise UserInputException(self._unique_id)
+
+
+@register_agent
 class ExecuteQuery(Tool):
     """Execute a standalone SQL query without modifying any files.
 

@@ -592,10 +592,23 @@ registerFrontendTool('EditDashboard', async (args, context) => {
       return await handleAddNewQuestion(mergedContent, args, context);
     case 'update_question':
       return await handleUpdateQuestion(args, context);
-    case 'set_parameter_values':
-      updates = handleSetParameterValues(mergedContent, args.parameter_values);
-      resultMessage = `Set ${Object.keys(args.parameter_values || {}).length} parameter value(s)`;
-      break;
+    case 'set_parameter_values': {
+      const paramUpdates = handleSetParameterValues(mergedContent, args.parameter_values);
+      const paramValues = paramUpdates.parameterValues || {};
+      // Set ephemeral typing state + lastExecuted.params to trigger execution
+      dispatch(setEphemeral({
+        fileId: file_id as FileId,
+        changes: {
+          parameterValues: paramValues,
+          lastExecuted: { query: '', params: paramValues, database: '', references: [] }
+        }
+      }));
+      return {
+        success: true,
+        message: `Successfully executed set_parameter_values. Set ${Object.keys(args.parameter_values || {}).length} parameter value(s)`,
+        updates: paramUpdates
+      };
+    }
     default:
       throw new Error(`Unknown operation: ${operation}`);
   }
@@ -1847,4 +1860,52 @@ registerFrontendTool('PublishFile', async (args, context) => {
   }
 
   return result;
+});
+
+/**
+ * SetRuntimeValues - Set ephemeral runtime values (parameter values) on a file
+ * Works for both questions and dashboards
+ */
+registerFrontendTool('SetRuntimeValues', async (args, context) => {
+  const { fileId, parameter_values } = args;
+  const { dispatch, state } = context;
+
+  if (!dispatch || fileId === undefined) {
+    return {
+      success: false,
+      message: 'Missing dispatch or fileId'
+    };
+  }
+
+  // Get merged content to merge with existing parameter values
+  const reduxState = state || getStore().getState();
+  const mergedContent = selectMergedContent(reduxState, fileId);
+
+  if (!mergedContent) {
+    return {
+      success: false,
+      error: `File content not available. FileId: ${fileId}`
+    };
+  }
+
+  // Reuse existing helper to normalize parameter_values format
+  const paramUpdates = handleSetParameterValues(mergedContent as DocumentContent, parameter_values);
+  const paramValues = paramUpdates.parameterValues || {};
+
+  // Set ephemeral state + lastExecuted.params to trigger execution
+  dispatch(setEphemeral({
+    fileId: fileId as FileId,
+    changes: {
+      parameterValues: paramValues,
+      lastExecuted: { query: '', params: paramValues, database: '', references: [] }
+    }
+  }));
+
+  const paramEntries = Object.entries(paramValues);
+  const paramSummary = paramEntries.map(([k, v]) => `${k}=${v}`).join(', ');
+
+  return {
+    success: true,
+    message: `Set ${paramEntries.length} parameter value(s): ${paramSummary}`
+  };
 });

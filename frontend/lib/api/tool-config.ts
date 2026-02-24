@@ -7,6 +7,7 @@ import NavigateDisplay from '@/components/explore/tools/NavigateDisplay';
 import EditDashboardDisplay from '@/components/explore/tools/EditDashboardDisplay';
 import EditReportDisplay from '@/components/explore/tools/EditReportDisplay';
 import EditAlertDisplay from '@/components/explore/tools/EditAlertDisplay';
+import SetRuntimeValuesDisplay from '@/components/explore/tools/SetRuntimeValuesDisplay';
 import { DisplayProps } from '@/lib/types';
 
 // Tool configuration interface
@@ -59,6 +60,9 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
   },
   'EditAlert': {
     displayComponent: EditAlertDisplay
+  },
+  'SetRuntimeValues': {
+    displayComponent: SetRuntimeValuesDisplay
   }
 };
 
