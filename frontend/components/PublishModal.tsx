@@ -14,7 +14,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAppSelector } from '@/store/hooks';
+import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectEffectiveName } from '@/store/filesSlice';
 import {
   Box,
@@ -260,7 +260,7 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
                         Discard
                       </Button>
                     </HStack>
-                    <Box flex="1" minH="0" display="flex" flexDirection="column" overflow="hidden">
+                    <Box flex="1" minH="0" display="flex" flexDirection="column" overflowY="auto">
                       <FileView key={selectedFileId} fileId={selectedFileId} mode="view" hideHeader />
                     </Box>
                   </>
