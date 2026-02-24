@@ -66,7 +66,7 @@ function createTestCompany(id: number, name: string, userCount: number, docCount
       references: [],  // Phase 6: Connections and questions have no references
       content: i === 0
         ? { type: 'duckdb' as const, name: 'test', database_type: 'duckdb', config: { file_path: 'test.duckdb' } } as any
-        : { name: `Document ${i + 1}`, query: 'SELECT 1', vizSettings: { type: 'table' } },
+        : { query: 'SELECT 1', database_name: 'test_db', vizSettings: { type: 'table' } },
       company_id: id,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
