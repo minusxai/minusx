@@ -32,7 +32,7 @@ interface QuestionContainerV2Props {
  * Delegates rendering to QuestionViewV2 (dumb component)
  * Header (edit mode, save, cancel, name) is handled by FileHeader via FileView
  */
-export default function QuestionContainerV2({ fileId }: QuestionContainerV2Props) {
+export default function QuestionContainerV2({ fileId, mode: containerMode }: QuestionContainerV2Props) {
   const dispatch = useAppDispatch();
 
   // Phase 3: Use useFile hook for file state management (purely reactive)
@@ -134,6 +134,11 @@ export default function QuestionContainerV2({ fileId }: QuestionContainerV2Props
   // Convert fileId to number for questionId (handle both number and 'new' string)
   const questionId = typeof fileId === 'number' ? fileId : undefined;
 
+  // In preview mode, pass the original (saved) query for diff display
+  const originalQuery = containerMode === 'preview'
+    ? (file.content as QuestionContent | null)?.query
+    : undefined;
+
   return (
     <QuestionViewV2
       viewMode='page'
@@ -146,7 +151,9 @@ export default function QuestionContainerV2({ fileId }: QuestionContainerV2Props
       queryStale={queryStale}
       ephemeralParamValues={ephemeralParamValues}
       lastSubmittedParamValues={lastExecuted?.params}
-      proposedQuery={proposedQuery}
+      proposedQuery={containerMode === 'preview' ? undefined : proposedQuery}
+      originalQuery={originalQuery}
+      mode={containerMode}
       onChange={handleChange}
       onParameterValueChange={handleParameterValueChange}
       onExecute={handleExecute}

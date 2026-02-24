@@ -68,6 +68,12 @@ interface QuestionViewV2Props {
   ephemeralParamValues?: Record<string, any>;
   lastSubmittedParamValues?: Record<string, any>;
 
+  // Original (saved) query for diff display in preview mode
+  originalQuery?: string;
+
+  // Container mode: 'preview' forces read-only with SQL diff
+  mode?: 'view' | 'create' | 'preview';
+
   // Handlers
   onChange: (updates: Partial<QuestionContent>) => void;
   onParameterValueChange?: (paramName: string, value: string | number) => void;  // Ephemeral
@@ -86,11 +92,14 @@ export default function QuestionViewV2({
   ephemeralParamValues,
   lastSubmittedParamValues,
   proposedQuery,
+  originalQuery,
+  mode = 'view',
   onChange,
   onParameterValueChange,
   onExecute,
 }: QuestionViewV2Props) {
   const fullMode = viewMode === 'page';
+  const isPreview = mode === 'preview';
   const { config } = useConfigs();
   const agentName = config.branding.agentName;
 
@@ -103,7 +112,8 @@ export default function QuestionViewV2({
     state => selectSqlEditorCollapsed(state, questionId, !fullMode)
   );
   // editMode and viewMode sourced from Redux (managed by FileHeader)
-  const editMode = useAppSelector(state => selectFileEditMode(state, questionId ?? -1));
+  const reduxEditMode = useAppSelector(state => selectFileEditMode(state, questionId ?? -1));
+  const editMode = isPreview ? false : reduxEditMode;
   const activeTab = useAppSelector(state => selectFileViewMode(state, questionId));
   const [containerWidth, setContainerWidth] = useState(0);
   const mainContentRef = useRef<HTMLDivElement>(null);
@@ -596,14 +606,16 @@ export default function QuestionViewV2({
                 {/* SQL Mode: Monaco Editor */}
                 {queryMode === 'sql' && (
                   <SqlEditor
-                    readOnly={!fullMode}
-                    value={content.query}
+                    readOnly={isPreview || !fullMode}
+                    value={isPreview ? (originalQuery ?? content.query) : content.query}
                     onChange={handleQueryChange}
                     onRun={handleExecute}
-                    showRunButton={true}
-                    showFormatButton={true}
+                    showRunButton={!isPreview}
+                    showFormatButton={!isPreview}
                     isRunning={queryLoading && !queryData}
-                    proposedValue={proposedQuery}
+                    proposedValue={isPreview
+                      ? (originalQuery !== content.query ? content.query : undefined)
+                      : proposedQuery}
                     availableReferences={availableQuestions}
                     validReferenceAliases={referencedQuestions.map(r => r.alias)}
                     schemaData={schemaData}
