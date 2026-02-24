@@ -1,8 +1,9 @@
 'use client';
 
-import { Flex, Text, Menu, Icon, Box } from '@chakra-ui/react';
+import { useState } from 'react';
+import { Flex, Text, Menu, Icon, Box, Button } from '@chakra-ui/react';
 import { Link } from '@/components/ui/Link';
-import { LuChevronRight, LuChevronDown } from 'react-icons/lu';
+import { LuChevronRight, LuChevronDown, LuTriangleAlert } from 'react-icons/lu';
 import { BaseFileMetadata } from '@/lib/types';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
@@ -10,6 +11,8 @@ import { useAppSelector } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
 import DemoModeBanner from '@/components/DemoModeBanner';
 import FileSearchBar from './FileSearchBar';
+import { useDirtyFiles } from '@/lib/hooks/file-state-hooks';
+import PublishModal from './PublishModal';
 
 interface BreadcrumbItem {
   label: string;
@@ -26,6 +29,8 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId }: Bread
   const { navigate } = useNavigationGuard();
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const isTutorialMode = effectiveUser?.mode === 'tutorial';
+  const dirtyFiles = useDirtyFiles();
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const isLastItem = (index: number) => index === items.length - 1;
   const hasDropdown = siblingFiles && siblingFiles.length > 0;
 
@@ -151,9 +156,25 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId }: Bread
   return (
     <Flex align="center" justify="space-between" gap={2} mb={2}>
       {breadcrumbItems}
-      <Box flexShrink={0} display={{ base: 'none', md: 'block' }}>
+      <Flex gap={2} align="center" flexShrink={0} display={{ base: 'none', md: 'flex' }}>
+        {dirtyFiles.length > 0 && (
+          <Button
+            size="xs"
+            variant="solid"
+            bg="accent.warning"
+            border="1px solid"
+            borderColor="accent.warning"
+            color="black"
+            fontFamily="mono"
+            onClick={() => setIsPublishModalOpen(true)}
+          >
+            <LuTriangleAlert size={12} />
+            {dirtyFiles.length} unsaved {dirtyFiles.length === 1 ? 'change' : 'changes'}
+          </Button>
+        )}
         <FileSearchBar />
-      </Box> 
+      </Flex>
+      <PublishModal isOpen={isPublishModalOpen} onClose={() => setIsPublishModalOpen(false)} />
     </Flex>
   );
 }

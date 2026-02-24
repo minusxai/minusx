@@ -230,8 +230,16 @@ export async function loadFiles(fileIds: number[], ttl: number, skip: boolean): 
  * @param fileIds - File IDs to select
  * @returns ReadFilesOutput
  */
+// Simple per-key memoization cache: returns the same reference when state hasn't changed,
+// which suppresses React Redux dev-mode "selector returned a different result" warnings.
+const _augmentedFilesCache = new Map<string, { state: RootState; result: AugmentedFile[] }>();
+
 export function selectAugmentedFiles(state: RootState, fileIds: number[]): AugmentedFile[] {
-  return fileIds
+  const key = fileIds.join(',');
+  const cached = _augmentedFilesCache.get(key);
+  if (cached && cached.state === state) return cached.result;
+
+  const result = fileIds
     .map(id => {
       const fileState = selectFile(state, id);
       if (!fileState) {
@@ -251,6 +259,9 @@ export function selectAugmentedFiles(state: RootState, fileIds: number[]): Augme
       return { fileState, references: effectiveReferences, queryResults: Array.from(queryResultMap.values()) };
     })
     .filter((a): a is AugmentedFile => a !== undefined);
+
+  _augmentedFilesCache.set(key, { state, result });
+  return result;
 }
 
 /**

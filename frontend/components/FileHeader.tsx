@@ -22,7 +22,6 @@ import {
 } from '@/store/uiSlice';
 import { editFile, publishFile, clearFileChanges } from '@/lib/api/file-state';
 import { isSystemFileType, type FileType } from '@/lib/ui/file-metadata';
-import { useDirtyFiles } from '@/lib/hooks/file-state-hooks';
 import { isUserFacingError } from '@/lib/errors';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import { useRouter } from '@/lib/navigation/use-navigation';
@@ -62,8 +61,6 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
     }
   }, [dispatch, fileId, isDashboard]);
 
-  const dirtyFiles = useDirtyFiles();
-  const anyDirtyFiles = dirtyFiles.length > 0;
 
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
@@ -158,7 +155,6 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
           </HStack>
         ) : undefined}
         onPublish={isSystem ? undefined : () => setIsPublishModalOpen(true)}
-        anyDirtyFiles={anyDirtyFiles}
       />
       {!isSystem && (
         <PublishModal

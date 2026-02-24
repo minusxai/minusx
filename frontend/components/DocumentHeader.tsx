@@ -239,14 +239,14 @@ export default function DocumentHeader({
             )}
 
             {/* Save / Publish Button */}
-            {/* Publish: shown when editing this file, or when any file has unsaved changes */}
-            {(editMode || anyDirtyFiles) && showPublishButton ? (
+            {/* Publish: shown only when the current file has unsaved changes */}
+            {editMode && showPublishButton ? (
               <IconButton
                 onClick={onPublish}
                 aria-label="Publish changes"
                 size="xs"
                 colorPalette="teal"
-                disabled={!isDirty && !anyDirtyFiles}
+                disabled={!isDirty}
                 px={2}
               >
                 <LuUpload />

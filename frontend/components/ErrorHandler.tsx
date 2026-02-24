@@ -13,14 +13,20 @@ import { showAdminToast } from '@/lib/utils/toast-helpers';
 export function GlobalErrorHandler() {
   useEffect(() => {
     const handleError = (event: ErrorEvent) => {
-      console.error('Unhandled error:', event.error);
+      // ResizeObserver loop errors are benign (browser fires them during layout shifts)
+      if (event.message?.includes('ResizeObserver')) return;
+
+      const errorDetail = event.error
+        ? (event.error instanceof Error ? event.error.stack || event.error.message : String(event.error))
+        : `${event.message || 'Unknown error'} at ${event.filename || 'unknown'}:${event.lineno}:${event.colno}`;
+      console.error('Unhandled error:', errorDetail);
 
       // Show toast notification (only to admins)
       showAdminToast({
         title: 'An unexpected error occurred',
-        description: 'Please refresh the page if issues persist.',
+        description: errorDetail.slice(0, 200),
         type: 'error',
-        duration: 5000,
+        duration: 8000,
       });
     };
 

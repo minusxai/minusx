@@ -1154,8 +1154,9 @@ export const selectContextFromPath = createSelector(
  * Get ephemeral parameter values for a file
  * Used by question/dashboard views to get runtime param overrides
  */
+const EMPTY_PARAM_VALUES: Record<string, any> = {};
 export const selectEphemeralParamValues = (state: RootState, id: FileId): Record<string, any> => {
-  return (state.files.files[id]?.ephemeralChanges as EphemeralChanges)?.parameterValues || {};
+  return (state.files.files[id]?.ephemeralChanges as EphemeralChanges)?.parameterValues || EMPTY_PARAM_VALUES;
 };
 
 export default filesSlice.reducer;

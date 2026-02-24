@@ -26,11 +26,11 @@ import {
   Badge,
 } from '@chakra-ui/react';
 import { Dialog } from '@chakra-ui/react';
-import { LuUpload } from 'react-icons/lu';
+import { LuUpload, LuUndo2 } from 'react-icons/lu';
 import { useDirtyFiles } from '@/lib/hooks/file-state-hooks';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import FileView from '@/components/FileView';
-import { publishAll } from '@/lib/api/file-state';
+import { publishAll, publishFile, clearFileChanges } from '@/lib/api/file-state';
 import type { FileState } from '@/store/filesSlice';
 
 interface PublishModalProps {
@@ -51,7 +51,7 @@ function DirtyFileItem({
   onSelect: () => void;
 }) {
   const meta = getFileTypeMetadata(file.type as any);
-  const Icon = meta.icon;
+  const FileIcon = meta.icon;
   const effectiveName = useAppSelector(state => selectEffectiveName(state, file.id));
 
   return (
@@ -68,7 +68,7 @@ function DirtyFileItem({
       transition="background 0.1s"
     >
       <Box color={meta.color} flexShrink={0}>
-        <Icon size={15} />
+        <FileIcon size={15} />
       </Box>
       <VStack align="start" gap={0} flex="1" minW="0">
         <Text
@@ -82,16 +82,6 @@ function DirtyFileItem({
           {effectiveName || 'Untitled'}
         </Text>
       </VStack>
-      <Badge
-        size="sm"
-        fontSize="2xs"
-        fontFamily="mono"
-        colorPalette="orange"
-        variant="subtle"
-        flexShrink={0}
-      >
-        unsaved
-      </Badge>
     </HStack>
   );
 }
@@ -100,6 +90,7 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
   const dirtyFiles = useDirtyFiles();
   const [selectedFileId, setSelectedFileId] = useState<number | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isPublishingSingle, setIsPublishingSingle] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
 
   // Auto-select first file when modal opens or list changes
@@ -122,6 +113,21 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
   const handleSelect = useCallback((fileId: number) => {
     setSelectedFileId(fileId);
   }, []);
+
+  const handlePublishSelected = useCallback(async () => {
+    if (selectedFileId === null) return;
+    setIsPublishingSingle(true);
+    try {
+      await publishFile({ fileId: selectedFileId });
+    } finally {
+      setIsPublishingSingle(false);
+    }
+  }, [selectedFileId]);
+
+  const handleDiscardSelected = useCallback(() => {
+    if (selectedFileId === null) return;
+    clearFileChanges({ fileId: selectedFileId });
+  }, [selectedFileId]);
 
   const handlePublishAll = useCallback(async () => {
     setIsPublishing(true);
@@ -223,12 +229,41 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
                 </VStack>
               </Box>
 
-              {/* Right pane: file view */}
-              <Box flex="1" overflow="auto" bg="bg.canvas">
+              {/* Right pane: toolbar + file view */}
+              <Box flex="1" minW="0" display="flex" flexDirection="column" bg="bg.canvas" overflow="hidden">
                 {selectedFileId !== null ? (
-                  <Box p={4} h="full">
-                    <FileView key={selectedFileId} fileId={selectedFileId} mode="view" hideHeader />
-                  </Box>
+                  <>
+                    <HStack
+                      px={4}
+                      py={2}
+                      borderBottom="1px solid"
+                      borderColor="border.default"
+                      gap={2}
+                      flexShrink={0}
+                      justify="flex-end"
+                    >
+                      <Button
+                        size="xs"
+                        colorPalette="teal"
+                        loading={isPublishingSingle}
+                        onClick={handlePublishSelected}
+                      >
+                        <LuUpload />
+                        Publish
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        onClick={handleDiscardSelected}
+                      >
+                        <LuUndo2 />
+                        Discard
+                      </Button>
+                    </HStack>
+                    <Box flex="1" minH="0" display="flex" flexDirection="column" overflow="hidden">
+                      <FileView key={selectedFileId} fileId={selectedFileId} mode="view" hideHeader />
+                    </Box>
+                  </>
                 ) : (
                   <Box
                     display="flex"
@@ -258,7 +293,7 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
                   </Text>
                 ) : (
                   <Text fontSize="xs" color="fg.muted">
-                    Save individual files using the Save button in the preview pane.
+                    Publish or discard individual files, or publish all at once.
                   </Text>
                 )}
                 <Button
