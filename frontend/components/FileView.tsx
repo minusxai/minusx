@@ -13,7 +13,9 @@
 import { Box, Spinner, Text } from '@chakra-ui/react';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { getFileComponent, hasFileComponent } from '@/lib/ui/fileComponents';
+import { isSystemFileType, type FileType } from '@/lib/ui/file-metadata';
 import { type FileId } from '@/store/filesSlice';
+import FileHeader from './FileHeader';
 
 export interface FileViewProps {
   fileId: FileId;
@@ -27,11 +29,31 @@ export default function FileView({ fileId, mode = 'view', defaultFolder }: FileV
 
   // Loading state
   if (!file || file.loading) {
-    return (
+    const spinner = (
       <Box display="flex" alignItems="center" justifyContent="center" minH="400px">
         <Spinner size="lg" colorScheme="blue" />
       </Box>
     );
+
+    // If we've loaded this file before (updatedAt > 0), the type is real — show the header
+    // while content reloads so it doesn't flash away. On first load (placeholder, updatedAt=0),
+    // fall through to full-page spinner.
+    const canShowHeader = file && file.updatedAt > 0
+      && typeof fileId === 'number'
+      && !isSystemFileType(file.type as FileType);
+
+    if (canShowHeader) {
+      return (
+        <>
+          <Box px={3} pt={3} pb={0} borderBottomWidth="1px" borderColor="border.muted">
+            <FileHeader fileId={fileId as number} fileType={file.type} mode={mode} />
+          </Box>
+          {spinner}
+        </>
+      );
+    }
+
+    return spinner;
   }
 
   // Error state
@@ -93,12 +115,22 @@ export default function FileView({ fileId, mode = 'view', defaultFolder }: FileV
     );
   }
 
+  // Render common header for user files (non-system types with a numeric fileId)
+  const showFileHeader = typeof fileId === 'number' && !isSystemFileType(file.type as FileType);
+
   // Render file-specific component
   return (
-    <Component
-      fileId={fileId}
-      mode={mode}
-      defaultFolder={defaultFolder}
-    />
+    <>
+      {showFileHeader && (
+        <Box px={3} pt={3} pb={0} borderBottomWidth="1px" borderColor="border.muted">
+          <FileHeader fileId={fileId as number} fileType={file.type} mode={mode} />
+        </Box>
+      )}
+      <Component
+        fileId={fileId}
+        mode={mode}
+        defaultFolder={defaultFolder}
+      />
+    </>
   );
 }

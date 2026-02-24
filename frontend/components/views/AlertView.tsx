@@ -3,10 +3,11 @@
 import { Box, Text, VStack, HStack, Input, Button, Flex, Badge } from '@chakra-ui/react';
 import { AlertContent, AlertRunContent, AlertSelector, AlertFunction, ComparisonOperator } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import DocumentHeader from '../DocumentHeader';
 import { LuPlay, LuClock, LuBell, LuMail, LuInfo, LuGripVertical, LuHistory, LuSettings, LuColumns3, LuScanSearch } from 'react-icons/lu';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { useAppSelector } from '@/store/hooks';
+import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
+import { selectIsDirty } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
 
 interface AlertRun {
@@ -17,20 +18,12 @@ interface AlertRun {
 
 interface AlertViewProps {
   alert: AlertContent;
-  fileName: string;
-  isDirty: boolean;
-  isSaving: boolean;
-  saveError?: string | null;
-  editMode: boolean;
+  fileId: number;
   isRunning: boolean;
   runs?: AlertRun[];
   selectedRunId?: number | null;
 
   onChange: (updates: Partial<AlertContent>) => void;
-  onMetadataChange: (changes: { name?: string }) => void;
-  onSave: () => Promise<void>;
-  onRevert: () => void;
-  onEditModeChange: (editMode: boolean) => void;
   onCheckNow: () => Promise<void>;
   onSelectRun?: (runId: number | null) => void;
 }
@@ -146,23 +139,18 @@ const operatorCollection = createListCollection({
 
 export default function AlertView({
   alert,
-  fileName,
-  isDirty,
-  isSaving,
-  saveError,
-  editMode,
+  fileId,
   isRunning,
   runs = [],
   selectedRunId,
   onChange,
-  onMetadataChange,
-  onSave,
-  onRevert,
-  onEditModeChange,
   onCheckNow,
   onSelectRun
 }: AlertViewProps) {
-  const [activeTab, setActiveTab] = useState<'visual' | 'json'>('visual');
+  // editMode, viewMode, and isDirty sourced from Redux (managed by FileHeader)
+  const editMode = useAppSelector(state => selectFileEditMode(state, fileId));
+  const activeTab = useAppSelector(state => selectFileViewMode(state, fileId));
+  const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
 
   // Resizable panel state
   const [leftPanelWidth, setLeftPanelWidth] = useState(50);
@@ -248,20 +236,6 @@ export default function AlertView({
     }))
   }), [runs]);
 
-  const handleSave = async () => {
-    try {
-      await onSave();
-      onEditModeChange(false);
-    } catch (error) {
-      console.error('Failed to save alert:', error);
-    }
-  };
-
-  const handleCancel = () => {
-    onRevert();
-    onEditModeChange(false);
-  };
-
   // Get selected run
   const selectedRun = runs.find(r => r.id === selectedRunId);
 
@@ -270,29 +244,6 @@ export default function AlertView({
 
   return (
     <Box display="flex" flexDirection="column" overflow="hidden" flex="1" minH="0" fontFamily="mono">
-      {/* Header */}
-      <DocumentHeader
-        name={fileName}
-        description={alert?.description}
-        fileType="alert"
-        editMode={editMode}
-        isDirty={isDirty}
-        isSaving={isSaving}
-        saveError={saveError}
-        onNameChange={(name) => onMetadataChange({ name })}
-        onDescriptionChange={(description) => onChange({ description })}
-        onEditModeToggle={() => {
-          if (editMode) {
-            handleCancel();
-          } else {
-            onEditModeChange(true);
-          }
-        }}
-        onSave={handleSave}
-        viewMode={activeTab}
-        onViewModeChange={(mode) => setActiveTab(mode)}
-      />
-
       {/* Cron not active info banner */}
       <HStack gap={2} px={4} py={2} bg="yellow.subtle" borderBottomWidth="1px" borderColor="yellow.muted" borderRadius={"md"}>
         <LuInfo size={14} color="var(--chakra-colors-yellow-fg)" />

@@ -36,13 +36,13 @@ import { syncParametersWithSQL } from '@/lib/sql/sql-params';
 import { syncReferencesWithSQL } from '@/lib/sql/sql-references';
 import { useAvailableQuestions } from '@/lib/hooks/useAvailableQuestions';
 import { useContext as useSchemaContext } from '@/lib/hooks/useContext';
-import DocumentHeader from '../DocumentHeader';
 import JsonEditor from '../slides/JsonEditor';
 import { QuestionVisualization } from '../question/QuestionVisualization';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import QuestionPickerModal from '../modals/QuestionPickerModal';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { addReferenceToQuestion, removeReferenceFromQuestion, setFile } from '@/store/filesSlice';
+import { setSqlEditorCollapsed, selectSqlEditorCollapsed, setQuestionCollapsedPanel, selectQuestionCollapsedPanel, selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { QueryBuilder, QueryModeSelector } from '../query-builder';
 
 /**
@@ -52,9 +52,8 @@ interface QuestionViewV2Props {
   viewMode: 'page' | 'toolcall';   // Full view or compact view (for toolcall)
   // Content (merged: content + persistableChanges + ephemeralChanges)
   content: QuestionContent;
-  fileName: string;                // File name (question identifier) - separate from content
   filePath?: string;               // File path for context lookup (schema autocomplete)
-  questionId?: number;             // Question ID for explain button
+  questionId?: number;             // Question ID (also used to read editMode from Redux)
 
   // Query result (from useQueryResult hook in container)
   queryData: any | null;           // Query result data (columns + rows)
@@ -62,49 +61,24 @@ interface QuestionViewV2Props {
   queryError: string | null;       // Query execution error
   queryStale: boolean;             // Data exists but is being refetched
 
-  // State (controlled by container)
-  editMode: boolean;
-  isDirty: boolean;
-  isSaving: boolean;
-  saveError: string | null;
+  // Content-only state/handlers (header state lives in FileHeader via Redux)
   proposedQuery?: string;          // Proposed query for diff view (from pending confirmation)
-
-  // Handlers
   onChange: (updates: Partial<QuestionContent>) => void;
-  onMetadataChange: (changes: { name?: string }) => void; // Phase 5: Metadata editing
   onExecute: (overrideParams?: QuestionParameter[]) => void;  // Phase 3: Explicit execute
-  onSave: () => void;
-  onCancel: () => void;
-  onEditModeChange: (mode: boolean) => void;
-
-  // Multi-file Publish workflow (Phase 1)
-  dirtyFileCount?: number;
-  onPublish?: () => void;
 }
 
 export default function QuestionViewV2({
   viewMode='page',
   content,
-  fileName,
   filePath,
   questionId,
   queryData,
   queryLoading,
   queryError,
   queryStale,
-  editMode,
-  isDirty,
-  isSaving,
-  saveError,
   proposedQuery,
   onChange,
-  onMetadataChange,
   onExecute,
-  onSave,
-  onCancel,
-  onEditModeChange,
-  dirtyFileCount = 0,
-  onPublish,
 }: QuestionViewV2Props) {
   const fullMode = viewMode === 'page';
   const { config } = useConfigs();
@@ -112,8 +86,15 @@ export default function QuestionViewV2({
 
   // Get schema data for SQL autocomplete
   const { databases: schemaData } = useSchemaContext(filePath || '/org');
-  const [sqlEditorCollapsed, setSqlEditorCollapsed] = useState(fullMode ? false : true);
-  const [activeTab, setActiveTab] = useState<'visual' | 'json'>('visual');
+
+  // SQL editor collapsed state — persisted in Redux per question so it survives navigation.
+  // Default: open in page mode, collapsed in toolcall/embedded mode.
+  const sqlEditorCollapsed = useAppSelector(
+    state => selectSqlEditorCollapsed(state, questionId, !fullMode)
+  );
+  // editMode and viewMode sourced from Redux (managed by FileHeader)
+  const editMode = useAppSelector(state => selectFileEditMode(state, questionId ?? -1));
+  const activeTab = useAppSelector(state => selectFileViewMode(state, questionId));
   const [containerWidth, setContainerWidth] = useState(0);
   const mainContentRef = useRef<HTMLDivElement>(null);
   const resultsContainerRef = useRef<HTMLDivElement>(null);
@@ -123,13 +104,17 @@ export default function QuestionViewV2({
   // Resizable panel state
   const [leftPanelWidth, setLeftPanelWidth] = useState(45); // percentage
   const [isResizing, setIsResizing] = useState(false);
-  const [collapsedPanel, setCollapsedPanel] = useState<'none' | 'left' | 'right'>(
-    fullMode && content.query?.trim() ? 'left' : 'none'
-  );
+  const collapsedPanel = useAppSelector(selectQuestionCollapsedPanel);
   const resizeStartX = useRef<number>(0);
   const resizeStartWidth = useRef<number>(45);
   const rafRef = useRef<number | null>(null);
   const dispatch = useAppDispatch();
+
+  const handleSqlEditorToggle = useCallback(() => {
+    if (questionId !== undefined) {
+      dispatch(setSqlEditorCollapsed({ fileId: questionId, collapsed: !sqlEditorCollapsed }));
+    }
+  }, [dispatch, questionId, sqlEditorCollapsed]);
 
   // Query mode state (SQL or GUI)
   const [queryMode, setQueryMode] = useState<'sql' | 'gui'>('sql');
@@ -253,16 +238,6 @@ export default function QuestionViewV2({
       }
     };
   }, [isResizing, handleResizeMove, handleResizeEnd]);
-
-  // Handle name change (Phase 5)
-  const handleNameChange = (name: string) => {
-    onMetadataChange({ name });
-  };
-
-  // Handle description change
-  const handleDescriptionChange = (description: string) => {
-    onChange({ description });
-  };
 
   // Debounce timer ref for param/ref sync
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -406,36 +381,6 @@ export default function QuestionViewV2({
       minH="0"
       data-file-id={questionId}
     >
-      {/* Header */}
-      {fullMode && (
-        <Box p={3} pb={2} borderBottomWidth="1px" borderColor="border.muted">
-          <DocumentHeader
-            name={fileName}
-            description={content.description ?? undefined}
-            fileType="question"
-            editMode={editMode}
-            isDirty={isDirty}
-            isSaving={isSaving}
-            saveError={saveError}
-            onNameChange={handleNameChange}
-            onDescriptionChange={handleDescriptionChange}
-            onEditModeToggle={() => {
-              if (editMode) {
-                onCancel();
-              } else {
-                onEditModeChange(true);
-              }
-            }}
-            onSave={onSave}
-            viewMode={activeTab}
-            onViewModeChange={setActiveTab}
-            questionId={questionId}
-            dirtyFileCount={dirtyFileCount}
-            onPublish={onPublish}
-          />
-        </Box>
-      )}
-
       {/* Main Content */}
       <Box ref={mainContentRef} flex={1} overflow="hidden" minHeight="0">
         {/* JSON View */}
@@ -489,7 +434,7 @@ export default function QuestionViewV2({
               alignItems="center"
               justifyContent="center"
               cursor="pointer"
-              onClick={() => setCollapsedPanel('none')}
+              onClick={() => dispatch(setQuestionCollapsedPanel('none'))}
               _hover={{ bg: 'accent.teal/50' }}
               my={2}
               ml={2}
@@ -547,7 +492,7 @@ export default function QuestionViewV2({
                   gap={2}
                   cursor="pointer"
                   align="center"
-                  onClick={() => setSqlEditorCollapsed(!sqlEditorCollapsed)}
+                  onClick={handleSqlEditorToggle}
                 >
                   <Box color="fg.muted" fontSize="sm">
                     {sqlEditorCollapsed ? <LuChevronDown /> : <LuChevronUp />}
@@ -720,7 +665,7 @@ export default function QuestionViewV2({
                   cursor="pointer"
                   p={1}
                   borderRadius="sm"
-                  onClick={() => setCollapsedPanel('left')}
+                  onClick={() => dispatch(setQuestionCollapsedPanel('left'))}
                   onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
                   _hover={{ opacity: 0.7 }}
                 >
@@ -742,7 +687,7 @@ export default function QuestionViewV2({
                   cursor="pointer"
                   p={1}
                   borderRadius="sm"
-                  onClick={() => setCollapsedPanel('right')}
+                  onClick={() => dispatch(setQuestionCollapsedPanel('right'))}
                   onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
                   _hover={{ opacity: 0.7 }}
                 >
@@ -770,7 +715,7 @@ export default function QuestionViewV2({
               alignItems="center"
               justifyContent="center"
               cursor="pointer"
-              onClick={() => setCollapsedPanel('none')}
+              onClick={() => dispatch(setQuestionCollapsedPanel('none'))}
               _hover={{ bg: 'accent.teal/50' }}
               my={2}
               mr={2}

@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Text, HStack } from '@chakra-ui/react';
+import { Box, Text } from '@chakra-ui/react';
 import { AssetReference, DocumentContent, QuestionContent, QuestionParameter } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
 import ParameterRow from '../ParameterRow';
@@ -9,10 +9,9 @@ import { Layout, WidthProvider, Responsive } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import JsonEditor from '../slides/JsonEditor';
-import DocumentHeader from '../DocumentHeader';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectMergedContent } from '@/store/filesSlice';
-import { openFileModal } from '@/store/uiSlice';
+import { openFileModal, selectDashboardEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
 import { shallowEqual } from 'react-redux';
@@ -22,26 +21,11 @@ const ResponsiveGridLayout = WidthProvider(Responsive);
 interface DashboardViewProps {
   // Data props (all from Redux via smart component)
   document: DocumentContent;
-  fileName: string;  // File name (separate from content)
   folderPath: string;
-  isDirty: boolean;
-  isSaving: boolean;
-  saveError?: string | null;
   fileId: number;  // File ID for Redux operations
 
-  // State (controlled by container)
-  editMode: boolean;
-
-  // Callback props
+  // Content change callback (header/save/editMode now live in FileHeader via Redux)
   onChange: (updates: Partial<DocumentContent>) => void;
-  onMetadataChange: (changes: { name?: string }) => void; // Phase 5: Metadata editing
-  onSave: () => Promise<void>;
-  onRevert: () => void;
-  onEditModeChange: (editMode: boolean) => void;
-
-  // Multi-file Publish workflow (Phase 1)
-  dirtyFileCount?: number;
-  onPublish?: () => void;
 }
 
 // Compact layout for mobile by stacking cards vertically
@@ -83,25 +67,15 @@ const generateDefaultLayout = (assets: AssetReference[]): Layout[] => {
 
 export default function DashboardView({
   document,
-  fileName,
   folderPath,
-  isDirty,
-  isSaving,
-  saveError,
   fileId,
-  editMode,
   onChange,
-  onMetadataChange,
-  onSave,
-  onRevert,
-  onEditModeChange,
-  dirtyFileCount = 0,
-  onPublish,
 }: DashboardViewProps) {
   const dispatch = useAppDispatch();
 
-  // Tab switcher for visual/json view
-  const [activeTab, setActiveTab] = useState<'visual' | 'json'>('visual');
+  // editMode and viewMode sourced from Redux (managed by FileHeader)
+  const editMode = useAppSelector(state => selectDashboardEditMode(state, fileId));
+  const activeTab = useAppSelector(state => selectFileViewMode(state, fileId));
 
   // Track current columns for responsive grid background
   const [currentCols, setCurrentCols] = useState(12);
@@ -358,67 +332,8 @@ export default function DashboardView({
     onChange({ layout: updatedLayout });
   };
 
-  const handleSave = async () => {
-    try {
-      await onSave();
-      onEditModeChange(false);
-    } catch (error) {
-      console.error('Failed to save dashboard:', error);
-    }
-  };
-
-  const handleCancel = () => {
-    onRevert();
-    onEditModeChange(false);
-  };
-
   return (
     <Box flex="1" data-file-id={fileId}>
-      {/* Header with Title, Description, and Badges */}
-      <Box>
-        <DocumentHeader
-          name={fileName}
-          description={document?.description}
-          fileType="dashboard"
-          editMode={editMode}
-          isDirty={isDirty}
-          isSaving={isSaving}
-          saveError={saveError}
-          onNameChange={(name) => onMetadataChange({ name })}
-          onDescriptionChange={(description) => onChange({ description })}
-          onEditModeToggle={() => {
-            if (editMode) {
-              handleCancel();
-            } else {
-              onEditModeChange(true);
-            }
-          }}
-          onSave={handleSave}
-          viewMode={activeTab}
-          onViewModeChange={(mode) => setActiveTab(mode)}
-          additionalBadges={
-            <HStack
-              gap={1}
-              fontFamily="mono"
-              fontSize="2xs"
-              fontWeight="600"
-              color="fg.default"
-              px={1.5}
-              py={0.5}
-              bg="bg.elevated"
-              borderRadius="sm"
-              border="1px solid"
-              borderColor="border.default"
-              flexShrink={0}
-            >
-              <Text>{questionCount.toString().padStart(2, '0')}</Text>
-              <Text color="fg.muted">{questionCount !== 1 ? 'questions' : 'question'}</Text>
-            </HStack>
-          }
-          dirtyFileCount={dirtyFileCount}
-          onPublish={onPublish}
-        />
-      </Box>
 
       {/* JSON View */}
       {activeTab === 'json' && (

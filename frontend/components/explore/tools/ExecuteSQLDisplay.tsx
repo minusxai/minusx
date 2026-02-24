@@ -251,22 +251,13 @@ export default function ExecuteSQLDisplay({ toolCallTuple, databaseName, isCompa
           ) : localContent ? (
             <QuestionViewV2
               viewMode='toolcall'
-              fileName='SQL Query Result'
               content={localContent}
               queryData={queryResult}
               queryLoading={false}
               queryError={error}
               queryStale={false}
-              editMode={false} // Read-only in explore
-              isDirty={false}
-              isSaving={false}
-              saveError={null}
               onChange={handleContentChange} // Allow viz type changes locally
-              onMetadataChange={() => {}} // No metadata changes in explore
               onExecute={() => {}} // No re-execution in explore
-              onSave={() => {}} // No saving in explore
-              onCancel={() => {}} // No cancel in explore
-              onEditModeChange={() => {}} // No edit mode change in explore
             />
           ) : (
             <Text fontSize="xs" color="fg.muted" fontFamily="mono">

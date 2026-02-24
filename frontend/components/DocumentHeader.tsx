@@ -58,11 +58,15 @@ export interface DocumentHeaderProps {
   // Explain button (optional - shown for questions)
   questionId?: number;  // If provided, show explain button in view mode
 
-  // Multi-file Publish workflow (Phase 1)
-  // When dirtyFileCount >= 2 and the current file is not a system file,
+  // Publish workflow: when onPublish is provided and this is not a system file,
   // the Save button is replaced with a Publish button that opens the PublishModal.
-  dirtyFileCount?: number;  // Total count of dirty non-system files across the app
-  onPublish?: () => void;   // Opens publish modal (only used when multi-file dirty)
+  // System files (connection, config, styles, context) always use the inline Save button.
+  onPublish?: () => void;
+
+  // True when any file in the app has unsaved changes (not just this file).
+  // Keeps the Publish button visible even when not editing the current file,
+  // so it acts as a persistent reminder of unpublished work.
+  anyDirtyFiles?: boolean;
 }
 
 export default function DocumentHeader({
@@ -83,18 +87,17 @@ export default function DocumentHeader({
   viewMode = 'visual',
   onViewModeChange,
   questionId,
-  dirtyFileCount = 0,
   onPublish,
+  anyDirtyFiles = false,
 }: DocumentHeaderProps) {
   const metadata = getFileTypeMetadata(fileType);
   const [validationError, setValidationError] = useState<string | null>(null);
   const showJson = useAppSelector((state) => state.ui.showJson);
 
-  // Determine whether to show "Publish" instead of "Save":
-  // - System files always use Save (they save in-place)
-  // - User files with 2+ dirty files across the app → Publish button
+  // System files (connection, config, styles, context) always use inline Save.
+  // All other files use Publish when onPublish is provided.
   const isSystemFile = isSystemFileType(fileType as FileType);
-  const showPublishButton = !isSystemFile && dirtyFileCount >= 2 && !!onPublish;
+  const showPublishButton = !isSystemFile && !!onPublish;
 
   // Validate and save
   const handleSave = useCallback(() => {
@@ -235,14 +238,15 @@ export default function DocumentHeader({
               <ExplainButton questionId={questionId} size="xs" />
             )}
 
-            {/* Save / Publish Button (show in edit mode) */}
-            {editMode && showPublishButton ? (
+            {/* Save / Publish Button */}
+            {/* Publish: shown when editing this file, or when any file has unsaved changes */}
+            {(editMode || anyDirtyFiles) && showPublishButton ? (
               <IconButton
                 onClick={onPublish}
                 aria-label="Publish changes"
                 size="xs"
                 colorPalette="teal"
-                disabled={!isDirty}
+                disabled={!isDirty && !anyDirtyFiles}
                 px={2}
               >
                 <LuUpload />

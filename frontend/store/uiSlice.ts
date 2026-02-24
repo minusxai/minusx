@@ -14,7 +14,11 @@ interface UIState {
   showDebug: boolean;
   showJson: boolean;
   gettingStartedCollapsed: boolean;
-  dashboardEditMode: Record<number, boolean>;  // fileId -> editMode
+  dashboardEditMode: Record<number, boolean>;  // fileId -> editMode (dashboards)
+  fileEditMode: Record<number, boolean>;       // fileId -> editMode (question, report, alert)
+  fileViewMode: Record<number, 'visual' | 'json'>;  // fileId -> active tab
+  sqlEditorCollapsed: Record<number, boolean>;  // fileId -> collapsed state
+  questionCollapsedPanel: 'none' | 'left' | 'right';  // global: which panel is collapsed across all questions
   sidebarDrafts: Record<number, string>;  // fileId -> draft input text
   proposedQueries: Record<number, string>;  // fileId -> proposed SQL query (for diff view)
   selectedToolset: 'classic' | 'native';
@@ -45,6 +49,10 @@ const initialState: UIState = {
   showJson: false,
   gettingStartedCollapsed: false,
   dashboardEditMode: {},
+  fileEditMode: {},
+  fileViewMode: {},
+  sqlEditorCollapsed: {},
+  questionCollapsedPanel: 'left',
   sidebarDrafts: {},
   proposedQueries: {},
   selectedToolset: getPersistedToolset(),
@@ -113,6 +121,24 @@ const uiSlice = createSlice({
     clearDashboardEditMode: (state, action: PayloadAction<number>) => {
       delete state.dashboardEditMode[action.payload];
     },
+    setFileEditMode: (state, action: PayloadAction<{ fileId: number; editMode: boolean }>) => {
+      const { fileId, editMode } = action.payload;
+      state.fileEditMode[fileId] = editMode;
+    },
+    clearFileEditMode: (state, action: PayloadAction<number>) => {
+      delete state.fileEditMode[action.payload];
+    },
+    setFileViewMode: (state, action: PayloadAction<{ fileId: number; mode: 'visual' | 'json' }>) => {
+      const { fileId, mode } = action.payload;
+      state.fileViewMode[fileId] = mode;
+    },
+    setSqlEditorCollapsed: (state, action: PayloadAction<{ fileId: number; collapsed: boolean }>) => {
+      const { fileId, collapsed } = action.payload;
+      state.sqlEditorCollapsed[fileId] = collapsed;
+    },
+    setQuestionCollapsedPanel: (state, action: PayloadAction<'none' | 'left' | 'right'>) => {
+      state.questionCollapsedPanel = action.payload;
+    },
     setSidebarDraft: (state, action: PayloadAction<{ fileId: number; draft: string }>) => {
       const { fileId, draft } = action.payload;
       if (draft.trim() === '') {
@@ -176,6 +202,11 @@ export const {
   toggleGettingStartedCollapsed,
   setDashboardEditMode,
   clearDashboardEditMode,
+  setFileEditMode,
+  clearFileEditMode,
+  setFileViewMode,
+  setSqlEditorCollapsed,
+  setQuestionCollapsedPanel,
   setSidebarDraft,
   clearSidebarDraft,
   setProposedQuery,
@@ -212,6 +243,17 @@ export const selectShowDebug = (state: RootState) => state.ui.showDebug;
 export const selectShowJson = (state: RootState) => state.ui.showJson;
 export const selectGettingStartedCollapsed = (state: RootState) => state.ui.gettingStartedCollapsed;
 export const selectDashboardEditMode = (state: RootState, fileId: number) => state.ui.dashboardEditMode[fileId] ?? false;
+export const selectFileEditMode = (state: RootState, fileId: number) => state.ui.fileEditMode[fileId] ?? false;
+export const selectFileViewMode = (state: RootState, fileId: number | undefined) =>
+  fileId !== undefined ? (state.ui.fileViewMode[fileId] ?? 'visual') : 'visual';
+// Returns collapsed state for a question's SQL editor.
+// Falls back to mode-appropriate default when not yet stored (open in page mode, closed in toolcall).
+export const selectSqlEditorCollapsed = (
+  state: RootState,
+  fileId: number | undefined,
+  defaultCollapsed: boolean
+) => fileId !== undefined ? (state.ui.sqlEditorCollapsed[fileId] ?? defaultCollapsed) : defaultCollapsed;
+export const selectQuestionCollapsedPanel = (state: RootState) => state.ui.questionCollapsedPanel;
 export const selectSidebarDraft = (state: RootState, fileId: number | undefined) =>
   fileId ? state.ui.sidebarDrafts[fileId] ?? '' : '';
 export const selectProposedQuery = (state: RootState, fileId: number | undefined) =>

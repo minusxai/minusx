@@ -63,22 +63,13 @@ function InlineChart({ queryData }: { queryData: ReportQueryResult }) {
     >
       <QuestionViewV2
         viewMode='toolcall'
-        fileName={queryData.fileName || 'Query Result'}
         content={localContent}
         queryData={queryResult}
         queryLoading={false}
         queryError={null}
         queryStale={false}
-        editMode={false}
-        isDirty={false}
-        isSaving={false}
-        saveError={null}
         onChange={handleContentChange}
-        onMetadataChange={() => {}}
         onExecute={() => {}}
-        onSave={() => {}}
-        onCancel={() => {}}
-        onEditModeChange={() => {}}
       />
     </Box>
   );

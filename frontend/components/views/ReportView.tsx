@@ -3,12 +3,13 @@
 import { Box, Text, VStack, HStack, Input, Button, Textarea, Flex, Badge, IconButton } from '@chakra-ui/react';
 import { ReportContent, ReportReference, ReportRunContent } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import DocumentHeader from '../DocumentHeader';
 import { LuPlay, LuClock, LuMail, LuInfo, LuPlus, LuTrash2, LuFileText, LuGripVertical, LuListChecks, LuHistory } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import Markdown from '@/components/Markdown';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { useAppSelector } from '@/store/hooks';
+import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
+import { selectIsDirty } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
 
 interface ReportRun {
@@ -19,20 +20,12 @@ interface ReportRun {
 
 interface ReportViewProps {
   report: ReportContent;
-  fileName: string;
-  isDirty: boolean;
-  isSaving: boolean;
-  saveError?: string | null;
-  editMode: boolean;
+  fileId: number;
   isRunning: boolean;
   runs?: ReportRun[];
   selectedRunId?: number | null;
 
   onChange: (updates: Partial<ReportContent>) => void;
-  onMetadataChange: (changes: { name?: string }) => void;
-  onSave: () => Promise<void>;
-  onRevert: () => void;
-  onEditModeChange: (editMode: boolean) => void;
   onRunNow: () => Promise<void>;
   onSelectRun?: (runId: number | null) => void;
 }
@@ -76,23 +69,18 @@ const referenceTypeCollection = createListCollection({
 
 export default function ReportView({
   report,
-  fileName,
-  isDirty,
-  isSaving,
-  saveError,
-  editMode,
+  fileId,
   isRunning,
   runs = [],
   selectedRunId,
   onChange,
-  onMetadataChange,
-  onSave,
-  onRevert,
-  onEditModeChange,
   onRunNow,
   onSelectRun
 }: ReportViewProps) {
-  const [activeTab, setActiveTab] = useState<'visual' | 'json'>('visual');
+  // editMode, viewMode, and isDirty sourced from Redux (managed by FileHeader)
+  const editMode = useAppSelector(state => selectFileEditMode(state, fileId));
+  const activeTab = useAppSelector(state => selectFileViewMode(state, fileId));
+  const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
 
   // Resizable panel state
   const [leftPanelWidth, setLeftPanelWidth] = useState(50); // percentage
@@ -200,20 +188,6 @@ export default function ReportView({
     }))
   }), [runs]);
 
-  const handleSave = async () => {
-    try {
-      await onSave();
-      onEditModeChange(false);
-    } catch (error) {
-      console.error('Failed to save report:', error);
-    }
-  };
-
-  const handleCancel = () => {
-    onRevert();
-    onEditModeChange(false);
-  };
-
   // Reference management
   const addReference = useCallback(() => {
     const newReference: ReportReference = {
@@ -239,29 +213,6 @@ export default function ReportView({
 
   return (
     <Box display="flex" flexDirection="column" overflow="hidden" flex="1" minH="0" fontFamily="mono">
-      {/* Header */}
-      <DocumentHeader
-        name={fileName}
-        description={report?.description}
-        fileType="report"
-        editMode={editMode}
-        isDirty={isDirty}
-        isSaving={isSaving}
-        saveError={saveError}
-        onNameChange={(name) => onMetadataChange({ name })}
-        onDescriptionChange={(description) => onChange({ description })}
-        onEditModeToggle={() => {
-          if (editMode) {
-            handleCancel();
-          } else {
-            onEditModeChange(true);
-          }
-        }}
-        onSave={handleSave}
-        viewMode={activeTab}
-        onViewModeChange={(mode) => setActiveTab(mode)}
-      />
-
       {/* Cron not active info banner */}
       <HStack gap={2} px={4} py={2} bg="yellow.subtle" borderBottomWidth="1px" borderColor="yellow.muted"  borderRadius={"md"}>
         <LuInfo size={14} color="var(--chakra-colors-yellow-fg)" />

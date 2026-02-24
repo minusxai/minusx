@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useCallback, useEffect, MutableRefObject, useMemo } from 'react';
-import { Box, Button, Dialog, HStack, Text, VStack } from '@chakra-ui/react';
+import { Box, Button, Dialog, HStack, Input, Text, VStack } from '@chakra-ui/react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile, publishFile, clearFileChanges, createVirtualFile } from '@/lib/api/file-state';
 import { useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { selectIsDirty, selectMergedContent, selectEffectiveName, setEphemeral, deleteFile } from '@/store/filesSlice';
+import { setFileEditMode } from '@/store/uiSlice';
 import { QuestionContent } from '@/lib/types';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
 import { isUserFacingError } from '@/lib/errors';
@@ -82,6 +83,13 @@ export default function CreateQuestionModalContainer({
 
   // Don't use useEffect for cleanup - it causes unmount issues
   // Instead, cleanup in the cancel/close handlers
+
+  // Always in edit mode in this modal (allows reference removal, editable viz)
+  useEffect(() => {
+    if (typeof effectiveId === 'number') {
+      dispatch(setFileEditMode({ fileId: effectiveId, editMode: true }));
+    }
+  }, [effectiveId, dispatch]);
 
   // Set initial lastExecuted (only once when file is ready)
   useEffect(() => {
@@ -219,24 +227,54 @@ export default function CreateQuestionModalContainer({
         height="100%"
         overflow="hidden"
       >
+        {/* Modal header: name input + save/cancel (replaces DocumentHeader which lives in FileView) */}
+        <HStack
+          px={3}
+          py={2}
+          borderBottomWidth="1px"
+          borderColor="border.muted"
+          gap={2}
+          flexShrink={0}
+        >
+          <Box flex={1}>
+            <Input
+              value={effectiveName}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleMetadataChange({ name: e.target.value })}
+              placeholder="Question name..."
+              size="sm"
+              variant="flushed"
+              fontWeight="semibold"
+            />
+          </Box>
+          {saveError && (
+            <Text fontSize="xs" color="accent.danger" flexShrink={0}>{saveError}</Text>
+          )}
+          <Button size="sm" variant="ghost" onClick={handleCancel} flexShrink={0}>
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            bg="accent.teal"
+            color="white"
+            onClick={handleSave}
+            loading={saving}
+            disabled={saving}
+            flexShrink={0}
+          >
+            Save
+          </Button>
+        </HStack>
+
         <QuestionViewV2
           viewMode="page"
-          fileName={effectiveName}
           content={mergedContent}
+          questionId={typeof effectiveId === 'number' ? effectiveId : undefined}
           queryData={queryData}
           queryLoading={queryLoading}
           queryError={queryError}
           queryStale={queryStale}
-          editMode={true}
-          isDirty={isDirty}
-          isSaving={saving}
-          saveError={saveError}
           onChange={handleChange}
-          onMetadataChange={handleMetadataChange}
           onExecute={handleExecute}
-          onSave={handleSave}
-          onCancel={handleCancel}
-          onEditModeChange={() => {}} // No-op in create mode
         />
       </Box>
 

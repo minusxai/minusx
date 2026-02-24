@@ -57,8 +57,10 @@ export default function FilePage({ params }: FilePageProps) {
     };
   }, [filesState, file]);
 
-  // Show loading state
-  if (!file || file.loading) {
+  // Show full-page spinner only on first-ever load (no cached metadata yet).
+  // When file has metadata from a folder listing (updatedAt > 0), render the layout
+  // normally — FileView will show the header + a content-area spinner while content loads.
+  if (!file || (file.loading && file.updatedAt === 0)) {
     return (
       <Center h="100vh" bg="bg.canvas">
         <Spinner size="xl" color="primary" />

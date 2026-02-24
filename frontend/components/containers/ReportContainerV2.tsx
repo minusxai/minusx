@@ -7,39 +7,29 @@
  */
 import { Box } from '@chakra-ui/react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectIsDirty, selectMergedContent, selectEffectiveName, type FileId } from '@/store/filesSlice';
+import { selectMergedContent, selectEffectiveName, type FileId } from '@/store/filesSlice';
 import { setRuns, setSelectedRun, selectRuns, selectSelectedRunId } from '@/store/reportRunsSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { useFile } from '@/lib/hooks/file-state-hooks';
-import { editFile, publishFile, clearFileChanges, readFilesByCriteria, readFiles } from '@/lib/api/file-state';
-import { redirectAfterSave } from '@/lib/ui/file-utils';
+import { editFile, readFilesByCriteria, readFiles } from '@/lib/api/file-state';
 import { FilesAPI } from '@/lib/data/files';
 import ReportView from '@/components/views/ReportView';
 import { ReportContent, ReportRunContent } from '@/lib/types';
 import { useContexts } from '@/lib/hooks/useContexts';
 import { useCallback, useState, useEffect } from 'react';
-import { useRouter } from '@/lib/navigation/use-navigation';
-import { isUserFacingError } from '@/lib/errors';
 
 interface ReportContainerV2Props {
   fileId: FileId;
-  mode?: 'view' | 'create';
+  mode?: 'view' | 'create';  // Handled by FileHeader (rendered by FileView)
 }
 
-export default function ReportContainerV2({
-  fileId,
-  mode = 'view',
-}: ReportContainerV2Props) {
-  const router = useRouter();
+export default function ReportContainerV2({ fileId }: ReportContainerV2Props) {
   const dispatch = useAppDispatch();
 
   // Use useFile hook for state management
   const { fileState: file } = useFile(fileId) ?? {};
   const fileLoading = !file || file.loading;
-  const saving = file?.saving ?? false;
-  const error = file?.loadError ?? null;
-  const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
   const effectiveName = useAppSelector(state => selectEffectiveName(state, fileId)) || '';
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const userMode = effectiveUser?.mode || 'org';
@@ -56,23 +46,7 @@ export default function ReportContainerV2({
   const selectedRunId = useAppSelector(state => selectSelectedRunId(state, typeof fileId === 'number' ? fileId : -1));
 
   // Local state
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [editMode, setEditMode] = useState(mode === 'create');
   const [isRunning, setIsRunning] = useState(false);
-
-  // Initialize edit mode for create mode
-  useEffect(() => {
-    if (mode === 'create' && !editMode) {
-      setEditMode(true);
-    }
-  }, [mode, editMode]);
-
-  // Auto-enter edit mode when changes are made
-  useEffect(() => {
-    if (isDirty && !editMode) {
-      setEditMode(true);
-    }
-  }, [isDirty, editMode]);
 
   // Merge content with persistableChanges for preview
   const mergedContent = useAppSelector(state => selectMergedContent(state, fileId)) as ReportContent | undefined;
@@ -134,40 +108,6 @@ export default function ReportContainerV2({
   const handleChange = useCallback((updates: Partial<ReportContent>) => {
     editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes: { content: updates } });
   }, [fileId]);
-
-  const handleMetadataChange = useCallback((changes: { name?: string }) => {
-    editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes });
-  }, [fileId]);
-
-  const handleSave = useCallback(async () => {
-    if (!mergedContent || typeof fileId !== 'number') return;
-
-    setSaveError(null);
-
-    try {
-      const result = await publishFile({ fileId });
-      redirectAfterSave(result, fileId, router);
-    } catch (error) {
-      if (isUserFacingError(error)) {
-        setSaveError(error.message);
-        return;
-      }
-      console.error('Failed to save report:', error);
-      setSaveError('An unexpected error occurred. Please try again.');
-    }
-  }, [mergedContent, fileId, router]);
-
-  const handleRevert = useCallback(() => {
-    if (typeof fileId === 'number') {
-      clearFileChanges({ fileId });
-    }
-    setEditMode(false);
-    setSaveError(null);
-  }, [fileId]);
-
-  const handleEditModeChange = useCallback((newEditMode: boolean) => {
-    setEditMode(newEditMode);
-  }, []);
 
   // Run Now handler - calls the chat API directly with Report agent
   const handleRunNow = useCallback(async () => {
@@ -291,22 +231,17 @@ export default function ReportContainerV2({
     return <Box p={4}>Loading report...</Box>;
   }
 
+  // ReportView requires a numeric fileId
+  if (typeof fileId !== 'number') return null;
+
   return (
     <ReportView
       report={mergedContent}
-      fileName={effectiveName}
-      isDirty={isDirty}
-      isSaving={saving}
-      saveError={saveError}
-      editMode={editMode}
+      fileId={fileId}
       isRunning={isRunning}
       runs={runs}
       selectedRunId={selectedRunId}
       onChange={handleChange}
-      onMetadataChange={handleMetadataChange}
-      onSave={handleSave}
-      onRevert={handleRevert}
-      onEditModeChange={handleEditModeChange}
       onRunNow={handleRunNow}
       onSelectRun={handleSelectRun}
     />
