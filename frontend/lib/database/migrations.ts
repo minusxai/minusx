@@ -602,6 +602,40 @@ export function getTargetVersions(): { dataVersion: number; schemaVersion: numbe
 }
 
 /**
+ * Fix known schema issues in data — runs unconditionally after every migration pass,
+ * including when no version-gated migrations were needed ("empty migration").
+ * Add new fixups here as issues are discovered.
+ */
+export function fixData(data: InitData): InitData {
+  for (const company of data.companies as CompanyData[]) {
+    for (const doc of company.documents) {
+      const content = doc.content as any;
+      if (!content || typeof content !== 'object') continue;
+
+      // Dashboard: coerce layout item IDs from string to integer
+      if (doc.type === 'dashboard') {
+        const items = content.layout?.items;
+        if (Array.isArray(items)) {
+          content.layout.items = items.map((item: any) => ({
+            ...item,
+            id: typeof item.id === 'string' ? parseInt(item.id, 10) : item.id,
+          }));
+        }
+      }
+
+      // Question: add default pivotConfig when type is 'pivot' but config is missing
+      if (doc.type === 'question') {
+        const viz = content.vizSettings;
+        if (viz?.type === 'pivot' && viz.pivotConfig == null) {
+          viz.pivotConfig = { rows: [], columns: [], values: [] };
+        }
+      }
+    }
+  }
+  return data;
+}
+
+/**
  * Apply all migrations to data starting from specified version
  */
 export function applyMigrations(data: InitData, fromDataVersion: number): InitData {
@@ -617,7 +651,7 @@ export function applyMigrations(data: InitData, fromDataVersion: number): InitDa
     }
   }
 
-  return currentData;
+  return fixData(currentData);
 }
 
 /**

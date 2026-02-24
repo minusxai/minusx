@@ -426,12 +426,12 @@ export default function DataManagementSection() {
         {/* Show validation results if present */}
         {result.validation && result.validation.errors.length > 0 && (
           <Box mt={2} p={2} bg="orange.50" borderRadius="md" borderWidth="1px" borderColor="orange.200">
-            <Text fontSize="xs" fontWeight="medium" color="accent.warning" fontFamily="mono" mb={1}>
+            <Text fontSize="xs" fontWeight="medium" color="orange.900" fontFamily="mono" mb={1}>
               Validation Issues:
             </Text>
             <VStack align="stretch" gap={1}>
               {result.validation.errors.map((error, idx) => (
-                <Text key={idx} fontSize="xs" color="accent.warning" fontFamily="mono">
+                <Text key={idx} fontSize="xs" color="orange.900" fontFamily="mono">
                   • {error}
                 </Text>
               ))}

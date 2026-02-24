@@ -45,7 +45,7 @@ import {
   InitData,
   CompanyData
 } from '../lib/database/import-export';
-import { applyMigrations, getTargetVersions } from '../lib/database/migrations';
+import { applyMigrations, fixData, getTargetVersions } from '../lib/database/migrations';
 import { validateInitData } from '../lib/database/validation';
 import { DB_PATH, getDbType } from '../lib/database/db-config';
 import { createAdapter } from '../lib/database/adapter/factory';
@@ -187,12 +187,15 @@ async function main() {
     importData.version = 0;
   }
 
-  // Apply migrations
+  // Apply migrations (applyMigrations always runs fixData at the end)
   const targetVersions = getTargetVersions();
   if (importData.version < targetVersions.dataVersion) {
     console.log(`🔄 Migrating data from v${importData.version} to v${targetVersions.dataVersion}...`);
     importData = applyMigrations(importData, importData.version);
     console.log('✅ Data migration complete\n');
+  } else {
+    // Already at latest version — still run fixData to normalise any schema issues
+    importData = fixData(importData);
   }
 
   // Validate import data
