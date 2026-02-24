@@ -3,9 +3,9 @@
  * updates persistableChanges and isDirty state
  */
 import { getTestDbPath, waitFor, initTestDatabase, cleanupTestDatabase } from './test-utils';
-import { editFile, readFiles } from '@/lib/api/file-state';
+import { editFile, editFileStr, readFiles } from '@/lib/api/file-state';
 import { selectIsDirty, selectMergedContent, selectFile } from '@/store/filesSlice';
-import { QuestionContent } from '@/lib/types';
+import { QuestionContent, DashboardContent } from '@/lib/types';
 import { configureStore } from '@reduxjs/toolkit';
 import filesReducer from '../filesSlice';
 import queryResultsReducer from '../queryResultsSlice';
@@ -383,5 +383,309 @@ describe('editFile - Question Editing Flow', () => {
 
     // File should be dirty
     expect(selectIsDirty(finalState, fileId)).toBe(true);
+  });
+});
+
+describe('editFile - Question content validation', () => {
+  const dbPath = getTestDbPath('edit_file'); // same mock path as db-config module mock above
+  const companyId = 1;
+  let questionId: number;
+
+  const { POST: batchPostHandler } = require('@/app/api/files/batch/route');
+
+  function setupStore() {
+    return configureStore({
+      reducer: {
+        files: filesReducer,
+        queryResults: queryResultsReducer,
+        auth: authReducer
+      }
+    });
+  }
+
+  beforeAll(() => {
+    global.fetch = jest.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+      if (urlStr.includes('/api/files/batch')) {
+        const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;
+        const request = new Request(fullUrl, {
+          method: 'POST',
+          ...init,
+          headers: { ...init?.headers, 'x-company-id': '1', 'x-user-id': '1' }
+        });
+        const response = await batchPostHandler(request);
+        const data = await response.json();
+        return { ok: response.status === 200, status: response.status, json: async () => data } as Response;
+      }
+      throw new Error(`Unmocked fetch call to ${urlStr}`);
+    });
+  });
+
+  afterAll(async () => {
+    jest.restoreAllMocks();
+    // dbPath is shared with the first describe; only clean up if still present
+    await cleanupTestDatabase(dbPath);
+  });
+
+  beforeEach(async () => {
+    const { resetAdapter } = await import('@/lib/database/adapter/factory');
+    await resetAdapter();
+    await initTestDatabase(dbPath);
+
+    const { DocumentDB } = await import('@/lib/database/documents-db');
+    questionId = await DocumentDB.create(
+      'viz-validation-question',
+      '/org/viz-validation-question',
+      'question',
+      {
+        query: 'SELECT 1',
+        database_name: 'test_db',
+        parameters: [],
+        references: [],
+        vizSettings: { type: 'table', xCols: [], yCols: [] }
+      } as QuestionContent,
+      [],
+      companyId
+    );
+
+    testStore = setupStore();
+    jest.clearAllMocks();
+  });
+
+  afterEach(async () => {
+    const { resetAdapter } = await import('@/lib/database/adapter/factory');
+    await resetAdapter();
+    testStore = null;
+    if (global.gc) global.gc();
+  });
+
+  it('rejects missing query field', async () => {
+    await readFiles([questionId]);
+    const result = await editFileStr({
+      fileId: questionId,
+      oldMatch: '"query":"SELECT 1"',
+      newMatch: '"query":null',
+    });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Invalid question content/);
+  });
+
+  it('rejects missing database_name field', async () => {
+    await readFiles([questionId]);
+    const result = await editFileStr({
+      fileId: questionId,
+      oldMatch: '"database_name":"test_db"',
+      newMatch: '"database_name":null',
+    });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Invalid question content/);
+  });
+
+  it('rejects invalid visualization type', async () => {
+    await readFiles([questionId]);
+    const result = await editFileStr({
+      fileId: questionId,
+      oldMatch: '"type":"table"',
+      newMatch: '"type":"invalid_chart_type"',
+    });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Invalid question content/);
+  });
+
+  it('rejects pivot type without pivotConfig', async () => {
+    await readFiles([questionId]);
+    const result = await editFileStr({
+      fileId: questionId,
+      oldMatch: '"type":"table"',
+      newMatch: '"type":"pivot"',
+    });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/pivotConfig is required/);
+  });
+
+  it('rejects pivot with missing required pivotConfig fields', async () => {
+    await readFiles([questionId]);
+    const result = await editFileStr({
+      fileId: questionId,
+      oldMatch: '"vizSettings":{"type":"table","xCols":[],"yCols":[]}',
+      newMatch: '"vizSettings":{"type":"pivot","pivotConfig":{"rows":["region"]}}',
+    });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Invalid question content/);
+  });
+
+  it('accepts valid table viz (no xCols/yCols needed)', async () => {
+    await readFiles([questionId]);
+    const result = await editFileStr({
+      fileId: questionId,
+      oldMatch: '"vizSettings":{"type":"table","xCols":[],"yCols":[]}',
+      newMatch: '"vizSettings":{"type":"table"}',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts valid pivot with full pivotConfig', async () => {
+    await readFiles([questionId]);
+    const pivotViz = JSON.stringify({
+      type: 'pivot',
+      pivotConfig: {
+        rows: ['region'],
+        columns: ['year'],
+        values: [{ column: 'revenue', aggFunction: 'SUM' }],
+      },
+    });
+    const result = await editFileStr({
+      fileId: questionId,
+      oldMatch: '"vizSettings":{"type":"table","xCols":[],"yCols":[]}',
+      newMatch: `"vizSettings":${pivotViz}`,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts valid bar chart with xCols/yCols', async () => {
+    await readFiles([questionId]);
+    const result = await editFileStr({
+      fileId: questionId,
+      oldMatch: '"vizSettings":{"type":"table","xCols":[],"yCols":[]}',
+      newMatch: '"vizSettings":{"type":"bar","xCols":["category"],"yCols":["revenue"]}',
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
+describe('editFile - Dashboard content validation', () => {
+  const dbPath = getTestDbPath('edit_file'); // same db-config mock path
+  const companyId = 1;
+  let dashboardId: number;
+
+  const { POST: batchPostHandler } = require('@/app/api/files/batch/route');
+
+  // Initial dashboard content — serialises to a known JSON string for oldMatch
+  const initialContent: DashboardContent = {
+    assets: [{ type: 'question', id: 99 }],
+    layout: { columns: 12, items: [{ id: 99, x: 0, y: 0, w: 6, h: 4 }] },
+  };
+
+  function setupStore() {
+    return configureStore({
+      reducer: {
+        files: filesReducer,
+        queryResults: queryResultsReducer,
+        auth: authReducer,
+      },
+    });
+  }
+
+  beforeAll(() => {
+    global.fetch = jest.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+      if (urlStr.includes('/api/files/batch')) {
+        const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;
+        const request = new Request(fullUrl, {
+          method: 'POST',
+          ...init,
+          headers: { ...init?.headers, 'x-company-id': '1', 'x-user-id': '1' },
+        });
+        const response = await batchPostHandler(request);
+        const data = await response.json();
+        return { ok: response.status === 200, status: response.status, json: async () => data } as Response;
+      }
+      throw new Error(`Unmocked fetch call to ${urlStr}`);
+    });
+  });
+
+  afterAll(async () => {
+    jest.restoreAllMocks();
+    await cleanupTestDatabase(dbPath);
+  });
+
+  beforeEach(async () => {
+    const { resetAdapter } = await import('@/lib/database/adapter/factory');
+    await resetAdapter();
+    await initTestDatabase(dbPath);
+
+    const { DocumentDB } = await import('@/lib/database/documents-db');
+    dashboardId = await DocumentDB.create(
+      'test-dashboard',
+      '/org/test-dashboard',
+      'dashboard',
+      initialContent,
+      [],
+      companyId
+    );
+
+    testStore = setupStore();
+    jest.clearAllMocks();
+  });
+
+  afterEach(async () => {
+    const { resetAdapter } = await import('@/lib/database/adapter/factory');
+    await resetAdapter();
+    testStore = null;
+    if (global.gc) global.gc();
+  });
+
+  it('rejects invalid asset type discriminator', async () => {
+    await readFiles([dashboardId]);
+    const result = await editFileStr({
+      fileId: dashboardId,
+      oldMatch: '{"type":"question","id":99}',
+      newMatch: '{"type":"chart","id":99}',
+    });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Invalid dashboard content/);
+  });
+
+  it('rejects non-integer id in FileAssetRef', async () => {
+    await readFiles([dashboardId]);
+    const result = await editFileStr({
+      fileId: dashboardId,
+      oldMatch: '{"type":"question","id":99}',
+      newMatch: '{"type":"question","id":"ninety-nine"}',
+    });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Invalid dashboard content/);
+  });
+
+  it('rejects layout item w below minimum (3)', async () => {
+    await readFiles([dashboardId]);
+    const result = await editFileStr({
+      fileId: dashboardId,
+      oldMatch: '"w":6',
+      newMatch: '"w":1',
+    });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Invalid dashboard content/);
+  });
+
+  it('rejects layout item h below minimum (3)', async () => {
+    await readFiles([dashboardId]);
+    const result = await editFileStr({
+      fileId: dashboardId,
+      oldMatch: '"h":4',
+      newMatch: '"h":2',
+    });
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Invalid dashboard content/);
+  });
+
+  it('accepts valid inline (text) asset', async () => {
+    await readFiles([dashboardId]);
+    const result = await editFileStr({
+      fileId: dashboardId,
+      oldMatch: '{"type":"question","id":99}',
+      newMatch: '{"type":"text","content":"Section header"}',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts valid layout dimension change', async () => {
+    await readFiles([dashboardId]);
+    const result = await editFileStr({
+      fileId: dashboardId,
+      oldMatch: '"w":6,"h":4',
+      newMatch: '"w":4,"h":6',
+    });
+    expect(result.success).toBe(true);
   });
 });

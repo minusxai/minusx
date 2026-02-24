@@ -6,6 +6,7 @@
 import { InitData, ExportedDocument, CompanyData } from './import-export';
 import { Company } from './company-db';
 import { User } from './user-db';
+import { validateFileState } from '@/lib/validation/content-validators';
 
 export interface ValidationResult {
   valid: boolean;
@@ -219,13 +220,13 @@ export function validateFileContent(documents: ExportedDocument[]): ValidationRe
 
     // Content must be an object
     if (!content || typeof content !== 'object') {
-      errors.push(
-        `${type} '${path}' (ID: ${id}) has invalid content (not an object)`
-      );
+      errors.push(`${type} '${path}' (ID: ${id}) has invalid content (not an object)`);
       continue;
     }
 
-    // Note: content.name validation removed - name is now stored only in file.name (DB column)
+    // Schema validation for known file types
+    const err = validateFileState(doc);
+    if (err) errors.push(`${type} '${path}' (ID: ${id}): ${err}`);
   }
 
   return {

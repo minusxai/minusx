@@ -36,6 +36,7 @@ import type { AugmentedFile, FileState, QueryResult, QuestionContent, QuestionPa
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
 import type { AppState } from '@/lib/appState';
+import { validateFileState } from '@/lib/validation/content-validators';
 
 /**
  * Extracts the initial inherited params for the root file being augmented.
@@ -607,36 +608,9 @@ export async function editFileStr(
 
   // Validate content if it changed
   if (contentChanged) {
-    if (fileState.type === 'question') {
-      const questionContent = editedFile.content as QuestionContent;
-      if (!questionContent.database_name) {
-        return {
-          success: false,
-          error: 'Question requires database_name field'
-        };
-      }
-      if (!questionContent.query) {
-        return {
-          success: false,
-          error: 'Question requires query field'
-        };
-      }
-    }
-
-    if (fileState.type === 'dashboard') {
-      const dashboardContent = editedFile.content as DocumentContent;
-      if (!dashboardContent.assets) {
-        return {
-          success: false,
-          error: 'Dashboard requires assets field'
-        };
-      }
-      if (!dashboardContent.layout) {
-        return {
-          success: false,
-          error: 'Dashboard requires layout field'
-        };
-      }
+    const error = validateFileState(editedFile);
+    if (error) {
+      return { success: false, error: `Invalid ${editedFile.type} content: ${error}` };
     }
   }
 
