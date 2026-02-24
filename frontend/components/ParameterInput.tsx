@@ -42,7 +42,7 @@ export default function ParameterInput({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && onSubmit) {
+    if ((e.key === 'Enter' || ((e.metaKey || e.ctrlKey) && e.key === 'Enter')) && onSubmit) {
       e.preventDefault();
       e.stopPropagation();
       const currentValue = parameter.type === 'number'

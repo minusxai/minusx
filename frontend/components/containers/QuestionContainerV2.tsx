@@ -153,6 +153,7 @@ export default function QuestionContainerV2({ fileId }: QuestionContainerV2Props
       queryError={queryError}
       queryStale={queryStale}
       ephemeralParamValues={ephemeralParamValues}
+      lastSubmittedParamValues={lastExecuted?.params}
       proposedQuery={proposedQuery}
       onChange={handleChange}
       onParameterValueChange={handleParameterValueChange}

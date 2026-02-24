@@ -1,12 +1,15 @@
 'use client';
 
-import { HStack } from '@chakra-ui/react';
+import { HStack, IconButton } from '@chakra-ui/react';
+import { LuPlay } from 'react-icons/lu';
+import { Tooltip } from '@/components/ui/tooltip';
 import { QuestionParameter } from '@/lib/types';
 import ParameterInput from './ParameterInput';
 
 interface ParameterRowProps {
   parameters: QuestionParameter[];
   parameterValues?: Record<string, any>;        // ephemeral runtime values
+  lastSubmittedValues?: Record<string, any>;     // values last used for execution
   onValueChange?: (paramName: string, value: string | number) => void;  // ephemeral
   onSubmit: (paramValues: Record<string, any>) => void;  // submit for execution
   onParametersChange?: (parameters: QuestionParameter[]) => void;  // structural
@@ -19,6 +22,7 @@ interface ParameterRowProps {
 export default function ParameterRow({
   parameters,
   parameterValues,
+  lastSubmittedValues,
   onValueChange,
   onSubmit,
   onParametersChange,
@@ -61,6 +65,13 @@ export default function ParameterRow({
     onSubmit(valuesDict);
   };
 
+  // Dirty detection: any param's effective value differs from lastSubmittedValues
+  const isDirty = lastSubmittedValues !== undefined && parameters.some(p => {
+    const effective = String(getEffectiveValue(p) ?? '');
+    const submitted = String(lastSubmittedValues[p.name] ?? '');
+    return effective !== submitted;
+  });
+
   const handleTypeChange = (paramName: string, type: 'text' | 'number' | 'date') => {
     const updatedParams = parameters.map((p) =>
       p.name === paramName ? { ...p, type } : p
@@ -87,6 +98,21 @@ export default function ParameterRow({
           onHoverParam={onHoverParam}
         />
       ))}
+      {isDirty && (
+        <Tooltip content="Run with updated values (⌘+Enter)">
+          <IconButton
+            aria-label="Run query"
+            size="sm"
+            variant="solid"
+            colorPalette="teal"
+            px={2}
+            onClick={() => handleSubmit()}
+          >
+            <LuPlay />
+            Rerun
+          </IconButton>
+        </Tooltip>
+      )}
     </HStack>
   );
 }

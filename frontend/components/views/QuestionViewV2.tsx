@@ -66,6 +66,7 @@ interface QuestionViewV2Props {
 
   // Ephemeral parameter state
   ephemeralParamValues?: Record<string, any>;
+  lastSubmittedParamValues?: Record<string, any>;
 
   // Handlers
   onChange: (updates: Partial<QuestionContent>) => void;
@@ -84,6 +85,7 @@ export default function QuestionViewV2({
   queryError,
   queryStale,
   ephemeralParamValues,
+  lastSubmittedParamValues,
   proposedQuery,
   onChange,
   onParameterValueChange,
@@ -768,6 +770,7 @@ export default function QuestionViewV2({
               <ParameterRow
                 parameters={parameters}
                 parameterValues={ephemeralParamValues}
+                lastSubmittedValues={lastSubmittedParamValues}
                 onValueChange={handleParameterValueChange}
                 onSubmit={handleParametersSubmit}
                 onParametersChange={handleParametersStructuralChange}

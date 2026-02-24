@@ -83,6 +83,9 @@ export default function DashboardView({
   // Read ephemeral parameter values from Redux
   const ephemeralParamValues = useAppSelector(state => selectEphemeralParamValues(state, fileId));
 
+  // Submitted param values: only these flow to query execution
+  const [submittedParamValues, setSubmittedParamValues] = useState<Record<string, any>>({});
+
   // Get agent name from config
   const { config } = useConfigs();
   const agentName = config.branding.agentName;
@@ -180,14 +183,14 @@ export default function DashboardView({
     return mergedParameters;
   }, [mergedParameters]);
 
-  // Effective parameter values dict: ephemeral overrides > question defaults
-  const effectiveParamValues = useMemo(() => {
+  // Effective submitted values: only these flow to query execution
+  const effectiveSubmittedValues = useMemo(() => {
     const values: Record<string, any> = {};
     for (const p of mergedParameters) {
-      values[p.name] = ephemeralParamValues[p.name] ?? p.defaultValue ?? '';
+      values[p.name] = submittedParamValues[p.name] ?? p.defaultValue ?? '';
     }
     return values;
-  }, [mergedParameters, ephemeralParamValues]);
+  }, [mergedParameters, submittedParamValues]);
 
   // Handler for removing questions (needs to be defined before questionGridItems)
   const handleRemoveQuestion = useCallback((questionIdStr: string) => {
@@ -306,7 +309,7 @@ export default function DashboardView({
           <SmartEmbeddedQuestionContainer
             questionId={questionId}
             externalParameters={parameterValuesForDisplay}
-            externalParamValues={effectiveParamValues}
+            externalParamValues={effectiveSubmittedValues}
             showTitle={true}
             editMode={editMode}
             index={index}
@@ -316,7 +319,7 @@ export default function DashboardView({
         </Box>
       );
     });
-  }, [questionIds, editMode, handleRemoveQuestion, parameterValuesForDisplay, effectiveParamValues, hoveredParamKey, paramToQuestionIds]);
+  }, [questionIds, editMode, handleRemoveQuestion, parameterValuesForDisplay, effectiveSubmittedValues, hoveredParamKey, paramToQuestionIds]);
 
   const handleLayoutChange = (newLayout: Layout[]) => {
     if (!document) return;
@@ -358,6 +361,7 @@ export default function DashboardView({
               <ParameterRow
                 parameters={parameterValuesForDisplay}
                 parameterValues={ephemeralParamValues}
+                lastSubmittedValues={effectiveSubmittedValues}
                 onValueChange={(paramName, value) => {
                   dispatch(setEphemeral({
                     fileId,
@@ -365,11 +369,12 @@ export default function DashboardView({
                   }));
                 }}
                 onSubmit={(paramValues) => {
-                  // Update ephemeral state with all param values (ephemeral only, not persisted)
+                  // Update ephemeral state AND submitted values for execution
                   dispatch(setEphemeral({
                     fileId,
                     changes: { parameterValues: paramValues }
                   }));
+                  setSubmittedParamValues(paramValues);
                 }}
                 disableTypeChange={true}
                 disableSetDefault={true}
