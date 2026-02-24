@@ -3,7 +3,7 @@
 /**
  * FileHeader - Common smart header for all user file types.
  *
- * Renders DocumentHeader + PublishModal by reading all state directly from Redux,
+ * Renders DocumentHeader by reading all state directly from Redux,
  * so it works identically whether rendered on a full page (via FileView) or
  * inside the PublishModal review pane.
  *
@@ -14,20 +14,18 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { HStack, Text } from '@chakra-ui/react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectIsDirty, selectEffectiveName, selectMergedContent, type FileId } from '@/store/filesSlice';
+import { selectIsDirty, selectEffectiveName, selectMergedContent } from '@/store/filesSlice';
 import {
   selectDashboardEditMode, setDashboardEditMode,
   selectFileEditMode, setFileEditMode,
   selectFileViewMode, setFileViewMode,
 } from '@/store/uiSlice';
 import { editFile, publishFile, clearFileChanges } from '@/lib/api/file-state';
-import { isSystemFileType, type FileType } from '@/lib/ui/file-metadata';
 import { isUserFacingError } from '@/lib/errors';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { DocumentContent } from '@/lib/types';
 import DocumentHeader from './DocumentHeader';
-import PublishModal from './PublishModal';
 
 interface FileHeaderProps {
   fileId: number;
@@ -63,8 +61,6 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
 
 
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
-
   // Set initial edit mode for create mode (once on mount only)
   const initializedRef = useRef(false);
   useEffect(() => {
@@ -104,8 +100,6 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
     dispatchSetEditMode(false);
     setSaveError(null);
   }, [fileId, dispatchSetEditMode]);
-
-  const isSystem = isSystemFileType(fileType as FileType);
 
   // Dashboard badge: question count
   const questionCount = isDashboard
@@ -154,14 +148,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
             <Text color="fg.muted">{questionCount !== 1 ? 'questions' : 'question'}</Text>
           </HStack>
         ) : undefined}
-        onPublish={isSystem ? undefined : () => setIsPublishModalOpen(true)}
       />
-      {!isSystem && (
-        <PublishModal
-          isOpen={isPublishModalOpen}
-          onClose={() => setIsPublishModalOpen(false)}
-        />
-      )}
     </>
   );
 }

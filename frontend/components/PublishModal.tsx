@@ -145,14 +145,14 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
     <Dialog.Root
       open={isOpen}
       onOpenChange={(e: { open: boolean }) => { if (!e.open) onClose(); }}
-      size="full"
+      size="xl"
     >
       <Portal>
         <Dialog.Backdrop />
-        <Dialog.Positioner display="flex" alignItems="center" justifyContent="center" p={4}>
+        <Dialog.Positioner display="flex" alignItems="center" justifyContent="center" p={4} position="fixed" inset={0} overflow="hidden">
           <Dialog.Content
             maxW="90vw"
-            h="85vh"
+            h="90vh"
             bg="bg.canvas"
             borderRadius="xl"
             border="1px solid"
