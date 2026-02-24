@@ -1,6 +1,6 @@
 'use client';
 
-import { HStack, Text, Icon, GridItem } from '@chakra-ui/react';
+import { HStack, Text, Icon, GridItem, Box } from '@chakra-ui/react';
 import { LuCheck, LuX } from 'react-icons/lu';
 import { DisplayProps } from '@/lib/types';
 
@@ -29,21 +29,35 @@ export default function SetRuntimeValuesDisplay({ toolCallTuple, showThinking }:
 
   const { success } = result;
 
-  // Build label from parameter_values
+  // Build chips from parameter_values
   const paramValues = args.parameter_values || {};
   const entries = Object.entries(paramValues);
-  const paramSummary = entries.length > 0
-    ? entries.slice(0, 3).map(([k, v]) => `${k}=${v}`).join(', ') +
-      (entries.length > 3 ? `, +${entries.length - 3} more` : '')
-    : 'parameters';
 
   const color = success ? 'accent.teal' : 'accent.danger';
   const icon = success ? LuCheck : LuX;
-  const label = success
-    ? `Set ${entries.length} parameter(s): ${paramSummary}`
-    : 'Failed to set parameters';
 
   if (!success && !showThinking) return null;
+
+  if (!success) {
+    return (
+      <GridItem colSpan={12} my={1}>
+        <HStack
+          gap={1.5}
+          py={1.5}
+          px={2}
+          bg={`${color}/10`}
+          borderRadius="md"
+          border="1px solid"
+          borderColor={`${color}/20`}
+        >
+          <Icon as={icon} boxSize={3} color={color} flexShrink={0} />
+          <Text fontSize="xs" color={color} fontFamily="mono">
+            Failed to set parameters
+          </Text>
+        </HStack>
+      </GridItem>
+    );
+  }
 
   return (
     <GridItem colSpan={12} my={1}>
@@ -59,8 +73,27 @@ export default function SetRuntimeValuesDisplay({ toolCallTuple, showThinking }:
       >
         <Icon as={icon} boxSize={3} color={color} flexShrink={0} />
         <Text fontSize="xs" color={color} fontFamily="mono">
-          {label}
+          Set {entries.length} parameter(s)
         </Text>
+        {entries.slice(0, 5).map(([k, v]) => (
+          <Box
+            key={k}
+            px={1.5}
+            py={0.5}
+            bg={`${color}/85`}
+            color={"white"}
+            borderRadius="sm"
+          >
+            <Text fontSize="xs" color={"white"} fontFamily="mono">
+              {k}={String(v)}
+            </Text>
+          </Box>
+        ))}
+        {entries.length > 5 && (
+          <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+            +{entries.length - 5} more
+          </Text>
+        )}
       </HStack>
     </GridItem>
   );

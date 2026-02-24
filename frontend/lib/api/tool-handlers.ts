@@ -1892,12 +1892,26 @@ registerFrontendTool('SetRuntimeValues', async (args, context) => {
   const paramUpdates = handleSetParameterValues(mergedContent as DocumentContent, parameter_values);
   const paramValues = paramUpdates.parameterValues || {};
 
-  // Set ephemeral state + lastExecuted.params to trigger execution
+  // Build lastExecuted with actual query/database from file content
+  // For questions, useQueryResult skips execution when query is empty,
+  // so we must populate from the file's current content.
+  const fileState = reduxState.files.files[fileId];
+  const isQuestion = fileState?.type === 'question';
+  const questionContent = isQuestion ? mergedContent as QuestionContent : null;
+
+  const lastExecuted = {
+    query: questionContent?.query || '',
+    params: paramValues,
+    database: questionContent?.database_name || '',
+    references: questionContent?.references || []
+  };
+
+  // Set ephemeral state + lastExecuted to trigger execution
   dispatch(setEphemeral({
     fileId: fileId as FileId,
     changes: {
       parameterValues: paramValues,
-      lastExecuted: { query: '', params: paramValues, database: '', references: [] }
+      lastExecuted
     }
   }));
 
