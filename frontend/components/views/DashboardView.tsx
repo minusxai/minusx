@@ -120,7 +120,7 @@ export default function DashboardView({
     let baseLayout: Layout[];
     if (document.layout?.items) {
       baseLayout = document.layout.items.map((item: any) => ({
-        i: item.id,
+        i: String(item.id),
         x: item.x,
         y: item.y,
         w: item.w,
@@ -341,7 +341,7 @@ export default function DashboardView({
     const updatedLayout = {
       columns: 12,
       items: newLayout.map(item => ({
-        id: item.i,
+        id: Number(item.i),
         x: item.x,
         y: item.y,
         w: item.w,
