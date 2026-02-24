@@ -13,6 +13,7 @@ import ExplainButton from '@/components/ExplainButton';
 interface SmartEmbeddedQuestionContainerProps {
   questionId: number;
   externalParameters?: QuestionParameter[];  // Optional: parameters from parent (e.g., dashboard)
+  externalParamValues?: Record<string, any>;  // Optional: runtime parameter values from parent
   showTitle?: boolean;  // Show question title header
   editMode?: boolean;   // Enable edit mode UI (drag handle, edit button, remove button)
   onEdit?: () => void;  // Callback for edit button
@@ -23,6 +24,7 @@ interface SmartEmbeddedQuestionContainerProps {
 export default function SmartEmbeddedQuestionContainer({
   questionId,
   externalParameters,
+  externalParamValues,
   showTitle = false,
   editMode = false,
   onEdit,
@@ -142,6 +144,7 @@ export default function SmartEmbeddedQuestionContainer({
         question={mergedContent}
         questionId={questionId}
         externalParameters={parametersToUse}
+        externalParamValues={externalParamValues}
       />
     </>
   );

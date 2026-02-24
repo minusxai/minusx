@@ -19,6 +19,7 @@ interface EmbeddedQuestionContainerProps {
   question: QuestionContent;
   questionId: number;
   externalParameters?: QuestionParameter[];
+  externalParamValues?: Record<string, any>;  // Runtime parameter values from parent (e.g., dashboard ephemeral state)
   onChange?: (updates: Partial<QuestionContent>) => void;
 }
 
@@ -31,6 +32,7 @@ export default function EmbeddedQuestionContainer({
   question,
   questionId,
   externalParameters,
+  externalParamValues,
   onChange,
 }: EmbeddedQuestionContainerProps) {
   // Local state for embedded question (no Redux)
@@ -44,19 +46,19 @@ export default function EmbeddedQuestionContainer({
   // Phase 3: Convert parameters to format useQueryResult expects
   const queryParams = useMemo(() => {
     const questionParams = localQuestion.parameters || [];
-    if (!externalParameters) {
+    if (!externalParameters && !externalParamValues) {
       // No external params — use question's own defaults
-      return questionParams.reduce((acc, p) => ({ ...acc, [p.name]: p.value }), {} as Record<string, any>);
+      return questionParams.reduce((acc, p) => ({ ...acc, [p.name]: p.defaultValue }), {} as Record<string, any>);
     }
-    // Apply external values only for params the question actually uses.
-    // This prevents unrelated dashboard params (from other questions) from
-    // polluting this question's cache key.
-    const externalByName = new Map(externalParameters.map(p => [p.name, p]));
+    // Use explicit values dict if provided (from dashboard ephemeral state),
+    // fall back to external param definitions, then question's own defaults.
+    // Only include params the question actually uses to avoid polluting cache key.
+    const externalByName = new Map((externalParameters || []).map(p => [p.name, p]));
     return questionParams.reduce((acc, p) => ({
       ...acc,
-      [p.name]: externalByName.get(p.name)?.value ?? p.value
+      [p.name]: externalParamValues?.[p.name] ?? externalByName.get(p.name)?.defaultValue ?? p.defaultValue
     }), {} as Record<string, any>);
-  }, [externalParameters, localQuestion.parameters]);
+  }, [externalParameters, externalParamValues, localQuestion.parameters]);
 
   // Phase 3: Use useQueryResult hook for automatic execution with TTL caching
   const {
