@@ -1,6 +1,6 @@
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { IFilesDataLayer } from './files.interface';
-import { LoadFileResult, LoadFilesResult, GetFilesOptions, GetFilesResult, SaveFileResult, CreateFileInput, CreateFileResult, GetTemplateOptions, GetTemplateResult } from './types';
+import { LoadFileResult, LoadFilesResult, GetFilesOptions, GetFilesResult, SaveFileResult, CreateFileInput, CreateFileResult, GetTemplateOptions, GetTemplateResult, BatchCreateInput, BatchCreateFileResult, BatchSaveFileInput, BatchSaveFileResult } from './types';
 import { FileExistsError, AccessPermissionError, FileNotFoundError, SerializedError, deserializeError } from '@/lib/errors';
 import { BaseFileContent, FileType } from '@/lib/types';
 
@@ -167,6 +167,40 @@ class FilesDataLayerClient implements IFilesDataLayer {
 
     const json = await res.json();
     return json.data;
+  }
+
+  async batchCreateFiles(inputs: BatchCreateInput[], user?: EffectiveUser): Promise<BatchCreateFileResult> {
+    const res = await fetch(`${API_BASE}/api/files/batch-create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files: inputs })
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      const errorMessage = errorData.error?.message || errorData.message || errorData.error || `Failed to batch create files: ${res.statusText}`;
+      throw new Error(errorMessage);
+    }
+
+    const json = await res.json();
+    return { data: json.data };
+  }
+
+  async batchSaveFiles(inputs: BatchSaveFileInput[], user?: EffectiveUser): Promise<BatchSaveFileResult> {
+    const res = await fetch(`${API_BASE}/api/files/batch-save`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files: inputs })
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      const errorMessage = errorData.error?.message || errorData.message || errorData.error || `Failed to batch save files: ${res.statusText}`;
+      throw new Error(errorMessage);
+    }
+
+    const json = await res.json();
+    return { data: json.data };
   }
 
 }

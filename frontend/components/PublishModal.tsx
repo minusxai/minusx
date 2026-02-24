@@ -28,6 +28,7 @@ import { LuUpload } from 'react-icons/lu';
 import { useDirtyFiles } from '@/lib/hooks/file-state-hooks';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import FileView from '@/components/FileView';
+import { publishAll } from '@/lib/api/file-state';
 import type { FileState } from '@/store/filesSlice';
 
 interface PublishModalProps {
@@ -95,6 +96,8 @@ function DirtyFileItem({
 export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
   const dirtyFiles = useDirtyFiles();
   const [selectedFileId, setSelectedFileId] = useState<number | null>(null);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
 
   // Auto-select first file when modal opens or list changes
   useEffect(() => {
@@ -115,6 +118,18 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
 
   const handleSelect = useCallback((fileId: number) => {
     setSelectedFileId(fileId);
+  }, []);
+
+  const handlePublishAll = useCallback(async () => {
+    setIsPublishing(true);
+    setPublishError(null);
+    try {
+      await publishAll();
+    } catch (err) {
+      setPublishError(err instanceof Error ? err.message : 'Failed to publish. Please try again.');
+    } finally {
+      setIsPublishing(false);
+    }
   }, []);
 
   return (
@@ -234,14 +249,20 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
               flexShrink={0}
             >
               <HStack justify="space-between" align="center">
-                <Text fontSize="xs" color="fg.muted">
-                  Save individual files using the Save button in the preview pane.
-                </Text>
+                {publishError ? (
+                  <Text fontSize="xs" color="fg.error">
+                    {publishError}
+                  </Text>
+                ) : (
+                  <Text fontSize="xs" color="fg.muted">
+                    Save individual files using the Save button in the preview pane.
+                  </Text>
+                )}
                 <Button
                   size="sm"
                   colorPalette="teal"
-                  disabled
-                  title="Batch publish coming soon (Phase 2)"
+                  loading={isPublishing}
+                  onClick={handlePublishAll}
                 >
                   <LuUpload />
                   Publish All

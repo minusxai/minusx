@@ -13,7 +13,11 @@ import {
   CreateFileResult,
   FileInfo,
   GetTemplateOptions,
-  GetTemplateResult
+  GetTemplateResult,
+  BatchCreateInput,
+  BatchCreateFileResult,
+  BatchSaveFileInput,
+  BatchSaveFileResult
 } from './types';
 import { canAccessFile } from './helpers/permissions';
 import { extractReferenceIds, extractAllReferenceIds } from './helpers/references';
@@ -601,6 +605,25 @@ class FilesDataLayerServer implements IFilesDataLayer {
         throw new Error(`Unsupported template type: ${type}`);
     }
   }
+
+  async batchCreateFiles(inputs: BatchCreateInput[], user: EffectiveUser): Promise<BatchCreateFileResult> {
+    const results: Array<{ virtualId: number; file: DbFile }> = [];
+    for (const input of inputs) {
+      const { virtualId, ...createInput } = input;
+      const result = await this.createFile(createInput, user);
+      results.push({ virtualId, file: result.data });
+    }
+    return { data: results };
+  }
+
+  async batchSaveFiles(inputs: BatchSaveFileInput[], user: EffectiveUser): Promise<BatchSaveFileResult> {
+    const results: DbFile[] = [];
+    for (const input of inputs) {
+      const result = await this.saveFile(input.id, input.name, input.path, input.content, input.references, user);
+      results.push(result.data);
+    }
+    return { data: results };
+  }
 }
 
 // Export singleton instance - PREFER using this
@@ -615,3 +638,5 @@ export const createFile = FilesAPI.createFile.bind(FilesAPI);
 export const saveFile = FilesAPI.saveFile.bind(FilesAPI);
 export const loadFileByPath = FilesAPI.loadFileByPath.bind(FilesAPI);
 export const getTemplate = FilesAPI.getTemplate.bind(FilesAPI);
+export const batchCreateFiles = FilesAPI.batchCreateFiles.bind(FilesAPI);
+export const batchSaveFiles = FilesAPI.batchSaveFiles.bind(FilesAPI);

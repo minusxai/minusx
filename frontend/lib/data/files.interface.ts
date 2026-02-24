@@ -1,5 +1,5 @@
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { LoadFileResult, LoadFilesResult, GetFilesOptions, GetFilesResult, SaveFileResult, CreateFileInput, CreateFileResult, GetTemplateOptions, GetTemplateResult } from './types';
+import { LoadFileResult, LoadFilesResult, GetFilesOptions, GetFilesResult, SaveFileResult, CreateFileInput, CreateFileResult, GetTemplateOptions, GetTemplateResult, BatchCreateInput, BatchCreateFileResult, BatchSaveFileInput, BatchSaveFileResult } from './types';
 import { BaseFileContent, FileType } from '@/lib/types';
 import { LoaderOptions } from './loaders/types';
 
@@ -54,5 +54,16 @@ export interface IFilesDataLayer {
    * Returns content structure with default values for new file creation
    */
   getTemplate(type: FileType, options: GetTemplateOptions, user: EffectiveUser): Promise<GetTemplateResult>;
+
+  /**
+   * Batch-create multiple virtual files in a single operation.
+   * Each input includes the client-side virtualId so the caller can build an idMap.
+   */
+  batchCreateFiles(inputs: BatchCreateInput[], user: EffectiveUser): Promise<BatchCreateFileResult>;
+
+  /**
+   * Batch-save multiple existing files in a single operation.
+   */
+  batchSaveFiles(inputs: BatchSaveFileInput[], user: EffectiveUser): Promise<BatchSaveFileResult>;
 
 }

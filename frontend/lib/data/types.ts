@@ -101,3 +101,35 @@ export interface GetTemplateResult {
     availableDatabases?: string[];  // Hint for dropdowns
   };
 }
+
+/**
+ * Input for batch create: CreateFileInput + client-side virtualId
+ */
+export interface BatchCreateInput extends CreateFileInput {
+  virtualId: number;  // client-side negative ID
+}
+
+/**
+ * Result for batch create operation
+ */
+export interface BatchCreateFileResult {
+  data: Array<{ virtualId: number; file: DbFile }>;
+}
+
+/**
+ * Input for batch save: existing file fields
+ */
+export interface BatchSaveFileInput {
+  id: number;
+  name: string;
+  path: string;
+  content: BaseFileContent;
+  references: number[];
+}
+
+/**
+ * Result for batch save operation
+ */
+export interface BatchSaveFileResult {
+  data: DbFile[];
+}

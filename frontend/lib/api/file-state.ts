@@ -19,7 +19,7 @@
  */
 
 import { getStore } from '@/store/store';
-import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, selectEffectivePath, deleteFile as deleteFileAction, setFilePlaceholder, generateVirtualId, pathToVirtualId } from '@/store/filesSlice';
+import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, selectEffectivePath, deleteFile as deleteFileAction, setFilePlaceholder, generateVirtualId, pathToVirtualId, selectDirtyFiles } from '@/store/filesSlice';
 export { selectDirtyFiles } from '@/store/filesSlice';
 import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, setQueryLoading } from '@/store/queryResultsSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
@@ -27,6 +27,7 @@ import { FilesAPI, getFiles } from '@/lib/data/files';
 import { PromiseManager } from '@/lib/utils/promise-manager';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
+import { replaceNegativeIdsInContent } from '@/lib/data/helpers/replace-references';
 import { resolveHomeFolderSync, isHiddenSystemPath, isFileTypeAllowedInPath, getModeRoot } from '@/lib/mode/path-resolver';
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import { API } from '@/lib/api/declarations';
@@ -814,6 +815,83 @@ export async function publishFile(
   getStore().dispatch(clearMetadataEdits(fileId));
 
   return { id: savedId, name: savedName };
+}
+
+/**
+ * publishAll - Batch-publish all dirty non-system files in a single flow.
+ *
+ * Flow:
+ * 1. Batch-create any virtual (negative-ID) files — one API call.
+ * 2. Replace stale negative IDs in other dirty files (Redux only).
+ * 3. Batch-save all remaining dirty (positive-ID) files — one API call.
+ *
+ * Throws on error; caller is responsible for showing error state.
+ */
+export async function publishAll(): Promise<void> {
+  const state = getStore().getState();
+  const allDirty = selectDirtyFiles(state);
+  if (allDirty.length === 0) return;
+
+  const idMap: Record<number, number> = {};
+
+  // Step 1: Batch-create virtual files (negative IDs)
+  const virtualFiles = allDirty.filter(f => f.id < 0);
+  if (virtualFiles.length > 0) {
+    const toCreate = virtualFiles.map(f => {
+      const merged = { ...(f.content || {}), ...(f.persistableChanges || {}) };
+      return {
+        virtualId: f.id,
+        name: f.metadataChanges?.name || f.name,
+        path: f.metadataChanges?.path || f.path,
+        type: f.type,
+        content: merged,
+        references: extractReferencesFromContent(merged as any, f.type as FileType),
+      };
+    });
+    const { data: created } = await FilesAPI.batchCreateFiles(toCreate as any);
+    for (const { virtualId, file } of created) {
+      idMap[virtualId] = file.id;
+      getStore().dispatch(addFile(file));
+      getStore().dispatch(clearEdits(virtualId));
+      getStore().dispatch(clearMetadataEdits(virtualId));
+    }
+  }
+
+  // Step 2: Replace stale negative IDs in real dirty files (Redux only)
+  const realDirty = allDirty.filter(f => f.id > 0);
+  if (Object.keys(idMap).length > 0) {
+    for (const rFile of realDirty) {
+      const merged = selectMergedContent(getStore().getState(), rFile.id) as any;
+      if (merged) {
+        const updated = replaceNegativeIdsInContent(merged, rFile.type as FileType, idMap);
+        if (JSON.stringify(updated) !== JSON.stringify(merged)) {
+          getStore().dispatch(setEdit({ fileId: rFile.id, edits: updated as any }));
+        }
+      }
+    }
+  }
+
+  // Step 3: Batch-save real dirty files
+  if (realDirty.length > 0) {
+    const freshState = getStore().getState();
+    const toSave = realDirty.map(f => {
+      const fs = freshState.files.files[f.id];
+      const merged = { ...(fs.content || {}), ...(fs.persistableChanges || {}) };
+      return {
+        id: f.id,
+        name: fs.metadataChanges?.name || fs.name,
+        path: fs.metadataChanges?.path || fs.path,
+        content: merged,
+        references: extractReferencesFromContent(merged as any, fs.type as FileType),
+      };
+    });
+    const { data: saved } = await FilesAPI.batchSaveFiles(toSave as any);
+    for (const file of saved) {
+      getStore().dispatch(setFile({ file }));
+      getStore().dispatch(clearEdits(file.id));
+      getStore().dispatch(clearMetadataEdits(file.id));
+    }
+  }
 }
 
 /**
