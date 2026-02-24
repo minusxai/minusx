@@ -305,6 +305,9 @@ templates:
     ### Query Execution
     - **ExecuteQuery(query: string, connectionId: string, parameters?: object, vizSettings?: object)**: Execute a standalone SQL query for data exploration. Results are displayed to the user but not tied to any file. Use this for ad-hoc analysis, checking values, exploring data.
 
+    ### Runtime Values
+    - **SetRuntimeValues(fileId: int, parameter_values: object)**: Set ephemeral parameter values on a question or dashboard, triggering re-execution with the new values. Use this when the user wants to change parameter values (e.g., date ranges, filters) without editing the file's saved content. Example: `SetRuntimeValues(fileId=123, parameter_values={{"start_date": "2024-01-01", "limit": 100}})`
+
     ### Navigation & Interaction
     - **Navigate(file_id?: int, path?: string, newFileType?: string)**: Navigate the user to a file, folder, or new file page.
     - **Clarify(question: string, options: string[], multiSelect?: bool)**: Ask the user to clarify between multiple options when the request is ambiguous. ALWAYS clarify instead of guessing.
@@ -401,6 +404,12 @@ templates:
     - For nested values, include surrounding context: `"vizSettings":{{"type":"table"}}` ensures you edit the right field
     - Use minimal matching - just enough to uniquely identify what to replace
     - If unsure, copy the exact string from ReadFiles output as your `oldMatch`
+
+    ### Parameter Values vs File Edits
+    - Use **SetRuntimeValues** to change parameter values at runtime (ephemeral, not saved). This triggers re-execution with the new values.
+    - Use **EditFile** to change the parameter definitions themselves (add/remove parameters, change types, change default values). This modifies the saved file content.
+    - Example: If a question has `:start_date` parameter and the user says "show me data from January", use `SetRuntimeValues(fileId=123, parameter_values={{"start_date": "2024-01-01"}})`.
+    - Example: If the user says "add a limit parameter", use `EditFile` to add the parameter to the query and parameters array.
 
     ### General Approach
     - ALWAYS think through your approach before writing SQL queries

@@ -12,7 +12,7 @@ from tasks.llm.client import allm_request as real_allm_request, describe_tool
 from tasks.llm.models import ALLMRequest, LlmSettings, UserInfo
 from tasks.llm.config import ANALYST_V2_MODEL, MAX_STEPS_LOWER_LEVEL
 from .tools import ExecuteSQLQuery, SearchDBSchema, EditDashboard, EditReport, GetAllQuestions, SearchFiles, GetFiles, UpdateFileMetadata, Clarify, Navigate, CreateFile
-from .tools import ReadFiles, EditFile, PublishFile, ExecuteQuery  # native toolset
+from .tools import ReadFiles, EditFile, ExecuteQuery, SetRuntimeValues  # native toolset
 from .prompt_loader import get_prompt
 
 
@@ -133,7 +133,7 @@ class AnalystAgent(Agent):
             return []
 
         if self.toolset == 'native':
-            return [ReadFiles, EditFile, ExecuteQuery, Navigate, Clarify, SearchDBSchema, SearchFiles, CreateFile]
+            return [ReadFiles, EditFile, ExecuteQuery, SetRuntimeValues, Navigate, Clarify, SearchDBSchema, SearchFiles, CreateFile]
 
         # classic (default)
         return [ExecuteSQLQuery, SearchDBSchema, SearchFiles, GetFiles, UpdateFileMetadata, Navigate, Clarify, EditDashboard, EditReport, GetAllQuestions, CreateFile]
