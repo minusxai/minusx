@@ -2,7 +2,7 @@
 
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { useAppSelector } from '@/store/hooks';
-import { selectMergedContent } from '@/store/filesSlice';
+import { selectMergedContent, selectEffectiveName } from '@/store/filesSlice';
 import { QuestionContent, QuestionParameter } from '@/lib/types';
 import EmbeddedQuestionContainer from './EmbeddedQuestionContainer';
 import { Box, Spinner, Text, HStack, VStack, IconButton } from '@chakra-ui/react';
@@ -37,6 +37,9 @@ export default function SmartEmbeddedQuestionContainer({
   const mergedContent = useAppSelector(state =>
     selectMergedContent(state, questionId)
   ) as QuestionContent | undefined;
+
+  // Use effective name so pending renames are reflected immediately in the dashboard card
+  const effectiveName = useAppSelector(state => selectEffectiveName(state, questionId));
 
   // Show loading state while file loads
   if (loading || !file || !mergedContent) {
@@ -92,7 +95,7 @@ export default function SmartEmbeddedQuestionContainer({
                 cursor={editMode ? 'move' : 'pointer'}
                 _hover={{ color: editMode ? 'fg.default' : 'accent.primary', textDecoration: editMode ? 'none' : 'underline' }}
               >
-                {file.name}
+                {effectiveName || file.name}
               </Text>
             </Link>
           </Box>

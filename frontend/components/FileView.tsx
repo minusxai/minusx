@@ -21,9 +21,11 @@ export interface FileViewProps {
   fileId: FileId;
   mode?: 'view' | 'create';
   defaultFolder?: string;
+  /** When true, suppresses FileHeader (e.g., PublishModal preview pane is read-only). */
+  hideHeader?: boolean;
 }
 
-export default function FileView({ fileId, mode = 'view', defaultFolder }: FileViewProps) {
+export default function FileView({ fileId, mode = 'view', defaultFolder, hideHeader }: FileViewProps) {
   // Load file using useFile hook (no useEffect in component!)
   const { fileState: file } = useFile(fileId) ?? {};
 
@@ -38,7 +40,8 @@ export default function FileView({ fileId, mode = 'view', defaultFolder }: FileV
     // If we've loaded this file before (updatedAt > 0), the type is real — show the header
     // while content reloads so it doesn't flash away. On first load (placeholder, updatedAt=0),
     // fall through to full-page spinner.
-    const canShowHeader = file && file.updatedAt > 0
+    const canShowHeader = !hideHeader
+      && file && file.updatedAt > 0
       && typeof fileId === 'number'
       && !isSystemFileType(file.type as FileType);
 
@@ -116,7 +119,7 @@ export default function FileView({ fileId, mode = 'view', defaultFolder }: FileV
   }
 
   // Render common header for user files (non-system types with a numeric fileId)
-  const showFileHeader = typeof fileId === 'number' && !isSystemFileType(file.type as FileType);
+  const showFileHeader = !hideHeader && typeof fileId === 'number' && !isSystemFileType(file.type as FileType);
 
   // Render file-specific component
   return (

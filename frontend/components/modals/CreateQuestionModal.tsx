@@ -67,7 +67,7 @@ export default function CreateQuestionModal({
           {/* Header with title and link to question page */}
           <HStack p={3} justify="space-between">
             <Text fontFamily="mono" fontSize="lg">{questionId ? "Edit Question" : "Create Question"}</Text>
-            {questionId && (
+            {questionId && questionId > 0 && (
               <Link href={preserveParams(`/f/${questionId}`)} target="_blank">
                 <Button size="xs" variant="ghost">
                   <LuExternalLink />

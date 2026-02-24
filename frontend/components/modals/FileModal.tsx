@@ -107,12 +107,14 @@ export default function FileModal() {
               <HStack p={3} justify="space-between">
                 <Text fontFamily="mono" fontSize="lg">Edit Question</Text>
                 <HStack gap={1}>
-                  <Link href={preserveParams(`/f/${fileId}`)} target="_blank">
-                    <Button size="xs" variant="ghost">
-                      <LuExternalLink />
-                      Go to Question
-                    </Button>
-                  </Link>
+                  {fileId > 0 && (
+                    <Link href={preserveParams(`/f/${fileId}`)} target="_blank">
+                      <Button size="xs" variant="ghost">
+                        <LuExternalLink />
+                        Go to Question
+                      </Button>
+                    </Link>
+                  )}
                   <IconButton
                     size="xs"
                     variant="ghost"

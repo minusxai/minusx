@@ -14,6 +14,8 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useAppSelector } from '@/store/hooks';
+import { selectEffectiveName } from '@/store/filesSlice';
 import {
   Box,
   Text,
@@ -50,6 +52,7 @@ function DirtyFileItem({
 }) {
   const meta = getFileTypeMetadata(file.type as any);
   const Icon = meta.icon;
+  const effectiveName = useAppSelector(state => selectEffectiveName(state, file.id));
 
   return (
     <HStack
@@ -76,7 +79,7 @@ function DirtyFileItem({
           truncate
           color="fg.default"
         >
-          {file.name || 'Untitled'}
+          {effectiveName || 'Untitled'}
         </Text>
       </VStack>
       <Badge
@@ -224,7 +227,7 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
               <Box flex="1" overflow="auto" bg="bg.canvas">
                 {selectedFileId !== null ? (
                   <Box p={4} h="full">
-                    <FileView key={selectedFileId} fileId={selectedFileId} mode="view" />
+                    <FileView key={selectedFileId} fileId={selectedFileId} mode="view" hideHeader />
                   </Box>
                 ) : (
                   <Box
