@@ -19,9 +19,9 @@ import FileHeader from './FileHeader';
 
 export interface FileViewProps {
   fileId: FileId;
-  mode?: 'view' | 'create';
+  mode?: 'view' | 'create' | 'preview';
   defaultFolder?: string;
-  /** When true, suppresses FileHeader (e.g., PublishModal preview pane is read-only). */
+  /** When true, suppresses FileHeader (e.g., PublishModal preview pane). */
   hideHeader?: boolean;
 }
 

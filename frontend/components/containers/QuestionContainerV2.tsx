@@ -19,10 +19,11 @@ import { useFile, useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { editFile } from '@/lib/api/file-state';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
 import { QuestionContent } from '@/lib/types';
+import { type FileViewMode } from '@/lib/ui/fileComponents';
 
 interface QuestionContainerV2Props {
   fileId: FileId;
-  mode?: 'view' | 'create';  // Handled by FileHeader (rendered by FileView)
+  mode?: FileViewMode;
 }
 
 /**

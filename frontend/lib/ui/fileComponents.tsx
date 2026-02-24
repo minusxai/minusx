@@ -24,9 +24,11 @@ import AlertContainerV2 from '@/components/containers/AlertContainerV2';
  * Props interface for all file component containers
  * Supports both real files (positive IDs) and virtual files (negative IDs for create mode)
  */
+export type FileViewMode = 'view' | 'create' | 'preview';
+
 export interface FileComponentProps {
   fileId: FileId;
-  mode?: 'view' | 'create';
+  mode?: FileViewMode;
   defaultFolder?: string;
 }
 

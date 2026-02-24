@@ -31,6 +31,7 @@ import { useDirtyFiles } from '@/lib/hooks/file-state-hooks';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import FileView from '@/components/FileView';
 import { publishAll, publishFile, clearFileChanges } from '@/lib/api/file-state';
+import { setDashboardEditMode, setFileEditMode } from '@/store/uiSlice';
 import type { FileState } from '@/store/filesSlice';
 
 interface PublishModalProps {
@@ -87,6 +88,7 @@ function DirtyFileItem({
 }
 
 export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
+  const dispatch = useAppDispatch();
   const dirtyFiles = useDirtyFiles();
   const [selectedFileId, setSelectedFileId] = useState<number | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -114,32 +116,46 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
     setSelectedFileId(fileId);
   }, []);
 
+  const exitEditMode = useCallback((fileId: number, fileType?: string) => {
+    if (fileType === 'dashboard') {
+      dispatch(setDashboardEditMode({ fileId, editMode: false }));
+    } else {
+      dispatch(setFileEditMode({ fileId, editMode: false }));
+    }
+  }, [dispatch]);
+
   const handlePublishSelected = useCallback(async () => {
     if (selectedFileId === null) return;
+    const file = dirtyFiles.find(f => f.id === selectedFileId);
     setIsPublishingSingle(true);
     try {
       await publishFile({ fileId: selectedFileId });
+      exitEditMode(selectedFileId, file?.type);
     } finally {
       setIsPublishingSingle(false);
     }
-  }, [selectedFileId]);
+  }, [selectedFileId, dirtyFiles, exitEditMode]);
 
   const handleDiscardSelected = useCallback(() => {
     if (selectedFileId === null) return;
+    const file = dirtyFiles.find(f => f.id === selectedFileId);
     clearFileChanges({ fileId: selectedFileId });
-  }, [selectedFileId]);
+    exitEditMode(selectedFileId, file?.type);
+  }, [selectedFileId, dirtyFiles, exitEditMode]);
 
   const handlePublishAll = useCallback(async () => {
     setIsPublishing(true);
     setPublishError(null);
     try {
+      const filesToPublish = [...dirtyFiles];
       await publishAll();
+      filesToPublish.forEach(f => exitEditMode(f.id, f.type));
     } catch (err) {
       setPublishError(err instanceof Error ? err.message : 'Failed to publish. Please try again.');
     } finally {
       setIsPublishing(false);
     }
-  }, []);
+  }, [dirtyFiles, exitEditMode]);
 
   return (
     <Dialog.Root
@@ -261,7 +277,7 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
                       </Button>
                     </HStack>
                     <Box flex="1" minH="0" display="flex" flexDirection="column" overflowY="auto">
-                      <FileView key={selectedFileId} fileId={selectedFileId} mode="view" hideHeader />
+                      <FileView key={selectedFileId} fileId={selectedFileId} mode="preview" hideHeader />
                     </Box>
                   </>
                 ) : (

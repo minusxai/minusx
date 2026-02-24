@@ -18,10 +18,11 @@ import ReportView from '@/components/views/ReportView';
 import { ReportContent, ReportRunContent } from '@/lib/types';
 import { useContexts } from '@/lib/hooks/useContexts';
 import { useCallback, useState, useEffect } from 'react';
+import { type FileViewMode } from '@/lib/ui/fileComponents';
 
 interface ReportContainerV2Props {
   fileId: FileId;
-  mode?: 'view' | 'create';  // Handled by FileHeader (rendered by FileView)
+  mode?: FileViewMode;
 }
 
 export default function ReportContainerV2({ fileId }: ReportContainerV2Props) {

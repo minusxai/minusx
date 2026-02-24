@@ -17,10 +17,11 @@ import { FilesAPI } from '@/lib/data/files';
 import AlertView from '@/components/views/AlertView';
 import { AlertContent, AlertRunContent, QuestionContent, ComparisonOperator } from '@/lib/types';
 import { useCallback, useState, useEffect } from 'react';
+import { type FileViewMode } from '@/lib/ui/fileComponents';
 
 interface AlertContainerV2Props {
   fileId: FileId;
-  mode?: 'view' | 'create';  // Handled by FileHeader (rendered by FileView)
+  mode?: FileViewMode;
 }
 
 /** Evaluate a condition against an actual value */

@@ -19,10 +19,11 @@ import { editFile } from '@/lib/api/file-state';
 import DashboardView from '@/components/views/DashboardView';
 import { DocumentContent } from '@/lib/types';
 import { useCallback } from 'react';
+import { type FileViewMode } from '@/lib/ui/fileComponents';
 
 interface DashboardContainerV2Props {
   fileId: FileId;
-  mode?: 'view' | 'create';  // Handled by FileHeader (rendered by FileView)
+  mode?: FileViewMode;
 }
 
 /**
@@ -31,7 +32,7 @@ interface DashboardContainerV2Props {
  * Delegates rendering to DashboardView (dumb component)
  * Header (edit mode, save, cancel, name) is handled by FileHeader via FileView
  */
-export default function DashboardContainerV2({ fileId }: DashboardContainerV2Props) {
+export default function DashboardContainerV2({ fileId, mode }: DashboardContainerV2Props) {
   // Phase 2: Use useFile hook for state management
   const { fileState: file } = useFile(fileId) ?? {};
   const fileLoading = !file || file.loading;
@@ -60,6 +61,7 @@ export default function DashboardContainerV2({ fileId }: DashboardContainerV2Pro
       folderPath={folderPath}
       fileId={fileId}
       onChange={handleChange}
+      mode={mode}
     />
   );
 }

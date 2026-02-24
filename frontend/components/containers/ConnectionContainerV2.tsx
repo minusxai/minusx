@@ -21,10 +21,11 @@ import { useRouter } from '@/lib/navigation/use-navigation';
 import { isUserFacingError } from '@/lib/errors';
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import { API } from '@/lib/api/declarations';
+import { type FileViewMode } from '@/lib/ui/fileComponents';
 
 interface ConnectionContainerV2Props {
   fileId: FileId;
-  mode?: 'view' | 'create';
+  mode?: FileViewMode;
   defaultFolder?: string;
 }
 
@@ -144,7 +145,7 @@ export default function ConnectionContainerV2({
       onSave={handleSave}
       onCancel={handleCancel}
       onReload={handleReload}
-      mode={mode}
+      mode={mode === 'preview' ? 'view' : mode}
     />
   );
 }

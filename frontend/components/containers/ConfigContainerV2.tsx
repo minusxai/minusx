@@ -18,10 +18,11 @@ import { useMemo, useCallback } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { FilesAPI } from '@/lib/data/files';
 import { slugify } from '@/lib/slug-utils';
+import { type FileViewMode } from '@/lib/ui/fileComponents';
 
 interface ConfigContainerV2Props {
   fileId: FileId;
-  mode?: 'view' | 'create';
+  mode?: FileViewMode;
   defaultFolder?: string;
 }
 

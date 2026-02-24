@@ -30,7 +30,7 @@ import DocumentHeader from './DocumentHeader';
 interface FileHeaderProps {
   fileId: number;
   fileType: string;
-  mode?: 'view' | 'create';
+  mode?: 'view' | 'create' | 'preview';
 }
 
 export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHeaderProps) {

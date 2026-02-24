@@ -26,6 +26,8 @@ interface DashboardViewProps {
 
   // Content change callback (header/save/editMode now live in FileHeader via Redux)
   onChange: (updates: Partial<DocumentContent>) => void;
+
+  mode?: 'view' | 'create' | 'preview';
 }
 
 // Compact layout for mobile by stacking cards vertically
@@ -70,11 +72,13 @@ export default function DashboardView({
   folderPath,
   fileId,
   onChange,
+  mode = 'view',
 }: DashboardViewProps) {
   const dispatch = useAppDispatch();
 
   // editMode and viewMode sourced from Redux (managed by FileHeader)
-  const editMode = useAppSelector(state => selectDashboardEditMode(state, fileId));
+  const reduxEditMode = useAppSelector(state => selectDashboardEditMode(state, fileId));
+  const editMode = mode === 'preview' ? false : reduxEditMode;
   const activeTab = useAppSelector(state => selectFileViewMode(state, fileId));
 
   // Track current columns for responsive grid background

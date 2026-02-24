@@ -22,10 +22,11 @@ import { DocumentContent } from '@/lib/types';
 import { useMemo, useCallback, useState } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { isUserFacingError } from '@/lib/errors';
+import { type FileViewMode } from '@/lib/ui/fileComponents';
 
 interface PresentationContainerV2Props {
   fileId: FileId;
-  mode?: 'view' | 'create';
+  mode?: FileViewMode;
 }
 
 /**

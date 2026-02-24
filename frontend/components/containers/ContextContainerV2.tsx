@@ -16,6 +16,7 @@ import { useRouter } from '@/lib/navigation/use-navigation';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import { isUserFacingError } from '@/lib/errors';
 import { Dialog, Portal, Button, Text } from '@chakra-ui/react';
+import { type FileViewMode } from '@/lib/ui/fileComponents';
 import {
   validateContextVersions,
   canDeleteVersion,
@@ -25,7 +26,7 @@ import {
 
 interface ContextContainerV2Props {
   fileId: FileId;
-  mode?: 'view' | 'create';
+  mode?: FileViewMode;
   defaultFolder?: string;
 }
 

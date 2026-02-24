@@ -12,10 +12,11 @@ import StylesEditor from '@/components/config/StylesEditor';
 import { StylesContent } from '@/lib/types';
 import { useMemo, useCallback } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
+import { type FileViewMode } from '@/lib/ui/fileComponents';
 
 interface StylesContainerV2Props {
   fileId: FileId;
-  mode?: 'view' | 'create';
+  mode?: FileViewMode;
   defaultFolder?: string;
 }
 
