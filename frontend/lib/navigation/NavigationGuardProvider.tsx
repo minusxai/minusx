@@ -17,7 +17,8 @@ import { useAppSelector } from '@/store/hooks';
 import { selectActiveConversation } from '@/store/chatSlice';
 import { Dialog, Portal, Button, Text, HStack } from '@chakra-ui/react';
 import { preserveParams } from './url-utils';
-import { publishFile, clearFileChanges } from '@/lib/api/file-state';
+import { publishFile, clearFileChanges, selectDirtyFiles } from '@/lib/api/file-state';
+import { isSystemFileType } from '@/lib/ui/file-metadata';
 
 /**
  * Extract file ID from pathname
@@ -104,6 +105,14 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
     return false;
   }, [currentFile, dirtyVirtualFile]);
 
+  // Check if the current file is a system file (connection, config, styles, context).
+  // Only system files trigger the in-app nav guard; user files navigate freely.
+  const isCurrentFileSystemFile = useMemo(() => {
+    if (currentFile) return isSystemFileType(currentFile.type as any);
+    if (dirtyVirtualFile) return isSystemFileType(dirtyVirtualFile.type as any);
+    return false;
+  }, [currentFile, dirtyVirtualFile]);
+
   const currentFileName = currentFile?.name || dirtyVirtualFile?.name || 'Untitled';
 
   // Check if agent is running in active conversation
@@ -115,8 +124,16 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
     || activeConversation?.executionState === 'EXECUTING'
     || activeConversation?.executionState === 'STREAMING';
 
-  // Guard navigation if file is dirty OR agent is running
-  const shouldGuardNavigation = isCurrentFileDirty || isAgentRunning;
+  // Check if there are any non-system dirty files (for beforeunload only)
+  const anyNonSystemDirtyFiles = useAppSelector(state => selectDirtyFiles(state).length > 0);
+
+  // In-app nav guard: only for system files (dirty) OR agent running.
+  // User files navigate freely — their changes persist in Redux across navigation.
+  const shouldGuardInAppNavigation = (isCurrentFileDirty && isCurrentFileSystemFile) || isAgentRunning;
+
+  // beforeunload guard: fire whenever any file (system or user) has unsaved changes,
+  // or when the agent is running.
+  const shouldGuardUnload = isCurrentFileDirty || anyNonSystemDirtyFiles || isAgentRunning;
 
   // Modal state
   const [isOpen, setIsOpen] = useState(false);
@@ -131,14 +148,14 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
     setIsOpen(true);
   }, [isAgentRunning]);
 
-  // Navigate function that checks for dirty state or running agent
+  // Navigate function that checks for system-file dirty state or running agent
   const navigate = useCallback((href: string) => {
-    if (shouldGuardNavigation) {
+    if (shouldGuardInAppNavigation) {
       openGuardModal(href);
     } else {
       router.push(href);
     }
-  }, [shouldGuardNavigation, openGuardModal, router]);
+  }, [shouldGuardInAppNavigation, openGuardModal, router]);
 
   // Confirm navigation (leave page, discard changes)
   const handleConfirm = useCallback(() => {
@@ -191,8 +208,9 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
   }, [isOpen, guardReason, isAgentRunning, handleCancel]);
 
   // Handle browser beforeunload (tab close, refresh, external navigation)
+  // Fires for ALL dirty files (system + user) and when agent is running
   useEffect(() => {
-    if (!shouldGuardNavigation) return;
+    if (!shouldGuardUnload) return;
 
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       e.preventDefault();
@@ -203,7 +221,7 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
 
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [shouldGuardNavigation]);
+  }, [shouldGuardUnload]);
 
   // Intercept link clicks globally
   useEffect(() => {
@@ -237,8 +255,9 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
         return;
       }
 
-      // Check if the current file has unsaved changes or agent is running
-      if (shouldGuardNavigation) {
+      // For system files (or agent running): intercept and show guard modal.
+      // For user files: allow navigation freely (changes persist in Redux).
+      if (shouldGuardInAppNavigation) {
         e.preventDefault();
         e.stopPropagation();
 
@@ -251,7 +270,7 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
     // Use capture phase to intercept before other handlers
     document.addEventListener('click', handleClick, true);
     return () => document.removeEventListener('click', handleClick, true);
-  }, [shouldGuardNavigation, openGuardModal]);
+  }, [shouldGuardInAppNavigation, openGuardModal]);
 
   return (
     <NavigationGuardContext.Provider value={{ navigate }}>

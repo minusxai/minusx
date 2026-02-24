@@ -37,6 +37,7 @@ import {
   selectAugmentedFolder,
   selectFilesByCriteria,
   selectFileByPath,
+  selectDirtyFiles,
   type AugmentedFolder
 } from '@/lib/api/file-state';
 import type { AppState } from '@/lib/appState';
@@ -483,4 +484,28 @@ export function useQueryResult(
  */
 export function useAppState(): { appState: AppState | null; loading: boolean } {
   return useAppSelector(selectAppState, shallowEqual);
+}
+
+// ============================================================================
+// useDirtyFiles - All non-system files with unsaved changes
+// ============================================================================
+
+/**
+ * useDirtyFiles Hook
+ *
+ * Returns all loaded non-system files that have unsaved changes (content or metadata).
+ * System files (connection, config, styles, context) are excluded — they save in-place.
+ *
+ * Re-renders only when the set of dirty files changes (shallowEqual on array).
+ *
+ * Usage:
+ * ```typescript
+ * const dirtyFiles = useDirtyFiles();
+ * // dirtyFiles.length === 0  → nothing to publish
+ * // dirtyFiles.length === 1  → show Save button (single file)
+ * // dirtyFiles.length >= 2   → show Publish button (multi-file)
+ * ```
+ */
+export function useDirtyFiles(): FileState[] {
+  return useAppSelector(selectDirtyFiles, shallowEqual);
 }

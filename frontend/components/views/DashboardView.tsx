@@ -38,6 +38,10 @@ interface DashboardViewProps {
   onSave: () => Promise<void>;
   onRevert: () => void;
   onEditModeChange: (editMode: boolean) => void;
+
+  // Multi-file Publish workflow (Phase 1)
+  dirtyFileCount?: number;
+  onPublish?: () => void;
 }
 
 // Compact layout for mobile by stacking cards vertically
@@ -90,7 +94,9 @@ export default function DashboardView({
   onMetadataChange,
   onSave,
   onRevert,
-  onEditModeChange
+  onEditModeChange,
+  dirtyFileCount = 0,
+  onPublish,
 }: DashboardViewProps) {
   const dispatch = useAppDispatch();
 
@@ -409,6 +415,8 @@ export default function DashboardView({
               <Text color="fg.muted">{questionCount !== 1 ? 'questions' : 'question'}</Text>
             </HStack>
           }
+          dirtyFileCount={dirtyFileCount}
+          onPublish={onPublish}
         />
       </Box>
 

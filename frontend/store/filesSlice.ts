@@ -5,6 +5,11 @@ import type { RootState } from './store';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import type { LoadError } from '@/lib/types/errors';
 
+// System file types that save in-place and are excluded from bulk Publish.
+// Defined as a Set here (instead of importing from file-metadata) to avoid
+// circular-dependency issues between store and ui modules.
+const SYSTEM_FILE_TYPES_SET = new Set<string>(['connection', 'config', 'styles', 'context']);
+
 /**
  * Ephemeral changes - non-persistent state like lastExecuted query
  */
@@ -1030,6 +1035,22 @@ export const selectHasMetadataChanges = (state: RootState, id: FileId): boolean 
  */
 export const selectFileLoadError = (state: RootState, id: FileId): LoadError | null => {
   return state.files.files[id]?.loadError ?? null;
+};
+
+/**
+ * Returns all loaded NON-system files that have unsaved changes.
+ * System files (connection, config, styles, context) are excluded:
+ * they save in-place and are discarded on navigation-away anyway.
+ */
+export const selectDirtyFiles = (state: RootState): FileState[] => {
+  return Object.values(state.files.files).filter(file =>
+    file &&
+    !SYSTEM_FILE_TYPES_SET.has(file.type) &&
+    (
+      (file.persistableChanges && Object.keys(file.persistableChanges).length > 0) ||
+      (file.metadataChanges && (file.metadataChanges.name !== undefined || file.metadataChanges.path !== undefined))
+    )
+  ) as FileState[];
 };
 
 // ============================================================================

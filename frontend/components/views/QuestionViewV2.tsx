@@ -76,6 +76,10 @@ interface QuestionViewV2Props {
   onSave: () => void;
   onCancel: () => void;
   onEditModeChange: (mode: boolean) => void;
+
+  // Multi-file Publish workflow (Phase 1)
+  dirtyFileCount?: number;
+  onPublish?: () => void;
 }
 
 export default function QuestionViewV2({
@@ -98,7 +102,9 @@ export default function QuestionViewV2({
   onExecute,
   onSave,
   onCancel,
-  onEditModeChange
+  onEditModeChange,
+  dirtyFileCount = 0,
+  onPublish,
 }: QuestionViewV2Props) {
   const fullMode = viewMode === 'page';
   const { config } = useConfigs();
@@ -424,6 +430,8 @@ export default function QuestionViewV2({
             viewMode={activeTab}
             onViewModeChange={setActiveTab}
             questionId={questionId}
+            dirtyFileCount={dirtyFileCount}
+            onPublish={onPublish}
           />
         </Box>
       )}

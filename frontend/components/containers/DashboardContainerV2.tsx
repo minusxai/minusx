@@ -16,10 +16,11 @@ import { Box } from '@chakra-ui/react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { selectIsDirty, selectMergedContent, selectEffectiveName, type FileId } from '@/store/filesSlice';
 import { selectDashboardEditMode, setDashboardEditMode, setRightSidebarCollapsed, setActiveSidebarSection } from '@/store/uiSlice';
-import { useFile } from '@/lib/hooks/file-state-hooks';
+import { useFile, useDirtyFiles } from '@/lib/hooks/file-state-hooks';
 import { editFile, publishFile, clearFileChanges } from '@/lib/api/file-state';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import DashboardView from '@/components/views/DashboardView';
+import PublishModal from '@/components/PublishModal';
 import { DocumentContent } from '@/lib/types';
 import { useCallback, useState, useEffect } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
@@ -54,6 +55,10 @@ export default function DashboardContainerV2({
 
   // Edit mode state (from Redux)
   const editMode = useAppSelector(state => selectDashboardEditMode(state, fileId));
+
+  // Multi-file Publish workflow (Phase 1)
+  const dirtyFiles = useDirtyFiles();
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
 
   // Initialize edit mode for create mode
   useEffect(() => {
@@ -126,20 +131,28 @@ export default function DashboardContainerV2({
   }
 
   return (
-    <DashboardView
-      document={mergedContent}
-      fileName={effectiveName}
-      folderPath={folderPath}
-      isDirty={isDirty}
-      isSaving={saving}
-      saveError={saveError}
-      fileId={fileId}
-      editMode={editMode}
-      onChange={handleChange}
-      onMetadataChange={handleMetadataChange}
-      onSave={handleSave}
-      onRevert={handleRevert}
-      onEditModeChange={handleEditModeChange}
-    />
+    <>
+      <DashboardView
+        document={mergedContent}
+        fileName={effectiveName}
+        folderPath={folderPath}
+        isDirty={isDirty}
+        isSaving={saving}
+        saveError={saveError}
+        fileId={fileId}
+        editMode={editMode}
+        onChange={handleChange}
+        onMetadataChange={handleMetadataChange}
+        onSave={handleSave}
+        onRevert={handleRevert}
+        onEditModeChange={handleEditModeChange}
+        dirtyFileCount={dirtyFiles.length}
+        onPublish={() => setIsPublishModalOpen(true)}
+      />
+      <PublishModal
+        isOpen={isPublishModalOpen}
+        onClose={() => setIsPublishModalOpen(false)}
+      />
+    </>
   );
 }

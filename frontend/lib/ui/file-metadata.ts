@@ -229,6 +229,19 @@ export type ManagementFileType = typeof MANAGEMENT_FILE_TYPES[number];
 
 
 /**
+ * System file types that require in-place save and cannot participate in bulk Publish.
+ * These files save immediately when the user clicks Save, and the in-app nav guard
+ * shows a Save/Discard/Cancel modal when navigating away with unsaved changes.
+ */
+export const SYSTEM_FILE_TYPES: FileType[] = ['connection', 'config', 'styles', 'context'];
+
+/**
+ * Returns true if the given file type is a system file (connection, config, styles, context).
+ * System files save in-place and are excluded from the bulk Publish workflow.
+ */
+export const isSystemFileType = (type: FileType): boolean => SYSTEM_FILE_TYPES.includes(type);
+
+/**
  * Category labels for display
  */
 export const CATEGORY_LABELS: Record<FileCategory, string> = {

@@ -11,16 +11,17 @@
  * - Shows old results while editing query
  * - Background refetch for stale data
  */
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box } from '@chakra-ui/react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectIsDirty, selectMergedContent, selectEffectiveName, setEphemeral, type FileId } from '@/store/filesSlice';
 import { selectProposedQuery } from '@/store/uiSlice';
-import { useFile, useQueryResult } from '@/lib/hooks/file-state-hooks';
+import { useFile, useQueryResult, useDirtyFiles } from '@/lib/hooks/file-state-hooks';
 import { editFile, publishFile, clearFileChanges } from '@/lib/api/file-state';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
+import PublishModal from '@/components/PublishModal';
 import { QuestionContent, QuestionParameter } from '@/lib/types';
 import { isUserFacingError } from '@/lib/errors';
 import { last } from 'lodash';
@@ -60,6 +61,10 @@ export default function QuestionContainerV2({
   // Edit mode state (controlled by container)
   const [editMode, setEditMode] = useState(mode === 'create');
 
+  // Multi-file Publish workflow (Phase 1)
+  const dirtyFiles = useDirtyFiles();
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+
   // Handler for edit mode changes
   const handleEditModeChange = useCallback((mode: boolean) => {
     setEditMode(mode);
@@ -73,6 +78,8 @@ export default function QuestionContainerV2({
   }, [isDirty, editMode, handleEditModeChange]);
 
   // Phase 3: Get query to execute (from ephemeralChanges.lastExecuted or fallback to current)
+  // lastExecuted tracks what was most recently *explicitly* executed (user click or auto-execute).
+  // We display results for lastExecuted so edits don't wipe out visible results mid-typing.
   const lastExecuted = file?.ephemeralChanges?.lastExecuted;
   const queryToExecute = lastExecuted || {
     query: mergedContent?.query || '',
@@ -83,6 +90,12 @@ export default function QuestionContainerV2({
     database: mergedContent?.database_name || '',
     references: mergedContent?.references || []
   };
+
+  // Ref-based guard: ensures we auto-execute exactly once per mount with the *current*
+  // mergedContent (which includes persistableChanges). This means every fresh mount —
+  // whether on the file page, inside a dashboard, or in the PublishModal right-pane —
+  // will run the up-to-date query, not whatever lastExecuted holds from a prior session.
+  const hasAutoExecutedRef = useRef(false);
 
   // Phase 3: Use useQueryResult hook for query execution with caching
   const { data: queryData, loading: queryLoading, error: queryError, isStale: queryStale } = useQueryResult(
@@ -125,14 +138,16 @@ export default function QuestionContainerV2({
     }));
   }, [mergedContent, fileId, dispatch]);
 
-  // Execute query on first load
+  // Auto-execute once per mount with current mergedContent (includes persistableChanges).
+  // Using a ref (not lastExecuted) as the guard so every fresh mount runs the current query —
+  // even if lastExecuted is stale from a prior edit session on this file.
   useEffect(() => {
     if (!file || !mergedContent) return;
-    if (lastExecuted) return;  // Already executed
+    if (hasAutoExecutedRef.current) return;
 
-    console.log('[QuestionContainerV2] Auto-executing query on first load');
+    hasAutoExecutedRef.current = true;
     handleExecute();
-  }, [file, mergedContent, lastExecuted, handleExecute]);
+  }, [file, mergedContent, handleExecute]);
 
   // Phase 3: Save handler - uses publishFile from file-state.ts (handles both create and update)
   // Note: Name/description validation is handled by DocumentHeader
@@ -179,27 +194,35 @@ export default function QuestionContainerV2({
   const questionId = typeof fileId === 'number' ? fileId : undefined;
 
   return (
-    <QuestionViewV2
-      viewMode='page'
-      content={mergedContent}
-      fileName={effectiveName}
-      filePath={file?.path}
-      questionId={questionId}
-      queryData={queryData}
-      queryLoading={queryLoading}
-      queryError={queryError}
-      queryStale={queryStale}
-      editMode={editMode}
-      isDirty={isDirty}
-      isSaving={saving}
-      saveError={saveError}
-      proposedQuery={proposedQuery}
-      onChange={handleChange}
-      onMetadataChange={handleMetadataChange}
-      onExecute={handleExecute}
-      onSave={handleSave}
-      onCancel={handleCancel}
-      onEditModeChange={handleEditModeChange}
-    />
+    <>
+      <QuestionViewV2
+        viewMode='page'
+        content={mergedContent}
+        fileName={effectiveName}
+        filePath={file?.path}
+        questionId={questionId}
+        queryData={queryData}
+        queryLoading={queryLoading}
+        queryError={queryError}
+        queryStale={queryStale}
+        editMode={editMode}
+        isDirty={isDirty}
+        isSaving={saving}
+        saveError={saveError}
+        proposedQuery={proposedQuery}
+        onChange={handleChange}
+        onMetadataChange={handleMetadataChange}
+        onExecute={handleExecute}
+        onSave={handleSave}
+        onCancel={handleCancel}
+        onEditModeChange={handleEditModeChange}
+        dirtyFileCount={dirtyFiles.length}
+        onPublish={() => setIsPublishModalOpen(true)}
+      />
+      <PublishModal
+        isOpen={isPublishModalOpen}
+        onClose={() => setIsPublishModalOpen(false)}
+      />
+    </>
   );
 }
