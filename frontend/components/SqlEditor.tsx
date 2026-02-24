@@ -425,6 +425,8 @@ export default function SqlEditor({
               original={value}
               modified={proposedValue}
               theme={editorTheme}
+              keepCurrentOriginalModel
+              keepCurrentModifiedModel
               onMount={(_editor, monaco) => {
                 // Define custom theme
                 monaco.editor.defineTheme('custom-theme', {
