@@ -469,6 +469,19 @@ export default function SqlEditor({
                 // Register @ completion provider now that Monaco is ready
                 registerCompletionProvider(monaco);
 
+                // Listen for insert-at-cursor events from sidebar components
+                const handleEditorInsert = (e: Event) => {
+                  const text = (e as CustomEvent<{ text: string }>).detail?.text;
+                  if (text && !readOnly) {
+                    editor.focus();
+                    editor.trigger('sidebar', 'type', { text });
+                  }
+                };
+                window.addEventListener('atlas:editor-insert', handleEditorInsert);
+                editor.onDidDispose(() => {
+                  window.removeEventListener('atlas:editor-insert', handleEditorInsert);
+                });
+
                 // Manually trigger suggestions when @ is typed
                 editor.onKeyUp(() => {
                   // Check if @ was typed by looking at the character before cursor

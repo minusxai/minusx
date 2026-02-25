@@ -7,6 +7,7 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setRightSidebarCollapsed, setRightSidebarWidth, setActiveSidebarSection, selectRightSidebarUIState, selectDashboardEditMode } from '@/store/uiSlice';
 import { setFiles, selectMergedContent, addQuestionToDashboard } from '@/store/filesSlice';
 import { QuestionBrowserPanel } from './QuestionBrowserPanel';
+import QuestionSchemaSection from './QuestionSchemaSection';
 import { DocumentContent, FileType } from '@/lib/types';
 import SchemaTreeView from './SchemaTreeView';
 import Markdown from './Markdown';
@@ -217,6 +218,11 @@ export default function RightSidebar({
 
   // Always show schema section (empty state handled in rendering)
   sections.push(getSidebarSection('databases'));
+
+  // Show referenced questions section for question pages
+  if (fileType === 'question') {
+    sections.push(getSidebarSection('question-references'));
+  }
 
   // Always show documentation section (empty state handled in rendering)
   sections.push(getSidebarSection('documentation'));
@@ -548,6 +554,11 @@ export default function RightSidebar({
                         )}
                         {section.id === 'dev' && (
                           <DevToolsPanel appState={appState} />
+                        )}
+                        {section.id === 'question-references' && (
+                          <Box p={0} maxH="calc(100vh - 200px)" overflowY="auto">
+                            <QuestionSchemaSection />
+                          </Box>
                         )}
                         {section.id === 'questions' && appState?.type === 'file' && (
                           <Box p={0} maxH="calc(100vh - 200px)" overflowY="auto">

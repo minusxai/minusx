@@ -147,6 +147,57 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
       }
     }
 
+    // Infer columns for each resolved reference and inject as virtual schema tables
+    const schemaData = [...(context.schemaData || [])];
+    for (const ref of resolvedReferences) {
+      if (!ref.inferredColumns && ref.query) {
+        try {
+          const inferResponse = await pythonBackendFetch('/api/infer-columns', {
+            method: 'POST',
+            body: JSON.stringify({
+              query: ref.query,
+              schema_data: context.schemaData || [],
+            }),
+          });
+          if (inferResponse.ok) {
+            const inferData = await inferResponse.json();
+            ref.inferredColumns = inferData.columns || [];
+          }
+        } catch (err) {
+          console.warn(`[Completions] Failed to infer columns for ref ${ref.alias}:`, err);
+        }
+      }
+
+      if (ref.inferredColumns && ref.inferredColumns.length > 0) {
+        // Find or create the entry for the current databaseName
+        const dbName = context.databaseName || '';
+        let dbEntry = schemaData.find(d => d.databaseName === dbName);
+        if (!dbEntry) {
+          dbEntry = { databaseName: dbName, schemas: [] };
+          schemaData.push(dbEntry);
+        }
+
+        // Find or create a schema bucket for virtual tables (use empty schema name)
+        let virtualSchema = dbEntry.schemas.find((s: any) => s.schema === '');
+        if (!virtualSchema) {
+          virtualSchema = { schema: '', tables: [] };
+          dbEntry.schemas.push(virtualSchema);
+        }
+
+        // Add virtual table for this reference (alias → columns)
+        const existingIdx = virtualSchema.tables.findIndex((t: any) => t.table === ref.alias);
+        const virtualTable = {
+          table: ref.alias,
+          columns: ref.inferredColumns.map(c => ({ name: c.name, type: c.type })),
+        };
+        if (existingIdx >= 0) {
+          virtualSchema.tables[existingIdx] = virtualTable;
+        } else {
+          virtualSchema.tables.push(virtualTable);
+        }
+      }
+    }
+
     // Convert @references to CTEs if needed and adjust cursor offset
     let processedQuery = query;
     let adjustedCursorOffset = cursorOffset;
@@ -182,7 +233,7 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
         body: JSON.stringify({
           query: processedQuery,
           cursor_offset: adjustedCursorOffset,
-          schema_data: context.schemaData || [],
+          schema_data: schemaData,
           database_name: context.databaseName,
         }),
       });

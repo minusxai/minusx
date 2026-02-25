@@ -7,6 +7,7 @@ export interface ResolvedReference {
   id: number;
   alias: string;
   query: string;
+  inferredColumns?: { name: string; type: string }[];
 }
 
 /**
