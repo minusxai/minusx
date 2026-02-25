@@ -149,10 +149,10 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId }: Bread
     <Button
       size="xs"
       variant="solid"
-      bg={isTutorialMode ? 'whiteAlpha.500' : 'accent.warning'}
+      bg={isTutorialMode ? 'whiteAlpha.500' : 'accent.danger/15'}
       border="1px solid"
-      borderColor={isTutorialMode ? 'whiteAlpha.600' : 'accent.warning'}
-      color={isTutorialMode ? 'white' : 'black'}
+      borderColor={isTutorialMode ? 'whiteAlpha.600' : 'accent.danger/30'}
+      color={isTutorialMode ? 'white' : 'accent.danger'}
       _hover={isTutorialMode ? { bg: 'white', color: 'accent.danger' } : undefined}
       fontFamily="mono"
       onClick={() => setIsPublishModalOpen(true)}

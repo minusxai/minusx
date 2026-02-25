@@ -8,6 +8,8 @@ import EditDashboardDisplay from '@/components/explore/tools/EditDashboardDispla
 import EditReportDisplay from '@/components/explore/tools/EditReportDisplay';
 import EditAlertDisplay from '@/components/explore/tools/EditAlertDisplay';
 import SetRuntimeValuesDisplay from '@/components/explore/tools/SetRuntimeValuesDisplay';
+import EditFileDisplay from '@/components/explore/tools/EditFileDisplay';
+import ReadFilesDisplay from '@/components/explore/tools/ReadFilesDisplay';
 import { DisplayProps } from '@/lib/types';
 
 // Tool configuration interface
@@ -63,6 +65,12 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
   },
   'SetRuntimeValues': {
     displayComponent: SetRuntimeValuesDisplay
+  },
+  'EditFile': {
+    displayComponent: EditFileDisplay
+  },
+  'ReadFiles': {
+    displayComponent: ReadFilesDisplay
   }
 };
 
