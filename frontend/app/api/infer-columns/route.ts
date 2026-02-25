@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { FilesAPI } from '@/lib/data/files.server';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import { QuestionContent, DatabaseWithSchema } from '@/lib/types';
+import { FileNotFoundError } from '@/lib/errors';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -26,7 +27,19 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     }
 
     // Load the question file
-    const questionResult = await FilesAPI.loadFile(questionId, user);
+    let questionResult;
+    try {
+      questionResult = await FilesAPI.loadFile(questionId, user);
+    } catch (err) {
+      if (err instanceof FileNotFoundError) {
+        return NextResponse.json(
+          { columns: [], error: 'Question not found' },
+          { status: 404 }
+        );
+      }
+      throw err;
+    }
+
     if (!questionResult.data || questionResult.data.type !== 'question') {
       return NextResponse.json(
         { columns: [], error: 'Question not found' },

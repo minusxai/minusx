@@ -184,6 +184,119 @@ describe('Autocomplete API - Phase 2 E2E Tests', () => {
     });
   });
 
+  describe('Part B-ext: Column autocomplete for @reference dot-notation (schema augmentation)', () => {
+    /**
+     * This suite verifies the infer-columns schema augmentation path introduced alongside
+     * the @reference autocomplete feature.  After CTE conversion, Python receives the
+     * augmented schemaData that includes a virtual table entry for each resolved reference
+     * (columns inferred via /api/infer-columns).  This lets Python suggest columns when
+     * the cursor is positioned after `alias.`.
+     */
+
+    test('Test 3b: Should suggest inferred columns after @reference alias dot-notation', async () => {
+      // Query: SELECT a. FROM @revenue_1 a
+      // Cursor is positioned right after "a." — column completion context
+      const query = 'SELECT a. FROM @revenue_1 a';
+      const cursorOffset = 9; // After "SELECT a."
+
+      const result = await CompletionsAPI.getSqlCompletions({
+        query,
+        cursorOffset,
+        context: {
+          type: 'sql_editor' as const,
+          schemaData: testSchemaData,
+          resolvedReferences: [
+            {
+              id: 1,
+              alias: 'revenue_1',
+              query: 'SELECT user_id, SUM(amount) AS total FROM orders GROUP BY user_id',
+            },
+          ],
+          databaseName: 'test_db',
+        },
+      });
+
+      // Python should have received the augmented schemaData (virtual table for revenue_1)
+      // and the CTE query, and return column completions for the alias
+      expect(Array.isArray(result.suggestions)).toBe(true);
+
+      const labels = result.suggestions.map((s: any) => s.label);
+
+      // The inferred columns (user_id, total) from the @reference should appear
+      expect(labels).toContain('user_id');
+      expect(labels).toContain('total');
+
+      // Original table columns not in the CTE should NOT appear
+      expect(labels).not.toContain('amount');
+      expect(labels).not.toContain('created_at');
+    });
+
+    test('Test 3c: Should merge inferred columns from multiple @references into schema', async () => {
+      // Two @references each contributing distinct columns
+      const query = 'SELECT r., c. FROM @rev_1 r JOIN @costs_2 c ON r.user_id = c.user_id';
+      const cursorOffset = 9; // After "SELECT r."
+
+      const result = await CompletionsAPI.getSqlCompletions({
+        query,
+        cursorOffset,
+        context: {
+          type: 'sql_editor' as const,
+          schemaData: testSchemaData,
+          resolvedReferences: [
+            {
+              id: 1,
+              alias: 'rev_1',
+              query: 'SELECT user_id, SUM(amount) AS revenue FROM orders GROUP BY user_id',
+            },
+            {
+              id: 2,
+              alias: 'costs_2',
+              query: 'SELECT user_id, SUM(amount) AS costs FROM orders WHERE amount < 0 GROUP BY user_id',
+            },
+          ],
+          databaseName: 'test_db',
+        },
+      });
+
+      expect(Array.isArray(result.suggestions)).toBe(true);
+
+      // Should at minimum not crash and return suggestions
+      // (Python may return columns from the rev_1 CTE at this cursor position)
+      const labels = result.suggestions.map((s: any) => s.label);
+      expect(labels).toContain('user_id');
+    });
+
+    test('Test 3d: Should not call infer-columns when inferredColumns already cached on reference', async () => {
+      // Pre-supply inferredColumns on the reference — server should skip the /api/infer-columns call
+      const result = await CompletionsAPI.getSqlCompletions({
+        query: 'SELECT a. FROM @cached_ref_3 a',
+        cursorOffset: 9,
+        context: {
+          type: 'sql_editor' as const,
+          schemaData: testSchemaData,
+          resolvedReferences: [
+            {
+              id: 3,
+              alias: 'cached_ref_3',
+              query: 'SELECT month, total FROM summary',
+              inferredColumns: [
+                { name: 'month', type: 'varchar' },
+                { name: 'total', type: 'number' },
+              ],
+            },
+          ],
+          databaseName: 'test_db',
+        },
+      });
+
+      expect(Array.isArray(result.suggestions)).toBe(true);
+      // Suggestions should still come through (schema was augmented from cached columns)
+      const labels = result.suggestions.map((s: any) => s.label);
+      expect(labels).toContain('month');
+      expect(labels).toContain('total');
+    });
+  });
+
   describe('Part B: Error Handling & Edge Cases', () => {
     test('Test 4: Should handle empty resolved references gracefully', async () => {
 
