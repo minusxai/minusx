@@ -10,6 +10,7 @@ import EditAlertDisplay from '@/components/explore/tools/EditAlertDisplay';
 import SetRuntimeValuesDisplay from '@/components/explore/tools/SetRuntimeValuesDisplay';
 import EditFileDisplay from '@/components/explore/tools/EditFileDisplay';
 import ReadFilesDisplay from '@/components/explore/tools/ReadFilesDisplay';
+import SearchFilesDisplay from '@/components/explore/tools/SearchFilesDisplay';
 import { DisplayProps } from '@/lib/types';
 
 // Tool configuration interface
@@ -71,6 +72,9 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
   },
   'ReadFiles': {
     displayComponent: ReadFilesDisplay
+  },
+  'SearchFiles': {
+    displayComponent: SearchFilesDisplay
   }
 };
 
