@@ -21,7 +21,6 @@ import {
 } from '@chakra-ui/react';
 import {
   LuChevronDown,
-  LuChevronUp,
   LuChevronLeft,
   LuChevronRight,
   LuSparkles,
@@ -108,9 +107,12 @@ export default function QuestionViewV2({
 
   // SQL editor collapsed state — persisted in Redux per question so it survives navigation.
   // Default: open in page mode, collapsed in toolcall/embedded mode.
-  const sqlEditorCollapsed = useAppSelector(
+  // When questionId is undefined (e.g. toolcall mode), use local state as fallback.
+  const [localSqlEditorCollapsed, setLocalSqlEditorCollapsed] = useState(!fullMode);
+  const reduxSqlEditorCollapsed = useAppSelector(
     state => selectSqlEditorCollapsed(state, questionId, !fullMode)
   );
+  const sqlEditorCollapsed = questionId !== undefined ? reduxSqlEditorCollapsed : localSqlEditorCollapsed;
   // editMode and viewMode sourced from Redux (managed by FileHeader)
   const reduxEditMode = useAppSelector(state => selectFileEditMode(state, questionId ?? -1));
   const editMode = isPreview ? false : reduxEditMode;
@@ -133,6 +135,8 @@ export default function QuestionViewV2({
   const handleSqlEditorToggle = useCallback(() => {
     if (questionId !== undefined) {
       dispatch(setSqlEditorCollapsed({ fileId: questionId, collapsed: !sqlEditorCollapsed }));
+    } else {
+      setLocalSqlEditorCollapsed(prev => !prev);
     }
   }, [dispatch, questionId, sqlEditorCollapsed]);
 
@@ -533,7 +537,7 @@ export default function QuestionViewV2({
                   onClick={handleSqlEditorToggle}
                 >
                   <Box color="fg.muted" fontSize="sm">
-                    {sqlEditorCollapsed ? <LuChevronDown /> : <LuChevronUp />}
+                    {sqlEditorCollapsed ? <LuChevronRight /> : <LuChevronDown />}
                   </Box>
                   <Text fontSize="sm" fontWeight="700">
                     Query
