@@ -21,6 +21,7 @@ import { setupMockFetch } from '@/test/harness/mock-fetch';
 import { setupTestDb } from '@/test/harness/test-db';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { POST as inferColumnsHandler } from '../route';
+import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 
 const mockUser = {
   companyId: 1,
@@ -70,6 +71,20 @@ describe('Infer Columns - E2E Tests', () => {
 
   // Python backend calls pass through mock-fetch automatically (localhost:8001 → dynamic port)
   const mockFetch = setupMockFetch({ getPythonPort });
+
+  // Override global mock to include mode:'org' and home_folder:'/org'
+  // (global jest.setup.ts mock uses home_folder:'/test' with no mode field,
+  //  which breaks permission checks for files under /org/*)
+  beforeAll(() => {
+    (getEffectiveUser as jest.Mock).mockResolvedValue({
+      userId: 1,
+      email: 'test@example.com',
+      companyId: 1,
+      role: 'admin',
+      home_folder: '/org',
+      mode: 'org',
+    });
+  });
 
   beforeEach(() => {
     mockFetch.mockClear();

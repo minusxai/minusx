@@ -528,14 +528,16 @@ async def infer_columns_endpoint(request: InferColumnsRequest):
                 inner = expr
             elif isinstance(expr, sqlexp.Star):
                 # SELECT * - try to expand from schema_data
+                # schema_data structure: [{databaseName, schemas: [{schema, tables: [{table, columns}]}]}]
                 if request.schema_data:
                     for schema_entry in request.schema_data:
-                        for table_entry in schema_entry.get("tables", []):
-                            for col in table_entry.get("columns", []):
-                                columns.append(InferredColumn(
-                                    name=col.get("name", "?"),
-                                    type=col.get("type", "unknown")
-                                ))
+                        for schema_obj in schema_entry.get("schemas", []):
+                            for table_entry in schema_obj.get("tables", []):
+                                for col in table_entry.get("columns", []):
+                                    columns.append(InferredColumn(
+                                        name=col.get("name", "?"),
+                                        type=col.get("type", "unknown")
+                                    ))
                 else:
                     columns.append(InferredColumn(name="*", type="unknown"))
                 continue
@@ -563,16 +565,18 @@ async def infer_columns_endpoint(request: InferColumnsRequest):
                     col_type = "text"
             elif isinstance(inner, sqlexp.Column):
                 # Try to look up column type from schema_data
+                # schema_data structure: [{databaseName, schemas: [{schema, tables: [{table, columns}]}]}]
                 col_ref_name = inner.name
                 table_ref = inner.table if inner.table else None
                 for schema_entry in request.schema_data:
-                    for table_entry in schema_entry.get("tables", []):
-                        if table_ref and table_entry.get("table") != table_ref:
-                            continue
-                        for col in table_entry.get("columns", []):
-                            if col.get("name") == col_ref_name:
-                                col_type = col.get("type", "unknown")
-                                break
+                    for schema_obj in schema_entry.get("schemas", []):
+                        for table_entry in schema_obj.get("tables", []):
+                            if table_ref and table_entry.get("table") != table_ref:
+                                continue
+                            for col in table_entry.get("columns", []):
+                                if col.get("name") == col_ref_name:
+                                    col_type = col.get("type", "unknown")
+                                    break
 
             columns.append(InferredColumn(name=col_name, type=col_type))
 

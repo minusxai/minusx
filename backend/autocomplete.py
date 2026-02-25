@@ -337,7 +337,23 @@ def get_schema_dot_completions_fallback(
                     idx += 1
                 return suggestions
 
-    # Not a schema, return empty (can't determine without AST)
+    # Check if prefix is a table name or alias (table.column pattern)
+    for db in schema_data:
+        for schema in db.get("schemas", []):
+            for table in schema.get("tables", []):
+                if table["table"].lower() == prefix.lower():
+                    for col in table.get("columns", []):
+                        suggestions.append(CompletionItem(
+                            label=col["name"],
+                            kind="column",
+                            detail=f"  {table['table']}",
+                            documentation=col.get("type", ""),
+                            insert_text=col["name"],
+                            sort_text=str(idx).zfill(5)
+                        ))
+                        idx += 1
+                    return suggestions
+
     return []
 
 

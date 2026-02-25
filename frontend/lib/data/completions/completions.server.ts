@@ -195,6 +195,27 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
         } else {
           virtualSchema.tables.push(virtualTable);
         }
+
+        // Also inject virtual tables for any SQL aliases used for this reference
+        // in the original query (e.g. "FROM @revenue_1 r" → inject table "r" too).
+        // This allows Python's dot-completion fallback to find columns when parse fails.
+        const SQL_KEYWORDS = new Set(['on', 'where', 'join', 'inner', 'left', 'right', 'outer',
+          'full', 'cross', 'group', 'order', 'having', 'limit', 'union', 'except', 'intersect',
+          'as', 'and', 'or', 'not', 'in', 'is', 'null', 'between', 'like', 'select', 'from', 'with']);
+        const aliasPattern = new RegExp(`@${ref.alias}\\s+(\\w+)`, 'gi');
+        let aliasMatch: RegExpExecArray | null;
+        while ((aliasMatch = aliasPattern.exec(query)) !== null) {
+          const sqlAlias = aliasMatch[1];
+          if (!SQL_KEYWORDS.has(sqlAlias.toLowerCase()) && sqlAlias.toLowerCase() !== ref.alias.toLowerCase()) {
+            const existingAliasIdx = virtualSchema.tables.findIndex((t: any) => t.table === sqlAlias);
+            if (existingAliasIdx < 0) {
+              virtualSchema.tables.push({
+                table: sqlAlias,
+                columns: ref.inferredColumns!.map(c => ({ name: c.name, type: c.type })),
+              });
+            }
+          }
+        }
       }
     }
 
