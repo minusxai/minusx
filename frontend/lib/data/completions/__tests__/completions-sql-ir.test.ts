@@ -1075,6 +1075,31 @@ describe('Completions SQL IR - E2E Tests', () => {
       expect(generateResult.sql).toMatch(/O''Brien|O\\'Brien/);
     });
 
+    it('should preserve string literal in HAVING (not coerce to number)', async () => {
+      // Regression: HAVING AVG(col) > '75' was coercing '75' to 75 (number),
+      // causing round-trip failure due to '75' vs 75 in normalized SQL.
+      const sql = `SELECT
+  AVG(avg_order_value) AS avg_avg_order_value,
+  DATE_TRUNC('WEEK', week_start) AS week_start_week
+FROM orders
+GROUP BY DATE_TRUNC('WEEK', week_start)
+HAVING AVG(avg_order_value) > '75'`;
+
+      const parseResult = await CompletionsAPI.sqlToIR({ sql });
+      expect(parseResult.success).toBe(true);
+      expect(parseResult.ir).toBeDefined();
+
+      // HAVING value should be preserved as string '75'
+      const havingCond = parseResult.ir!.having?.conditions?.[0] as any;
+      expect(havingCond?.value).toBe('75');
+      expect(typeof havingCond?.value).toBe('string');
+
+      const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir! });
+      expect(generateResult.success).toBe(true);
+      // Must regenerate with quoted '75', not numeric 75
+      expect(generateResult.sql).toContain("'75'");
+    });
+
     it('should handle empty WHERE clause', async () => {
       const sql = 'SELECT * FROM users';
 

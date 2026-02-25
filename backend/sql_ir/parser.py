@@ -501,14 +501,15 @@ def parse_comparison(expr: exp.Expression, operator: str) -> Optional[FilterCond
     elif isinstance(right, exp.Literal):
         # Literal value
         value = right.this
-        # Try to parse as number
-        try:
-            if '.' in str(value):
-                value = float(value)
-            else:
-                value = int(value)
-        except ValueError:
-            pass  # Keep as string
+        # Only try to parse as number for numeric literals (not quoted strings like '75')
+        if not right.is_string:
+            try:
+                if '.' in str(value):
+                    value = float(value)
+                else:
+                    value = int(value)
+            except ValueError:
+                pass  # Keep as string
     elif isinstance(right, exp.Null):
         # NULL literal
         value = None
