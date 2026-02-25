@@ -27,4 +27,8 @@ export type AppState =
   | {
       type: 'folder';
       state: FolderState;
+    }
+  | {
+      type: 'explore';
+      state: null; // No additional state needed for explore page at this time
     };

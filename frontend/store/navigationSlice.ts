@@ -22,6 +22,7 @@ export type PathState =
   | { type: 'file'; id: number }
   | { type: 'newFile'; fileType: FileType; createOptions: NavCreateOptions }
   | { type: 'folder'; path: string }
+  | { type: 'explore'}
   | { type: null };
 
 interface NavigationState {
@@ -126,6 +127,12 @@ function computePathState(
   const folderMatch = pathname.match(/^\/p\/(.*)/);
   if (folderMatch) {
     return { type: 'folder', path: '/' + (folderMatch[1] || '') };
+  }
+
+  // Explore page: /explore or /explore/{conversationId}
+  const exploreMatch = pathname.match(/^\/explore(?:\/(\d+))?/);
+  if (exploreMatch) {
+    return { type: 'explore' };
   }
 
   return { type: null };
@@ -235,6 +242,13 @@ export const selectAppState = createSelector(
           },
         },
         loading: folderLoading,
+      };
+    }
+
+    if (pathState.type === 'explore') {
+      return {
+        appState: { type: 'explore', state: null },
+        loading: false,
       };
     }
 
