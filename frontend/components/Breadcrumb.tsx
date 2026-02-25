@@ -144,12 +144,33 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId }: Bread
     </Flex>
   );
 
+  // Unsaved changes button (styled differently when inside demo banner vs standalone)
+  const unsavedChangesButton = dirtyFiles.length > 0 ? (
+    <Button
+      size="xs"
+      variant="solid"
+      bg={isTutorialMode ? 'whiteAlpha.500' : 'accent.warning'}
+      border="1px solid"
+      borderColor={isTutorialMode ? 'whiteAlpha.600' : 'accent.warning'}
+      color={isTutorialMode ? 'white' : 'black'}
+      _hover={isTutorialMode ? { bg: 'white', color: 'accent.danger' } : undefined}
+      fontFamily="mono"
+      onClick={() => setIsPublishModalOpen(true)}
+    >
+      <LuTriangleAlert size={12} />
+      {dirtyFiles.length} unsaved {dirtyFiles.length === 1 ? 'change' : 'changes'}
+    </Button>
+  ) : null;
+
   // Use DemoModeBanner wrapper when in tutorial mode
   if (isTutorialMode) {
     return (
-      <DemoModeBanner>
-        {breadcrumbItems}
-      </DemoModeBanner>
+      <>
+        <DemoModeBanner unsavedChangesButton={unsavedChangesButton}>
+          {breadcrumbItems}
+        </DemoModeBanner>
+        <PublishModal isOpen={isPublishModalOpen} onClose={() => setIsPublishModalOpen(false)} />
+      </>
     );
   }
 
@@ -157,21 +178,7 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId }: Bread
     <Flex align="center" justify="space-between" gap={2} mb={2}>
       {breadcrumbItems}
       <Flex gap={2} align="center" flexShrink={0} display={{ base: 'none', md: 'flex' }}>
-        {dirtyFiles.length > 0 && (
-          <Button
-            size="xs"
-            variant="solid"
-            bg="accent.warning"
-            border="1px solid"
-            borderColor="accent.warning"
-            color="black"
-            fontFamily="mono"
-            onClick={() => setIsPublishModalOpen(true)}
-          >
-            <LuTriangleAlert size={12} />
-            {dirtyFiles.length} unsaved {dirtyFiles.length === 1 ? 'change' : 'changes'}
-          </Button>
-        )}
+        {unsavedChangesButton}
         <FileSearchBar />
       </Flex>
       <PublishModal isOpen={isPublishModalOpen} onClose={() => setIsPublishModalOpen(false)} />

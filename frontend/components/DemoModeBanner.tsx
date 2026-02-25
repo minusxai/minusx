@@ -35,9 +35,10 @@ const containerQueryStyles = `
 
 interface DemoModeBannerProps {
   children?: React.ReactNode;
+  unsavedChangesButton?: React.ReactNode;
 }
 
-export default function DemoModeBanner({ children }: DemoModeBannerProps) {
+export default function DemoModeBanner({ children, unsavedChangesButton }: DemoModeBannerProps) {
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const isTutorialMode = effectiveUser?.mode === 'tutorial';
 
@@ -102,9 +103,11 @@ export default function DemoModeBanner({ children }: DemoModeBannerProps) {
                 Demo Mode
               </Text>
             </Flex>
-            <Text fontSize="xs" color="whiteAlpha.800" whiteSpace="nowrap" className="demo-description">
-              You're exploring MinusX with Sample Data
-            </Text>
+            {unsavedChangesButton ? null : (
+              <Text fontSize="xs" color="whiteAlpha.800" whiteSpace="nowrap" className="demo-description">
+                You're exploring MinusX with Sample Data
+              </Text>
+            )}
             <Button
                 size="2xs"
                 variant="solid"
@@ -120,9 +123,10 @@ export default function DemoModeBanner({ children }: DemoModeBannerProps) {
             </Button>
           </Flex>
 
-          <Box flexShrink={0} display={{ base: 'none', md: 'block' }}>
+          <Flex gap={2} align="center" flexShrink={0} display={{ base: 'none', md: 'flex' }}>
+            {unsavedChangesButton}
             <FileSearchBar />
-          </Box>
+          </Flex>
         </Flex>
       </Box>
     </Box>
