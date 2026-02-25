@@ -73,6 +73,9 @@ interface QuestionViewV2Props {
   // Container mode: 'preview' forces read-only with SQL diff
   mode?: 'view' | 'create' | 'preview';
 
+  // Hide viz type buttons and viz settings toggle (chart still renders)
+  showVizControls?: boolean;
+
   // Handlers
   onChange: (updates: Partial<QuestionContent>) => void;
   onParameterValueChange?: (paramName: string, value: string | number) => void;  // Ephemeral
@@ -93,6 +96,7 @@ export default function QuestionViewV2({
   proposedQuery,
   originalQuery,
   mode = 'view',
+  showVizControls = true,
   onChange,
   onParameterValueChange,
   onExecute,
@@ -864,8 +868,8 @@ export default function QuestionViewV2({
                   showJsonToggle: false,
                   editable: editMode,
                   viz: {
-                    showTypeButtons: true,
-                    showChartBuilder: true,
+                    showTypeButtons: showVizControls,
+                    showChartBuilder: showVizControls,
                     // Always use horizontal (compact) to hide column sidebar - cleaner in side-by-side
                     typesButtonsOrientation: 'horizontal'
                   },

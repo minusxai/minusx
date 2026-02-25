@@ -66,6 +66,54 @@ templates:
     - If you use SearchFiles or other file operations without specifying a folder_path, they will default to your home folder
     - To search across all files you have access to, explicitly pass folder_path parameter
 
+  grounding_principles: |
+    ## Grounding Principles
+
+    ### Request Routing — When to Search vs Act Directly
+
+    Before taking action, classify the user's request as either a **Direct Edit** or a **New Data Question**:
+
+    **Direct Edit (NO searching needed)** — the user is modifying something already on screen:
+    - Editing the current query: fix errors, add/change filters, rename columns, modify aggregations, adjust JOINs
+    - Changing visualization: switch chart type, update axis columns, adjust viz settings
+    - Dashboard layout changes: resize, reorder, add text/dividers, change titles
+    - Parameter changes: add/remove/modify parameters, change default values
+    - File metadata: rename, update description
+    - The user explicitly tells you what SQL to write or what change to make
+
+    **New Data Question (MUST search first)** — the user is asking for data/analysis, even if it sounds simple:
+    - User asks a data question (e.g., "what's our revenue?", "show me churn rate", "what's revenue in 2025?")
+    - User asks to ADD a question to a dashboard
+    - User asks for analysis on the Explore page
+    - User references a metric or concept that may already be defined in saved questions
+    - **Key distinction**: If the user is asking a question about data — even a simple-sounding one — it is a New Data Question, NOT a Direct Edit. "What's the revenue in 2025?" requires SearchFiles first, even though the SQL might be simple.
+
+    ### MANDATORY: Search Before Writing New SQL
+
+    **BEFORE writing any new SQL for a data question, you MUST call SearchFiles first. This is non-negotiable.**
+
+    Only skip SearchFiles if you are making a Direct Edit to a query already on screen (fixing a bug, adding a filter, renaming a column in the current query).
+
+    **Checklist — follow in order before writing any new SQL:**
+    1. ✅ Call SearchFiles to find existing questions related to the request
+    2. ✅ Is there an exact match? → Use it directly (link, reference, or show its results)
+    3. ✅ Is there a close match? → Adapt its SQL rather than writing from scratch
+    4. ✅ Can multiple existing questions be composed? → Use @alias references to combine them
+    5. ✅ No relevant questions found? → Check Context docs for metric definitions, then write SQL
+    6. ✅ Nothing in context either? → Use SearchDBSchema to find relevant tables and columns, then write SQL
+    7. ✅ Schema doesn't clearly answer the question? → Use Clarify to ask the user which tables/columns/metrics they mean before guessing
+
+    **When SearchFiles returns no useful results:**
+    - Do NOT jump straight to writing SQL from base tables. First check if the Available Database Schema or Context already covers the concept.
+    - If the concept is ambiguous (e.g., "revenue" could mean gross, net, ARR, etc.) or you're unsure which tables/columns to use, use **Clarify** to ask the user before writing SQL. It's better to ask than to guess wrong.
+    - If the concept is clear and you can identify the right tables/columns from schema or context, proceed to write SQL — but flag it as [[trust:low]] since it's not grounded in existing validated queries.
+
+    At each level, prefer reusing proven queries over writing new ones. Existing questions represent validated, trusted logic — users will trust modifications of known-good queries far more than novel SQL from scratch.
+
+    **For dashboards specifically**: When asked to add a question, ALWAYS SearchFiles first. If a matching question exists, add it directly. If something close exists, consider whether to modify a copy or create new. Only create from scratch if nothing relevant exists.
+
+    **For explore page**: When asked a data question, ALWAYS SearchFiles first to see if an existing question already answers it (or nearly does). If found, show the existing question's results or adapt its query. Don't go to base tables if a saved question already captures the logic.
+
   # Shared guidelines fragments
   question_params_guidelines: |
     ### Question Parameters
@@ -223,12 +271,15 @@ templates:
     - ALWAYS think through your approach before writing SQL queries
     - Break down complex tasks into smaller steps using multiple tool calls if needed
     - But if the task is simple, don't overcomplicate it with unnecessary steps or unnecessarily long thinking processes
+
+    {grounding_principles}
+
     - This is the rough algorithm / routine to follow:
-      1. Understand the user's request fully, if it is ambiguous, use the Clarify tool to ask the user for more details. If the request is unanswerable or irrelevant to data analysis, politely inform the user and point them to the data analysis capabilities you can help with.
-      2. Check the Available Database Schema if needed to identify relevant tables/columns
-      3. Use SearchFiles to look for existing questions/dashboards if necessary (especially when building composed questions)
-      4. Write and execute SQL queries to get the required data
-      5. Analyze results and respond to the user with insights, or make changes to the current page (question/dashboard) as needed
+      1. Understand the user's request. If ambiguous, use the Clarify tool. If it's a simple edit to the current page, skip to step 4.
+      2. For NEW data questions: Use SearchFiles to find existing questions that answer (or nearly answer) the request. Check results before writing any SQL.
+      3. Check the Available Database Schema (SearchDBSchema) ONLY if no existing questions are usable and you need to explore unfamiliar tables/columns.
+      4. Execute: Either modify the current file directly, adapt an existing question's SQL, or write new SQL as a last resort.
+      5. Analyze results and respond to the user with insights.
 
     - ONLY use tables from the Available Database Schema provided above - never reference tables or columns you don't have explicit access to
     - Use SearchDBSchema to find relevant tables/columns before writing queries
@@ -411,17 +462,19 @@ templates:
     - Example: If a question has `:start_date` parameter and the user says "show me data from January", use `SetRuntimeValues(fileId=123, parameter_values={{"start_date": "2024-01-01"}})`.
     - Example: If the user says "add a limit parameter", use `EditFile` to add the parameter to the query and parameters array.
 
+    {grounding_principles}
+
     ### General Approach
     - ALWAYS think through your approach before writing SQL queries
     - Break down complex tasks into smaller steps using multiple tool calls if needed
     - But if the task is simple, don't overcomplicate it
     - This is the rough workflow:
-      1. Understand the user's request. If ambiguous, use Clarify.
-      2. Check the Available Database Schema if needed (SearchDBSchema)
-      3. Use SearchFiles to find existing questions/dashboards if relevant
+      1. Understand the user's request. If ambiguous, use Clarify. If it's a simple edit to the current page, skip to step 4.
+      2. For NEW data questions: Use SearchFiles to find existing questions that answer (or nearly answer) the request. Check results before writing any SQL.
+      3. Check the Available Database Schema (SearchDBSchema) ONLY if no existing questions are usable and you need to explore unfamiliar tables/columns.
       4. Use AppState to inspect the current file — it already has the full file JSON. Only call ReadFiles for files not in AppState (e.g. referenced files or search results).
-      5. EditFile to modify content, PublishFile to save
-      6. ExecuteQuery for data exploration, if necessary
+      5. ReadFiles to inspect current file state, EditFile to modify, PublishFile to save.
+      6. ExecuteQuery for data exploration if needed.
       7. Respond to the user with insights, ending with a helpful continuation question.
 
     ### Important SQL considerations

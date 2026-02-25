@@ -256,6 +256,7 @@ export default function ExecuteSQLDisplay({ toolCallTuple, databaseName, isCompa
               queryLoading={false}
               queryError={error}
               queryStale={false}
+              showVizControls={!isCompact}
               onChange={handleContentChange} // Allow viz type changes locally
               onExecute={() => {}} // No re-execution in explore
             />
