@@ -12,18 +12,26 @@ import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { QueryChip } from './QueryChip';
 import { PickerPopover, PickerHeader, PickerList, PickerItem } from './PickerPopover';
 import { AliasInput } from './AliasInput';
-import { LuTable, LuDatabase } from 'react-icons/lu';
+import { LuTable, LuDatabase, LuChartBar } from 'react-icons/lu';
+import type { QuestionOption } from '@/lib/hooks/useAvailableQuestions';
 
 interface DataSectionProps {
   databaseName: string;
   value: TableReference;
   onChange: (table: TableReference) => void;
+  availableQuestions?: QuestionOption[];
 }
 
-export function DataSection({ databaseName, value, onChange }: DataSectionProps) {
+export function DataSection({ databaseName, value, onChange, availableQuestions = [] }: DataSectionProps) {
   const [tables, setTables] = useState<Array<{ name: string; schema?: string; displayName: string }>>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+
+  // Resolve display name for the current table value when it's a @reference
+  const isReference = value.table?.startsWith('@');
+  const referencedQuestion = isReference
+    ? availableQuestions.find(q => `@${q.alias}` === value.table)
+    : null;
 
   useEffect(() => {
     async function loadTables() {
@@ -47,6 +55,11 @@ export function DataSection({ databaseName, value, onChange }: DataSectionProps)
 
   const handleSelect = (table: { name: string; schema?: string }) => {
     onChange({ table: table.name, schema: table.schema, alias: value.alias });
+    setOpen(false);
+  };
+
+  const handleSelectQuestion = (q: QuestionOption) => {
+    onChange({ table: `@${q.alias}`, schema: undefined, alias: value.alias });
     setOpen(false);
   };
 
@@ -75,8 +88,14 @@ export function DataSection({ databaseName, value, onChange }: DataSectionProps)
           trigger={
             <Box cursor="pointer">
               {value.table ? (
-                <QueryChip variant="table" icon={<LuTable size={11} />} onClick={() => setOpen(true)}>
-                  {value.schema ? `${value.schema}.${value.table}` : value.table}
+                <QueryChip
+                  variant="table"
+                  icon={isReference ? <LuChartBar size={11} /> : <LuTable size={11} />}
+                  onClick={() => setOpen(true)}
+                >
+                  {isReference
+                    ? (referencedQuestion?.name ?? value.table)
+                    : (value.schema ? `${value.schema}.${value.table}` : value.table)}
                   {value.alias && <Text as="span" color="fg.muted" fontWeight="400"> as {value.alias}</Text>}
                 </QueryChip>
               ) : (
@@ -118,7 +137,7 @@ export function DataSection({ databaseName, value, onChange }: DataSectionProps)
               </HStack>
             )}
           </HStack>
-          <PickerList maxH="250px" searchable searchPlaceholder="Search tables...">
+          <PickerList maxH="300px" searchable searchPlaceholder="Search tables or questions...">
             {(query) =>
               loading ? (
                 <HStack px={2} py={3} justify="center">
@@ -128,22 +147,51 @@ export function DataSection({ databaseName, value, onChange }: DataSectionProps)
                   </Text>
                 </HStack>
               ) : (
-                tables
-                  .filter((t) => !query || t.displayName.toLowerCase().includes(query.toLowerCase()))
-                  .map((table) => {
-                    const tableDisplayName = table.schema ? `${table.schema}.${table.name}` : table.name;
-                    const isSelected = tableDisplayName === (value.schema ? `${value.schema}.${value.table}` : value.table);
-                    return (
-                      <PickerItem
-                        key={table.displayName}
-                        icon={<LuTable size={14} />}
-                        selected={isSelected}
-                        onClick={() => handleSelect(table)}
-                      >
-                        {table.displayName}
-                      </PickerItem>
-                    );
-                  })
+                <>
+                  {/* DB tables */}
+                  {tables
+                    .filter((t) => !query || t.displayName.toLowerCase().includes(query.toLowerCase()))
+                    .map((table) => {
+                      const tableDisplayName = table.schema ? `${table.schema}.${table.name}` : table.name;
+                      const isSelected = !isReference && tableDisplayName === (value.schema ? `${value.schema}.${value.table}` : value.table);
+                      return (
+                        <PickerItem
+                          key={table.displayName}
+                          icon={<LuTable size={14} />}
+                          selected={isSelected}
+                          onClick={() => handleSelect(table)}
+                        >
+                          {table.displayName}
+                        </PickerItem>
+                      );
+                    })}
+                  {/* Questions section */}
+                  {availableQuestions.length > 0 && (
+                    <>
+                      {(tables.length > 0 || query) && (
+                        <Text fontSize="10px" fontWeight="600" color="fg.subtle" textTransform="uppercase"
+                          letterSpacing="0.08em" px={2} pt={2} pb={1}>
+                          Questions
+                        </Text>
+                      )}
+                      {availableQuestions
+                        .filter((q) => !query || q.name.toLowerCase().includes(query.toLowerCase()) || q.alias.toLowerCase().includes(query.toLowerCase()))
+                        .map((q) => {
+                          const isSelected = isReference && `@${q.alias}` === value.table;
+                          return (
+                            <PickerItem
+                              key={q.id}
+                              icon={<LuChartBar size={14} />}
+                              selected={isSelected}
+                              onClick={() => handleSelectQuestion(q)}
+                            >
+                              {q.name}
+                            </PickerItem>
+                          );
+                        })}
+                    </>
+                  )}
+                </>
               )
             }
           </PickerList>

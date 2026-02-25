@@ -12,6 +12,7 @@ import { QueryIR, SelectColumn, TableReference } from '@/lib/types';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { useAppSelector } from '@/store/hooks';
 import { selectShowDebug } from '@/store/uiSlice';
+import type { QuestionOption } from '@/lib/hooks/useAvailableQuestions';
 import { DataSection } from './DataSection';
 import { FilterSection } from './FilterSection';
 import { SummarizeSection } from './SummarizeSection';
@@ -95,6 +96,7 @@ interface QueryBuilderProps {
   onSqlChange: (sql: string) => void;
   onExecute?: () => void;
   isExecuting?: boolean;
+  availableQuestions?: QuestionOption[];
 }
 
 export function QueryBuilder({
@@ -103,6 +105,7 @@ export function QueryBuilder({
   onSqlChange,
   onExecute,
   isExecuting = false,
+  availableQuestions = [],
 }: QueryBuilderProps) {
   const [ir, setIr] = useState<QueryIR | null>(null);
   const [loading, setLoading] = useState(true);
@@ -373,6 +376,7 @@ export function QueryBuilder({
               databaseName={databaseName}
               value={ir.from}
               onChange={handleFromTableChange}
+              availableQuestions={availableQuestions}
             />
           )}
           <IRDebugView ir={ir} />
@@ -401,6 +405,7 @@ export function QueryBuilder({
           databaseName={databaseName}
           value={ir.from}
           onChange={handleFromTableChange}
+          availableQuestions={availableQuestions}
         />
 
         {/* Join Section - right after table selection */}

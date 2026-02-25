@@ -544,8 +544,7 @@ export default function QuestionViewV2({
                   <QueryModeSelector
                     mode={queryMode}
                     onModeChange={setQueryMode}
-                    canUseGUI={referencedQuestions.length === 0}
-                    guiError={referencedQuestions.length > 0 ? 'GUI mode not available with @references' : undefined}
+                    canUseGUI={true}
                   />
                 )}
               </HStack>
@@ -640,6 +639,7 @@ export default function QuestionViewV2({
                       onSqlChange={handleQueryChange}
                       onExecute={handleExecute}
                       isExecuting={queryLoading && !queryData}
+                      availableQuestions={availableQuestions}
                     />
                   </Box>
                 )}

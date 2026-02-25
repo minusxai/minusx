@@ -291,6 +291,37 @@ class CompletionsDataLayerClient implements ICompletionsDataLayer {
   }
 
   async getColumnSuggestions(options: ColumnSuggestionsOptions, user?: EffectiveUser): Promise<ColumnSuggestionsResult> {
+    // @reference tables (e.g. "@revenue_by_month_43") — infer columns via /api/infer-columns.
+    // The alias format is always `${slug}_${id}` so the question ID is after the last `_`.
+    if (options.table?.startsWith('@')) {
+      try {
+        const alias = options.table.slice(1);
+        const lastUnderscore = alias.lastIndexOf('_');
+        const questionId = lastUnderscore >= 0 ? parseInt(alias.slice(lastUnderscore + 1), 10) : NaN;
+        if (!isNaN(questionId)) {
+          const res = await fetch(`${API_BASE}/api/infer-columns`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ questionId }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            return {
+              success: true,
+              columns: (data.columns ?? []).map((c: { name: string; type: string }) => ({
+                name: c.name,
+                type: c.type,
+                displayName: c.name,
+              })),
+            };
+          }
+        }
+      } catch (err) {
+        console.error('[Completions Client] Failed to infer columns for reference:', err);
+      }
+      return { success: false, error: 'Could not infer columns for reference' };
+    }
+
     try {
       const res = await fetch(`${API_BASE}/api/column-suggestions`, {
         method: 'POST',
