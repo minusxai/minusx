@@ -4,6 +4,7 @@ import { Box, Text, VStack, HStack, Input, Button, Flex, Badge } from '@chakra-u
 import { AlertContent, AlertRunContent, AlertSelector, AlertFunction, ComparisonOperator } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { LuPlay, LuClock, LuBell, LuMail, LuInfo, LuGripVertical, LuHistory, LuSettings, LuColumns3, LuScanSearch } from 'react-icons/lu';
+import { DeliveryPicker } from '@/components/shared/DeliveryPicker';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { useAppSelector } from '@/store/hooks';
 import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
@@ -606,15 +607,10 @@ export default function AlertView({
                   <Text fontWeight="700" fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Delivery</Text>
                 </HStack>
 
-                <Input
-                  value={(alert.emails || []).join(', ')}
-                  onChange={(e) => onChange({
-                    emails: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
-                  })}
-                  placeholder="user@example.com, team@example.com"
+                <DeliveryPicker
+                  emails={alert.emails || []}
+                  onChange={(emails) => onChange({ emails })}
                   disabled={!editMode}
-                  size="sm"
-                  bg="bg.surface"
                 />
               </Box>
             </VStack>

@@ -4,6 +4,7 @@ import { Box, Text, VStack, HStack, Input, Button, Textarea, Flex, Badge, IconBu
 import { ReportContent, ReportReference, ReportRunContent } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { LuPlay, LuClock, LuMail, LuInfo, LuPlus, LuTrash2, LuFileText, LuGripVertical, LuListChecks, LuHistory } from 'react-icons/lu';
+import { DeliveryPicker } from '@/components/shared/DeliveryPicker';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import Markdown from '@/components/Markdown';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
@@ -582,15 +583,10 @@ export default function ReportView({
                   <Text fontWeight="700" fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Delivery</Text>
                 </HStack>
 
-                <Input
-                  value={(report.emails || []).join(', ')}
-                  onChange={(e) => onChange({
-                    emails: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
-                  })}
-                  placeholder="user@example.com, team@example.com"
+                <DeliveryPicker
+                  emails={report.emails || []}
+                  onChange={(emails) => onChange({ emails })}
                   disabled={!editMode}
-                  size="sm"
-                  bg="bg.surface"
                 />
               </Box>
             </VStack>
