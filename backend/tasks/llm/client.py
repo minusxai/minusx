@@ -10,12 +10,14 @@ from enum import Enum
 from typing import List, get_args, get_origin, Union
 
 from litellm import acompletion
+from litellm.llms.custom_httpx.http_handler import AsyncHTTPHandler
 import litellm
 import httpx
 from pydantic.fields import FieldInfo
 
 from .models import ALLMRequest, LlmSettings
-from .config import DEFAULT_MODEL, MAX_TOKENS, DEBUG_DURATION
+from .config import DEFAULT_MODEL, MAX_TOKENS, DEBUG_DURATION, MX_API_BASE_URL, MX_API_KEY, HTTP_MAX_CONNECTIONS, HTTP_KEEPALIVE_EXPIRY, HTTP_TIMEOUT
+from .transport import MxProxyTransport
 from ..debug_context import LLMDebug, get_task_debug
 
 # Configure litellm
@@ -25,23 +27,37 @@ if is_litellm_log:
 
 litellm.include_cost_in_streaming_usage = True
 
-# Global session variable to store the custom httpx session
+
 _custom_session = None
 
+
 def _get_or_create_session():
-    """Get or create the custom httpx session with connection pooling"""
+    """Get or create the custom httpx session with connection pooling."""
     global _custom_session
     if _custom_session is None:
-        # Configure httpx limits for high concurrency (20+ requests)
-        limits = httpx.Limits(
-            max_keepalive_connections=500,  # Total connection pool size
-            max_connections=500,            # Total connections
-            keepalive_expiry=300,          # Keep connections alive for 5 minutes
-        )
-        _custom_session = httpx.AsyncClient(limits=limits, timeout=httpx.Timeout(120.0))
-        litellm.aclient_session = _custom_session
+        if MX_API_BASE_URL:
+            transport = MxProxyTransport(proxy_url=MX_API_BASE_URL, mx_api_key=MX_API_KEY)
+            _custom_session = httpx.AsyncClient(
+                transport=transport,
+                timeout=httpx.Timeout(HTTP_TIMEOUT),
+            )
+            # OpenAI: aclient_session → AsyncOpenAI(http_client=...)
+            litellm.aclient_session = _custom_session
+            # Anthropic streaming: make_call() falls back to module_level_aclient
+            _mx_handler = AsyncHTTPHandler(timeout=httpx.Timeout(HTTP_TIMEOUT))
+            _mx_handler.client = _custom_session  # inject our transport-backed client
+            litellm.module_level_aclient = _mx_handler
+        else:
+            # Direct mode: standard connection-pooled client
+            limits = httpx.Limits(
+                max_keepalive_connections=HTTP_MAX_CONNECTIONS,
+                max_connections=HTTP_MAX_CONNECTIONS,
+                keepalive_expiry=HTTP_KEEPALIVE_EXPIRY,
+            )
+            _custom_session = httpx.AsyncClient(limits=limits, timeout=httpx.Timeout(HTTP_TIMEOUT))
+            litellm.aclient_session = _custom_session
         if DEBUG_DURATION:
-            print(f"TIMING: Created httpx session with {limits.max_connections} max connections")
+            print(f"TIMING: Created httpx session with {HTTP_MAX_CONNECTIONS} max connections")
     return _custom_session
 
 
@@ -384,7 +400,15 @@ async def allm_request(request: ALLMRequest, on_content=None):
         usage = usage.model_dump()
     elif usage and hasattr(usage, 'to_dict'):
         usage = usage.to_dict()
-    elif not usage:
+
+    # Extract mx_call_id injected by mx-llm-provider proxy into the usage SSE chunk.
+    # This is our externally-visible X-MX-Call-ID, replacing LiteLLM's internal UUID.
+    if usage and isinstance(usage, dict):
+        mx_call_id = usage.pop('mx_call_id', None)
+        if mx_call_id:
+            litellm_call_id = mx_call_id
+
+    if not usage:
         # Fallback if usage not provided
         usage = {
             "total_tokens": 0,
