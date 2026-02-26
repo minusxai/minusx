@@ -6,7 +6,8 @@ const nextConfig: NextConfig = {
 
   // Exclude heavy client-side packages from server bundle
   // This prevents DuckDB WASM from being compiled during API route builds
-  serverExternalPackages: ['@duckdb/duckdb-wasm'],
+  // 'duckdb' is the native Node.js DuckDB package used for server-side analytics
+  serverExternalPackages: ['@duckdb/duckdb-wasm', 'duckdb'],
 
   experimental: {
     // Enable optimized package imports to reduce bundle size

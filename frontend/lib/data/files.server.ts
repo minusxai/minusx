@@ -33,6 +33,7 @@ import { listAllConnections } from './connections.server';
 import { computeSchemaFromDatabases } from './loaders/context-loader-utils';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import { getQueryHash } from '@/lib/utils/query-hash';
+import { trackFileEvent } from '@/lib/analytics/file-analytics.server';
 
 /**
  * Server-side implementation of files data layer
@@ -86,6 +87,23 @@ class FilesDataLayerServer implements IFilesDataLayer {
       ? await DocumentDB.getByIds(refIds, user.companyId)
       : [];
     console.log(`[FILES DataLayer] Loading ${refIds.length} references took ${Date.now() - refStart}ms`);
+
+    // Track read_as_reference for each loaded reference (fire-and-forget)
+    for (const ref of references) {
+      trackFileEvent({
+        eventType: 'read_as_reference',
+        fileId: ref.id,
+        fileType: ref.type,
+        filePath: ref.path,
+        fileName: ref.name,
+        userId: user.userId,
+        userEmail: user.email,
+        userRole: user.role,
+        companyId: user.companyId,
+        referencedByFileId: file.id,
+        referencedByFileType: file.type,
+      }).catch(err => console.error('[analytics] trackFileEvent failed:', err));
+    }
 
     // Filter references by unified permission check (Phase 4)
     const filteredReferences = references.filter(ref => canAccessFile(ref, user, overrides));
@@ -333,6 +351,19 @@ class FilesDataLayerServer implements IFilesDataLayer {
       throw new Error('File not found after creation');
     }
 
+    // Track created event (fire-and-forget)
+    trackFileEvent({
+      eventType: 'created',
+      fileId: newFile.id,
+      fileType: newFile.type,
+      filePath: newFile.path,
+      fileName: newFile.name,
+      userId: user.userId,
+      userEmail: user.email,
+      userRole: user.role,
+      companyId: user.companyId,
+    }).catch(err => console.error('[analytics] trackFileEvent failed:', err));
+
     return {
       data: newFile
     };
@@ -395,6 +426,19 @@ class FilesDataLayerServer implements IFilesDataLayer {
     if (!success) {
       throw new Error('Failed to save file');
     }
+
+    // Track updated event (fire-and-forget)
+    trackFileEvent({
+      eventType: 'updated',
+      fileId: id,
+      fileType: existingFile.type,
+      filePath: path,
+      fileName: name,
+      userId: user.userId,
+      userEmail: user.email,
+      userRole: user.role,
+      companyId: user.companyId,
+    }).catch(err => console.error('[analytics] trackFileEvent failed:', err));
 
     // For connections, reload through loader with refresh=true to update schema
     if (existingFile.type === 'connection') {

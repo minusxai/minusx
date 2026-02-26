@@ -42,3 +42,6 @@ next-env.d.ts
 
 # exported schemas (environment-specific)
 data/schemas.json
+
+# analytics DuckDB files (per-company, runtime-generated)
+data/analytics/
