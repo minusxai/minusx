@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { LuChartColumnIncreasing, LuChevronDown, LuCircleHelp, LuFilePlus2, LuRocket, LuShieldCheck, LuShieldAlert, LuShieldQuestion } from 'react-icons/lu';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import { FileType } from '@/lib/types';
-import { ReactNode, useMemo, useState } from 'react';
+import { ReactNode, useCallback, useMemo, useState } from 'react';
 import { useAppSelector } from '@/store/hooks';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { ReportQueryResult, QuestionContent } from '@/lib/types';
@@ -339,10 +339,46 @@ export default function Markdown({
     },
   };
 
+  // Strip background colors and non-default text colors from copied HTML
+  // so pasting into Google Docs / Word uses black-on-white defaults
+  const handleCopy = useCallback((e: React.ClipboardEvent) => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed) return;
+
+    // Get plain text
+    const plainText = selection.toString();
+
+    // Build sanitized HTML from the selection
+    const range = selection.getRangeAt(0);
+    const fragment = range.cloneContents();
+    const wrapper = document.createElement('div');
+    wrapper.appendChild(fragment);
+
+    // Remove style-heavy properties that carry app theme colors
+    wrapper.querySelectorAll('*').forEach((el) => {
+      if (el instanceof HTMLElement) {
+        el.style.removeProperty('background-color');
+        el.style.removeProperty('background');
+        el.style.removeProperty('color');
+        el.style.removeProperty('font-family');
+        el.style.removeProperty('border');
+        el.style.removeProperty('border-bottom');
+        el.style.removeProperty('border-right');
+        el.style.removeProperty('border-left');
+        el.style.removeProperty('border-top');
+      }
+    });
+
+    e.clipboardData.setData('text/plain', plainText);
+    e.clipboardData.setData('text/html', wrapper.innerHTML);
+    e.preventDefault();
+  }, []);
+
   return (
     <Box
       textAlign={textAlign}
       color={textColor}
+      onCopy={handleCopy}
       css={{
         WebkitFontSmoothing: 'antialiased',
         MozOsxFontSmoothing: 'grayscale',
