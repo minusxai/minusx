@@ -139,7 +139,6 @@ export default function ParameterInput({
             onKeyDown={handleKeyDown}
             type={parameter.type === 'number' ? 'number' : 'text'}
             minW="100px"
-            maxW="150px"
             bg="bg.canvas"
             borderColor="border.muted"
             fontFamily={parameter.type === 'number' ? 'mono' : 'inherit'}
