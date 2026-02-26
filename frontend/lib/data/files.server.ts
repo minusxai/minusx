@@ -33,7 +33,7 @@ import { listAllConnections } from './connections.server';
 import { computeSchemaFromDatabases } from './loaders/context-loader-utils';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import { getQueryHash } from '@/lib/utils/query-hash';
-import { trackFileEvent } from '@/lib/analytics/file-analytics.server';
+import { trackFileEvent, getFileAnalyticsSummary, getFilesAnalyticsSummary } from '@/lib/analytics/file-analytics.server';
 
 /**
  * Server-side implementation of files data layer
@@ -83,9 +83,10 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     const refStart = Date.now();
     const refIds = await extractReferenceIds(file);
-    const references = refIds.length > 0
-      ? await DocumentDB.getByIds(refIds, user.companyId)
-      : [];
+    const [references, analytics] = await Promise.all([
+      refIds.length > 0 ? DocumentDB.getByIds(refIds, user.companyId) : Promise.resolve([]),
+      getFileAnalyticsSummary(id, user.companyId).catch(() => null),
+    ]);
     console.log(`[FILES DataLayer] Loading ${refIds.length} references took ${Date.now() - refStart}ms`);
 
     // Track read_as_reference for each loaded reference (fire-and-forget)
@@ -121,9 +122,22 @@ class FilesDataLayerServer implements IFilesDataLayer {
     );
     console.log(`[FILES DataLayer] Custom loaders took ${Date.now() - loaderStart}ms`);
 
+    // Track read_direct event (fire-and-forget)
+    trackFileEvent({
+      eventType: 'read_direct',
+      fileId: transformedFile.id,
+      fileType: transformedFile.type,
+      filePath: transformedFile.path,
+      fileName: transformedFile.name,
+      userId: user.userId,
+      userEmail: user.email,
+      userRole: user.role,
+      companyId: user.companyId,
+    }).catch(err => console.error('[analytics] trackFileEvent failed:', err));
+
     return {
       data: transformedFile,
-      metadata: { references: transformedReferences }
+      metadata: { references: transformedReferences, analytics }
     };
   }
 
@@ -135,9 +149,10 @@ class FilesDataLayerServer implements IFilesDataLayer {
     const filteredFiles = files.filter(f => canAccessFile(f, user, overrides));
 
     const uniqueRefIds = await extractAllReferenceIds(filteredFiles);
-    const references = uniqueRefIds.length > 0
-      ? await DocumentDB.getByIds(uniqueRefIds, user.companyId)
-      : [];
+    const [references, analytics] = await Promise.all([
+      uniqueRefIds.length > 0 ? DocumentDB.getByIds(uniqueRefIds, user.companyId) : Promise.resolve([]),
+      getFilesAnalyticsSummary(filteredFiles.map(f => f.id), user.companyId).catch(() => ({})),
+    ]);
 
     // Filter references by unified permission check (Phase 4)
     const filteredReferences = references.filter(ref => canAccessFile(ref, user, overrides));
@@ -159,7 +174,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     return {
       data: transformedFiles,
-      metadata: { references: transformedReferences }
+      metadata: { references: transformedReferences, analytics }
     };
   }
 

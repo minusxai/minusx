@@ -218,6 +218,11 @@ export default function DevToolsPanel({ appState }: DevToolsPanelProps) {
   const [isCapturingScreenshot, setIsCapturingScreenshot] = useState(false);
   const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
   const [appStateOpen, setAppStateOpen] = useState(false);
+  const [analyticsOpen, setAnalyticsOpen] = useState(false);
+
+  const fileAnalytics = appState?.type === 'file'
+    ? appState.state.fileState.analytics
+    : undefined;
 
   const handleScreenshot = async () => {
     if (appState?.type !== 'file') return;
@@ -306,6 +311,42 @@ export default function DevToolsPanel({ appState }: DevToolsPanelProps) {
             </Box>
           )}
         </Box>
+
+        {/* Analytics (collapsible, file only) */}
+        {appState?.type === 'file' && (
+          <Box borderWidth="1px" borderColor="border.default" borderRadius="md" bg="bg.surface" overflow="hidden">
+            <HStack
+              px={3} py={2}
+              cursor="pointer"
+              onClick={() => setAnalyticsOpen(!analyticsOpen)}
+              _hover={{ bg: 'bg.subtle' }}
+            >
+              <Box as={analyticsOpen ? LuChevronDown : LuChevronRight} fontSize="xs" color="fg.muted" />
+              <Text fontSize="xs" fontWeight="600" color="fg.muted">Analytics</Text>
+            </HStack>
+            {analyticsOpen && (
+              <Box px={3} pb={3}>
+                <Box
+                  as="pre"
+                  p={2}
+                  borderRadius="sm"
+                  bg="bg.subtle"
+                  borderWidth="1px"
+                  borderColor="border.default"
+                  fontSize="2xs"
+                  fontFamily="mono"
+                  overflowX="auto"
+                  maxH="300px"
+                  overflowY="auto"
+                  whiteSpace="pre-wrap"
+                  wordBreak="break-all"
+                >
+                  {JSON.stringify(fileAnalytics ?? null, null, 2)}
+                </Box>
+              </Box>
+            )}
+          </Box>
+        )}
 
         {/* Tool Tester */}
         <ToolTester />

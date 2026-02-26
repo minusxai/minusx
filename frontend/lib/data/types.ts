@@ -1,4 +1,5 @@
 import { DbFile, FileType, BaseFileMetadata, BaseFileContent } from '@/lib/types';
+import type { FileAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
 
 /**
  * FileInfo: File metadata without content (for efficient folder listings)
@@ -16,6 +17,7 @@ export interface LoadFileResult {
   data: DbFile;
   metadata: {
     references: DbFile[];
+    analytics?: FileAnalyticsSummary | null;  // null = analytics DB doesn't exist yet
   };
 }
 
@@ -26,6 +28,7 @@ export interface LoadFilesResult {
   data: DbFile[];
   metadata: {
     references: DbFile[];
+    analytics?: Record<number, FileAnalyticsSummary>;  // keyed by fileId
   };
 }
 

@@ -52,6 +52,16 @@ function initSchema(db: any): Promise<void> {
 }
 
 /**
+ * Check whether the analytics DuckDB file already exists for a given company.
+ * Used by read-side queries to avoid creating a DB just for a read.
+ */
+export function analyticsDbExists(companyId: number): boolean {
+  const dir = getAnalyticsDbDir();
+  const dbPath = path.join(dir, `${companyId}.duckdb`);
+  return fs.existsSync(dbPath);
+}
+
+/**
  * Returns the DuckDB Database for the given company, creating it on first access.
  * Thread-safe: deduplicates concurrent init calls via initPromises.
  */

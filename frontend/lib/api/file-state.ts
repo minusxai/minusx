@@ -197,7 +197,8 @@ export async function loadFiles(fileIds: number[], ttl: number, skip: boolean): 
       const result = await FilesAPI.loadFiles(needsFetch);
       getStore().dispatch(setFiles({
         files: result.data,
-        references: result.metadata.references || []
+        references: result.metadata.references || [],
+        analyticsMap: result.metadata.analytics || {},
       }));
       // setFiles sets loading: false on all stored files
     });
