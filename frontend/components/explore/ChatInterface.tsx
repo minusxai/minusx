@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box, VStack, HStack, Text, Icon, Button, Spinner, Grid, GridItem } from '@chakra-ui/react';
-import { LuPlus, LuChevronDown, LuRefreshCw, LuSparkles, LuPin, LuShare2 } from 'react-icons/lu';
+import { LuPlus, LuChevronDown, LuRefreshCw, LuSparkles, LuPin, LuShare2, LuExpand } from 'react-icons/lu';
 import type { LoadError } from '@/lib/types/errors';
 import { AppState } from '@/lib/appState';
 import ChatInput from './ChatInput';
@@ -468,7 +468,28 @@ export default function ChatInterface({
           display="flex"
           justifyContent="center"
         >
-          <Box width="100%" display="flex" justifyContent="flex-end" alignItems="center" px={5}>
+          <Box width="100%" display="flex" justifyContent="space-between" alignItems="center" px={5}>
+            <Box>
+            {container === 'sidebar' && (
+              <Tooltip content="Open in explore" positioning={{ placement: 'bottom' }}>
+                <Button
+                  onClick={() => {
+                    const path = conversationID && conversationID > 0
+                      ? `/explore/${conversationID}`
+                      : '/explore';
+                    router.push(preserveParams(path));
+                  }}
+                  size="xs"
+                  variant="outline"
+                  borderColor="border.muted"
+                  color="fg.subtle"
+                  _hover={{ color: 'accent.teal', borderColor: 'accent.teal' }}
+                >
+                  <LuExpand />
+                </Button>
+              </Tooltip>
+            )}
+            </Box>
             <HStack gap={2}>
               {setAsActiveButton}
               {newChatButton}
