@@ -17,7 +17,17 @@ export type Query = string;
 /**
  * type of the visualization (default is table)
  */
-export type VisualizationType = "table" | "bar" | "line" | "scatter" | "area" | "funnel" | "pie" | "pivot" | "trend";
+export type VisualizationType =
+  | "table"
+  | "bar"
+  | "line"
+  | "scatter"
+  | "area"
+  | "funnel"
+  | "pie"
+  | "pivot"
+  | "trend"
+  | "waterfall";
 /**
  * list of column names in the x axis (for non-pivot chart types)
  */

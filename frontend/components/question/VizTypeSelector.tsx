@@ -15,6 +15,7 @@ import {
   LuChartPie,
   LuGrid3X3,
   LuTrendingUp,
+  LuChartNoAxesColumn,
 } from 'react-icons/lu';
 import type { VizSettings } from '@/lib/types';
 
@@ -34,6 +35,7 @@ const VIZ_TYPES: VizTypeOption[] = [
   { type: 'pie', icon: <LuChartPie size={18} />, label: 'Pie chart' },
   { type: 'pivot', icon: <LuTable2 size={18} />, label: 'Pivot table' },
   { type: 'trend', icon: <LuTrendingUp size={18} />, label: 'Trend' },
+  { type: 'waterfall', icon: <LuChartNoAxesColumn size={18} />, label: 'Waterfall chart' },
 ];
 
 interface VizTypeSelectorProps {

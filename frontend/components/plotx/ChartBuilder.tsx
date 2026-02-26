@@ -12,6 +12,7 @@ import { PivotTable } from './PivotTable'
 import { PivotAxisBuilder } from './PivotAxisBuilder'
 import { SingleValue } from './SingleValue'
 import { TrendPlot } from './TrendPlot'
+import { WaterfallPlot } from './WaterfallPlot'
 import { DrillDownCard, type DrillDownState } from './DrillDownCard'
 import { AxisBuilder, type AxisZone } from './AxisBuilder'
 import { resolveColumnType } from './AxisComponents'
@@ -23,7 +24,7 @@ interface ChartBuilderProps {
   columns: string[]
   types: string[]
   rows: Record<string, any>[]
-  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend'
+  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall'
   initialXCols?: string[]
   initialYCols?: string[]
   onAxisChange?: (xCols: string[], yCols: string[]) => void
@@ -549,6 +550,19 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                   )}
                   {chartType === 'trend' && (
                     <TrendPlot series={aggregatedData.series} columnFormats={columnFormats} yAxisColumns={yAxisColumns} />
+                  )}
+                  {chartType === 'waterfall' && (
+                    <WaterfallPlot
+                      xAxisData={aggregatedData.xAxisData}
+                      series={aggregatedData.series}
+                      xAxisLabel={getDisplayName(xAxisColumns[0])}
+                      yAxisLabel={buildYAxisLabel(yAxisColumns)}
+                      xAxisColumns={xAxisColumns}
+                      columnFormats={columnFormats}
+                      yAxisColumns={yAxisColumns}
+                      height={useCompactView && !fillHeight ? 300 : undefined}
+                      onChartClick={handleChartClick}
+                    />
                   )}
                 </Box>
               )}

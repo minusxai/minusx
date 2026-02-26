@@ -11,7 +11,7 @@ export const aggregateData = (
   rows: Record<string, any>[],
   xAxisColumns: string[],
   yAxisColumns: string[],
-  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend'
+  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall'
 ): AggregatedData => {
   if (yAxisColumns.length === 0) {
     return { xAxisData: [], series: [] }

@@ -290,7 +290,8 @@ export function QuestionVisualization({
                   currentState?.vizSettings?.type === 'funnel' ||
                   currentState?.vizSettings?.type === 'pie' ||
                   currentState?.vizSettings?.type === 'pivot' ||
-                  currentState?.vizSettings?.type === 'trend') && (
+                  currentState?.vizSettings?.type === 'trend' ||
+                  currentState?.vizSettings?.type === 'waterfall') && (
                   <Box flex="1" width="100%" overflow="hidden" minHeight="0" display="flex">
                     <ChartBuilder
                       columns={data.columns}
