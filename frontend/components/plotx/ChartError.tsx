@@ -1,12 +1,33 @@
 import { Box, Text, VStack } from '@chakra-ui/react'
-import { LuTriangleAlert } from 'react-icons/lu'
+import { LuTriangleAlert, LuInfo } from 'react-icons/lu'
 
 interface ChartErrorProps {
   title?: string
   message: string
+  variant?: 'warning' | 'info'
 }
 
-export const ChartError = ({ title = 'Chart configuration error', message }: ChartErrorProps) => {
+const VARIANT_STYLES = {
+  warning: {
+    color: 'orange.500',
+    bg: 'orange.500/6',
+    borderColor: 'orange.500/20',
+    iconBg: 'orange.500/12',
+    Icon: LuTriangleAlert,
+  },
+  info: {
+    color: 'teal.500',
+    bg: 'teal.500/6',
+    borderColor: 'teal.500/20',
+    iconBg: 'teal.500/12',
+    Icon: LuInfo,
+  },
+} as const
+
+export const ChartError = ({ title, message, variant = 'warning' }: ChartErrorProps) => {
+  const style = VARIANT_STYLES[variant]
+  const defaultTitle = variant === 'info' ? 'No data to display' : 'Chart configuration error'
+
   return (
     <Box
       display="flex"
@@ -18,9 +39,9 @@ export const ChartError = ({ title = 'Chart configuration error', message }: Cha
       p={8}
     >
       <Box
-        bg="orange.500/6"
+        bg={style.bg}
         border="1px solid"
-        borderColor="orange.500/20"
+        borderColor={style.borderColor}
         borderRadius="xl"
         px={8}
         py={7}
@@ -28,16 +49,16 @@ export const ChartError = ({ title = 'Chart configuration error', message }: Cha
       >
         <VStack gap={3} textAlign="center">
           <Box
-            bg="orange.500/12"
+            bg={style.iconBg}
             borderRadius="full"
             p={3}
-            color="orange.500"
+            color={style.color}
             fontSize="xl"
           >
-            <LuTriangleAlert />
+            <style.Icon />
           </Box>
           <Text fontSize="lg" fontWeight="700" fontFamily="mono" color="fg.default">
-            {title}
+            {title || defaultTitle}
           </Text>
           <Text fontSize="md" fontFamily="mono" color="fg.subtle" lineHeight="tall">
             {message}

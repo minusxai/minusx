@@ -3,6 +3,7 @@ import { Box } from '@chakra-ui/react'
 import { useAppSelector } from '@/store/hooks'
 import { EChart } from './EChart'
 import { useChartContainer } from './useChartContainer'
+import { ChartError } from './ChartError'
 import { isValidChartData, resolveChartFormats, buildToolbox, getTimestamp, type ChartProps } from '@/lib/chart/chart-utils'
 import { withMinusXTheme, COLOR_PALETTE } from '@/lib/chart/echarts-theme'
 import type { EChartsOption } from 'echarts'
@@ -144,6 +145,14 @@ export const PiePlot = (props: PiePlotProps) => {
 
     return withMinusXTheme(baseOption, colorMode)
   }, [xAxisData, series, colorMode, containerWidth, containerHeight, fmtName, fmtValue])
+
+  if ((xAxisColumns?.length ?? 0) > 1) {
+    return <ChartError message="Pie charts support only a single X-axis column. Remove extra columns from the X axis to continue." />
+  }
+
+  if ((yAxisColumns?.length ?? 0) > 1) {
+    return <ChartError message="Pie charts support only a single Y-axis column. Remove extra columns from the Y axis to continue." />
+  }
 
   if (!isValidChartData(xAxisData, series)) {
     return (

@@ -13,6 +13,7 @@ import { PivotAxisBuilder } from './PivotAxisBuilder'
 import { SingleValue } from './SingleValue'
 import { TrendPlot } from './TrendPlot'
 import { WaterfallPlot } from './WaterfallPlot'
+import { ChartError } from './ChartError'
 import { DrillDownCard, type DrillDownState } from './DrillDownCard'
 import { AxisBuilder, type AxisZone } from './AxisBuilder'
 import { resolveColumnType } from './AxisComponents'
@@ -405,21 +406,11 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
               valueColumns={pivotConfig?.values.map(v => v.column)}
             />
           ) : (
-            <Box
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
-              width="100%"
-              color="fg.muted"
-              fontSize="sm"
-            >
-              <VStack gap={2}>
-                <Text fontWeight="600">No data to display</Text>
-                <Text fontSize="xs" color="fg.subtle">
-                  Drag columns to Rows, Columns, and Values to build your pivot table
-                </Text>
-              </VStack>
-            </Box>
+            <ChartError
+              variant="info"
+              title="No data to display"
+              message="Drag columns to Rows, Columns, and Values to build your pivot table"
+            />
           )}
         </Box>
 
@@ -568,21 +559,11 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
               )}
             </>
           ) : (
-            <Box
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
-              height="100%"
-              color="fg.muted"
-              fontSize="sm"
-            >
-              <VStack gap={2}>
-                <Text fontWeight="600">No data to display</Text>
-                <Text fontSize="xs" color="fg.subtle">
-                  Drag at least one column to Y Axis to see aggregated values
-                </Text>
-              </VStack>
-            </Box>
+            <ChartError
+              variant="info"
+              title="No data to display"
+              message="Drag at least one column to Y Axis to see aggregated values"
+            />
           )}
         </Box>
       </VStack>
