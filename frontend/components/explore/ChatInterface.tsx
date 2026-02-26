@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box, VStack, HStack, Text, Icon, Button, Spinner, Grid, GridItem } from '@chakra-ui/react';
-import { LuPlus, LuChevronDown, LuRefreshCw, LuSparkles, LuPin } from 'react-icons/lu';
+import { LuPlus, LuChevronDown, LuRefreshCw, LuSparkles, LuPin, LuShare2 } from 'react-icons/lu';
 import type { LoadError } from '@/lib/types/errors';
 import { AppState } from '@/lib/appState';
 import ChatInput from './ChatInput';
@@ -14,6 +14,7 @@ import { useConversation } from '@/lib/hooks/useConversation';
 import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { Tooltip } from '@/components/ui/tooltip';
+import { toaster } from '@/components/ui/toaster';
 import ExampleQuestions from './message/ExampleQuestions';
 import FileNotFound from '../FileNotFound';
 import { deduplicateMessages } from './message/messageHelpers';
@@ -470,6 +471,17 @@ export default function ChatInterface({
             <HStack gap={2}>
               {setAsActiveButton}
               {newChatButton}
+              <Tooltip content="Copy link" positioning={{ placement: 'bottom' }}>
+                <Button
+                  onClick={() => { navigator.clipboard.writeText(window.location.href); toaster.create({ title: 'Link copied to clipboard', type: 'success' }); }}
+                  size="xs"
+                  bg="accent.teal"
+                  color="white"
+                  _hover={{ bg: 'accent.teal', opacity: 0.9 }}
+                >
+                  <LuShare2 />
+                </Button>
+              </Tooltip>
             </HStack>
           </Box>
         </Box>
