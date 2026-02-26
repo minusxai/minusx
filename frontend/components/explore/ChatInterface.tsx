@@ -21,6 +21,7 @@ import { deduplicateMessages } from './message/messageHelpers';
 import SimpleChatMessage from './SimpleChatMessage';
 import { parseThinkingAnswer } from '@/lib/utils/xml-parser';
 import { selectDatabase } from '@/lib/utils/database-selector';
+import { preserveParams } from '@/lib/navigation/url-utils';
 
 interface ChatInterfaceProps {
   conversationId?: number;  // Optional file ID: if provided, load existing conversation
@@ -473,7 +474,14 @@ export default function ChatInterface({
               {newChatButton}
               <Tooltip content="Copy link" positioning={{ placement: 'bottom' }}>
                 <Button
-                  onClick={() => { navigator.clipboard.writeText(window.location.href); toaster.create({ title: 'Link copied to clipboard', type: 'success' }); }}
+                  onClick={() => {
+                    const path = conversationID && conversationID > 0
+                      ? `/explore/${conversationID}`
+                      : window.location.pathname + window.location.search;
+                    const url = window.location.origin + preserveParams(path);
+                    navigator.clipboard.writeText(url);
+                    toaster.create({ title: 'Link copied to clipboard', type: 'success' });
+                  }}
                   size="xs"
                   bg="accent.teal"
                   color="white"
