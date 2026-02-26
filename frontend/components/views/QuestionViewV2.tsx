@@ -871,7 +871,8 @@ export default function QuestionViewV2({
                     showTypeButtons: showVizControls,
                     showChartBuilder: showVizControls,
                     // Always use horizontal (compact) to hide column sidebar - cleaner in side-by-side
-                    typesButtonsOrientation: 'horizontal'
+                    typesButtonsOrientation: 'horizontal',
+                    showTitle: viewMode === 'toolcall'
                   },
                   fixError: true
                 }}

@@ -13,6 +13,7 @@ export interface ChartProps {
   onChartClick?: (params: unknown) => void  // ECharts click event handler for drill-down
   columnFormats?: Record<string, ColumnFormatConfig>
   xAxisColumns?: string[]  // Actual X-axis column names (for format config lookup)
+  chartTitle?: string  // Title shown in chart and included in downloads
 }
 
 // Calculate axis label interval based on data length, container width, and max label length after truncation
@@ -312,10 +313,11 @@ interface BaseChartConfig {
   containerWidth?: number
   containerHeight?: number
   columnFormats?: Record<string, ColumnFormatConfig>
+  chartTitle?: string
 }
 
 export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
-  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats } = config
+  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle } = config
 
   // Resolve format configs for axes
   const { yDecimalPoints, xDateFormat } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
@@ -546,6 +548,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   }
 
   const baseOption: EChartsOption = {
+    ...(chartTitle ? { title: { text: chartTitle, left: 'center', top: 5 } } : {}),
     toolbox: buildToolbox(colorMode, downloadCsv),
     tooltip: chartType === 'scatter'
       ? {
@@ -587,7 +590,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
             .sort((a, b) => a.axis - b.axis) // Sort by axis (0=L first, 1=R second)
             .map(item => item.name)
         : series.map(s => s.name),
-      top: 10,
+      top: chartTitle ? 30 : 10,
       orient: 'horizontal',
       type: series.length > 10 ? 'scroll' : 'plain',
       pageIconSize: 10, // Smaller navigation buttons

@@ -23,6 +23,7 @@ export interface ContainerConfig {
     showTypeButtons: boolean;
     showChartBuilder: boolean;
     typesButtonsOrientation: 'horizontal' | 'vertical';
+    showTitle: boolean;
   };
     fixError: boolean;
 }
@@ -88,6 +89,19 @@ export function QuestionVisualization({
 
   const useCompactLayout = config.viz.typesButtonsOrientation === 'horizontal';
   const isChartType = currentState?.vizSettings?.type && currentState.vizSettings.type !== 'table';
+
+  // Build chart title for ECharts (included in image downloads)
+  const chartTitle = (() => {
+    if (!config.viz.showTitle || !currentState?.vizSettings) return undefined;
+    const yCols = currentState.vizSettings.yCols ?? [];
+    const xCols = currentState.vizSettings.xCols ?? [];
+    if (yCols.length === 0 && xCols.length === 0) return undefined;
+    const yPart = yCols.join(', ');
+    const xPart = xCols.length > 0 ? xCols[0] : '';
+    const splitPart = xCols.length > 1 ? xCols.slice(1).join(', ') : '';
+    const parts = [yPart, xPart && `vs ${xPart}`, splitPart && `split by ${splitPart}`].filter(Boolean).join(' ');
+    return parts || undefined;
+  })();
   return (
     <VStack gap={0} width="full" align="stretch" flex="1" overflow="hidden"
     borderRadius={'lg'} border={'1px solid'} borderColor={'border.muted'}>
@@ -311,6 +325,7 @@ export function QuestionVisualization({
                       initialColumnFormats={currentState.vizSettings?.columnFormats ?? undefined}
                       onColumnFormatsChange={onColumnFormatsChange}
                       settingsExpanded={useCompactLayout ? vizSettingsExpanded : undefined}
+                      chartTitle={chartTitle}
                     />
                   </Box>
                 )}

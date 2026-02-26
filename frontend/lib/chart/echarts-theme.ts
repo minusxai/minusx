@@ -97,7 +97,7 @@ const getMinusXTheme = (colorMode: 'light' | 'dark'): EChartsOption => {
       subtextStyle: {
         fontFamily: 'JetBrains Mono, Consolas, Monaco, Courier New, monospace',
         fontSize: 13,
-        color: theme.fgMuted,
+        color: theme.fgDefault,
       },
     },
 
@@ -258,6 +258,16 @@ export function withMinusXTheme(options: EChartsOption, colorMode: 'light' | 'da
       ...minusXTheme.grid,
       ...options.grid,
     },
+    ...(options.title ? {
+      title: {
+        ...minusXTheme.title,
+        ...options.title,
+        textStyle: {
+          ...(minusXTheme.title as any)?.textStyle,
+          ...(options.title as any)?.textStyle,
+        },
+      },
+    } : {}),
   }
 
   // Handle legend - deep merge to preserve theme styling

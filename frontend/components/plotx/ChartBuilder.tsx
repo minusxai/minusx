@@ -39,6 +39,7 @@ interface ChartBuilderProps {
   initialColumnFormats?: Record<string, ColumnFormatConfig>
   onColumnFormatsChange?: (formats: Record<string, ColumnFormatConfig>) => void
   settingsExpanded?: boolean
+  chartTitle?: string
 }
 
 interface GroupedColumns {
@@ -47,7 +48,7 @@ interface GroupedColumns {
   categories: string[]
 }
 
-export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, settingsExpanded: settingsExpandedProp }: ChartBuilderProps) => {
+export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, settingsExpanded: settingsExpandedProp, chartTitle }: ChartBuilderProps) => {
   // Group columns by type
   const groupedColumns: GroupedColumns = useMemo(() => {
     const groups: GroupedColumns = {
@@ -472,6 +473,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
+                      chartTitle={chartTitle}
                     />
                   )}
                   {chartType === 'bar' && (
@@ -485,6 +487,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
+                      chartTitle={chartTitle}
                     />
                   )}
                   {chartType === 'area' && (
@@ -498,6 +501,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
+                      chartTitle={chartTitle}
                     />
                   )}
                   {chartType === 'scatter' && (
@@ -511,6 +515,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
+                      chartTitle={chartTitle}
                     />
                   )}
                   {chartType === 'funnel' && (
@@ -524,6 +529,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
+                      chartTitle={chartTitle}
                     />
                   )}
                   {chartType === 'pie' && (
@@ -537,6 +543,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
+                      chartTitle={chartTitle}
                     />
                   )}
                   {chartType === 'trend' && (
@@ -553,6 +560,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       yAxisColumns={yAxisColumns}
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
+                      chartTitle={chartTitle}
                     />
                   )}
                 </Box>

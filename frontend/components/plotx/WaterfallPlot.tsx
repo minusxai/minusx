@@ -13,7 +13,7 @@ interface WaterfallPlotProps extends ChartProps {
 }
 
 export const WaterfallPlot = (props: WaterfallPlotProps) => {
-  const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns } = props
+  const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns, chartTitle } = props
   const colorMode = useAppSelector((state) => state.ui.colorMode)
   const { containerRef, containerWidth, containerHeight, chartEvents } = useChartContainer(onChartClick)
 
@@ -92,6 +92,7 @@ export const WaterfallPlot = (props: WaterfallPlotProps) => {
     const decreaseColor = '#e74c3c' // red
 
     const baseOption: EChartsOption = {
+      ...(chartTitle ? { title: { text: chartTitle, left: 'center', top: 5 } } : {}),
       toolbox: buildToolbox(colorMode, downloadCsv),
       tooltip: {
         trigger: 'axis',

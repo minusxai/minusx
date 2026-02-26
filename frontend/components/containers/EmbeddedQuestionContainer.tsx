@@ -125,7 +125,8 @@ export default function EmbeddedQuestionContainer({
     viz: {
       showTypeButtons: false,
       showChartBuilder: false,
-      typesButtonsOrientation: 'vertical'
+      typesButtonsOrientation: 'vertical',
+      showTitle: false
     },
     fixError: false
   };
