@@ -39,7 +39,7 @@ interface ChartBuilderProps {
   initialColumnFormats?: Record<string, ColumnFormatConfig>
   onColumnFormatsChange?: (formats: Record<string, ColumnFormatConfig>) => void
   settingsExpanded?: boolean
-  chartTitle?: string
+  showChartTitle?: boolean
 }
 
 interface GroupedColumns {
@@ -48,7 +48,7 @@ interface GroupedColumns {
   categories: string[]
 }
 
-export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, settingsExpanded: settingsExpandedProp, chartTitle }: ChartBuilderProps) => {
+export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true }: ChartBuilderProps) => {
   // Group columns by type
   const groupedColumns: GroupedColumns = useMemo(() => {
     const groups: GroupedColumns = {
@@ -133,6 +133,16 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
 
   // Helper: resolve display name using alias
   const getDisplayName = useCallback((col: string) => columnFormats[col]?.alias || col, [columnFormats])
+
+  // Build chart title from axis columns using aliases
+  const chartTitle = useMemo(() => {
+    if (yAxisColumns.length === 0 && xAxisColumns.length === 0) return undefined
+    const yPart = yAxisColumns.map(getDisplayName).join(', ')
+    const xPart = xAxisColumns.length > 0 ? getDisplayName(xAxisColumns[0]) : ''
+    const splitPart = xAxisColumns.length > 1 ? xAxisColumns.slice(1).map(getDisplayName).join(', ') : ''
+    const parts = [yPart, xPart && `vs ${xPart}`, splitPart && `split by ${splitPart}`].filter(Boolean).join(' ')
+    return parts || undefined
+  }, [xAxisColumns, yAxisColumns, getDisplayName])
 
   // Build a y-axis label that fits on ~1 line (~40 chars),
   // showing as many column names as fit and "(and X other metrics)" for the rest
@@ -474,6 +484,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
                       chartTitle={chartTitle}
+                      showChartTitle={showChartTitle}
                     />
                   )}
                   {chartType === 'bar' && (
@@ -488,6 +499,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
                       chartTitle={chartTitle}
+                      showChartTitle={showChartTitle}
                     />
                   )}
                   {chartType === 'area' && (
@@ -502,6 +514,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
                       chartTitle={chartTitle}
+                      showChartTitle={showChartTitle}
                     />
                   )}
                   {chartType === 'scatter' && (
@@ -516,6 +529,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
                       chartTitle={chartTitle}
+                      showChartTitle={showChartTitle}
                     />
                   )}
                   {chartType === 'funnel' && (
@@ -530,6 +544,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
                       chartTitle={chartTitle}
+                      showChartTitle={showChartTitle}
                     />
                   )}
                   {chartType === 'pie' && (
@@ -544,6 +559,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
                       chartTitle={chartTitle}
+                      showChartTitle={showChartTitle}
                     />
                   )}
                   {chartType === 'trend' && (
@@ -561,6 +577,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       height={useCompactView && !fillHeight ? 300 : undefined}
                       onChartClick={handleChartClick}
                       chartTitle={chartTitle}
+                      showChartTitle={showChartTitle}
                     />
                   )}
                 </Box>

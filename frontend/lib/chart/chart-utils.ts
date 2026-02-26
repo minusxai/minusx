@@ -14,6 +14,7 @@ export interface ChartProps {
   columnFormats?: Record<string, ColumnFormatConfig>
   xAxisColumns?: string[]  // Actual X-axis column names (for format config lookup)
   chartTitle?: string  // Title shown in chart and included in downloads
+  showChartTitle?: boolean  // Whether to show title in chart (always shown in downloads)
 }
 
 // Calculate axis label interval based on data length, container width, and max label length after truncation
@@ -165,16 +166,40 @@ export const getTimestamp = () => {
 // Build toolbox configuration for charts (PNG + CSV download)
 export const buildToolbox = (
   colorMode: 'light' | 'dark',
-  downloadCsv: () => void
+  downloadCsv: () => void,
+  chartTitle?: string
 ) => ({
   feature: {
-    saveAsImage: {
-      type: 'png' as const,
-      name: `chart-${getTimestamp()}`,
+    mySaveAsImage: {
+      show: true,
       title: '',
-      pixelRatio: 2,
-      backgroundColor: colorMode === 'dark' ? '#1a1a1a' : '#ffffff',
       icon: `image://data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${colorMode === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10l-3.1-3.1a2 2 0 0 0-2.814.014L6 21"/><path d="m14 19 3 3v-5.5"/><path d="m17 22 3-3"/><circle cx="9" cy="9" r="2"/></svg>`)}`,
+      onclick: function (this: { ecModel: { scheduler: { ecInstance: any } } }) {
+        const chart = this.ecModel?.scheduler?.ecInstance
+        if (!chart) return
+
+        // Temporarily show title and shift legend down for export
+        const hasHiddenTitle = chartTitle && chart.getOption()?.title?.[0]?.show === false
+        if (hasHiddenTitle) {
+          chart.setOption({ title: { show: true }, legend: { top: 35 } }, false)
+        }
+
+        const url = chart.getDataURL({
+          type: 'png',
+          pixelRatio: 2,
+          backgroundColor: colorMode === 'dark' ? '#1a1a1a' : '#ffffff',
+        })
+
+        // Restore hidden title and legend position
+        if (hasHiddenTitle) {
+          chart.setOption({ title: { show: false }, legend: { top: 10 } }, false)
+        }
+
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `chart-${getTimestamp()}.png`
+        link.click()
+      },
     },
     myDownloadCsv: {
       show: true,
@@ -189,7 +214,7 @@ export const buildToolbox = (
     show: true,
     formatter: (param: { name: string }) => {
       const labels: Record<string, string> = {
-        saveAsImage: 'Save as PNG',
+        mySaveAsImage: 'Save as PNG',
         myDownloadCsv: 'Download CSV',
       }
       return labels[param.name] || param.name
@@ -314,10 +339,11 @@ interface BaseChartConfig {
   containerHeight?: number
   columnFormats?: Record<string, ColumnFormatConfig>
   chartTitle?: string
+  showChartTitle?: boolean
 }
 
 export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
-  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle } = config
+  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true } = config
 
   // Resolve format configs for axes
   const { yDecimalPoints, xDateFormat } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
@@ -548,8 +574,8 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   }
 
   const baseOption: EChartsOption = {
-    ...(chartTitle ? { title: { text: chartTitle, left: 'center', top: 5 } } : {}),
-    toolbox: buildToolbox(colorMode, downloadCsv),
+    ...(chartTitle ? { title: { text: chartTitle, left: 'center', top: 5, show: showChartTitle } } : {}),
+    toolbox: buildToolbox(colorMode, downloadCsv, chartTitle),
     tooltip: chartType === 'scatter'
       ? {
           trigger: 'item',
@@ -590,7 +616,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
             .sort((a, b) => a.axis - b.axis) // Sort by axis (0=L first, 1=R second)
             .map(item => item.name)
         : series.map(s => s.name),
-      top: chartTitle ? 30 : 10,
+      top: chartTitle && showChartTitle ? 30 : 10,
       orient: 'horizontal',
       type: series.length > 10 ? 'scroll' : 'plain',
       pageIconSize: 10, // Smaller navigation buttons

@@ -13,7 +13,7 @@ interface PiePlotProps extends ChartProps {
 }
 
 export const PiePlot = (props: PiePlotProps) => {
-  const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns, chartTitle } = props
+  const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns, chartTitle, showChartTitle = true } = props
   const colorMode = useAppSelector((state) => state.ui.colorMode)
   const { containerRef, containerWidth, containerHeight, chartEvents } = useChartContainer(onChartClick)
 
@@ -78,8 +78,8 @@ export const PiePlot = (props: PiePlotProps) => {
     }
 
     const baseOption: EChartsOption = {
-      ...(chartTitle ? { title: { text: chartTitle, left: 'center', top: 5 } } : {}),
-      toolbox: buildToolbox(colorMode, downloadCsv),
+      ...(chartTitle ? { title: { text: chartTitle, left: 'center', top: 5, show: showChartTitle } } : {}),
+      toolbox: buildToolbox(colorMode, downloadCsv, chartTitle),
       tooltip: {
         trigger: 'item',
         appendToBody: true,
@@ -92,7 +92,7 @@ export const PiePlot = (props: PiePlotProps) => {
       },
       legend: {
         data: pieData.map(d => d.name),
-        top: chartTitle ? 35 : 10,
+        top: chartTitle && showChartTitle ? 35 : 10,
         orient: 'horizontal',
         type: pieData.length > 10 ? 'scroll' : 'plain',
         pageIconSize: 10,
