@@ -40,6 +40,7 @@ services:
       - NODE_ENV=production
       - NEXT_PUBLIC_BACKEND_URL=http://backend:8001
       - BASE_DUCKDB_DATA_PATH=/app
+      - ANALYTICS_DB_DIR=/app/data/analytics
     env_file:
       - ./frontend/.env
     depends_on:
