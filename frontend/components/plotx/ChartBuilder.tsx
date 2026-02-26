@@ -131,6 +131,35 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   // Helper: resolve display name using alias
   const getDisplayName = useCallback((col: string) => columnFormats[col]?.alias || col, [columnFormats])
 
+  // Build a y-axis label that fits on ~1 line (~40 chars),
+  // showing as many column names as fit and "(and X other metrics)" for the rest
+  const buildYAxisLabel = useCallback((cols: string[]): string => {
+    if (cols.length === 0) return ''
+    const names = cols.map(getDisplayName)
+    if (cols.length === 1) return names[0]
+
+    const maxLength = 60
+    const separator = ' | '
+    let label = names[0]
+    let includedCount = 1
+
+    for (let i = 1; i < names.length; i++) {
+      const remaining = names.length - includedCount - 1
+      const suffix = remaining > 0 ? `${separator}(+ ${remaining} other metric${remaining > 1 ? 's' : ''})` : ''
+      const candidate = `${label}${separator}${names[i]}`
+
+      if (candidate.length + suffix.length > maxLength) break
+      label = candidate
+      includedCount++
+    }
+
+    const excluded = names.length - includedCount
+    if (excluded > 0) {
+      label += `${separator}(+ ${excluded} other metric${excluded > 1 ? 's' : ''})`
+    }
+    return label
+  }, [getDisplayName])
+
   // Handle drop on X axis
   const handleDropX = useCallback((col: string) => {
     if (!xAxisColumns.includes(col)) {
@@ -444,8 +473,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                     <LinePlot
                       xAxisData={aggregatedData.xAxisData}
                       series={aggregatedData.series}
-                      xAxisLabel={xAxisColumns.map(getDisplayName).join(' | ')}
-                      yAxisLabel={yAxisColumns.map(getDisplayName).join(' | ')}
+                      xAxisLabel={getDisplayName(xAxisColumns[0])}
+                      yAxisLabel={buildYAxisLabel(yAxisColumns)}
                       xAxisColumns={xAxisColumns}
                       columnFormats={columnFormats}
                       yAxisColumns={yAxisColumns}
@@ -457,8 +486,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                     <BarPlot
                       xAxisData={aggregatedData.xAxisData}
                       series={aggregatedData.series}
-                      xAxisLabel={xAxisColumns.map(getDisplayName).join(' | ')}
-                      yAxisLabel={yAxisColumns.map(getDisplayName).join(' | ')}
+                      xAxisLabel={getDisplayName(xAxisColumns[0])}
+                      yAxisLabel={buildYAxisLabel(yAxisColumns)}
                       xAxisColumns={xAxisColumns}
                       columnFormats={columnFormats}
                       yAxisColumns={yAxisColumns}
@@ -470,8 +499,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                     <AreaPlot
                       xAxisData={aggregatedData.xAxisData}
                       series={aggregatedData.series}
-                      xAxisLabel={xAxisColumns.map(getDisplayName).join(' | ')}
-                      yAxisLabel={yAxisColumns.map(getDisplayName).join(' | ')}
+                      xAxisLabel={getDisplayName(xAxisColumns[0])}
+                      yAxisLabel={buildYAxisLabel(yAxisColumns)}
                       xAxisColumns={xAxisColumns}
                       columnFormats={columnFormats}
                       yAxisColumns={yAxisColumns}
@@ -483,8 +512,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                     <ScatterPlot
                       xAxisData={aggregatedData.xAxisData}
                       series={aggregatedData.series}
-                      xAxisLabel={xAxisColumns.map(getDisplayName).join(' | ')}
-                      yAxisLabel={yAxisColumns.map(getDisplayName).join(' | ')}
+                      xAxisLabel={getDisplayName(xAxisColumns[0])}
+                      yAxisLabel={buildYAxisLabel(yAxisColumns)}
                       xAxisColumns={xAxisColumns}
                       columnFormats={columnFormats}
                       yAxisColumns={yAxisColumns}
@@ -496,8 +525,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                     <FunnelPlot
                       xAxisData={aggregatedData.xAxisData}
                       series={aggregatedData.series}
-                      xAxisLabel={xAxisColumns.map(getDisplayName).join(' | ')}
-                      yAxisLabel={yAxisColumns.map(getDisplayName).join(' | ')}
+                      xAxisLabel={getDisplayName(xAxisColumns[0])}
+                      yAxisLabel={buildYAxisLabel(yAxisColumns)}
                       xAxisColumns={xAxisColumns}
                       columnFormats={columnFormats}
                       yAxisColumns={yAxisColumns}
@@ -509,8 +538,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                     <PiePlot
                       xAxisData={aggregatedData.xAxisData}
                       series={aggregatedData.series}
-                      xAxisLabel={xAxisColumns.map(getDisplayName).join(' | ')}
-                      yAxisLabel={yAxisColumns.map(getDisplayName).join(' | ')}
+                      xAxisLabel={getDisplayName(xAxisColumns[0])}
+                      yAxisLabel={buildYAxisLabel(yAxisColumns)}
                       xAxisColumns={xAxisColumns}
                       columnFormats={columnFormats}
                       yAxisColumns={yAxisColumns}

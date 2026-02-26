@@ -402,7 +402,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   const wrapAxisName = (name: string | undefined, maxLength: number = 40): string => {
     if (!name || name.length <= maxLength) return name || ''
 
-    const maxLines = 3  // Maximum number of lines before truncating
+    const maxLines = 2  // Maximum number of lines before truncating
 
     // Split into chunks of maxLength
     const lines: string[] = []
