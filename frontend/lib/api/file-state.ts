@@ -986,7 +986,8 @@ export async function reloadFile(options: ReloadFileOptions): Promise<void> {
     // Update Redux with fresh data
     getStore().dispatch(setFile({
       file: result.data,
-      references: result.metadata.references || []
+      references: result.metadata.references || [],
+      analytics: result.metadata.analytics,
     }));
   } finally {
     // Clear loading state

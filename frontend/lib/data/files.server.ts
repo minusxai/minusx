@@ -122,19 +122,6 @@ class FilesDataLayerServer implements IFilesDataLayer {
     );
     console.log(`[FILES DataLayer] Custom loaders took ${Date.now() - loaderStart}ms`);
 
-    // Track read_direct event (fire-and-forget)
-    trackFileEvent({
-      eventType: 'read_direct',
-      fileId: transformedFile.id,
-      fileType: transformedFile.type,
-      filePath: transformedFile.path,
-      fileName: transformedFile.name,
-      userId: user.userId,
-      userEmail: user.email,
-      userRole: user.role,
-      companyId: user.companyId,
-    }).catch(err => console.error('[analytics] trackFileEvent failed:', err));
-
     return {
       data: transformedFile,
       metadata: { references: transformedReferences, analytics }

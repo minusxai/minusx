@@ -139,7 +139,7 @@ const filesSlice = createSlice({
       // Extract references from content
       const referenceIds = extractReferences(file);
 
-      // Store the main file
+      // Store the main file — preserve existing analytics when not explicitly provided
       state.files[file.id] = {
         ...file,
         references: referenceIds,
@@ -149,13 +149,11 @@ const filesSlice = createSlice({
         loadError: null,
         persistableChanges: {},
         ephemeralChanges: {},
-        metadataChanges: {}
+        metadataChanges: {},
+        analytics: 'analytics' in action.payload
+          ? action.payload.analytics
+          : state.files[file.id]?.analytics,
       };
-
-      // Only overwrite analytics if explicitly provided (avoids clearing it on save)
-      if ('analytics' in action.payload) {
-        state.files[file.id].analytics = action.payload.analytics;
-      }
 
       // Update path index (only for real files with positive IDs)
       // Cleanup: remove path-placeholder when real file arrives

@@ -37,9 +37,9 @@ function toISOOrNull(val: unknown): string | null {
 const AGGREGATION_SQL = `
 SELECT
   COUNT(*) FILTER (WHERE event_type = 'read_direct') AS "totalViews",
-  COUNT(DISTINCT user_email) FILTER (WHERE event_type = 'read_direct') AS "uniqueViewers",
+  COUNT(DISTINCT user_id) FILTER (WHERE event_type = 'read_direct') AS "uniqueViewers",
   COUNT(*) FILTER (WHERE event_type = 'updated') AS "totalEdits",
-  COUNT(DISTINCT user_email) FILTER (WHERE event_type = 'updated') AS "uniqueEditors",
+  COUNT(DISTINCT user_id) FILTER (WHERE event_type = 'updated') AS "uniqueEditors",
   COUNT(DISTINCT referenced_by_file_id) FILTER (WHERE event_type = 'read_as_reference') AS "usedByFiles",
   MIN(timestamp) FILTER (WHERE event_type = 'created') AS "createdAt",
   MAX(timestamp) FILTER (WHERE event_type = 'updated') AS "lastEditedAt"
@@ -113,9 +113,9 @@ export async function getFilesAnalyticsSummary(
 SELECT
   file_id AS "fileId",
   COUNT(*) FILTER (WHERE event_type = 'read_direct') AS "totalViews",
-  COUNT(DISTINCT user_email) FILTER (WHERE event_type = 'read_direct') AS "uniqueViewers",
+  COUNT(DISTINCT user_id) FILTER (WHERE event_type = 'read_direct') AS "uniqueViewers",
   COUNT(*) FILTER (WHERE event_type = 'updated') AS "totalEdits",
-  COUNT(DISTINCT user_email) FILTER (WHERE event_type = 'updated') AS "uniqueEditors",
+  COUNT(DISTINCT user_id) FILTER (WHERE event_type = 'updated') AS "uniqueEditors",
   COUNT(DISTINCT referenced_by_file_id) FILTER (WHERE event_type = 'read_as_reference') AS "usedByFiles",
   MIN(timestamp) FILTER (WHERE event_type = 'created') AS "createdAt",
   MAX(timestamp) FILTER (WHERE event_type = 'updated') AS "lastEditedAt"
