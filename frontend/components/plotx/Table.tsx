@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Table as ChakraTable, Box, HStack, Button, Text, VStack, Menu, Portal, Icon } from '@chakra-ui/react'
+import { Table as ChakraTable, Box, HStack, Button, Text, VStack, Menu, Portal, Icon, Spinner } from '@chakra-ui/react'
 import { LuChevronLeft, LuChevronRight, LuChevronDown, LuType, LuHash, LuCalendar, LuColumns3, LuCheck } from 'react-icons/lu'
 import { calculateColumnStats, ColumnStats, getColumnType, loadDataIntoTable, generateRandomTableName } from '@/lib/database/duckdb'
 import { calculateHistogram } from '@/lib/chart/histogram'
@@ -222,7 +222,7 @@ export const Table = ({ columns, types, rows, pageSize: fixedPageSize }: TablePr
         </Box>
       ) : (
       <Box overflow="auto" flex="1" minHeight="0">
-        <ChakraTable.Root key={displayColumnIndices.join(',')} variant="outline" size="sm" tableLayout="auto">
+        <ChakraTable.Root key={displayColumnIndices.join(',')} variant="outline" size="sm" tableLayout="fixed">
           <ChakraTable.Header position="sticky" top={0} zIndex={1} bg="bg.muted">
             <ChakraTable.Row bg="bg.muted">
               {displayColumnIndices.map((originalIndex, displayIndex) => {
@@ -237,6 +237,7 @@ export const Table = ({ columns, types, rows, pageSize: fixedPageSize }: TablePr
                     py={3}
                     px={4}
                     textAlign="left"
+                    width={`${100 / displayColumnIndices.length}%`}
                     borderRight="1px solid"
                     borderRightColor="border.default"
                     _last={{ borderRight: 'none' }}
@@ -252,54 +253,61 @@ export const Table = ({ columns, types, rows, pageSize: fixedPageSize }: TablePr
                           {column}
                         </Text>
                       </HStack>
-                      {stats && stats[column] && (
-                        <>
-                          <Text
-                            fontSize="2xs"
-                            color="fg.subtle"
-                            fontFamily="mono"
-                            fontWeight="400"
-                          >
-                            {stats[column].type === 'number' && (
-                              <>
-                                avg: {stats[column].avg.toLocaleString('en-US', { maximumFractionDigits: 0 })}
-                              </>
+                      <Box h="100px" w="100%" overflow="hidden">
+                        {loadingStats && !stats && (
+                          <Box w="100%" h="100%" display="flex" alignItems="center" justifyContent="center">
+                            <Spinner size="sm" color="fg.subtle" />
+                          </Box>
+                        )}
+                        {stats && stats[column] && (
+                          <>
+                            <Text
+                              fontSize="2xs"
+                              color="fg.subtle"
+                              fontFamily="mono"
+                              fontWeight="400"
+                            >
+                              {stats[column].type === 'number' && (
+                                <>
+                                  avg: {stats[column].avg.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+                                </>
+                              )}
+                              {stats[column].type === 'date' && (
+                                <>
+                                  {stats[column].unique} unique
+                                </>
+                              )}
+                              {stats[column].type === 'text' && (
+                                <>
+                                  {stats[column].unique} unique
+                                </>
+                              )}
+                            </Text>
+                            {stats[column].type === 'text' && stats[column].topValues.length > 0 && (
+                              <Box mt={1} w={"100%"}>
+                                <MiniBarChart
+                                  data={stats[column].topValues}
+                                  totalUnique={stats[column].unique}
+                                  color={getTypeColor(columnTypes[originalIndex])}
+                                  height={75}
+                                />
+                              </Box>
                             )}
-                            {stats[column].type === 'date' && (
-                              <>
-                                {stats[column].unique} unique
-                              </>
+                            {(stats[column].type === 'number' || stats[column].type === 'date') && histograms[column] && (
+                              <Box mt={1} w={"100%"}>
+                                <MiniHistogram
+                                  data={histograms[column]}
+                                  color={getTypeColor(columnTypes[originalIndex])}
+                                  height={30}
+                                  isDate={stats[column].type === 'date'}
+                                  isFirstColumn={displayIndex === 0}
+                                  isLastColumn={displayIndex === displayColumnIndices.length - 1}
+                                />
+                              </Box>
                             )}
-                            {stats[column].type === 'text' && (
-                              <>
-                                {stats[column].unique} unique
-                              </>
-                            )}
-                          </Text>
-                          {stats[column].type === 'text' && stats[column].topValues.length > 0 && (
-                            <Box mt={1} w={"100%"}>
-                              <MiniBarChart
-                                data={stats[column].topValues}
-                                totalUnique={stats[column].unique}
-                                color={getTypeColor(columnTypes[originalIndex])}
-                                height={75}
-                              />
-                            </Box>
-                          )}
-                          {(stats[column].type === 'number' || stats[column].type === 'date') && histograms[column] && (
-                            <Box mt={1} w={"100%"}>
-                              <MiniHistogram
-                                data={histograms[column]}
-                                color={getTypeColor(columnTypes[originalIndex])}
-                                height={30}
-                                isDate={stats[column].type === 'date'}
-                                isFirstColumn={displayIndex === 0}
-                                isLastColumn={displayIndex === displayColumnIndices.length - 1}
-                              />
-                            </Box>
-                          )}
-                        </>
-                      )}
+                          </>
+                        )}
+                      </Box>
                     </VStack>
                   </ChakraTable.ColumnHeader>
                 )
@@ -327,6 +335,9 @@ export const Table = ({ columns, types, rows, pageSize: fixedPageSize }: TablePr
                       borderRight="1px solid"
                       borderRightColor="border.muted"
                       _last={{ borderRight: 'none' }}
+                      overflow="hidden"
+                      textOverflow="ellipsis"
+                      whiteSpace="nowrap"
                     >
                       {formatValue(row[column], columnTypes[originalIndex])}
                     </ChakraTable.Cell>
