@@ -5,6 +5,7 @@ output*log
 *.db-shm
 *.db-wal
 *.duckdb
+*.duckdb.wal
 data/csv_connections
 
 # Backup files

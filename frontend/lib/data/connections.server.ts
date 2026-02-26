@@ -26,7 +26,7 @@ import {
   CreateConnectionInput
 } from './connections.interface';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { getSafeConfig, validateConnectionName, RESERVED_NAMES } from './helpers/connections';
+import { getSafeConfig, validateConnectionName, RESERVED_NAMES, validateDuckDbFilePath } from './helpers/connections';
 import { resolvePath } from '@/lib/mode/path-resolver';
 
 class ConnectionsDataLayerServer implements IConnectionsDataLayer {
@@ -101,6 +101,8 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
       throw new Error(`Connection name "${input.name}" is reserved`);
     }
 
+    validateDuckDbFilePath(input.type, input.config, user.companyId);
+
     // Check duplicates
     const connectionPath = resolvePath(user.mode, `/database/${input.name}`);
     const existing = await DocumentDB.getByPath(connectionPath, user.companyId);
@@ -156,6 +158,7 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
     }
 
     const content = conn.content as ConnectionContent;
+    validateDuckDbFilePath(content.type, config, user.companyId);
     content.config = config;
 
     await DocumentDB.update(conn.id, name, conn.path, content, [], user.companyId);  // Phase 6: Connections have no references

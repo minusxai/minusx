@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { handleApiError, ApiErrors } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
+import { validateDuckDbFilePath } from '@/lib/data/helpers/connections';
 
 interface TestConnectionRequest {
   name?: string | null;
@@ -22,6 +23,8 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     if (!type || !config) {
       return ApiErrors.badRequest('type and config are required');
     }
+
+    validateDuckDbFilePath(type, config, user.companyId);
 
     // Forward request to Python backend (company ID header added automatically)
     const response = await pythonBackendFetch('/api/connections/test', {

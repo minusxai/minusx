@@ -37,7 +37,9 @@ const pool = new Map<number, any>();
 const initPromises = new Map<number, Promise<any>>();
 
 function getAnalyticsDbDir(): string {
-  return process.env.ANALYTICS_DB_DIR || path.join(process.cwd(), 'data', 'analytics');
+  if (process.env.ANALYTICS_DB_DIR) return process.env.ANALYTICS_DB_DIR;
+  const base = process.env.BASE_DUCKDB_DATA_PATH || '.';
+  return path.join(base, 'data', 'analytics');
 }
 
 function initSchema(db: any): Promise<void> {

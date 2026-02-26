@@ -9,6 +9,26 @@
 export const RESERVED_NAMES = ['default_db'];
 
 /**
+ * Block DuckDB connections that point to another company's analytics DB.
+ * Analytics DBs are named "{companyId}.duckdb". Users may only reference their own.
+ * @throws Error if the path targets a different company's analytics DB
+ */
+export function validateDuckDbFilePath(type: string, config: Record<string, any>, companyId: number): void {
+  if (type !== 'duckdb') return;
+
+  const filePath: string = config?.file_path || '';
+  // Extract the final path segment (works on both / and \ separators)
+  const filename = filePath.replace(/\\/g, '/').split('/').pop() ?? '';
+  const match = /^(\d+)\.duckdb$/i.exec(filename);
+  if (!match) return; // not a numeric-named DuckDB file — allow it
+
+  const fileCompanyId = parseInt(match[1], 10);
+  if (fileCompanyId !== companyId) {
+    throw new Error('Access denied: cannot connect to another company\'s analytics database');
+  }
+}
+
+/**
  * Validate connection name format
  * @throws Error if name is invalid
  */
