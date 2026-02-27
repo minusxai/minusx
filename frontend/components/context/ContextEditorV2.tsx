@@ -17,6 +17,7 @@ import Editor from '@monaco-editor/react';
 import Markdown from '../Markdown';
 import DocumentHeader from '../DocumentHeader';
 import { useAppSelector } from '@/store/hooks';
+import { HIDDEN_SYSTEM_FOLDERS } from '@/lib/mode/path-resolver';
 
 interface ContextEditorV2Props {
   content: ContextContent;
@@ -101,20 +102,22 @@ export default function ContextEditorV2({
   const availableChildPaths = useMemo(() => {
     if (!file?.path) return [];
 
-    // Get all context files
-    const allContextFiles = Object.values(filesState).filter(f => f.type === 'context');
+    // Get all child folders (any folder, not just ones with a knowledge base)
+    // Exclude hidden system folders (database, configs, logs, etc.)
+    const hiddenNames = new Set(HIDDEN_SYSTEM_FOLDERS.map(f => f.replace('/', '')));
+    const allFolders = Object.values(filesState).filter(f => f.type === 'folder');
 
-    // Find immediate children (one level deep)
+    // Find immediate child folders (one level deep)
     const fileDir = file.path.substring(0, file.path.lastIndexOf('/')) || '/';
-    const children = allContextFiles
+    const children = allFolders
       .filter(f => {
-        const childDir = f.path.substring(0, f.path.lastIndexOf('/')) || '/';
-        const relativePath = childDir.substring(fileDir.length);
+        const relativePath = f.path.substring(fileDir.length);
         if (!relativePath.startsWith('/')) return false;
         const segments = relativePath.split('/').filter(Boolean);
-        return segments.length === 1; // Immediate child
+        if (segments.length !== 1) return false; // Immediate child only
+        return !hiddenNames.has(segments[0]); // Exclude system folders
       })
-      .map(f => f.path.substring(0, f.path.lastIndexOf('/')) || '/');
+      .map(f => f.path);
 
     return Array.from(new Set(children)).sort();
   }, [file?.path, filesState]);
