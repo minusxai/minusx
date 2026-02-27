@@ -35,7 +35,7 @@ function LLMCallMXDetails({ llmCallId }: { llmCallId: string }) {
     return (
       <HStack gap={2} p={2} justify="center">
         <Spinner size="sm" />
-        <Text fontSize="2xs" color="fg.subtle">Loading request/response from MX proxy...</Text>
+        <Text fontSize="2xs" color="fg.subtle">Loading request/response...</Text>
       </HStack>
     );
   }
@@ -43,7 +43,7 @@ function LLMCallMXDetails({ llmCallId }: { llmCallId: string }) {
   if (!data || (!data.stats && !data.logs)) {
     return (
       <Text fontSize="2xs" color="fg.subtle" fontStyle="italic">
-        Not available (no MX proxy configured)
+        Not available
       </Text>
     );
   }
@@ -337,7 +337,7 @@ export default function DebugInfoDisplay({ debugInfo }: DebugInfoDisplayProps) {
                       {llm.lllm_call_id && (
                         <Box>
                           <Text fontSize="2xs" fontWeight="600" color="fg.muted" mb={0.5}>
-                            Request / Response (MX Proxy)
+                            Request / Response
                           </Text>
                           <LLMCallMXDetails llmCallId={llm.lllm_call_id} />
                         </Box>

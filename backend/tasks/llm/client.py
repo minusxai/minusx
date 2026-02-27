@@ -258,6 +258,16 @@ async def allm_request(request: ALLMRequest, on_content=None):
         completion_request["max_completion_tokens"] = MAX_TOKENS
         completion_request["temperature"] = 0
 
+    # When proxying through mx-llm-provider, generate the call UUID here and pass
+    # it as a request header so the provider stores exactly this UUID as call_uuid.
+    # This avoids unreliable ContextVar propagation from the transport layer back
+    # to this calling code (ContextVar.set() inside handle_async_request doesn't
+    # propagate back due to asyncio context-copy semantics).
+    mx_request_call_id: str | None = None
+    if MX_API_BASE_URL:
+        mx_request_call_id = str(uuid.uuid4())
+        completion_request["extra_headers"] = {"X-MX-Request-Call-ID": mx_request_call_id}
+
     # Ensure custom session is created for connection pooling
     session_start = time.perf_counter()
     session = _get_or_create_session()
@@ -401,12 +411,12 @@ async def allm_request(request: ALLMRequest, on_content=None):
     elif usage and hasattr(usage, 'to_dict'):
         usage = usage.to_dict()
 
-    # Extract mx_call_id injected by mx-llm-provider proxy into the usage SSE chunk.
-    # This is our externally-visible X-MX-Call-ID, replacing LiteLLM's internal UUID.
-    if usage and isinstance(usage, dict):
-        mx_call_id = usage.pop('mx_call_id', None)
-        if mx_call_id:
-            litellm_call_id = mx_call_id
+    # Use the client-generated UUID when proxying through mx-llm-provider.
+    # The provider was sent this UUID via X-MX-Request-Call-ID and stores it
+    # as call_uuid, so lllm_call_id and call_uuid are guaranteed to match.
+    # Falls back to LiteLLM's own internal UUID for direct (non-proxy) calls.
+    if mx_request_call_id:
+        litellm_call_id = mx_request_call_id
 
     if not usage:
         # Fallback if usage not provided
