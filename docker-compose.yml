@@ -51,6 +51,7 @@ services:
 
 networks:
   minusx-network:
+    name: minusx-network
     driver: bridge
 
 volumes:
