@@ -18,9 +18,13 @@ export function filterSchemaByWhitelist(
 ): DatabaseSchema {
   // Filter whitelist items by childPaths BEFORE creating lookup sets
   const applicableWhitelist = whitelist.filter(item => {
-    // If no childPaths specified, apply to all children (backward compatible)
-    if (!item.childPaths || item.childPaths.length === 0) {
+    // If childPaths is undefined/null, apply to all children (backward compatible)
+    // If childPaths is [] (empty array), apply to NO children (only this folder)
+    if (!item.childPaths) {
       return true;
+    }
+    if (item.childPaths.length === 0) {
+      return false;
     }
     // If currentPath not provided, include all (for non-child contexts)
     if (!currentPath) {

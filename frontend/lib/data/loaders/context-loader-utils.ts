@@ -17,9 +17,13 @@ import { getPublishedVersionForUser as getPublishedVersionForUserId } from '@/li
  */
 function filterDocsByChildPaths(docs: DocEntry[], currentPath: string): DocEntry[] {
   return docs.filter(docEntry => {
-    // If no childPaths specified, apply to all children (backward compatible)
-    if (!docEntry.childPaths || docEntry.childPaths.length === 0) {
+    // If childPaths is undefined/null, apply to all children (backward compatible)
+    // If childPaths is [] (empty array), apply to NO children (only this folder)
+    if (!docEntry.childPaths) {
       return true;
+    }
+    if (docEntry.childPaths.length === 0) {
+      return false;
     }
 
     // Check if currentPath matches any childPaths (exact or nested)
