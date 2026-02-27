@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { Box, VStack, HStack, Text, Icon, Collapsible, IconButton, Input } from '@chakra-ui/react';
 import { LuTable, LuChevronRight, LuChevronDown, LuColumns3, LuSearch, LuX, LuDatabase, LuEye, LuRefreshCw } from 'react-icons/lu';
 import { Checkbox } from '@/components/ui/checkbox';
+import ChildPathSelector from './ChildPathSelector';
 
 // Types for the component
 export interface SchemaTreeItem {
@@ -69,7 +70,6 @@ export default function SchemaTreeView({
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set());
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
-  const [expandedPathFilters, setExpandedPathFilters] = useState<Set<string>>(new Set());
 
   // Track visible counts for tables in each schema
   const [visibleTableCounts, setVisibleTableCounts] = useState<Record<string, number>>({});
@@ -594,90 +594,23 @@ export default function SchemaTreeView({
                   </Box>
 
                   {/* Path Filter UI for schema-level whitelists */}
-                  {showPathFilter && availableChildPaths.length > 1 && isSchemaWhitelisted(schemaItem.schema) && (
+                  {showPathFilter && availableChildPaths.length > 0 && isSchemaWhitelisted(schemaItem.schema) && (
                     <Box ml={10} mt={2}>
-                      <HStack gap={1}>
-                        <Icon
-                          as={expandedPathFilters.has(`schema:${schemaItem.schema}`) ? LuChevronDown : LuChevronRight}
-                          boxSize={3}
-                          cursor="pointer"
-                          onClick={() => {
-                            setExpandedPathFilters((prev) => {
-                              const next = new Set(prev);
-                              const key = `schema:${schemaItem.schema}`;
-                              if (next.has(key)) {
-                                next.delete(key);
-                              } else {
-                                next.add(key);
-                              }
-                              return next;
-                            });
-                          }}
-                        />
-                        <Text fontSize="xs" color="fg.muted">
-                          Apply to: {
-                            (() => {
-                              const item = whitelist.find(
-                                w => w.type === 'schema' && w.name === schemaItem.schema
-                              );
-                              const count = item?.childPaths?.length || 0;
-                              return count === 0 ? 'all child paths' : `${count} child path${count === 1 ? '' : 's'}`;
-                            })()
-                          }
-                        </Text>
-                      </HStack>
-
-                      {expandedPathFilters.has(`schema:${schemaItem.schema}`) && (
-                        <VStack align="stretch" mt={2} ml={4} gap={1}>
-                          <Checkbox
-                            size="sm"
-                            checked={(() => {
-                              const item = whitelist.find(
-                                w => w.type === 'schema' && w.name === schemaItem.schema
-                              );
-                              return !item?.childPaths || item.childPaths.length === 0;
-                            })()}
-                            onCheckedChange={(e) => {
-                              const item = whitelist.find(
-                                w => w.type === 'schema' && w.name === schemaItem.schema
-                              );
-                              if (item && e.checked) {
-                                handlePathFilterChange(item, undefined);
-                              }
-                            }}
-                          >
-                            <Text fontSize="xs">All child paths (default)</Text>
-                          </Checkbox>
-
-                          {availableChildPaths.map(path => {
-                            const item = whitelist.find(
-                              w => w.type === 'schema' && w.name === schemaItem.schema
-                            );
-                            const isChecked = item?.childPaths?.includes(path) || false;
-
-                            return (
-                              <Checkbox
-                                key={path}
-                                size="sm"
-                                checked={isChecked}
-                                onCheckedChange={(e) => {
-                                  if (!item) return;
-                                  const newPaths = item.childPaths ? [...item.childPaths] : [];
-                                  if (e.checked) {
-                                    newPaths.push(path);
-                                  } else {
-                                    const idx = newPaths.indexOf(path);
-                                    if (idx > -1) newPaths.splice(idx, 1);
-                                  }
-                                  handlePathFilterChange(item, newPaths.length > 0 ? newPaths : undefined);
-                                }}
-                              >
-                                <Text fontSize="xs" fontFamily="mono">{path}</Text>
-                              </Checkbox>
-                            );
-                          })}
-                        </VStack>
-                      )}
+                      <ChildPathSelector
+                        availablePaths={availableChildPaths}
+                        selectedPaths={(() => {
+                          const item = whitelist.find(
+                            w => w.type === 'schema' && w.name === schemaItem.schema
+                          );
+                          return item?.childPaths;
+                        })()}
+                        onChange={(paths) => {
+                          const item = whitelist.find(
+                            w => w.type === 'schema' && w.name === schemaItem.schema
+                          );
+                          if (item) handlePathFilterChange(item, paths);
+                        }}
+                      />
                     </Box>
                   )}
 
@@ -842,89 +775,23 @@ export default function SchemaTreeView({
                                 </Box>
 
                                 {/* Path Filter UI - only for whitelisted tables in parent contexts */}
-                                {showPathFilter && availableChildPaths.length > 1 && tableWL && !schemaWL && (
+                                {showPathFilter && availableChildPaths.length > 0 && tableWL && !schemaWL && (
                                   <Box ml={10} mt={2}>
-                                    <HStack gap={1}>
-                                      <Icon
-                                        as={expandedPathFilters.has(tableKey) ? LuChevronDown : LuChevronRight}
-                                        boxSize={3}
-                                        cursor="pointer"
-                                        onClick={() => {
-                                          setExpandedPathFilters((prev) => {
-                                            const next = new Set(prev);
-                                            if (next.has(tableKey)) {
-                                              next.delete(tableKey);
-                                            } else {
-                                              next.add(tableKey);
-                                            }
-                                            return next;
-                                          });
-                                        }}
-                                      />
-                                      <Text fontSize="xs" color="fg.muted">
-                                        Apply to: {
-                                          (() => {
-                                            const item = whitelist.find(
-                                              w => w.type === 'table' && w.name === table.table && w.schema === schemaItem.schema
-                                            );
-                                            const count = item?.childPaths?.length || 0;
-                                            return count === 0 ? 'all child paths' : `${count} child path${count === 1 ? '' : 's'}`;
-                                          })()
-                                        }
-                                      </Text>
-                                    </HStack>
-
-                                    {expandedPathFilters.has(tableKey) && (
-                                      <VStack align="stretch" mt={2} ml={4} gap={1}>
-                                        <Checkbox
-                                          size="sm"
-                                          checked={(() => {
-                                            const item = whitelist.find(
-                                              w => w.type === 'table' && w.name === table.table && w.schema === schemaItem.schema
-                                            );
-                                            return !item?.childPaths || item.childPaths.length === 0;
-                                          })()}
-                                          onCheckedChange={(e) => {
-                                            const item = whitelist.find(
-                                              w => w.type === 'table' && w.name === table.table && w.schema === schemaItem.schema
-                                            );
-                                            if (item && e.checked) {
-                                              handlePathFilterChange(item, undefined);
-                                            }
-                                          }}
-                                        >
-                                          <Text fontSize="xs">All child paths (default)</Text>
-                                        </Checkbox>
-
-                                        {availableChildPaths.map(path => {
-                                          const item = whitelist.find(
-                                            w => w.type === 'table' && w.name === table.table && w.schema === schemaItem.schema
-                                          );
-                                          const isChecked = item?.childPaths?.includes(path) || false;
-
-                                          return (
-                                            <Checkbox
-                                              key={path}
-                                              size="sm"
-                                              checked={isChecked}
-                                              onCheckedChange={(e) => {
-                                                if (!item) return;
-                                                const newPaths = item.childPaths ? [...item.childPaths] : [];
-                                                if (e.checked) {
-                                                  newPaths.push(path);
-                                                } else {
-                                                  const idx = newPaths.indexOf(path);
-                                                  if (idx > -1) newPaths.splice(idx, 1);
-                                                }
-                                                handlePathFilterChange(item, newPaths.length > 0 ? newPaths : undefined);
-                                              }}
-                                            >
-                                              <Text fontSize="xs" fontFamily="mono">{path}</Text>
-                                            </Checkbox>
-                                          );
-                                        })}
-                                      </VStack>
-                                    )}
+                                    <ChildPathSelector
+                                      availablePaths={availableChildPaths}
+                                      selectedPaths={(() => {
+                                        const item = whitelist.find(
+                                          w => w.type === 'table' && w.name === table.table && w.schema === schemaItem.schema
+                                        );
+                                        return item?.childPaths;
+                                      })()}
+                                      onChange={(paths) => {
+                                        const item = whitelist.find(
+                                          w => w.type === 'table' && w.name === table.table && w.schema === schemaItem.schema
+                                        );
+                                        if (item) handlePathFilterChange(item, paths);
+                                      }}
+                                    />
                                   </Box>
                                 )}
 
