@@ -116,7 +116,6 @@ export function ContextSelector({ selectedContextPath, selectedVersion, onSelect
       onChange={(val) => {
         const [path, versionStr] = val.split(':');
         const version = versionStr ? parseInt(versionStr) : undefined;
-        console.log('[ContextSelector] onChange — val:', val, 'path:', path, 'version:', version);
         onSelectContext(path, version);
       }}
       options={options}

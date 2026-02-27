@@ -64,7 +64,6 @@ export default function RightSidebar({
 
   // Get context info using selected context path (from dropdown) or fallback to file path
   const contextPath = selectedContextPath || filePath;
-  console.log('[RightSidebar] selectedContextPath:', selectedContextPath, 'filePath:', filePath, 'contextPath:', contextPath, 'contextVersion:', contextVersion);
   const contextInfo = useContext(contextPath, contextVersion);
   const databases = contextInfo.databases;
   const documentation = contextInfo.documentation;
