@@ -14,6 +14,41 @@ interface DebugInfoDisplayProps {
   debugInfo: MessageDebugInfo;
 }
 
+function StatsTable({ stats }: { stats: Record<string, unknown> }) {
+  const rows = Object.entries(stats).filter(([k]) => k !== 'id');
+  return (
+    <Box overflowX="auto">
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <tbody>
+          {rows.map(([key, value]) => (
+            <tr key={key}>
+              <td style={{ padding: '1px 12px 1px 0', whiteSpace: 'nowrap', verticalAlign: 'top', opacity: 0.6, fontFamily: 'monospace', fontSize: '11px' }}>
+                {key}
+              </td>
+              <td style={{ padding: '1px 0', fontFamily: 'monospace', fontSize: '11px', wordBreak: 'break-all' }}>
+                {String(value ?? '—')}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Box>
+  );
+}
+
+function JsonSection({ title, raw }: { title: string; raw: string }) {
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { parsed = raw; }
+  return (
+    <Box>
+      <Text fontSize="2xs" fontWeight="600" color="fg.muted" mb={0.5}>{title}</Text>
+      <Box p={1.5} bg="bg.surface" borderRadius="sm" fontFamily="mono" fontSize="2xs" overflowX="auto" maxH="300px" overflowY="auto">
+        <pre>{JSON.stringify(parsed, null, 2)}</pre>
+      </Box>
+    </Box>
+  );
+}
+
 /**
  * Component to load and display LLM call details from MX proxy API
  */
@@ -48,47 +83,14 @@ function LLMCallMXDetails({ llmCallId }: { llmCallId: string }) {
     );
   }
 
+  const requestBody = data.logs?.request_body as string | undefined;
+  const responseBody = data.logs?.response_body as string | undefined;
+
   return (
     <VStack gap={2} align="stretch">
-      {data.stats && (
-        <Box>
-          <Text fontSize="2xs" fontWeight="600" color="fg.muted" mb={0.5}>
-            Stats
-          </Text>
-          <Box
-            p={1.5}
-            bg="bg.surface"
-            borderRadius="sm"
-            fontFamily="mono"
-            fontSize="2xs"
-            overflowX="auto"
-            maxH="200px"
-            overflowY="auto"
-          >
-            <pre>{JSON.stringify(data.stats, null, 2)}</pre>
-          </Box>
-        </Box>
-      )}
-
-      {data.logs && (
-        <Box>
-          <Text fontSize="2xs" fontWeight="600" color="fg.muted" mb={0.5}>
-            Request / Response
-          </Text>
-          <Box
-            p={1.5}
-            bg="bg.surface"
-            borderRadius="sm"
-            fontFamily="mono"
-            fontSize="2xs"
-            overflowX="auto"
-            maxH="300px"
-            overflowY="auto"
-          >
-            <pre>{JSON.stringify(data.logs, null, 2)}</pre>
-          </Box>
-        </Box>
-      )}
+      {data.stats && <StatsTable stats={data.stats} />}
+      {requestBody && <JsonSection title="Request" raw={requestBody} />}
+      {responseBody && <JsonSection title="Response" raw={responseBody} />}
     </VStack>
   );
 }
@@ -333,14 +335,9 @@ export default function DebugInfoDisplay({ debugInfo }: DebugInfoDisplayProps) {
                         </Box>
                       )}
 
-                      {/* Request/Response from MX proxy */}
+                      {/* Stats + Request/Response from backend */}
                       {llm.lllm_call_id && (
-                        <Box>
-                          <Text fontSize="2xs" fontWeight="600" color="fg.muted" mb={0.5}>
-                            Request / Response
-                          </Text>
-                          <LLMCallMXDetails llmCallId={llm.lllm_call_id} />
-                        </Box>
+                        <LLMCallMXDetails llmCallId={llm.lllm_call_id} />
                       )}
                     </VStack>
                   )}
