@@ -44,10 +44,9 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
   });
   const homeContextPath = homeContext?.path;
 
-  // Initialize selectedContextPath with homeContextPath when it becomes available
-  // Also set the published version if the context has multiple versions
+  // Initialize selectedContextPath with homeContextPath only on first load
   useEffect(() => {
-    if ((!selectedContextPath || !selectedVersion) && homeContextPath) {
+    if (!selectedContextPath && homeContextPath) {
       const content = homeContext?.content as ContextContent | undefined;
       if (content?.published?.all) {
         setSelectedContextPath(homeContextPath);
@@ -140,6 +139,11 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
             title="Exploration Context"
             filePath={contextPath}
             contextVersion={selectedVersion}
+            selectedContextPath={selectedContextPath}
+            onContextChange={(path, version) => {
+              setSelectedContextPath(path);
+              setSelectedVersion(version);
+            }}
             showChat={false}
             history={conversationHistory}
         />
@@ -149,6 +153,11 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
             title="Exploration Context"
             filePath={contextPath}
             contextVersion={selectedVersion}
+            selectedContextPath={selectedContextPath}
+            onContextChange={(path, version) => {
+              setSelectedContextPath(path);
+              setSelectedVersion(version);
+            }}
             showChat={false}
             history={conversationHistory}
         />

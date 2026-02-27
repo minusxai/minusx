@@ -235,6 +235,11 @@ export function getDocumentationForUser(
   contextContent: ContextContent,
   userId: number
 ): string | undefined {
+  // Collect inherited docs (fullDocs) filtered by childPaths (already filtered by loader)
+  const inheritedDocStrings = (contextContent.fullDocs || []).map(doc =>
+    typeof doc === 'string' ? doc : doc.content
+  );
+
   // Get user's published version and return its docs
   if (contextContent.versions && contextContent.versions.length > 0) {
     const publishedVersionNum = getPublishedVersionForUser(contextContent, userId);
@@ -242,17 +247,14 @@ export function getDocumentationForUser(
 
     if (publishedVersion && publishedVersion.docs) {
       // Handle DocEntry[] format (post-migration v11)
-      const docStrings = publishedVersion.docs.map(doc =>
+      const ownDocStrings = publishedVersion.docs.map(doc =>
         typeof doc === 'string' ? doc : doc.content
       );
-      return docStrings.join('\n\n---\n\n') || undefined;
+      const allDocStrings = [...inheritedDocStrings, ...ownDocStrings].filter(Boolean);
+      return allDocStrings.length > 0 ? allDocStrings.join('\n\n---\n\n') : undefined;
     }
   }
 
-  // Legacy fallback for contexts without versions
-  if (contextContent.fullDocs) {
-    return contextContent.fullDocs.join('\n\n---\n\n') || undefined;
-  }
-
-  return undefined;
+  // Legacy fallback or no own docs — return inherited only
+  return inheritedDocStrings.length > 0 ? inheritedDocStrings.join('\n\n---\n\n') : undefined;
 }

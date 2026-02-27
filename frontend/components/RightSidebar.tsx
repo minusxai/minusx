@@ -62,8 +62,10 @@ export default function RightSidebar({
   // Read from Redux (loaded by layout.tsx)
   const currentUser = useAppSelector(state => state.auth.user);
 
-  // Get context info using path (use selected version if provided by admin)
-  const contextInfo = useContext(filePath, contextVersion);
+  // Get context info using selected context path (from dropdown) or fallback to file path
+  const contextPath = selectedContextPath || filePath;
+  console.log('[RightSidebar] selectedContextPath:', selectedContextPath, 'filePath:', filePath, 'contextPath:', contextPath, 'contextVersion:', contextVersion);
+  const contextInfo = useContext(contextPath, contextVersion);
   const databases = contextInfo.databases;
   const documentation = contextInfo.documentation;
   const contextsLoading = contextInfo.contextLoading;

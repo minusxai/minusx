@@ -50,7 +50,8 @@ export default function MobileRightSidebar({
   const currentUser = useAppSelector(state => state.auth.user);
 
   // Get context info using path (use selected version if provided by admin)
-  const contextInfo = useContext(filePath, contextVersion);
+  const contextPath = selectedContextPath || filePath;
+  const contextInfo = useContext(contextPath, contextVersion);
   const databases = contextInfo.databases;
   const documentation = contextInfo.documentation;
   const contextsLoading = contextInfo.contextLoading;

@@ -59,6 +59,10 @@ export function useContext(path: string, version?: number): ContextInfo {
   const contextInfo = useMemo((): ContextInfo => {
     const contextContent = loadedContext?.content as ContextContent | undefined;
 
+    console.log('[useContext] path:', path, 'version:', version, 'contextFile:', contextFile?.path, 'contextFile.id:', contextFile?.id);
+    console.log('[useContext] fullDocs:', contextContent?.fullDocs);
+    console.log('[useContext] fullSchema:', contextContent?.fullSchema?.map(db => ({ name: db.databaseName, schemas: db.schemas.length })));
+
     // If context exists and is loaded, filter by version
     if (contextContent && loadedContext && currentUser) {
       // Determine which version to use (default to published version)
@@ -93,12 +97,17 @@ export function useContext(path: string, version?: number): ContextInfo {
             };
           }).filter(Boolean) as Array<{ databaseName: string; schemas: any[] }>;
 
-          // Handle DocEntry[] format (post-migration v11)
-          const docStrings = effectiveVersionContent.docs?.map(doc =>
+          // Combine inherited docs (fullDocs) + own docs from this version
+          const inheritedDocStrings = (contextContent.fullDocs || []).map(doc =>
             typeof doc === 'string' ? doc : doc.content
           );
-          const documentation = docStrings?.join('\n\n---\n\n') || undefined;
+          const ownDocStrings = (effectiveVersionContent.docs || []).map(doc =>
+            typeof doc === 'string' ? doc : doc.content
+          );
+          const allDocStrings = [...inheritedDocStrings, ...ownDocStrings].filter(Boolean);
+          const documentation = allDocStrings.length > 0 ? allDocStrings.join('\n\n---\n\n') : undefined;
 
+          console.log('[useContext] VERSION OVERRIDE — databases:', databases.map(d => d.databaseName), 'documentation:', documentation?.substring(0, 200));
           return {
             contextId: loadedContext.id,
             databases,
@@ -113,6 +122,7 @@ export function useContext(path: string, version?: number): ContextInfo {
       const databases = getWhitelistedSchemaForUser(contextContent, currentUser.id);
       const documentation = getDocumentationForUser(contextContent, currentUser.id);
 
+      console.log('[useContext] DEFAULT — databases:', databases.map(d => d.databaseName), 'documentation:', documentation?.substring(0, 200));
       return {
         contextId: loadedContext.id,
         databases,
