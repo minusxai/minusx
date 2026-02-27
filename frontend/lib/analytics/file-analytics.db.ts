@@ -29,6 +29,25 @@ CREATE INDEX IF NOT EXISTS idx_fe_file_id ON file_events(file_id);
 CREATE INDEX IF NOT EXISTS idx_fe_user    ON file_events(user_email);
 CREATE INDEX IF NOT EXISTS idx_fe_ts      ON file_events(timestamp);
 CREATE INDEX IF NOT EXISTS idx_fe_type    ON file_events(event_type, file_id);
+
+CREATE SEQUENCE IF NOT EXISTS llm_call_events_id_seq;
+
+CREATE TABLE IF NOT EXISTS llm_call_events (
+  id                BIGINT    DEFAULT nextval('llm_call_events_id_seq') PRIMARY KEY,
+  conversation_id   INTEGER   NOT NULL,
+  llm_call_id       VARCHAR,
+  model             VARCHAR   NOT NULL,
+  total_tokens      BIGINT    NOT NULL DEFAULT 0,
+  prompt_tokens     BIGINT    NOT NULL DEFAULT 0,
+  completion_tokens BIGINT    NOT NULL DEFAULT 0,
+  cost              FLOAT8    NOT NULL DEFAULT 0,
+  duration_s        FLOAT8    NOT NULL DEFAULT 0,
+  finish_reason     VARCHAR,
+  timestamp         TIMESTAMP NOT NULL DEFAULT current_timestamp
+);
+
+CREATE INDEX IF NOT EXISTS idx_llm_conv ON llm_call_events(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_llm_ts   ON llm_call_events(timestamp);
 `;
 
 // Module-level pool: one Database per companyId, persists for process lifetime

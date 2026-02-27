@@ -434,8 +434,6 @@ async def allm_request(request: ALLMRequest, on_content=None):
 
     # Track LLM call in task debug context
     task_debug = get_task_debug()
-    llm_debug_extra = completion_request.copy()
-    llm_debug_extra["response"] = response
     if 'cost' not in usage:
         usage['cost'] = cost
     task_debug.llmDebug.append(LLMDebug(
@@ -450,7 +448,6 @@ async def allm_request(request: ALLMRequest, on_content=None):
         prompt_tokens_details=usage['prompt_tokens_details'],
         lllm_call_id=litellm_call_id,
         lllm_overhead_time_ms=litellm_overhead_time_ms,
-        extra=llm_debug_extra
     ))
 
     return response, usage

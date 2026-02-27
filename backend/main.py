@@ -1226,7 +1226,6 @@ class LLMCallDetail(BaseModel):
     completion_tokens: int
     cost: float
     finish_reason: Optional[str] = None
-    extra: Optional[dict] = None  # Contains full request/response
 
 
 class ConversationResponse(BaseModel):
@@ -1250,35 +1249,24 @@ class CloseConversationResponse(BaseModel):
 
 def extract_llm_calls_from_log_diff(log_diff: ConversationLog) -> Dict[str, LLMCallDetail]:
     """
-    Extract LLM call details from logDiff and strip 'extra' field from entries.
-
-    This function performs two operations in one pass:
-    1. Extracts LLM debug data into a dict mapping llm_call_id -> LLMCallDetail
-    2. Strips 'extra' field from all LLMDebug entries (modifies log_diff in-place)
-
-    The extracted dict contains full debug data including 'extra' for debugging,
-    while the log_diff has 'extra' removed to reduce file size when persisted.
+    Extract LLM call details from logDiff entries.
 
     Args:
-        log_diff: List of conversation log entries (modified in-place)
+        log_diff: List of conversation log entries
 
     Returns:
-        Dictionary mapping llm_call_id to detailed call information (with 'extra')
+        Dictionary mapping llm_call_id to detailed call information
     """
     from tasks.orchestrator import TaskDebugLog
 
     llm_calls: Dict[str, LLMCallDetail] = {}
 
     for entry in log_diff:
-        # Only process TaskDebugLog entries
         if not isinstance(entry, TaskDebugLog):
             continue
 
-        # Extract LLM debug entries
         for llm_debug in entry.llmDebug:
             call_id = llm_debug.lllm_call_id
-
-            # Extract to dict first (while extra is still present)
             if call_id and call_id not in llm_calls:
                 llm_calls[call_id] = LLMCallDetail(
                     llm_call_id=call_id,
@@ -1289,11 +1277,7 @@ def extract_llm_calls_from_log_diff(log_diff: ConversationLog) -> Dict[str, LLMC
                     completion_tokens=llm_debug.completion_tokens,
                     cost=llm_debug.cost,
                     finish_reason=llm_debug.finish_reason,
-                    extra=llm_debug.extra  # Full request/response
                 )
-
-            # Strip extra from log_diff entry (reduces persisted size)
-            llm_debug.extra = None
 
     return llm_calls
 

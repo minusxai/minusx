@@ -743,7 +743,6 @@ export interface LLMDebugInfo {
   finish_reason?: string;
   lllm_call_id?: string;
   lllm_overhead_time_ms?: number;
-  extra?: any;  // Contains full request/response
 }
 
 /**

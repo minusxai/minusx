@@ -1,6 +1,7 @@
 import 'server-only';
 import { getAnalyticsDb, runStatement, runQuery } from './file-analytics.db';
-import { FileEvent, FileAnalyticsSummary } from './file-analytics.types';
+import { FileEvent, FileAnalyticsSummary, ConversationAnalyticsSummary } from './file-analytics.types';
+import type { LLMCallDetail } from '@/lib/chat-orchestration';
 
 const INSERT_SQL = `
 INSERT INTO file_events
@@ -188,5 +189,85 @@ GROUP BY file_id
   } catch (err) {
     console.error('[analytics] getFilesAnalyticsSummary failed:', err);
     return {};
+  }
+}
+
+const INSERT_LLM_SQL = `
+INSERT INTO llm_call_events
+  (conversation_id, llm_call_id, model, total_tokens, prompt_tokens, completion_tokens, cost, duration_s, finish_reason)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+`;
+
+/**
+ * Track LLM call events for a conversation. Fire-and-forget; errors logged but not thrown.
+ */
+export async function trackLLMCallEvents(
+  llmCalls: Record<string, LLMCallDetail>,
+  conversationId: number,
+  companyId: number
+): Promise<void> {
+  const db = await getAnalyticsDb(companyId);
+  const inserts = Object.values(llmCalls).map((call) =>
+    runStatement(db, INSERT_LLM_SQL, [
+      conversationId,
+      call.llm_call_id ?? null,
+      call.model,
+      call.total_tokens,
+      call.prompt_tokens,
+      call.completion_tokens,
+      call.cost,
+      call.duration,
+      call.finish_reason ?? null,
+    ]).catch((err: unknown) =>
+      console.error('[analytics] trackLLMCallEvents insert failed:', err)
+    )
+  );
+  await Promise.allSettled(inserts);
+}
+
+const CONV_AGG_SQL = `
+SELECT
+  model,
+  COUNT(*) AS calls,
+  SUM(total_tokens) AS tokens,
+  SUM(cost) AS cost
+FROM llm_call_events
+WHERE conversation_id = ?
+GROUP BY model
+`;
+
+/**
+ * Fetch aggregated LLM analytics for a conversation.
+ * Returns null if the analytics DB doesn't exist or there are no rows.
+ */
+export async function getConversationAnalytics(
+  conversationId: number,
+  companyId: number
+): Promise<ConversationAnalyticsSummary | null> {
+  try {
+    const db = await getAnalyticsDb(companyId);
+    const rows = await runQuery<Record<string, unknown>>(db, CONV_AGG_SQL, [conversationId]);
+
+    if (rows.length === 0) return null;
+
+    const byModel: ConversationAnalyticsSummary['byModel'] = {};
+    let totalCalls = 0;
+    let totalTokens = 0;
+    let totalCost = 0;
+
+    for (const row of rows) {
+      const model = String(row['model'] ?? '');
+      const calls = Number(row['calls'] ?? 0);
+      const tokens = Number(row['tokens'] ?? 0);
+      const cost = Number(row['cost'] ?? 0);
+      byModel[model] = { calls, tokens, cost };
+      totalCalls += calls;
+      totalTokens += tokens;
+      totalCost += cost;
+    }
+
+    return { totalCalls, totalTokens, totalCost, byModel };
+  } catch {
+    return null;
   }
 }

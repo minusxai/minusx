@@ -1,5 +1,5 @@
 import { DbFile, FileType, BaseFileMetadata, BaseFileContent } from '@/lib/types';
-import type { FileAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
+import type { FileAnalyticsSummary, ConversationAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
 
 /**
  * FileInfo: File metadata without content (for efficient folder listings)
@@ -18,6 +18,7 @@ export interface LoadFileResult {
   metadata: {
     references: DbFile[];
     analytics?: FileAnalyticsSummary | null;  // null = analytics DB doesn't exist yet
+    conversationAnalytics?: ConversationAnalyticsSummary;  // only for conversation files
   };
 }
 

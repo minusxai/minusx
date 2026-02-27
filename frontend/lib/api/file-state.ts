@@ -988,6 +988,7 @@ export async function reloadFile(options: ReloadFileOptions): Promise<void> {
       file: result.data,
       references: result.metadata.references || [],
       analytics: result.metadata.analytics,
+      conversationAnalytics: result.metadata.conversationAnalytics,
     }));
   } finally {
     // Clear loading state

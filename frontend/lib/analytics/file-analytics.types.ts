@@ -14,6 +14,26 @@ export interface FileEvent {
   referencedByFileType?: string;
 }
 
+export interface LLMCallEvent {
+  conversationId: number;
+  llmCallId?: string;
+  model: string;
+  totalTokens: number;
+  promptTokens: number;
+  completionTokens: number;
+  cost: number;
+  durationS: number;
+  finishReason?: string;
+  companyId: number;
+}
+
+export interface ConversationAnalyticsSummary {
+  totalCalls: number;
+  totalTokens: number;
+  totalCost: number;
+  byModel: Record<string, { calls: number; tokens: number; cost: number }>;
+}
+
 export interface FileAnalyticsSummary {
   totalViews: number;           // COUNT(*) WHERE event_type = 'read_direct'
   uniqueViewers: number;        // COUNT(DISTINCT user_id) WHERE event_type = 'read_direct'

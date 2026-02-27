@@ -1,7 +1,7 @@
 import { createSlice, PayloadAction, createSelector } from '@reduxjs/toolkit';
 import type { DbFile, FileType, DocumentContent, AssetReference, QuestionContent, QuestionReference } from '@/lib/types';
 import type { FileInfo } from '@/lib/data/types';
-import type { FileAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
+import type { FileAnalyticsSummary, ConversationAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
 import type { RootState } from './store';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import type { LoadError } from '@/lib/types/errors';
@@ -47,6 +47,8 @@ export interface FileState extends DbFile {
 
   // Analytics summary (loaded alongside the file, never blocks file loading)
   analytics?: FileAnalyticsSummary | null;
+  // Conversation-level LLM analytics (only populated for conversation files)
+  conversationAnalytics?: ConversationAnalyticsSummary | null;
 }
 
 /**
@@ -133,6 +135,7 @@ const filesSlice = createSlice({
       file: DbFile;
       references?: DbFile[];
       analytics?: FileAnalyticsSummary | null;
+      conversationAnalytics?: ConversationAnalyticsSummary | null;
     }>) {
       const { file, references = [] } = action.payload;
 
@@ -153,6 +156,9 @@ const filesSlice = createSlice({
         analytics: 'analytics' in action.payload
           ? action.payload.analytics
           : state.files[file.id]?.analytics,
+        conversationAnalytics: 'conversationAnalytics' in action.payload
+          ? action.payload.conversationAnalytics
+          : state.files[file.id]?.conversationAnalytics,
       };
 
       // Update path index (only for real files with positive IDs)

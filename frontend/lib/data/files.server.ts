@@ -33,7 +33,7 @@ import { listAllConnections } from './connections.server';
 import { computeSchemaFromDatabases } from './loaders/context-loader-utils';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import { getQueryHash } from '@/lib/utils/query-hash';
-import { trackFileEvent, getFileAnalyticsSummary, getFilesAnalyticsSummary } from '@/lib/analytics/file-analytics.server';
+import { trackFileEvent, getFileAnalyticsSummary, getFilesAnalyticsSummary, getConversationAnalytics } from '@/lib/analytics/file-analytics.server';
 
 /**
  * Server-side implementation of files data layer
@@ -83,9 +83,11 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     const refStart = Date.now();
     const refIds = await extractReferenceIds(file);
-    const [references, analytics] = await Promise.all([
+    const isConversation = file.type === 'conversation';
+    const [references, analytics, conversationAnalytics] = await Promise.all([
       refIds.length > 0 ? DocumentDB.getByIds(refIds, user.companyId) : Promise.resolve([]),
       getFileAnalyticsSummary(id, user.companyId).catch(() => null),
+      isConversation ? getConversationAnalytics(id, user.companyId).catch(() => null) : Promise.resolve(null),
     ]);
     console.log(`[FILES DataLayer] Loading ${refIds.length} references took ${Date.now() - refStart}ms`);
 
@@ -124,7 +126,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     return {
       data: transformedFile,
-      metadata: { references: transformedReferences, analytics }
+      metadata: { references: transformedReferences, analytics, conversationAnalytics: conversationAnalytics ?? undefined }
     };
   }
 

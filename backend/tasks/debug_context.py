@@ -22,7 +22,6 @@ class LLMDebug(BaseModel):
     finish_reason: Optional[str] = None
     lllm_call_id: Optional[str] = None
     lllm_overhead_time_ms: Optional[float] = None
-    extra: Optional[dict] = None
 
 
 class TaskDebug(BaseModel):

@@ -87,7 +87,6 @@ export interface LLMCallDetail {
   completion_tokens: number;
   cost: number;
   finish_reason?: string | null;
-  extra?: Record<string, any> | null;  // Full request/response
 }
 
 /**
