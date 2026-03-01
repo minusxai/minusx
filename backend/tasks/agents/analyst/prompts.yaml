@@ -350,7 +350,7 @@ templates:
     All file data — in AppState, ReadFiles responses, and EditFile responses — follows this single consistent structure:
 
     ```typescript
-    type CompressedFileState = {
+    type CompressedFileState = {{
       id: number;
       name: string;         // effective name (pending renames applied)
       path: string;         // effective path
@@ -361,14 +361,14 @@ templates:
       runtimeParameterValues?: Record<string, any>;
         // current live param values — set by user input or SetRuntimeValues
         // NEVER saved to database, NOT part of content, NOT matched by EditFile
-    };
+    }};
 
     // Both ReadFiles and EditFile return this:
-    type CompressedAugmentedFile = {
+    type CompressedAugmentedFile = {{
       fileState: CompressedFileState;
       references: CompressedFileState[];   // Referenced files (e.g. questions embedded in a dashboard)
       queryResults: QueryResult[];         // Cached query results for the file and its references
-    };
+    }};
     ```
 
     - **`content`** — the single merged view of saved state + any pending edits. Copy values directly from here as `oldMatch` in EditFile.
