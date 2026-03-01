@@ -17,7 +17,7 @@ import { fetchWithCache } from './fetch-wrapper';
 import { API } from './declarations';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 import { getRouter } from '@/lib/navigation/use-navigation';
-import { readFiles, editFileStr, publishFile, getQueryResult, createVirtualFile, editFile as editFileOp, clearFileChanges } from '@/lib/api/file-state';
+import { readFiles, editFileStr, publishFile, getQueryResult, createVirtualFile, editFile as editFileOp, clearFileChanges, compressAugmentedFile } from '@/lib/api/file-state';
 import { canCreateFileType } from '@/lib/auth/access-rules.client';
 import { preserveParams } from '@/lib/navigation/url-utils';
 
@@ -1748,14 +1748,15 @@ registerFrontendTool('ClarifyFrontend', async (args, context) => {
 
 /**
  * ReadFiles - Load multiple files with references and query results
- * Returns raw AugmentedFile[] (fileState + references + queryResults) for consistent LLM consumption
+ * Returns CompressedAugmentedFile[] — pre-merged content/persistableChanges so the
+ * model always sees a single flat content layer (no layer reasoning needed).
  */
 registerFrontendTool('ReadFiles', async (args, _context) => {
   const { fileIds } = args;
 
   const result = await readFiles(fileIds, {});
 
-  return result;
+  return result.map(compressAugmentedFile);
 });
 
 /**
@@ -1793,10 +1794,10 @@ registerFrontendTool('EditFile', async (args, _context) => {
     }
   }
 
-  // Return the updated AugmentedFile (same format as ReadFiles) so the model can verify
-  // edits landed in persistableChanges and also see references + query results
+  // Return the updated CompressedAugmentedFile (same format as ReadFiles) so the model can
+  // verify edits landed in content and also see references + query results
   const [augmented] = await readFiles([fileId], {});
-  return augmented;
+  return compressAugmentedFile(augmented);
 });
 
 /**

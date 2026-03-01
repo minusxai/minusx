@@ -33,7 +33,7 @@ import { API } from '@/lib/api/declarations';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import type { RootState } from '@/store/store';
-import type { AugmentedFile, FileState, QueryResult, QuestionContent, QuestionParameter, FileType, DocumentContent, DbFile, BaseFileContent, QuestionReference } from '@/lib/types';
+import type { AugmentedFile, CompressedAugmentedFile, CompressedFileState, FileState, QueryResult, QuestionContent, QuestionParameter, FileType, DocumentContent, DbFile, BaseFileContent, QuestionReference } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
 import type { AppState } from '@/lib/appState';
@@ -263,6 +263,40 @@ export function selectAugmentedFiles(state: RootState, fileIds: number[]): Augme
 
   _augmentedFilesCache.set(key, { state, result });
   return result;
+}
+
+/**
+ * Compress an AugmentedFile into a single consistent view for model consumption.
+ *
+ * - content   = { ...content, ...persistableChanges }  (what editFileStr matches against)
+ * - runtimeParameterValues = ephemeralChanges.parameterValues (clearly labeled, never saved)
+ * - loading/saving/ephemeralChanges.lastExecuted are dropped (noise for the model)
+ */
+export function compressAugmentedFile(augmented: AugmentedFile): CompressedAugmentedFile {
+  const compressFileState = (fs: FileState): CompressedFileState => {
+    const mergedContent = { ...(fs.content || {}), ...(fs.persistableChanges || {}) };
+    const isDirty = !!(
+      (fs.persistableChanges && Object.keys(fs.persistableChanges).length > 0) ||
+      fs.metadataChanges?.name !== undefined ||
+      fs.metadataChanges?.path !== undefined
+    );
+    const runtimeParameterValues = (fs.ephemeralChanges as { parameterValues?: Record<string, any> })?.parameterValues;
+    return {
+      id: fs.id,
+      name: fs.metadataChanges?.name ?? fs.name,
+      path: fs.metadataChanges?.path ?? fs.path,
+      type: fs.type as FileType,
+      isDirty,
+      content: mergedContent as FileState['content'],
+      ...(runtimeParameterValues && Object.keys(runtimeParameterValues).length > 0
+        ? { runtimeParameterValues } : {})
+    };
+  };
+  return {
+    fileState: compressFileState(augmented.fileState),
+    references: augmented.references.map(compressFileState),
+    queryResults: augmented.queryResults,
+  };
 }
 
 /**
@@ -517,7 +551,12 @@ export async function readFilesStr(
   const state = getStore().getState();
   return files.map(augmented => {
     const { fileState } = augmented;
-    const mergedContent = selectMergedContent(state, fileState.id);
+    // Mirror editFileStr: content + persistableChanges only (no ephemeralChanges)
+    // so stringifiedContent is exactly what editFileStr matches against.
+    const baseContent = fileState.content || {};
+    const mergedContent = fileState.persistableChanges && Object.keys(fileState.persistableChanges).length > 0
+      ? { ...baseContent, ...fileState.persistableChanges }
+      : baseContent;
     const fullFile = {
       id: fileState.id,
       name: selectEffectiveName(state, fileState.id) || '',
@@ -562,11 +601,16 @@ export async function editFileStr(
     return { success: false, error: `File ${fileId} not found` };
   }
 
-  // Get merged content
-  const mergedContent = selectMergedContent(state, fileId);
-  if (!mergedContent) {
+  // Get merged content (content + persistableChanges only — no ephemeralChanges).
+  // This must match exactly what compressAugmentedFile exposes so oldMatch is always
+  // a verbatim copy from what the model sees.
+  const baseContent = fileState.content;
+  if (!baseContent) {
     return { success: false, error: `File ${fileId} has no content` };
   }
+  const mergedContent = fileState.persistableChanges && Object.keys(fileState.persistableChanges).length > 0
+    ? { ...baseContent, ...fileState.persistableChanges }
+    : baseContent;
 
   // Build FULL file JSON (same format as readFilesStr)
   const currentName = selectEffectiveName(state, fileId) || '';

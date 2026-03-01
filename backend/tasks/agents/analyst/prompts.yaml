@@ -347,63 +347,40 @@ templates:
 
   file_state_schema: |
     ## File State Schema
-    All file data — in AppState, ReadFiles responses, and EditFile responses — follows this structure:
+    All file data — in AppState, ReadFiles responses, and EditFile responses — follows this single consistent structure:
 
     ```typescript
-    type FileState = {
+    type CompressedFileState = {
       id: number;
-      name: string;
-      path: string;
+      name: string;         // effective name (pending renames applied)
+      path: string;         // effective path
       type: 'question' | 'dashboard' | 'report' | 'alert' | 'folder' | string;
-
-      // Layer 1 — what is saved in the database. May be stale if there are pending edits.
+      isDirty: boolean;     // true if there are unpublished edits — call PublishFile to save
       content: QuestionContent | DashboardContent | ...;
-
-      // Layer 2 — YOUR pending edits (from EditFile). Overrides content. Persisted on PublishFile.
-      persistableChanges: Partial<content>;
-
-      // Layer 3 — runtime-only state. Overrides both content and persistableChanges. NEVER saved.
-      //   parameterValues: the current runtime parameter values (set by the user or SetRuntimeValues).
-      //     This is what the question is ACTUALLY running with right now.
-      //     content.parameters[].defaultValue is the saved default — ephemeralChanges.parameterValues is the live value.
-      //   lastExecuted: the most recent query execution (query string, params dict, database).
-      ephemeralChanges: {
-        parameterValues?: Record<string, any>;
-        lastExecuted?: { query: string; params: Record<string, any>; database: string };
-      };
-
-      metadataChanges: { name?: string; path?: string };  // Pending name/path edits
-      loading: boolean;
-      saving: boolean;
+        // merged saved + pending edits — use this directly for oldMatch in EditFile
+      runtimeParameterValues?: Record<string, any>;
+        // current live param values — set by user input or SetRuntimeValues
+        // NEVER saved to database, NOT part of content, NOT matched by EditFile
     };
 
     // Both ReadFiles and EditFile return this:
-    type AugmentedFile = {
-      fileState: FileState;          // Raw FileState with all three layers visible
-      references: FileState[];       // Referenced files (e.g. questions embedded in a dashboard)
-      queryResults: QueryResult[];   // Cached query results for the file and its references
+    type CompressedAugmentedFile = {
+      fileState: CompressedFileState;
+      references: CompressedFileState[];   // Referenced files (e.g. questions embedded in a dashboard)
+      queryResults: QueryResult[];         // Cached query results for the file and its references
     };
     ```
 
-    **Layer merge order** (each layer overrides the previous):
-    ```
-    effective state = { ...content, ...persistableChanges, ...ephemeralChanges }
-    ```
-
-    - **`content`** — saved DB state. The baseline.
-    - **`persistableChanges`** — your pending edits from EditFile. Override `content`. Saved on PublishFile.
-    - **`ephemeralChanges`** — runtime-only. Overrides both. Never saved. Contains:
-      - `parameterValues`: what the question is *currently running with* (user-typed or SetRuntimeValues). To know the live param values, read `ephemeralChanges.parameterValues`, NOT `content.parameters[].defaultValue`.
-      - `lastExecuted`: the last query that was actually run.
-
-    After EditFile, your changes appear in `persistableChanges` — `content` still shows the old DB value until PublishFile.
+    - **`content`** — the single merged view of saved state + any pending edits. Copy values directly from here as `oldMatch` in EditFile.
+    - **`isDirty`** — `true` when there are unpublished edits. Call PublishFile when done editing.
+    - **`runtimeParameterValues`** — live param values set by the user or SetRuntimeValues. These are ephemeral: NEVER saved, NOT part of `content`, NOT matched by EditFile.
 
   native_tools: |
     ## Available Tools:
 
     ### File Reading & Editing
-    - **ReadFiles(fileIds: int[])**: Load one or more files. Returns `AugmentedFile` objects — each contains `fileState` (raw FileState with content/persistableChanges/ephemeralChanges layers), `references` (embedded referenced files), and `queryResults`. See **File State Schema** below. **Always read a file before editing it — but if the file is the current page, AppState already contains equivalent data, so you can skip ReadFiles and read from AppState instead.**
-    - **EditFile(fileId: int, oldMatch: string, newMatch: string)**: Find `oldMatch` in the file's JSON and replace with `newMatch`. Changes are staged as drafts in `persistableChanges` — NOT saved until PublishFile. Returns the updated `AugmentedFile` (same format as ReadFiles) so you can verify your changes landed in `persistableChanges` and inspect references and query results.
+    - **ReadFiles(fileIds: int[])**: Load one or more files. Returns `CompressedAugmentedFile` objects — each contains `fileState` (with merged `content`, `isDirty`, and optional `runtimeParameterValues`), `references` (embedded referenced files), and `queryResults`. See **File State Schema** below. **Always read a file before editing it — but if the file is the current page, AppState already contains equivalent data, so you can skip ReadFiles and read from AppState instead.**
+    - **EditFile(fileId: int, oldMatch: string, newMatch: string)**: Find `oldMatch` in the file's JSON and replace with `newMatch`. Changes are staged as drafts — NOT saved until PublishFile. Returns the updated `CompressedAugmentedFile` (same format as ReadFiles) so you can verify your edit is reflected in `content` and see `isDirty: true`.
     - **PublishFile(fileId: int)**: Save all pending edits for this file to the database. Cascades to any dirty referenced files.
 
     ### Query Execution
@@ -423,7 +400,7 @@ templates:
   native_file_structures: |
     ## File Content Structures
 
-    ReadFiles and EditFile return `AugmentedFile` objects (see File State Schema). The structures below describe the shape of the **`content`** field inside `FileState` — these are also what you write in `newMatch` when using EditFile:
+    ReadFiles and EditFile return `CompressedAugmentedFile` objects (see File State Schema). The structures below describe the shape of the **`content`** field inside `CompressedFileState` — these are also what you write in `newMatch` when using EditFile:
 
     ### Question
     ```json
@@ -498,19 +475,21 @@ templates:
     ## Guidelines:
 
     ### Read-Edit-Publish Workflow
-    1. **Get current file state** before editing — either from AppState (if the file is the current page) or via **ReadFiles** (for files not in AppState, e.g. referenced files or search results). AppState already contains the full `FileState` (id, name, path, type, content, persistableChanges, ephemeralChanges — see **File State Schema**). Calling ReadFiles on the current page file is redundant.
+    1. **Get current file state** before editing — either from AppState (if the file is the current page) or via **ReadFiles** (for files not in AppState, e.g. referenced files or search results). AppState already contains `CompressedAugmentedFile` (id, name, path, type, content, isDirty — see **File State Schema**). Calling ReadFiles on the current page file is redundant.
     2. **EditFile** with exact string matching - find the substring you want to replace (`oldMatch`) and provide the replacement (`newMatch`)
     3. **PublishFile** to persist changes to the database
     4. Use **ExecuteQuery** for ad-hoc data exploration (not tied to any file). This is especially useful in the `explore` page.
 
     ### String Matching Tips for EditFile
+    - EditFile matches `oldMatch` against the **entire file JSON**: `{{"id":..., "name":..., "path":..., "type":..., "content":{{...}}}}`. This is exactly what ReadFiles/AppState return — copy any value verbatim.
+    - To change file content: copy the relevant substring from `content` (e.g. `"query":"SELECT * FROM sales"`)
+    - To rename a file: match `"name":"Old Name"` and replace with `"name":"New Name"`
     - Match exact JSON strings including quotes: `"query":"SELECT * FROM sales"` not `SELECT * FROM sales`
     - For nested values, include surrounding context: `"vizSettings":{{"type":"table"}}` ensures you edit the right field
     - Use minimal matching - just enough to uniquely identify what to replace
-    - **`oldMatch` must reflect the effective/merged value** — `editFileStr` matches against `{{ ...content, ...persistableChanges }}`. If a field has a pending edit in `persistableChanges`, use that value as `oldMatch`, not the stale value in `content`. In other words: check `persistableChanges` first; if the field isn't there, use `content`.
 
     ### Parameter Values vs File Edits
-    - Use **SetRuntimeValues** to change parameter values at runtime (ephemeral, not saved). This triggers re-execution with the new values.
+    - Use **SetRuntimeValues** to change parameter values at runtime (ephemeral, not saved). Values land in `runtimeParameterValues` of the next ReadFiles/AppState response.
     - Use **EditFile** to change the parameter definitions themselves (add/remove parameters, change types, change default values). This modifies the saved file content.
     - Example: If a question has `:start_date` parameter and the user says "show me data from January", use `SetRuntimeValues(fileId=123, parameter_values={{"start_date": "2024-01-01"}})`.
     - Example: If the user says "add a limit parameter", use `EditFile` to add the parameter to the query and parameters array.
@@ -525,7 +504,7 @@ templates:
       1. Understand the user's request. If ambiguous, use Clarify. If it's a simple edit to the current page, skip to step 4.
       2. For NEW data questions: Use SearchFiles to find existing questions that answer (or nearly answer) the request. Check results before writing any SQL.
       3. Check the Available Database Schema (SearchDBSchema) ONLY if no existing questions are usable and you need to explore unfamiliar tables/columns.
-      4. Use AppState to inspect the current file — it already has the full file JSON. Only call ReadFiles for files not in AppState (e.g. referenced files or search results).
+      4. Use AppState to inspect the current file — it already has the `CompressedAugmentedFile` JSON (same format as ReadFiles). Only call ReadFiles for files not in AppState (e.g. referenced files or search results).
       5. ReadFiles to inspect current file state, EditFile to modify, PublishFile to save.
       6. ExecuteQuery for data exploration if needed.
       7. Respond to the user with insights, ending with a helpful continuation question.

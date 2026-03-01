@@ -10,7 +10,7 @@ import { useScreenshot } from '@/lib/hooks/useScreenshot';
 import { getRegisteredToolNames, executeToolCall } from '@/lib/api/tool-handlers';
 import { UserInputException, type UserInputProps, type UserInput } from '@/lib/api/user-input-exception';
 import { getStore } from '@/store/store';
-import { useAppDispatch } from '@/store/hooks';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { BACKEND_URL } from '@/lib/constants';
 import type { ToolCall, DatabaseWithSchema } from '@/lib/types';
 
@@ -220,9 +220,10 @@ export default function DevToolsPanel({ appState }: DevToolsPanelProps) {
   const [appStateOpen, setAppStateOpen] = useState(false);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
 
-  const fileAnalytics = appState?.type === 'file'
-    ? appState.state.fileState.analytics
-    : undefined;
+  const fileId = appState?.type === 'file' ? appState.state.fileState.id : undefined;
+  const fileAnalytics = useAppSelector(state =>
+    fileId !== undefined ? state.files.files[fileId]?.analytics : undefined
+  );
 
   const handleScreenshot = async () => {
     if (appState?.type !== 'file') return;
