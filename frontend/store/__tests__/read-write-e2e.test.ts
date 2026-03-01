@@ -13,6 +13,7 @@ import { getTestDbPath, initTestDatabase, cleanupTestDatabase, createMockFetch }
 import { DocumentDB } from '@/lib/database/documents-db';
 import type { QuestionContent, DocumentContent, UserRole } from '@/lib/types';
 import { readFiles, publishFile, editFileStr, compressAugmentedFile, selectAugmentedFiles } from '@/lib/api/file-state';
+import { setEphemeral } from '@/store/filesSlice';
 import { executeQuery } from '@/lib/api/execute-query.server';
 import type { RootState } from '@/store/store';
 import type { Mode } from '@/lib/mode/mode-types';
@@ -698,6 +699,10 @@ describe('Phase 1: Unified File System API E2E', () => {
           payload: { files: [questionFile] }
         });
 
+        // Set ephemeral parameterValues to verify they appear as runtimeParameterValues
+        // and do NOT bleed into content in both responses
+        store.dispatch(setEphemeral({ fileId: questionId, changes: { parameterValues: { start_date: '2024-01-01' } } }));
+
         // Read current state (same way the model would via ReadFiles / AppState)
         const [before] = (await readFiles([questionId], {})).map(compressAugmentedFile);
         const content = before.fileState.content as any;
@@ -723,8 +728,13 @@ describe('Phase 1: Unified File System API E2E', () => {
         expect((editFileResponse.fileState.content as any).query).toContain('revenue FROM sales');
         expect(editFileResponse.fileState.isDirty).toBe(true);
 
+        // Ephemeral values appear as runtimeParameterValues, not in content
+        expect(editFileResponse.fileState.runtimeParameterValues).toEqual({ start_date: '2024-01-01' });
+        expect((editFileResponse.fileState.content as any).parameterValues).toBeUndefined();
+
         console.log('✓ EditFile and ReadFiles responses are identical');
         console.log('✓ isDirty=true, edit reflected in content');
+        console.log('✓ runtimeParameterValues present, not leaked into content');
       });
 
       it('AppState fileState is consistent with ReadFiles after an edit', async () => {
@@ -736,6 +746,9 @@ describe('Phase 1: Unified File System API E2E', () => {
           type: 'files/setFiles',
           payload: { files: [questionFile] }
         });
+
+        // Set ephemeral parameterValues to verify AppState and ReadFiles agree on runtimeParameterValues
+        store.dispatch(setEphemeral({ fileId: questionId, changes: { parameterValues: { limit: 100 } } }));
 
         // Make an edit
         const [before] = (await readFiles([questionId], {})).map(compressAugmentedFile);
@@ -760,8 +773,57 @@ describe('Phase 1: Unified File System API E2E', () => {
         // Must be identical — same Redux state, same compressAugmentedFile transform
         expect(appStateFileState).toEqual(readFilesFileState);
 
+        // Ephemeral values present as runtimeParameterValues in both
+        expect(appStateFileState.runtimeParameterValues).toEqual({ limit: 100 });
+
         console.log('✓ AppState and ReadFiles fileState are identical');
         console.log('✓ isDirty=true in both:', appStateFileState.isDirty);
+        console.log('✓ runtimeParameterValues consistent in both:', appStateFileState.runtimeParameterValues);
+      });
+
+      it('CompressedAugmentedFile correctly handles persistableChanges and ephemeralChanges', async () => {
+        console.log('\n[TEST] CompressedAugmentedFile: persistableChanges + ephemeralChanges isolation');
+
+        // Load question into Redux (clean state)
+        const questionFile = await DocumentDB.getById(questionId, 1);
+        (store.dispatch as any)({
+          type: 'files/setFiles',
+          payload: { files: [questionFile] }
+        });
+
+        // Stage a persistableChanges edit
+        const [initial] = (await readFiles([questionId], {})).map(compressAugmentedFile);
+        const oldDesc = `"description":${JSON.stringify((initial.fileState.content as any).description)}`;
+        const editResult = await editFileStr({
+          fileId: questionId,
+          oldMatch: oldDesc,
+          newMatch: '"description":"Ephemeral isolation test"'
+        });
+        expect(editResult.success).toBe(true);
+
+        // Dispatch setEphemeral to set parameterValues (e.g. user changed a filter)
+        store.dispatch(setEphemeral({ fileId: questionId, changes: { parameterValues: { limit: 50 } } }));
+
+        // Read via readFiles + compressAugmentedFile (what agents see)
+        const compressed = compressAugmentedFile((await readFiles([questionId], {}))[0]);
+        const { fileState } = compressed;
+
+        // persistableChanges must be reflected in content
+        expect((fileState.content as any).description).toBe('Ephemeral isolation test');
+
+        // ephemeralChanges.parameterValues must NOT appear in content
+        expect((fileState.content as any).parameterValues).toBeUndefined();
+
+        // ephemeralChanges.parameterValues must appear as runtimeParameterValues
+        expect(fileState.runtimeParameterValues).toEqual({ limit: 50 });
+
+        // File must be dirty (persistableChanges present)
+        expect(fileState.isDirty).toBe(true);
+
+        console.log('✓ persistableChanges reflected in content.description');
+        console.log('✓ ephemeralChanges.parameterValues NOT leaked into content');
+        console.log('✓ runtimeParameterValues = { limit: 50 }');
+        console.log('✓ isDirty = true');
       });
 
 

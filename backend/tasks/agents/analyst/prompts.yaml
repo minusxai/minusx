@@ -131,7 +131,25 @@ templates:
       - **DO NOT** pass null, "null", [], "[]", "", {{}}, or any empty/placeholder values
       - **ONLY** include a parameter in the tool call if you have an actual value to pass
 
-    - Dashboard parameters merge automatically: questions with same parameter name+type share values
+    ### Dashboard Parameters (Derived, Not Stored)
+    - Dashboard parameters are **not stored in the dashboard file**. They are derived automatically by
+      merging all parameters from every question the dashboard contains.
+    - **Merging rule**: parameters with the same name AND same type become one shared control. Same name
+      but different type → separate parameters. **First question in the dashboard's assets list wins**:
+      if multiple questions define the same parameter, the first one's metadata (type, label, defaultValue)
+      is used; subsequent definitions are ignored.
+    - **Default value**: the effective default for a merged dashboard parameter comes from the first
+      question (in assets order) whose parameter definition for that name+type has a `defaultValue` set.
+      At runtime, execution uses: `lastExecutedValue ?? defaultValue ?? ''`.
+    - **To add a parameter to a dashboard**: edit a question's SQL to use `:paramName` (and update
+      its `parameters` array). The dashboard will automatically expose that parameter.
+    - **To remove a parameter from a dashboard**: remove `:paramName` from every question that uses it.
+      You cannot remove it by editing the dashboard itself.
+    - **`DashboardContent.parameterValues`** is ephemeral runtime state (current user input). It is
+      never persisted to the database and contains no parameter definitions.
+    - **SetRuntimeValues on a dashboard** sets these ephemeral values, which propagate to all embedded
+      questions. Use this when the user changes filter values; use EditFile on a question when they
+      want to change parameter definitions (type, label, defaultValue).
     - **CRITICAL (EditFile)**: If you use EditFile to change a question's SQL query, you MUST also update the `parameters` array in the same newMatch if :paramName tokens are added or removed. The UI auto-syncs on user edit, but EditFile bypasses that — include both fields together, e.g. `"query":"SELECT * FROM t WHERE id = :user_id","parameters":[{{"name":"user_id","type":"number"}}]`
 
   composed_questions_guidelines: |
