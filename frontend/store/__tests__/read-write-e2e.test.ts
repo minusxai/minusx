@@ -12,7 +12,9 @@ import authReducer from '../authSlice';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase, createMockFetch } from './test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
 import type { QuestionContent, DocumentContent, UserRole } from '@/lib/types';
-import { readFiles, publishFile, readFilesStr, editFileStr } from '@/lib/api/file-state';
+import { readFiles, publishFile, editFileStr, compressAugmentedFile, selectAugmentedFiles, tryNormalizeJsonFragment } from '@/lib/api/file-state';
+import { setEphemeral } from '@/store/filesSlice';
+import type { ToolCall } from '@/lib/types';
 import { executeQuery } from '@/lib/api/execute-query.server';
 import type { RootState } from '@/store/store';
 import type { Mode } from '@/lib/mode/mode-types';
@@ -687,64 +689,145 @@ describe('Phase 1: Unified File System API E2E', () => {
       });
     });
 
-    describe('readFilesStr', () => {
-      it('should return compact JSON strings for files', async () => {
-        console.log('\n[TEST] readFilesStr - Compact JSON output');
+    describe('editFileStr', () => {
+      it('EditFile and ReadFiles return identical CompressedAugmentedFile after an edit', async () => {
+        console.log('\n[TEST] EditFile / ReadFiles consistency');
 
-        // Load files into Redux first
+        // Load question into Redux
         const questionFile = await DocumentDB.getById(questionId, 1);
         (store.dispatch as any)({
           type: 'files/setFiles',
           payload: { files: [questionFile] }
         });
 
-        // Call readFilesStr
-        const result = await readFilesStr([questionId]);
+        // Set ephemeral parameterValues to verify they appear as runtimeParameterValues
+        // and do NOT bleed into content in both responses
+        store.dispatch(setEphemeral({ fileId: questionId, changes: { parameterValues: { start_date: '2024-01-01' } } }));
 
-        // Verify result structure
-        expect(result).toHaveLength(1);
-        expect(result[0].fileState.id).toBe(questionId);
-        expect(result[0].stringifiedContent).toBeDefined();
+        // Read current state (same way the model would via ReadFiles / AppState)
+        const [before] = (await readFiles([questionId], {})).map(compressAugmentedFile);
+        const content = before.fileState.content as any;
 
-        // Verify it's compact JSON (no newlines or extra spaces)
-        const compactStr = result[0].stringifiedContent;
-        expect(compactStr).not.toContain('\n');
-        expect(compactStr).not.toMatch(/\s{2,}/); // No multiple spaces
-        expect(compactStr).toContain('"query"');
-        expect(compactStr).toContain('"database_name"');
+        // Build oldMatch exactly as the model would — copy verbatim from content
+        const oldQuery = `"query":${JSON.stringify(content.query)}`;
+        const newQuery = '"query":"SELECT month, revenue FROM sales"';
 
-        console.log('✓ readFilesStr returned compact JSON (no pretty print)');
-        console.log(`✓ String length: ${compactStr.length} characters`);
+        // Apply the edit (this is what the EditFile tool handler does internally)
+        const editResult = await editFileStr({ fileId: questionId, oldMatch: oldQuery, newMatch: newQuery });
+        expect(editResult.success).toBe(true);
+
+        // Simulate EditFile tool response: readFiles + compressAugmentedFile
+        const editFileResponse = compressAugmentedFile((await readFiles([questionId], {}))[0]);
+
+        // Simulate ReadFiles tool response: readFiles + compressAugmentedFile (same code path)
+        const readFilesResponse = (await readFiles([questionId], {})).map(compressAugmentedFile)[0];
+
+        // Both tool responses must be identical
+        expect(readFilesResponse).toEqual(editFileResponse);
+
+        // Sanity: edit landed and isDirty is set
+        expect((editFileResponse.fileState.content as any).query).toContain('revenue FROM sales');
+        expect(editFileResponse.fileState.isDirty).toBe(true);
+
+        // Ephemeral values appear as runtimeParameterValues, not in content
+        expect(editFileResponse.fileState.runtimeParameterValues).toEqual({ start_date: '2024-01-01' });
+        expect((editFileResponse.fileState.content as any).parameterValues).toBeUndefined();
+
+        console.log('✓ EditFile and ReadFiles responses are identical');
+        console.log('✓ isDirty=true, edit reflected in content');
+        console.log('✓ runtimeParameterValues present, not leaked into content');
       });
 
-      it('should handle multiple files', async () => {
-        console.log('\n[TEST] readFilesStr - Multiple files');
+      it('AppState fileState is consistent with ReadFiles after an edit', async () => {
+        console.log('\n[TEST] AppState / ReadFiles consistency');
 
-        // Load both question and dashboard
+        // Load question into Redux
         const questionFile = await DocumentDB.getById(questionId, 1);
-        const dashboardFile = await DocumentDB.getById(dashboardId, 1);
         (store.dispatch as any)({
           type: 'files/setFiles',
-          payload: { files: [questionFile, dashboardFile] }
+          payload: { files: [questionFile] }
         });
 
-        // Call readFilesStr with multiple IDs
-        const result = await readFilesStr([questionId, dashboardId]);
+        // Set ephemeral parameterValues to verify AppState and ReadFiles agree on runtimeParameterValues
+        store.dispatch(setEphemeral({ fileId: questionId, changes: { parameterValues: { limit: 100 } } }));
 
-        // Verify both files returned
-        expect(result).toHaveLength(2);
-        expect(result[0].stringifiedContent).toBeDefined();
-        expect(result[1].stringifiedContent).toBeDefined();
+        // Make an edit
+        const [before] = (await readFiles([questionId], {})).map(compressAugmentedFile);
+        const content = before.fileState.content as any;
+        const oldQuery = `"query":${JSON.stringify(content.query)}`;
+        const editResult = await editFileStr({
+          fileId: questionId,
+          oldMatch: oldQuery,
+          newMatch: '"query":"SELECT year, revenue FROM sales"'
+        });
+        expect(editResult.success).toBe(true);
 
-        // Verify both are compact JSON
-        expect(result[0].stringifiedContent).not.toContain('\n');
-        expect(result[1].stringifiedContent).not.toContain('\n');
+        // Simulate AppState: selectAugmentedFiles (pure Redux selector) + compressAugmentedFile
+        // This is exactly what navigationSlice.selectAppState does for a file page
+        const state = store.getState() as RootState;
+        const [augmented] = selectAugmentedFiles(state, [questionId]);
+        const appStateFileState = compressAugmentedFile(augmented).fileState;
 
-        console.log('✓ readFilesStr handled multiple files correctly');
+        // Simulate ReadFiles tool response
+        const readFilesFileState = (await readFiles([questionId], {})).map(compressAugmentedFile)[0].fileState;
+
+        // Must be identical — same Redux state, same compressAugmentedFile transform
+        expect(appStateFileState).toEqual(readFilesFileState);
+
+        // Ephemeral values present as runtimeParameterValues in both
+        expect(appStateFileState.runtimeParameterValues).toEqual({ limit: 100 });
+
+        console.log('✓ AppState and ReadFiles fileState are identical');
+        console.log('✓ isDirty=true in both:', appStateFileState.isDirty);
+        console.log('✓ runtimeParameterValues consistent in both:', appStateFileState.runtimeParameterValues);
       });
-    });
 
-    describe('editFileStr', () => {
+      it('CompressedAugmentedFile correctly handles persistableChanges and ephemeralChanges', async () => {
+        console.log('\n[TEST] CompressedAugmentedFile: persistableChanges + ephemeralChanges isolation');
+
+        // Load question into Redux (clean state)
+        const questionFile = await DocumentDB.getById(questionId, 1);
+        (store.dispatch as any)({
+          type: 'files/setFiles',
+          payload: { files: [questionFile] }
+        });
+
+        // Stage a persistableChanges edit
+        const [initial] = (await readFiles([questionId], {})).map(compressAugmentedFile);
+        const oldDesc = `"description":${JSON.stringify((initial.fileState.content as any).description)}`;
+        const editResult = await editFileStr({
+          fileId: questionId,
+          oldMatch: oldDesc,
+          newMatch: '"description":"Ephemeral isolation test"'
+        });
+        expect(editResult.success).toBe(true);
+
+        // Dispatch setEphemeral to set parameterValues (e.g. user changed a filter)
+        store.dispatch(setEphemeral({ fileId: questionId, changes: { parameterValues: { limit: 50 } } }));
+
+        // Read via readFiles + compressAugmentedFile (what agents see)
+        const compressed = compressAugmentedFile((await readFiles([questionId], {}))[0]);
+        const { fileState } = compressed;
+
+        // persistableChanges must be reflected in content
+        expect((fileState.content as any).description).toBe('Ephemeral isolation test');
+
+        // ephemeralChanges.parameterValues must NOT appear in content
+        expect((fileState.content as any).parameterValues).toBeUndefined();
+
+        // ephemeralChanges.parameterValues must appear as runtimeParameterValues
+        expect(fileState.runtimeParameterValues).toEqual({ limit: 50 });
+
+        // File must be dirty (persistableChanges present)
+        expect(fileState.isDirty).toBe(true);
+
+        console.log('✓ persistableChanges reflected in content.description');
+        console.log('✓ ephemeralChanges.parameterValues NOT leaked into content');
+        console.log('✓ runtimeParameterValues = { limit: 50 }');
+        console.log('✓ isDirty = true');
+      });
+
+
       it('should successfully replace string in file content', async () => {
         console.log('\n[TEST] editFileStr - Basic string replacement');
 
@@ -999,6 +1082,308 @@ describe('Phase 1: Unified File System API E2E', () => {
         expect(questionState2.persistableChanges.query).toContain('WHERE month = :month');
         console.log('✓ Both edits accumulated in persistableChanges');
       });
+    });
+  });
+
+  // ============================================================================
+  // EditFile Tool Handler Integration Tests
+  // These test the full registered frontend tool handler (tool-handlers.ts:1767),
+  // specifically the auto-execute path that builds params from the parameters array.
+  // The bug was: p.value (always undefined) instead of p.defaultValue.
+  // ============================================================================
+
+  describe('EditFile Tool Handler - auto-execute parameter resolution', () => {
+    let paramQuestionId: number;
+
+    beforeAll(async () => {
+      // Create a question with a parameterized query and defaultValue (once for all tests)
+      paramQuestionId = await DocumentDB.create(
+        'Parameterized Sales',
+        '/org/param-sales',
+        'question',
+        {
+          description: 'Sales with limit param',
+          query: 'SELECT month, total FROM sales LIMIT :limit',
+          database_name: 'test_db',
+          parameters: [{ name: 'limit', type: 'number' as const, defaultValue: 50 }],
+          vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
+        } as QuestionContent,
+        [],
+        1
+      );
+    });
+
+    beforeEach(async () => {
+      // Reload from DB and reset Redux state (clears edits and ephemeral state)
+      const qFile = await DocumentDB.getById(paramQuestionId, 1);
+      (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [qFile] } });
+    });
+
+    it('uses defaultValue when no ephemeral value is set', async () => {
+      console.log('\n[TEST] EditFile tool handler: auto-execute uses defaultValue');
+
+      const { pythonBackendFetch } = require('@/lib/api/python-backend-client');
+      const callsBefore = pythonBackendFetch.mock.calls.length;
+
+      // Call the registered EditFile frontend tool handler
+      const { executeToolCall } = await import('@/lib/api/tool-handlers');
+      const toolCall: ToolCall = {
+        id: 'test-edit-defaultvalue',
+        type: 'function',
+        function: {
+          name: 'EditFile',
+          arguments: {
+            fileId: paramQuestionId,
+            oldMatch: '"description":"Sales with limit param"',
+            newMatch: '"description":"Updated description"'
+          }
+        }
+      };
+
+      await executeToolCall(
+        toolCall,
+        { databaseName: 'test_db', schemas: [] } as any,
+        store.dispatch as any,
+        undefined,
+        store.getState() as any
+      );
+
+      // Verify auto-execute was triggered and used defaultValue=50 (not empty string)
+      const newCalls = pythonBackendFetch.mock.calls.slice(callsBefore);
+      const executeCall = newCalls.find(([url]: [string]) => url.includes('/api/execute-query'));
+      expect(executeCall).toBeDefined();
+      const body = JSON.parse(executeCall[1].body);
+      expect(body.parameters).toEqual({ limit: 50 });
+
+      console.log('✓ Auto-execute used defaultValue=50, not empty string');
+    });
+
+    it('uses ephemeralValue over defaultValue when set', async () => {
+      console.log('\n[TEST] EditFile tool handler: ephemeralValue takes precedence over defaultValue');
+
+      // Set an ephemeral runtime value (user changed the filter to 99)
+      store.dispatch(setEphemeral({ fileId: paramQuestionId, changes: { parameterValues: { limit: 99 } } }));
+
+      const { pythonBackendFetch } = require('@/lib/api/python-backend-client');
+      const callsBefore = pythonBackendFetch.mock.calls.length;
+
+      const { executeToolCall } = await import('@/lib/api/tool-handlers');
+      const toolCall: ToolCall = {
+        id: 'test-edit-ephemeral',
+        type: 'function',
+        function: {
+          name: 'EditFile',
+          arguments: {
+            fileId: paramQuestionId,
+            oldMatch: '"description":"Sales with limit param"',
+            newMatch: '"description":"Ephemeral override test"'
+          }
+        }
+      };
+
+      await executeToolCall(
+        toolCall,
+        { databaseName: 'test_db', schemas: [] } as any,
+        store.dispatch as any,
+        undefined,
+        store.getState() as any
+      );
+
+      // Verify auto-execute used ephemeral value=99, NOT defaultValue=50
+      const newCalls = pythonBackendFetch.mock.calls.slice(callsBefore);
+      const executeCall = newCalls.find(([url]: [string]) => url.includes('/api/execute-query'));
+      expect(executeCall).toBeDefined();
+      const body = JSON.parse(executeCall[1].body);
+      expect(body.parameters).toEqual({ limit: 99 });
+
+      console.log('✓ Auto-execute used ephemeralValue=99, ignoring defaultValue=50');
+    });
+
+    it('returns CompressedAugmentedFile with queryResults after auto-execute', async () => {
+      console.log('\n[TEST] EditFile tool handler: returns CompressedAugmentedFile with queryResults');
+
+      const { executeToolCall } = await import('@/lib/api/tool-handlers');
+      const toolCall: ToolCall = {
+        id: 'test-edit-response',
+        type: 'function',
+        function: {
+          name: 'EditFile',
+          arguments: {
+            fileId: paramQuestionId,
+            oldMatch: '"description":"Sales with limit param"',
+            newMatch: '"description":"Response structure test"'
+          }
+        }
+      };
+
+      const result = await executeToolCall(
+        toolCall,
+        { databaseName: 'test_db', schemas: [] } as any,
+        store.dispatch as any,
+        undefined,
+        store.getState() as any
+      );
+
+      // Result content should be a CompressedAugmentedFile JSON
+      const content = JSON.parse(result.content as string);
+
+      // Should have fileState with isDirty and updated content
+      expect(content.fileState).toBeDefined();
+      expect(content.fileState.isDirty).toBe(true);
+      expect((content.fileState.content as any).description).toBe('Response structure test');
+
+      // Should have queryResults (from auto-execute)
+      expect(content.queryResults).toBeDefined();
+      expect(Array.isArray(content.queryResults)).toBe(true);
+      expect(content.queryResults.length).toBeGreaterThan(0);
+
+      console.log('✓ EditFile returns CompressedAugmentedFile with isDirty=true and queryResults');
+    });
+
+    it('succeeds even when auto-execute fails (best-effort)', async () => {
+      console.log('\n[TEST] EditFile tool handler: auto-execute failure does not block edit');
+
+      // Create a question with an empty parameters array but a query that references a param
+      // This simulates the broken intermediate state: query has :param but parameters is still []
+      const brokenQuestionId = await DocumentDB.create(
+        'Broken Param Question',
+        '/org/broken-param',
+        'question',
+        {
+          description: 'Query has :limit but parameters is empty',
+          query: 'SELECT month, total FROM sales LIMIT :limit',
+          database_name: 'test_db',
+          parameters: [],  // intentionally empty — auto-execute will fail
+          vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
+        } as QuestionContent,
+        [],
+        1
+      );
+      const qFile = await DocumentDB.getById(brokenQuestionId, 1);
+      (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [qFile] } });
+
+      const { executeToolCall } = await import('@/lib/api/tool-handlers');
+      const toolCall: ToolCall = {
+        id: 'test-edit-broken-param',
+        type: 'function',
+        function: {
+          name: 'EditFile',
+          arguments: {
+            fileId: brokenQuestionId,
+            oldMatch: '"description":"Query has :limit but parameters is empty"',
+            newMatch: '"description":"Step 1: parameters updated next"'
+          }
+        }
+      };
+
+      // Should NOT throw even though auto-execute will fail (no value for :limit)
+      const result = await executeToolCall(
+        toolCall,
+        { databaseName: 'test_db', schemas: [] } as any,
+        store.dispatch as any,
+        undefined,
+        store.getState() as any
+      );
+
+      // Edit must have succeeded (staged in Redux)
+      const parsed = JSON.parse(result.content as string);
+      expect(parsed.fileState.isDirty).toBe(true);
+      expect((parsed.fileState.content as any).description).toBe('Step 1: parameters updated next');
+
+      console.log('✓ EditFile reported success; edit staged despite auto-execute failure');
+    });
+  });
+
+  describe('tryNormalizeJsonFragment', () => {
+    it('normalizes pretty-printed key-value pairs to compact form', () => {
+      // Simulates what AppState produces with json.dumps(indent=2)
+      expect(tryNormalizeJsonFragment('"query": "SELECT * FROM t"'))
+        .toBe('"query":"SELECT * FROM t"');
+
+      expect(tryNormalizeJsonFragment('"description": "My question"'))
+        .toBe('"description":"My question"');
+    });
+
+    it('normalizes pretty-printed parameters arrays', () => {
+      const prettyParams = '"parameters": [{"name": "current_month", "type": "date", "defaultValue": "2026-03-01"}]';
+      const compactParams = '"parameters":[{"name":"current_month","type":"date","defaultValue":"2026-03-01"}]';
+      expect(tryNormalizeJsonFragment(prettyParams)).toBe(compactParams);
+    });
+
+    it('returns original string for non-JSON fragments (raw SQL)', () => {
+      const sql = 'AND date_trunc(\'month\', visit_date) = :current_month';
+      expect(tryNormalizeJsonFragment(sql)).toBe(sql);
+    });
+
+    it('handles already-compact fragments by returning them unchanged', () => {
+      const compact = '"parameters":[{"name":"x","type":"date"}]';
+      expect(tryNormalizeJsonFragment(compact)).toBe(compact);
+    });
+  });
+
+  describe('editFileStr - pretty-printed JSON normalization', () => {
+    let normQuestionId: number;
+
+    beforeAll(async () => {
+      // Create a question with a parameterized query (uses static DocumentDB.create)
+      normQuestionId = await DocumentDB.create(
+        'Norm Test Q',
+        '/org/norm-test-q',
+        'question',
+        {
+          query: 'SELECT * FROM products WHERE category = :cat',
+          database_name: 'test_db',
+          vizSettings: { type: 'table' as const, xCols: [], yCols: [] },
+          parameters: [{ name: 'cat', type: 'text' as const, label: 'Category', defaultValue: 'Electronics' }],
+          description: 'Normalization test question',
+        } as QuestionContent,
+        [],
+        1
+      );
+    });
+
+    beforeEach(async () => {
+      const normFile = await DocumentDB.getById(normQuestionId, 1);
+      (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [normFile] } });
+    });
+
+    it('matches pretty-printed parameters array from AppState (key-value with spaces)', async () => {
+      // Simulate what the agent would copy verbatim from AppState (json.dumps(indent=2))
+      // The space after ":" is the critical difference vs compact JSON
+      const prettyOldMatch = '"parameters": [{"name": "cat", "type": "text", "label": "Category", "defaultValue": "Electronics"}]';
+      const newMatch = '"parameters":[{"name":"cat","type":"text","label":"Category","defaultValue":"Electronics"},{"name":"limit","type":"number","defaultValue":10}]';
+
+      const result = await editFileStr({
+        fileId: normQuestionId,
+        oldMatch: prettyOldMatch,
+        newMatch
+      });
+
+      expect(result.success).toBe(true);
+
+      // Verify the edit landed in Redux
+      const [augmented] = await readFiles([normQuestionId], {});
+      const compressed = compressAugmentedFile(augmented);
+      expect((compressed.fileState.content as any).parameters).toHaveLength(2);
+      expect((compressed.fileState.content as any).parameters[1].name).toBe('limit');
+      console.log('✓ editFileStr matched pretty-printed parameters array from AppState');
+    });
+
+    it('matches pretty-printed key:"value" pairs (space after colon)', async () => {
+      const prettyOldMatch = '"description": "Normalization test question"';
+      const newMatch = '"description":"Updated description"';
+
+      const result = await editFileStr({
+        fileId: normQuestionId,
+        oldMatch: prettyOldMatch,
+        newMatch
+      });
+
+      expect(result.success).toBe(true);
+      const [augmented] = await readFiles([normQuestionId], {});
+      const compressed = compressAugmentedFile(augmented);
+      expect((compressed.fileState.content as any).description).toBe('Updated description');
+      console.log('✓ editFileStr matched pretty-printed key-value pair from AppState');
     });
   });
 });

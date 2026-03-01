@@ -6,7 +6,7 @@
  */
 
 import { ToolCall, ToolMessage, DatabaseWithSchema, DocumentContent, QuestionContent, ReportContent, ReportReference, AlertContent, AlertSelector, AlertFunction, ComparisonOperator } from '@/lib/types';
-import { setEdit, setEphemeral, setFile, selectMergedContent, setMetadataEdit, type FileId } from '@/store/filesSlice';
+import { setEdit, setEphemeral, setFile, selectMergedContent, selectEphemeralParamValues, setMetadataEdit, type FileId } from '@/store/filesSlice';
 import type { AppDispatch, RootState } from '@/store/store';
 import { getStore } from '@/store/store';
 import type { UserInput } from './user-input-exception';
@@ -17,7 +17,7 @@ import { fetchWithCache } from './fetch-wrapper';
 import { API } from './declarations';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 import { getRouter } from '@/lib/navigation/use-navigation';
-import { readFilesStr, editFileStr, publishFile, getQueryResult, createVirtualFile, editFile as editFileOp, clearFileChanges } from '@/lib/api/file-state';
+import { readFiles, editFileStr, publishFile, getQueryResult, createVirtualFile, editFile as editFileOp, clearFileChanges, compressAugmentedFile } from '@/lib/api/file-state';
 import { canCreateFileType } from '@/lib/auth/access-rules.client';
 import { preserveParams } from '@/lib/navigation/url-utils';
 
@@ -1589,8 +1589,9 @@ async function handleUpdateQuestion(
     const queryPromise = shouldExecuteQuery
       ? (async () => {
           // Convert parameters array to key-value object for execution
+          const ephemeralValues = selectEphemeralParamValues(state, questionId);
           const paramsObj = (mergedContent.parameters || []).reduce((acc: any, p: any) => {
-            acc[p.name] = p.value;
+            acc[p.name] = ephemeralValues[p.name] ?? p.defaultValue ?? '';
             return acc;
           }, {});
 
@@ -1748,15 +1749,15 @@ registerFrontendTool('ClarifyFrontend', async (args, context) => {
 
 /**
  * ReadFiles - Load multiple files with references and query results
- * Returns compact JSON strings for LLM consumption
+ * Returns CompressedAugmentedFile[] — pre-merged content/persistableChanges so the
+ * model always sees a single flat content layer (no layer reasoning needed).
  */
-registerFrontendTool('ReadFiles', async (args, context) => {
+registerFrontendTool('ReadFiles', async (args, _context) => {
   const { fileIds } = args;
 
-  // Execute with compact JSON strings
-  const result = await readFilesStr(fileIds, {});
+  const result = await readFiles(fileIds, {});
 
-  return result;
+  return result.map(compressAugmentedFile);
 });
 
 /**
@@ -1781,20 +1782,35 @@ registerFrontendTool('EditFile', async (args, _context) => {
     const finalContent = selectMergedContent(updatedState, fileId) as any;
 
     if (finalContent?.query && finalContent?.database_name) {
+      const ephemeralValues = selectEphemeralParamValues(updatedState, fileId);
       const params = (finalContent.parameters || []).reduce((acc: any, p: any) => {
-        acc[p.name] = p.value ?? '';
+        acc[p.name] = ephemeralValues[p.name] ?? p.defaultValue ?? '';
         return acc;
       }, {} as Record<string, any>);
 
-      await getQueryResult({
-        query: finalContent.query,
-        params,
-        database: finalContent.database_name
-      });
+      // Auto-execute is best-effort: a failed execution (e.g. no data, bad param) must NOT
+      // cause EditFile to report failure. The edit was already staged successfully.
+      try {
+        await getQueryResult({
+          query: finalContent.query,
+          params,
+          database: finalContent.database_name
+        });
+      } catch (execErr) {
+        console.warn('[EditFile] Auto-execute failed (edit still staged):', execErr);
+      }
     }
   }
 
-  return result;
+  // Return the updated CompressedAugmentedFile (same format as ReadFiles) so the model can
+  // verify edits landed in content and also see references + query results.
+  // Also include success:true + diff so EditFileDisplay can render the inline diff in chat.
+  const [augmented] = await readFiles([fileId], {});
+  return {
+    success: true,
+    diff: result.diff,
+    ...compressAugmentedFile(augmented)
+  };
 });
 
 /**
@@ -1843,7 +1859,7 @@ registerFrontendTool('CreateFile', async (args, _context) => {
 /**
  * PublishFile - Commit changes from Redux to database
  */
-registerFrontendTool('PublishFile', async (args, context) => {
+registerFrontendTool('PublishFile', async (args, _context) => {
   const { fileId } = args;
 
   // Execute (new unified API)

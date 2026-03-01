@@ -5,7 +5,7 @@ import type { FileType } from '@/lib/types';
 import type { Mode } from '@/lib/mode/mode-types';
 import type { AppState } from '@/lib/appState';
 import { resolveHomeFolderSync, isHiddenSystemPath } from '@/lib/mode/path-resolver';
-import { selectAugmentedFiles } from '@/lib/api/file-state';
+import { selectAugmentedFiles, compressAugmentedFile } from '@/lib/api/file-state';
 
 // ============================================================================
 // Types
@@ -189,7 +189,7 @@ export const selectAppState = createSelector(
       const [augmented] = selectAugmentedFiles(partialState, [pathState.id]);
       if (!augmented) return { appState: null, loading: true };
       return {
-        appState: { type: 'file', state: augmented },
+        appState: { type: 'file', state: compressAugmentedFile(augmented) },
         loading: file.loading || false,
       };
     }
@@ -201,7 +201,7 @@ export const selectAppState = createSelector(
         const [augmented] = selectAugmentedFiles(partialState, [virtualId]);
         if (!augmented) return { appState: null, loading: true };
         return {
-          appState: { type: 'file', state: augmented },
+          appState: { type: 'file', state: compressAugmentedFile(augmented) },
           loading: file.loading || false,
         };
       }

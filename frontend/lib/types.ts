@@ -792,6 +792,27 @@ export interface AugmentedFile {
 }
 
 /**
+ * CompressedFileState — pre-merged view of a FileState for model consumption.
+ * content = { ...content, ...persistableChanges } so oldMatch is just a copy.
+ * runtimeParameterValues surfaces ephemeralChanges.parameterValues clearly labeled.
+ */
+export interface CompressedFileState {
+  id: number;
+  name: string;   // effective name (metadataChanges.name ?? name)
+  path: string;   // effective path  (metadataChanges.path ?? path)
+  type: FileType;
+  isDirty: boolean;             // true if unpublished changes exist
+  content: FileState['content']; // merged: { ...content, ...persistableChanges }
+  runtimeParameterValues?: Record<string, any>; // ephemeralChanges.parameterValues — live, never saved
+}
+
+export interface CompressedAugmentedFile {
+  fileState: CompressedFileState;
+  references: CompressedFileState[];
+  queryResults: QueryResult[];
+}
+
+/**
  * EditFile Tool - Range-based file editing
  */
 export interface EditFileInput {

@@ -33,7 +33,7 @@ import { API } from '@/lib/api/declarations';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import type { RootState } from '@/store/store';
-import type { AugmentedFile, FileState, QueryResult, QuestionContent, QuestionParameter, FileType, DocumentContent, DbFile, BaseFileContent, QuestionReference } from '@/lib/types';
+import type { AugmentedFile, CompressedAugmentedFile, CompressedFileState, FileState, QueryResult, QuestionContent, QuestionParameter, FileType, DocumentContent, DbFile, BaseFileContent, QuestionReference } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
 import type { AppState } from '@/lib/appState';
@@ -263,6 +263,40 @@ export function selectAugmentedFiles(state: RootState, fileIds: number[]): Augme
 
   _augmentedFilesCache.set(key, { state, result });
   return result;
+}
+
+/**
+ * Compress an AugmentedFile into a single consistent view for model consumption.
+ *
+ * - content   = { ...content, ...persistableChanges }  (what editFileStr matches against)
+ * - runtimeParameterValues = ephemeralChanges.parameterValues (clearly labeled, never saved)
+ * - loading/saving/ephemeralChanges.lastExecuted are dropped (noise for the model)
+ */
+export function compressAugmentedFile(augmented: AugmentedFile): CompressedAugmentedFile {
+  const compressFileState = (fs: FileState): CompressedFileState => {
+    const mergedContent = { ...(fs.content || {}), ...(fs.persistableChanges || {}) };
+    const isDirty = !!(
+      (fs.persistableChanges && Object.keys(fs.persistableChanges).length > 0) ||
+      fs.metadataChanges?.name !== undefined ||
+      fs.metadataChanges?.path !== undefined
+    );
+    const runtimeParameterValues = (fs.ephemeralChanges as { parameterValues?: Record<string, any> })?.parameterValues;
+    return {
+      id: fs.id,
+      name: fs.metadataChanges?.name ?? fs.name,
+      path: fs.metadataChanges?.path ?? fs.path,
+      type: fs.type as FileType,
+      isDirty,
+      content: mergedContent as FileState['content'],
+      ...(runtimeParameterValues && Object.keys(runtimeParameterValues).length > 0
+        ? { runtimeParameterValues } : {})
+    };
+  };
+  return {
+    fileState: compressFileState(augmented.fileState),
+    references: augmented.references.map(compressFileState),
+    queryResults: augmented.queryResults,
+  };
 }
 
 /**
@@ -499,34 +533,38 @@ export async function editFile(options: EditFileOptions): Promise<void> {
   }
 }
 
+
 /**
- * Read files and return stringified content (no pretty print)
+ * Attempt to compact a JSON fragment extracted from pretty-printed output (e.g. AppState,
+ * which is rendered with json.dumps(indent=2)).
  *
- * Loads files and returns their content as compact JSON strings.
- * Useful for string-based operations where line encoding is not needed.
+ * Strategy: wrap the fragment as an object value `{ <fragment> }` to make it parseable,
+ * then re-serialize compactly and strip the wrapper. Falls back to the original string if
+ * the fragment cannot be normalized (e.g. it is a raw SQL substring, not a JSON fragment).
  *
- * @param input - File IDs to load
- * @param options - Read options (ttl, skip, etc.)
- * @returns File states and stringified content (id -> string)
+ * Examples:
+ *   '"parameters": [{"name": "x", "type": "date"}]'
+ *   → '"parameters":[{"name":"x","type":"date"}]'
+ *
+ *   '"query": "SELECT * FROM t"'
+ *   → '"query":"SELECT * FROM t"'
  */
-export async function readFilesStr(
-  fileIds: number[],
-  options: ReadFilesOptions = {}
-): Promise<(AugmentedFile & { stringifiedContent: string })[]> {
-  const files = await readFiles(fileIds, options);
-  const state = getStore().getState();
-  return files.map(augmented => {
-    const { fileState } = augmented;
-    const mergedContent = selectMergedContent(state, fileState.id);
-    const fullFile = {
-      id: fileState.id,
-      name: selectEffectiveName(state, fileState.id) || '',
-      path: fileState.path,
-      type: fileState.type,
-      content: mergedContent
-    };
-    return { ...augmented, stringifiedContent: JSON.stringify(fullFile) };
-  });
+export function tryNormalizeJsonFragment(fragment: string): string {
+  // Try wrapping as an object property: { <fragment> }
+  try {
+    const parsed = JSON.parse(`{${fragment}}`);
+    const serialized = JSON.stringify(parsed);
+    // Remove surrounding {}
+    return serialized.slice(1, -1);
+  } catch {
+    // Not a valid key-value fragment — fall through
+  }
+  // Try as a standalone JSON value (array, object, string, number, etc.)
+  try {
+    return JSON.stringify(JSON.parse(fragment));
+  } catch {
+    return fragment;  // Give up: not a JSON fragment at all
+  }
 }
 
 /**
@@ -562,11 +600,16 @@ export async function editFileStr(
     return { success: false, error: `File ${fileId} not found` };
   }
 
-  // Get merged content
-  const mergedContent = selectMergedContent(state, fileId);
-  if (!mergedContent) {
+  // Get merged content (content + persistableChanges only — no ephemeralChanges).
+  // This must match exactly what compressAugmentedFile exposes so oldMatch is always
+  // a verbatim copy from what the model sees.
+  const baseContent = fileState.content;
+  if (!baseContent) {
     return { success: false, error: `File ${fileId} has no content` };
   }
+  const mergedContent = fileState.persistableChanges && Object.keys(fileState.persistableChanges).length > 0
+    ? { ...baseContent, ...fileState.persistableChanges }
+    : baseContent;
 
   // Build FULL file JSON (same format as readFilesStr)
   const currentName = selectEffectiveName(state, fileId) || '';
@@ -581,13 +624,20 @@ export async function editFileStr(
   // Convert to JSON string (compact)
   const fullFileStr = JSON.stringify(fullFile);
 
-  // Check if oldMatch exists
+  // Check if oldMatch exists; if not, try normalizing whitespace (handles pretty-printed JSON
+  // from AppState which uses json.dumps(indent=2) vs the compact JSON.stringify stored here).
+  let actualOldMatch = oldMatch;
   if (!fullFileStr.includes(oldMatch)) {
-    return { success: false, error: `String "${oldMatch}" not found in file` };
+    const normalized = tryNormalizeJsonFragment(oldMatch);
+    if (normalized !== oldMatch && fullFileStr.includes(normalized)) {
+      actualOldMatch = normalized;
+    } else {
+      return { success: false, error: `String "${oldMatch}" not found in file` };
+    }
   }
 
   // Apply string replace (first occurrence only)
-  const editedStr = fullFileStr.replace(oldMatch, newMatch);
+  const editedStr = fullFileStr.replace(actualOldMatch, newMatch);
 
   // Parse edited file as JSON
   let editedFile: { id: number; name: string; path: string; type: FileType; content: any };
