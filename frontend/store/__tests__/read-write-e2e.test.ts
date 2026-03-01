@@ -14,6 +14,7 @@ import { DocumentDB } from '@/lib/database/documents-db';
 import type { QuestionContent, DocumentContent, UserRole } from '@/lib/types';
 import { readFiles, publishFile, editFileStr, compressAugmentedFile, selectAugmentedFiles } from '@/lib/api/file-state';
 import { setEphemeral } from '@/store/filesSlice';
+import type { ToolCall } from '@/lib/types';
 import { executeQuery } from '@/lib/api/execute-query.server';
 import type { RootState } from '@/store/store';
 import type { Mode } from '@/lib/mode/mode-types';
@@ -1081,6 +1082,162 @@ describe('Phase 1: Unified File System API E2E', () => {
         expect(questionState2.persistableChanges.query).toContain('WHERE month = :month');
         console.log('✓ Both edits accumulated in persistableChanges');
       });
+    });
+  });
+
+  // ============================================================================
+  // EditFile Tool Handler Integration Tests
+  // These test the full registered frontend tool handler (tool-handlers.ts:1767),
+  // specifically the auto-execute path that builds params from the parameters array.
+  // The bug was: p.value (always undefined) instead of p.defaultValue.
+  // ============================================================================
+
+  describe('EditFile Tool Handler - auto-execute parameter resolution', () => {
+    let paramQuestionId: number;
+
+    beforeAll(async () => {
+      // Create a question with a parameterized query and defaultValue (once for all tests)
+      paramQuestionId = await DocumentDB.create(
+        'Parameterized Sales',
+        '/org/param-sales',
+        'question',
+        {
+          description: 'Sales with limit param',
+          query: 'SELECT month, total FROM sales LIMIT :limit',
+          database_name: 'test_db',
+          parameters: [{ name: 'limit', type: 'number' as const, defaultValue: 50 }],
+          vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
+        } as QuestionContent,
+        [],
+        1
+      );
+    });
+
+    beforeEach(async () => {
+      // Reload from DB and reset Redux state (clears edits and ephemeral state)
+      const qFile = await DocumentDB.getById(paramQuestionId, 1);
+      (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [qFile] } });
+    });
+
+    it('uses defaultValue when no ephemeral value is set', async () => {
+      console.log('\n[TEST] EditFile tool handler: auto-execute uses defaultValue');
+
+      const { pythonBackendFetch } = require('@/lib/api/python-backend-client');
+      const callsBefore = pythonBackendFetch.mock.calls.length;
+
+      // Call the registered EditFile frontend tool handler
+      const { executeToolCall } = await import('@/lib/api/tool-handlers');
+      const toolCall: ToolCall = {
+        id: 'test-edit-defaultvalue',
+        type: 'function',
+        function: {
+          name: 'EditFile',
+          arguments: {
+            fileId: paramQuestionId,
+            oldMatch: '"description":"Sales with limit param"',
+            newMatch: '"description":"Updated description"'
+          }
+        }
+      };
+
+      await executeToolCall(
+        toolCall,
+        { databaseName: 'test_db', schemas: [] } as any,
+        store.dispatch as any,
+        undefined,
+        store.getState() as any
+      );
+
+      // Verify auto-execute was triggered and used defaultValue=50 (not empty string)
+      const newCalls = pythonBackendFetch.mock.calls.slice(callsBefore);
+      const executeCall = newCalls.find(([url]: [string]) => url.includes('/api/execute-query'));
+      expect(executeCall).toBeDefined();
+      const body = JSON.parse(executeCall[1].body);
+      expect(body.parameters).toEqual({ limit: 50 });
+
+      console.log('✓ Auto-execute used defaultValue=50, not empty string');
+    });
+
+    it('uses ephemeralValue over defaultValue when set', async () => {
+      console.log('\n[TEST] EditFile tool handler: ephemeralValue takes precedence over defaultValue');
+
+      // Set an ephemeral runtime value (user changed the filter to 99)
+      store.dispatch(setEphemeral({ fileId: paramQuestionId, changes: { parameterValues: { limit: 99 } } }));
+
+      const { pythonBackendFetch } = require('@/lib/api/python-backend-client');
+      const callsBefore = pythonBackendFetch.mock.calls.length;
+
+      const { executeToolCall } = await import('@/lib/api/tool-handlers');
+      const toolCall: ToolCall = {
+        id: 'test-edit-ephemeral',
+        type: 'function',
+        function: {
+          name: 'EditFile',
+          arguments: {
+            fileId: paramQuestionId,
+            oldMatch: '"description":"Sales with limit param"',
+            newMatch: '"description":"Ephemeral override test"'
+          }
+        }
+      };
+
+      await executeToolCall(
+        toolCall,
+        { databaseName: 'test_db', schemas: [] } as any,
+        store.dispatch as any,
+        undefined,
+        store.getState() as any
+      );
+
+      // Verify auto-execute used ephemeral value=99, NOT defaultValue=50
+      const newCalls = pythonBackendFetch.mock.calls.slice(callsBefore);
+      const executeCall = newCalls.find(([url]: [string]) => url.includes('/api/execute-query'));
+      expect(executeCall).toBeDefined();
+      const body = JSON.parse(executeCall[1].body);
+      expect(body.parameters).toEqual({ limit: 99 });
+
+      console.log('✓ Auto-execute used ephemeralValue=99, ignoring defaultValue=50');
+    });
+
+    it('returns CompressedAugmentedFile with queryResults after auto-execute', async () => {
+      console.log('\n[TEST] EditFile tool handler: returns CompressedAugmentedFile with queryResults');
+
+      const { executeToolCall } = await import('@/lib/api/tool-handlers');
+      const toolCall: ToolCall = {
+        id: 'test-edit-response',
+        type: 'function',
+        function: {
+          name: 'EditFile',
+          arguments: {
+            fileId: paramQuestionId,
+            oldMatch: '"description":"Sales with limit param"',
+            newMatch: '"description":"Response structure test"'
+          }
+        }
+      };
+
+      const result = await executeToolCall(
+        toolCall,
+        { databaseName: 'test_db', schemas: [] } as any,
+        store.dispatch as any,
+        undefined,
+        store.getState() as any
+      );
+
+      // Result content should be a CompressedAugmentedFile JSON
+      const content = JSON.parse(result.content as string);
+
+      // Should have fileState with isDirty and updated content
+      expect(content.fileState).toBeDefined();
+      expect(content.fileState.isDirty).toBe(true);
+      expect((content.fileState.content as any).description).toBe('Response structure test');
+
+      // Should have queryResults (from auto-execute)
+      expect(content.queryResults).toBeDefined();
+      expect(Array.isArray(content.queryResults)).toBe(true);
+      expect(content.queryResults.length).toBeGreaterThan(0);
+
+      console.log('✓ EditFile returns CompressedAugmentedFile with isDirty=true and queryResults');
     });
   });
 });

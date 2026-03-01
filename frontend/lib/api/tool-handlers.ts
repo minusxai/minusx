@@ -6,7 +6,7 @@
  */
 
 import { ToolCall, ToolMessage, DatabaseWithSchema, DocumentContent, QuestionContent, ReportContent, ReportReference, AlertContent, AlertSelector, AlertFunction, ComparisonOperator } from '@/lib/types';
-import { setEdit, setEphemeral, setFile, selectMergedContent, setMetadataEdit, type FileId } from '@/store/filesSlice';
+import { setEdit, setEphemeral, setFile, selectMergedContent, selectEphemeralParamValues, setMetadataEdit, type FileId } from '@/store/filesSlice';
 import type { AppDispatch, RootState } from '@/store/store';
 import { getStore } from '@/store/store';
 import type { UserInput } from './user-input-exception';
@@ -1589,8 +1589,9 @@ async function handleUpdateQuestion(
     const queryPromise = shouldExecuteQuery
       ? (async () => {
           // Convert parameters array to key-value object for execution
+          const ephemeralValues = selectEphemeralParamValues(state, questionId);
           const paramsObj = (mergedContent.parameters || []).reduce((acc: any, p: any) => {
-            acc[p.name] = p.value;
+            acc[p.name] = ephemeralValues[p.name] ?? p.defaultValue ?? '';
             return acc;
           }, {});
 
@@ -1781,8 +1782,9 @@ registerFrontendTool('EditFile', async (args, _context) => {
     const finalContent = selectMergedContent(updatedState, fileId) as any;
 
     if (finalContent?.query && finalContent?.database_name) {
+      const ephemeralValues = selectEphemeralParamValues(updatedState, fileId);
       const params = (finalContent.parameters || []).reduce((acc: any, p: any) => {
-        acc[p.name] = p.value ?? '';
+        acc[p.name] = ephemeralValues[p.name] ?? p.defaultValue ?? '';
         return acc;
       }, {} as Record<string, any>);
 

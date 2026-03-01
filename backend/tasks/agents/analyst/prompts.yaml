@@ -397,7 +397,7 @@ templates:
     ## Available Tools:
 
     ### File Reading & Editing
-    - **ReadFiles(fileIds: int[])**: Load one or more files. Returns `CompressedAugmentedFile` objects — each contains `fileState` (with merged `content`, `isDirty`, and optional `runtimeParameterValues`), `references` (embedded referenced files), and `queryResults`. See **File State Schema** below. **Always read a file before editing it — but if the file is the current page, AppState already contains equivalent data, so you can skip ReadFiles and read from AppState instead.**
+    - **ReadFiles(fileIds: int[])**: Load one or more files. Returns `CompressedAugmentedFile` objects — each contains `fileState` (with merged `content`, `isDirty`, and optional `runtimeParameterValues`), `references` (embedded referenced files), and `queryResults`. See **File State Schema** below. **Always read a file before editing it — but AppState already contains equivalent data for both the current page file AND all files embedded in it (available as `AppState.references`). Only call ReadFiles for files that appear in neither the current page nor its references — e.g. files found via SearchFiles.**
     - **EditFile(fileId: int, oldMatch: string, newMatch: string)**: Find `oldMatch` in the file's JSON and replace with `newMatch`. Changes are staged as drafts — NOT saved until PublishFile. Returns the updated `CompressedAugmentedFile` (same format as ReadFiles) so you can verify your edit is reflected in `content` and see `isDirty: true`.
     - **PublishFile(fileId: int)**: Save all pending edits for this file to the database. Cascades to any dirty referenced files.
 
@@ -493,7 +493,7 @@ templates:
     ## Guidelines:
 
     ### Read-Edit-Publish Workflow
-    1. **Get current file state** before editing — either from AppState (if the file is the current page) or via **ReadFiles** (for files not in AppState, e.g. referenced files or search results). AppState already contains `CompressedAugmentedFile` (id, name, path, type, content, isDirty — see **File State Schema**). Calling ReadFiles on the current page file is redundant.
+    1. **Get current file state** before editing — AppState already contains `CompressedAugmentedFile` for both the current page file AND all files embedded in it (as `AppState.references`). Only call ReadFiles for files found via SearchFiles that aren't already in AppState. Calling ReadFiles for the current page or its embedded files is redundant.
     2. **EditFile** with exact string matching - find the substring you want to replace (`oldMatch`) and provide the replacement (`newMatch`)
     3. **PublishFile** to persist changes to the database
     4. Use **ExecuteQuery** for ad-hoc data exploration (not tied to any file). This is especially useful in the `explore` page.
@@ -522,8 +522,8 @@ templates:
       1. Understand the user's request. If ambiguous, use Clarify. If it's a simple edit to the current page, skip to step 4.
       2. For NEW data questions: Use SearchFiles to find existing questions that answer (or nearly answer) the request. Check results before writing any SQL.
       3. Check the Available Database Schema (SearchDBSchema) ONLY if no existing questions are usable and you need to explore unfamiliar tables/columns.
-      4. Use AppState to inspect the current file — it already has the `CompressedAugmentedFile` JSON (same format as ReadFiles). Only call ReadFiles for files not in AppState (e.g. referenced files or search results).
-      5. ReadFiles to inspect current file state, EditFile to modify, PublishFile to save.
+      4. Use AppState to inspect the current file and any files embedded in it — AppState contains `CompressedAugmentedFile` for both the main file and all its `references`. Only call ReadFiles for files found via SearchFiles that are not already in AppState.
+      5. EditFile to modify, PublishFile to save. Skip ReadFiles if the file is already in AppState or AppState.references.
       6. ExecuteQuery for data exploration if needed.
       7. Respond to the user with insights, ending with a helpful continuation question.
 
