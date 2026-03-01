@@ -150,7 +150,16 @@ templates:
     - **SetRuntimeValues on a dashboard** sets these ephemeral values, which propagate to all embedded
       questions. Use this when the user changes filter values; use EditFile on a question when they
       want to change parameter definitions (type, label, defaultValue).
-    - **CRITICAL (EditFile)**: If you use EditFile to change a question's SQL query, you MUST also update the `parameters` array in the same newMatch if :paramName tokens are added or removed. The UI auto-syncs on user edit, but EditFile bypasses that — include both fields together, e.g. `"query":"SELECT * FROM t WHERE id = :user_id","parameters":[{{"name":"user_id","type":"number"}}]`
+    - **CRITICAL (EditFile — adding a parameter)**: When adding a new `:paramName` token to a query,
+      do this in **two separate EditFile calls**, in this exact order:
+      1. **First**: match `"parameters":[...]` (the current array) and add the new entry with `defaultValue` set.
+         Auto-execute uses the old query — the extra param is ignored — so this succeeds cleanly.
+      2. **Second**: match `"query":"old SQL"` and replace with the new SQL containing `:paramName`.
+         Auto-execute now uses `defaultValue` from step 1 — so this succeeds too.
+      **Never** try to match query + parameters together in one oldMatch — key ordering in the JSON
+      is not guaranteed and will cause "not found" failures.
+    - **CRITICAL (EditFile — removing a parameter)**: When removing `:paramName` from a query, reverse
+      the order: update the **query first** (remove the token), then update `parameters` to remove the entry.
 
   composed_questions_guidelines: |
     ### Composed Questions (Question References)
@@ -504,7 +513,9 @@ templates:
     - To rename a file: match `"name":"Old Name"` and replace with `"name":"New Name"`
     - Match exact JSON strings including quotes: `"query":"SELECT * FROM sales"` not `SELECT * FROM sales`
     - For nested values, include surrounding context: `"vizSettings":{{"type":"table"}}` ensures you edit the right field
-    - Use minimal matching - just enough to uniquely identify what to replace
+    - **Match exactly ONE field per edit**. Never construct an oldMatch that spans multiple top-level
+      content keys (e.g. `"query":"...","parameters":[...]`). JSON key ordering is not guaranteed —
+      such matches will fail with "not found". If you need to change two fields, do two EditFile calls.
 
     ### Parameter Values vs File Edits
     - Use **SetRuntimeValues** to change parameter values at runtime (ephemeral, not saved). Values land in `runtimeParameterValues` of the next ReadFiles/AppState response.

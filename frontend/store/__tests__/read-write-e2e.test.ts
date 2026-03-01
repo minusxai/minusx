@@ -1239,5 +1239,58 @@ describe('Phase 1: Unified File System API E2E', () => {
 
       console.log('✓ EditFile returns CompressedAugmentedFile with isDirty=true and queryResults');
     });
+
+    it('succeeds even when auto-execute fails (best-effort)', async () => {
+      console.log('\n[TEST] EditFile tool handler: auto-execute failure does not block edit');
+
+      // Create a question with an empty parameters array but a query that references a param
+      // This simulates the broken intermediate state: query has :param but parameters is still []
+      const brokenQuestionId = await DocumentDB.create(
+        'Broken Param Question',
+        '/org/broken-param',
+        'question',
+        {
+          description: 'Query has :limit but parameters is empty',
+          query: 'SELECT month, total FROM sales LIMIT :limit',
+          database_name: 'test_db',
+          parameters: [],  // intentionally empty — auto-execute will fail
+          vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
+        } as QuestionContent,
+        [],
+        1
+      );
+      const qFile = await DocumentDB.getById(brokenQuestionId, 1);
+      (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [qFile] } });
+
+      const { executeToolCall } = await import('@/lib/api/tool-handlers');
+      const toolCall: ToolCall = {
+        id: 'test-edit-broken-param',
+        type: 'function',
+        function: {
+          name: 'EditFile',
+          arguments: {
+            fileId: brokenQuestionId,
+            oldMatch: '"description":"Query has :limit but parameters is empty"',
+            newMatch: '"description":"Step 1: parameters updated next"'
+          }
+        }
+      };
+
+      // Should NOT throw even though auto-execute will fail (no value for :limit)
+      const result = await executeToolCall(
+        toolCall,
+        { databaseName: 'test_db', schemas: [] } as any,
+        store.dispatch as any,
+        undefined,
+        store.getState() as any
+      );
+
+      // Edit must have succeeded (staged in Redux)
+      const parsed = JSON.parse(result.content as string);
+      expect(parsed.fileState.isDirty).toBe(true);
+      expect((parsed.fileState.content as any).description).toBe('Step 1: parameters updated next');
+
+      console.log('✓ EditFile reported success; edit staged despite auto-execute failure');
+    });
   });
 });

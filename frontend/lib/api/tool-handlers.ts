@@ -1788,11 +1788,17 @@ registerFrontendTool('EditFile', async (args, _context) => {
         return acc;
       }, {} as Record<string, any>);
 
-      await getQueryResult({
-        query: finalContent.query,
-        params,
-        database: finalContent.database_name
-      });
+      // Auto-execute is best-effort: a failed execution (e.g. no data, bad param) must NOT
+      // cause EditFile to report failure. The edit was already staged successfully.
+      try {
+        await getQueryResult({
+          query: finalContent.query,
+          params,
+          database: finalContent.database_name
+        });
+      } catch (execErr) {
+        console.warn('[EditFile] Auto-execute failed (edit still staged):', execErr);
+      }
     }
   }
 
