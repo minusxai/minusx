@@ -1803,9 +1803,14 @@ registerFrontendTool('EditFile', async (args, _context) => {
   }
 
   // Return the updated CompressedAugmentedFile (same format as ReadFiles) so the model can
-  // verify edits landed in content and also see references + query results
+  // verify edits landed in content and also see references + query results.
+  // Also include success:true + diff so EditFileDisplay can render the inline diff in chat.
   const [augmented] = await readFiles([fileId], {});
-  return compressAugmentedFile(augmented);
+  return {
+    success: true,
+    diff: result.diff,
+    ...compressAugmentedFile(augmented)
+  };
 });
 
 /**

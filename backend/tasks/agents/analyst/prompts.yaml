@@ -502,7 +502,11 @@ templates:
     ## Guidelines:
 
     ### Read-Edit-Publish Workflow
-    1. **Get current file state** before editing — AppState already contains `CompressedAugmentedFile` for both the current page file AND all files embedded in it (as `AppState.references`). Only call ReadFiles for files found via SearchFiles that aren't already in AppState. Calling ReadFiles for the current page or its embedded files is redundant.
+    1. **Get current file state** before editing — AppState already contains `CompressedAugmentedFile` for
+       both the current page file AND all files embedded in it (as `AppState.references`). **NEVER call
+       ReadFiles for files already listed in AppState or AppState.references** — the content is already
+       there and calling ReadFiles again is wasteful and redundant. Only call ReadFiles for files
+       discovered via SearchFiles that do not appear anywhere in AppState.
     2. **EditFile** with exact string matching - find the substring you want to replace (`oldMatch`) and provide the replacement (`newMatch`)
     3. **PublishFile** to persist changes to the database
     4. Use **ExecuteQuery** for ad-hoc data exploration (not tied to any file). This is especially useful in the `explore` page.
@@ -516,6 +520,22 @@ templates:
     - **Match exactly ONE field per edit**. Never construct an oldMatch that spans multiple top-level
       content keys (e.g. `"query":"...","parameters":[...]`). JSON key ordering is not guaranteed —
       such matches will fail with "not found". If you need to change two fields, do two EditFile calls.
+    - **AppState is pretty-printed; EditFile matching is compact**: AppState formats JSON with spaces
+      (`"key": value`, `[item, item]`) but the stored format is compact (`"key":value`, `[item,item]`).
+      EditFile automatically normalizes this difference when matching, so you CAN copy JSON key-value
+      fragments directly from AppState and use them as `oldMatch`. However, prefer short specific matches:
+      the shorter and more unique your `oldMatch`, the safer and more reliable the edit.
+    - **For SQL query edits, match the minimum unique clause — never the full query string**. Matching
+      the entire multi-line SQL body is fragile and unnecessary. Instead, match just the specific line
+      or condition you want to change. Examples:
+      - To remove a filter: oldMatch = `AND date_trunc('month', visit_date) = :current_month ::DATE`
+      - To add a WHERE clause: match the last line before it, e.g. `GROUP BY patient_id`
+      - To remove a SELECT column: match just that column expression + its comma/newline context
+      Matching small substrings avoids the common failure of whitespace mismatches in the full query.
+    - **Verify each edit before claiming success**: After every EditFile call, check that the returned
+      `fileState.isDirty` is `true` and the `content` reflects your intended change. If `isDirty` is
+      still `false` or the expected change is absent, the edit failed — do NOT claim success or proceed
+      to PublishFile. Retry with a corrected, shorter `oldMatch`.
 
     ### Parameter Values vs File Edits
     - Use **SetRuntimeValues** to change parameter values at runtime (ephemeral, not saved). Values land in `runtimeParameterValues` of the next ReadFiles/AppState response.
@@ -533,8 +553,8 @@ templates:
       1. Understand the user's request. If ambiguous, use Clarify. If it's a simple edit to the current page, skip to step 4.
       2. For NEW data questions: Use SearchFiles to find existing questions that answer (or nearly answer) the request. Check results before writing any SQL.
       3. Check the Available Database Schema (SearchDBSchema) ONLY if no existing questions are usable and you need to explore unfamiliar tables/columns.
-      4. Use AppState to inspect the current file and any files embedded in it — AppState contains `CompressedAugmentedFile` for both the main file and all its `references`. Only call ReadFiles for files found via SearchFiles that are not already in AppState.
-      5. EditFile to modify, PublishFile to save. Skip ReadFiles if the file is already in AppState or AppState.references.
+      4. Use AppState to inspect the current file and any files embedded in it — AppState contains `CompressedAugmentedFile` for both the main file and all its `references`. **NEVER call ReadFiles for files in AppState or AppState.references.** Only call ReadFiles for files found via SearchFiles that are not listed in AppState.
+      5. EditFile to modify, PublishFile to save. After each EditFile, verify `isDirty: true` in the response before proceeding.
       6. ExecuteQuery for data exploration if needed.
       7. Respond to the user with insights, ending with a helpful continuation question.
 

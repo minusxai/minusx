@@ -12,7 +12,7 @@ import authReducer from '../authSlice';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase, createMockFetch } from './test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
 import type { QuestionContent, DocumentContent, UserRole } from '@/lib/types';
-import { readFiles, publishFile, editFileStr, compressAugmentedFile, selectAugmentedFiles } from '@/lib/api/file-state';
+import { readFiles, publishFile, editFileStr, compressAugmentedFile, selectAugmentedFiles, tryNormalizeJsonFragment } from '@/lib/api/file-state';
 import { setEphemeral } from '@/store/filesSlice';
 import type { ToolCall } from '@/lib/types';
 import { executeQuery } from '@/lib/api/execute-query.server';
@@ -1291,6 +1291,99 @@ describe('Phase 1: Unified File System API E2E', () => {
       expect((parsed.fileState.content as any).description).toBe('Step 1: parameters updated next');
 
       console.log('✓ EditFile reported success; edit staged despite auto-execute failure');
+    });
+  });
+
+  describe('tryNormalizeJsonFragment', () => {
+    it('normalizes pretty-printed key-value pairs to compact form', () => {
+      // Simulates what AppState produces with json.dumps(indent=2)
+      expect(tryNormalizeJsonFragment('"query": "SELECT * FROM t"'))
+        .toBe('"query":"SELECT * FROM t"');
+
+      expect(tryNormalizeJsonFragment('"description": "My question"'))
+        .toBe('"description":"My question"');
+    });
+
+    it('normalizes pretty-printed parameters arrays', () => {
+      const prettyParams = '"parameters": [{"name": "current_month", "type": "date", "defaultValue": "2026-03-01"}]';
+      const compactParams = '"parameters":[{"name":"current_month","type":"date","defaultValue":"2026-03-01"}]';
+      expect(tryNormalizeJsonFragment(prettyParams)).toBe(compactParams);
+    });
+
+    it('returns original string for non-JSON fragments (raw SQL)', () => {
+      const sql = 'AND date_trunc(\'month\', visit_date) = :current_month';
+      expect(tryNormalizeJsonFragment(sql)).toBe(sql);
+    });
+
+    it('handles already-compact fragments by returning them unchanged', () => {
+      const compact = '"parameters":[{"name":"x","type":"date"}]';
+      expect(tryNormalizeJsonFragment(compact)).toBe(compact);
+    });
+  });
+
+  describe('editFileStr - pretty-printed JSON normalization', () => {
+    let normQuestionId: number;
+
+    beforeAll(async () => {
+      // Create a question with a parameterized query (uses static DocumentDB.create)
+      normQuestionId = await DocumentDB.create(
+        'Norm Test Q',
+        '/org/norm-test-q',
+        'question',
+        {
+          query: 'SELECT * FROM products WHERE category = :cat',
+          database_name: 'test_db',
+          vizSettings: { type: 'table' as const, xCols: [], yCols: [] },
+          parameters: [{ name: 'cat', type: 'text' as const, label: 'Category', defaultValue: 'Electronics' }],
+          description: 'Normalization test question',
+        } as QuestionContent,
+        [],
+        1
+      );
+    });
+
+    beforeEach(async () => {
+      const normFile = await DocumentDB.getById(normQuestionId, 1);
+      (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [normFile] } });
+    });
+
+    it('matches pretty-printed parameters array from AppState (key-value with spaces)', async () => {
+      // Simulate what the agent would copy verbatim from AppState (json.dumps(indent=2))
+      // The space after ":" is the critical difference vs compact JSON
+      const prettyOldMatch = '"parameters": [{"name": "cat", "type": "text", "label": "Category", "defaultValue": "Electronics"}]';
+      const newMatch = '"parameters":[{"name":"cat","type":"text","label":"Category","defaultValue":"Electronics"},{"name":"limit","type":"number","defaultValue":10}]';
+
+      const result = await editFileStr({
+        fileId: normQuestionId,
+        oldMatch: prettyOldMatch,
+        newMatch
+      });
+
+      expect(result.success).toBe(true);
+
+      // Verify the edit landed in Redux
+      const [augmented] = await readFiles([normQuestionId], {});
+      const compressed = compressAugmentedFile(augmented);
+      expect((compressed.fileState.content as any).parameters).toHaveLength(2);
+      expect((compressed.fileState.content as any).parameters[1].name).toBe('limit');
+      console.log('✓ editFileStr matched pretty-printed parameters array from AppState');
+    });
+
+    it('matches pretty-printed key:"value" pairs (space after colon)', async () => {
+      const prettyOldMatch = '"description": "Normalization test question"';
+      const newMatch = '"description":"Updated description"';
+
+      const result = await editFileStr({
+        fileId: normQuestionId,
+        oldMatch: prettyOldMatch,
+        newMatch
+      });
+
+      expect(result.success).toBe(true);
+      const [augmented] = await readFiles([normQuestionId], {});
+      const compressed = compressAugmentedFile(augmented);
+      expect((compressed.fileState.content as any).description).toBe('Updated description');
+      console.log('✓ editFileStr matched pretty-printed key-value pair from AppState');
     });
   });
 });
