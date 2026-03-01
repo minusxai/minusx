@@ -12,7 +12,7 @@ import authReducer from '../authSlice';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase, createMockFetch } from './test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
 import type { QuestionContent, DocumentContent, UserRole } from '@/lib/types';
-import { readFiles, publishFile, readFilesStr, editFileStr } from '@/lib/api/file-state';
+import { readFiles, publishFile, editFileStr, compressAugmentedFile, selectAugmentedFiles } from '@/lib/api/file-state';
 import { executeQuery } from '@/lib/api/execute-query.server';
 import type { RootState } from '@/store/store';
 import type { Mode } from '@/lib/mode/mode-types';
@@ -687,64 +687,84 @@ describe('Phase 1: Unified File System API E2E', () => {
       });
     });
 
-    describe('readFilesStr', () => {
-      it('should return compact JSON strings for files', async () => {
-        console.log('\n[TEST] readFilesStr - Compact JSON output');
+    describe('editFileStr', () => {
+      it('EditFile and ReadFiles return identical CompressedAugmentedFile after an edit', async () => {
+        console.log('\n[TEST] EditFile / ReadFiles consistency');
 
-        // Load files into Redux first
+        // Load question into Redux
         const questionFile = await DocumentDB.getById(questionId, 1);
         (store.dispatch as any)({
           type: 'files/setFiles',
           payload: { files: [questionFile] }
         });
 
-        // Call readFilesStr
-        const result = await readFilesStr([questionId]);
+        // Read current state (same way the model would via ReadFiles / AppState)
+        const [before] = (await readFiles([questionId], {})).map(compressAugmentedFile);
+        const content = before.fileState.content as any;
 
-        // Verify result structure
-        expect(result).toHaveLength(1);
-        expect(result[0].fileState.id).toBe(questionId);
-        expect(result[0].stringifiedContent).toBeDefined();
+        // Build oldMatch exactly as the model would — copy verbatim from content
+        const oldQuery = `"query":${JSON.stringify(content.query)}`;
+        const newQuery = '"query":"SELECT month, revenue FROM sales"';
 
-        // Verify it's compact JSON (no newlines or extra spaces)
-        const compactStr = result[0].stringifiedContent;
-        expect(compactStr).not.toContain('\n');
-        expect(compactStr).not.toMatch(/\s{2,}/); // No multiple spaces
-        expect(compactStr).toContain('"query"');
-        expect(compactStr).toContain('"database_name"');
+        // Apply the edit (this is what the EditFile tool handler does internally)
+        const editResult = await editFileStr({ fileId: questionId, oldMatch: oldQuery, newMatch: newQuery });
+        expect(editResult.success).toBe(true);
 
-        console.log('✓ readFilesStr returned compact JSON (no pretty print)');
-        console.log(`✓ String length: ${compactStr.length} characters`);
+        // Simulate EditFile tool response: readFiles + compressAugmentedFile
+        const editFileResponse = compressAugmentedFile((await readFiles([questionId], {}))[0]);
+
+        // Simulate ReadFiles tool response: readFiles + compressAugmentedFile (same code path)
+        const readFilesResponse = (await readFiles([questionId], {})).map(compressAugmentedFile)[0];
+
+        // Both tool responses must be identical
+        expect(readFilesResponse).toEqual(editFileResponse);
+
+        // Sanity: edit landed and isDirty is set
+        expect((editFileResponse.fileState.content as any).query).toContain('revenue FROM sales');
+        expect(editFileResponse.fileState.isDirty).toBe(true);
+
+        console.log('✓ EditFile and ReadFiles responses are identical');
+        console.log('✓ isDirty=true, edit reflected in content');
       });
 
-      it('should handle multiple files', async () => {
-        console.log('\n[TEST] readFilesStr - Multiple files');
+      it('AppState fileState is consistent with ReadFiles after an edit', async () => {
+        console.log('\n[TEST] AppState / ReadFiles consistency');
 
-        // Load both question and dashboard
+        // Load question into Redux
         const questionFile = await DocumentDB.getById(questionId, 1);
-        const dashboardFile = await DocumentDB.getById(dashboardId, 1);
         (store.dispatch as any)({
           type: 'files/setFiles',
-          payload: { files: [questionFile, dashboardFile] }
+          payload: { files: [questionFile] }
         });
 
-        // Call readFilesStr with multiple IDs
-        const result = await readFilesStr([questionId, dashboardId]);
+        // Make an edit
+        const [before] = (await readFiles([questionId], {})).map(compressAugmentedFile);
+        const content = before.fileState.content as any;
+        const oldQuery = `"query":${JSON.stringify(content.query)}`;
+        const editResult = await editFileStr({
+          fileId: questionId,
+          oldMatch: oldQuery,
+          newMatch: '"query":"SELECT year, revenue FROM sales"'
+        });
+        expect(editResult.success).toBe(true);
 
-        // Verify both files returned
-        expect(result).toHaveLength(2);
-        expect(result[0].stringifiedContent).toBeDefined();
-        expect(result[1].stringifiedContent).toBeDefined();
+        // Simulate AppState: selectAugmentedFiles (pure Redux selector) + compressAugmentedFile
+        // This is exactly what navigationSlice.selectAppState does for a file page
+        const state = store.getState() as RootState;
+        const [augmented] = selectAugmentedFiles(state, [questionId]);
+        const appStateFileState = compressAugmentedFile(augmented).fileState;
 
-        // Verify both are compact JSON
-        expect(result[0].stringifiedContent).not.toContain('\n');
-        expect(result[1].stringifiedContent).not.toContain('\n');
+        // Simulate ReadFiles tool response
+        const readFilesFileState = (await readFiles([questionId], {})).map(compressAugmentedFile)[0].fileState;
 
-        console.log('✓ readFilesStr handled multiple files correctly');
+        // Must be identical — same Redux state, same compressAugmentedFile transform
+        expect(appStateFileState).toEqual(readFilesFileState);
+
+        console.log('✓ AppState and ReadFiles fileState are identical');
+        console.log('✓ isDirty=true in both:', appStateFileState.isDirty);
       });
-    });
 
-    describe('editFileStr', () => {
+
       it('should successfully replace string in file content', async () => {
         console.log('\n[TEST] editFileStr - Basic string replacement');
 

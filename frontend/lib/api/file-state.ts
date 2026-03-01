@@ -533,40 +533,6 @@ export async function editFile(options: EditFileOptions): Promise<void> {
   }
 }
 
-/**
- * Read files and return stringified content (no pretty print)
- *
- * Loads files and returns their content as compact JSON strings.
- * Useful for string-based operations where line encoding is not needed.
- *
- * @param input - File IDs to load
- * @param options - Read options (ttl, skip, etc.)
- * @returns File states and stringified content (id -> string)
- */
-export async function readFilesStr(
-  fileIds: number[],
-  options: ReadFilesOptions = {}
-): Promise<(AugmentedFile & { stringifiedContent: string })[]> {
-  const files = await readFiles(fileIds, options);
-  const state = getStore().getState();
-  return files.map(augmented => {
-    const { fileState } = augmented;
-    // Mirror editFileStr: content + persistableChanges only (no ephemeralChanges)
-    // so stringifiedContent is exactly what editFileStr matches against.
-    const baseContent = fileState.content || {};
-    const mergedContent = fileState.persistableChanges && Object.keys(fileState.persistableChanges).length > 0
-      ? { ...baseContent, ...fileState.persistableChanges }
-      : baseContent;
-    const fullFile = {
-      id: fileState.id,
-      name: selectEffectiveName(state, fileState.id) || '',
-      path: fileState.path,
-      type: fileState.type,
-      content: mergedContent
-    };
-    return { ...augmented, stringifiedContent: JSON.stringify(fullFile) };
-  });
-}
 
 /**
  * Options for editFileStr (string-based editing)
