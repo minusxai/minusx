@@ -345,12 +345,65 @@ templates:
 
   # ── Native toolset templates ──────────────────────────────────────
 
+  file_state_schema: |
+    ## File State Schema
+    All file data — in AppState, ReadFiles responses, and EditFile responses — follows this structure:
+
+    ```typescript
+    type FileState = {
+      id: number;
+      name: string;
+      path: string;
+      type: 'question' | 'dashboard' | 'report' | 'alert' | 'folder' | string;
+
+      // Layer 1 — what is saved in the database. May be stale if there are pending edits.
+      content: QuestionContent | DashboardContent | ...;
+
+      // Layer 2 — YOUR pending edits (from EditFile). Overrides content. Persisted on PublishFile.
+      persistableChanges: Partial<content>;
+
+      // Layer 3 — runtime-only state. Overrides both content and persistableChanges. NEVER saved.
+      //   parameterValues: the current runtime parameter values (set by the user or SetRuntimeValues).
+      //     This is what the question is ACTUALLY running with right now.
+      //     content.parameters[].defaultValue is the saved default — ephemeralChanges.parameterValues is the live value.
+      //   lastExecuted: the most recent query execution (query string, params dict, database).
+      ephemeralChanges: {
+        parameterValues?: Record<string, any>;
+        lastExecuted?: { query: string; params: Record<string, any>; database: string };
+      };
+
+      metadataChanges: { name?: string; path?: string };  // Pending name/path edits
+      loading: boolean;
+      saving: boolean;
+    };
+
+    // Both ReadFiles and EditFile return this:
+    type AugmentedFile = {
+      fileState: FileState;          // Raw FileState with all three layers visible
+      references: FileState[];       // Referenced files (e.g. questions embedded in a dashboard)
+      queryResults: QueryResult[];   // Cached query results for the file and its references
+    };
+    ```
+
+    **Layer merge order** (each layer overrides the previous):
+    ```
+    effective state = { ...content, ...persistableChanges, ...ephemeralChanges }
+    ```
+
+    - **`content`** — saved DB state. The baseline.
+    - **`persistableChanges`** — your pending edits from EditFile. Override `content`. Saved on PublishFile.
+    - **`ephemeralChanges`** — runtime-only. Overrides both. Never saved. Contains:
+      - `parameterValues`: what the question is *currently running with* (user-typed or SetRuntimeValues). To know the live param values, read `ephemeralChanges.parameterValues`, NOT `content.parameters[].defaultValue`.
+      - `lastExecuted`: the last query that was actually run.
+
+    After EditFile, your changes appear in `persistableChanges` — `content` still shows the old DB value until PublishFile.
+
   native_tools: |
     ## Available Tools:
 
     ### File Reading & Editing
-    - **ReadFiles(fileIds: int[])**: Load one or more files. Returns compact JSON strings showing file content, references, and cached query results. **Always read a file before editing it — but if the file is the current page, AppState already contains this data (same source), so you can skip ReadFiles and read from AppState instead.**
-    - **EditFile(fileId: int, oldMatch: string, newMatch: string)**: Find `oldMatch` in the file's JSON and replace with `newMatch`. Changes are held in memory - NOT saved until PublishFile. You can make multiple edits before publishing.
+    - **ReadFiles(fileIds: int[])**: Load one or more files. Returns `AugmentedFile` objects — each contains `fileState` (raw FileState with content/persistableChanges/ephemeralChanges layers), `references` (embedded referenced files), and `queryResults`. See **File State Schema** below. **Always read a file before editing it — but if the file is the current page, AppState already contains equivalent data, so you can skip ReadFiles and read from AppState instead.**
+    - **EditFile(fileId: int, oldMatch: string, newMatch: string)**: Find `oldMatch` in the file's JSON and replace with `newMatch`. Changes are staged as drafts in `persistableChanges` — NOT saved until PublishFile. Returns the updated `AugmentedFile` (same format as ReadFiles) so you can verify your changes landed in `persistableChanges` and inspect references and query results.
     - **PublishFile(fileId: int)**: Save all pending edits for this file to the database. Cascades to any dirty referenced files.
 
     ### Query Execution
@@ -370,7 +423,7 @@ templates:
   native_file_structures: |
     ## File Content Structures
 
-    When you ReadFiles, you'll see compact JSON strings (no line numbers, no pretty-printing). Here are the structures for each editable file type:
+    ReadFiles and EditFile return `AugmentedFile` objects (see File State Schema). The structures below describe the shape of the **`content`** field inside `FileState` — these are also what you write in `newMatch` when using EditFile:
 
     ### Question
     ```json
@@ -445,7 +498,7 @@ templates:
     ## Guidelines:
 
     ### Read-Edit-Publish Workflow
-    1. **Get current file JSON** before editing — either from AppState (if the file is the current page) or via **ReadFiles** (for files not in AppState, e.g. referenced files or search results). AppState already contains the full file JSON (id, name, path, type, content, references, query results) — calling ReadFiles on the current page file is redundant.
+    1. **Get current file state** before editing — either from AppState (if the file is the current page) or via **ReadFiles** (for files not in AppState, e.g. referenced files or search results). AppState already contains the full `FileState` (id, name, path, type, content, persistableChanges, ephemeralChanges — see **File State Schema**). Calling ReadFiles on the current page file is redundant.
     2. **EditFile** with exact string matching - find the substring you want to replace (`oldMatch`) and provide the replacement (`newMatch`)
     3. **PublishFile** to persist changes to the database
     4. Use **ExecuteQuery** for ad-hoc data exploration (not tied to any file). This is especially useful in the `explore` page.
@@ -454,7 +507,7 @@ templates:
     - Match exact JSON strings including quotes: `"query":"SELECT * FROM sales"` not `SELECT * FROM sales`
     - For nested values, include surrounding context: `"vizSettings":{{"type":"table"}}` ensures you edit the right field
     - Use minimal matching - just enough to uniquely identify what to replace
-    - If unsure, copy the exact string from AppState (or ReadFiles output) as your `oldMatch`
+    - **`oldMatch` must reflect the effective/merged value** — `editFileStr` matches against `{{ ...content, ...persistableChanges }}`. If a field has a pending edit in `persistableChanges`, use that value as `oldMatch`, not the stale value in `content`. In other words: check `persistableChanges` first; if the field isn't there, use `content`.
 
     ### Parameter Values vs File Edits
     - Use **SetRuntimeValues** to change parameter values at runtime (ephemeral, not saved). This triggers re-execution with the new values.
@@ -533,6 +586,8 @@ prompts:
       {native_tools}
 
       {native_file_structures}
+
+      {file_state_schema}
 
       {native_guidelines}
 

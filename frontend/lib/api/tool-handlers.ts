@@ -17,7 +17,7 @@ import { fetchWithCache } from './fetch-wrapper';
 import { API } from './declarations';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 import { getRouter } from '@/lib/navigation/use-navigation';
-import { readFilesStr, editFileStr, publishFile, getQueryResult, createVirtualFile, editFile as editFileOp, clearFileChanges } from '@/lib/api/file-state';
+import { readFiles, editFileStr, publishFile, getQueryResult, createVirtualFile, editFile as editFileOp, clearFileChanges } from '@/lib/api/file-state';
 import { canCreateFileType } from '@/lib/auth/access-rules.client';
 import { preserveParams } from '@/lib/navigation/url-utils';
 
@@ -1748,13 +1748,12 @@ registerFrontendTool('ClarifyFrontend', async (args, context) => {
 
 /**
  * ReadFiles - Load multiple files with references and query results
- * Returns compact JSON strings for LLM consumption
+ * Returns raw AugmentedFile[] (fileState + references + queryResults) for consistent LLM consumption
  */
-registerFrontendTool('ReadFiles', async (args, context) => {
+registerFrontendTool('ReadFiles', async (args, _context) => {
   const { fileIds } = args;
 
-  // Execute with compact JSON strings
-  const result = await readFilesStr(fileIds, {});
+  const result = await readFiles(fileIds, {});
 
   return result;
 });
@@ -1794,7 +1793,10 @@ registerFrontendTool('EditFile', async (args, _context) => {
     }
   }
 
-  return result;
+  // Return the updated AugmentedFile (same format as ReadFiles) so the model can verify
+  // edits landed in persistableChanges and also see references + query results
+  const [augmented] = await readFiles([fileId], {});
+  return augmented;
 });
 
 /**
@@ -1843,7 +1845,7 @@ registerFrontendTool('CreateFile', async (args, _context) => {
 /**
  * PublishFile - Commit changes from Redux to database
  */
-registerFrontendTool('PublishFile', async (args, context) => {
+registerFrontendTool('PublishFile', async (args, _context) => {
   const { fileId } = args;
 
   // Execute (new unified API)
