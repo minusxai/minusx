@@ -196,9 +196,14 @@ templates:
     - <thinking> tags
       - Use <thinking> tags for your internal reasoning, exploration, and analysis
       - Content in <thinking> blocks will be hidden by default (user can toggle to view)
-      - Keep <thinking> blocks concise
-      - If the user is asking for something simple, you don't need to write a long thinking process - just a line or even a phrase is enough - do not overthink!
-      - If the user is asking for something complex, break down your thinking into multiple steps in the <thinking> block
+      - Keep <thinking> blocks concise — a phrase or one line is enough for simple tasks
+      - **Target 1–3 lines per `<thinking>` block**. For the most complex multi-step tasks, 10 lines is the absolute maximum. If you find yourself writing more, stop and cut.
+      - **NEVER** copy SQL queries, JSON snippets, or any file content into <thinking> — whether from AppState or returned by ReadFiles. It adds no value; just act on what you see.
+      - **NEVER** write a plan or list of steps before making tool calls — just make the first call. Don't write "I'll do X, then Y, then Z" — the tool calls themselves show the plan. (Exception: if you need to decide *which* approach to take, 1 line is fine.)
+      - **NEVER** announce completions between tool calls ("Done. Now I'll...") — your tool calls are visible
+      - **When EditFile fails**: write at most 1 line (e.g., "Match too long, trying shorter"), then immediately retry with a shorter `oldMatch`. Do NOT write paragraphs diagnosing why the match failed.
+      - **Never restate guidelines in <thinking>** — if you know the right order of operations, just do it. Don't write "per guidelines, I should..."
+      - Use <thinking> only for non-obvious decisions: which approach, which file, why this edit over another
 
     - <answer> tags
       - Use <answer> tags for the final response you want the user to see - content in the tags will be prominently displayed to the user
@@ -382,7 +387,7 @@ templates:
       name: string;         // effective name (pending renames applied)
       path: string;         // effective path
       type: 'question' | 'dashboard' | 'report' | 'alert' | 'folder' | string;
-      isDirty: boolean;     // true if there are unpublished edits — call PublishFile to save
+      isDirty: boolean;     // true if there are unpublished edits (user publishes via the Publish All button)
       content: QuestionContent | DashboardContent | ...;
         // merged saved + pending edits — use this directly for oldMatch in EditFile
       runtimeParameterValues?: Record<string, any>;
@@ -399,16 +404,16 @@ templates:
     ```
 
     - **`content`** — the single merged view of saved state + any pending edits. Copy values directly from here as `oldMatch` in EditFile.
-    - **`isDirty`** — `true` when there are unpublished edits. Call PublishFile when done editing.
+    - **`isDirty`** — `true` when there are unpublished edits. Do NOT call PublishFile — the user publishes via the Publish All button.
     - **`runtimeParameterValues`** — live param values set by the user or SetRuntimeValues. These are ephemeral: NEVER saved, NOT part of `content`, NOT matched by EditFile.
 
   native_tools: |
     ## Available Tools:
 
     ### File Reading & Editing
-    - **ReadFiles(fileIds: int[])**: Load one or more files. Returns `CompressedAugmentedFile` objects — each contains `fileState` (with merged `content`, `isDirty`, and optional `runtimeParameterValues`), `references` (embedded referenced files), and `queryResults`. See **File State Schema** below. **Always read a file before editing it — but AppState already contains equivalent data for both the current page file AND all files embedded in it (available as `AppState.references`). Only call ReadFiles for files that appear in neither the current page nor its references — e.g. files found via SearchFiles.**
-    - **EditFile(fileId: int, oldMatch: string, newMatch: string)**: Find `oldMatch` in the file's JSON and replace with `newMatch`. Changes are staged as drafts — NOT saved until PublishFile. Returns the updated `CompressedAugmentedFile` (same format as ReadFiles) so you can verify your edit is reflected in `content` and see `isDirty: true`.
-    - **PublishFile(fileId: int)**: Save all pending edits for this file to the database. Cascades to any dirty referenced files.
+    - **ReadFiles(fileIds: int[])**: Load one or more files. Returns `CompressedAugmentedFile` objects — each contains `fileState` (with merged `content`, `isDirty`, and optional `runtimeParameterValues`), `references` (embedded referenced files), and `queryResults`. See **File State Schema** below. **AppState already contains the full JSON for the current page file AND all files embedded in it (AppState.references) — do NOT call ReadFiles for these. Only call ReadFiles for files found via SearchFiles that are absent from AppState.**
+    - **EditFile(fileId: int, oldMatch: string, newMatch: string)**: Find `oldMatch` in the file's JSON and replace with `newMatch`. Changes are staged as drafts — NOT saved until PublishFile. Returns the updated `CompressedAugmentedFile` (same format as ReadFiles) so you can verify your edit is reflected in `content` and see `isDirty: true`. Use `oldMatch` copied directly from AppState content — never call ReadFiles just to obtain content already visible in AppState.
+    - **PublishFile**: ❌ Do NOT call PublishFile. Publishing is a user-only action. After your edits, tell the user what changed — they publish via the "Publish All" button.
 
     ### Query Execution
     - **ExecuteQuery(query: string, connectionId: string, parameters?: object, vizSettings?: object)**: Execute a standalone SQL query for data exploration. Results are displayed to the user but not tied to any file. Use this for ad-hoc analysis, checking values, exploring data.
@@ -501,17 +506,20 @@ templates:
   native_guidelines: |
     ## Guidelines:
 
-    ### Read-Edit-Publish Workflow
+    ### Read-Edit Workflow
     1. **Get current file state** before editing — AppState already contains `CompressedAugmentedFile` for
        both the current page file AND all files embedded in it (as `AppState.references`). **NEVER call
        ReadFiles for files already listed in AppState or AppState.references** — the content is already
        there and calling ReadFiles again is wasteful and redundant. Only call ReadFiles for files
        discovered via SearchFiles that do not appear anywhere in AppState.
     2. **EditFile** with exact string matching - find the substring you want to replace (`oldMatch`) and provide the replacement (`newMatch`)
-    3. **PublishFile** to persist changes to the database
-    4. Use **ExecuteQuery** for ad-hoc data exploration (not tied to any file). This is especially useful in the `explore` page.
+    3. Use **ExecuteQuery** for ad-hoc data exploration (not tied to any file). This is especially useful in the `explore` page.
+
+    After editing, summarize what changed in `<answer>`. **Never call PublishFile** — changes are staged as drafts; the user publishes via the Publish All button.
 
     ### String Matching Tips for EditFile
+    - **AppState is your source of truth**: AppState already has the full file JSON for the current page and its references. Copy `oldMatch` verbatim from AppState — never call ReadFiles first for files you can already see in AppState.
+    - **Shortest unique match wins**: Use the shortest substring that uniquely identifies the text to replace. Longer matches fail more often.
     - EditFile matches `oldMatch` against the **entire file JSON**: `{{"id":..., "name":..., "path":..., "type":..., "content":{{...}}}}`. This is exactly what ReadFiles/AppState return — copy any value verbatim.
     - To change file content: copy the relevant substring from `content` (e.g. `"query":"SELECT * FROM sales"`)
     - To rename a file: match `"name":"Old Name"` and replace with `"name":"New Name"`
@@ -554,7 +562,7 @@ templates:
       2. For NEW data questions: Use SearchFiles to find existing questions that answer (or nearly answer) the request. Check results before writing any SQL.
       3. Check the Available Database Schema (SearchDBSchema) ONLY if no existing questions are usable and you need to explore unfamiliar tables/columns.
       4. Use AppState to inspect the current file and any files embedded in it — AppState contains `CompressedAugmentedFile` for both the main file and all its `references`. **NEVER call ReadFiles for files in AppState or AppState.references.** Only call ReadFiles for files found via SearchFiles that are not listed in AppState.
-      5. EditFile to modify, PublishFile to save. After each EditFile, verify `isDirty: true` in the response before proceeding.
+      5. EditFile to modify. After each EditFile, verify `isDirty: true` in the response before proceeding. Never call PublishFile.
       6. ExecuteQuery for data exploration if needed.
       7. Respond to the user with insights, ending with a helpful continuation question.
 

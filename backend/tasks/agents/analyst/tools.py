@@ -681,6 +681,8 @@ class ReadFiles(Tool):
     - Get file metadata and content in one call
 
     The response includes file states, references, and cached query results.
+
+    Only call this for files NOT already in AppState or AppState.references — calling it for files already in AppState is wasteful and redundant.
     """
 
     def __init__(
@@ -721,6 +723,8 @@ class EditFile(Tool):
     The tool validates changes and returns a diff.
     Changes are staged as drafts in Redux. The user reviews and publishes all pending changes
     via the Publish All button. You do not need to call Navigate or PublishFile.
+
+    String Matching: Use `oldMatch` copied directly from AppState content — never call ReadFiles just to get content that is already in AppState.
     """
 
     def __init__(
@@ -745,10 +749,8 @@ class EditFile(Tool):
 
 @register_agent
 class PublishFile(Tool):
-    """Commit changes from Redux to the database.
-
-    Saves the specified file and all dirty references in a single atomic transaction.
-    Use this after EditFile to persist changes to disk.
+    """⚠️ Do NOT call PublishFile. Publishing is a user-only action triggered by the "Publish All" button.
+    After completing edits with EditFile, tell the user what was changed and let them publish.
     """
 
     def __init__(
