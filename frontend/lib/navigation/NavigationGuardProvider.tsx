@@ -18,7 +18,6 @@ import { selectActiveConversation } from '@/store/chatSlice';
 import { Dialog, Portal, Button, Text, HStack } from '@chakra-ui/react';
 import { preserveParams } from './url-utils';
 import { publishFile, clearFileChanges, selectDirtyFiles } from '@/lib/api/file-state';
-import { isSystemFileType } from '@/lib/ui/file-metadata';
 
 /**
  * Extract file ID from pathname
@@ -105,14 +104,6 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
     return false;
   }, [currentFile, dirtyVirtualFile]);
 
-  // Check if the current file is a system file (connection, config, styles, context).
-  // Only system files trigger the in-app nav guard; user files navigate freely.
-  const isCurrentFileSystemFile = useMemo(() => {
-    if (currentFile) return isSystemFileType(currentFile.type as any);
-    if (dirtyVirtualFile) return isSystemFileType(dirtyVirtualFile.type as any);
-    return false;
-  }, [currentFile, dirtyVirtualFile]);
-
   const currentFileName = currentFile?.name || dirtyVirtualFile?.name || 'Untitled';
 
   // Check if agent is running in active conversation
@@ -124,16 +115,15 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
     || activeConversation?.executionState === 'EXECUTING'
     || activeConversation?.executionState === 'STREAMING';
 
-  // Check if there are any non-system dirty files (for beforeunload only)
-  const anyNonSystemDirtyFiles = useAppSelector(state => selectDirtyFiles(state).length > 0);
+  // Check if there are any dirty files (for beforeunload only)
+  const anyDirtyFiles = useAppSelector(state => selectDirtyFiles(state).length > 0);
 
-  // In-app nav guard: only for system files (dirty) OR agent running.
-  // User files navigate freely — their changes persist in Redux across navigation.
-  const shouldGuardInAppNavigation = (isCurrentFileDirty && isCurrentFileSystemFile) || isAgentRunning;
+  // In-app nav guard: any dirty file OR agent running.
+  // Agent navigation via the Navigate tool uses router.push() directly and bypasses this guard.
+  const shouldGuardInAppNavigation = isCurrentFileDirty || isAgentRunning;
 
-  // beforeunload guard: fire whenever any file (system or user) has unsaved changes,
-  // or when the agent is running.
-  const shouldGuardUnload = isCurrentFileDirty || anyNonSystemDirtyFiles || isAgentRunning;
+  // beforeunload guard: fire whenever any file has unsaved changes, or when the agent is running.
+  const shouldGuardUnload = isCurrentFileDirty || anyDirtyFiles || isAgentRunning;
 
   // Modal state
   const [isOpen, setIsOpen] = useState(false);
