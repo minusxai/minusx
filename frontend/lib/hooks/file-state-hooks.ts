@@ -41,7 +41,7 @@ import {
   type AugmentedFolder
 } from '@/lib/api/file-state';
 import type { AppState } from '@/lib/appState';
-import { selectAppState } from '@/store/navigationSlice';
+import { selectAppState } from '@/store/appStateSelector';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import type { LoadError } from '@/lib/types/errors';
 import type { GetFilesOptions } from '@/lib/data/types';
