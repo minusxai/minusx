@@ -1796,6 +1796,19 @@ registerFrontendTool('EditFile', async (args, _context) => {
           params,
           database: finalContent.database_name
         });
+        // Update lastExecuted so QuestionContainerV2 displays results for the new query.
+        // Without this, the component keeps showing results for the old lastExecuted query.
+        getStore().dispatch(setEphemeral({
+          fileId: fileId as FileId,
+          changes: {
+            lastExecuted: {
+              query: finalContent.query,
+              params,
+              database: finalContent.database_name,
+              references: finalContent.references || []
+            }
+          }
+        }));
       } catch (execErr) {
         console.warn('[EditFile] Auto-execute failed (edit still staged):', execErr);
       }

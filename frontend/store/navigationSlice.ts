@@ -1,11 +1,8 @@
-import { createSlice, PayloadAction, createSelector } from '@reduxjs/toolkit';
+import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import type { RootState } from './store';
-import type { FileState } from './filesSlice';
 import type { FileType } from '@/lib/types';
 import type { Mode } from '@/lib/mode/mode-types';
-import type { AppState } from '@/lib/appState';
-import { resolveHomeFolderSync, isHiddenSystemPath } from '@/lib/mode/path-resolver';
-import { selectAugmentedFiles, compressAugmentedFile } from '@/lib/api/file-state';
+import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 
 // ============================================================================
 // Types
@@ -32,6 +29,9 @@ interface NavigationState {
    *  Set by navigationListener after generating a virtualId.
    *  Cleared (null) whenever pathname changes. */
   activeVirtualId: number | null;
+  /** Error from virtual file creation (e.g. no connections available).
+   *  Cleared whenever pathname changes. */
+  createError: string | null;
 }
 
 // ============================================================================
@@ -42,6 +42,7 @@ const initialState: NavigationState = {
   pathname: '',
   searchParams: {},
   activeVirtualId: null,
+  createError: null,
 };
 
 const navigationSlice = createSlice({
@@ -52,9 +53,10 @@ const navigationSlice = createSlice({
       state,
       action: PayloadAction<{ pathname: string; searchParams: Record<string, string> }>
     ) {
-      // Reset activeVirtualId whenever the page changes
+      // Reset activeVirtualId and createError whenever the page changes
       if (state.pathname !== action.payload.pathname) {
         state.activeVirtualId = null;
+        state.createError = null;
       }
       state.pathname = action.payload.pathname;
       state.searchParams = action.payload.searchParams;
@@ -62,17 +64,20 @@ const navigationSlice = createSlice({
     setActiveVirtualId(state, action: PayloadAction<number | null>) {
       state.activeVirtualId = action.payload;
     },
+    setCreateError(state, action: PayloadAction<string | null>) {
+      state.createError = action.payload;
+    },
   },
 });
 
-export const { setNavigation, setActiveVirtualId } = navigationSlice.actions;
+export const { setNavigation, setActiveVirtualId, setCreateError } = navigationSlice.actions;
 export default navigationSlice.reducer;
 
 // ============================================================================
 // selectPathState — pure computation (not stored in Redux)
 // ============================================================================
 
-function computePathState(
+export function computePathState(
   pathname: string,
   searchParams: Record<string, string>,
   activeVirtualId: number | null,
@@ -151,107 +156,6 @@ export function selectPathState(state: RootState): PathState {
   );
 }
 
-// ============================================================================
-// selectAppState — full AppState derivation (memoized)
-// ============================================================================
-
-/**
- * selectAppState — derives AppState + loading from Redux.
- *
- * Replaces all logic from the old useAppState hook (useMemo + useState).
- * Memoized via createSelector; only recomputes when relevant inputs change.
- */
-export const selectAppState = createSelector(
-  (state: RootState) => state.navigation.pathname,
-  (state: RootState) => state.navigation.searchParams,
-  (state: RootState) => state.navigation.activeVirtualId,
-  (state: RootState) => state.files.files,
-  (state: RootState) => state.files.pathIndex,
-  (state: RootState) => state.auth.user,
-  (state: RootState) => state.queryResults.results,
-  (
-    pathname,
-    searchParams,
-    activeVirtualId,
-    filesState,
-    pathIndex,
-    user,
-    queryResultsMap
-  ): { appState: AppState | null; loading: boolean } => {
-    const pathState = computePathState(pathname, searchParams, activeVirtualId, user);
-
-    // Minimal partial state for selectAugmentedFiles — it only reads files.files and queryResults.results
-    const partialState = { files: { files: filesState }, queryResults: { results: queryResultsMap } } as RootState;
-
-    if (pathState.type === 'file') {
-      const file = filesState[pathState.id];
-      if (!file) return { appState: null, loading: true };
-      const [augmented] = selectAugmentedFiles(partialState, [pathState.id]);
-      if (!augmented) return { appState: null, loading: true };
-      return {
-        appState: { type: 'file', state: compressAugmentedFile(augmented) },
-        loading: file.loading || false,
-      };
-    }
-
-    if (pathState.type === 'newFile') {
-      const virtualId = pathState.createOptions.virtualId;
-      if (virtualId !== undefined && filesState[virtualId]) {
-        const file = filesState[virtualId];
-        const [augmented] = selectAugmentedFiles(partialState, [virtualId]);
-        if (!augmented) return { appState: null, loading: true };
-        return {
-          appState: { type: 'file', state: compressAugmentedFile(augmented) },
-          loading: file.loading || false,
-        };
-      }
-      return { appState: null, loading: true };
-    }
-
-    if (pathState.type === 'folder') {
-      const mode = user?.mode || 'org';
-      const folderId = pathIndex[pathState.path];
-      const folder = folderId !== undefined ? filesState[folderId] : undefined;
-
-      if (!folder) {
-        return {
-          appState: {
-            type: 'folder',
-            state: { files: [], loading: true, error: null },
-          },
-          loading: true,
-        };
-      }
-
-      const files = (folder.references || [])
-        .map(id => filesState[id])
-        .filter((f): f is FileState => {
-          if (!f) return false;
-          if (f.type === 'folder' && isHiddenSystemPath(f.path, mode)) return false;
-          return true;
-        });
-
-      const folderLoading = folder.loading ?? false;
-      return {
-        appState: {
-          type: 'folder',
-          state: {
-            files,
-            loading: folderLoading,
-            error: folder.loadError?.message ?? null,
-          },
-        },
-        loading: folderLoading,
-      };
-    }
-
-    if (pathState.type === 'explore') {
-      return {
-        appState: { type: 'explore', state: null },
-        loading: false,
-      };
-    }
-
-    return { appState: null, loading: false };
-  }
-);
+// selectAppState has been moved to store/appStateSelector.ts to break the
+// circular dependency: navigationSlice → file-state → store → navigationSlice.
+// Import selectAppState from '@/store/appStateSelector' instead.

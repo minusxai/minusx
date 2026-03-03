@@ -26,6 +26,7 @@ export default function NewFilePage({ params }: NewFilePageProps) {
   // Get app state (creates virtual file with URL params automatically)
   const { appState, loading: appStateLoading } = useAppState();
   const virtualFileId = appState?.type === 'file' ? appState.state.fileState.id : undefined;
+  const createError = useAppSelector(state => state.navigation.createError);
 
   // Load the virtual file
   const { fileState: file } = useFile(virtualFileId) ?? {};
@@ -105,6 +106,22 @@ export default function NewFilePage({ params }: NewFilePageProps) {
           </Text>
           <Text color="fg.muted">
             The file type "{type}" is not supported.
+          </Text>
+        </Box>
+      </Center>
+    );
+  }
+
+  // Show error if virtual file creation failed
+  if (!appStateLoading && !virtualFileId && createError) {
+    return (
+      <Center h="100vh" bg="bg.canvas">
+        <Box textAlign="center">
+          <Text fontSize="xl" fontWeight="bold" mb={2}>
+            Cannot Create {type}
+          </Text>
+          <Text color="fg.muted">
+            {createError}
           </Text>
         </Box>
       </Center>

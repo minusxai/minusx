@@ -162,7 +162,9 @@ class FilesDataLayerClient implements IFilesDataLayer {
     });
 
     if (!res.ok) {
-      throw new Error(`Failed to get template for type ${type}: ${res.statusText}`);
+      const errorData = await res.json().catch(() => ({}));
+      const errorMessage = errorData.error?.message || errorData.message || errorData.error || `Failed to get template for type ${type}: ${res.statusText}`;
+      throw new Error(errorMessage);
     }
 
     const json = await res.json();

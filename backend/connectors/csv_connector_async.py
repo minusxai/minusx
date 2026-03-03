@@ -4,7 +4,7 @@ from .base import AsyncDatabaseConnector
 from . import register_connector
 from .duckdb_connector_async import AsyncDuckDBConnector
 from pathlib import Path
-from config import BASE_DUCKDB_DATA_PATH
+from config import resolve_duckdb_path
 from typing import List, Dict, Any
 
 
@@ -48,10 +48,7 @@ class AsyncCsvConnector(AsyncDatabaseConnector):
             }
 
         # Check if file exists
-        if Path(generated_db_path).is_absolute():
-            resolved_path = generated_db_path
-        else:
-            resolved_path = str(Path(BASE_DUCKDB_DATA_PATH) / generated_db_path)
+        resolved_path = resolve_duckdb_path(generated_db_path)
 
         if not Path(resolved_path).exists():
             return {
@@ -87,13 +84,8 @@ class AsyncCsvConnector(AsyncDatabaseConnector):
         # It's OK to have empty path before files are uploaded
         # The frontend will handle validation during upload
         if generated_db_path:
-            # Resolve path
-            if Path(generated_db_path).is_absolute():
-                resolved_path = generated_db_path
-            else:
-                resolved_path = str(Path(BASE_DUCKDB_DATA_PATH) / generated_db_path)
-
             # Check if database exists
+            resolved_path = resolve_duckdb_path(generated_db_path)
             if not Path(resolved_path).exists():
                 errors.append(f"Generated database not found: {generated_db_path}")
 
