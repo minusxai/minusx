@@ -17,7 +17,6 @@ import {
   LuSettings,
   LuFileText,
   LuMessageSquare,
-  LuSparkles,
   LuVideo,
 } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
@@ -40,7 +39,6 @@ function getSystemFolderEmptyState(path: string, mode: Mode): { message: string;
     [resolvePath(mode, SYSTEM_FOLDERS.configs)]: { message: 'No configurations yet', icon: LuSettings },
     [resolvePath(mode, SYSTEM_FOLDERS.logs)]: { message: 'No logs yet', icon: LuFileText },
     [resolvePath(mode, SYSTEM_FOLDERS.logsConversations)]: { message: 'No conversations yet', icon: LuMessageSquare },
-    [resolvePath(mode, SYSTEM_FOLDERS.logsLlmCalls)]: { message: 'No LLM calls yet', icon: LuSparkles },
     [resolvePath(mode, SYSTEM_FOLDERS.recordings)]: { message: 'No recordings yet', icon: LuVideo },
     [resolvePath(mode, SYSTEM_FOLDERS.config)]: { message: 'No configurations yet', icon: LuSettings },
   };

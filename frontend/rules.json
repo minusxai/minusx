@@ -11,16 +11,16 @@
     {
       "type": "fileTypeAccess",
       "role": "editor",
-      "allowedTypes": ["question", "dashboard", "folder", "context", "connection", "conversation", "session", "llm_call", "report", "alert"],
+      "allowedTypes": ["question", "dashboard", "folder", "context", "connection", "conversation", "session", "report", "alert"],
       "createTypes": ["question", "dashboard", "folder", "context", "alert", "report"],
-      "viewTypes": ["question", "dashboard", "folder", "context", "conversation", "session", "llm_call", "report", "alert"]
+      "viewTypes": ["question", "dashboard", "folder", "context", "conversation", "session", "report", "alert"]
     },
     {
       "type": "fileTypeAccess",
       "role": "viewer",
-      "allowedTypes": ["question", "dashboard", "folder", "context", "connection", "conversation", "session", "llm_call"],
+      "allowedTypes": ["question", "dashboard", "folder", "context", "connection", "conversation", "session"],
       "createTypes": [],
-      "viewTypes": ["dashboard", "folder", "conversation", "session", "llm_call"]
+      "viewTypes": ["dashboard", "folder", "conversation", "session"]
     },
     {
       "type": "createLocationRestrictions",

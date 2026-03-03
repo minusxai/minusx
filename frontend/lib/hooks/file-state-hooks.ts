@@ -261,9 +261,9 @@ export interface UseFileByPathReturn {
  * useFileByPath Hook
  *
  * Loads a file by path instead of ID. Useful when you only know the file path
- * (e.g., LLM call files where you have llm_call_id but not the file ID).
+ * but not the file ID.
  *
- * @param path - File path (e.g., /logs/llm_calls/user@example.com/abc123.json)
+ * @param path - Full file path (e.g., /org/logs/conversations/user@example.com/abc123.json)
  * @param options - Hook options (ttl, skip)
  * @returns {file, loading, error}
  *
@@ -272,20 +272,6 @@ export interface UseFileByPathReturn {
  * 2. Extracts file ID from response
  * 3. Stores file in Redux by ID (can be accessed with useFile later)
  * 4. Returns file state
- *
- * Example:
- * ```tsx
- * function LLMCallViewer({ llmCallId, userId }: Props) {
- *   const path = `/logs/llm_calls/${userId}/${llmCallId}.json`;
- *   const { file, loading, error } = useFileByPath(path);
- *
- *   if (loading) return <Spinner />;
- *   if (error) return <Error message={error} />;
- *   if (!file) return <NotFound />;
- *
- *   return <LLMCallContent file={file} />;
- * }
- * ```
  *
  * Note: This hook does NOT support edit/save operations. It's read-only.
  * After loading, if you need to edit, use useFile with the file.id.
