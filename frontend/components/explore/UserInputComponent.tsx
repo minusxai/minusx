@@ -18,7 +18,7 @@ function PublishUserInputRenderer({
   fileCount: number;
   onSubmit: (result: any) => void;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
   const dirtyFiles = useDirtyFiles();
 
   const handleClose = () => {
