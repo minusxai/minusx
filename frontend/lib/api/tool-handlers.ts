@@ -491,24 +491,27 @@ registerFrontendTool('CreateFile', async (args, _context) => {
 registerFrontendTool('PublishAll', async (_args, context) => {
   const { userInputs, state } = context;
 
-  const reduxState = state || getStore().getState();
-  const dirtyFiles = selectDirtyFiles(reduxState);
-
-  if (dirtyFiles.length === 0) {
-    return { success: true, message: 'No unsaved changes' };
-  }
-
-  const fileCount = dirtyFiles.length;
   const userResponse = userInputs?.[0]?.result;
 
+  // First invocation: check dirty files and show modal if needed
   if (userResponse === undefined) {
+    const reduxState = state || getStore().getState();
+    const dirtyFiles = selectDirtyFiles(reduxState);
+
+    if (dirtyFiles.length === 0) {
+      return { success: true, message: 'No unsaved changes' };
+    }
+
     throw new UserInputException({
       type: 'publish',
       title: 'Unsaved Changes',
-      fileCount,
+      fileCount: dirtyFiles.length,
     });
   }
 
+  // Resume: user closed the modal — use their response directly.
+  // Do NOT re-read dirtyFiles here: publishAll() already cleared them in Redux,
+  // so re-reading would incorrectly return 'No unsaved changes'.
   if (userResponse.cancelled) {
     return {
       success: false,
@@ -516,6 +519,7 @@ registerFrontendTool('PublishAll', async (_args, context) => {
     };
   }
 
+  const fileCount = userInputs?.[0]?.props?.fileCount ?? 0;
   return {
     success: true,
     message: `Published ${fileCount} file${fileCount === 1 ? '' : 's'} successfully.`,
