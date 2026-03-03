@@ -62,6 +62,10 @@ jobs:
         working-directory: ./frontend
         run: npm ci
 
+      - name: Validate (typecheck + lint)
+        working-directory: ./frontend
+        run: npm run validate
+
       - name: Run frontend tests
         working-directory: ./frontend
         run: npm test -- --ci --coverage --maxWorkers=2

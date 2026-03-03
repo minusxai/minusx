@@ -29,6 +29,8 @@ const eslintConfig = defineConfig([
       },
     },
     rules: {
+      // Downgraded to warn — codebase uses `any` extensively, fix gradually
+      "@typescript-eslint/no-explicit-any": "warn",
       // Disable base rules as they are replaced by unused-imports
       "@typescript-eslint/no-unused-vars": "off",
       "no-unused-vars": "off",
@@ -59,6 +61,17 @@ const eslintConfig = defineConfig([
           message: "require() calls are not allowed. Use static ES module imports at the top of the file instead.",
         },
       ],
+    },
+  },
+  // Relax import discipline rules in test files — Jest module mocking requires
+  // require() calls and dynamic imports after jest.mock()/jest.resetModules().
+  {
+    files: ["**/*.test.ts", "**/*.test.tsx", "**/__tests__/**", "**/__mocks__/**"],
+    rules: {
+      "import-x/no-cycle": "off",
+      "import-x/first": "off",
+      "no-restricted-syntax": "off",
+      "@typescript-eslint/no-require-imports": "off",
     },
   },
 ]);
