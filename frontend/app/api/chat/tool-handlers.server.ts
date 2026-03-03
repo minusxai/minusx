@@ -5,8 +5,6 @@
  * Each tool calls registerTool() to make itself available for execution.
  */
 
-import { ToolCall } from '@/lib/types';
-import { executeQuery } from '@/lib/data/query-executor';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { connectionLoader } from '@/lib/data/loaders/connection-loader';
 import { ConnectionContent } from '@/lib/types';
@@ -18,7 +16,6 @@ import { registerTool } from './orchestrator';
 import { JSONPath } from 'jsonpath-plus';
 import { searchInField } from '@/lib/search/file-search-utils';
 import { searchFilesInFolder } from '@/lib/search/file-search';
-import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 
 // ============================================================================
 // Tool Implementations
@@ -29,66 +26,6 @@ import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
  */
 registerTool('UserInputToolBackend', async () => {
   return 'Backend executed tool response';
-});
-
-/**
- * ExecuteSQLQuery - Execute SQL queries against the database
- * If foreground=true, delegates to ExecuteSQLQueryForeground to update UI
- */
-registerTool('ExecuteSQLQuery', async (args, user, childResults) => {
-  // Check if resuming with child results (from foreground execution)
-  if (childResults && childResults.length > 0) {
-    // childResults is Array<Array<{...}>> - grouped by run_id
-    // Flatten to get all child results
-    const allChildren = childResults.flat();
-    const frontendResult = allChildren[0];
-    // Return the frontend tool's result as our result
-    return frontendResult.result;
-  }
-
-  const { query, connection_id, foreground, vizSettings, parameters, references, file_id } = args;
-
-  if (!query) {
-    throw new Error('SQL query is required');
-  }
-
-  if (!connection_id) {
-    throw new Error('connection_id is required');
-  }
-
-  // If foreground mode requested, spawn frontend tool
-  if (foreground) {
-    throw new FrontendToolException({
-      spawnedTools: [
-        {
-          type: 'function',
-          function: {
-            name: 'ExecuteSQLQueryForeground',
-            arguments: {  // Pass dict directly (matches Python FunctionCallMX: dict | str)
-              query,
-              connection_id,
-              vizSettings,
-              parameters,
-              references,
-              file_id
-            }
-          }
-        }
-      ]
-    });
-  }
-
-  // Background mode - execute query and return results
-  // Company ID header added automatically by pythonBackendFetch
-  const result = await executeQuery(connection_id, query, {});
-
-  return {
-    success: true,
-    columns: result.columns || [],
-    types: result.types || [],
-    rows: result.rows || [],
-    rowCount: result.rows?.length || 0
-  };
 });
 
 /**
@@ -332,63 +269,6 @@ registerTool('SearchDBSchema', async (args, user) => {
 });
 
 /**
- * GetAllQuestions - Get all available questions that can be added to dashboard
- * Matches QuestionBrowserPanel behavior
- */
-registerTool('GetAllQuestions', async (args, user) => {
-  const { folder_path, search_query, exclude_ids } = args;
-
-  // Use user's home_folder if no folder specified (resolve with mode)
-  const resolvedHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder || '');
-  const searchPath = folder_path || resolvedHomeFolder;
-
-  // Get all questions in folder (like QuestionBrowserPanel does)
-  const { data: questionFiles } = await FilesAPI.getFiles({
-    paths: [searchPath],
-    type: 'question',
-    depth: 999  // All subfolders
-  }, user);
-
-  // Load full content for each question
-  const questionIds = questionFiles.map((f: any) => f.id);
-  const { data: fullQuestions } = await FilesAPI.loadFiles(questionIds, user);
-
-  // Map to simplified format with all needed fields
-  let questions = fullQuestions.map((q: any) => ({
-    id: q.id,
-    name: q.name,
-    path: q.path,
-    description: q.content.description || '',
-    query: q.content.query || '',
-    vizSettings: q.content.vizSettings,
-    parameters: q.content.parameters || [],
-    database_name: q.content.database_name
-  }));
-
-  // Filter by exclude_ids if provided
-  if (exclude_ids && Array.isArray(exclude_ids) && exclude_ids.length > 0) {
-    questions = questions.filter((q: any) => !exclude_ids.includes(q.id));
-  }
-
-  // Filter by search query if provided
-  if (search_query && search_query.trim()) {
-    const searchLower = search_query.toLowerCase();
-    questions = questions.filter((q: any) =>
-      q.name.toLowerCase().includes(searchLower) ||
-      q.description?.toLowerCase().includes(searchLower)
-    );
-  }
-
-  // Return question list
-  return {
-    success: true,
-    questions,
-    count: questions.length,
-    folder_path: searchPath
-  };
-});
-
-/**
  * SearchFiles - Search files by content with ranking and snippets
  */
 registerTool('SearchFiles', async (args, user) => {
@@ -420,45 +300,6 @@ registerTool('SearchFiles', async (args, user) => {
     success: true,
     ...result
   };
-});
-
-/**
- * GetFiles - Load files by IDs with optional content
- */
-registerTool('GetFiles', async (args, user) => {
-  const { ids, include_content = false } = args;
-
-  // Validation
-  if (!ids || !Array.isArray(ids) || ids.length === 0) {
-    throw new Error('ids is required and must be a non-empty array');
-  }
-
-  if (!ids.every((id: any) => typeof id === 'number')) {
-    throw new Error('All IDs must be numbers');
-  }
-
-  // Load files
-  if (include_content) {
-    const { data: files } = await FilesAPI.loadFiles(ids, user);
-    return {
-      success: true,
-      files,
-      count: files.length
-    };
-  } else {
-    // Metadata only - more efficient
-    const { data: allFiles } = await FilesAPI.getFiles({
-      paths: [],
-      depth: 999
-    }, user);
-
-    const requestedFiles = allFiles.filter(f => ids.includes(f.id));
-    return {
-      success: true,
-      files: requestedFiles,
-      count: requestedFiles.length
-    };
-  }
 });
 
 /**

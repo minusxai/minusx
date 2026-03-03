@@ -16,13 +16,6 @@ import { chatListenerMiddleware } from '../chatListener';
 import { waitForPortRelease } from './port-manager';
 
 // ============================================================================
-// Constants
-// ============================================================================
-
-export const TEST_DB_PATH = join(process.cwd(), 'data', 'test_e2e.db');
-export const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8001';
-
-// ============================================================================
 // Jest Mock Setup - Important Limitations
 // ============================================================================
 
@@ -70,7 +63,7 @@ export const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8001';
  * Initialize a fresh test database with schema and test company.
  * Cleans up any existing database and WAL files first.
  */
-export async function initTestDatabase(dbPath: string = TEST_DB_PATH) {
+export async function initTestDatabase(dbPath: string = join(process.cwd(), 'data', 'test_e2e.db')) {
   // Clean up existing files
   [dbPath, `${dbPath}-shm`, `${dbPath}-wal`].forEach(file => {
     if (existsSync(file)) unlinkSync(file);
@@ -92,7 +85,7 @@ export async function initTestDatabase(dbPath: string = TEST_DB_PATH) {
  * Clean up test database and associated WAL files.
  * Call this in afterAll hook.
  */
-export async function cleanupTestDatabase(dbPath: string = TEST_DB_PATH) {
+export async function cleanupTestDatabase(dbPath: string = join(process.cwd(), 'data', 'test_e2e.db')) {
   // Reset adapter to close any open connections
   const { resetAdapter } = await import('@/lib/database/adapter/factory');
   await resetAdapter();
@@ -243,21 +236,6 @@ export async function killPythonBackend(
   });
 }
 
-/**
- * Print warning if Python backend is not running.
- * Call this in beforeAll hook.
- *
- * @deprecated Use startPythonBackend() instead for self-contained tests
- */
-export async function checkPythonBackend() {
-  const isRunning = await isPythonBackendRunning();
-  if (!isRunning) {
-    console.warn('⚠️  Python backend is not running on http://localhost:8001');
-    console.warn('   Start it with: cd backend && uv run uvicorn main:app --reload --reload-include=\'*.yaml\' --port 8001');
-  }
-  return isRunning;
-}
-
 // ============================================================================
 // Async Helpers
 // ============================================================================
@@ -327,131 +305,6 @@ export function getTestDbPath(testName: string): string {
 }
 
 // ============================================================================
-// Fetch Mocking Helpers
-// ============================================================================
-
-/**
- * Additional interceptor function for custom API mocking.
- * @param urlStr - The URL being fetched
- * @param init - Fetch init options
- * @returns Response object or null if this interceptor doesn't handle the URL
- */
-export type FetchInterceptor = (urlStr: string, init?: any) => Promise<Response | null>;
-
-/**
- * Options for creating a mock fetch function.
- */
-export interface CreateMockFetchOptions {
-  /** The Next.js POST handler for /api/chat (optional) */
-  chatPostHandler?: any;
-  /** Python backend port (default: 8001) */
-  pythonPort?: number;
-  /** Additional custom interceptors for test-specific APIs */
-  additionalInterceptors?: FetchInterceptor[];
-}
-
-/**
- * Create an extensible mock fetch function that routes API calls appropriately.
- *
- * Features:
- * - Routes Next.js /api/chat calls to the real handler
- * - Lets Python backend calls through to real backend
- * - Mocks health check endpoints
- * - Supports custom interceptors for test-specific APIs
- *
- * IMPORTANT: Only intercepts Next.js /api/chat calls (localhost:3000/api/chat),
- * NOT Python backend calls (localhost:PORT/api/chat).
- *
- * @param options - Configuration options
- * @returns Mock fetch function
- *
- * @example Basic usage:
- * ```typescript
- * const mockFetch = createMockFetch({
- *   chatPostHandler,
- *   pythonPort
- * });
- * jest.spyOn(global, 'fetch').mockImplementation(mockFetch as any);
- * ```
- *
- * @example With custom interceptors:
- * ```typescript
- * const mockFetch = createMockFetch({
- *   chatPostHandler,
- *   pythonPort,
- *   additionalInterceptors: [
- *     async (url, init) => {
- *       if (url.includes('/api/query')) {
- *         return {
- *           ok: true,
- *           status: 200,
- *           json: async () => ({ columns: ['test'], rows: [{ test: 1 }] })
- *         } as Response;
- *       }
- *       return null;  // Let other interceptors handle it
- *     }
- *   ]
- * });
- * ```
- */
-export function createMockFetch(options: CreateMockFetchOptions = {}) {
-  const {
-    chatPostHandler,
-    pythonPort = 8001,
-    additionalInterceptors = []
-  } = options;
-
-  const originalFetch = global.fetch;
-
-  return jest.fn(async (url: string | Request | URL, init?: any) => {
-    const urlStr = url.toString();
-
-    // Try additional interceptors first
-    for (const interceptor of additionalInterceptors) {
-      const response = await interceptor(urlStr, init);
-      if (response !== null) {
-        return response;
-      }
-    }
-
-    // Route ONLY Next.js /api/chat calls to handler (not Python backend)
-    if (chatPostHandler && (urlStr.includes('localhost:3000/api/chat') || urlStr.startsWith('/api/chat'))) {
-      const { NextRequest } = require('next/server');
-      const request = new NextRequest('http://localhost:3000/api/chat', {
-        method: init?.method || 'POST',
-        body: init?.body,
-        headers: init?.headers
-      });
-
-      const response = await chatPostHandler(request);
-      const data = await response.json();
-
-      return {
-        ok: response.status === 200,
-        status: response.status,
-        json: async () => data
-      } as Response;
-    }
-
-    // Let Python backend calls through
-    if (urlStr.includes(`localhost:${pythonPort}`)) {
-      return originalFetch(url, init);
-    }
-
-    // Mock health check
-    if (urlStr.includes('/health')) {
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({ status: 'healthy' })
-      } as Response;
-    }
-
-    throw new Error(`Unmocked fetch call to ${urlStr}`);
-  });
-}
-
-// ============================================================================
 // API Route Testing Helpers
 // ============================================================================
 
@@ -467,16 +320,3 @@ export function createNextRequest(body: any) {
   });
 }
 
-/**
- * Skip test if Python backend is not running.
- * Returns true if test should continue, false if skipped.
- *
- * @deprecated Should not be needed with self-contained tests
- */
-export async function skipIfBackendDown(port: number = 8001): Promise<boolean> {
-  const isRunning = await isPythonBackendRunning(port);
-  if (!isRunning) {
-    console.log(`⏭️  Skipping test - Python backend not running on port ${port}`);
-  }
-  return isRunning;
-}

@@ -651,7 +651,6 @@ export interface ConversationState {
 
 // Tool names (centralized)
 export const ToolNames = {
-  EXECUTE_SQL_QUERY: 'ExecuteSQLQuery',
   SEARCH_DB_SCHEMA: 'SearchDBSchema',
   PRESENT_FINAL_ANSWER: 'PresentFinalAnswer',
   TALK_TO_USER: 'TalkToUser',

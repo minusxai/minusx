@@ -20,15 +20,8 @@ export interface ToolConfig {
 
 // Centralized tool configurations
 export const TOOL_CONFIGS: Record<string, ToolConfig> = {
-  [ToolNames.EXECUTE_SQL_QUERY]: {
-    displayComponent: ExecuteSQLDisplay,
-  },
   [ToolNames.EXECUTE_QUERY]: {
     displayComponent: ExecuteSQLDisplay,
-  },
-  // Frontend variant (ExecuteSQLQueryForeground) - same display as ExecuteSQLQuery
-  'ExecuteSQLQueryForeground': {
-    displayComponent: null,
   },
   'Clarify': {
     displayComponent: ClarifyDisplay,
