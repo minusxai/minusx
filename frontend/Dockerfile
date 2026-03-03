@@ -30,6 +30,8 @@ COPY . .
 RUN mkdir -p data && npm run create-empty-db
 
 # Build Next.js application (generates .next/standalone)
+# Dummy secret satisfies build-time validation; real value is set at runtime via docker-compose
+ENV NEXTAUTH_SECRET=build-placeholder
 RUN npm run build
 
 # ===== RUNTIME STAGE ===== #
