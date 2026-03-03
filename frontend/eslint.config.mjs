@@ -2,6 +2,7 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 import unusedImports from "eslint-plugin-unused-imports";
+import importPlugin from "eslint-plugin-import-x";
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -17,6 +18,15 @@ const eslintConfig = defineConfig([
   {
     plugins: {
       "unused-imports": unusedImports,
+      "import-x": importPlugin,
+    },
+    settings: {
+      "import-x/resolver": {
+        typescript: {
+          alwaysTryTypes: true,
+          project: "./tsconfig.json",
+        },
+      },
     },
     rules: {
       // Disable base rules as they are replaced by unused-imports
@@ -33,6 +43,8 @@ const eslintConfig = defineConfig([
           argsIgnorePattern: "^_",
         },
       ],
+      // Detect runtime circular imports (import type cycles are safe and ignored)
+      "import-x/no-cycle": ["error", { ignoreExternal: true }],
       // Prevent inline/dynamic imports (code smell indicating circular dependencies)
       "no-restricted-syntax": [
         "error",
