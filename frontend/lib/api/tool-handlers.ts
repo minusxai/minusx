@@ -62,6 +62,13 @@ export function getRegisteredToolNames(): string[] {
   return Object.keys(frontendToolRegistry);
 }
 
+/**
+ * Check if a tool can be executed on the frontend
+ */
+export function isFrontendTool(name: string): boolean {
+  return name in frontendToolRegistry;
+}
+
 // ============================================================================
 // Main Executor
 // ============================================================================

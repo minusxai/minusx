@@ -15,6 +15,9 @@ import {
 } from '@chakra-ui/react';
 import { LuRotateCcw } from 'react-icons/lu';
 import type { ToolCall, ToolMessage } from '@/lib/types';
+import { isFrontendTool, executeToolCall } from '@/lib/api/tool-handlers';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import type { DatabaseWithSchema } from '@/lib/types';
 
 interface ToolInspectModalProps {
   toolCall: ToolCall;
@@ -51,6 +54,9 @@ export default function ToolInspectModal({
   isOpen,
   onClose,
 }: ToolInspectModalProps) {
+  const dispatch = useAppDispatch();
+  const reduxState = useAppSelector(state => state);
+
   const originalArgs = JSON.stringify(toolCall.function.arguments ?? {}, null, 2);
   const [argsText, setArgsText] = useState(originalArgs);
   const [argsValid, setArgsValid] = useState(true);
@@ -94,11 +100,30 @@ export default function ToolInspectModal({
     setRerunError(null);
     setToolNotExecutable(false);
 
+    const syntheticCall: ToolCall = {
+      ...toolCall,
+      function: { ...toolCall.function, arguments: parsedArgs as Record<string, any> },
+    };
+
     try {
+      // 1. Try frontend registry first (no network round-trip)
+      if (isFrontendTool(syntheticCall.function.name)) {
+        const result = await executeToolCall(
+          syntheticCall,
+          {} as DatabaseWithSchema,  // most frontend tools don't use database
+          dispatch,
+          controller.signal,
+          reduxState,
+        );
+        setRerunResult(result.content);
+        return;
+      }
+
+      // 2. Fall back to server registry via API
       const res = await fetch('/api/tools/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ toolName: toolCall.function.name, args: parsedArgs }),
+        body: JSON.stringify({ toolName: syntheticCall.function.name, args: parsedArgs }),
         signal: controller.signal,
       });
 
@@ -107,7 +132,6 @@ export default function ToolInspectModal({
       if (!res.ok) {
         setRerunError(json?.error?.message ?? `HTTP ${res.status}`);
       } else if (json?.data?.error) {
-        // Tool not in registry
         setToolNotExecutable(true);
         setRerunError(json.data.error);
       } else {
@@ -134,6 +158,8 @@ export default function ToolInspectModal({
       : 'success'
     : 'unknown';
 
+  const executionTarget = isFrontendTool(toolName) ? 'frontend' : 'server';
+
   return (
     <Dialog.Root open={isOpen} onOpenChange={(e) => !e.open && handleClose()} size="xl">
       <Dialog.Backdrop />
@@ -149,6 +175,9 @@ export default function ToolInspectModal({
                 size="sm"
               >
                 {status}
+              </Badge>
+              <Badge colorPalette={executionTarget === 'frontend' ? 'blue' : 'purple'} size="sm" variant="outline">
+                {executionTarget}
               </Badge>
             </HStack>
           </Dialog.Header>
