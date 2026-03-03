@@ -362,6 +362,14 @@ export const API = {
         deduplicate: true,
       },
     },
+    resetTutorial: {
+      url: '/api/admin/reset-tutorial',
+      method: 'POST',
+      cache: {
+        ttl: 0,  // No caching for mutations
+        deduplicate: true,  // Prevent accidental double-reset
+      },
+    },
   },
 
   // Auth API (for login/register)

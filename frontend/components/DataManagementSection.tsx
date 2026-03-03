@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Box, Flex, Text, Button, Input, VStack, Icon } from '@chakra-ui/react';
-import { LuDownload, LuUpload, LuCircleCheck, LuCircleX, LuLoader, LuChevronDown, LuChevronRight } from 'react-icons/lu';
+import { Box, Flex, Text, Button, Input, VStack, Icon, Dialog, Portal } from '@chakra-ui/react';
+import { LuDownload, LuUpload, LuCircleCheck, LuCircleX, LuLoader, LuChevronDown, LuChevronRight, LuRotateCcw } from 'react-icons/lu';
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import { API } from '@/lib/api/declarations';
 
@@ -45,6 +45,9 @@ export default function DataManagementSection() {
   const [isValidating, setIsValidating] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
+  const [isResettingTutorial, setIsResettingTutorial] = useState(false);
+  const [showResetTutorialConfirm, setShowResetTutorialConfirm] = useState(false);
+  const [resetTutorialStatus, setResetTutorialStatus] = useState<{ success: boolean; message: string } | null>(null);
   const [expandedErrors, setExpandedErrors] = useState<'export' | 'validate' | 'import' | 'migrate' | null>(null);
   const [uploadedData, setUploadedData] = useState<any>(null);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -328,6 +331,28 @@ export default function DataManagementSection() {
       });
     } finally {
       setIsMigrating(false);
+    }
+  };
+
+  const handleResetTutorial = async () => {
+    setShowResetTutorialConfirm(false);
+    setIsResettingTutorial(true);
+    setResetTutorialStatus(null);
+
+    try {
+      const result = await fetchWithCache('/api/admin/reset-tutorial', {
+        method: 'POST',
+        cacheStrategy: API.admin.resetTutorial.cache,
+      });
+
+      setResetTutorialStatus({
+        success: result.success,
+        message: result.message || (result.success ? 'Tutorial reset successfully' : 'Reset failed'),
+      });
+    } catch (error) {
+      setResetTutorialStatus({ success: false, message: 'Failed to reset tutorial' });
+    } finally {
+      setIsResettingTutorial(false);
     }
   };
 
@@ -685,7 +710,87 @@ export default function DataManagementSection() {
           )}
 
         </Box>
+
+        {/* Reset Tutorial */}
+        <Box py={4} px={4}>
+          <Flex justify="space-between" align="center" mb={resetTutorialStatus ? 2 : 0}>
+            <Text fontSize="sm" fontWeight="medium" fontFamily="mono">
+              Reset Tutorial
+            </Text>
+            <Button
+              size="sm"
+              colorPalette="red"
+              variant="outline"
+              onClick={() => setShowResetTutorialConfirm(true)}
+              disabled={isResettingTutorial}
+              fontFamily="mono"
+            >
+              {isResettingTutorial ? (
+                <>
+                  <Icon fontSize="md" mr={1}>
+                    <LuLoader className="animate-spin" />
+                  </Icon>
+                  Resetting...
+                </>
+              ) : (
+                <>
+                  <Icon fontSize="md" mr={1}>
+                    <LuRotateCcw />
+                  </Icon>
+                  Reset
+                </>
+              )}
+            </Button>
+          </Flex>
+          <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={resetTutorialStatus ? 2 : 0}>
+            Restore tutorial mode to its original state, removing any changes or files added in tutorial mode
+          </Text>
+          {resetTutorialStatus && (
+            <Text fontSize="xs" color={resetTutorialStatus.success ? 'accent.teal' : 'accent.danger'} fontFamily="mono">
+              {resetTutorialStatus.success ? `✓ ${resetTutorialStatus.message}` : `✗ ${resetTutorialStatus.message}`}
+            </Text>
+          )}
+        </Box>
+
       </VStack>
+
+      {/* Reset Tutorial confirmation dialog */}
+      <Dialog.Root open={showResetTutorialConfirm} onOpenChange={(e: { open: boolean }) => setShowResetTutorialConfirm(e.open)}>
+        <Portal>
+          <Dialog.Backdrop />
+          <Dialog.Positioner>
+            <Dialog.Content
+              maxW="460px"
+              bg="bg.surface"
+              borderRadius="lg"
+              border="1px solid"
+              borderColor="border.default"
+            >
+              <Dialog.Header px={6} py={4} borderBottom="1px solid" borderColor="border.default">
+                <Dialog.Title fontWeight="700" fontSize="xl" fontFamily="mono">Reset Tutorial</Dialog.Title>
+              </Dialog.Header>
+              <Dialog.Body px={6} py={5}>
+                <Text fontSize="sm" lineHeight="1.6" fontFamily="mono">
+                  This will delete all tutorial files and restore the original 27 template documents.
+                  Any questions, dashboards, or conversations created in tutorial mode will be permanently lost.
+                </Text>
+              </Dialog.Body>
+              <Dialog.Footer px={6} py={4} gap={3} borderTop="1px solid" borderColor="border.default" justifyContent="flex-end">
+                <Dialog.ActionTrigger asChild>
+                  <Button variant="outline" fontFamily="mono" onClick={() => setShowResetTutorialConfirm(false)}>
+                    Cancel
+                  </Button>
+                </Dialog.ActionTrigger>
+                <Button colorPalette="red" fontFamily="mono" onClick={handleResetTutorial}>
+                  Reset Tutorial
+                </Button>
+              </Dialog.Footer>
+              <Dialog.CloseTrigger />
+            </Dialog.Content>
+          </Dialog.Positioner>
+        </Portal>
+      </Dialog.Root>
+
     </Box>
   );
 }
