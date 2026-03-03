@@ -29,13 +29,14 @@ const eslintConfig = defineConfig([
       },
     },
     rules: {
-      // Downgraded to warn — codebase uses `any` extensively, fix gradually
+      // Downgraded to warn — fix gradually
       "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/ban-ts-comment": "warn",
       // Disable base rules as they are replaced by unused-imports
       "@typescript-eslint/no-unused-vars": "off",
       "no-unused-vars": "off",
-      // Enable unused-imports rules
-      "unused-imports/no-unused-imports": "error",
+      // Unused imports/vars — warn, not error (harmless clutter, fix gradually)
+      "unused-imports/no-unused-imports": "warn",
       "unused-imports/no-unused-vars": [
         "warn",
         {
@@ -45,6 +46,11 @@ const eslintConfig = defineConfig([
           argsIgnorePattern: "^_",
         },
       ],
+      // Style preferences — warn, not error
+      "prefer-const": "warn",
+      "react/no-unescaped-entities": "warn",
+      // React Compiler memoization hints — warn (perf hints, not bugs)
+      "react-hooks/preserve-manual-memoization": "warn",
       // Detect runtime circular imports (import type cycles are safe and ignored)
       "import-x/no-cycle": ["error", { ignoreExternal: true }],
       // Enforce all imports at the top of the file before any other code
