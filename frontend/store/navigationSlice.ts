@@ -32,6 +32,9 @@ interface NavigationState {
    *  Set by navigationListener after generating a virtualId.
    *  Cleared (null) whenever pathname changes. */
   activeVirtualId: number | null;
+  /** Error from virtual file creation (e.g. no connections available).
+   *  Cleared whenever pathname changes. */
+  createError: string | null;
 }
 
 // ============================================================================
@@ -42,6 +45,7 @@ const initialState: NavigationState = {
   pathname: '',
   searchParams: {},
   activeVirtualId: null,
+  createError: null,
 };
 
 const navigationSlice = createSlice({
@@ -52,9 +56,10 @@ const navigationSlice = createSlice({
       state,
       action: PayloadAction<{ pathname: string; searchParams: Record<string, string> }>
     ) {
-      // Reset activeVirtualId whenever the page changes
+      // Reset activeVirtualId and createError whenever the page changes
       if (state.pathname !== action.payload.pathname) {
         state.activeVirtualId = null;
+        state.createError = null;
       }
       state.pathname = action.payload.pathname;
       state.searchParams = action.payload.searchParams;
@@ -62,10 +67,13 @@ const navigationSlice = createSlice({
     setActiveVirtualId(state, action: PayloadAction<number | null>) {
       state.activeVirtualId = action.payload;
     },
+    setCreateError(state, action: PayloadAction<string | null>) {
+      state.createError = action.payload;
+    },
   },
 });
 
-export const { setNavigation, setActiveVirtualId } = navigationSlice.actions;
+export const { setNavigation, setActiveVirtualId, setCreateError } = navigationSlice.actions;
 export default navigationSlice.reducer;
 
 // ============================================================================
@@ -205,7 +213,9 @@ export const selectAppState = createSelector(
           loading: file.loading || false,
         };
       }
-      return { appState: null, loading: true };
+      // If virtualId is defined but not in Redux yet, still loading.
+      // If virtualId is undefined (cleared after error or not yet assigned), stop loading.
+      return { appState: null, loading: virtualId !== undefined };
     }
 
     if (pathState.type === 'folder') {

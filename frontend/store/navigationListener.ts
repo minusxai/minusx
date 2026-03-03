@@ -1,6 +1,6 @@
 import { createListenerMiddleware } from '@reduxjs/toolkit';
 import type { AppDispatch, RootState } from './store';
-import { setNavigation, setActiveVirtualId, selectPathState } from './navigationSlice';
+import { setNavigation, setActiveVirtualId, setCreateError, selectPathState } from './navigationSlice';
 import { generateVirtualId } from './filesSlice';
 import { readFiles, readFolder, createVirtualFile } from '@/lib/api/file-state';
 
@@ -38,10 +38,18 @@ navigationListenerMiddleware.startListening({
       const currentState = getState() as RootState;
       const exists = currentState.files.files[virtualId];
       if (!exists) {
-        await createVirtualFile(pathState.fileType, {
-          ...pathState.createOptions,
-          virtualId,
-        });
+        try {
+          await createVirtualFile(pathState.fileType, {
+            ...pathState.createOptions,
+            virtualId,
+          });
+        } catch (err) {
+          // Creation failed (e.g. no database connections) — clear virtualId and
+          // store the error so the page can show it instead of a spinner.
+          const message = err instanceof Error ? err.message : 'Failed to initialize file';
+          typedDispatch(setCreateError(message));
+          typedDispatch(setActiveVirtualId(null));
+        }
       }
 
     } else if (pathState.type === 'folder') {
