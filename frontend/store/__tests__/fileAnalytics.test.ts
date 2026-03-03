@@ -13,6 +13,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
+// Override the global jest.setup.ts mock — this suite specifically tests the real DuckDB layer.
+jest.unmock('@/lib/analytics/file-analytics.server');
+
 // NOTE: process.env.ANALYTICS_DB_DIR is read at *call time* (not import time),
 // so setting it in beforeAll() before any getAnalyticsDb() call works correctly.
 import { trackFileEvent } from '@/lib/analytics/file-analytics.server';
