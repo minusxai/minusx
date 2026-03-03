@@ -2,11 +2,10 @@
  * CSV Upload API Client
  *
  * Client functions for uploading CSV files and managing CSV connections.
- * These functions call the Python backend's CSV endpoints.
+ * These functions call the Next.js API proxy routes, which forward to Python.
  */
 
-import { BACKEND_URL } from '@/lib/constants';
-import { CsvFileInfo, CsvConnectionConfig } from '@/lib/types';
+import { CsvConnectionConfig } from '@/lib/types';
 
 export interface CsvUploadResult {
   success: boolean;
@@ -24,16 +23,12 @@ export interface CsvDeleteResult {
  *
  * @param connectionName - Name of the connection
  * @param files - Array of File objects to upload
- * @param companyId - Company ID for multi-tenant isolation
- * @param mode - Mode for isolation (org, tutorial, etc.)
  * @param replaceExisting - If true, replace existing files; if false, error on existing
  * @returns Upload result with generated config
  */
 export async function uploadCsvFiles(
   connectionName: string,
   files: File[],
-  companyId: number,
-  mode: string,
   replaceExisting: boolean = false
 ): Promise<CsvUploadResult> {
   const formData = new FormData();
@@ -45,12 +40,8 @@ export async function uploadCsvFiles(
   }
 
   try {
-    const res = await fetch(`${BACKEND_URL}/api/csv/upload`, {
+    const res = await fetch('/api/csv/upload', {
       method: 'POST',
-      headers: {
-        'x-company-id': companyId.toString(),
-        'x-mode': mode
-      },
       body: formData
     });
 
@@ -76,22 +67,14 @@ export async function uploadCsvFiles(
  * Should be called when deleting a CSV connection.
  *
  * @param connectionName - Name of the connection
- * @param companyId - Company ID
- * @param mode - Mode for isolation
  * @returns Delete result
  */
 export async function deleteCsvData(
-  connectionName: string,
-  companyId: number,
-  mode: string
+  connectionName: string
 ): Promise<CsvDeleteResult> {
   try {
-    const res = await fetch(`${BACKEND_URL}/api/csv/delete/${encodeURIComponent(connectionName)}`, {
-      method: 'DELETE',
-      headers: {
-        'x-company-id': companyId.toString(),
-        'x-mode': mode
-      }
+    const res = await fetch(`/api/csv/delete/${encodeURIComponent(connectionName)}`, {
+      method: 'DELETE'
     });
 
     if (!res.ok) {

@@ -14,7 +14,7 @@ import {
   getSchemaFromPython,
   validateConnectionBeforeCreate
 } from '@/lib/backend/python-backend';
-import { deleteCsvData } from '@/lib/backend/csv-upload';
+import { BACKEND_URL } from '@/lib/constants';
 import { deleteGoogleSheetsData } from '@/lib/backend/google-sheets';
 import { ConnectionContent, DatabaseSchema } from '@/lib/types';
 import {
@@ -218,7 +218,13 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
     // For CSV connections, also clean up the data files
     if (content.type === 'csv') {
       try {
-        await deleteCsvData(name, user.companyId, user.mode);
+        await fetch(`${BACKEND_URL}/api/csv/delete/${encodeURIComponent(name)}`, {
+          method: 'DELETE',
+          headers: {
+            'x-company-id': user.companyId.toString(),
+            'x-mode': user.mode
+          }
+        });
         console.log(`[ConnectionsAPI] Cleaned up CSV data for connection ${name}`);
       } catch (error) {
         console.error(`[ConnectionsAPI] Failed to clean up CSV data for ${name}:`, error);

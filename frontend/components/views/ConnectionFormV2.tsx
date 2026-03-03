@@ -909,8 +909,6 @@ export default function ConnectionFormV2({
             onChange={(newConfig) => onChange({ config: newConfig })}
             mode={mode}
             connectionName={fileName}
-            companyId={companyId}
-            userMode={userMode}
             onError={setNameError}
           />
         )}

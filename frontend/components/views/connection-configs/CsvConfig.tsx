@@ -9,8 +9,6 @@ import { BaseConfigProps } from './types';
 
 interface CsvConfigProps extends BaseConfigProps {
   connectionName: string;
-  companyId: number | undefined;
-  userMode: string;
   onError: (error: string) => void;
 }
 
@@ -19,8 +17,6 @@ export default function CsvConfig({
   onChange,
   mode,
   connectionName,
-  companyId,
-  userMode,
   onError
 }: CsvConfigProps) {
   const [csvFiles, setCsvFiles] = useState<File[]>([]);
@@ -29,11 +25,6 @@ export default function CsvConfig({
   const handleCsvUpload = async () => {
     if (csvFiles.length === 0) {
       onError('Please select at least one CSV file');
-      return;
-    }
-
-    if (!companyId) {
-      onError('Unable to determine company ID');
       return;
     }
 
@@ -48,8 +39,6 @@ export default function CsvConfig({
       const result = await uploadCsvFiles(
         connectionName,
         csvFiles,
-        companyId,
-        userMode,
         mode === 'view'  // replace_existing in view mode
       );
 
