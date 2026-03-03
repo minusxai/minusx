@@ -53,9 +53,6 @@ export default function ChatInterface({
   // Get config for location
   const { config } = useConfigs();
 
-  // Get selected toolset from Redux
-  const selectedToolset = useAppSelector((state) => state.ui.selectedToolset);
-
   // Internal database selection state
   const [selectedDatabase, setSelectedDatabase] = useState<string | null>(
     initialDatabaseName || null
@@ -355,7 +352,6 @@ export default function ChatInterface({
           app_state: appState,
           city: config.city,
           agent_name: config.branding.agentName || 'MinusX',
-          toolset: selectedToolset
         },
         message: userInput
       }));
@@ -376,7 +372,6 @@ export default function ChatInterface({
           app_state: appState,
           city: config.city,
           agent_name: config.branding.agentName || 'MinusX',
-          toolset: selectedToolset
         }
       }));
 

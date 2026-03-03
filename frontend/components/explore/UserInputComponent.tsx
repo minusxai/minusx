@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useDispatch } from 'react-redux';
 import {
   Box, HStack, VStack, Text, Button, Input, Textarea, Icon
@@ -8,7 +8,6 @@ import {
 import { LuTriangleAlert } from 'react-icons/lu';
 import { UserInput } from '@/lib/api/user-input-exception';
 import { setUserInputResult } from '@/store/chatSlice';
-import { setProposedQuery, clearProposedQuery } from '@/store/uiSlice';
 import { useDirtyFiles } from '@/lib/hooks/file-state-hooks';
 import PublishModal from '@/components/PublishModal';
 
@@ -72,26 +71,7 @@ export default function UserInputComponent({
   const [formValues, setFormValues] = useState<Record<string, any>>({});
   const [otherText, setOtherText] = useState('');  // For "Other" option text input
 
-  // Set proposed query on mount, clear on unmount (for SQL diff view)
-  useEffect(() => {
-    if (toolName === 'ExecuteSQLQueryForeground' && fileId && toolArgs?.query) {
-      dispatch(setProposedQuery({ fileId, query: toolArgs.query }));
-    }
-
-    return () => {
-      // Clear proposed query on unmount
-      if (fileId) {
-        dispatch(clearProposedQuery(fileId));
-      }
-    };
-  }, [toolName, fileId, toolArgs?.query, dispatch]);
-
   const handleSubmit = (result: any) => {
-    // Clear proposed query when user responds
-    if (fileId) {
-      dispatch(clearProposedQuery(fileId));
-    }
-
     dispatch(setUserInputResult({
       conversationID,
       tool_call_id,
