@@ -17,7 +17,7 @@ import { fetchWithCache } from './fetch-wrapper';
 import { API } from './declarations';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 import { getRouter } from '@/lib/navigation/use-navigation';
-import { readFiles, editFileStr, publishFile, getQueryResult, createVirtualFile, editFile as editFileOp, clearFileChanges, compressAugmentedFile } from '@/lib/api/file-state';
+import { readFiles, editFileStr, getQueryResult, createVirtualFile, editFile as editFileOp, compressAugmentedFile } from '@/lib/api/file-state';
 import { canCreateFileType } from '@/lib/auth/access-rules.client';
 import { preserveParams } from '@/lib/navigation/url-utils';
 
@@ -1869,27 +1869,6 @@ registerFrontendTool('CreateFile', async (args, _context) => {
   };
 });
 
-/**
- * PublishFile - Commit changes from Redux to database
- */
-registerFrontendTool('PublishFile', async (args, _context) => {
-  const { fileId } = args;
-
-  // Execute (new unified API)
-  const result = await publishFile({ fileId });
-  if (fileId < 0 && result.id) {
-    const router = getRouter();
-    if (!router) {
-      return {
-        success: false,
-        message: 'Router not available'
-      };
-    }
-    router.push(`/f/${result.id}`)
-  }
-
-  return result;
-});
 
 /**
  * PublishAll - Open PublishModal for user to review and publish all unsaved changes

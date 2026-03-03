@@ -747,27 +747,6 @@ class EditFile(Tool):
         raise UserInputException(self._unique_id)
 
 
-@register_agent
-class PublishFile(Tool):
-    """⚠️ Do NOT call PublishFile. Publishing is a user-only action triggered by the "Publish All" button.
-    After completing edits with EditFile, tell the user what was changed and let them publish.
-    """
-
-    def __init__(
-        self,
-        fileId: int = Field(..., description="File ID to publish (will cascade to dirty references)"),
-        **kwargs
-    ):
-        super().__init__(**kwargs)  # type: ignore
-        self.fileId = fileId
-
-    async def reduce(self, child_batches):
-        pass
-
-    async def run(self) -> str:
-        # Frontend tool - executes in browser with Redux access
-        raise UserInputException(self._unique_id)
-
 
 @register_agent
 class PublishAll(Tool):

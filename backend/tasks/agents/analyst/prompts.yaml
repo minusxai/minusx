@@ -404,7 +404,7 @@ templates:
     ```
 
     - **`content`** — the single merged view of saved state + any pending edits. Copy values directly from here as `oldMatch` in EditFile.
-    - **`isDirty`** — `true` when there are unpublished edits. Do NOT call PublishFile. After completing all edits, call **PublishAll** to open the publish review modal and let the user confirm.
+    - **`isDirty`** — `true` when there are unpublished edits. After completing all edits, call **PublishAll** to open the publish review modal and let the user confirm.
     - **`runtimeParameterValues`** — live param values set by the user or SetRuntimeValues. These are ephemeral: NEVER saved, NOT part of `content`, NOT matched by EditFile.
 
   native_tools: |
@@ -412,9 +412,8 @@ templates:
 
     ### File Reading & Editing
     - **ReadFiles(fileIds: int[])**: Load one or more files. Returns `CompressedAugmentedFile` objects — each contains `fileState` (with merged `content`, `isDirty`, and optional `runtimeParameterValues`), `references` (embedded referenced files), and `queryResults`. See **File State Schema** below. **AppState already contains the full JSON for the current page file AND all files embedded in it (AppState.references) — do NOT call ReadFiles for these. Only call ReadFiles for files found via SearchFiles that are absent from AppState.**
-    - **EditFile(fileId: int, oldMatch: string, newMatch: string)**: Find `oldMatch` in the file's JSON and replace with `newMatch`. Changes are staged as drafts — NOT saved until PublishFile. Returns the updated `CompressedAugmentedFile` (same format as ReadFiles) so you can verify your edit is reflected in `content` and see `isDirty: true`. Use `oldMatch` copied directly from AppState content — never call ReadFiles just to obtain content already visible in AppState.
-    - **PublishFile**: ❌ Do NOT call PublishFile directly.
-    - **PublishAll**: Call this after completing all edits when the user wants to publish. Opens a review modal showing all dirty files. Returns immediately if nothing is dirty. Use this instead of PublishFile.
+    - **EditFile(fileId: int, oldMatch: string, newMatch: string)**: Find `oldMatch` in the file's JSON and replace with `newMatch`. Changes are staged as drafts — not saved until published. Returns the updated `CompressedAugmentedFile` (same format as ReadFiles) so you can verify your edit is reflected in `content` and see `isDirty: true`. Use `oldMatch` copied directly from AppState content — never call ReadFiles just to obtain content already visible in AppState.
+    - **PublishAll**: Call this after completing all edits when the user wants to publish. Opens a review modal showing all dirty files. Returns immediately if nothing is dirty.
 
     ### Query Execution
     - **ExecuteQuery(query: string, connectionId: string, parameters?: object, vizSettings?: object)**: Execute a standalone SQL query for data exploration. Results are displayed to the user but not tied to any file. Use this for ad-hoc analysis, checking values, exploring data.
@@ -516,7 +515,7 @@ templates:
     2. **EditFile** with exact string matching - find the substring you want to replace (`oldMatch`) and provide the replacement (`newMatch`)
     3. Use **ExecuteQuery** for ad-hoc data exploration (not tied to any file). This is especially useful in the `explore` page.
 
-    After editing, summarize what changed in `<answer>`. **Never call PublishFile** — use **PublishAll** when the user explicitly asks to publish; otherwise leave changes as drafts for the user to publish via the Publish All button.
+    After editing, summarize what changed in `<answer>`. Use **PublishAll** when the user explicitly asks to publish; otherwise leave changes as drafts for the user to publish via the Publish All button.
 
     ### String Matching Tips for EditFile
     - **AppState is your source of truth**: AppState already has the full file JSON for the current page and its references. Copy `oldMatch` verbatim from AppState — never call ReadFiles first for files you can already see in AppState.
@@ -543,8 +542,7 @@ templates:
       Matching small substrings avoids the common failure of whitespace mismatches in the full query.
     - **Verify each edit before claiming success**: After every EditFile call, check that the returned
       `fileState.isDirty` is `true` and the `content` reflects your intended change. If `isDirty` is
-      still `false` or the expected change is absent, the edit failed — do NOT claim success or proceed
-      to PublishFile. Retry with a corrected, shorter `oldMatch`.
+      still `false` or the expected change is absent, the edit failed — do NOT claim success. Retry with a corrected, shorter `oldMatch`.
 
     ### Parameter Values vs File Edits
     - Use **SetRuntimeValues** to change parameter values at runtime (ephemeral, not saved). Values land in `runtimeParameterValues` of the next ReadFiles/AppState response.
@@ -563,7 +561,7 @@ templates:
       2. For NEW data questions: Use SearchFiles to find existing questions that answer (or nearly answer) the request. Check results before writing any SQL.
       3. Check the Available Database Schema (SearchDBSchema) ONLY if no existing questions are usable and you need to explore unfamiliar tables/columns.
       4. Use AppState to inspect the current file and any files embedded in it — AppState contains `CompressedAugmentedFile` for both the main file and all its `references`. **NEVER call ReadFiles for files in AppState or AppState.references.** Only call ReadFiles for files found via SearchFiles that are not listed in AppState.
-      5. EditFile to modify. After each EditFile, verify `isDirty: true` in the response before proceeding. Never call PublishFile. If the user asks to publish, call PublishAll at the end.
+      5. EditFile to modify. After each EditFile, verify `isDirty: true` in the response before proceeding. If the user asks to publish, call PublishAll at the end.
       6. ExecuteQuery for data exploration if needed.
       7. Respond to the user with insights, ending with a helpful continuation question.
 
