@@ -102,12 +102,10 @@ export function withPythonBackend(options: PythonBackendOptions = {}): PythonBac
   // Shutdown function that can be called explicitly
   const shutdown = async () => {
     try {
-      if (mockServer) {
-        await mockServer.stop();
-      }
-      if (pythonServer) {
-        await killPythonBackend(pythonServer, pythonPort);
-      }
+      await Promise.all([
+        mockServer ? mockServer.stop() : Promise.resolve(),
+        pythonServer ? killPythonBackend(pythonServer, pythonPort) : Promise.resolve()
+      ]);
     } catch (error) {
       console.error('Failed to cleanup Python backend:', error);
       throw error;
@@ -118,7 +116,7 @@ export function withPythonBackend(options: PythonBackendOptions = {}): PythonBac
 
   afterAll(async () => {
     await shutdown();
-  }, 10000);
+  }, 30000);
 
   const harness: PythonBackendHarness = {
     getPythonPort: () => pythonPort,
