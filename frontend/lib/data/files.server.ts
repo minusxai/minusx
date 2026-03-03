@@ -21,7 +21,8 @@ import {
 } from './types';
 import { canAccessFile } from './helpers/permissions';
 import { extractReferenceIds, extractAllReferenceIds } from './helpers/references';
-import { AccessPermissionError, FileNotFoundError } from '@/lib/errors';
+import { UserFacingError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
+import { validateFileState } from '@/lib/validation/content-validators';
 import { PROTECTED_FILE_PATHS } from '@/lib/constants';
 import { canAccessFileType, canCreateFileType, validateFileLocation } from '@/lib/auth/access-rules';
 import type { AccessRulesOverride } from '@/lib/branding/whitelabel';
@@ -340,6 +341,12 @@ class FilesDataLayerServer implements IFilesDataLayer {
       console.log(`[FILES DataLayer] Computed queryResultId for new question ${name}: ${queryResultId}`);
     }
 
+    // Validate content schema before writing to DB
+    const createValidationError = validateFileState({ type, content: contentToCreate });
+    if (createValidationError) {
+      throw new UserFacingError(`Invalid file content: ${createValidationError}`);
+    }
+
     // Create file in database (returns numeric ID)
     // Phase 6: Pass references from client (server is dumb, no extraction)
     const newFileId = await DocumentDB.create(name, finalPath, type, contentToCreate, references, user.companyId);
@@ -422,6 +429,12 @@ class FilesDataLayerServer implements IFilesDataLayer {
       const queryResultId = getQueryHash(questionContent.query, params, questionContent.database_name);
       contentToSave = { ...contentToSave, queryResultId } as BaseFileContent;
       console.log(`[FILES DataLayer] Computed queryResultId for question ${name}: ${queryResultId}`);
+    }
+
+    // Validate content schema before writing to DB
+    const saveValidationError = validateFileState({ type: existingFile.type, content: contentToSave });
+    if (saveValidationError) {
+      throw new UserFacingError(`Invalid file content: ${saveValidationError}`);
     }
 
     // Phase 6: Server is dumb - just saves what client sends (no extraction)
