@@ -32,6 +32,7 @@ export function Providers({ children, initialData }: ProvidersProps) {
     // Configs (ALWAYS present - from SSR or defaults)
     configs: {
       config: initialData?.config || DEFAULT_CONFIG,
+      // eslint-disable-next-line react-hooks/purity
       loadedAt: initialData?.config ? Date.now() : null,
     },
 

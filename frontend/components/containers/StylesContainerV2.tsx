@@ -65,11 +65,6 @@ export default function StylesContainerV2({
     }
   }, [currentContent, fileId, router]);
 
-  // Show loading state while file is loading
-  if (fileLoading || !file || !currentContent) {
-    return <div>Loading styles...</div>;
-  }
-
   // Handle changes from editor
   const handleChange = useCallback((updates: Partial<StylesContent>) => {
     if (currentContent) {
@@ -82,6 +77,11 @@ export default function StylesContainerV2({
       reloadFile({ fileId });
     }
   }, [fileId]);
+
+  // Show loading state while file is loading
+  if (fileLoading || !file || !currentContent) {
+    return <div>Loading styles...</div>;
+  }
 
   return (
     <StylesEditor

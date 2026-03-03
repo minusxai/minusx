@@ -15,6 +15,7 @@ export default function ReduxProvider({ children, preloadedState }: ReduxProvide
   const storeRef = useRef(getOrCreateStore(preloadedState));
 
   return (
+    // eslint-disable-next-line react-hooks/refs
     <Provider store={storeRef.current}>
       {children}
     </Provider>

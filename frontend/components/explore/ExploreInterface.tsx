@@ -44,11 +44,12 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
   });
   const homeContextPath = homeContext?.path;
 
-  // Initialize selectedContextPath with homeContextPath only on first load
+  // Initialize selectedContextPath with homeContextPath only on first load — intentional setState in effect
   useEffect(() => {
     if (!selectedContextPath && homeContextPath) {
       const content = homeContext?.content as ContextContent | undefined;
       if (content?.published?.all) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setSelectedContextPath(homeContextPath);
         setSelectedVersion(content.published.all);
       }

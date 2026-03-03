@@ -21,16 +21,14 @@ export function ContextSelector({ selectedContextPath, selectedVersion, onSelect
   // Triggers context loading and provides accurate loading state.
   // Must be called before early returns to satisfy Rules of Hooks.
   const { loading: contextsLoading } = useContexts();
-
-  if (!user) return null;
-
-  const homeFolder = resolveHomeFolderSync(user.mode, user.home_folder || '');
   const filesState = useAppSelector(state => state.files.files);
 
-  const allContexts = Object.values(filesState)
+  const homeFolder = user ? resolveHomeFolderSync(user.mode, user.home_folder || '') : '';
+
+  const allContexts = user ? Object.values(filesState)
     .filter(file => file.type === 'context')
     .filter(file => file.path.startsWith(homeFolder))
-    .filter(file => file.id > 0);
+    .filter(file => file.id > 0) : [];
 
   const contexts = allContexts.map(file => ({
     id: file.id,
@@ -88,11 +86,6 @@ export function ContextSelector({ selectedContextPath, selectedVersion, onSelect
     return result.sort((a, b) => a.label.localeCompare(b.label));
   }, [contexts]);
 
-  // Non-admins don't see selector (only home context)
-  if (!isAdmin(user.role)) {
-    return null;
-  }
-
   // Build current value - find matching option
   // When selectedVersion is undefined, find the first option matching the path (published version)
   const currentValue = useMemo(() => {
@@ -109,6 +102,13 @@ export function ContextSelector({ selectedContextPath, selectedVersion, onSelect
 
     return selectedContextPath || '';
   }, [selectedContextPath, selectedVersion, options]);
+
+  if (!user) return null;
+
+  // Non-admins don't see selector (only home context)
+  if (!isAdmin(user.role)) {
+    return null;
+  }
 
   return (
     <GenericSelector

@@ -43,6 +43,7 @@ import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { addReferenceToQuestion, removeReferenceFromQuestion, setFile } from '@/store/filesSlice';
 import { setSqlEditorCollapsed, selectSqlEditorCollapsed, setQuestionCollapsedPanel, selectQuestionCollapsedPanel, selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { QueryBuilder, QueryModeSelector } from '../query-builder';
+import { FilesAPI } from '@/lib/data/files';
 
 /**
  * Props for QuestionViewV2
@@ -182,14 +183,12 @@ export default function QuestionViewV2({
     if (missingIds.length === 0) return;
 
     // Load missing questions
-    import('@/lib/data/files').then(({ FilesAPI }) => {
-      FilesAPI.loadFiles(missingIds).then(result => {
-        result.data.forEach(file => {
-          dispatch(setFile({ file, references: [] }));
-        });
-      }).catch(err => {
-        console.error('[QuestionViewV2] Failed to load referenced questions:', err);
+    FilesAPI.loadFiles(missingIds).then(result => {
+      result.data.forEach(file => {
+        dispatch(setFile({ file, references: [] }));
       });
+    }).catch(err => {
+      console.error('[QuestionViewV2] Failed to load referenced questions:', err);
     });
   }, [content.references, referencedQuestions, dispatch]);
 

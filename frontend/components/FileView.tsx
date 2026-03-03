@@ -122,6 +122,7 @@ export default function FileView({ fileId, mode = 'view', defaultFolder, hideHea
   const showFileHeader = !hideHeader && typeof fileId === 'number' && !isSystemFileType(file.type as FileType);
 
   // Render file-specific component
+  // getFileComponent returns a stable reference from a lookup table
   return (
     <>
       {showFileHeader && (
@@ -129,6 +130,7 @@ export default function FileView({ fileId, mode = 'view', defaultFolder, hideHea
           <FileHeader fileId={fileId as number} fileType={file.type} mode={mode} />
         </Box>
       )}
+      {/* eslint-disable-next-line react-hooks/static-components */}
       <Component
         fileId={fileId}
         mode={mode}

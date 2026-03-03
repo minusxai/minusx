@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction, createSelector } from '@reduxjs/toolkit';
-import type { DbFile, FileType, DocumentContent, AssetReference, QuestionContent, QuestionReference } from '@/lib/types';
+import type { DbFile, FileType, DocumentContent, AssetReference, QuestionContent, QuestionReference, DatabaseSchema } from '@/lib/types';
 import type { FileInfo } from '@/lib/data/types';
 import type { FileAnalyticsSummary, ConversationAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
 import type { RootState } from './store';
@@ -1114,8 +1114,6 @@ export const selectDirtyFiles = (state: RootState): FileState[] => {
 // BACKWARDS COMPATIBILITY: Connection selectors
 // ============================================================================
 // These maintain the same API as old connectionsSlice for gradual migration
-
-import type { DatabaseSchema } from '@/lib/types';
 
 export interface ConnectionWithSchema {
   metadata: {

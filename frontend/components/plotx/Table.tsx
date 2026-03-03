@@ -74,8 +74,9 @@ export const Table = ({ columns, types, rows, pageSize: fixedPageSize }: TablePr
   const [containerHeight, setContainerHeight] = useState<number>(0)
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set(columns))
 
-  // Reset visible columns when columns change
+  // Reset visible columns when columns change — intentional setState in effect
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setVisibleColumns(new Set(columns))
   }, [columns])
 
@@ -145,9 +146,11 @@ export const Table = ({ columns, types, rows, pageSize: fixedPageSize }: TablePr
   // Use fixed page size if provided, otherwise use calculated
   const pageSize = fixedPageSize || calculatedPageSize
 
+  // Calculate column stats when data changes — intentional setState in effect
   useEffect(() => {
     if (columns.length > 0 && rows.length > 0 && types) {
       console.log('Calculating stats for', columns.length, 'columns and', rows.length, 'rows')
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoadingStats(true)
 
       // Load data into table once, then run all calculations on it

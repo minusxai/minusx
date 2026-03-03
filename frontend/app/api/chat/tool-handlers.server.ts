@@ -16,6 +16,7 @@ import { registerTool } from './orchestrator';
 import { JSONPath } from 'jsonpath-plus';
 import { searchInField } from '@/lib/search/file-search-utils';
 import { searchFilesInFolder } from '@/lib/search/file-search';
+import { executeQuery as execQuery } from '@/lib/api/execute-query.server';
 
 // ============================================================================
 // Tool Implementations
@@ -370,9 +371,6 @@ registerTool('Clarify', async (args, _user, childResults) => {
  */
 registerTool('ExecuteQuery', async (args) => {
   const { query, connectionId, parameters = {} } = args;
-
-  // Import the executeQuery function
-  const { executeQuery: execQuery } = await import('@/lib/api/execute-query.server');
 
   // Execute query
   const result = await execQuery({

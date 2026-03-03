@@ -265,9 +265,10 @@ export function MentionsPlugin({ databaseName, whitelistedSchemas }: MentionsPlu
     mentionType === 'questions' ? m.type !== 'table' : true
   );
 
-  // Reset selectedIndex if it's out of bounds after filtering
+  // Reset selectedIndex if it's out of bounds after filtering — intentional setState in effect
   useEffect(() => {
     if (selectedIndex >= filteredMentions.length && filteredMentions.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedIndex(0);
     }
   }, [filteredMentions.length, selectedIndex]);

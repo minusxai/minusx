@@ -35,7 +35,7 @@ export default function ConfigEditor({
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const isEditingRef = useRef(false);
 
-  // Sync content to JSON text only when NOT actively editing
+  // Sync content to JSON text only when NOT actively editing — intentional setState in effect
   useEffect(() => {
     // Skip sync if user is actively editing
     if (isEditingRef.current) {
@@ -47,6 +47,7 @@ export default function ConfigEditor({
       const cleanedConfig = JSON.parse(JSON.stringify(content));
 
       const newJson = JSON.stringify(cleanedConfig, null, 2);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setJsonText(newJson);
       setError(null);
     } catch (err) {

@@ -57,8 +57,10 @@ function LLMCallMXDetails({ llmCallId }: { llmCallId: string }) {
   const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState(false);
 
+  // Fetch LLM log stats once on mount — intentional setState in effect
   useEffect(() => {
     if (fetched) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setFetched(true);
     setLoading(true);
     getLLMLogStats(llmCallId)

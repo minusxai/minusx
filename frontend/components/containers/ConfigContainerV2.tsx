@@ -92,11 +92,6 @@ export default function ConfigContainerV2({
     }
   }, [file, fileId, currentContent, dispatch, router]);
 
-  // Show loading state while file is loading
-  if (fileLoading || !file || !currentContent) {
-    return <div>Loading config...</div>;
-  }
-
   // Handle changes from editor - use setFullContent for full replacement
   const handleChange = useCallback((newContent: Partial<ConfigContent>) => {
     dispatch(setFullContent({ fileId, content: newContent }));
@@ -107,6 +102,11 @@ export default function ConfigContainerV2({
       reloadFile({ fileId });
     }
   }, [fileId]);
+
+  // Show loading state while file is loading
+  if (fileLoading || !file || !currentContent) {
+    return <div>Loading config...</div>;
+  }
 
   return (
     <ConfigEditor

@@ -180,6 +180,8 @@ export default function FileSearchBar({ onResultClick }: FileSearchBarProps) {
       {/* Dropdown Results */}
       {showDropdown && (
         <Portal>
+          {/* Accessing containerRef during render for Portal positioning — intentional ref read in render */}
+          {/* eslint-disable react-hooks/refs */}
           <Box
             ref={dropdownRef}
             position="fixed"
@@ -271,6 +273,7 @@ export default function FileSearchBar({ onResultClick }: FileSearchBarProps) {
               </VStack>
             )}
           </Box>
+          {/* eslint-enable react-hooks/refs */}
         </Portal>
       )}
     </Box>

@@ -12,9 +12,11 @@ export async function createAdapter(config?: DatabaseConfig): Promise<IDatabaseA
   const dbType = config?.type || getDbType();
 
   if (dbType === 'sqlite') {
+    // eslint-disable-next-line no-restricted-syntax
     const { SqliteAdapter } = await import('./sqlite-adapter');
     return new SqliteAdapter(config?.sqlitePath);
   } else if (dbType === 'postgres') {
+    // eslint-disable-next-line no-restricted-syntax
     const { PostgresAdapter } = await import('./postgres-adapter');
     return new PostgresAdapter(config?.postgresConnectionString);
   } else {
@@ -33,6 +35,7 @@ export async function getAdapter(): Promise<IDatabaseAdapter> {
 
     if (dbType === 'sqlite') {
       // Import DB_PATH to ensure we use the mocked value in tests
+      // eslint-disable-next-line no-restricted-syntax
       const { DB_PATH } = await import('../db-config');
       currentAdapter = await createAdapter({ type: 'sqlite', sqlitePath: DB_PATH });
     } else if (dbType === 'postgres') {

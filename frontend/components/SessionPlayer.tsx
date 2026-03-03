@@ -21,10 +21,11 @@ export default function SessionPlayer({ content, fileName, fileId, onDelete }: S
   const [error, setError] = useState<string | null>(null);
   const [events, setEvents] = useState<any[]>([]);
 
-  // Decompress events on mount
+  // Decompress events on mount — intentional setState in effect to update from prop
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIsLoading(true);
     try {
-      setIsLoading(true);
       const decompressed = decompressEvents(content.events);
       setEvents(decompressed);
       setIsLoading(false);

@@ -50,6 +50,7 @@ export function useRecordingManager() {
 
       // Auto-stop if limit reached
       if (result.uncompressedSize >= MAX_SIZE || result.duration >= MAX_DURATION) {
+        // eslint-disable-next-line react-hooks/immutability
         stopRecording();
       }
     } catch (error) {

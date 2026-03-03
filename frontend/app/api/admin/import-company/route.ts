@@ -20,6 +20,7 @@ import {
 import { validateInitData } from '@/lib/database/validation';
 import { getDataVersion } from '@/lib/database/config-db';
 import { DB_PATH } from '@/lib/database/db-config';
+import { resetAdapter } from '@/lib/database/adapter/factory';
 import { gunzip } from 'zlib';
 import { promisify } from 'util';
 
@@ -114,7 +115,6 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
     // Reset adapter to ensure fresh connection for next request
     // WAL checkpoint happens automatically when connection is closed
-    const { resetAdapter } = await import('@/lib/database/adapter/factory');
     await resetAdapter();
 
     return NextResponse.json({

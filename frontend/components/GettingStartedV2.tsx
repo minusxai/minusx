@@ -33,6 +33,7 @@ import {
   setActiveSidebarSection,
   setRightSidebarCollapsed
 } from '@/store/uiSlice';
+import CreateMenu from './CreateMenu';
 
 interface OnboardingEmptyState {
   message: string;
@@ -458,9 +459,6 @@ export default function GettingStartedV2({ variant, fallback }: GettingStartedV2
  * Used by FolderView for empty subfolders
  */
 export function DefaultEmptyState({ currentPath }: { currentPath: string }) {
-  // Import CreateMenu dynamically to avoid circular deps
-  const CreateMenu = require('./CreateMenu').default;
-
   return (
     <Box
       display="flex"

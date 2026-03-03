@@ -8,6 +8,7 @@ import { UserRole, UserState } from '@/lib/types'
 import { isAdmin } from '@/lib/auth/role-helpers'
 import { getCompanyNameById } from '@/lib/data/configs.server'
 import { ADMIN_PWD } from '@/lib/config'
+import { CURRENT_TOKEN_VERSION } from '@/lib/auth/auth-constants'
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
@@ -108,9 +109,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   },
   callbacks: {
     async jwt({ token, user, trigger, session }) {
-      // Import constants from shared location
-      const { CURRENT_TOKEN_VERSION } = await import('@/lib/auth/auth-constants');
-
       // On sign in, add user data to token
       if (user) {
         token.userId = user.userId
