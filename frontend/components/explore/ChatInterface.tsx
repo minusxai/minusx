@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box, VStack, HStack, Text, Icon, Button, Spinner, Grid, GridItem } from '@chakra-ui/react';
-import { LuPlus, LuChevronDown, LuRefreshCw, LuSparkles, LuPin, LuShare2, LuExpand } from 'react-icons/lu';
+import { LuPlus, LuChevronDown, LuRefreshCw, LuSparkles, LuPin, LuShare2, LuExpand, LuTerminal } from 'react-icons/lu';
 import type { LoadError } from '@/lib/types/errors';
 import { AppState } from '@/lib/appState';
 import ChatInput from './ChatInput';
@@ -22,6 +22,9 @@ import SimpleChatMessage from './SimpleChatMessage';
 import { parseThinkingAnswer } from '@/lib/utils/xml-parser';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import { preserveParams } from '@/lib/navigation/url-utils';
+import { selectEffectiveUser } from '@/store/authSlice';
+import { isAdmin } from '@/lib/auth/role-helpers';
+import ToolCallListModal from './ToolCallListModal';
 
 interface ChatInterfaceProps {
   conversationId?: number;  // Optional file ID: if provided, load existing conversation
@@ -86,6 +89,10 @@ export default function ChatInterface({
   const { conversation: loadedConversation, isLoading, error: loadError } = useConversation(providedConversationId);
 
   const [showThinking, setShowThinking] = useState<boolean>(false)
+  const [showToolInspector, setShowToolInspector] = useState(false)
+
+  const effectiveUser = useAppSelector(selectEffectiveUser);
+  const userIsAdmin = effectiveUser?.role ? isAdmin(effectiveUser.role) : false;
 
   // Single conversation selector - handles both existing and new conversations
   // Uses active flag to find the global conversation
@@ -467,7 +474,7 @@ export default function ChatInterface({
           justifyContent="center"
         >
           <Box width="100%" display="flex" justifyContent="space-between" alignItems="center" px={5}>
-            <Box>
+            <HStack gap={2}>
             {container === 'sidebar' && (
               <Tooltip content="Open in explore" positioning={{ placement: 'bottom' }}>
                 <Button
@@ -487,7 +494,21 @@ export default function ChatInterface({
                 </Button>
               </Tooltip>
             )}
-            </Box>
+            {userIsAdmin && allMessages.length > 0 && (
+              <Tooltip content="Inspect tool calls" positioning={{ placement: 'bottom' }}>
+                <Button
+                  onClick={() => setShowToolInspector(true)}
+                  size="xs"
+                  variant="outline"
+                  borderColor="border.muted"
+                  color="fg.subtle"
+                  _hover={{ color: 'accent.teal', borderColor: 'accent.teal' }}
+                >
+                  <LuTerminal />
+                </Button>
+              </Tooltip>
+            )}
+            </HStack>
             <HStack gap={2}>
               {setAsActiveButton}
               {newChatButton}
@@ -674,6 +695,15 @@ export default function ChatInterface({
           </Box>
         )}
       </Box>
+
+      {/* Admin tool call inspector */}
+      {userIsAdmin && showToolInspector && (
+        <ToolCallListModal
+          messages={allMessages}
+          isOpen={showToolInspector}
+          onClose={() => setShowToolInspector(false)}
+        />
+      )}
 
       {/* Input - Sticky at bottom */}
       {!loadError && (
