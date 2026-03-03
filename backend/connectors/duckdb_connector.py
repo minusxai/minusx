@@ -2,7 +2,7 @@ from .base import DatabaseConnector
 from . import register_connector
 from sqlalchemy import create_engine, inspect, text, event
 from pathlib import Path
-from config import BASE_DUCKDB_DATA_PATH
+from config import resolve_duckdb_path
 
 
 @register_connector('duckdb')
@@ -14,12 +14,7 @@ class DuckDBConnector(DatabaseConnector):
         if not self._engine:
             # Get file path from config
             file_path = self.config.get('file_path')
-
-            # Resolve path relative to BASE_DUCKDB_DATA_PATH if relative
-            if Path(file_path).is_absolute():
-                resolved_path = file_path
-            else:
-                resolved_path = str(Path(BASE_DUCKDB_DATA_PATH) / file_path)
+            resolved_path = resolve_duckdb_path(file_path)
 
             # Create engine with resolved path
             self._engine = create_engine(f"duckdb:///{resolved_path}", connect_args={"read_only": True})
@@ -122,10 +117,7 @@ class DuckDBConnector(DatabaseConnector):
         else:
             # Validate that resolved path is valid
             file_path = self.config.get('file_path')
-            if Path(file_path).is_absolute():
-                resolved_path = file_path
-            else:
-                resolved_path = str(Path(BASE_DUCKDB_DATA_PATH) / file_path)
+            resolved_path = resolve_duckdb_path(file_path)
 
             # Check if parent directory exists (file itself may not exist yet)
             parent_path = Path(resolved_path).parent
