@@ -45,12 +45,18 @@ const eslintConfig = defineConfig([
       ],
       // Detect runtime circular imports (import type cycles are safe and ignored)
       "import-x/no-cycle": ["error", { ignoreExternal: true }],
+      // Enforce all imports at the top of the file before any other code
+      "import-x/first": "error",
       // Prevent inline/dynamic imports (code smell indicating circular dependencies)
       "no-restricted-syntax": [
         "error",
         {
           selector: "ImportExpression",
           message: "Dynamic imports (await import()) are not allowed. Use static imports at the top of the file. Inline imports indicate circular dependencies or poor architecture - fix the design instead.",
+        },
+        {
+          selector: "CallExpression[callee.name='require']",
+          message: "require() calls are not allowed. Use static ES module imports at the top of the file instead.",
         },
       ],
     },
