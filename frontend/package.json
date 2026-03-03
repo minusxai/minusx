@@ -7,7 +7,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint --cache",
-    "validate": "concurrently -g --names tsc,eslint \"tsc --noEmit\" \"eslint --cache\"",
+    "validate": "concurrently -g --names tsc,eslint \"tsc --noEmit\" \"eslint --cache --quiet\"",
     "test": "node --expose-gc ./node_modules/.bin/jest",
     "test:watch": "node --expose-gc ./node_modules/.bin/jest --watch",
     "create-empty-db": "tsx scripts/create-empty-db.ts",
