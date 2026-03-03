@@ -9,6 +9,42 @@ import { LuTriangleAlert } from 'react-icons/lu';
 import { UserInput } from '@/lib/api/user-input-exception';
 import { setUserInputResult } from '@/store/chatSlice';
 import { setProposedQuery, clearProposedQuery } from '@/store/uiSlice';
+import { useDirtyFiles } from '@/lib/hooks/file-state-hooks';
+import PublishModal from '@/components/PublishModal';
+
+function PublishUserInputRenderer({
+  fileCount,
+  onSubmit,
+}: {
+  fileCount: number;
+  onSubmit: (result: any) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dirtyFiles = useDirtyFiles();
+
+  const handleClose = () => {
+    setIsOpen(false);
+    if (dirtyFiles.length === 0) {
+      onSubmit({ published: true });
+    } else {
+      onSubmit({ cancelled: true, remaining: dirtyFiles.length });
+    }
+  };
+
+  return (
+    <>
+      <Button
+        size="sm"
+        bg="accent.teal"
+        color="white"
+        onClick={() => setIsOpen(true)}
+      >
+        Review &amp; Publish ({fileCount} {fileCount === 1 ? 'file' : 'files'})
+      </Button>
+      <PublishModal isOpen={isOpen} onClose={handleClose} />
+    </>
+  );
+}
 
 interface UserInputComponentProps {
   conversationID: number;
@@ -319,6 +355,14 @@ export default function UserInputComponent({
               Submit
             </Button>
           </VStack>
+        );
+
+      case 'publish':
+        return (
+          <PublishUserInputRenderer
+            fileCount={props.fileCount || 0}
+            onSubmit={handleSubmit}
+          />
         );
 
       default:

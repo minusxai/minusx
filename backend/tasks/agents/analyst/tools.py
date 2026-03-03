@@ -770,6 +770,21 @@ class PublishFile(Tool):
 
 
 @register_agent
+class PublishAll(Tool):
+    """Request the user to review and publish all unsaved changes.
+    Opens a modal showing all draft files. If there are no unsaved changes,
+    returns immediately. Otherwise blocks until user publishes or cancels.
+    """
+
+    async def reduce(self, child_batches):
+        pass
+
+    async def run(self) -> str:
+        # Frontend tool - executes in browser with Redux access
+        raise UserInputException(self._unique_id)
+
+
+@register_agent
 class CreateFile(Tool):
     """Create a new file (question or dashboard).
 

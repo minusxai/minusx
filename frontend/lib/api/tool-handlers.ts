@@ -6,7 +6,7 @@
  */
 
 import { ToolCall, ToolMessage, DatabaseWithSchema, DocumentContent, QuestionContent, ReportContent, ReportReference, AlertContent, AlertSelector, AlertFunction, ComparisonOperator } from '@/lib/types';
-import { setEdit, setEphemeral, setFile, selectMergedContent, selectEphemeralParamValues, setMetadataEdit, type FileId } from '@/store/filesSlice';
+import { setEdit, setEphemeral, setFile, selectMergedContent, selectEphemeralParamValues, setMetadataEdit, selectDirtyFiles, type FileId } from '@/store/filesSlice';
 import type { AppDispatch, RootState } from '@/store/store';
 import { getStore } from '@/store/store';
 import type { UserInput } from './user-input-exception';
@@ -1889,6 +1889,43 @@ registerFrontendTool('PublishFile', async (args, _context) => {
   }
 
   return result;
+});
+
+/**
+ * PublishAll - Open PublishModal for user to review and publish all unsaved changes
+ */
+registerFrontendTool('PublishAll', async (_args, context) => {
+  const { userInputs, state } = context;
+
+  const reduxState = state || getStore().getState();
+  const dirtyFiles = selectDirtyFiles(reduxState);
+
+  if (dirtyFiles.length === 0) {
+    return { success: true, message: 'No unsaved changes' };
+  }
+
+  const fileCount = dirtyFiles.length;
+  const userResponse = userInputs?.[0]?.result;
+
+  if (userResponse === undefined) {
+    throw new UserInputException({
+      type: 'publish',
+      title: 'Unsaved Changes',
+      fileCount,
+    });
+  }
+
+  if (userResponse.cancelled) {
+    return {
+      success: false,
+      message: `Publish cancelled. ${userResponse.remaining} file${userResponse.remaining === 1 ? '' : 's'} still have unsaved changes.`,
+    };
+  }
+
+  return {
+    success: true,
+    message: `Published ${fileCount} file${fileCount === 1 ? '' : 's'} successfully.`,
+  };
 });
 
 /**
