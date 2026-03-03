@@ -153,7 +153,7 @@ describe('Agent - E2E with Dynamic LLM Mocking', () => {
           expect(req.tools!.length).toBeGreaterThan(0);
           const toolNames = req.tools!.map((t: any) => t.function.name);
           expect(toolNames).toContain('SearchDBSchema');
-          expect(toolNames).toContain('ExecuteSQLQuery');
+          expect(toolNames).toContain('EditFile');
 
           return true;
         },

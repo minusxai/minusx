@@ -10,7 +10,7 @@ export class UserInputException extends Error {
 }
 
 export interface UserInputProps {
-  type: 'confirmation' | 'text' | 'choice' | 'form';
+  type: 'confirmation' | 'text' | 'choice' | 'form' | 'publish';
   title: string;
   message?: string;
 
@@ -26,6 +26,9 @@ export interface UserInputProps {
   options?: Array<{ label: string; value?: any; description?: string }>;
   multiSelect?: boolean;  // Allow multiple selections for choice type
   cancellable?: boolean;  // Show cancel button for choice type
+
+  // For publish type
+  fileCount?: number;  // How many dirty files need publishing
 
   // For form input
   fields?: Array<{

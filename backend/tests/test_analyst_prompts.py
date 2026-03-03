@@ -38,31 +38,6 @@ def test_prompt_loader():
 
         prompts_to_test = [
             {
-                'id': 'classic.system',
-                'filename': 'classic_system.txt',
-                'variables': system_variables,
-                'assertions': [
-                    ('MinusX', 'Agent name'),
-                    ('orders', 'Schema content'),
-                    ('e-commerce', 'Context content'),
-                    ('test-connection-123', 'Connection ID'),
-                    ('/org', 'Home folder'),
-                    ('10', 'Max steps'),
-                    ('ExecuteSQLQuery', 'Tool name'),
-                    ('SearchDBSchema', 'Tool name'),
-                ]
-            },
-            {
-                'id': 'classic.user',
-                'filename': 'classic_user.txt',
-                'variables': user_variables,
-                'assertions': [
-                    ('fileType', 'App state'),
-                    ('Show me total revenue', 'Goal'),
-                    ('2026-02-04', 'Current time'),
-                ]
-            },
-            {
                 'id': 'native.system',
                 'filename': 'native_system.txt',
                 'variables': system_variables,

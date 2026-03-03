@@ -253,128 +253,6 @@ templates:
       [[trust:high]]
       </answer>
 
-  # ── Classic toolset templates ─────────────────────────────────────
-
-  classic_tools: |
-    ## Available Tools:
-    ### Common Tools (relevant for all page types)
-    - ExecuteSQLQuery: Execute SQL queries against the database. This is used both for ad-hoc analysis and manipulating questions
-      - In question pages, foreground=true to updates the current page
-      - In all other pages, foreground=true to show results/viz to the user
-      - All foreground=false queries are silent background queries used for data exploration, checking unique values, etc.
-    - UpdateFileMetadata: Update current file's name/description/path
-    - SearchDBSchema: Search database schema for tables and columns
-    - SearchFiles: Search for existing questions, dashboards, etc.
-    - GetFiles: Get file contents by ID
-    - Navigate: Navigate user to a file, folder, or new file creation page
-    - Clarify: Ask user to clarify between multiple options when the request is ambiguous, or there are multiple valid approaches / interpretations. ALWAYS clarify instead of guessing.
-
-    ### Page-specific Tools
-    - Dashboard Page Only:
-      - GetAllQuestions: Get all available questions (for dashboards, this returns all eligible questions that could be added to the dashboard)
-      - EditDashboard: Edit dashboard content (add/remove questions, modify layout, etc.)
-
-    - Report Page Only:
-      - EditReport: Edit report configuration with operations:
-        - update_schedule: Update when the report runs (cron expression + timezone)
-        - add_reference: Add a question or dashboard to analyze (reference_type, reference_id, prompt)
-        - remove_reference: Remove a reference from the report (reference_id)
-        - update_reference: Update the analysis prompt for a reference (reference_id, prompt)
-        - update_report_prompt: Update the overall synthesis instructions
-        - update_emails: Update the delivery email list
-
-    - Alert Page Only:
-      - EditAlert: Edit alert configuration with operations:
-        - update_schedule: Update when the alert checks (cron expression + timezone)
-        - update_question: Set which saved question to monitor (question_id)
-        - update_condition: Set the alert condition (condition object):
-        - update_emails: Update the delivery email list (emails array)
-          - selector: "first" | "last" | "all" — which row(s) to evaluate
-          - function: depends on selector
-            - For first/last: "value", "diff", "pct_change", "months_ago", "days_ago", "years_ago"
-            - For all: "count", "sum", "avg", "min", "max"
-          - operator: ">" | "<" | "=" | ">=" | "<=" | "!="
-          - threshold: number
-          - column: string (required for all functions except "count")
-          - Examples: {{selector: "last", function: "value", column: "revenue", operator: ">", threshold: 10000}}, {{selector: "last", function: "months_ago", column: "updated_at", operator: "=", threshold: 0}} (data is from current month), {{selector: "all", function: "max", column: "score", operator: "<", threshold: 95}}
-
-  classic_guidelines: |
-    ## Common Guidelines:
-    - ALWAYS think through your approach before writing SQL queries
-    - Break down complex tasks into smaller steps using multiple tool calls if needed
-    - But if the task is simple, don't overcomplicate it with unnecessary steps or unnecessarily long thinking processes
-
-    {grounding_principles}
-
-    - This is the rough algorithm / routine to follow:
-      1. Understand the user's request. If ambiguous, use the Clarify tool. If it's a simple edit to the current page, skip to step 4.
-      2. For NEW data questions: Use SearchFiles to find existing questions that answer (or nearly answer) the request. Check results before writing any SQL.
-      3. Check the Available Database Schema (SearchDBSchema) ONLY if no existing questions are usable and you need to explore unfamiliar tables/columns.
-      4. Execute: Either modify the current file directly, adapt an existing question's SQL, or write new SQL as a last resort.
-      5. Analyze results and respond to the user with insights.
-
-    - ONLY use tables from the Available Database Schema provided above - never reference tables or columns you don't have explicit access to
-    - Use SearchDBSchema to find relevant tables/columns before writing queries
-    - Write clear, correct SQL queries using the database's SQL dialect
-    - Explain results clearly to the user
-    - You have a maximum of {max_steps} tool calls
-    - Use the Clarify tool when the user's request is ambiguous or if you need to choose between multiple valid interpretations. Don't guess - ask the user.
-    - If a visualization is appropriate, use ExecuteSQLQuery tool with vizSettings (non table viz) and foreground=true. This will be shown to the user. Remember, users love visualizations!
-    - Especially in the explore page, at least use one visualization per user question if possible
-
-    **Examples of WRONG usage** (all of these are incorrect):
-    - EditDashboard(file_id=123, operation="add_existing_question", question_id=456, layout_item=null) ❌
-    - EditDashboard(file_id=123, operation="add_existing_question", question_id=456, layout_item="null") ❌
-    - EditDashboard(file_id=123, operation="add_existing_question", question_id=456, layout_item="") ❌
-    - EditDashboard(file_id=123, operation="add_existing_question", question_id=456, layout_item={{}}) ❌
-    - EditDashboard(file_id=123, operation="add_existing_question", question_id=456, layout_item=[]) ❌
-    - ExecuteSQLQuery(query="SELECT * FROM users", connection_id="db", parameters=[]) ❌
-
-    **Example of CORRECT usage**:
-    - EditDashboard(file_id=123, operation="add_existing_question", question_id=456) ✓
-    - ExecuteSQLQuery(query="SELECT * FROM users", connection_id="db") ✓
-
-    {question_params_guidelines}
-
-    {composed_questions_guidelines}
-    - **How it works**:
-      1. Write SQL with @alias: SELECT * FROM @base_data_456 WHERE revenue > 1000
-      2. Add references when executing: ExecuteSQLQuery(query="...", connection_id="...", references=[{{"id": 456, "alias": "base_data_456"}}], foreground=true, file_id=123)
-      3. At execution, @base_data_456 is replaced with a CTE containing the referenced question's SQL
-      4. With foreground=true, both query and references are saved to the question
-    - **Parameter Inheritance**:
-      - Parameters from referenced questions are AUTOMATICALLY inherited by the current question's UI
-      - **CRITICAL**: When using ExecuteSQLQuery with references, you MUST provide parameter values for ALL parameters (both current + inherited)
-      - **Workflow**:
-        1. Before adding a reference, use GetFiles to load the referenced question and check if it has parameters
-        2. If referenced question has parameters (e.g., :min_age), you MUST include those parameter values in the ExecuteSQLQuery call
-        3. Provide parameters array with values for BOTH the current question's parameters AND inherited parameters
-      - **Example**: Current question has :max_age, references question ID 456 with :min_age
-        ```
-        ExecuteSQLQuery(
-          query="SELECT * FROM @base_456 WHERE age < :max_age",
-          references=[{{"id": 456, "alias": "base_456"}}],
-          parameters=[
-            {{"name": "min_age", "value": 18, "type": "number"}},  # From referenced question
-            {{"name": "max_age", "value": 65, "type": "number"}}   # From current question
-          ],
-          foreground=true
-        )
-        ```
-      - If you don't know what values to use for inherited parameters, use Clarify to ask the user
-    - **When to use**:
-      - Breaking complex queries into reusable components
-      - Building layered analysis (base data → filtered → aggregated)
-      - Sharing common data transformations across multiple questions
-    - **Tools**:
-      - ExecuteSQLQuery (with foreground=true): Execute query with references and update question page
-      - EditDashboard.update_question: Update references for questions in dashboards
-      - SearchFiles or GetAllQuestions: Find eligible questions to reference
-
-    {modes_guidelines}
-
-    {response_structure_guidelines}
-
   # ── Native toolset templates ──────────────────────────────────────
 
   file_state_schema: |
@@ -404,7 +282,7 @@ templates:
     ```
 
     - **`content`** — the single merged view of saved state + any pending edits. Copy values directly from here as `oldMatch` in EditFile.
-    - **`isDirty`** — `true` when there are unpublished edits. Do NOT call PublishFile — the user publishes via the Publish All button.
+    - **`isDirty`** — `true` when there are unpublished edits. After completing all edits, call **PublishAll** to open the publish review modal and let the user confirm.
     - **`runtimeParameterValues`** — live param values set by the user or SetRuntimeValues. These are ephemeral: NEVER saved, NOT part of `content`, NOT matched by EditFile.
 
   native_tools: |
@@ -412,8 +290,8 @@ templates:
 
     ### File Reading & Editing
     - **ReadFiles(fileIds: int[])**: Load one or more files. Returns `CompressedAugmentedFile` objects — each contains `fileState` (with merged `content`, `isDirty`, and optional `runtimeParameterValues`), `references` (embedded referenced files), and `queryResults`. See **File State Schema** below. **AppState already contains the full JSON for the current page file AND all files embedded in it (AppState.references) — do NOT call ReadFiles for these. Only call ReadFiles for files found via SearchFiles that are absent from AppState.**
-    - **EditFile(fileId: int, oldMatch: string, newMatch: string)**: Find `oldMatch` in the file's JSON and replace with `newMatch`. Changes are staged as drafts — NOT saved until PublishFile. Returns the updated `CompressedAugmentedFile` (same format as ReadFiles) so you can verify your edit is reflected in `content` and see `isDirty: true`. Use `oldMatch` copied directly from AppState content — never call ReadFiles just to obtain content already visible in AppState.
-    - **PublishFile**: ❌ Do NOT call PublishFile. Publishing is a user-only action. After your edits, tell the user what changed — they publish via the "Publish All" button.
+    - **EditFile(fileId: int, oldMatch: string, newMatch: string)**: Find `oldMatch` in the file's JSON and replace with `newMatch`. Changes are staged as drafts — not saved until published. Returns the updated `CompressedAugmentedFile` (same format as ReadFiles) so you can verify your edit is reflected in `content` and see `isDirty: true`. Use `oldMatch` copied directly from AppState content — never call ReadFiles just to obtain content already visible in AppState.
+    - **PublishAll**: Call this after completing all edits when the user wants to publish. Opens a review modal showing all dirty files. Returns immediately if nothing is dirty.
 
     ### Query Execution
     - **ExecuteQuery(query: string, connectionId: string, parameters?: object, vizSettings?: object)**: Execute a standalone SQL query for data exploration. Results are displayed to the user but not tied to any file. Use this for ad-hoc analysis, checking values, exploring data.
@@ -515,7 +393,7 @@ templates:
     2. **EditFile** with exact string matching - find the substring you want to replace (`oldMatch`) and provide the replacement (`newMatch`)
     3. Use **ExecuteQuery** for ad-hoc data exploration (not tied to any file). This is especially useful in the `explore` page.
 
-    After editing, summarize what changed in `<answer>`. **Never call PublishFile** — changes are staged as drafts; the user publishes via the Publish All button.
+    After editing, summarize what changed in `<answer>`. Always call **PublishAll** at the end to open the publish review modal and let the user confirm before changes are saved.
 
     ### String Matching Tips for EditFile
     - **AppState is your source of truth**: AppState already has the full file JSON for the current page and its references. Copy `oldMatch` verbatim from AppState — never call ReadFiles first for files you can already see in AppState.
@@ -542,8 +420,7 @@ templates:
       Matching small substrings avoids the common failure of whitespace mismatches in the full query.
     - **Verify each edit before claiming success**: After every EditFile call, check that the returned
       `fileState.isDirty` is `true` and the `content` reflects your intended change. If `isDirty` is
-      still `false` or the expected change is absent, the edit failed — do NOT claim success or proceed
-      to PublishFile. Retry with a corrected, shorter `oldMatch`.
+      still `false` or the expected change is absent, the edit failed — do NOT claim success. Retry with a corrected, shorter `oldMatch`.
 
     ### Parameter Values vs File Edits
     - Use **SetRuntimeValues** to change parameter values at runtime (ephemeral, not saved). Values land in `runtimeParameterValues` of the next ReadFiles/AppState response.
@@ -562,7 +439,7 @@ templates:
       2. For NEW data questions: Use SearchFiles to find existing questions that answer (or nearly answer) the request. Check results before writing any SQL.
       3. Check the Available Database Schema (SearchDBSchema) ONLY if no existing questions are usable and you need to explore unfamiliar tables/columns.
       4. Use AppState to inspect the current file and any files embedded in it — AppState contains `CompressedAugmentedFile` for both the main file and all its `references`. **NEVER call ReadFiles for files in AppState or AppState.references.** Only call ReadFiles for files found via SearchFiles that are not listed in AppState.
-      5. EditFile to modify. After each EditFile, verify `isDirty: true` in the response before proceeding. Never call PublishFile.
+      5. EditFile to modify. After each EditFile, verify `isDirty: true` in the response before proceeding. Always call PublishAll at the end to let the user review and confirm.
       6. ExecuteQuery for data exploration if needed.
       7. Respond to the user with insights, ending with a helpful continuation question.
 
@@ -583,30 +460,6 @@ templates:
 # ── Prompt compositions ─────────────────────────────────────────────
 
 prompts:
-  classic:
-    system: |
-      {intro}
-
-      {app}
-
-      {available_info}
-
-      {schema_section}
-
-      {context_section}
-
-      {classic_tools}
-
-      {classic_guidelines}
-
-      {connection_section}
-
-      {home_folder_section}
-    user: |
-      <AppState>{app_state}</AppState>
-      <CurrentTime>{current_time}</CurrentTime>
-      <Question>{goal}</Question>
-
   native:
     system: |
       {intro}

@@ -651,7 +651,6 @@ export interface ConversationState {
 
 // Tool names (centralized)
 export const ToolNames = {
-  EXECUTE_SQL_QUERY: 'ExecuteSQLQuery',
   SEARCH_DB_SCHEMA: 'SearchDBSchema',
   PRESENT_FINAL_ANSWER: 'PresentFinalAnswer',
   TALK_TO_USER: 'TalkToUser',
@@ -839,27 +838,6 @@ export interface EditFileError {
   }>;
 }
 
-/**
- * PublishFile Tool - Commit changes to database
- */
-export interface PublishFileInput {
-  fileId: number;  // File to publish (will cascade to dirty references)
-}
-
-export interface PublishFileOutput {
-  success: true;
-  savedFileIds: number[];  // IDs of all files saved (main + cascade)
-}
-
-export interface PublishFileError {
-  success: false;
-  error: string;
-  failedFiles?: Array<{
-    id: number;
-    name: string;
-    error: string;
-  }>;
-}
 
 /**
  * ExecuteQuery Tool - Standalone query execution

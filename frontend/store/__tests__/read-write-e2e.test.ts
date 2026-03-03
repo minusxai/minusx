@@ -9,7 +9,7 @@ import { configureStore } from '@reduxjs/toolkit';
 import filesReducer from '../filesSlice';
 import queryResultsReducer from '../queryResultsSlice';
 import authReducer from '../authSlice';
-import { getTestDbPath, initTestDatabase, cleanupTestDatabase, createMockFetch } from './test-utils';
+import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
 import type { QuestionContent, DocumentContent, UserRole } from '@/lib/types';
 import { readFiles, publishFile, editFileStr, compressAugmentedFile, selectAugmentedFiles, tryNormalizeJsonFragment } from '@/lib/api/file-state';

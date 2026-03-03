@@ -21,7 +21,6 @@ interface UIState {
   questionCollapsedPanel: 'none' | 'left' | 'right';  // global: which panel is collapsed across all questions
   sidebarDrafts: Record<number, string>;  // fileId -> draft input text
   proposedQueries: Record<number, string>;  // fileId -> proposed SQL query (for diff view)
-  selectedToolset: 'classic' | 'native';
   modalFile: { fileId: number; state: 'ACTIVE' | 'COLLAPSED' } | null;
 }
 
@@ -33,17 +32,6 @@ const getPersistedBool = (key: string, fallback: boolean): boolean => {
     return stored === 'true';
   } catch {
     return fallback;
-  }
-};
-
-// Load persisted toolset from localStorage (with SSR safety)
-const getPersistedToolset = (): 'classic' | 'native' => {
-  if (typeof window === 'undefined') return 'classic';
-  try {
-    const stored = localStorage.getItem('selectedToolset');
-    return stored === 'native' ? 'native' : 'classic';
-  } catch {
-    return 'classic';
   }
 };
 
@@ -67,7 +55,6 @@ const initialState: UIState = {
   questionCollapsedPanel: 'left',
   sidebarDrafts: {},
   proposedQueries: {},
-  selectedToolset: getPersistedToolset(),
   modalFile: null,
 };
 
@@ -175,17 +162,6 @@ const uiSlice = createSlice({
     clearProposedQuery: (state, action: PayloadAction<number>) => {
       delete state.proposedQueries[action.payload];
     },
-    setSelectedToolset: (state, action: PayloadAction<'classic' | 'native'>) => {
-      state.selectedToolset = action.payload;
-      // Persist to localStorage
-      if (typeof window !== 'undefined') {
-        try {
-          localStorage.setItem('selectedToolset', action.payload);
-        } catch (error) {
-          console.warn('Failed to persist toolset to localStorage:', error);
-        }
-      }
-    },
     openFileModal: (state, action: PayloadAction<number>) => {
       state.modalFile = { fileId: action.payload, state: 'ACTIVE' };
     },
@@ -229,7 +205,6 @@ export const {
   clearSidebarDraft,
   setProposedQuery,
   clearProposedQuery,
-  setSelectedToolset,
   openFileModal,
   closeFileModal,
   collapseFileModal,
@@ -276,5 +251,4 @@ export const selectSidebarDraft = (state: RootState, fileId: number | undefined)
   fileId ? state.ui.sidebarDrafts[fileId] ?? '' : '';
 export const selectProposedQuery = (state: RootState, fileId: number | undefined) =>
   fileId ? state.ui.proposedQueries[fileId] : undefined;
-export const selectSelectedToolset = (state: RootState) => state.ui.selectedToolset;
 export const selectModalFile = (state: RootState) => state.ui.modalFile;

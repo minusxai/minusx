@@ -11,21 +11,6 @@ import { NextRequest } from 'next/server';
  * Common interceptors that can be reused across tests
  */
 export const commonInterceptors = {
-  /** Mock /api/query with simple test data */
-  mockQuerySimple: async (urlStr: string) => {
-    if (urlStr.includes('/api/query')) {
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({
-          columns: ['test'],
-          rows: [{ test: 1 }]
-        })
-      } as Response;
-    }
-    return null;
-  },
-
   /** Mock /api/query with sales data */
   mockQuerySales: async (urlStr: string) => {
     if (urlStr.includes('/api/query')) {
@@ -39,18 +24,6 @@ export const commonInterceptors = {
             { region: 'Canada', total_sales: 18398929.19 }
           ]
         })
-      } as Response;
-    }
-    return null;
-  },
-
-  /** Mock /api/connections/[id]/schema with simple schema */
-  mockSchemaSimple: async (urlStr: string) => {
-    if (urlStr.includes('/api/connections/') && urlStr.includes('/schema')) {
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ([{ schema: 'public', tables: ['test_table'] }])
       } as Response;
     }
     return null;

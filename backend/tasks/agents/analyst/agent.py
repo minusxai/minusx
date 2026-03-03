@@ -11,8 +11,8 @@ from tasks.chat_thread_processor import root_tasks_to_thread, task_batch_to_thre
 from tasks.llm.client import allm_request as real_allm_request, describe_tool
 from tasks.llm.models import ALLMRequest, LlmSettings, UserInfo
 from tasks.llm.config import ANALYST_V2_MODEL, MAX_STEPS_LOWER_LEVEL
-from .tools import ExecuteSQLQuery, SearchDBSchema, EditDashboard, EditReport, GetAllQuestions, SearchFiles, GetFiles, UpdateFileMetadata, Clarify, Navigate, CreateFile
-from .tools import ReadFiles, EditFile, ExecuteQuery, SetRuntimeValues  # native toolset
+from .tools import SearchDBSchema, SearchFiles, Clarify, Navigate, CreateFile
+from .tools import ReadFiles, EditFile, ExecuteQuery, SetRuntimeValues, PublishAll
 from .prompt_loader import get_prompt
 
 
@@ -75,7 +75,6 @@ class AnalystAgent(Agent):
         home_folder: Optional[str] = None,
         city: Optional[str] = None,
         agent_name: Optional[str] = None,
-        toolset: str = 'classic',
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
@@ -87,7 +86,6 @@ class AnalystAgent(Agent):
         self.agent_name = agent_name or "MinusX"
         self.home_folder = home_folder or "/"
         self.city = city
-        self.toolset = toolset
         self.tool_thread: List[dict] = []  # Conversation thread with tool calls/responses
         self.child_count = 0
 
@@ -105,7 +103,7 @@ class AnalystAgent(Agent):
         max_steps = MAX_STEPS_LOWER_LEVEL - 5  # Safety margin
 
         content = get_prompt(
-            f'{self.toolset}.system',
+            'native.system',
             schema=self.schema,
             context=self.context,
             connection_id=self.connection_id,
@@ -120,7 +118,7 @@ class AnalystAgent(Agent):
         app_state_str = json.dumps(self.app_state, indent=2) if self.app_state else "null"
 
         content = get_prompt(
-            f'{self.toolset}.user',
+            'native.user',
             app_state=app_state_str,
             goal=self.goal,
             current_time=time.strftime("%Y-%m-%d %H:%M:%S")
@@ -132,11 +130,7 @@ class AnalystAgent(Agent):
         if len(self.tool_thread) >= MAX_STEPS_LOWER_LEVEL - 5:
             return []
 
-        if self.toolset == 'native':
-            return [ReadFiles, EditFile, ExecuteQuery, SetRuntimeValues, Navigate, Clarify, SearchDBSchema, SearchFiles, CreateFile]
-
-        # classic (default)
-        return [ExecuteSQLQuery, SearchDBSchema, SearchFiles, GetFiles, UpdateFileMetadata, Navigate, Clarify, EditDashboard, EditReport, GetAllQuestions, CreateFile]
+        return [ReadFiles, EditFile, ExecuteQuery, SetRuntimeValues, PublishAll, Navigate, Clarify, SearchDBSchema, SearchFiles, CreateFile]
     
     def _get_history(self):
         previous_root_tasks = self._orchestrator.get_previous_root_tasks()
