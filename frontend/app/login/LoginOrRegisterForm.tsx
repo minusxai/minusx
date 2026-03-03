@@ -156,6 +156,7 @@ export function LoginOrRegisterForm({
 
       // Force full page reload to trigger layout.tsx and load initial state
       const callbackUrl = searchParams.get('callbackUrl') || '/';
+      // eslint-disable-next-line react-hooks/immutability
       window.location.href = callbackUrl;
     } catch (err) {
       console.error('Login error:', err);

@@ -34,7 +34,9 @@ export const resolveColumnType = (col: string, columns: string[], types: string[
 // Shared hook for touch device detection
 export const useIsTouchDevice = () => {
   const [isTouchDevice, setIsTouchDevice] = useState(false)
+  // Detect touch support after mount — intentional setState in effect
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0)
   }, [])
   return isTouchDevice

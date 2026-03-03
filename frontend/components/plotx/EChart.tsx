@@ -32,6 +32,7 @@ export const EChart = ({
   // Debounce resize event so it only fires periodically instead of constantly
   const resizeChart = useMemo(
     () =>
+      // eslint-disable-next-line react-hooks/refs
       debounce(() => {
         if (chartRef.current) {
           const chart = getInstanceByDom(chartRef.current)

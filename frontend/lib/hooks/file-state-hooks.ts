@@ -223,7 +223,9 @@ export function useFilesByCriteria(options: UseFilesByCriteriaOptions): UseFiles
     [criteria, partial, ttl, skip]
   );
 
+  // Load files on criteria change and track loading state — intentional setState in effect
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (skip) { setLoading(false); return; }
     setLoading(true);
     setError(null);

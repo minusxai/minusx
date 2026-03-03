@@ -1,18 +1,17 @@
 import { AnalyticsFileType, FileType } from './ui/file-metadata';
 import type { FileState } from '@/store/filesSlice';
-
-// Re-export FileType for convenience
-export type { FileType };
-
-// Re-export FileState for convenience
-export type { FileState };
-
 // Generated from backend/tasks/agents/analyst/file_schema.py
 // Regenerate: cd frontend && npm run generate-types
 import type {
   QuestionContent as QuestionContentBase,
   FileReference, InlineAsset, VizSettings,
 } from './types.gen';
+
+// Re-export FileType for convenience
+export type { FileType };
+
+// Re-export FileState for convenience
+export type { FileState };
 export type {
   AggregationFunction, FormulaOperator, VisualizationType, ParameterType,
   PivotValueConfig, PivotFormula, PivotConfig, ColumnFormatConfig, VizSettings,
@@ -73,6 +72,7 @@ export function isInlineAsset(asset: AssetReference): asset is InlineAsset {
   return ['text', 'image', 'divider'].includes(asset.type);
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface NotebookLayout {
   // Reserved for future overrides
 }
@@ -290,6 +290,7 @@ export interface SchemaTableResponse {
  * Content is now fully decoupled from metadata (name, path)
  * Name is stored only in file.name (DB column), not in content
  */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface BaseFileContent {
   // Empty base - each content type defines its own fields
 }

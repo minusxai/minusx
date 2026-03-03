@@ -58,10 +58,11 @@ export default function ChatInterface({
     initialDatabaseName || null
   );
 
-  // Auto-select database when context loads (if none selected)
+  // Auto-select database when context loads (if none selected) — intentional setState in effect
   useEffect(() => {
     if (!selectedDatabase && databases.length > 0) {
       const autoSelected = selectDatabase(databases, null);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedDatabase(autoSelected);
     }
   }, [databases, selectedDatabase]);
@@ -236,7 +237,7 @@ export default function ChatInterface({
   const colSpan = isCompact ? 12 : { base: 12, md: 8, lg: 6 };
   const colStart = isCompact ? 1 : { base: 1, md: 3, lg: 4 };
 
-  // Clear errors when navigating between conversations
+  // Clear errors when navigating between conversations — intentional setState in effect
   const prevProvidedIdRef = useRef(providedConversationId);
   useEffect(() => {
     const prevId = prevProvidedIdRef.current;
@@ -244,6 +245,7 @@ export default function ChatInterface({
 
     // Clear errors when going from one conversation to another
     if (prevId !== providedConversationId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLocalError(null);
     }
   }, [providedConversationId]);
@@ -276,13 +278,14 @@ export default function ChatInterface({
 
   const prevUserMessageCountRef = useRef(0);
 
-  // Auto-scroll only once when a new user message is added
+  // Auto-scroll only once when a new user message is added — intentional setState in effect
   useEffect(() => {
     if (userMessageCount > prevUserMessageCountRef.current) {
       // New user message detected - scroll to bottom once
       scrollToBottom();
       prevUserMessageCountRef.current = userMessageCount;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     checkScrollPosition();
   }, [userMessageCount]);
 

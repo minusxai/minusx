@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 
 // Native DuckDB (not WASM) — excluded from Next.js bundle via serverExternalPackages
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+// eslint-disable-next-line @typescript-eslint/no-require-imports, no-restricted-syntax
 const duckdb = require('duckdb');
 
 // Schema for per-company analytics database

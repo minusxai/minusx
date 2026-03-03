@@ -157,9 +157,11 @@ class RetroEffectImpl extends Effect {
   }
 }
 
+// Create the wrapped component outside of render to avoid re-creating it each render
+const WrappedRetroEffect = wrapEffect(RetroEffectImpl);
+
 const RetroEffect = forwardRef<RetroEffectImpl, { colorNum: number; pixelSize: number }>((props, ref) => {
   const { colorNum, pixelSize } = props;
-  const WrappedRetroEffect = wrapEffect(RetroEffectImpl);
   return <WrappedRetroEffect ref={ref} colorNum={colorNum} pixelSize={pixelSize} />;
 });
 
@@ -263,11 +265,13 @@ function DitheredWaves({
     <>
       <mesh ref={mesh} scale={[viewport.width, viewport.height, 1]}>
         <planeGeometry args={[1, 1]} />
+        {/* eslint-disable react-hooks/refs */}
         <shaderMaterial
           vertexShader={waveVertexShader}
           fragmentShader={waveFragmentShader}
           uniforms={waveUniformsRef.current}
         />
+        {/* eslint-enable react-hooks/refs */}
       </mesh>
 
       <EffectComposer>

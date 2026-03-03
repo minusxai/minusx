@@ -260,6 +260,8 @@ export default function SlideRectangle({
       </Box>
 
       {/* Moveable controller - only when selected and not editing */}
+      {/* Accessing targetRef.current during render for Moveable controller — intentional */}
+      {/* eslint-disable react-hooks/refs */}
       {isSelected && !isEditing && targetRef.current && (
         <Moveable
           ref={moveableRef}
@@ -374,6 +376,7 @@ export default function SlideRectangle({
           renderDirections={['nw', 'n', 'ne', 'w', 'e', 'sw', 's', 'se']}
         />
       )}
+      {/* eslint-enable react-hooks/refs */}
     </>
   );
 }

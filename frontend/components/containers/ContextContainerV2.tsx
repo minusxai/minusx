@@ -66,9 +66,10 @@ export default function ContextContainerV2({
     setEditMode(newMode);
   }, []);
 
-  // Automatically enter edit mode when file becomes dirty
+  // Automatically enter edit mode when file becomes dirty — intentional setState in effect
   useEffect(() => {
     if (isDirty && !editMode) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       handleEditModeChange(true);
     }
   }, [isDirty, editMode, handleEditModeChange]);
@@ -301,11 +302,6 @@ export default function ContextContainerV2({
     setSaveError(null);
   }, [fileId]);
 
-  // Show loading state while file is loading
-  if (fileLoading || !file || !currentContent) {
-    return <div>Loading context...</div>;
-  }
-
   // Handle changes from editor (for the selected version)
   const handleChange = useCallback((updates: Partial<ContextContent>) => {
     if (!currentContent || !currentVersionContent || !user?.id) return;
@@ -351,6 +347,11 @@ export default function ContextContainerV2({
       published: currentContent.published // Ensure published is always present
     };
   }, [currentContent, currentVersionContent]);
+
+  // Show loading state while file is loading
+  if (fileLoading || !file || !currentContent) {
+    return <div>Loading context...</div>;
+  }
 
   return (
     <>

@@ -628,7 +628,9 @@ chatListenerMiddleware.startListening({
       try {
         console.log(`[chatListener] Executing tool: ${pendingTool.toolCall.function.name}`);
 
-        // Dynamic import to avoid circular dependencies
+        // Dynamic import to avoid circular dependencies:
+        // tool-handlers → store → chatListener → tool-handlers (circular)
+        // eslint-disable-next-line no-restricted-syntax
         const { executeToolCall } = await import('@/lib/api/tool-handlers');
 
         // Get database from agent_args

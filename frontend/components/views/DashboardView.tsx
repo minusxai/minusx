@@ -13,10 +13,10 @@ import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectMergedContent, selectEphemeralParamValues, setEphemeral } from '@/store/filesSlice';
 import { openFileModal, selectDashboardEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
-
-const EMPTY_PARAMS: Record<string, any> = {};
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
 import { shallowEqual } from 'react-redux';
+
+const EMPTY_PARAMS: Record<string, any> = {};
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 

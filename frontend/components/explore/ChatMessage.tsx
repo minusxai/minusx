@@ -21,6 +21,8 @@ interface ChatMessageProps {
 }
 
 export default function ChatMessage({ message, databaseName, isCompact = false, showThinking = false, markdownContext = 'mainpage' }: ChatMessageProps) {
+  const colorMode = useAppSelector((state) => state.ui.colorMode);
+
   // Handle debug messages (admin-only) - only show if there are LLM calls
   if (message.role === 'debug') {
     const debugInfo = message as any as MessageDebugInfo;
@@ -35,7 +37,6 @@ export default function ChatMessage({ message, databaseName, isCompact = false, 
 
   const isUser = message.role === 'user';
   const hasContent = !!message.content && message.content.trim().length > 0;
-  const colorMode = useAppSelector((state) => state.ui.colorMode);
   // Layout adjustments based on compact mode
   const userColSpan = isCompact ? 12 : { base: 12, md: 8 };
   const userColStart = isCompact ? 1 : { base: 1, md: 5};

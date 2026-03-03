@@ -29,8 +29,9 @@ export const DrillDownCard = ({ drillDown, onClose, sql, databaseName }: DrillDo
   const [askInput, setAskInput] = useState('')
   const [askFocused, setAskFocused] = useState(false)
 
-  // Reset state when drill-down changes
+  // Reset state when drill-down changes — intentional setState in effect
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAskInput('')
     setAskFocused(false)
   }, [drillDown])

@@ -34,13 +34,14 @@ export default function StylesEditor({
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const isEditingRef = useRef(false);
 
-  // Sync content to CSS text only when NOT actively editing
+  // Sync CSS text from content when not editing — intentional setState in effect
   useEffect(() => {
     // Skip sync if user is actively editing
     if (isEditingRef.current) {
       return;
     }
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCssText(content.styles || '');
   }, [content]);
 

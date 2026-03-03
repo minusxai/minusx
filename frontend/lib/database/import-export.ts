@@ -451,7 +451,6 @@ async function atomicImportPostgres(initData: InitData, _targetDbPath: string): 
   console.log('📦 PostgreSQL: Importing with transaction (no temp database needed)...');
 
   // Validate BEFORE starting transaction (fail fast)
-  const { validateInitData } = await import('./validation');
   const validation = validateInitData(initData);
 
   if (!validation.valid) {
@@ -479,7 +478,6 @@ async function atomicImportPostgres(initData: InitData, _targetDbPath: string): 
   // The singleton pool serves regular app requests; its connections can block
   // the DELETE FROM companies/users/files statements in the import transaction.
   console.log('🔄 Closing singleton adapter before import...');
-  const { resetAdapter } = await import('./adapter/factory');
   await resetAdapter();
   console.log('✅ Singleton adapter closed');
 

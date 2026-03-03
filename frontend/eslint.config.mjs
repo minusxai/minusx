@@ -72,7 +72,7 @@ const eslintConfig = defineConfig([
   // Relax import discipline rules in test files — Jest module mocking requires
   // require() calls and dynamic imports after jest.mock()/jest.resetModules().
   {
-    files: ["**/*.test.ts", "**/*.test.tsx", "**/__tests__/**", "**/__mocks__/**"],
+    files: ["**/*.test.ts", "**/*.test.tsx", "**/__tests__/**", "**/__mocks__/**", "test/**"],
     rules: {
       "import-x/no-cycle": "off",
       "import-x/first": "off",

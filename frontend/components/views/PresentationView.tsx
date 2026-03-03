@@ -62,10 +62,11 @@ export default function PresentationView({
   const canvasHeight = presentationLayout?.canvasHeight || 720;
   const assets = document?.assets || [];
 
-  // Set mounted flag after initialization
+  // Set mounted flag after initialization — intentional setState in effect
   useEffect(() => {
     if (document) {
       isInitializing.current = true;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMounted(false);
 
       setTimeout(() => {
@@ -77,10 +78,11 @@ export default function PresentationView({
     }
   }, [document]);
 
-  // Auto-manage panel visibility when selecting shapes
+  // Auto-manage panel visibility when selecting shapes — intentional setState in effect
   useEffect(() => {
     if (selectedElementId) {
       // Shape selected: collapse questions, expand properties
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowQuestionPanel(false);
       setShowPropertiesPanel(true);
     }

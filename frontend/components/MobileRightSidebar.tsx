@@ -129,13 +129,6 @@ export default function MobileRightSidebar({
     sections.push(getSidebarSection('dev'));
   }
 
-  // Don't render if no sections
-  if (sections.length === 0) {
-    return null;
-  }
-
-  const activeS = sections.find(s => s.id === activeSection);
-
   // Drag handlers for icon bar
   const handleDragStart = (e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
@@ -180,6 +173,13 @@ export default function MobileRightSidebar({
       document.removeEventListener('touchend', handleDragEnd);
     };
   }, [isDragging]);
+
+  // Don't render if no sections
+  if (sections.length === 0) {
+    return null;
+  }
+
+  const activeS = sections.find(s => s.id === activeSection);
 
   return (
     <>

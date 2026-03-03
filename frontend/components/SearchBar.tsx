@@ -8,12 +8,12 @@ import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSec
 import { LexicalMentionEditor, LexicalMentionEditorRef } from '@/components/chat/LexicalMentionEditor';
 import { useContext } from '@/lib/hooks/useContext';
 import { selectDatabase } from '@/lib/utils/database-selector';
+import { useConfigs } from '@/lib/hooks/useConfigs';
 
 // Sidebar width constants (must match Sidebar.tsx)
 const SIDEBAR_WIDTH_EXPANDED = '260px';
 const SIDEBAR_WIDTH_COLLAPSED = '72px';
 const RIGHTSIDEBAR_WIDTH_COLLAPSED = '49px';
-import { useConfigs } from '@/lib/hooks/useConfigs';
 
 interface SearchBarProps {
     inBottomBar?: boolean;

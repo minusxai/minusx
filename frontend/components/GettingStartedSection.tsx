@@ -116,7 +116,7 @@ export default function GettingStartedSection() {
   const [isDismissed, setIsDismissed] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
 
-  // Fetch user count for admins
+  // Fetch user count for admins — intentional setState in effect
   useEffect(() => {
     if (userIsAdmin) {
       fetchWithCache('/api/users', {
@@ -131,6 +131,7 @@ export default function GettingStartedSection() {
         .catch(() => {})
         .finally(() => setIsLoaded(true));
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsLoaded(true);
     }
   }, [userIsAdmin]);
