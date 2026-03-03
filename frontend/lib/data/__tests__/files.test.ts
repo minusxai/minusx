@@ -21,16 +21,6 @@ import type {
 } from '@/lib/types';
 import * as pythonBackend from '@/lib/backend/python-backend';
 
-// Prevent native DuckDB binary from loading in this Jest worker.
-// files.server.ts → file-analytics.server.ts → file-analytics.db.ts → require('duckdb')
-// The native module's C++ destructor can SIGSEGV on worker exit, causing flaky CI failures.
-// Analytics is fire-and-forget; returning null/empty here matches the real error-path behaviour.
-jest.mock('@/lib/analytics/file-analytics.server', () => ({
-  trackFileEvent: jest.fn().mockResolvedValue(undefined),
-  getFileAnalyticsSummary: jest.fn().mockResolvedValue(null),
-  getFilesAnalyticsSummary: jest.fn().mockResolvedValue({}),
-}));
-
 // Database-specific mock
 jest.mock('@/lib/database/db-config', () => {
   const path = require('path');

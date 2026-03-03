@@ -144,14 +144,6 @@ export const FILE_TYPE_METADATA = {
     supported: true,
     h: 'none',
   },
-  llm_call: {
-    label: 'LLM Call',
-    icon: LuFileCode,
-    color: 'accent.muted',
-    category: 'engineering',
-    supported: true,
-    h: 'none',
-  },
   users: {
     label: 'Users',
     icon: LuUsers,

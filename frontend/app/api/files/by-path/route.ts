@@ -4,11 +4,11 @@ import { withAuth } from '@/lib/api/with-auth';
 import { loadFileByPath } from '@/lib/data/files.server';
 
 /**
- * GET /api/files/by-path?path=/logs/llm_calls/user/abc123.json
+ * GET /api/files/by-path?path=/logs/conversations/user/abc123.json
  * Load a single file by its path (without references)
  *
  * Query params:
- * - path: string - Full file path (e.g., /logs/llm_calls/user@example.com/abc123.json)
+ * - path: string - Full file path (e.g., /logs/conversations/user@example.com/abc123.json)
  *
  * Returns:
  * - data: DbFile - The file with its content

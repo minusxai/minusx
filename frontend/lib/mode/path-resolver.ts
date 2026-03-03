@@ -60,7 +60,6 @@ export const SYSTEM_FOLDERS = {
   configs: '/configs',
   logs: '/logs',
   logsConversations: '/logs/conversations',
-  logsLlmCalls: '/logs/llm_calls',
   recordings: '/recordings',
   config: '/config',  // Legacy config folder
 } as const;
@@ -98,7 +97,6 @@ export function getSystemFolders(mode: Mode) {
     configs: resolvePath(mode, SYSTEM_FOLDERS.configs),
     logs: resolvePath(mode, SYSTEM_FOLDERS.logs),
     logsConversations: resolvePath(mode, SYSTEM_FOLDERS.logsConversations),
-    logsLlmCalls: resolvePath(mode, SYSTEM_FOLDERS.logsLlmCalls),
     recordings: resolvePath(mode, SYSTEM_FOLDERS.recordings),
   };
 }
@@ -132,14 +130,14 @@ export function isUnderSystemFolder(physicalPath: string, mode: Mode): boolean {
  * File types that are allowed in system folders
  * - connection: must be in /database
  * - config: must be in /configs or /config
- * - conversation, session, llm_call: allowed in /logs
+ * - conversation, session: allowed in /logs
  * - connector: allowed in /recordings
  */
 const SYSTEM_FOLDER_ALLOWED_TYPES = {
   '/database': ['connection'] as const,
   '/configs': ['config'] as const,
   '/config': ['config'] as const,
-  '/logs': ['conversation', 'session', 'llm_call', 'report_run', 'alert_run'] as const,
+  '/logs': ['conversation', 'session', 'report_run', 'alert_run'] as const,
   '/recordings': ['connector'] as const,
 } as const;
 

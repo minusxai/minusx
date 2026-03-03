@@ -557,7 +557,7 @@ describe('POST /api/admin/reset-tutorial', () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.success).toBe(true);
-    expect(body.documentsCreated).toBe(27);
+    expect(body.documentsCreated).toBe(26);
 
     const { createAdapter } = await import('@/lib/database/adapter/factory');
     const db = await createAdapter({ type: 'sqlite', sqlitePath: TEST_DB_PATH });
@@ -566,7 +566,7 @@ describe('POST /api/admin/reset-tutorial', () => {
       "SELECT COUNT(*) as count FROM files WHERE company_id = 1 AND (path = '/tutorial' OR path LIKE '/tutorial/%')",
       []
     );
-    expect(tutorialResult.rows[0].count).toBe(27);
+    expect(tutorialResult.rows[0].count).toBe(26);
 
     const userFileResult = await db.query<{ count: number }>(
       "SELECT COUNT(*) as count FROM files WHERE company_id = 1 AND id = 500",
@@ -699,7 +699,7 @@ describe('POST /api/admin/reset-tutorial', () => {
       "SELECT COUNT(*) as count FROM files WHERE company_id = 1 AND (path = '/tutorial' OR path LIKE '/tutorial/%')",
       []
     );
-    expect(c1Result.rows[0].count).toBe(27);
+    expect(c1Result.rows[0].count).toBe(26);
 
     const c2Result = await db.query<{ count: number }>(
       "SELECT COUNT(*) as count FROM files WHERE company_id = 2",
@@ -710,19 +710,19 @@ describe('POST /api/admin/reset-tutorial', () => {
     await db.close();
   });
 
-  it('should be idempotent — second call also returns 27 docs', async () => {
+  it('should be idempotent — second call also returns 26 docs', async () => {
     const request1 = createResetRequest();
     const response1 = await resetTutorialHandler(request1, {} as any);
     expect(response1.status).toBe(200);
     const body1 = await response1.json();
-    expect(body1.documentsCreated).toBe(27);
+    expect(body1.documentsCreated).toBe(26);
 
     const request2 = createResetRequest();
     const response2 = await resetTutorialHandler(request2, {} as any);
     expect(response2.status).toBe(200);
     const body2 = await response2.json();
     expect(body2.success).toBe(true);
-    expect(body2.documentsCreated).toBe(27);
+    expect(body2.documentsCreated).toBe(26);
 
     const { createAdapter } = await import('@/lib/database/adapter/factory');
     const db = await createAdapter({ type: 'sqlite', sqlitePath: TEST_DB_PATH });
@@ -730,7 +730,7 @@ describe('POST /api/admin/reset-tutorial', () => {
       "SELECT COUNT(*) as count FROM files WHERE company_id = 1 AND (path = '/tutorial' OR path LIKE '/tutorial/%')",
       []
     );
-    expect(result.rows[0].count).toBe(27);
+    expect(result.rows[0].count).toBe(26);
     await db.close();
   });
 });

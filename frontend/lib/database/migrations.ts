@@ -566,6 +566,29 @@ export const MIGRATIONS: MigrationEntry[] = [
     description: 'Add updated_at timestamp to connection schemas for caching'
   },
   {
+    dataVersion: 16,
+    schemaVersion: undefined,  // No schema change
+    dataMigration: (data: InitData) => {
+      // Remove all documents at or under any /*/logs/llm_calls path.
+      // llm_call was scaffolded but never used — only empty folder nodes can exist.
+      const LLM_CALLS_RE = /^\/[^/]+\/logs\/llm_calls(\/|$)/;
+
+      for (const companyData of data.companies as CompanyData[]) {
+        const before = companyData.documents.length;
+        companyData.documents = companyData.documents.filter(
+          doc => !LLM_CALLS_RE.test(doc.path)
+        );
+        const removed = before - companyData.documents.length;
+        if (removed > 0) {
+          console.log(`  ✅ Removed ${removed} llm_calls document(s) for company ${companyData.name}`);
+        }
+      }
+
+      return data;
+    },
+    description: 'Remove llm_call folders from all modes (llm_call type was never used)'
+  },
+  {
     dataVersion: undefined,  // No data format change
     schemaVersion: 6,  // Schema bumps to 6
     schemaMigration: null,  // null = recreate DB with new schema (subdomain NOT NULL)

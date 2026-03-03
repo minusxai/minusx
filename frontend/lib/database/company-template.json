@@ -88,19 +88,6 @@
           "updated_at": "{{TIMESTAMP}}"
         },
         {
-          "id": 6,
-          "name": "llm_calls",
-          "path": "/tutorial/logs/llm_calls",
-          "type": "folder",
-          "content": {
-            "name": "llm_calls",
-            "description": "LLM API call logs"
-          },
-          "company_id": "{{COMPANY_ID}}",
-          "created_at": "{{TIMESTAMP}}",
-          "updated_at": "{{TIMESTAMP}}"
-        },
-        {
           "id": 7,
           "name": "config",
           "path": "/tutorial/configs/config",
@@ -1587,19 +1574,6 @@
           "content": {
             "name": "conversations",
             "description": "Chat conversation logs"
-          },
-          "company_id": "{{COMPANY_ID}}",
-          "created_at": "{{TIMESTAMP}}",
-          "updated_at": "{{TIMESTAMP}}"
-        },
-        {
-          "id": 106,
-          "name": "llm_calls",
-          "path": "/org/logs/llm_calls",
-          "type": "folder",
-          "content": {
-            "name": "llm_calls",
-            "description": "LLM API call logs"
           },
           "company_id": "{{COMPANY_ID}}",
           "created_at": "{{TIMESTAMP}}",
