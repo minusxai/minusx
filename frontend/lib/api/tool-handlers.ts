@@ -1834,8 +1834,8 @@ registerFrontendTool('CreateFile', async (args, _context) => {
 
     return {
       success: true,
-      virtualId,
-      message: `Created draft question "${name}" (virtualId: ${virtualId}). Add to a dashboard: EditDashboard(operation="add_existing_question", question_id=${virtualId}, file_id=<dashboardId>). Changes are staged as drafts until the user publishes.`
+      id: virtualId,
+      message: `Created draft question "${name}" (virtualId: ${virtualId}).`
     };
   }
 
