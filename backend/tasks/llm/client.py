@@ -126,7 +126,7 @@ def describe_tool(cls):
     required = []
 
     for name, param in sig.parameters.items():
-        if name == "self" or name.startswith("_") or param.kind not in (
+        if name in ("self", "orchestrator") or name.startswith("_") or param.kind not in (
             inspect.Parameter.POSITIONAL_OR_KEYWORD,
             inspect.Parameter.KEYWORD_ONLY,
         ):
