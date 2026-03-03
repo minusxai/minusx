@@ -45,3 +45,4 @@ data/schemas.json
 
 # analytics DuckDB files (per-company, runtime-generated)
 data/analytics/
+.eslintcache
