@@ -68,7 +68,7 @@ export type ToolHandler = (
 /**
  * Global tool registry
  */
-const toolRegistry: Record<string, ToolHandler> = {};
+export const toolRegistry: Record<string, ToolHandler> = {};
 
 /**
  * Register a tool handler
