@@ -12,10 +12,11 @@ export default function BigQueryConfig({ config, onChange, mode }: BaseConfigPro
     try {
       if (value.trim()) {
         const parsed = JSON.parse(value);
+        const extractedProjectId = parsed.project_id || parsed.projectId || parsed.credentials?.project_id;
         onChange({
           ...config,
           service_account_json: value,
-          project_id: parsed.project_id || projectId
+          project_id: extractedProjectId || projectId
         });
       } else {
         onChange({
@@ -79,11 +80,8 @@ export default function BigQueryConfig({ config, onChange, mode }: BaseConfigPro
             fontFamily="mono"
             fontSize="xs"
             minH="150px"
-            disabled
+            readOnly
           />
-          <Text fontSize="xs" color="fg.muted" mt={1}>
-            Automatically extracted from service account JSON
-          </Text>
         </VStack>
       </Box>
       <Box>

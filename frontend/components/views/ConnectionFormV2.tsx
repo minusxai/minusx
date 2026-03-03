@@ -226,7 +226,8 @@ export default function ConnectionFormV2({
       // Validate JSON format
       try {
         const parsed = JSON.parse(serviceAccountJson);
-        if (!parsed.type || parsed.type !== 'service_account' || !parsed.project_id) {
+        const creds = parsed.credentials ?? parsed;
+        if (!creds.type || creds.type !== 'service_account') {
           return false;
         }
       } catch {
@@ -301,7 +302,8 @@ export default function ConnectionFormV2({
           // For create mode, validate credentials by temporarily testing the connection
           try {
             const parsed = JSON.parse(serviceAccountJson);
-            if (!parsed.project_id || !parsed.type || parsed.type !== 'service_account') {
+            const creds = parsed.credentials ?? parsed;
+            if (!creds.type || creds.type !== 'service_account') {
               setTestResult({
                 success: false,
                 message: 'Invalid service account JSON format',
@@ -426,11 +428,12 @@ export default function ConnectionFormV2({
       // Validate JSON format
       try {
         const parsed = JSON.parse(serviceAccountJson);
-        if (!parsed.type || parsed.type !== 'service_account') {
+        const creds = parsed.credentials ?? parsed;
+        if (!creds.type || creds.type !== 'service_account') {
           setNameError('Invalid service account JSON: must be a service account key');
           return;
         }
-        if (!parsed.project_id) {
+        if (!creds.project_id) {
           setNameError('Invalid service account JSON: missing project_id');
           return;
         }

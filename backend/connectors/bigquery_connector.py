@@ -10,22 +10,22 @@ import json
 class BigQueryConnector(DatabaseConnector):
     """Google BigQuery database connector"""
 
-    def _get_client(self):
+    def _parse_credentials(self):
         service_account_json = self.config.get('service_account_json')
+        parsed = json.loads(service_account_json)
+        # Support wrapped format: {"projectId": ..., "credentials": {...}}
+        return parsed.get('credentials', parsed)
+
+    def _get_client(self):
         project_id = self.config.get('project_id')
-        credentials_dict = json.loads(service_account_json)
+        credentials_dict = self._parse_credentials()
         credentials = service_account.Credentials.from_service_account_info(credentials_dict)
         return bigquery.Client(project=project_id, credentials=credentials)
 
     def get_engine(self):
         if not self._engine:
-            service_account_json = self.config.get('service_account_json')
             project_id = self.config.get('project_id')
-
-            # Parse credentials JSON
-            credentials_dict = json.loads(service_account_json)
-
-            # Create engine with credentials
+            credentials_dict = self._parse_credentials()
             self._engine = create_engine(
                 f"bigquery://{project_id}",
                 credentials_info=credentials_dict
