@@ -37,7 +37,7 @@ export const SIDEBAR_SECTION_METADATA: Record<SidebarSectionId, Omit<SidebarSect
     color: 'accent.teal',
   },
   'question-references': {
-    title: 'Referenced Questions',
+    title: 'Questions in Context',
     icon: LuChartBar,
     color: 'accent.success',
     maxHeight: '400px',

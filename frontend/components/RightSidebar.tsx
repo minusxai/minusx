@@ -220,13 +220,13 @@ export default function RightSidebar({
   // Always show schema section (empty state handled in rendering)
   sections.push(getSidebarSection('databases'));
 
+  // Always show documentation section (empty state handled in rendering)
+  sections.push(getSidebarSection('documentation'));
+
   // Show referenced questions section for question pages
   if (fileType === 'question') {
     sections.push(getSidebarSection('question-references'));
   }
-
-  // Always show documentation section (empty state handled in rendering)
-  sections.push(getSidebarSection('documentation'));
 
   if (history !== undefined) {
     sections.push(getSidebarSection('history'));
