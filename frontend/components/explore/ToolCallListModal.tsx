@@ -97,7 +97,9 @@ export default function ToolCallListModal({ messages, isOpen, onClose }: ToolCal
                         borderColor="border.default"
                         borderRadius="md"
                         bg="bg.canvas"
+                        cursor="pointer"
                         _hover={{ borderColor: 'accent.teal' }}
+                        onClick={() => setInspecting(toInspectTuple(msg))}
                       >
                         <HStack justify="space-between" gap={3}>
                           <HStack gap={2} minW="0" flex="1">
@@ -122,7 +124,10 @@ export default function ToolCallListModal({ messages, isOpen, onClose }: ToolCal
                             size="xs"
                             variant="ghost"
                             flexShrink={0}
-                            onClick={() => setInspecting(toInspectTuple(msg))}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setInspecting(toInspectTuple(msg));
+                            }}
                           >
                             <LuPencil />
                           </IconButton>
