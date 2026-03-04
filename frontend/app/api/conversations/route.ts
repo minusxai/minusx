@@ -59,7 +59,7 @@ function getLastUserMessage(log: ConversationLogEntry[]): string | undefined {
  */
 function getParentPageType(log: ConversationLogEntry[]): FileType | 'explore' | undefined {
   const firstTask = log.find(entry => entry._type === 'task');
-  return firstTask?.args?.app_state?.pageType;
+  return firstTask?.args?.app_state?.pageType || firstTask?.args?.app_state?.state?.fileState?.type || 'explore';
 }
 
 /**
