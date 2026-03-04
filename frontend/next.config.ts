@@ -20,7 +20,7 @@ const nextConfig: NextConfig = {
 
   experimental: {
     // Enable optimized package imports to reduce bundle size
-    optimizePackageImports: ['@chakra-ui/react', 'react-icons'],
+    optimizePackageImports: ['@chakra-ui/react', 'react-icons', 'echarts'],
 
     // Increase request body size limit for database imports (default is 10MB)
     // This allows large compressed database files to be uploaded
