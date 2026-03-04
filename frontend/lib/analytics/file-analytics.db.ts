@@ -1,10 +1,7 @@
 import 'server-only';
 import * as path from 'path';
 import * as fs from 'fs';
-
-// Native DuckDB (not WASM) — excluded from Next.js bundle via serverExternalPackages
-// eslint-disable-next-line @typescript-eslint/no-require-imports, no-restricted-syntax
-const duckdb = require('duckdb');
+import { DuckDBInstance } from '@duckdb/node-api';
 
 // Schema for per-company analytics database
 const SCHEMA_SQL = `
@@ -50,10 +47,16 @@ CREATE INDEX IF NOT EXISTS idx_llm_conv ON llm_call_events(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_llm_ts   ON llm_call_events(timestamp);
 `;
 
-// Module-level pool: one Database per companyId, persists for process lifetime
-const pool = new Map<number, any>();
+// Module-level pool: one DuckDBInstance per companyId, persists for process lifetime
+const pool = new Map<number, DuckDBInstance>();
 // Tracks in-progress initializations to prevent concurrent init for same company
-const initPromises = new Map<number, Promise<any>>();
+const initPromises = new Map<number, Promise<DuckDBInstance>>();
+
+// Convert legacy ? placeholders to $1, $2, ... (DuckDB prepared statement syntax)
+function toPositional(sql: string): string {
+  let i = 0;
+  return sql.replace(/\?/g, () => `$${++i}`);
+}
 
 function getAnalyticsDbDir(): string {
   if (process.env.ANALYTICS_DB_DIR) return process.env.ANALYTICS_DB_DIR;
@@ -61,15 +64,16 @@ function getAnalyticsDbDir(): string {
   return path.join(base, 'data', 'analytics');
 }
 
-function initSchema(db: any): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const conn = db.connect();
-    conn.exec(SCHEMA_SQL, (err: Error | null) => {
-      conn.close();
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+async function initSchema(instance: DuckDBInstance): Promise<void> {
+  const conn = await instance.connect();
+  try {
+    // Run each statement individually — @duckdb/node-api run() handles one statement at a time
+    for (const stmt of SCHEMA_SQL.split(';').map(s => s.trim()).filter(Boolean)) {
+      await conn.run(stmt);
+    }
+  } finally {
+    conn.closeSync();
+  }
 }
 
 /**
@@ -83,16 +87,16 @@ export function analyticsDbExists(companyId: number): boolean {
 }
 
 /**
- * Returns the DuckDB Database for the given company, creating it on first access.
+ * Returns the DuckDBInstance for the given company, creating it on first access.
  * Thread-safe: deduplicates concurrent init calls via initPromises.
  */
-export async function getAnalyticsDb(companyId: number): Promise<any> {
+export async function getAnalyticsDb(companyId: number): Promise<DuckDBInstance> {
   if (pool.has(companyId)) {
-    return pool.get(companyId);
+    return pool.get(companyId)!;
   }
 
   if (initPromises.has(companyId)) {
-    return initPromises.get(companyId);
+    return initPromises.get(companyId)!;
   }
 
   const initPromise = (async () => {
@@ -102,13 +106,13 @@ export async function getAnalyticsDb(companyId: number): Promise<any> {
     }
 
     const dbPath = path.join(dir, `${companyId}.duckdb`);
-    const db = new duckdb.Database(dbPath);
+    const instance = await DuckDBInstance.create(dbPath);
 
-    await initSchema(db);
+    await initSchema(instance);
 
-    pool.set(companyId, db);
+    pool.set(companyId, instance);
     initPromises.delete(companyId);
-    return db;
+    return instance;
   })();
 
   initPromises.set(companyId, initPromise);
@@ -119,29 +123,24 @@ export async function getAnalyticsDb(companyId: number): Promise<any> {
  * Run a parameterized write statement (INSERT/UPDATE/DELETE).
  * Creates a short-lived connection and closes it after use.
  */
-export function runStatement(db: any, sql: string, params: any[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const conn = db.connect();
-    const args = [...params, (err: Error | null) => {
-      conn.close();
-      if (err) reject(err);
-      else resolve();
-    }];
-    conn.run(sql, ...args);
-  });
+export async function runStatement(db: DuckDBInstance, sql: string, params: unknown[]): Promise<void> {
+  const conn = await db.connect();
+  try {
+    await conn.run(toPositional(sql), params as never);
+  } finally {
+    conn.closeSync();
+  }
 }
 
 /**
- * Run a parameterized read query and return all rows.
+ * Run a parameterized read query and return all rows as plain JS objects.
  */
-export function runQuery<T = Record<string, unknown>>(db: any, sql: string, params: any[]): Promise<T[]> {
-  return new Promise((resolve, reject) => {
-    const conn = db.connect();
-    const args = [...params, (err: Error | null, rows: T[]) => {
-      conn.close();
-      if (err) reject(err);
-      else resolve(rows);
-    }];
-    conn.all(sql, ...args);
-  });
+export async function runQuery<T = Record<string, unknown>>(db: DuckDBInstance, sql: string, params: unknown[]): Promise<T[]> {
+  const conn = await db.connect();
+  try {
+    const result = await conn.run(toPositional(sql), params as never);
+    return await result.getRowObjectsJS() as T[];
+  } finally {
+    conn.closeSync();
+  }
 }
