@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useMemo } from 'react';
-import { useAppSelector } from '@/store/hooks';
+import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { useContexts } from '@/lib/hooks/useContexts';
+import { setShowDebug, setShowJson } from '@/store/uiSlice';
 
 /**
  * DataLoader Component
@@ -20,7 +21,18 @@ import { useContexts } from '@/lib/hooks/useContexts';
  * This component has no UI - it's pure data orchestration.
  */
 export function DataLoader() {
+  const dispatch = useAppDispatch();
   const user = useAppSelector(state => state.auth.user);
+
+  // Restore persisted UI flags after hydration to avoid SSR mismatch
+  useEffect(() => {
+    try {
+      const debug = localStorage.getItem('showDebug');
+      if (debug !== null) dispatch(setShowDebug(debug === 'true'));
+      const json = localStorage.getItem('showJson');
+      if (json !== null) dispatch(setShowJson(json === 'true'));
+    } catch { /* ignore */ }
+  }, []);
   const configsLoaded = useAppSelector(state => state.configs.loadedAt !== null);
 
   // Check if any connection/context is loaded (optimized to avoid Object.values on every render)

@@ -24,18 +24,6 @@ interface UIState {
   modalFile: { fileId: number; state: 'ACTIVE' | 'COLLAPSED' } | null;
 }
 
-const getPersistedBool = (key: string, fallback: boolean): boolean => {
-  if (typeof window === 'undefined') return fallback;
-  try {
-    const stored = localStorage.getItem(key);
-    if (stored === null) return fallback;
-    return stored === 'true';
-  } catch {
-    return fallback;
-  }
-};
-
-
 const initialState: UIState = {
   leftSidebarCollapsed: false,
   rightSidebarCollapsed: true,
@@ -45,8 +33,8 @@ const initialState: UIState = {
   sidebarPendingMessage: null,
   activeSidebarSection: null,
   askForConfirmation: false,
-  showDebug: getPersistedBool('showDebug', false),
-  showJson: getPersistedBool('showJson', false),
+  showDebug: false,
+  showJson: false,
   gettingStartedCollapsed: false,
   dashboardEditMode: {},
   fileEditMode: {},

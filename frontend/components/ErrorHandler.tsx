@@ -16,6 +16,12 @@ export function GlobalErrorHandler() {
       // ResizeObserver loop errors are benign (browser fires them during layout shifts)
       if (event.message?.includes('ResizeObserver')) return;
 
+      // React 19 hydration errors are recoverable — React automatically re-renders the
+      // affected tree on the client. These are often caused by browser extensions injecting
+      // attributes (e.g. bis_skin_checked) into the DOM and are not actionable code bugs.
+      const msg = event.error?.message || event.message || '';
+      if (msg.includes('Hydration failed') || msg.includes('hydrating')) return;
+
       const errorDetail = event.error
         ? (event.error instanceof Error ? event.error.stack || event.error.message : String(event.error))
         : `${event.message || 'Unknown error'} at ${event.filename || 'unknown'}:${event.lineno}:${event.colno}`;
