@@ -34,6 +34,7 @@ interface ChatInterfaceProps {
   appState?: AppState | null;  // Current page state (e.g., QuestionAppState, DashboardAppState)
   container?: 'page' | 'sidebar';  // Layout mode: 'page' for full explore page, 'sidebar' for right sidebar
   onContextChange?: (contextPath: string | null, version?: number) => void;  // Context change callback (for parent coordination)
+  onDatabaseChange?: (name: string) => void;  // Database change callback (for parent coordination)
 }
 
 export default function ChatInterface({
@@ -43,7 +44,8 @@ export default function ChatInterface({
   databaseName: initialDatabaseName,
   appState,
   container = 'page',
-  onContextChange
+  onContextChange,
+  onDatabaseChange
 }: ChatInterfaceProps) {
   const router = useRouter();
   const dispatch = useAppDispatch();
@@ -56,10 +58,27 @@ export default function ChatInterface({
   // Get config for location
   const { config } = useConfigs();
 
-  // Internal database selection state
-  const [selectedDatabase, setSelectedDatabase] = useState<string | null>(
-    initialDatabaseName || null
+  // Read connection_id stored in the Redux conversation (available synchronously on remount)
+  const storedConnectionId = useAppSelector(state =>
+    providedConversationId
+      ? (state.chat.conversations[providedConversationId]?.agent_args?.connection_id ?? null)
+      : null
   );
+
+  // Internal database selection state — prefer stored connection from conversation over prop
+  const [selectedDatabase, setSelectedDatabase] = useState<string | null>(
+    storedConnectionId || initialDatabaseName || null
+  );
+
+  // When navigating to a different conversation, sync selectedDatabase to that conversation's
+  // stored connection_id. Runs on storedConnectionId changes (i.e. when providedConversationId
+  // changes and the conversation is already in Redux, or when it loads from DB).
+  useEffect(() => {
+    if (storedConnectionId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedDatabase(storedConnectionId);
+    }
+  }, [storedConnectionId]);
 
   // Auto-select database when context loads (if none selected) — intentional setState in effect
   useEffect(() => {
@@ -79,7 +98,8 @@ export default function ChatInterface({
   // Internal database change handler
   const handleDatabaseChange = useCallback((name: string) => {
     setSelectedDatabase(name);
-  }, []);
+    onDatabaseChange?.(name);
+  }, [onDatabaseChange]);
 
   // Derive loading states from context
   const connectionsLoading = contextLoading;
@@ -356,7 +376,7 @@ export default function ChatInterface({
         conversationID: -Date.now(),
         agent: 'AnalystAgent',
         agent_args: {
-          connection_id: database?.databaseName || null,
+          connection_id: selectedDatabase || null,
           schema: simplifiedSchema,
           context: markdown || '',
           app_state: appState,

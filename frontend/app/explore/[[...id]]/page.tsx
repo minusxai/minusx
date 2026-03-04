@@ -1,19 +1,16 @@
 'use client';
 
-import { use } from 'react';
+import { useParams } from 'next/navigation';
 import { Box } from '@chakra-ui/react';
 import ExploreInterface from '@/components/explore/ExploreInterface';
 import { useAppSelector } from '@/store/hooks';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';
 
-interface ExplorePageProps {
-  params: Promise<{ id?: string[] }>;
-}
-
-export default function ExplorePage({ params }: ExplorePageProps) {
-  // Unwrap params Promise (Next.js 16 requirement)
-  const { id } = use(params);
-  console.log('explore params are', id)
+export default function ExplorePage() {
+  // useParams() reads route params synchronously without causing Suspense/remount
+  // (use(params) was causing ExploreInterface to remount on navigation, resetting state)
+  const params = useParams<{ id?: string[] }>();
+  const id = params?.id;
 
   // Get user mode from Redux
   const user = useAppSelector(state => state.auth.user);

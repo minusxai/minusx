@@ -120,11 +120,9 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
           {/* Chat Interface */}
           <Box flex="1" overflow="hidden">
             <ChatInterface
-              key={conversationId || 'new'}
               conversationId={conversationId}
               contextPath={contextPath}
               contextVersion={selectedVersion}
-              databaseName={null}  // Auto-select first database
               appState={undefined}
               container="page"
               onContextChange={(path, version) => {
