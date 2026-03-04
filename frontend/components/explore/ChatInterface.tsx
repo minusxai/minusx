@@ -596,7 +596,7 @@ export default function ChatInterface({
                     return <SimpleChatMessage
                         key={`${msg.role}-${idx}-${(msg as any).tool_call_id || ''}`}
                         message={msg}
-                        databaseName={database?.databaseName || ''}
+                        databaseName={selectedDatabase || ''}
                         isCompact={isCompact}
                         showThinking={showThinking}
                         toggleShowThinking={() => setShowThinking(!showThinking)}
