@@ -32,6 +32,10 @@ export class PostgresAdapter implements IDatabaseAdapter {
         options: `-c search_path=${schema},public`,
         // Fail fast if pool can't acquire a connection within 30s (prevents infinite hangs)
         connectionTimeoutMillis: 30000,
+        // Evict idle connections before the server/firewall kills them silently
+        idleTimeoutMillis: 30000,
+        // TCP keepalives prevent firewalls/proxies from dropping long-idle connections
+        keepAlive: true,
       });
 
       // Handle pool errors
