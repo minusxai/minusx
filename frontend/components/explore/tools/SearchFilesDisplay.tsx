@@ -86,23 +86,25 @@ export default function SearchFilesDisplay({ toolCallTuple, showThinking }: Disp
           gap={1.5}
           py={1.5}
           px={2}
-          flexWrap="wrap"
           cursor={hasResults ? 'pointer' : 'default'}
           onClick={() => hasResults && setIsExpanded(!isExpanded)}
+          align="start"
         >
           {hasResults && (
-            <Icon as={isExpanded ? LuChevronDown : LuChevronRight} boxSize={3} color={color} flexShrink={0} />
+            <Icon as={isExpanded ? LuChevronDown : LuChevronRight} boxSize={3} color={color} flexShrink={0} mt={0.5} />
           )}
           {!hasResults && (
-            <Icon as={LuCheck} boxSize={3} color={color} flexShrink={0} />
+            <Icon as={LuCheck} boxSize={3} color={color} flexShrink={0} mt={0.5} />
           )}
-          <Icon as={LuSearch} boxSize={3} color={color} flexShrink={0} />
-          <Text fontSize="xs" color={color} fontFamily="mono">
-            Search{query ? ` "${query}"` : ''}
-          </Text>
-          <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-            {total} {total === 1 ? 'result' : 'results'}
-          </Text>
+          <VStack gap={0} align="start" minW={0}>
+            <Text fontSize="xs" color={color} fontFamily="mono">
+              <Icon as={LuSearch} boxSize={3} display="inline" verticalAlign="middle" mr={1} />
+              Search{query ? ` "${query}"` : ''}
+            </Text>
+            <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+              {total} {total === 1 ? 'result' : 'results'}
+            </Text>
+          </VStack>
         </HStack>
 
         {/* Expandable results list */}
