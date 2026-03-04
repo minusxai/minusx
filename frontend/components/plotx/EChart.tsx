@@ -1,6 +1,7 @@
 import { useMemo, useRef, useEffect } from 'react'
-import { init, getInstanceByDom, EChartsOption } from 'echarts'
-import type { SetOptionOpts } from 'echarts'
+import '@/lib/chart/echarts-init'
+import { init, getInstanceByDom } from 'echarts/core'
+import type { EChartsOption, SetOptionOpts } from 'echarts'
 import { debounce } from 'lodash'
 
 interface EChartProps extends React.HTMLAttributes<HTMLDivElement> {
