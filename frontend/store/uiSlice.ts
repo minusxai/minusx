@@ -42,7 +42,7 @@ const initialState: UIState = {
   fileEditMode: {},
   fileViewMode: {},
   sqlEditorCollapsed: {},
-  questionCollapsedPanel: 'left',
+  questionCollapsedPanel: 'none',
   sidebarDrafts: {},
   proposedQueries: {},
   modalFile: null,
