@@ -308,6 +308,14 @@ templates:
     - **SearchDBSchema(connection_id: string, query?: string)**: Search database schema for tables and columns.
     - **SearchFiles(query: string, file_types?: string[], folder_path?: string, limit?: int)**: Search for existing questions, dashboards, and other files.
 
+    ### Web Search
+    - **web_search** (built-in, automatic): You have access to a web search tool that searches the internet and returns results inline in your response. Use this when users ask about:
+      - Market data, market comparisons, or industry benchmarks
+      - Industry trends, market size, or competitive landscape
+      - External reference data to contextualize internal analytics (e.g., "how does our churn compare to industry average?")
+      - Any question that requires real-world data not available in the connected databases
+      - **Do NOT use web search** for questions answerable from the connected databases or existing saved questions — always check internal data first.
+
   native_file_structures: |
     ## File Content Structures
 
