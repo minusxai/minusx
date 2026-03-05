@@ -96,15 +96,15 @@ export default function SearchFilesDisplay({ toolCallTuple, showThinking }: Disp
           {!hasResults && (
             <Icon as={LuCheck} boxSize={3} color={color} flexShrink={0} mt={0.5} />
           )}
-          <VStack gap={0} align="start" minW={0}>
-            <Text fontSize="xs" color={color} fontFamily="mono">
+          <HStack gap={1} minW={0} flex={1}>
+            <Text fontSize="xs" color={color} fontFamily="mono" truncate>
               <Icon as={LuSearch} boxSize={3} display="inline" verticalAlign="middle" mr={1} />
               Search{query ? ` "${query}"` : ''}
             </Text>
-            <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-              {total} {total === 1 ? 'result' : 'results'}
+            <Text fontSize="xs" color="fg.muted" fontFamily="mono" flexShrink={0}>
+              · {total} {total === 1 ? 'result' : 'results'}
             </Text>
-          </VStack>
+          </HStack>
         </HStack>
 
         {/* Expandable results list */}

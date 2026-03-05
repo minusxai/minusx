@@ -320,9 +320,9 @@ export function QuestionVisualization({
                 )}
               </>
             ) : (
-              <Box color="fg.subtle" fontSize="sm" fontFamily="mono">
+              <HStack color="fg.subtle" fontSize="sm" fontFamily="mono" h={"full"} width={"full"} alignItems={"center"} justifyContent={"center"}>
                 <Text>No data</Text>
-              </Box>
+              </HStack>
             )}
           </Box>
         )}
