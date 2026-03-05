@@ -14,6 +14,7 @@ import { LexicalMentionEditor } from '@/components/chat/LexicalMentionEditor';
 import { DatabaseWithSchema, Attachment } from '@/lib/types';
 import { extractTextFromPDF } from '@/lib/utils/pdf-extract';
 import { toaster } from '@/components/ui/toaster';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface ChatInputProps {
   onSend: (message: string, attachments: Attachment[]) => void;
@@ -148,18 +149,22 @@ export default function ChatInput({
                     {attachments.map((att, idx) => (
                       <HStack
                         key={idx}
-                        bg="bg.muted"
+                        bg="accent.teal/50"
                         borderRadius="md"
+                        border={"1px solid"}
+                        borderColor="accent.teal"
                         px={2}
                         py={1}
                         gap={1}
                         fontSize="xs"
                         fontFamily="mono"
-                        color="fg.muted"
+                        color="white"
                       >
-                        <Text truncate maxW="150px">{att.name}</Text>
+                        <Tooltip content={att.name} positioning={{ placement: 'top' }}>
+                          <Text truncate maxW="150px">{att.name}</Text>
+                        </Tooltip>
                         {att.metadata?.pages && (
-                          <Text color="fg.subtle">({att.metadata.pages}p)</Text>
+                          <Text color="white">({att.metadata.pages} pages)</Text>
                         )}
                         <IconButton
                           aria-label="Remove attachment"
@@ -216,20 +221,22 @@ export default function ChatInput({
                 </HStack>
 
                 <HStack gap={1}>
-                  <IconButton
-                    aria-label="Attach PDF"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isAgentRunning}
-                    variant="ghost"
-                    size="sm"
-                    color="fg.muted"
-                    _hover={{ color: 'accent.teal' }}
-                    _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
-                    borderRadius="md"
-                    flexShrink={0}
-                  >
-                    <Icon as={LuPaperclip} boxSize={4} />
-                  </IconButton>
+                  <Tooltip content="Attach PDF" positioning={{ placement: 'top' }}>
+                    <IconButton
+                      aria-label="Attach PDF"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isAgentRunning}
+                      variant="ghost"
+                      size="sm"
+                      color="fg.muted"
+                      _hover={{ color: 'accent.teal' }}
+                      _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
+                      borderRadius="md"
+                      flexShrink={0}
+                    >
+                      <Icon as={LuPaperclip} boxSize={4} />
+                    </IconButton>
+                  </Tooltip>
 
                   {isAgentRunning ? (
                     <IconButton
