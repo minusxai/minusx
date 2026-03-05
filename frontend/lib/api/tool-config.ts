@@ -11,6 +11,8 @@ import SetRuntimeValuesDisplay from '@/components/explore/tools/SetRuntimeValues
 import EditFileDisplay from '@/components/explore/tools/EditFileDisplay';
 import ReadFilesDisplay from '@/components/explore/tools/ReadFilesDisplay';
 import SearchFilesDisplay from '@/components/explore/tools/SearchFilesDisplay';
+import CreateFileDisplay from '@/components/explore/tools/CreateFileDisplay';
+import SearchDBSchemaDisplay from '@/components/explore/tools/SearchDBSchemaDisplay';
 import { DisplayProps } from '@/lib/types';
 
 // Tool configuration interface
@@ -68,6 +70,12 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
   },
   'SearchFiles': {
     displayComponent: SearchFilesDisplay
+  },
+  'CreateFile': {
+    displayComponent: CreateFileDisplay
+  },
+  'SearchDBSchema': {
+    displayComponent: SearchDBSchemaDisplay
   }
 };
 
