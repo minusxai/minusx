@@ -5,6 +5,7 @@ import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box, VStack, HStack, Text, Icon, Button, Spinner, Grid, GridItem } from '@chakra-ui/react';
 import { LuPlus, LuChevronDown, LuRefreshCw, LuSparkles, LuPin, LuShare2, LuExpand, LuTerminal } from 'react-icons/lu';
 import type { LoadError } from '@/lib/types/errors';
+import type { Attachment } from '@/lib/types';
 import { AppState } from '@/lib/appState';
 import ChatInput from './ChatInput';
 import ThinkingIndicator from './ThinkingIndicator';
@@ -15,6 +16,7 @@ import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { Tooltip } from '@/components/ui/tooltip';
 import { toaster } from '@/components/ui/toaster';
+import { clearChatAttachments } from '@/store/uiSlice';
 import ExampleQuestions from './message/ExampleQuestions';
 import FileNotFound from '../FileNotFound';
 import { deduplicateMessages } from './message/messageHelpers';
@@ -318,6 +320,7 @@ export default function ChatInterface({
 
   const handleNewChat = () => {
     setLocalError(null);
+    dispatch(clearChatAttachments());
 
     // Stop agent if running
     if (conversationID && isAgentRunning) {
@@ -339,7 +342,7 @@ export default function ChatInterface({
     }
   };
 
-  const handleSendMessage = async (userInput: string) => {
+  const handleSendMessage = async (userInput: string, attachments: Attachment[] = []) => {
     if (!userInput.trim()) return;
 
     // Block sending if connections or contexts are still loading
@@ -382,6 +385,7 @@ export default function ChatInterface({
           app_state: appState,
           city: config.city,
           agent_name: config.branding.agentName || 'MinusX',
+          ...(attachments.length > 0 ? { attachments } : {}),
         },
         message: userInput
       }));
@@ -402,6 +406,7 @@ export default function ChatInterface({
           app_state: appState,
           city: config.city,
           agent_name: config.branding.agentName || 'MinusX',
+          ...(attachments.length > 0 ? { attachments } : {}),
         }
       }));
 

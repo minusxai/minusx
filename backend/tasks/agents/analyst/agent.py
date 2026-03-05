@@ -75,6 +75,7 @@ class AnalystAgent(Agent):
         home_folder: Optional[str] = None,
         city: Optional[str] = None,
         agent_name: Optional[str] = None,
+        attachments: Optional[List[dict]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
@@ -86,6 +87,7 @@ class AnalystAgent(Agent):
         self.agent_name = agent_name or "MinusX"
         self.home_folder = home_folder or "/"
         self.city = city
+        self.attachments = attachments or []
         self.tool_thread: List[dict] = []  # Conversation thread with tool calls/responses
         self.child_count = 0
 
@@ -113,15 +115,32 @@ class AnalystAgent(Agent):
         )
         return {"role": "system", "content": content}
 
+    def _format_attachments(self) -> str:
+        """Format text attachments as XML blocks for the user message."""
+        if not self.attachments:
+            return ""
+        parts = []
+        for att in self.attachments:
+            if att.get("type") != "text":
+                continue
+            name = att.get("name", "attachment")
+            content = att.get("content", "")
+            pages = att.get("metadata", {}).get("pages")
+            header = f"[{name}]" + (f" ({pages} pages)" if pages else "")
+            parts.append(f"<Attachment {header}>\n{content}\n</Attachment>")
+        return "\n".join(parts)
+
     def _get_user_message(self) -> dict:
         """Generate user message with the goal and app state."""
         app_state_str = json.dumps(self.app_state, indent=2) if self.app_state else "null"
+        attachments_str = self._format_attachments()
 
         content = get_prompt(
             'native.user',
             app_state=app_state_str,
             goal=self.goal,
-            current_time=time.strftime("%Y-%m-%d %H:%M:%S")
+            current_time=time.strftime("%Y-%m-%d %H:%M:%S"),
+            attachments=attachments_str
         )
         return {"role": "user", "content": content}
 

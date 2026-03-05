@@ -1,20 +1,23 @@
 'use client';
 
-import { useState, KeyboardEvent, useEffect } from 'react';
+import { useState, useRef, KeyboardEvent, useEffect } from 'react';
 import { Box, HStack, VStack, Textarea, IconButton, Icon, Grid, GridItem, Text } from '@chakra-ui/react';
-import { LuSendHorizontal, LuPaperclip, LuSettings2, LuSquare } from 'react-icons/lu';
+import { LuSendHorizontal, LuPaperclip, LuSettings2, LuSquare, LuX } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { selectCompanyName } from '@/store/authSlice';
-import { setSidebarPendingMessage, setSidebarDraft, selectSidebarDraft, setAskForConfirmation } from '@/store/uiSlice';
+import { setSidebarPendingMessage, setSidebarDraft, selectSidebarDraft, setAskForConfirmation, selectChatAttachments, addChatAttachment, removeChatAttachment } from '@/store/uiSlice';
 import { Checkbox } from '@/components/ui/checkbox';
 import DatabaseSelector from '@/components/DatabaseSelector';
 import { ContextSelector } from './ContextSelector';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { LexicalMentionEditor } from '@/components/chat/LexicalMentionEditor';
-import { DatabaseWithSchema } from '@/lib/types';
+import { DatabaseWithSchema, Attachment } from '@/lib/types';
+import { extractTextFromDocument, SUPPORTED_DOC_EXTENSIONS } from '@/lib/utils/attachment-extract';
+import { toaster } from '@/components/ui/toaster';
+import { Tooltip } from '@/components/ui/tooltip';
 
 interface ChatInputProps {
-  onSend: (message: string) => void;
+  onSend: (message: string, attachments: Attachment[]) => void;
   onStop: () => void;
   isAgentRunning: boolean;
   disabled?: boolean;
@@ -55,20 +58,43 @@ export default function ChatInput({
 
   // Use Redux for draft text (persists across unmount)
   const [input, setInput] = useState('');
+  const attachments = useAppSelector(selectChatAttachments);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   // Handle pending message from SearchBar — wait for connections/context to finish loading
   // before sending, so the message isn't discarded by the loading guard in handleSendMessage.
   useEffect(() => {
     if (pendingMessage && container === 'sidebar' && !connectionsLoading && !contextsLoading) {
-      onSend(pendingMessage);
+      onSend(pendingMessage, []);
       dispatch(setSidebarPendingMessage(null));
     }
   }, [pendingMessage, container, dispatch, onSend, connectionsLoading, contextsLoading]);
 
   const handleSend = () => {
     if (input.trim() && !disabled && !isAgentRunning && !connectionsLoading && !contextsLoading) {
-      onSend(input.trim());
+      onSend(input.trim(), attachments);
       setInput('');
     }
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset input so re-selecting the same file triggers onChange
+    e.target.value = '';
+
+    try {
+      const { text, pages, wordCount } = await extractTextFromDocument(file);
+      const metadata: Attachment['metadata'] = {};
+      if (pages) metadata.pages = pages;
+      if (wordCount) metadata.wordCount = wordCount;
+      dispatch(addChatAttachment({ type: 'text', name: file.name, content: text, metadata }));
+    } catch (err: any) {
+      toaster.create({ title: err.message || 'Failed to extract document text', type: 'error' });
+    }
+  };
+
+  const removeAttachment = (index: number) => {
+    dispatch(removeChatAttachment(index));
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -108,6 +134,56 @@ export default function ChatInput({
                   />
                 </Box>
 
+                {/* Hidden file input for PDF attachment */}
+                <input
+                  type="file"
+                  accept={SUPPORTED_DOC_EXTENSIONS}
+                  ref={fileInputRef}
+                  style={{ display: 'none' }}
+                  onChange={handleFileSelect}
+                />
+
+                {/* Attachment chips */}
+                {attachments.length > 0 && (
+                  <HStack px={3} py={1} gap={2} flexWrap="wrap" borderTop="1px solid" borderColor="border.muted">
+                    {attachments.map((att, idx) => (
+                      <HStack
+                        key={idx}
+                        bg="accent.teal/50"
+                        borderRadius="md"
+                        border={"1px solid"}
+                        borderColor="accent.teal"
+                        px={2}
+                        py={1}
+                        gap={1}
+                        fontSize="xs"
+                        fontFamily="mono"
+                        color="white"
+                      >
+                        <Tooltip content={att.name} positioning={{ placement: 'top' }}>
+                          <Text truncate maxW="150px">{att.name}</Text>
+                        </Tooltip>
+                        {att.metadata?.pages ? (
+                          <Text color="white">({att.metadata.pages} pages)</Text>
+                        ) : att.metadata?.wordCount ? (
+                          <Text color="white">({att.metadata.wordCount} words)</Text>
+                        ) : null}
+                        <IconButton
+                          aria-label="Remove attachment"
+                          onClick={() => removeAttachment(idx)}
+                          variant="ghost"
+                          size="2xs"
+                          minW="auto"
+                          h="auto"
+                          p={0}
+                        >
+                          <Icon as={LuX} boxSize={3} />
+                        </IconButton>
+                      </HStack>
+                    ))}
+                  </HStack>
+                )}
+
                 {/* Bottom Control Bar */}
                 <HStack
                 px={3}
@@ -146,36 +222,55 @@ export default function ChatInput({
                     )}
                 </HStack>
 
-                {isAgentRunning ? (
-                  <IconButton
-                    aria-label="Stop agent"
-                    onClick={onStop}
-                    bg="accent.danger"
-                    color="white"
-                    _hover={{ bg: 'accent.danger', opacity: 0.9 }}
-                    size="sm"
-                    borderRadius="md"
-                    flexShrink={0}
-                    px={2}
-                  > Stop
-                    <Icon as={LuSquare} boxSize={3.5} fill="white"/>
-                  </IconButton>
-                ) : (
-                  <IconButton
-                    aria-label="Send message"
-                    onClick={handleSend}
-                    disabled={disabled || !input.trim() || connectionsLoading || contextsLoading}
-                    bg="accent.teal"
-                    color="white"
-                    _hover={{ bg: 'accent.teal', opacity: 0.9 }}
-                    _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
-                    size="sm"
-                    borderRadius="md"
-                    flexShrink={0}
-                  >
-                    <Icon as={LuSendHorizontal} boxSize={4} />
-                  </IconButton>
-                )}
+                <HStack gap={1}>
+                  <Tooltip content="Attach additional context (PDF, DOCX, TXT)" positioning={{ placement: 'top' }}>
+                    <IconButton
+                      aria-label="Attach additional context (PDF, DOCX, TXT)"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isAgentRunning}
+                      variant="ghost"
+                      size="sm"
+                      color="fg.muted"
+                      _hover={{ color: 'accent.teal' }}
+                      _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
+                      borderRadius="md"
+                      flexShrink={0}
+                    >
+                      <Icon as={LuPaperclip} boxSize={4} />
+                    </IconButton>
+                  </Tooltip>
+
+                  {isAgentRunning ? (
+                    <IconButton
+                      aria-label="Stop agent"
+                      onClick={onStop}
+                      bg="accent.danger"
+                      color="white"
+                      _hover={{ bg: 'accent.danger', opacity: 0.9 }}
+                      size="sm"
+                      borderRadius="md"
+                      flexShrink={0}
+                      px={2}
+                    > Stop
+                      <Icon as={LuSquare} boxSize={3.5} fill="white"/>
+                    </IconButton>
+                  ) : (
+                    <IconButton
+                      aria-label="Send message"
+                      onClick={handleSend}
+                      disabled={disabled || !input.trim() || connectionsLoading || contextsLoading}
+                      bg="accent.teal"
+                      color="white"
+                      _hover={{ bg: 'accent.teal', opacity: 0.9 }}
+                      _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
+                      size="sm"
+                      borderRadius="md"
+                      flexShrink={0}
+                    >
+                      <Icon as={LuSendHorizontal} boxSize={4} />
+                    </IconButton>
+                  )}
+                </HStack>
                 </HStack>
             </VStack>
             </Box>
