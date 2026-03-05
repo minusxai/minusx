@@ -52,7 +52,7 @@ export default function MobileRightSidebar({
   // Get context info using path (use selected version if provided by admin)
   const contextPath = selectedContextPath || filePath;
   const contextInfo = useContext(contextPath, contextVersion);
-  const databases = contextInfo.databases;
+  const databases = contextInfo.databases?.filter(db => db.schemas.length > 0);
   const documentation = contextInfo.documentation;
   const contextsLoading = contextInfo.contextLoading;
 
