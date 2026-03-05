@@ -65,7 +65,7 @@ export default function RightSidebar({
   // Get context info using selected context path (from dropdown) or fallback to file path
   const contextPath = selectedContextPath || filePath;
   const contextInfo = useContext(contextPath, contextVersion);
-  const databases = contextInfo.databases;
+  const databases = contextInfo.databases?.filter(db => db.schemas.length > 0);
   const documentation = contextInfo.documentation;
   const contextsLoading = contextInfo.contextLoading;
 
@@ -462,7 +462,7 @@ export default function RightSidebar({
                         overflowY={section.maxHeight ? "auto" : "visible"}
                       >
                         {section.id === 'databases' && (
-                          <VStack gap={0} bg="bg.canvas" pb={2} align="stretch">
+                          <VStack gap={0} bg="bg.canvas" align="stretch">
                             {contextsLoading ? (
                               <Box p={8} textAlign="center">
                                 <Text fontSize="sm" color="fg.muted">Loading databases...</Text>

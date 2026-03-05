@@ -602,6 +602,7 @@ export default function QuestionViewV2({
                 <DatabaseSelector
                   value={content.database_name || ''}
                   onChange={handleDatabaseChange}
+                  allowedDatabaseNames={schemaData?.filter(db => db.schemas.length > 0).map(db => db.databaseName)}
                 />
               </HStack>
             </HStack>

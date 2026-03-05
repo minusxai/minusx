@@ -217,6 +217,7 @@ export default function ChatInput({
                           value={databaseName}
                           onChange={onDatabaseChange}
                           size="sm"
+                          allowedDatabaseNames={whitelistedSchemas?.filter(db => db.schemas.length > 0).map(db => db.databaseName)}
                         />
                       </HStack>
                     )}
