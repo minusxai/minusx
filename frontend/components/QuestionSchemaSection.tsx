@@ -174,7 +174,7 @@ export default function QuestionSchemaSection() {
                 flex="1"
                 truncate
                 title={`Insert @${q.alias}`}
-                onClick={() => insertAtCursor(`@${q.alias}`)}
+                // onClick={() => insertAtCursor(`@${q.alias}`)}
                 _hover={{ color: 'accent.success' }}
                 transition="color 0.15s"
               >
