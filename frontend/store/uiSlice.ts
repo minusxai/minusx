@@ -1,6 +1,7 @@
 import { createSlice, createSelector, PayloadAction } from '@reduxjs/toolkit';
 import { IS_DEV } from '@/lib/constants';
 import type { RootState } from './store';
+import type { Attachment } from '@/lib/types';
 
 interface UIState {
   leftSidebarCollapsed: boolean;
@@ -22,6 +23,7 @@ interface UIState {
   sidebarDrafts: Record<number, string>;  // fileId -> draft input text
   proposedQueries: Record<number, string>;  // fileId -> proposed SQL query (for diff view)
   modalFile: { fileId: number; state: 'ACTIVE' | 'COLLAPSED' } | null;
+  chatAttachments: Attachment[];
 }
 
 const initialState: UIState = {
@@ -44,6 +46,7 @@ const initialState: UIState = {
   sidebarDrafts: {},
   proposedQueries: {},
   modalFile: null,
+  chatAttachments: [],
 };
 
 const uiSlice = createSlice({
@@ -162,6 +165,15 @@ const uiSlice = createSlice({
     expandFileModal: (state) => {
       if (state.modalFile) state.modalFile.state = 'ACTIVE';
     },
+    addChatAttachment: (state, action: PayloadAction<Attachment>) => {
+      state.chatAttachments.push(action.payload);
+    },
+    removeChatAttachment: (state, action: PayloadAction<number>) => {
+      state.chatAttachments.splice(action.payload, 1);
+    },
+    clearChatAttachments: (state) => {
+      state.chatAttachments = [];
+    },
   },
 });
 
@@ -197,6 +209,9 @@ export const {
   closeFileModal,
   collapseFileModal,
   expandFileModal,
+  addChatAttachment,
+  removeChatAttachment,
+  clearChatAttachments,
 } = uiSlice.actions;
 
 export default uiSlice.reducer;
@@ -240,3 +255,4 @@ export const selectSidebarDraft = (state: RootState, fileId: number | undefined)
 export const selectProposedQuery = (state: RootState, fileId: number | undefined) =>
   fileId ? state.ui.proposedQueries[fileId] : undefined;
 export const selectModalFile = (state: RootState) => state.ui.modalFile;
+export const selectChatAttachments = (state: RootState) => state.ui.chatAttachments;

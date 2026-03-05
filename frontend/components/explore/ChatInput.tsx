@@ -5,7 +5,7 @@ import { Box, HStack, VStack, Textarea, IconButton, Icon, Grid, GridItem, Text }
 import { LuSendHorizontal, LuPaperclip, LuSettings2, LuSquare, LuX } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { selectCompanyName } from '@/store/authSlice';
-import { setSidebarPendingMessage, setSidebarDraft, selectSidebarDraft, setAskForConfirmation } from '@/store/uiSlice';
+import { setSidebarPendingMessage, setSidebarDraft, selectSidebarDraft, setAskForConfirmation, selectChatAttachments, addChatAttachment, removeChatAttachment } from '@/store/uiSlice';
 import { Checkbox } from '@/components/ui/checkbox';
 import DatabaseSelector from '@/components/DatabaseSelector';
 import { ContextSelector } from './ContextSelector';
@@ -58,7 +58,7 @@ export default function ChatInput({
 
   // Use Redux for draft text (persists across unmount)
   const [input, setInput] = useState('');
-  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const attachments = useAppSelector(selectChatAttachments);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Handle pending message from SearchBar — wait for connections/context to finish loading
   // before sending, so the message isn't discarded by the loading guard in handleSendMessage.
@@ -87,17 +87,14 @@ export default function ChatInput({
       const metadata: Attachment['metadata'] = {};
       if (pages) metadata.pages = pages;
       if (wordCount) metadata.wordCount = wordCount;
-      setAttachments(prev => [
-        ...prev,
-        { type: 'text', name: file.name, content: text, metadata },
-      ]);
+      dispatch(addChatAttachment({ type: 'text', name: file.name, content: text, metadata }));
     } catch (err: any) {
       toaster.create({ title: err.message || 'Failed to extract document text', type: 'error' });
     }
   };
 
   const removeAttachment = (index: number) => {
-    setAttachments(prev => prev.filter((_, i) => i !== index));
+    dispatch(removeChatAttachment(index));
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {

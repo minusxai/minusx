@@ -16,6 +16,7 @@ import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { Tooltip } from '@/components/ui/tooltip';
 import { toaster } from '@/components/ui/toaster';
+import { clearChatAttachments } from '@/store/uiSlice';
 import ExampleQuestions from './message/ExampleQuestions';
 import FileNotFound from '../FileNotFound';
 import { deduplicateMessages } from './message/messageHelpers';
@@ -319,6 +320,7 @@ export default function ChatInterface({
 
   const handleNewChat = () => {
     setLocalError(null);
+    dispatch(clearChatAttachments());
 
     // Stop agent if running
     if (conversationID && isAgentRunning) {
