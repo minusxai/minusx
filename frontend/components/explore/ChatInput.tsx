@@ -12,7 +12,7 @@ import { ContextSelector } from './ContextSelector';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { LexicalMentionEditor } from '@/components/chat/LexicalMentionEditor';
 import { DatabaseWithSchema, Attachment } from '@/lib/types';
-import { extractTextFromPDF } from '@/lib/utils/pdf-extract';
+import { extractTextFromDocument, SUPPORTED_DOC_EXTENSIONS } from '@/lib/utils/attachment-extract';
 import { toaster } from '@/components/ui/toaster';
 import { Tooltip } from '@/components/ui/tooltip';
 
@@ -83,13 +83,16 @@ export default function ChatInput({
     e.target.value = '';
 
     try {
-      const { text, totalPages } = await extractTextFromPDF(file);
+      const { text, pages, wordCount } = await extractTextFromDocument(file);
+      const metadata: Attachment['metadata'] = {};
+      if (pages) metadata.pages = pages;
+      if (wordCount) metadata.wordCount = wordCount;
       setAttachments(prev => [
         ...prev,
-        { type: 'text', name: file.name, content: text, metadata: { pages: totalPages } },
+        { type: 'text', name: file.name, content: text, metadata },
       ]);
     } catch (err: any) {
-      toaster.create({ title: err.message || 'Failed to extract PDF text', type: 'error' });
+      toaster.create({ title: err.message || 'Failed to extract document text', type: 'error' });
     }
   };
 
@@ -137,7 +140,7 @@ export default function ChatInput({
                 {/* Hidden file input for PDF attachment */}
                 <input
                   type="file"
-                  accept=".pdf"
+                  accept={SUPPORTED_DOC_EXTENSIONS}
                   ref={fileInputRef}
                   style={{ display: 'none' }}
                   onChange={handleFileSelect}
@@ -163,9 +166,11 @@ export default function ChatInput({
                         <Tooltip content={att.name} positioning={{ placement: 'top' }}>
                           <Text truncate maxW="150px">{att.name}</Text>
                         </Tooltip>
-                        {att.metadata?.pages && (
+                        {att.metadata?.pages ? (
                           <Text color="white">({att.metadata.pages} pages)</Text>
-                        )}
+                        ) : att.metadata?.wordCount ? (
+                          <Text color="white">({att.metadata.wordCount} words)</Text>
+                        ) : null}
                         <IconButton
                           aria-label="Remove attachment"
                           onClick={() => removeAttachment(idx)}
@@ -221,9 +226,9 @@ export default function ChatInput({
                 </HStack>
 
                 <HStack gap={1}>
-                  <Tooltip content="Attach PDF" positioning={{ placement: 'top' }}>
+                  <Tooltip content="Attach document (PDF, DOCX, TXT)" positioning={{ placement: 'top' }}>
                     <IconButton
-                      aria-label="Attach PDF"
+                      aria-label="Attach document (PDF, DOCX, TXT)"
                       onClick={() => fileInputRef.current?.click()}
                       disabled={isAgentRunning}
                       variant="ghost"
