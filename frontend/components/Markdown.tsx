@@ -93,13 +93,13 @@ function LinkButton({ href, icon, children, bg = 'accent.primary' }: {
       bg={bg}
       borderRadius="sm"
       fontSize={'sm'}
-      fontWeight="500"
+      fontWeight="400"
       color="white"
       textDecoration="none"
       transition="all 0.15s ease"
       _hover={{ opacity: 0.8 }}
     >
-      <Link href={href} style={{ textDecoration: 'none', color: 'white' }}>
+      <Link href={href} style={{ textDecoration: 'none', color: 'white', fontWeight: 400, fontSize: 'small' }}>
         {icon}
         {children}
       </Link>
@@ -264,6 +264,7 @@ export default function Markdown({
     h3: { fontSize: 'md', fontWeight: '600', mb: 2, mt: 2, lineHeight: '1.4' },
     h4: { fontSize: 'sm', fontWeight: '600', mb: 1.5, mt: 1.5 },
     p: { fontSize: 'sm', lineHeight: '1.7', fontWeight: '400' },
+    a: { fontSize: 'sm', lineHeight: '1.7', fontWeight: '400' },
     code: { fontSize: 'sm' },
     pre: { mb: 3, p: 2.5 },
     list: { ml: 5, mb: 2.5, fontSize: 'sm', lineHeight: '1.7' },
