@@ -72,7 +72,6 @@ export default function ChatInput({
     if (input.trim() && !disabled && !isAgentRunning && !connectionsLoading && !contextsLoading) {
       onSend(input.trim(), attachments);
       setInput('');
-      setAttachments([]);
     }
   };
 
