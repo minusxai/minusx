@@ -29,7 +29,7 @@ interface UIState {
 const initialState: UIState = {
   leftSidebarCollapsed: false,
   rightSidebarCollapsed: true,
-  rightSidebarWidth: 320,
+  rightSidebarWidth: 400,
   colorMode: 'dark',
   devMode: IS_DEV,
   sidebarPendingMessage: null,

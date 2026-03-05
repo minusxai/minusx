@@ -78,6 +78,7 @@ export default function SearchBar({
       dispatch(setRightSidebarCollapsed(false));
 
       setInput('');
+      setIsFocused(false);
     }
   };
 
