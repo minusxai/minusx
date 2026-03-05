@@ -223,9 +223,9 @@ export default function ChatInput({
                 </HStack>
 
                 <HStack gap={1}>
-                  <Tooltip content="Attach document (PDF, DOCX, TXT)" positioning={{ placement: 'top' }}>
+                  <Tooltip content="Attach additional context (PDF, DOCX, TXT)" positioning={{ placement: 'top' }}>
                     <IconButton
-                      aria-label="Attach document (PDF, DOCX, TXT)"
+                      aria-label="Attach additional context (PDF, DOCX, TXT)"
                       onClick={() => fileInputRef.current?.click()}
                       disabled={isAgentRunning}
                       variant="ghost"
