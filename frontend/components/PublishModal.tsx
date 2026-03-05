@@ -67,6 +67,8 @@ function DirtyFileItem({
       borderRadius="md"
       align="center"
       transition="background 0.1s"
+      minW="0"
+      overflow="hidden"
     >
       <Box color={meta.color} flexShrink={0}>
         <FileIcon size={15} />
