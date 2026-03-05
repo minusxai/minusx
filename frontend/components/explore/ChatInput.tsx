@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, KeyboardEvent, useEffect } from 'react';
+import { useState, useRef, KeyboardEvent, useEffect } from 'react';
 import { Box, HStack, VStack, Textarea, IconButton, Icon, Grid, GridItem, Text } from '@chakra-ui/react';
-import { LuSendHorizontal, LuPaperclip, LuSettings2, LuSquare } from 'react-icons/lu';
+import { LuSendHorizontal, LuPaperclip, LuSettings2, LuSquare, LuX } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { selectCompanyName } from '@/store/authSlice';
 import { setSidebarPendingMessage, setSidebarDraft, selectSidebarDraft, setAskForConfirmation } from '@/store/uiSlice';
@@ -11,10 +11,12 @@ import DatabaseSelector from '@/components/DatabaseSelector';
 import { ContextSelector } from './ContextSelector';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { LexicalMentionEditor } from '@/components/chat/LexicalMentionEditor';
-import { DatabaseWithSchema } from '@/lib/types';
+import { DatabaseWithSchema, Attachment } from '@/lib/types';
+import { extractTextFromPDF } from '@/lib/utils/pdf-extract';
+import { toaster } from '@/components/ui/toaster';
 
 interface ChatInputProps {
-  onSend: (message: string) => void;
+  onSend: (message: string, attachments: Attachment[]) => void;
   onStop: () => void;
   isAgentRunning: boolean;
   disabled?: boolean;
@@ -55,20 +57,44 @@ export default function ChatInput({
 
   // Use Redux for draft text (persists across unmount)
   const [input, setInput] = useState('');
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   // Handle pending message from SearchBar — wait for connections/context to finish loading
   // before sending, so the message isn't discarded by the loading guard in handleSendMessage.
   useEffect(() => {
     if (pendingMessage && container === 'sidebar' && !connectionsLoading && !contextsLoading) {
-      onSend(pendingMessage);
+      onSend(pendingMessage, []);
       dispatch(setSidebarPendingMessage(null));
     }
   }, [pendingMessage, container, dispatch, onSend, connectionsLoading, contextsLoading]);
 
   const handleSend = () => {
     if (input.trim() && !disabled && !isAgentRunning && !connectionsLoading && !contextsLoading) {
-      onSend(input.trim());
+      onSend(input.trim(), attachments);
       setInput('');
+      setAttachments([]);
     }
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Reset input so re-selecting the same file triggers onChange
+    e.target.value = '';
+
+    try {
+      const { text, totalPages } = await extractTextFromPDF(file);
+      setAttachments(prev => [
+        ...prev,
+        { type: 'text', name: file.name, content: text, metadata: { pages: totalPages } },
+      ]);
+    } catch (err: any) {
+      toaster.create({ title: err.message || 'Failed to extract PDF text', type: 'error' });
+    }
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -108,6 +134,50 @@ export default function ChatInput({
                   />
                 </Box>
 
+                {/* Hidden file input for PDF attachment */}
+                <input
+                  type="file"
+                  accept=".pdf"
+                  ref={fileInputRef}
+                  style={{ display: 'none' }}
+                  onChange={handleFileSelect}
+                />
+
+                {/* Attachment chips */}
+                {attachments.length > 0 && (
+                  <HStack px={3} py={1} gap={2} flexWrap="wrap" borderTop="1px solid" borderColor="border.muted">
+                    {attachments.map((att, idx) => (
+                      <HStack
+                        key={idx}
+                        bg="bg.muted"
+                        borderRadius="md"
+                        px={2}
+                        py={1}
+                        gap={1}
+                        fontSize="xs"
+                        fontFamily="mono"
+                        color="fg.muted"
+                      >
+                        <Text truncate maxW="150px">{att.name}</Text>
+                        {att.metadata?.pages && (
+                          <Text color="fg.subtle">({att.metadata.pages}p)</Text>
+                        )}
+                        <IconButton
+                          aria-label="Remove attachment"
+                          onClick={() => removeAttachment(idx)}
+                          variant="ghost"
+                          size="2xs"
+                          minW="auto"
+                          h="auto"
+                          p={0}
+                        >
+                          <Icon as={LuX} boxSize={3} />
+                        </IconButton>
+                      </HStack>
+                    ))}
+                  </HStack>
+                )}
+
                 {/* Bottom Control Bar */}
                 <HStack
                 px={3}
@@ -146,36 +216,53 @@ export default function ChatInput({
                     )}
                 </HStack>
 
-                {isAgentRunning ? (
+                <HStack gap={1}>
                   <IconButton
-                    aria-label="Stop agent"
-                    onClick={onStop}
-                    bg="accent.danger"
-                    color="white"
-                    _hover={{ bg: 'accent.danger', opacity: 0.9 }}
+                    aria-label="Attach PDF"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isAgentRunning}
+                    variant="ghost"
                     size="sm"
-                    borderRadius="md"
-                    flexShrink={0}
-                    px={2}
-                  > Stop
-                    <Icon as={LuSquare} boxSize={3.5} fill="white"/>
-                  </IconButton>
-                ) : (
-                  <IconButton
-                    aria-label="Send message"
-                    onClick={handleSend}
-                    disabled={disabled || !input.trim() || connectionsLoading || contextsLoading}
-                    bg="accent.teal"
-                    color="white"
-                    _hover={{ bg: 'accent.teal', opacity: 0.9 }}
+                    color="fg.muted"
+                    _hover={{ color: 'accent.teal' }}
                     _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
-                    size="sm"
                     borderRadius="md"
                     flexShrink={0}
                   >
-                    <Icon as={LuSendHorizontal} boxSize={4} />
+                    <Icon as={LuPaperclip} boxSize={4} />
                   </IconButton>
-                )}
+
+                  {isAgentRunning ? (
+                    <IconButton
+                      aria-label="Stop agent"
+                      onClick={onStop}
+                      bg="accent.danger"
+                      color="white"
+                      _hover={{ bg: 'accent.danger', opacity: 0.9 }}
+                      size="sm"
+                      borderRadius="md"
+                      flexShrink={0}
+                      px={2}
+                    > Stop
+                      <Icon as={LuSquare} boxSize={3.5} fill="white"/>
+                    </IconButton>
+                  ) : (
+                    <IconButton
+                      aria-label="Send message"
+                      onClick={handleSend}
+                      disabled={disabled || !input.trim() || connectionsLoading || contextsLoading}
+                      bg="accent.teal"
+                      color="white"
+                      _hover={{ bg: 'accent.teal', opacity: 0.9 }}
+                      _disabled={{ opacity: 0.4, cursor: 'not-allowed' }}
+                      size="sm"
+                      borderRadius="md"
+                      flexShrink={0}
+                    >
+                      <Icon as={LuSendHorizontal} boxSize={4} />
+                    </IconButton>
+                  )}
+                </HStack>
                 </HStack>
             </VStack>
             </Box>

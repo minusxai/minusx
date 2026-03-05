@@ -135,6 +135,14 @@ export interface SlideData {
   arrows: Arrow[];
 }
 
+// Chat attachment types
+export type Attachment = {
+  type: 'text' | 'image';
+  name: string;
+  content: string;
+  metadata?: { pages?: number };
+};
+
 // Context.md types (database schema whitelisting)
 export interface WhitelistItem {
   name: string;              // table or schema name

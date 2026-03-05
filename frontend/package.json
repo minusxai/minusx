@@ -45,6 +45,7 @@
     "next-auth": "^5.0.0-beta.30",
     "node-sql-parser": "^5.4.0",
     "pako": "^2.1.0",
+    "pdfjs-dist": "^5.5.207",
     "perfect-arrows": "^0.3.7",
     "pg": "^8.17.1",
     "react": "^19.2.3",
