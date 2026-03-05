@@ -236,9 +236,9 @@ export function getDocumentationForUser(
   userId: number
 ): string | undefined {
   // Collect inherited docs (fullDocs) filtered by childPaths (already filtered by loader)
-  const inheritedDocStrings = (contextContent.fullDocs || []).map(doc =>
-    typeof doc === 'string' ? doc : doc.content
-  );
+  const inheritedDocStrings = (contextContent.fullDocs || [])
+    .filter(doc => typeof doc === 'string' || doc.draft !== true)
+    .map(doc => typeof doc === 'string' ? doc : doc.content);
 
   // Get user's published version and return its docs
   if (contextContent.versions && contextContent.versions.length > 0) {
@@ -247,9 +247,9 @@ export function getDocumentationForUser(
 
     if (publishedVersion && publishedVersion.docs) {
       // Handle DocEntry[] format (post-migration v11)
-      const ownDocStrings = publishedVersion.docs.map(doc =>
-        typeof doc === 'string' ? doc : doc.content
-      );
+      const ownDocStrings = publishedVersion.docs
+        .filter(doc => typeof doc === 'string' || doc.draft !== true)
+        .map(doc => typeof doc === 'string' ? doc : doc.content);
       const allDocStrings = [...inheritedDocStrings, ...ownDocStrings].filter(Boolean);
       return allDocStrings.length > 0 ? allDocStrings.join('\n\n---\n\n') : undefined;
     }

@@ -93,13 +93,13 @@ export function useContext(path: string, version?: number): ContextInfo {
             };
           }).filter(Boolean) as Array<{ databaseName: string; schemas: any[] }>;
 
-          // Combine inherited docs (fullDocs) + own docs from this version
-          const inheritedDocStrings = (contextContent.fullDocs || []).map(doc =>
-            typeof doc === 'string' ? doc : doc.content
-          );
-          const ownDocStrings = (effectiveVersionContent.docs || []).map(doc =>
-            typeof doc === 'string' ? doc : doc.content
-          );
+          // Combine inherited docs (fullDocs) + own docs from this version, excluding drafts
+          const inheritedDocStrings = (contextContent.fullDocs || [])
+            .filter(doc => typeof doc === 'string' || doc.draft !== true)
+            .map(doc => typeof doc === 'string' ? doc : doc.content);
+          const ownDocStrings = (effectiveVersionContent.docs || [])
+            .filter(doc => typeof doc === 'string' || doc.draft !== true)
+            .map(doc => typeof doc === 'string' ? doc : doc.content);
           const allDocStrings = [...inheritedDocStrings, ...ownDocStrings].filter(Boolean);
           const documentation = allDocStrings.length > 0 ? allDocStrings.join('\n\n---\n\n') : undefined;
 

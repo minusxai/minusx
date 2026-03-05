@@ -154,6 +154,7 @@ export interface WhitelistItem {
 export interface DocEntry {
   content: string;           // Markdown documentation content
   childPaths?: string[];     // Optional: which child paths inherit this doc
+  draft?: boolean;           // Optional: if true, excluded from agent-facing outputs
 }
 
 export interface DatabaseContext {

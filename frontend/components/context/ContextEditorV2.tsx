@@ -6,7 +6,7 @@
  * All changes go through onChange immediately
  */
 
-import { Box, VStack, Heading, HStack, Button, Text, SimpleGrid, Badge, Menu, Input, Dialog, Field, Portal, Collapsible, Icon } from '@chakra-ui/react';
+import { Box, VStack, Heading, HStack, Button, Text, SimpleGrid, Badge, Menu, Input, Dialog, Field, Portal, Collapsible, Icon, Switch } from '@chakra-ui/react';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { LuCircleAlert, LuCircleCheck, LuPlus, LuTrash2, LuChevronDown, LuGlobe, LuChevronRight } from 'react-icons/lu';
 import { ContextContent, DatabaseContext, WhitelistItem, ContextVersion, PublishedVersions, DocEntry } from '@/lib/types';
@@ -204,6 +204,16 @@ export default function ContextEditorV2({
   const handleRemoveDoc = (index: number) => {
     const currentDocs = content.docs || [];
     onChange({ docs: currentDocs.filter((_, i) => i !== index) });
+  };
+
+  const handleToggleDraft = (index: number) => {
+    const currentDocs = content.docs || [];
+    const newDocs = [...currentDocs];
+    newDocs[index] = {
+      ...newDocs[index],
+      draft: !newDocs[index].draft
+    };
+    onChange({ docs: newDocs });
   };
 
   const handleChildPathsChange = (index: number, childPaths: string[] | undefined) => {
@@ -718,11 +728,12 @@ export default function ContextEditorV2({
                 <Box
                   key={index}
                   border="1px solid"
-                  borderColor="border.default"
+                  borderColor={docEntry.draft ? 'border.muted' : 'border.default'}
                   borderRadius="md"
                   overflow="hidden"
+                  opacity={docEntry.draft ? 0.6 : 1}
                 >
-                  {/* Header with remove button */}
+                  {/* Header with draft toggle and remove button */}
                   <HStack
                     justify="space-between"
                     px={3}
@@ -734,14 +745,32 @@ export default function ContextEditorV2({
                     <Text fontSize="sm" fontWeight="600">
                       Documentation Entry {index + 1}
                     </Text>
-                    <Button
-                      size="xs"
-                      variant="ghost"
-                      colorPalette="red"
-                      onClick={() => handleRemoveDoc(index)}
-                    >
-                      <LuTrash2 />
-                    </Button>
+                    <HStack gap={3}>
+                      <HStack gap={1.5}>
+                        <Badge size="sm" colorPalette={docEntry.draft ? 'yellow' : 'green'} variant="subtle">
+                          {docEntry.draft ? 'Draft — hidden from agent' : 'Active — visible to agent'}
+                        </Badge>
+                        <Switch.Root
+                          size="sm"
+                          checked={!docEntry.draft}
+                          onCheckedChange={() => handleToggleDraft(index)}
+                          colorPalette="green"
+                        >
+                          <Switch.HiddenInput />
+                          <Switch.Control>
+                            <Switch.Thumb />
+                          </Switch.Control>
+                        </Switch.Root>
+                      </HStack>
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        colorPalette="red"
+                        onClick={() => handleRemoveDoc(index)}
+                      >
+                        <LuTrash2 />
+                      </Button>
+                    </HStack>
                   </HStack>
 
                   {/* childPaths selector */}
