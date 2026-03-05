@@ -10,7 +10,7 @@ import 'react-grid-layout/css/styles.css';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import JsonEditor from '../slides/JsonEditor';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectMergedContent, selectEphemeralParamValues, setEphemeral } from '@/store/filesSlice';
+import { selectMergedContent, selectEphemeralParamValues, selectIsDirty, setEphemeral } from '@/store/filesSlice';
 import { openFileModal, selectDashboardEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
@@ -85,6 +85,19 @@ export default function DashboardView({
 
   // Track current columns for responsive grid background
   const [currentCols, setCurrentCols] = useState(12);
+
+  // Force react-grid-layout to remount when file reverts from dirty → clean (discard/save).
+  // ResponsiveGridLayout maintains internal layout state that doesn't always sync
+  // with the `layouts` prop, so we force a remount via key change.
+  const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
+  const [gridVersion, setGridVersion] = useState(0);
+  const [prevIsDirty, setPrevIsDirty] = useState(isDirty);
+  if (prevIsDirty !== isDirty) {
+    setPrevIsDirty(isDirty);
+    if (prevIsDirty && !isDirty) {
+      setGridVersion(v => v + 1);
+    }
+  }
 
   // Read ephemeral parameter values from Redux
   const ephemeralParamValues = useAppSelector(state => selectEphemeralParamValues(state, fileId));
@@ -401,6 +414,7 @@ export default function DashboardView({
 
             {questionIds.length > 0 ? (
               <ResponsiveGridLayout
+                key={`grid-v${gridVersion}`}
                 className="layout"
                 layouts={layouts}
                 breakpoints={{ lg: 1024, md: 768, sm: 0 }}
