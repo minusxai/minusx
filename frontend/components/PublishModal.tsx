@@ -212,7 +212,7 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
     >
       <Portal>
         <Dialog.Backdrop />
-        <Dialog.Positioner display="flex" alignItems="center" justifyContent="center" p={4} position="fixed" inset={0} overflow="hidden">
+        <Dialog.Positioner>
           <Dialog.Content
             maxW="90vw"
             h="90vh"

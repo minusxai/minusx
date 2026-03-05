@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Box, VStack, HStack, Text, Icon, Dialog } from '@chakra-ui/react';
+import { Box, VStack, HStack, Text, Icon, Dialog, Portal } from '@chakra-ui/react';
 import { LuX, LuMove } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setActiveSidebarSection, selectDashboardEditMode } from '@/store/uiSlice';
@@ -240,6 +240,7 @@ export default function MobileRightSidebar({
           onOpenChange={(e) => !e.open && dispatch(setActiveSidebarSection(null))}
           placement="bottom"
         >
+          <Portal>
           <Dialog.Backdrop />
           <Dialog.Positioner>
           <Dialog.Content
@@ -386,6 +387,7 @@ export default function MobileRightSidebar({
             </Box>
           </Dialog.Content>
         </Dialog.Positioner>
+          </Portal>
       </Dialog.Root>
       </Box>
     </>
