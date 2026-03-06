@@ -99,6 +99,11 @@ export interface QueryResult {
   rows: Record<string, any>[];
 }
 
+export interface TruncatedQueryResult extends QueryResult {
+  totalRows: number;
+  truncated: boolean;
+}
+
 export interface Rectangle {
   id: string;
   x: number;
@@ -797,7 +802,7 @@ export interface DisplayProps {
 export interface AugmentedFile {
   fileState: FileState;        // The requested file (always defined when item exists in Redux)
   references: FileState[];     // Referenced files belonging to this file
-  queryResults: QueryResult[]; // Query results for this file and its references
+  queryResults: TruncatedQueryResult[]; // Query results for this file and its references
 }
 
 /**
