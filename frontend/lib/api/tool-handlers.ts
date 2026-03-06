@@ -14,6 +14,7 @@ import { UserInputException } from './user-input-exception';
 import { FilesAPI } from '../data/files';
 import { getRouter } from '@/lib/navigation/use-navigation';
 import { readFiles, editFileStr, getQueryResult, createVirtualFile, editFile as editFileOp, compressAugmentedFile, selectAugmentedFiles } from '@/lib/api/file-state';
+import { validateFileState } from '@/lib/validation/content-validators';
 import { canCreateFileType } from '@/lib/auth/access-rules.client';
 
 // ============================================================================
@@ -499,6 +500,17 @@ registerFrontendTool('CreateFile', async (args, _context) => {
   }
   if (content && Object.keys(content).length > 0) {
     await editFileOp({ fileId: virtualId, changes: { content } });
+  }
+
+  // Validate final merged content (template defaults + content override)
+  // Same validator as editFileStr — catches bad vizSettings, invalid types, etc.
+  const fileType = getStore().getState().files.files[virtualId]?.type;
+  const mergedContent = selectMergedContent(getStore().getState(), virtualId);
+  if (fileType && mergedContent) {
+    const validationError = validateFileState({ type: fileType, content: mergedContent });
+    if (validationError) {
+      return { success: false, error: `Invalid content for '${fileType}': ${validationError}` };
+    }
   }
 
   const [augmented] = await readFiles([virtualId], {});
