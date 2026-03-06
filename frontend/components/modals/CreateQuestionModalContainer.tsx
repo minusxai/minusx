@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, MutableRefObject } from 'react';
-import { Box, Button, Dialog, HStack, Input, Text, VStack } from '@chakra-ui/react';
+import { Box, Button, Dialog, HStack, Input, Text, VStack, Portal } from '@chakra-ui/react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile, clearFileChanges, createVirtualFile } from '@/lib/api/file-state';
@@ -264,7 +264,9 @@ export default function CreateQuestionModalContainer({
       <Dialog.Root
         open={showConfirmClose}
         onOpenChange={(e) => setShowConfirmClose(e.open)}
+        preventScroll={false}
       >
+        <Portal>
         <Dialog.Backdrop />
         <Dialog.Positioner>
           <Dialog.Content maxW="400px" p={6} borderRadius="lg" bg="bg.surface">
@@ -312,6 +314,7 @@ export default function CreateQuestionModalContainer({
             </Dialog.Footer>
           </Dialog.Content>
         </Dialog.Positioner>
+        </Portal>
       </Dialog.Root>
     </>
   );

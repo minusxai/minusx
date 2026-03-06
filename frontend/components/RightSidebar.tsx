@@ -182,7 +182,7 @@ export default function RightSidebar({
         const rect = sidebarRef.current.getBoundingClientRect();
         const newWidth = rect.right - e.clientX;
         // Min width: 280px, Max width: 400px
-        const clampedWidth = Math.min(Math.max(newWidth, 280), 600);
+        const clampedWidth = Math.min(Math.max(newWidth, 350), 600);
         dispatch(setRightSidebarWidth(clampedWidth));
       }
     };

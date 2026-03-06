@@ -139,7 +139,7 @@ class AnalystAgent(Agent):
             'native.user',
             app_state=app_state_str,
             goal=self.goal,
-            current_time=time.strftime("%Y-%m-%d %H:%M:%S"),
+            current_date=time.strftime("%Y-%m-%d"),
             attachments=attachments_str
         )
         return {"role": "user", "content": content}

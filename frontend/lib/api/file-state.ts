@@ -32,13 +32,15 @@ import { API } from '@/lib/api/declarations';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import type { RootState } from '@/store/store';
-import type { AugmentedFile, CompressedAugmentedFile, CompressedFileState, FileState, QueryResult, QuestionContent, QuestionParameter, FileType, DocumentContent, DbFile, BaseFileContent, QuestionReference } from '@/lib/types';
+import type { AugmentedFile, CompressedAugmentedFile, CompressedFileState, FileState, QueryResult, TruncatedQueryResult, QuestionContent, QuestionParameter, FileType, DocumentContent, DbFile, BaseFileContent, QuestionReference } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
 import type { AppState } from '@/lib/appState';
 import { validateFileState } from '@/lib/validation/content-validators';
 
 export { selectDirtyFiles } from '@/store/filesSlice';
+
+const LIMIT_ROWS = 50;
 
 /**
  * Extracts the initial inherited params for the root file being augmented.
@@ -121,8 +123,8 @@ function augmentWithParams(
   state: RootState,
   fileState: FileState,
   inheritedParams: Record<string, any>
-): Map<string, QueryResult> {
-  const result = new Map<string, QueryResult>();
+): Map<string, TruncatedQueryResult> {
+  const result = new Map<string, TruncatedQueryResult>();
 
   // Questions execute SQL — look up the cached result using effective params.
   // Dashboards do not execute their own query; only their references do.
@@ -133,8 +135,13 @@ function augmentWithParams(
       const qr = selectQueryResult(state, content.query, params, content.database_name);
       if (qr?.data) {
         const id = getQueryHash(content.query, params, content.database_name)
+        const totalRows = qr.data.rows?.length ?? 0;
+        const truncated = totalRows > LIMIT_ROWS;
         result.set(id, {
           ...(qr.data || {}),
+          rows: truncated ? qr.data.rows.slice(0, LIMIT_ROWS) : qr.data.rows,
+          totalRows,
+          truncated,
           id
         });
       }

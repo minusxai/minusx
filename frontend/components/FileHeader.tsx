@@ -14,7 +14,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { HStack, Text } from '@chakra-ui/react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectIsDirty, selectEffectiveName, selectMergedContent } from '@/store/filesSlice';
+import { selectIsDirty, selectEffectiveName, selectMergedContent, selectDirtyFiles } from '@/store/filesSlice';
 import {
   selectDashboardEditMode, setDashboardEditMode,
   selectFileEditMode, setFileEditMode,
@@ -24,8 +24,10 @@ import { editFile, publishFile, clearFileChanges } from '@/lib/api/file-state';
 import { isUserFacingError } from '@/lib/errors';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import { useRouter } from '@/lib/navigation/use-navigation';
+import { isSystemFileType, type FileType } from '@/lib/ui/file-metadata';
 import { DocumentContent } from '@/lib/types';
 import DocumentHeader from './DocumentHeader';
+import PublishModal from './PublishModal';
 
 interface FileHeaderProps {
   fileId: number;
@@ -61,6 +63,11 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
 
 
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
+  const isSystemFile = isSystemFileType(fileType as FileType);
+  const dirtyFiles = useAppSelector(selectDirtyFiles);
+  const anyDirtyFiles = dirtyFiles.length > 0;
+
   // Set initial edit mode for create mode (once on mount only)
   const initializedRef = useRef(false);
   useEffect(() => {
@@ -126,6 +133,8 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
           }
         }}
         onSave={handleSave}
+        onPublish={!isSystemFile ? () => setIsPublishModalOpen(true) : undefined}
+        anyDirtyFiles={anyDirtyFiles}
         questionId={fileType === 'question' ? fileId : undefined}
         viewMode={viewMode}
         onViewModeChange={(m) => dispatch(setFileViewMode({ fileId, mode: m }))}
@@ -149,6 +158,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
           </HStack>
         ) : undefined}
       />
+      <PublishModal isOpen={isPublishModalOpen} onClose={() => setIsPublishModalOpen(false)} />
     </>
   );
 }

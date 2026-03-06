@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Box, IconButton, Icon, HStack } from '@chakra-ui/react';
+import { Box, IconButton, Icon, HStack, Portal } from '@chakra-ui/react';
 import { LuSendHorizontal } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection } from '@/store/uiSlice';
@@ -78,6 +78,7 @@ export default function SearchBar({
       dispatch(setRightSidebarCollapsed(false));
 
       setInput('');
+      setIsFocused(false);
     }
   };
 
@@ -102,6 +103,20 @@ export default function SearchBar({
                 width={isFocused ? { base: '90%', md: '600px', lg: '700px' } : { base: '85%', md: '350px', lg: '350px' }}
                 transition="width 0.25s ease-in-out"
                 >
+                {/* Dimming overlay when search is focused */}
+                {isFocused && !inBottomBar && (
+                  <Portal>
+                    <Box
+                      position="fixed"
+                      top={0}
+                      left={0}
+                      width="100vw"
+                      height="100vh"
+                      bg="blackAlpha.600"
+                      zIndex={999}
+                    />
+                  </Portal>
+                )}
                 <HStack
                     position="relative"
                     border="1px solid"
@@ -109,6 +124,7 @@ export default function SearchBar({
                     borderRadius="3xl"
                     bg="bg.subtle"
                     pr={3}
+                    zIndex={isFocused ? 1000 : 'auto'}
                     _focusWithin={{
                     borderColor: 'accent.teal',
                     boxShadow: (inBottomBar ? 'none' : '0 0 0 1px var(--chakra-colors-accent-teal)')

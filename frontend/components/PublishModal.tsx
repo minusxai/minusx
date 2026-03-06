@@ -32,7 +32,11 @@ import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import FileView from '@/components/FileView';
 import { publishAll, publishFile, clearFileChanges } from '@/lib/api/file-state';
 import { setDashboardEditMode, setFileEditMode } from '@/store/uiSlice';
+import { selectFile, selectMergedContent, selectIsDirty } from '@/store/filesSlice';
 import type { FileState } from '@/store/filesSlice';
+import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
+import type { FileType } from '@/lib/ui/file-metadata';
+import { getStore } from '@/store/store';
 
 interface PublishModalProps {
   isOpen: boolean;
@@ -62,8 +66,8 @@ function DirtyFileItem({
       gap={2.5}
       cursor="pointer"
       onClick={onSelect}
-      bg={isSelected ? 'bg.subtle' : 'transparent'}
-      _hover={{ bg: isSelected ? 'bg.subtle' : 'bg.muted' }}
+      bg={isSelected ? 'bg.emphasized' : 'transparent'}
+      _hover={{ bg: isSelected ? 'bg.emphasized' : 'bg.muted' }}
       borderRadius="md"
       align="center"
       transition="background 0.1s"
@@ -85,6 +89,31 @@ function DirtyFileItem({
           {effectiveName || 'Untitled'}
         </Text>
       </VStack>
+    </HStack>
+  );
+}
+
+function SelectedFileName({ fileId }: { fileId: number }) {
+  const name = useAppSelector(state => selectEffectiveName(state, fileId));
+  const fileState = useAppSelector(state => selectFile(state, fileId));
+  const meta = fileState ? getFileTypeMetadata(fileState.type as any) : null;
+  const FileIcon = meta?.icon;
+  return (
+    <HStack gap={2} minW="0" flex="1">
+      {FileIcon && (
+        <Box color={meta?.color} flexShrink={0}>
+          <FileIcon size={15} />
+        </Box>
+      )}
+      <Text
+        fontSize="sm"
+        fontWeight="700"
+        fontFamily="mono"
+        truncate
+        color="fg.default"
+      >
+        {name || 'Untitled'}
+      </Text>
     </HStack>
   );
 }
@@ -131,6 +160,22 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
     const file = dirtyFiles.find(f => f.id === selectedFileId);
     setIsPublishingSingle(true);
     try {
+      // Auto-publish virtual (negative-ID) dependencies first
+      const state = getStore().getState();
+      const mergedContent = selectMergedContent(state, selectedFileId);
+      const fileState = selectFile(state, selectedFileId);
+      if (mergedContent && fileState) {
+        const refIds = extractReferencesFromContent(mergedContent as any, fileState.type as FileType);
+        const virtualRefIds = refIds.filter(id => id < 0);
+        for (const depId of virtualRefIds) {
+          if (selectIsDirty(state, depId)) {
+            const depFile = selectFile(state, depId);
+            await publishFile({ fileId: depId });
+            if (depFile) exitEditMode(depId, depFile.type);
+          }
+        }
+      }
+
       await publishFile({ fileId: selectedFileId });
       exitEditMode(selectedFileId, file?.type);
     } finally {
@@ -167,7 +212,7 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
     >
       <Portal>
         <Dialog.Backdrop />
-        <Dialog.Positioner display="flex" alignItems="center" justifyContent="center" p={4} position="fixed" inset={0} overflow="hidden">
+        <Dialog.Positioner>
           <Dialog.Content
             maxW="90vw"
             h="90vh"
@@ -180,35 +225,50 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
             flexDirection="column"
           >
             {/* Header */}
-            <Dialog.Header
+            <Box
               px={5}
               py={3.5}
               borderBottom="1px solid"
               borderColor="border.default"
               flexShrink={0}
             >
-              <HStack justify="space-between" align="center">
-                <HStack gap={2.5} align="center">
-                  <LuUpload size={18} />
-                  <Dialog.Title fontWeight="700" fontSize="lg" fontFamily="mono">
+              <HStack justify="space-between" align="center" width="100%">
+                <HStack gap={2.5} align="center" minW="0">
+                  <LuUpload size={18} style={{ flexShrink: 0 }} />
+                  <Text fontWeight="700" fontSize="lg" fontFamily="mono" whiteSpace="nowrap">
                     Review Unsaved Changes
-                  </Dialog.Title>
+                  </Text>
                   <Badge
                     size="sm"
                     colorPalette="orange"
                     variant="subtle"
                     fontFamily="mono"
+                    flexShrink={0}
                   >
                     {dirtyFiles.length} {dirtyFiles.length === 1 ? 'file' : 'files'}
                   </Badge>
                 </HStack>
-                <Dialog.CloseTrigger asChild>
+                <HStack gap={2} flexShrink={0}>
+                  <Button
+                    size="sm"
+                    colorPalette="teal"
+                    loading={isPublishing}
+                    onClick={handlePublishAll}
+                  >
+                    <LuUpload />
+                    Save & Publish All
+                  </Button>
                   <Button variant="ghost" size="xs" onClick={onClose}>
                     Close
                   </Button>
-                </Dialog.CloseTrigger>
+                </HStack>
               </HStack>
-            </Dialog.Header>
+              {publishError && (
+                <Text fontSize="xs" color="fg.error" mt={1}>
+                  {publishError}
+                </Text>
+              )}
+            </Box>
 
             {/* Body: left list + right preview */}
             <Box flex="1" display="flex" overflow="hidden">
@@ -258,25 +318,29 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
                       borderColor="border.default"
                       gap={2}
                       flexShrink={0}
-                      justify="flex-end"
+                      justify="space-between"
                     >
-                      <Button
-                        size="xs"
-                        colorPalette="teal"
-                        loading={isPublishingSingle}
-                        onClick={handlePublishSelected}
-                      >
-                        <LuUpload />
-                        Publish
-                      </Button>
-                      <Button
-                        size="xs"
-                        variant="ghost"
-                        onClick={handleDiscardSelected}
-                      >
-                        <LuUndo2 />
-                        Discard
-                      </Button>
+                      <SelectedFileName fileId={selectedFileId} />
+                      <HStack gap={2} flexShrink={0}>
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          colorPalette="teal"
+                          loading={isPublishingSingle}
+                          onClick={handlePublishSelected}
+                        >
+                          <LuUpload />
+                          Save & Publish File
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          onClick={handleDiscardSelected}
+                        >
+                          <LuUndo2 />
+                          Discard
+                        </Button>
+                      </HStack>
                     </HStack>
                     <Box flex="1" minH="0" display="flex" flexDirection="column" overflowY="auto">
                       <FileView key={selectedFileId} fileId={selectedFileId} mode="preview" hideHeader />
@@ -296,35 +360,6 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
               </Box>
             </Box>
 
-            {/* Footer */}
-            <Box
-              px={5}
-              py={3}
-              borderTop="1px solid"
-              borderColor="border.default"
-              flexShrink={0}
-            >
-              <HStack justify="space-between" align="center">
-                {publishError ? (
-                  <Text fontSize="xs" color="fg.error">
-                    {publishError}
-                  </Text>
-                ) : (
-                  <Text fontSize="xs" color="fg.muted">
-                    Publish or discard individual files, or publish all at once.
-                  </Text>
-                )}
-                <Button
-                  size="sm"
-                  colorPalette="teal"
-                  loading={isPublishing}
-                  onClick={handlePublishAll}
-                >
-                  <LuUpload />
-                  Publish All
-                </Button>
-              </HStack>
-            </Box>
           </Dialog.Content>
         </Dialog.Positioner>
       </Portal>
