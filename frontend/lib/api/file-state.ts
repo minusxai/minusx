@@ -32,7 +32,7 @@ import { API } from '@/lib/api/declarations';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import type { RootState } from '@/store/store';
-import type { AugmentedFile, CompressedAugmentedFile, CompressedFileState, FileState, QueryResult, TruncatedQueryResult, QuestionContent, QuestionParameter, FileType, DocumentContent, DbFile, BaseFileContent, QuestionReference } from '@/lib/types';
+import type { AugmentedFile, CompressedAugmentedFile, CompressedFileState, CompressedQueryResult, FileState, QueryResult, QuestionContent, QuestionParameter, FileType, DocumentContent, DbFile, BaseFileContent, QuestionReference } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
 import type { AppState } from '@/lib/appState';
@@ -40,7 +40,7 @@ import { validateFileState } from '@/lib/validation/content-validators';
 
 export { selectDirtyFiles } from '@/store/filesSlice';
 
-const LIMIT_ROWS = 50;
+const LIMIT_CHARS = 50_000;
 
 /**
  * Extracts the initial inherited params for the root file being augmented.
@@ -123,8 +123,8 @@ function augmentWithParams(
   state: RootState,
   fileState: FileState,
   inheritedParams: Record<string, any>
-): Map<string, TruncatedQueryResult> {
-  const result = new Map<string, TruncatedQueryResult>();
+): Map<string, QueryResult> {
+  const result = new Map<string, QueryResult>();
 
   // Questions execute SQL — look up the cached result using effective params.
   // Dashboards do not execute their own query; only their references do.
@@ -134,16 +134,8 @@ function augmentWithParams(
       const { dict: params } = resolveEffectiveParams(content.parameters || [], inheritedParams);
       const qr = selectQueryResult(state, content.query, params, content.database_name);
       if (qr?.data) {
-        const id = getQueryHash(content.query, params, content.database_name)
-        const totalRows = qr.data.rows?.length ?? 0;
-        const truncated = totalRows > LIMIT_ROWS;
-        result.set(id, {
-          ...(qr.data || {}),
-          rows: truncated ? qr.data.rows.slice(0, LIMIT_ROWS) : qr.data.rows,
-          totalRows,
-          truncated,
-          id
-        });
+        const id = getQueryHash(content.query, params, content.database_name);
+        result.set(id, { ...(qr.data || {}), id });
       }
     }
   }
@@ -280,6 +272,24 @@ export function selectAugmentedFiles(state: RootState, fileIds: number[]): Augme
  * - runtimeParameterValues = ephemeralChanges.parameterValues (clearly labeled, never saved)
  * - loading/saving/ephemeralChanges.lastExecuted are dropped (noise for the model)
  */
+export function compressQueryResult(qr: QueryResult, maxChars = LIMIT_CHARS): CompressedQueryResult {
+  const { columns, types, rows } = qr;
+  const totalRows = rows.length;
+
+  const header = `| ${columns.join(' | ')} |`;
+  const sep    = `| ${columns.map(() => '---').join(' | ')} |`;
+  let md = `${header}\n${sep}\n`;
+
+  let truncated = false;
+  for (const row of rows) {
+    const line = `| ${columns.map(c => String(row[c] ?? '')).join(' | ')} |\n`;
+    if (md.length + line.length > maxChars) { truncated = true; break; }
+    md += line;
+  }
+
+  return { columns, types, data: md, totalRows, truncated, id: qr.id };
+}
+
 export function compressAugmentedFile(augmented: AugmentedFile): CompressedAugmentedFile {
   const compressFileState = (fs: FileState): CompressedFileState => {
     const mergedContent = { ...(fs.content || {}), ...(fs.persistableChanges || {}) };
@@ -303,7 +313,7 @@ export function compressAugmentedFile(augmented: AugmentedFile): CompressedAugme
   return {
     fileState: compressFileState(augmented.fileState),
     references: augmented.references.map(compressFileState),
-    queryResults: augmented.queryResults,
+    queryResults: augmented.queryResults.map(compressQueryResult),
   };
 }
 

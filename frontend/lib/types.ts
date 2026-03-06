@@ -97,11 +97,16 @@ export interface QueryResult {
   columns: string[];
   types: string[];
   rows: Record<string, any>[];
+  id?: string;  // query hash for delta deduplication
 }
 
-export interface TruncatedQueryResult extends QueryResult {
-  totalRows: number;
-  truncated: boolean;
+export interface CompressedQueryResult {
+  columns: string[];
+  types: string[];
+  data: string;        // markdown table (possibly character-truncated)
+  totalRows: number;   // original full row count
+  truncated: boolean;  // true if data was cut short by LIMIT_CHARS
+  id?: string;         // query hash (from QueryResult.id)
 }
 
 export interface Rectangle {
@@ -836,7 +841,7 @@ export interface DisplayProps {
 export interface AugmentedFile {
   fileState: FileState;        // The requested file (always defined when item exists in Redux)
   references: FileState[];     // Referenced files belonging to this file
-  queryResults: TruncatedQueryResult[]; // Query results for this file and its references
+  queryResults: QueryResult[]; // Query results for this file and its references (raw, untruncated)
 }
 
 /**
@@ -857,7 +862,7 @@ export interface CompressedFileState {
 export interface CompressedAugmentedFile {
   fileState: CompressedFileState;
   references: CompressedFileState[];
-  queryResults: QueryResult[];
+  queryResults: CompressedQueryResult[];
 }
 
 /**
