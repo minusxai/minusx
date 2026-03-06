@@ -640,10 +640,21 @@ export interface ToolCall {
   _parent_unique_id?: string;  // For child tools spawned by parent (not in OpenAI spec)
 }
 
+// Tool call details — structured metadata for UI rendering (not sent to LLM)
+export interface ToolCallDetails {
+  success: boolean;
+  error?: string;
+}
+
+export interface EditFileDetails extends ToolCallDetails {
+  diff: string;
+}
+
 export interface ToolMessage {
   role: 'tool';
   tool_call_id: string;
   content: string | any;    // Can be string or object
+  details?: ToolCallDetails;  // Structured metadata for UI rendering (not sent to LLM)
 }
 
 export type CompletedToolCall = [ToolCall, ToolMessage];

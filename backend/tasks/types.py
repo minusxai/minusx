@@ -1,7 +1,7 @@
 """Custom OpenAI types for flexible tool calling and message handling."""
 
-from typing import List, Literal, Required, Tuple, TypeAlias, Union
-from typing_extensions import TypedDict
+from typing import List, Literal, Optional, Required, Tuple, TypeAlias, Union
+from typing_extensions import NotRequired, TypedDict
 from openai.types.chat import (
     ChatCompletionAssistantMessageParam,
     ChatCompletionMessageToolCallParam,
@@ -54,6 +54,9 @@ class ChatCompletionToolMessageParamMX(ChatCompletionToolMessageParam):
     tool_call_id: Required[str]
     """Tool call that this message is responding to."""
 
+    details: NotRequired[Optional[dict]]
+    """Structured metadata for UI rendering (not sent to LLM)."""
+
 
 # Type alias for completed tool calls (tool call + response pairs)
 CompletedToolCallsMX = List[Tuple[ChatCompletionMessageToolCallParamMX, ChatCompletionToolMessageParamMX]]
@@ -77,6 +80,9 @@ class ChatCompletionToolMessageParamMXWithRunId(TypedDict, total=False):
 
     created_at: Required[str]
     """ISO timestamp when the tool call was created."""
+
+    details: NotRequired[Optional[dict]]
+    """Structured metadata for UI rendering (not sent to LLM)."""
 
 # Type alias for completed tool calls with run_id
 CompletedToolCallsMXWithRunId = List[ChatCompletionToolMessageParamMXWithRunId]

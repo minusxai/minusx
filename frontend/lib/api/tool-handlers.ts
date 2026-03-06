@@ -5,7 +5,7 @@
  * Used for tools that require user interaction or client-specific capabilities.
  */
 
-import { ToolCall, ToolMessage, DatabaseWithSchema, DocumentContent, QuestionContent } from '@/lib/types';
+import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, DatabaseWithSchema, DocumentContent, QuestionContent } from '@/lib/types';
 import { setEphemeral, selectMergedContent, selectEphemeralParamValues, selectDirtyFiles, type FileId } from '@/store/filesSlice';
 import type { AppDispatch, RootState } from '@/store/store';
 import { getStore } from '@/store/store';
@@ -33,15 +33,25 @@ export interface FrontendToolContext {
 }
 
 /**
+ * Structured result returned by every frontend tool handler.
+ * `content` is identical to the old flat return — LLM sees this.
+ * `details` is structured metadata for UI rendering — not sent to LLM.
+ */
+export interface ToolHandlerResult<TDetails extends ToolCallDetails = ToolCallDetails> {
+  content: string | object;
+  details: TDetails;
+}
+
+/**
  * Frontend tool handler signature
  * @param args - Destructured tool arguments
  * @param context - Bundled frontend dependencies
- * @returns Tool result content (string or object)
+ * @returns ToolHandlerResult with content (for LLM) and details (for UI)
  */
 export type FrontendToolHandler = (
   args: Record<string, any>,
   context: FrontendToolContext
-) => Promise<string | object>;
+) => Promise<ToolHandlerResult>;
 
 /**
  * Global frontend tool registry
@@ -99,12 +109,13 @@ export async function executeToolCall(
     userInputs  // Include in context
   };
 
-  const content = await handler(toolCall.function.arguments || {}, context);
+  const result = await handler(toolCall.function.arguments || {}, context);
 
   return {
     role: 'tool',
     tool_call_id: toolCall.id,
-    content: typeof content === 'string' ? content : JSON.stringify(content)
+    content: typeof result.content === 'string' ? result.content : JSON.stringify(result.content),
+    details: result.details
   };
 }
 
@@ -116,11 +127,11 @@ export async function executeToolCall(
  * UserInputFrontend / UserInputTool - Mock tool for tests and future client-side execution
  */
 registerFrontendTool('UserInputFrontend', async () => {
-  return 'User provided input';
+  return { content: 'User provided input', details: { success: true } };
 });
 
 registerFrontendTool('UserInputTool', async () => {
-  return 'User provided input';
+  return { content: 'User provided input', details: { success: true } };
 });
 
 /**
@@ -162,10 +173,8 @@ registerFrontendTool('Navigate', async (args, context) => {
 
     if (userConfirmed === false) {
       // User cancelled
-      return {
-        success: false,
-        message: 'Navigation cancelled by user'
-      };
+      const msg = 'Navigation cancelled by user';
+      return { content: { success: false, message: msg }, details: { success: false, error: msg } };
     }
 
     // User confirmed - continue with navigation
@@ -173,19 +182,15 @@ registerFrontendTool('Navigate', async (args, context) => {
 
   const router = getRouter();
   if (!router) {
-    return {
-      success: false,
-      message: 'Router not available'
-    };
+    const msg = 'Router not available';
+    return { content: { success: false, message: msg }, details: { success: false, error: msg } };
   }
 
   // Navigate to existing file
   if (file_id !== undefined) {
     if (isNaN(parseInt(file_id))) {
-      return {
-        success: false,
-        message: `Invalid file_id: ${file_id}. If you do not want to provide it, don't pass it at all.`
-      }
+      const msg = `Invalid file_id: ${file_id}. If you do not want to provide it, don't pass it at all.`;
+      return { content: { success: false, message: msg }, details: { success: false, error: msg } };
     }
 
     router.push(`/f/${file_id}`);
@@ -197,10 +202,8 @@ registerFrontendTool('Navigate', async (args, context) => {
     }
     const debugMsg = newFileType !== undefined ? `;newFileType=${newFileType} is ignored since file_id provided` : ''
     const debugMsg2 = path !== undefined ? `;path=${path} is ignored since file_id provided` : ''
-    return {
-      success: true,
-      message: `Navigated to file ${file_id}${debugMsg}${debugMsg2}`
-    };
+    const msg = `Navigated to file ${file_id}${debugMsg}${debugMsg2}`;
+    return { content: { success: true, message: msg }, details: { success: true } };
   }
 
   // Navigate to new file creation page
@@ -209,10 +212,8 @@ registerFrontendTool('Navigate', async (args, context) => {
     const canCreate = canCreateFileType(newFileType);
 
     if (!canCreate) {
-      return {
-        success: false,
-        message: `You don't have permission to create ${newFileType} files`
-      };
+      const msg = `You don't have permission to create ${newFileType} files`;
+      return { content: { success: false, message: msg }, details: { success: false, error: msg } };
     }
 
     const virtualFileId = -Date.now();
@@ -226,12 +227,10 @@ registerFrontendTool('Navigate', async (args, context) => {
     const url = `/new/${newFileType}?${params.toString()}`;
 
     router.push(url);
-    return {
-      success: true,
-      message: path
-        ? `Navigating to create new ${newFileType} in ${path}, with file id ${virtualFileId}`
-        : `Navigating to create new ${newFileType} with file id ${virtualFileId}`,
-    };
+    const msg = path
+      ? `Navigating to create new ${newFileType} in ${path}, with file id ${virtualFileId}`
+      : `Navigating to create new ${newFileType} with file id ${virtualFileId}`;
+    return { content: { success: true, message: msg }, details: { success: true } };
   }
 
   // Navigate to folder
@@ -239,16 +238,12 @@ registerFrontendTool('Navigate', async (args, context) => {
     // Remove leading slash if present for the route
     const cleanPath = path.startsWith('/') ? path.slice(1) : path;
     router.push(`/p/${cleanPath}`);
-    return {
-      success: true,
-      message: `Navigated to ${path}`
-    };
+    const msg = `Navigated to ${path}`;
+    return { content: { success: true, message: msg }, details: { success: true } };
   }
 
-  return {
-    success: false,
-    message: 'Must provide file_id, path, or newFileType'
-  };
+  const msg = 'Must provide file_id, path, or newFileType';
+  return { content: { success: false, message: msg }, details: { success: false, error: msg } };
 });
 
 // Operation handlers
@@ -295,12 +290,8 @@ registerFrontendTool('PresentFinalAnswerFrontend', async (args) => {
     throw new Error('answer is required and must be a string');
   }
 
-  // Return success with the answer
-  // The parent PresentFinalAnswer tool will display this
-  return {
-    success: true,
-    answer: answer
-  };
+  const content = { success: true, answer };
+  return { content, details: { success: true } };
 });
 
 /**
@@ -329,25 +320,28 @@ registerFrontendTool('ClarifyFrontend', async (args, context) => {
 
   // Handle cancellation
   if (userResponse?.cancelled) {
-    return { success: false, message: 'User cancelled the clarification request' };
+    const content = { success: false, message: 'User cancelled the clarification request' };
+    return { content, details: { success: false, error: content.message } };
   }
 
   // Handle "Figure it out" option
   if (userResponse?.figureItOut) {
-    return {
+    const content = {
       success: true,
       message: 'User chose: Figure it out (agent should decide based on context)',
       selection: { label: 'Figure it out', figureItOut: true }
     };
+    return { content, details: { success: true } };
   }
 
   // Handle "Other" option with custom text
   if (userResponse?.other) {
-    return {
+    const content = {
       success: true,
       message: `User provided custom response: ${userResponse.text}`,
       selection: { label: 'Other', other: true, text: userResponse.text }
     };
+    return { content, details: { success: true } };
   }
 
   // Format response message for regular selections
@@ -358,11 +352,12 @@ registerFrontendTool('ClarifyFrontend', async (args, context) => {
     return selection?.label || selection;
   };
 
-  return {
+  const content = {
     success: true,
     message: `User selected: ${formatSelection(userResponse)}`,
     selection: userResponse
   };
+  return { content, details: { success: true } };
 });
 
 // ============================================================================
@@ -378,11 +373,8 @@ registerFrontendTool('ReadFiles', async (args, _context) => {
   const { fileIds } = args;
 
   const result = await readFiles(fileIds, {});
-
-  return {
-    success: true,
-    files: result.map(compressAugmentedFile),
-  };
+  const content = { success: true, files: result.map(compressAugmentedFile) };
+  return { content, details: { success: true } };
 });
 
 /**
@@ -409,7 +401,8 @@ registerFrontendTool('EditFile', async (args, _context) => {
   // Edit (stages changes in Redux as draft)
   const result = await editFileStr({ fileId, oldMatch, newMatch });
   if (!result.success) {
-    return { success: false, error: result.error || 'Edit failed' };
+    const err = result.error || 'Edit failed';
+    return { content: { success: false, error: err }, details: { success: false, error: err } };
   }
 
   // Auto-execute query for questions (agent sees results immediately)
@@ -470,13 +463,14 @@ registerFrontendTool('EditFile', async (args, _context) => {
     return qr;
   });
 
-  return {
+  const diff = result.diff ?? '';
+  const content = {
     success: true,
-    diff: result.diff,
     fileState: compressed.fileState,
     references: deltaReferences,
     queryResults: deltaQueryResults,
   };
+  return { content, details: { success: true, diff } as EditFileDetails };
 });
 
 /**
@@ -509,19 +503,19 @@ registerFrontendTool('CreateFile', async (args, _context) => {
   if (fileType && mergedContent) {
     const validationError = validateFileState({ type: fileType, content: mergedContent });
     if (validationError) {
-      return { success: false, error: `Invalid content for '${fileType}': ${validationError}` };
+      const err = `Invalid content for '${fileType}': ${validationError}`;
+      return { content: { success: false, error: err }, details: { success: false, error: err } };
     }
   }
 
   const [augmented] = await readFiles([virtualId], {});
   if (!augmented) {
-    return { success: false, error: `Failed to read created file (virtualId: ${virtualId})` };
+    const err = `Failed to read created file (virtualId: ${virtualId})`;
+    return { content: { success: false, error: err }, details: { success: false, error: err } };
   }
 
-  return {
-    success: true,
-    state: compressAugmentedFile(augmented),
-  };
+  const result = { success: true, state: compressAugmentedFile(augmented) };
+  return { content: result, details: { success: true } };
 });
 
 
@@ -539,7 +533,7 @@ registerFrontendTool('PublishAll', async (_args, context) => {
     const dirtyFiles = selectDirtyFiles(reduxState);
 
     if (dirtyFiles.length === 0) {
-      return { success: true, message: 'No unsaved changes' };
+      return { content: { success: true, message: 'No unsaved changes' }, details: { success: true } };
     }
 
     throw new UserInputException({
@@ -553,17 +547,13 @@ registerFrontendTool('PublishAll', async (_args, context) => {
   // Do NOT re-read dirtyFiles here: publishAll() already cleared them in Redux,
   // so re-reading would incorrectly return 'No unsaved changes'.
   if (userResponse.cancelled) {
-    return {
-      success: false,
-      message: `Publish cancelled. ${userResponse.remaining} file${userResponse.remaining === 1 ? '' : 's'} still have unsaved changes.`,
-    };
+    const msg = `Publish cancelled. ${userResponse.remaining} file${userResponse.remaining === 1 ? '' : 's'} still have unsaved changes.`;
+    return { content: { success: false, message: msg }, details: { success: false, error: msg } };
   }
 
   const fileCount = userInputs?.[0]?.props?.fileCount ?? 0;
-  return {
-    success: true,
-    message: `Published ${fileCount} file${fileCount === 1 ? '' : 's'} successfully.`,
-  };
+  const msg = `Published ${fileCount} file${fileCount === 1 ? '' : 's'} successfully.`;
+  return { content: { success: true, message: msg }, details: { success: true } };
 });
 
 /**
@@ -575,10 +565,8 @@ registerFrontendTool('SetRuntimeValues', async (args, context) => {
   const { dispatch, state } = context;
 
   if (!dispatch || fileId === undefined) {
-    return {
-      success: false,
-      message: 'Missing dispatch or fileId'
-    };
+    const msg = 'Missing dispatch or fileId';
+    return { content: { success: false, message: msg }, details: { success: false, error: msg } };
   }
 
   // Get merged content to merge with existing parameter values
@@ -586,10 +574,8 @@ registerFrontendTool('SetRuntimeValues', async (args, context) => {
   const mergedContent = selectMergedContent(reduxState, fileId);
 
   if (!mergedContent) {
-    return {
-      success: false,
-      error: `File content not available. FileId: ${fileId}`
-    };
+    const err = `File content not available. FileId: ${fileId}`;
+    return { content: { success: false, error: err }, details: { success: false, error: err } };
   }
 
   // Reuse existing helper to normalize parameter_values format
@@ -621,9 +607,6 @@ registerFrontendTool('SetRuntimeValues', async (args, context) => {
 
   const paramEntries = Object.entries(paramValues);
   const paramSummary = paramEntries.map(([k, v]) => `${k}=${v}`).join(', ');
-
-  return {
-    success: true,
-    message: `Set ${paramEntries.length} parameter value(s): ${paramSummary}`
-  };
+  const msg = `Set ${paramEntries.length} parameter value(s): ${paramSummary}`;
+  return { content: { success: true, message: msg }, details: { success: true } };
 });

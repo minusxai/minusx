@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { HStack, VStack, Text, Icon, GridItem, Box } from '@chakra-ui/react';
 import { LuCheck, LuX, LuPencilLine, LuChevronDown, LuChevronRight } from 'react-icons/lu';
-import { DisplayProps } from '@/lib/types';
+import { DisplayProps, EditFileDetails } from '@/lib/types';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import type { FileType } from '@/lib/ui/file-metadata';
 import Link from 'next/link';
@@ -39,17 +39,29 @@ export default function EditFileDisplay({ toolCallTuple, showThinking }: Display
     };
   });
 
-  // Parse result
-  let result: any;
-  try {
-    result = typeof toolMessage.content === 'string'
-      ? JSON.parse(toolMessage.content)
-      : toolMessage.content;
-  } catch {
-    result = { success: false };
-  }
+  // Use structured details when available (new); fall back to parsing content (old conversations)
+  let success: boolean;
+  let error: string | undefined;
+  let diff: string | undefined;
 
-  const { success, error, diff } = result;
+  if (toolMessage.details) {
+    const details = toolMessage.details as EditFileDetails;
+    success = details.success;
+    error = details.error;
+    diff = details.diff;
+  } else {
+    let result: any;
+    try {
+      result = typeof toolMessage.content === 'string'
+        ? JSON.parse(toolMessage.content)
+        : toolMessage.content;
+    } catch {
+      result = { success: false };
+    }
+    success = result.success;
+    error = result.error;
+    diff = result.diff;
+  }
 
   const color = 'accent.secondary';
 

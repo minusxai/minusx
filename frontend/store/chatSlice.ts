@@ -18,6 +18,7 @@ interface ToolMessage {
   tool_call_id: string;
   content: string;
   created_at: string;
+  details?: Record<string, any>;
 }
 
 export type UserMessage = {
@@ -33,6 +34,7 @@ export type CompletedToolCall = {
   run_id: string;
   function: { name: string; arguments: string };
   created_at: string;
+  details?: Record<string, any>;
 };
 
 export type DebugMessage = MessageDebugInfo & {
