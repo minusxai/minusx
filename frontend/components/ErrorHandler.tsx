@@ -2,6 +2,9 @@
 
 import { useEffect } from 'react';
 import { showAdminToast } from '@/lib/utils/toast-helpers';
+import { isHydrationError } from '@/lib/utils/error-utils';
+import { getStore } from '@/store/store';
+import { selectShowAllErrorToasts } from '@/store/uiSlice';
 
 /**
  * Global error handler that catches browser-level errors that escape React error boundaries
@@ -9,6 +12,7 @@ import { showAdminToast } from '@/lib/utils/toast-helpers';
  * - Unhandled promise rejections (window.unhandledrejection)
  *
  * Toast notifications are only shown to admin users.
+ * Hydration errors are suppressed when the "Show all error toasts" setting is OFF.
  */
 export function GlobalErrorHandler() {
   useEffect(() => {
@@ -16,11 +20,12 @@ export function GlobalErrorHandler() {
       // ResizeObserver loop errors are benign (browser fires them during layout shifts)
       if (event.message?.includes('ResizeObserver')) return;
 
-      // React 19 hydration errors are recoverable — React automatically re-renders the
-      // affected tree on the client. These are often caused by browser extensions injecting
-      // attributes (e.g. bis_skin_checked) into the DOM and are not actionable code bugs.
       const msg = event.error?.message || event.message || '';
-      if (msg.includes('Hydration failed') || msg.includes('hydrating')) return;
+
+      // React hydration errors are recoverable — React automatically re-renders on the client.
+      // Suppress them unless the admin has opted into seeing all error toasts.
+      const showAll = selectShowAllErrorToasts(getStore().getState());
+      if (!showAll && isHydrationError(msg)) return;
 
       const errorDetail = event.error
         ? (event.error instanceof Error ? event.error.stack || event.error.message : String(event.error))
@@ -37,6 +42,12 @@ export function GlobalErrorHandler() {
     };
 
     const handleRejection = (event: PromiseRejectionEvent) => {
+      const msg = event.reason instanceof Error ? event.reason.message : String(event.reason ?? '');
+
+      // Suppress hydration-related rejections unless the admin opted in
+      const showAll = selectShowAllErrorToasts(getStore().getState());
+      if (!showAll && isHydrationError(msg)) return;
+
       console.error('Unhandled promise rejection:', event.reason);
 
       // Show toast notification (only to admins)

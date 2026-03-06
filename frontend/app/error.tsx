@@ -2,6 +2,9 @@
 
 import { useEffect } from 'react';
 import { showAdminToast } from '@/lib/utils/toast-helpers';
+import { isHydrationError } from '@/lib/utils/error-utils';
+import { getStore } from '@/store/store';
+import { selectShowAllErrorToasts } from '@/store/uiSlice';
 import { Box, Button, Text, VStack } from '@chakra-ui/react';
 
 export default function Error({
@@ -16,6 +19,10 @@ export default function Error({
   useEffect(() => {
     // Log error to console for debugging
     console.error('Page error:', error);
+
+    // Suppress hydration errors unless admin has opted into seeing all error toasts
+    const showAll = selectShowAllErrorToasts(getStore().getState());
+    if (!showAll && isHydrationError(error.message)) return;
 
     // Show toast notification (only to admins)
     showAdminToast({

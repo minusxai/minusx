@@ -5,7 +5,7 @@ import { Box, VStack, Text, Flex, Switch, Button, Heading, Container, Tabs } fro
 import { LuRefreshCw } from 'react-icons/lu';
 import { ColorModeButton } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { setAskForConfirmation, setShowDebug, setShowJson } from '@/store/uiSlice';
+import { setAskForConfirmation, setShowDebug, setShowJson, setShowAllErrorToasts } from '@/store/uiSlice';
 import RecordingControl from '@/components/RecordingControl';
 import DataManagementSection from '@/components/DataManagementSection';
 import { toaster } from '@/components/ui/toaster';
@@ -75,6 +75,7 @@ export default function SettingsPage() {
   const askForConfirmation = useAppSelector((state) => state.ui.askForConfirmation);
   const showDebug = useAppSelector((state) => state.ui.showDebug);
   const showJson = useAppSelector((state) => state.ui.showJson);
+  const showAllErrorToasts = useAppSelector((state) => state.ui.showAllErrorToasts);
   const user = useAppSelector((state) => state.auth.user);
   const [isClearing, setIsClearing] = useState(false);
 
@@ -172,6 +173,18 @@ export default function SettingsPage() {
     },
     {
       tab: 'dev',
+      title: 'Show all error toasts',
+      description: 'Display all error notifications including recoverable hydration errors (admin only)',
+      control: (
+        <SwitchControl
+          checked={showAllErrorToasts}
+          onChange={(checked) => dispatch(setShowAllErrorToasts(checked))}
+        />
+      ),
+      visible: showDebugOption,
+    },
+    {
+      tab: 'dev',
       title: 'Session Recording',
       description: 'Record your session for debugging and support',
       control: <RecordingControl />,
@@ -187,7 +200,7 @@ export default function SettingsPage() {
         </Button>
       ),
     },
-  ], [askForConfirmation, showDebug, showJson, showDebugOption, isClearing, user?.mode, dispatch, handleClearCache]);
+  ], [askForConfirmation, showDebug, showJson, showAllErrorToasts, showDebugOption, isClearing, user?.mode, dispatch, handleClearCache]);
 
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [
