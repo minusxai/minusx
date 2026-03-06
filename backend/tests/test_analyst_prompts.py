@@ -33,7 +33,7 @@ def test_prompt_loader():
         user_variables = {
             'app_state': '{"fileType": "question", "query": "SELECT * FROM orders"}',
             'goal': 'Show me total revenue by month',
-            'current_time': '2026-02-04 10:30:00',
+            'current_date': '2026-02-04',
             'attachments': ''
         }
 
@@ -61,7 +61,7 @@ def test_prompt_loader():
                 'assertions': [
                     ('fileType', 'App state'),
                     ('Show me total revenue', 'Goal'),
-                    ('2026-02-04', 'Current time'),
+                    ('2026-02-04', 'Current date'),
                 ]
             }
         ]
