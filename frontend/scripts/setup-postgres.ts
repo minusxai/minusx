@@ -42,6 +42,11 @@ async function main() {
     database = url.pathname.slice(1) || DEFAULT_DB;
   }
 
+  // Allow overriding password directly to avoid URL encoding issues with special characters
+  if (process.env.POSTGRES_PASSWORD) {
+    password = process.env.POSTGRES_PASSWORD;
+  }
+
   // Parse superuser credentials (if provided for user creation)
   let setupUser = user;
   let setupPassword = password;
@@ -55,6 +60,11 @@ async function main() {
     setupPassword = superUrl.password || password;
     setupHost = superUrl.hostname || host;
     setupPort = superUrl.port || port;
+  }
+
+  // Allow overriding superuser password directly to avoid URL encoding issues
+  if (process.env.POSTGRES_SUPERUSER_PASSWORD) {
+    setupPassword = process.env.POSTGRES_SUPERUSER_PASSWORD;
   }
 
   console.log('Configuration:');
@@ -91,6 +101,7 @@ async function main() {
       user: setupUser,
       password: setupPassword,
       database: 'template1', // Always exists
+      ssl: { rejectUnauthorized: false },
     });
     await client.connect();
     console.log(`✅ Connected as: ${setupUser}\n`);
@@ -151,6 +162,7 @@ async function main() {
       user: setupUser,
       password: setupPassword,
       database,
+      ssl: { rejectUnauthorized: false },
     });
     await client.connect();
 
