@@ -12,9 +12,10 @@ import authReducer from '../authSlice';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
 import type { QuestionContent, DocumentContent, UserRole } from '@/lib/types';
-import { readFiles, publishFile, editFileStr, compressAugmentedFile, selectAugmentedFiles, tryNormalizeJsonFragment } from '@/lib/api/file-state';
+import { readFiles, publishFile, editFileStr, compressAugmentedFile, selectAugmentedFiles, tryNormalizeJsonFragment, compressQueryResult } from '@/lib/api/file-state';
 import { setEphemeral } from '@/store/filesSlice';
-import type { ToolCall } from '@/lib/types';
+import type { ToolCall, CompressedQueryResult, ExecuteQueryDetails, ToolMessage } from '@/lib/types';
+import { contentToDetails } from '@/lib/types';
 import { executeQuery } from '@/lib/api/execute-query.server';
 import type { RootState } from '@/store/store';
 import type { Mode } from '@/lib/mode/mode-types';
@@ -353,8 +354,9 @@ describe('Phase 1: Unified File System API E2E', () => {
 
     // Verify ExecuteQuery output (mock returns products data)
     expect(exploreResult).toBeDefined();
-    expect(exploreResult.columns).toEqual(['category', 'count']);
-    expect(exploreResult.rows).toHaveLength(2);
+    const exploreDetails = exploreResult.details as import('@/lib/types').ExecuteQueryDetails;
+    expect(exploreDetails.queryResult?.columns).toEqual(['category', 'count']);
+    expect(exploreDetails.queryResult?.rows).toHaveLength(2);
     console.log('✓ ExecuteQuery completed (returned 2 rows from products query)');
 
     // ========================================================================
@@ -623,8 +625,9 @@ describe('Phase 1: Unified File System API E2E', () => {
       });
 
       expect(result).toBeDefined();
-      expect(result.columns).toEqual(['name', 'age']);
-      expect(result.rows).toHaveLength(2);
+      const resultDetails = result.details as import('@/lib/types').ExecuteQueryDetails;
+      expect(resultDetails.queryResult?.columns).toEqual(['name', 'age']);
+      expect(resultDetails.queryResult?.rows).toHaveLength(2);
       console.log('✓ ExecuteQuery with parameters returned 2 rows from users data');
     });
 
@@ -669,6 +672,131 @@ describe('Phase 1: Unified File System API E2E', () => {
       expect(result2).toBeDefined();
       expect(result2).toEqual(result1);
       console.log('✓ Second call returned from cache (same result as first call)');
+    });
+  });
+
+  // ============================================================================
+  // ExecuteQuery — compressed content + raw details
+  // ============================================================================
+
+  describe('ExecuteQuery — compressed content + raw details', () => {
+    it('content is CompressedQueryResult (markdown), details has raw rows', async () => {
+      const result = await executeQuery({
+        query: 'SELECT category, COUNT(*) as count FROM products GROUP BY category',
+        connectionId: 'test_db',
+        parameters: {}
+      });
+
+      // content must be a CompressedQueryResult object, NOT the raw QueryResult
+      expect(result.content).toBeDefined();
+      expect(typeof (result.content as any).rows).toBe('undefined');  // raw rows NOT in content
+      const compressed = result.content as CompressedQueryResult;
+      expect(typeof compressed.data).toBe('string');  // markdown string
+      expect(compressed.columns).toEqual(['category', 'count']);
+
+      // details must carry the raw QueryResult for UI rendering
+      const details = result.details as ExecuteQueryDetails;
+      expect(details.success).toBe(true);
+      expect(details.queryResult).toBeDefined();
+      expect(details.queryResult!.columns).toEqual(['category', 'count']);
+      expect(details.queryResult!.rows).toHaveLength(2);
+      expect(details.queryResult!.rows[0]).toEqual({ category: 'Electronics', count: 42 });
+    });
+
+    it('compressed content contains row values as markdown', async () => {
+      const result = await executeQuery({
+        query: 'SELECT category, COUNT(*) as count FROM products GROUP BY category',
+        connectionId: 'test_db',
+        parameters: {}
+      });
+
+      const compressed = result.content as CompressedQueryResult;
+      // Markdown table should include actual cell values
+      expect(compressed.data).toContain('Electronics');
+      expect(compressed.data).toContain('42');
+      // Not truncated for small result sets
+      expect(compressed.truncated).toBe(false);
+    });
+
+    it('error result has success:false and error message in both content and details', async () => {
+      // Override the mock for this one call to simulate a backend error
+      const { pythonBackendFetch } = jest.requireMock('@/lib/api/python-backend-client');
+      pythonBackendFetch.mockImplementationOnce(async () => ({
+        ok: false,
+        status: 400,
+        json: async () => ({ detail: 'Table "nonexistent_table_xyz" does not exist' })
+      }));
+
+      const result = await executeQuery({
+        query: 'SELECT * FROM nonexistent_table_xyz',
+        connectionId: 'test_db',
+        parameters: {}
+      });
+
+      // content and details both reflect the error (no raw rows)
+      const details = result.details as ExecuteQueryDetails;
+      expect(details.success).toBe(false);
+      expect(details.error).toContain('nonexistent_table_xyz');
+      expect(details.queryResult).toBeUndefined();
+      // content is also the error object (no markdown table)
+      const content = result.content as any;
+      expect(content.success).toBe(false);
+    });
+
+    it('backward compat: contentToDetails on old-format message (no details field) returns queryResult from content', () => {
+      // Old messages stored raw QueryResult directly in content (pre-implementation)
+      const oldToolMessage: ToolMessage = {
+        role: 'tool',
+        tool_call_id: 'old-call-123',
+        content: {
+          columns: ['name', 'age'],
+          types: ['TEXT', 'INTEGER'],
+          rows: [{ name: 'Alice', age: 25 }, { name: 'Bob', age: 30 }]
+        }
+        // No `details` field — this is the old format
+      };
+
+      const details = contentToDetails<ExecuteQueryDetails>(oldToolMessage);
+
+      // contentToDetails spreads content fields through
+      expect(details.columns).toEqual(['name', 'age']);
+      expect(details.rows).toHaveLength(2);
+      expect(details.rows![0]).toEqual({ name: 'Alice', age: 25 });
+      // queryResult is NOT set (old format didn't have it)
+      expect(details.queryResult).toBeUndefined();
+      // No error field → not an error
+      expect(details.error).toBeUndefined();
+
+      // Display component fallback: build queryResult from spread fields
+      const queryResult = details.queryResult
+        ?? (details.columns ? { columns: details.columns, types: details.types ?? [], rows: details.rows ?? [] } : null);
+      expect(queryResult).not.toBeNull();
+      expect(queryResult!.columns).toEqual(['name', 'age']);
+      expect(queryResult!.rows).toHaveLength(2);
+    });
+
+    it('backward compat: contentToDetails on new-format message (with details) returns details.queryResult directly', async () => {
+      const result = await executeQuery({
+        query: 'SELECT name, age FROM users WHERE age > :minAge',
+        connectionId: 'test_db',
+        parameters: { minAge: 20 }
+      });
+
+      // Simulate how a completed tool call message looks after route injects details
+      const newToolMessage: ToolMessage = {
+        role: 'tool',
+        tool_call_id: 'new-call-456',
+        content: result.content,   // CompressedQueryResult
+        details: result.details    // ExecuteQueryDetails with queryResult
+      };
+
+      const details = contentToDetails<ExecuteQueryDetails>(newToolMessage);
+
+      // contentToDetails returns details directly (no parsing needed)
+      expect(details.success).toBe(true);
+      expect(details.queryResult).toBeDefined();
+      expect(details.queryResult!.columns).toEqual(['name', 'age']);
+      expect(details.queryResult!.rows).toHaveLength(2);
     });
   });
 

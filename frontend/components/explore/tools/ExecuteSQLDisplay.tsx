@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Box, HStack, Text, IconButton, Icon, GridItem } from '@chakra-ui/react';
 import { LuChevronDown, LuChevronRight, LuDatabase, LuCheck, LuX } from 'react-icons/lu';
-import { QuestionContent, QueryResult, DisplayProps } from '@/lib/types';
+import { QuestionContent, QueryResult, DisplayProps, ExecuteQueryDetails, contentToDetails } from '@/lib/types';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
 
 
@@ -20,34 +20,6 @@ export default function ExecuteSQLDisplay({ toolCallTuple, databaseName, isCompa
   // Local state for viz changes (read-only display, but allow viz type switching)
   const [localContent, setLocalContent] = useState<QuestionContent | null>(null);
 
-  const parse_mb_data = (data: any) => {
-    const columns = data.cols.map((d: any) => d.name) || [];
-    const types = data.cols.map((d: any) => d.database_type) || [];
-    const rows = data.rows || [];
-
-    // Convert rows from list of lists to list of objects
-    const rowObjects = rows.map((row: any[]) => {
-      const obj: Record<string, any> = {};
-      columns.forEach((col: string, index: number) => {
-        obj[col] = row[index];
-      });
-      return obj;
-    });
-
-    return {
-      columns,
-      types,
-      rows: rowObjects
-    };
-  }
-
-  const parse_result_data = (data: any) => {
-    return {
-      columns: data.columns,
-      types: data.types,
-      rows: data.rows
-    };
-  }
   const args = toolCall.function.arguments;
 
   // Parse tool call once and memoize to prevent infinite loops
@@ -100,30 +72,17 @@ export default function ExecuteSQLDisplay({ toolCallTuple, databaseName, isCompa
         database_name: databaseName || ''  // Empty string if no database provided
       };
 
-      // Parse the result to get query data
-      if (typeof toolMessage.content === 'string') {
-        try {
-          const parsed = JSON.parse(toolMessage.content);
+      // Use contentToDetails for details-first / content-fallback dispatch.
+      // New messages: details.queryResult has raw rows. Old messages: contentToDetails
+      // spreads the raw QueryResult fields (columns/types/rows) from content.
+      const details = contentToDetails<ExecuteQueryDetails>(toolMessage);
 
-          // Check for error response
-          if (parsed.success === false || parsed.error) {
-            error = parsed.error || 'Query failed';
-          } else {
-            queryResult = parse_result_data(parsed.data ? parsed.data : parsed);
-          }
-        } catch (e) {
-          // Not JSON, might be error string
-          if (toolMessage.content.toLowerCase().includes('error')) {
-            error = toolMessage.content;
-          }
-        }
-      } else if (toolMessage.content?.error) {
-        error = toolMessage.content.error;
-      } else if (toolMessage.content?.success === false) {
-        error = toolMessage.content.error || 'Query failed';
-      } else if (toolMessage.content) {
-        // Content is already an object
-        queryResult = parse_result_data(toolMessage.content.data)
+      error = details.error ?? null;
+
+      if (!error) {
+        queryResult = details.queryResult
+          // Old messages: raw QueryResult fields spread directly into details
+          ?? (details.columns ? { columns: details.columns, types: details.types ?? [], rows: details.rows ?? [] } : null);
       }
     } catch (e) {
       error = 'Failed to parse tool call arguments';

@@ -12,7 +12,7 @@
  * - Event emission (for streaming)
  */
 
-import { ToolCall, ConversationLogEntry } from '@/lib/types';
+import { ToolCall, ConversationLogEntry, ToolCallDetails } from '@/lib/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { appendLogToConversation } from '@/lib/conversations';
 import { FrontendToolException } from './frontend-tool-exception';
@@ -29,6 +29,20 @@ export interface ToolExecutionResult {
   role: "tool";
   tool_call_id: string;
   content: string | any;
+  details?: ToolCallDetails;  // Stripped before sending to Python; injected into response for frontend
+}
+
+/**
+ * Structured return type for server tool handlers that want to pass
+ * details to the UI without sending them to the LLM.
+ */
+export interface ServerToolResult {
+  content: string | object;
+  details?: ToolCallDetails;
+}
+
+export function isServerToolResult(r: unknown): r is ServerToolResult {
+  return r !== null && typeof r === 'object' && 'content' in (r as object) && 'details' in (r as object);
 }
 
 /**
@@ -41,6 +55,7 @@ export interface OrchestrationResult {
   updatedFileId: number;
   updatedLogIndex: number;
   logEntries: ConversationLogEntry[];
+  detailsMap: Record<string, ToolCallDetails>;  // tool_call_id → details (for server tools)
 }
 
 /**
@@ -97,17 +112,22 @@ async function executeToolInternal(toolCall: ToolCall, user: EffectiveUser): Pro
   }
 
   // Call handler with destructured args
-  const content = await toolRegistry[toolName](
+  const rawResult = await toolRegistry[toolName](
     toolCall.function.arguments || {},
     user,
     toolCall.function.child_tasks_batch
   );
 
-  // Wrap result in message structure
+  // Detect ServerToolResult shape to extract content + details separately
+  const isStructured = isServerToolResult(rawResult);
+  const content = isStructured ? rawResult.content : rawResult;
+  const details = isStructured ? rawResult.details : undefined;
+
   return {
     role: "tool",
     tool_call_id: toolCall.id,
-    content: typeof content === 'string' ? content : JSON.stringify(content)
+    content: typeof content === 'string' ? content : JSON.stringify(content),
+    details
   };
 }
 
@@ -146,13 +166,15 @@ export async function orchestratePendingTools(
       spawnedTools: [],
       logEntries: [],
       updatedFileId: fileId,
-      updatedLogIndex: logIndex
+      updatedLogIndex: logIndex,
+      detailsMap: {}
     };
   }
 
   const completedTools: CompletedToolCallPayload[] = [];
   const remainingPendingTools: ToolCall[] = [];
   const spawnedTools: ToolCall[] = [];
+  const detailsMap: Record<string, ToolCallDetails> = {};
   let currentFileId = fileId;
   let currentLogIndex = logIndex;
   const logEntries: ConversationLogEntry[] = [];
@@ -165,9 +187,12 @@ export async function orchestratePendingTools(
         callbacks?.onToolExecuting?.(toolCall);
 
         const result = await executeToolInternal(toolCall, user);
-        completedTools.push(result);
+        // Strip details before sending to Python; track separately
+        const { details, ...payloadForPython } = result;
+        completedTools.push(payloadForPython);
+        if (details) detailsMap[result.tool_call_id] = details;
 
-        callbacks?.onToolCompleted?.(toolCall, result);
+        callbacks?.onToolCompleted?.(toolCall, payloadForPython);
       } catch (error) {
         // Check if tool is spawning frontend tools
         if (error instanceof FrontendToolException) {
@@ -241,6 +266,7 @@ export async function orchestratePendingTools(
     spawnedTools,
     updatedFileId: currentFileId,
     updatedLogIndex: currentLogIndex,
-    logEntries
+    logEntries,
+    detailsMap
   };
 }

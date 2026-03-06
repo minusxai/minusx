@@ -62,6 +62,7 @@ export interface CompletedToolCallFromPython {
     arguments: Record<string, any>;  // Always an object - HTTP response handles JSON serialization
   };
   created_at: string;  // ISO timestamp
+  details?: import('@/lib/types').ToolCallDetails;  // Injected by Next.js route for server tools (not sent to Python)
 }
 
 /**

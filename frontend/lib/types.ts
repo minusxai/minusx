@@ -906,3 +906,11 @@ export interface ExecuteQueryOutput extends QueryResult {
   // Extends QueryResult (columns, types, rows) with optional error
   error?: string;
 }
+
+export interface ExecuteQueryDetails extends ToolCallDetails {
+  queryResult?: QueryResult;  // new messages: raw rows/columns for UI rendering
+  // Old-message compat: contentToDetails spreads content fields through
+  columns?: string[];
+  types?: string[];
+  rows?: Record<string, any>[];
+}

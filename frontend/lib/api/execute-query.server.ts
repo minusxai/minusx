@@ -7,8 +7,10 @@
  * Does NOT modify any files - pure query execution.
  */
 
-import { ExecuteQueryInput, ExecuteQueryOutput } from '@/lib/types';
+import { ExecuteQueryInput, ExecuteQueryDetails, QueryResult } from '@/lib/types';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
+import { compressQueryResult } from '@/lib/api/file-state';
+import type { ServerToolResult } from '@/app/api/chat/orchestrator';
 
 /**
  * ExecuteQuery implementation
@@ -18,7 +20,7 @@ import { pythonBackendFetch } from '@/lib/api/python-backend-client';
  */
 export async function executeQuery(
   input: ExecuteQueryInput
-): Promise<ExecuteQueryOutput> {
+): Promise<ServerToolResult> {
   const { query, connectionId, parameters = {} } = input;
 
   try {
@@ -35,26 +37,22 @@ export async function executeQuery(
     const data = await response.json();
 
     if (!response.ok) {
-      return {
-        columns: [],
-        types: [],
-        rows: [],
-        error: data.detail || data.message || 'Query execution failed'
-      };
+      const errMsg = data.detail || data.message || 'Query execution failed';
+      const details: ExecuteQueryDetails = { success: false, error: errMsg };
+      return { content: details, details };
     }
 
-    // Return standardized QueryResult format
-    return {
+    const queryResult: QueryResult = {
       columns: data.columns || [],
       types: data.types || [],
       rows: data.rows || []
     };
+    const compressed = compressQueryResult(queryResult);
+    const details: ExecuteQueryDetails = { success: true, queryResult };
+    return { content: compressed, details };
   } catch (error) {
-    return {
-      columns: [],
-      types: [],
-      rows: [],
-      error: error instanceof Error ? error.message : 'Unknown error'
-    };
+    const errMsg = error instanceof Error ? error.message : 'Unknown error';
+    const details: ExecuteQueryDetails = { success: false, error: errMsg };
+    return { content: details, details };
   }
 }
