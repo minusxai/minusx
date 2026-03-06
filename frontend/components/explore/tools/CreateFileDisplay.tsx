@@ -2,7 +2,7 @@
 
 import { HStack, Text, Icon, GridItem } from '@chakra-ui/react';
 import { LuCheck, LuX, LuFilePlus2 } from 'react-icons/lu';
-import { DisplayProps } from '@/lib/types';
+import { DisplayProps, contentToDetails } from '@/lib/types';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import type { FileType } from '@/lib/ui/file-metadata';
 import Link from 'next/link';
@@ -25,17 +25,8 @@ export default function CreateFileDisplay({ toolCallTuple, showThinking }: Displ
 
   const { file_type, name } = args;
 
-  // Parse result
-  let result: any;
-  try {
-    result = typeof toolMessage.content === 'string'
-      ? JSON.parse(toolMessage.content)
-      : toolMessage.content;
-  } catch {
-    result = { success: false };
-  }
-
-  const { success, id } = result;
+  const { success } = contentToDetails(toolMessage);
+  const id = undefined;  // CreateFile doesn't return an id in its result
 
   if (!success) {
     return showThinking ? (

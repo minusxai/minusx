@@ -67,6 +67,7 @@ class TaskResult(BaseModel):
     type_: Literal["task_result"] = Field(default="task_result", alias="_type")
     task_unique_id: str = Field(alias="_task_unique_id")
     result: Optional[Union[dict, str]] = None
+    details: Optional[dict] = None
     created_at: str  # ISO timestamp
 
 

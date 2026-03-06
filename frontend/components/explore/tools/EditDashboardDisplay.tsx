@@ -2,7 +2,7 @@
 
 import { HStack, Text, Icon, GridItem } from '@chakra-ui/react';
 import { LuCheck, LuX, LuCirclePlus, LuTrash2, LuLayoutGrid, LuType, LuPencil } from 'react-icons/lu';
-import { DisplayProps } from '@/lib/types';
+import { DisplayProps, contentToDetails } from '@/lib/types';
 
 export default function EditDashboardDisplay({ toolCallTuple, showThinking }: DisplayProps) {
   const [toolCall, toolMessage] = toolCallTuple;
@@ -19,17 +19,7 @@ export default function EditDashboardDisplay({ toolCallTuple, showThinking }: Di
 
   const { operation, question_id, asset_id } = args;
 
-  // Parse result
-  let result: any;
-  try {
-    result = typeof toolMessage.content === 'string'
-      ? JSON.parse(toolMessage.content)
-      : toolMessage.content;
-  } catch {
-    result = { success: false };
-  }
-
-  const { success } = result;
+  const { success } = contentToDetails(toolMessage);
 
   // Failed - show minimal display hidden behind thinking
   if (!success) {

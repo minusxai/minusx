@@ -3,8 +3,10 @@
  * updates persistableChanges and isDirty state
  */
 import { getTestDbPath, waitFor, initTestDatabase, cleanupTestDatabase } from './test-utils';
-import { editFile, editFileStr, readFiles } from '@/lib/api/file-state';
+import { editFile, editFileStr, readFiles, createVirtualFile } from '@/lib/api/file-state';
 import { selectIsDirty, selectMergedContent, selectFile } from '@/store/filesSlice';
+import { executeToolCall } from '@/lib/api/tool-handlers';
+import { FilesAPI } from '@/lib/data/files';
 import { QuestionContent, DashboardContent } from '@/lib/types';
 import { configureStore } from '@reduxjs/toolkit';
 import filesReducer from '../filesSlice';
@@ -687,5 +689,136 @@ describe('editFile - Dashboard content validation', () => {
       newMatch: '"w":4,"h":6',
     });
     expect(result.success).toBe(true);
+  });
+});
+
+describe('CreateFile tool - content validation', () => {
+  const questionTemplate = {
+    fileName: 'Untitled Question',
+    content: {
+      query: 'SELECT 1',
+      database_name: 'test_db',
+      parameters: [],
+      references: [],
+      vizSettings: { type: 'table', xCols: [], yCols: [] },
+    },
+  };
+
+  const dashboardTemplate = {
+    fileName: 'Untitled Dashboard',
+    content: {
+      assets: [],
+      layout: { columns: 12, items: [] },
+    },
+  };
+
+  function makeToolCall(args: Record<string, unknown>) {
+    return {
+      id: 'test-call-1',
+      type: 'function' as const,
+      function: { name: 'CreateFile', arguments: args },
+    };
+  }
+
+  beforeEach(() => {
+    testStore = configureStore({
+      reducer: { files: filesReducer, queryResults: queryResultsReducer, auth: authReducer },
+    });
+    jest.spyOn(FilesAPI, 'getTemplate').mockImplementation(async (type) => {
+      if (type === 'question') return questionTemplate;
+      if (type === 'dashboard') return dashboardTemplate;
+      return { fileName: 'Untitled', content: {} };
+    });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    testStore = null;
+  });
+
+  it('creates a question with no content override and returns success', async () => {
+    const result = await executeToolCall(
+      makeToolCall({ file_type: 'question' }),
+      {} as any
+    );
+    const parsed = JSON.parse(result.content as string);
+    expect(parsed.success).toBe(true);
+    expect(parsed.state.fileState.type).toBe('question');
+    expect(parsed.state.fileState.isDirty).toBe(false);
+  });
+
+  it('creates a question with valid content override', async () => {
+    const result = await executeToolCall(
+      makeToolCall({
+        file_type: 'question',
+        name: 'My Query',
+        content: { query: 'SELECT * FROM users', database_name: 'prod' },
+      }),
+      {} as any
+    );
+    const parsed = JSON.parse(result.content as string);
+    expect(parsed.success).toBe(true);
+    expect(parsed.state.fileState.content.query).toBe('SELECT * FROM users');
+  });
+
+  it('rejects question with invalid vizSettings type', async () => {
+    const result = await executeToolCall(
+      makeToolCall({
+        file_type: 'question',
+        content: { vizSettings: { type: 'invalid_chart_type' } },
+      }),
+      {} as any
+    );
+    const parsed = JSON.parse(result.content as string);
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toMatch(/Invalid content/);
+  });
+
+  it('rejects question with pivot vizSettings but no pivotConfig', async () => {
+    const result = await executeToolCall(
+      makeToolCall({
+        file_type: 'question',
+        content: { vizSettings: { type: 'pivot' } },
+      }),
+      {} as any
+    );
+    const parsed = JSON.parse(result.content as string);
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toMatch(/pivotConfig/);
+  });
+
+  it('creates a question with valid pivot content', async () => {
+    const result = await executeToolCall(
+      makeToolCall({
+        file_type: 'question',
+        content: {
+          vizSettings: {
+            type: 'pivot',
+            pivotConfig: {
+              rows: ['region'],
+              columns: ['year'],
+              values: [{ column: 'revenue', aggFunction: 'SUM' }],
+            },
+          },
+        },
+      }),
+      {} as any
+    );
+    const parsed = JSON.parse(result.content as string);
+    expect(parsed.success).toBe(true);
+  });
+
+  it('creates a dashboard with valid content override', async () => {
+    const result = await executeToolCall(
+      makeToolCall({
+        file_type: 'dashboard',
+        name: 'My Dashboard',
+        content: { description: 'Revenue overview' },
+      }),
+      {} as any
+    );
+    const parsed = JSON.parse(result.content as string);
+    expect(parsed.success).toBe(true);
+    expect(parsed.state.fileState.type).toBe('dashboard');
   });
 });

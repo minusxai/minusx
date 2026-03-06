@@ -376,34 +376,35 @@ class PublishAll(Tool):
 
 @register_agent
 class CreateFile(Tool):
-    """Create a new file (question or dashboard).
+    """Create a new file of any type as a draft (virtual ID, negative number). No page navigation.
 
-    Behavior depends on file_type:
-    - Creating a *question* → question is created as a draft (virtual ID, negative number).
-      No page navigation, no modal. Returns virtualId.
-      Use virtualId directly with EditDashboard to add it to a dashboard:
-        EditDashboard(operation="add_existing_question", question_id=<virtualId>, file_id=<dashboardId>)
-      Changes are staged until the user publishes.
-    - Creating a *dashboard*, or any file from a folder → navigates to the new file page.
+    Always creates in Redux as a draft. The user reviews and publishes via Publish All.
+
+    - file_type: any supported type ('question', 'dashboard', 'report', etc.)
+    - name: optional display name
+    - path: folder path to create in (e.g. '/org/reports'). Defaults to user's home folder.
+    - content: initial content fields merged on top of template defaults.
+      Examples by type:
+        question:  {"query": "SELECT 1", "database_name": "default", "vizSettings": {...}}
+        dashboard: {"description": "My dashboard"}
+
+    Returns: {success: true, state: {fileState: {id, name, path, type, isDirty, content}, references: [...], queryResults: [...]}}
+    The returned id is negative (virtual). Use it with EditFile or EditDashboard immediately.
     """
 
     def __init__(
         self,
-        file_type: str = Field(..., description="File type to create: 'question' or 'dashboard'"),
+        file_type: str = Field(..., description="File type to create: 'question', 'dashboard', 'report', etc."),
         name: Optional[str] = Field(None, description="Display name for the new file"),
-        query: Optional[str] = Field(None, description="Initial SQL query (questions only)"),
-        database_name: Optional[str] = Field(None, description="Database connection name (questions only)"),
-        viz_settings: Optional[dict] = Field(None, description="Initial visualization settings (questions only)"),
-        folder: Optional[str] = Field(None, description="Folder path to create the file in"),
+        path: Optional[str] = Field(None, description="Folder path to create the file in (e.g. '/org/reports'). Defaults to user's home folder."),
+        content: Optional[dict] = Field(None, description=f"Initial content fields merged on top of template defaults. Schema: {ATLAS_FILE_SCHEMA_JSON}"),
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
         self.file_type = file_type
         self.name = name
-        self.query = query
-        self.database_name = database_name
-        self.viz_settings = viz_settings
-        self.folder = folder
+        self.path = path
+        self.content = content
 
     async def reduce(self, child_batches):
         pass

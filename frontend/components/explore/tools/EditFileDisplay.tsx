@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { HStack, VStack, Text, Icon, GridItem, Box } from '@chakra-ui/react';
 import { LuCheck, LuX, LuPencilLine, LuChevronDown, LuChevronRight } from 'react-icons/lu';
-import { DisplayProps } from '@/lib/types';
+import { DisplayProps, EditFileDetails, contentToDetails } from '@/lib/types';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import type { FileType } from '@/lib/ui/file-metadata';
 import Link from 'next/link';
@@ -39,17 +39,7 @@ export default function EditFileDisplay({ toolCallTuple, showThinking }: Display
     };
   });
 
-  // Parse result
-  let result: any;
-  try {
-    result = typeof toolMessage.content === 'string'
-      ? JSON.parse(toolMessage.content)
-      : toolMessage.content;
-  } catch {
-    result = { success: false };
-  }
-
-  const { success, error, diff } = result;
+  const { success, error, diff } = contentToDetails<EditFileDetails>(toolMessage);
 
   const color = 'accent.secondary';
 

@@ -2,7 +2,7 @@
 
 import { HStack, Text, Icon, GridItem } from '@chakra-ui/react';
 import { LuCheck, LuX, LuBookOpen } from 'react-icons/lu';
-import { DisplayProps } from '@/lib/types';
+import { DisplayProps, contentToDetails } from '@/lib/types';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import type { FileType } from '@/lib/ui/file-metadata';
 import Link from 'next/link';
@@ -38,17 +38,7 @@ export default function ReadFilesDisplay({ toolCallTuple, showThinking }: Displa
     });
   });
 
-  // Parse result - ReadFiles returns an array of file objects
-  let result: any;
-  try {
-    result = typeof toolMessage.content === 'string'
-      ? JSON.parse(toolMessage.content)
-      : toolMessage.content;
-  } catch {
-    result = null;
-  }
-
-  const success = Array.isArray(result) && result.length > 0;
+  const { success } = contentToDetails(toolMessage);
 
   if (!success) {
     return showThinking ? (

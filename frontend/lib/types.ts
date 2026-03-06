@@ -97,11 +97,16 @@ export interface QueryResult {
   columns: string[];
   types: string[];
   rows: Record<string, any>[];
+  id?: string;  // query hash for delta deduplication
 }
 
-export interface TruncatedQueryResult extends QueryResult {
-  totalRows: number;
-  truncated: boolean;
+export interface CompressedQueryResult {
+  columns: string[];
+  types: string[];
+  data: string;        // markdown table (possibly character-truncated)
+  totalRows: number;   // original full row count
+  truncated: boolean;  // true if data was cut short by LIMIT_CHARS
+  id?: string;         // query hash (from QueryResult.id)
 }
 
 export interface Rectangle {
@@ -640,10 +645,44 @@ export interface ToolCall {
   _parent_unique_id?: string;  // For child tools spawned by parent (not in OpenAI spec)
 }
 
+// Tool call details — structured metadata for UI rendering (not sent to LLM)
+export interface ToolCallDetails {
+  success: boolean;
+  error?: string;
+  message?: string;  // human-readable status message
+}
+
+export interface EditFileDetails extends ToolCallDetails {
+  diff: string;
+}
+
+export interface ClarifyDetails extends ToolCallDetails {
+  selection?: any;  // the user's selection (for highlighting chosen option)
+}
+
 export interface ToolMessage {
   role: 'tool';
   tool_call_id: string;
   content: string | any;    // Can be string or object
+  details?: ToolCallDetails;  // Structured metadata for UI rendering (not sent to LLM)
+}
+
+/**
+ * Convert a ToolMessage to typed details for display components.
+ * Prefers structured `details` (new); falls back to parsing `content` (old conversations
+ * and server-side Python tools that don't populate `details`).
+ * Spreading parsed content allows tool-specific fields (e.g. `selection`) through.
+ */
+export function contentToDetails<T extends ToolCallDetails>(toolMessage: ToolMessage): T {
+  if (toolMessage.details) return toolMessage.details as T;
+  try {
+    const parsed = typeof toolMessage.content === 'string'
+      ? JSON.parse(toolMessage.content)
+      : (toolMessage.content ?? {});
+    return { success: false, ...parsed } as T;
+  } catch {
+    return { success: false } as T;
+  }
 }
 
 export type CompletedToolCall = [ToolCall, ToolMessage];
@@ -802,7 +841,7 @@ export interface DisplayProps {
 export interface AugmentedFile {
   fileState: FileState;        // The requested file (always defined when item exists in Redux)
   references: FileState[];     // Referenced files belonging to this file
-  queryResults: TruncatedQueryResult[]; // Query results for this file and its references
+  queryResults: QueryResult[]; // Query results for this file and its references (raw, untruncated)
 }
 
 /**
@@ -823,7 +862,7 @@ export interface CompressedFileState {
 export interface CompressedAugmentedFile {
   fileState: CompressedFileState;
   references: CompressedFileState[];
-  queryResults: QueryResult[];
+  queryResults: CompressedQueryResult[];
 }
 
 /**

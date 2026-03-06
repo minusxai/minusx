@@ -115,7 +115,7 @@ def update_log_with_completed_tool_calls(
     pending_leaf_tasks = get_pending_leaf_tasks(log)
 
     completed_map = {
-        tool_call['tool_call_id']: tool_call['content']
+        tool_call['tool_call_id']: (tool_call['content'], tool_call.get('details'))
         for tool_call in completed_tool_calls
     }
 
@@ -124,10 +124,11 @@ def update_log_with_completed_tool_calls(
     # Append TaskResult for completed tasks
     for task in pending_leaf_tasks:
         if task.unique_id in completed_map:
-            content = completed_map[task.unique_id]
+            content, details = completed_map[task.unique_id]
             log.append(TaskResult(
                 task_unique_id=task.unique_id,
                 result=content,
+                details=details,
                 created_at=datetime.now(timezone.utc).isoformat()
             ))
         elif interrupt_pending:
@@ -218,7 +219,8 @@ def get_completed_tool_calls(
                 "name": task.agent,
                 "arguments": task.args  # No need for json.dumps - HTTP response handles serialization
             },
-            "created_at": result.created_at
+            "created_at": result.created_at,
+            "details": result.details
         })
 
         completed_tool_calls.append(tool_message)

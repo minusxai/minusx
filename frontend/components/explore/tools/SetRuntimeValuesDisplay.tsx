@@ -2,7 +2,7 @@
 
 import { HStack, Text, Icon, GridItem, Box } from '@chakra-ui/react';
 import { LuCheck, LuX } from 'react-icons/lu';
-import { DisplayProps } from '@/lib/types';
+import { DisplayProps, contentToDetails } from '@/lib/types';
 
 export default function SetRuntimeValuesDisplay({ toolCallTuple, showThinking }: DisplayProps) {
   const [toolCall, toolMessage] = toolCallTuple;
@@ -17,17 +17,7 @@ export default function SetRuntimeValuesDisplay({ toolCallTuple, showThinking }:
     args = {};
   }
 
-  // Parse result
-  let result: any;
-  try {
-    result = typeof toolMessage.content === 'string'
-      ? JSON.parse(toolMessage.content)
-      : toolMessage.content;
-  } catch {
-    result = { success: false };
-  }
-
-  const { success } = result;
+  const { success } = contentToDetails(toolMessage);
 
   // Build chips from parameter_values
   const paramValues = args.parameter_values || {};
