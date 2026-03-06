@@ -496,6 +496,6 @@ prompts:
       {home_folder_section}
     user: |
       <AppState>{app_state}</AppState>
-      <CurrentTime>{current_time}</CurrentTime>
+      <CurrentDate>{current_date}</CurrentDate>
       {attachments}
       <Question>{goal}</Question>

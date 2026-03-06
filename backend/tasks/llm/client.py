@@ -162,6 +162,17 @@ def generate_unique_tool_call_id():
     return f"call_{uuid.uuid4().hex[:24]}"
 
 
+def _add_cache_control(msg):
+    """Add Anthropic cache_control to a message, handling all content formats."""
+    content = msg.get('content')
+    if isinstance(content, str):
+        msg['content'] = [{"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}]
+    elif isinstance(content, list):
+        content[-1]["cache_control"] = {"type": "ephemeral"}
+    elif isinstance(content, dict):
+        content["cache_control"] = {"type": "ephemeral"}
+
+
 async def allm_request(request: ALLMRequest, on_content=None):
     """
     Make an async LLM request with streaming support.
@@ -222,18 +233,12 @@ async def allm_request(request: ALLMRequest, on_content=None):
         completion_request["temperature"] = 0
         completion_request["tool_choice"] = "auto"
 
-        # Add cache checkpoint for the first message
+        # Add cache checkpoints (up to 4 allowed by Anthropic)
         msgs = request.messages
-        if isinstance(msgs[0].get('content'), dict):
-            msgs[0]['content']["cache_control"] = {"type": "ephemeral"}
-        elif isinstance(msgs[0].get('content'), list):
-            msgs[0]['content'][-1]["cache_control"] = {"type": "ephemeral"}
-        elif isinstance(msgs[0].get('content'), str):
-            msgs[0]['content'] = [{
-                "type": "text",
-                "text": msgs[0]['content'],
-                "cache_control": {"type": "ephemeral"}
-            }]
+        # 1) System prompt (first message) — stable across entire conversation
+        _add_cache_control(msgs[0])
+        # 2) Last message — caches conversation history
+        _add_cache_control(msgs[-1])
         completion_request["messages"] = msgs
 
         if len(tool_descriptions) > 0:
