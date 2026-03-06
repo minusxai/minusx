@@ -313,7 +313,7 @@ export function compressAugmentedFile(augmented: AugmentedFile): CompressedAugme
   return {
     fileState: compressFileState(augmented.fileState),
     references: augmented.references.map(compressFileState),
-    queryResults: augmented.queryResults.map(compressQueryResult),
+    queryResults: augmented.queryResults.map(qr => compressQueryResult(qr)),
   };
 }
 

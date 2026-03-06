@@ -692,6 +692,87 @@ describe('editFile - Dashboard content validation', () => {
   });
 });
 
+describe('CreateFile tool - auto-execute query results', () => {
+  function makeToolCall(args: Record<string, unknown>) {
+    return {
+      id: 'test-call-1',
+      type: 'function' as const,
+      function: { name: 'CreateFile', arguments: args },
+    };
+  }
+
+  beforeAll(() => {
+    global.fetch = jest.fn(async (url: string | URL | Request) => {
+      const urlStr = typeof url === 'string' ? url : url.toString();
+      if (urlStr.includes('/api/query')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            success: true,
+            data: {
+              columns: ['total_orders'],
+              types: ['BIGINT'],
+              rows: [{ total_orders: 42 }],
+            },
+          }),
+        } as Response;
+      }
+      throw new Error(`Unmocked fetch call to ${urlStr}`);
+    });
+  });
+
+  afterAll(() => {
+    jest.restoreAllMocks();
+  });
+
+  beforeEach(() => {
+    testStore = configureStore({
+      reducer: { files: filesReducer, queryResults: queryResultsReducer, auth: authReducer },
+    });
+    jest.spyOn(FilesAPI, 'getTemplate').mockImplementation(async (type) => {
+      if (type === 'question') return {
+        fileName: 'Untitled Question',
+        content: {
+          query: 'SELECT 1',
+          database_name: 'test_db',
+          parameters: [],
+          references: [],
+          vizSettings: { type: 'table', xCols: [], yCols: [] },
+        },
+      };
+      return { fileName: 'Untitled', content: {} };
+    });
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+    testStore = null;
+  });
+
+  it('populates queryResults with actual row data when CreateFile is called with a question + query', async () => {
+    const result = await executeToolCall(
+      makeToolCall({
+        file_type: 'question',
+        name: 'Total Overall Orders',
+        content: {
+          query: "SELECT COUNT(*) as total_orders FROM orders WHERE status = 'completed'",
+          database_name: 'mxfood',
+        },
+      }),
+      {} as any
+    );
+    const parsed = JSON.parse(result.content as string);
+    expect(parsed.success).toBe(true);
+
+    const qr = parsed.state.queryResults[0];
+    expect(qr).toBeDefined();
+    expect(qr.totalRows).toBe(1);
+    expect(qr.truncated).toBe(false);
+    expect(qr.data).toContain('| 42 |');
+  });
+});
+
 describe('CreateFile tool - content validation', () => {
   const questionTemplate = {
     fileName: 'Untitled Question',
