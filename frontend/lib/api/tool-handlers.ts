@@ -503,6 +503,41 @@ registerFrontendTool('CreateFile', async (args, _context) => {
     }
   }
 
+  // Auto-execute query for questions (agent sees results immediately)
+  if (file_type === 'question') {
+    const updatedState = getStore().getState();
+    const finalContent = selectMergedContent(updatedState, virtualId) as any;
+
+    if (finalContent?.query && finalContent?.database_name) {
+      const ephemeralValues = selectEphemeralParamValues(updatedState, virtualId);
+      const params = (finalContent.parameters || []).reduce((acc: any, p: any) => {
+        acc[p.name] = ephemeralValues[p.name] ?? p.defaultValue ?? '';
+        return acc;
+      }, {} as Record<string, any>);
+
+      try {
+        await getQueryResult({
+          query: finalContent.query,
+          params,
+          database: finalContent.database_name
+        });
+        getStore().dispatch(setEphemeral({
+          fileId: virtualId as FileId,
+          changes: {
+            lastExecuted: {
+              query: finalContent.query,
+              params,
+              database: finalContent.database_name,
+              references: finalContent.references || []
+            }
+          }
+        }));
+      } catch (execErr) {
+        console.warn('[CreateFile] Auto-execute failed (file still created):', execErr);
+      }
+    }
+  }
+
   const [augmented] = await readFiles([virtualId], {});
   if (!augmented) {
     const err = `Failed to read created file (virtualId: ${virtualId})`;
