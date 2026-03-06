@@ -11,9 +11,9 @@
 
 | Tool | Args | Result |
 |------|------|--------|
-| **ReadFiles** | `{fileIds: int[]}` | `[{id: int, name: str, path: str, type: str, content: {...}, queryResults: [...], references: [...]}]` |
-| **EditFile** | `{fileId: int, oldMatch: str, newMatch: str}` | `{success: true, diff: str, id: int, name: str, path: str, type: str, content: {...}, queryResults: [...], references: [...]}` |
-| **CreateFile** | `{file_type: str, name?: str, query?: str, database_name?: str, viz_settings?: dict, folder?: str}` | `{success: true, id: int, message: str}` or `{success: true, message: str}` |
+| **ReadFiles** | `{fileIds: int[]}` | `{success: true, files: [{fileState: {id, name, path, type, isDirty, content}, references: [...], queryResults: [...]}]}` |
+| **EditFile** | `{fileId: int, oldMatch: str, newMatch: str}` | `{success: true, diff: str, fileState: {id, name, path, type, isDirty, content}, references: [{id, unchanged: true} or full], queryResults: [{queryResultId, unchanged: true} or full]}` or `{success: false, error: str}` |
+| **CreateFile** | `{file_type: str, name?: str, path?: str, content?: dict}` | `{success: true, state: {fileState: {id, name, path, type, isDirty, content}, references: [...], queryResults: [...]}}` or `{success: false, error: str}` |
 | **ExecuteQuery** | `{query: str, connectionId: str, parameters?: {key: value}, vizSettings?: str}` | `{columns: str[], types: str[], rows: [{...}]}` |
 | **SetRuntimeValues** | `{fileId: int, parameter_values: {name: value}}` | `{success: true, message: str}` |
 

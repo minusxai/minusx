@@ -13,9 +13,8 @@ import type { UserInput } from './user-input-exception';
 import { UserInputException } from './user-input-exception';
 import { FilesAPI } from '../data/files';
 import { getRouter } from '@/lib/navigation/use-navigation';
-import { readFiles, editFileStr, getQueryResult, createVirtualFile, editFile as editFileOp, compressAugmentedFile } from '@/lib/api/file-state';
+import { readFiles, editFileStr, getQueryResult, createVirtualFile, editFile as editFileOp, compressAugmentedFile, selectAugmentedFiles } from '@/lib/api/file-state';
 import { canCreateFileType } from '@/lib/auth/access-rules.client';
-import { preserveParams } from '@/lib/navigation/url-utils';
 
 // ============================================================================
 // Frontend Tool Registry
@@ -379,23 +378,37 @@ registerFrontendTool('ReadFiles', async (args, _context) => {
 
   const result = await readFiles(fileIds, {});
 
-  return result.map(compressAugmentedFile);
+  return {
+    success: true,
+    files: result.map(compressAugmentedFile),
+  };
 });
 
 /**
  * EditFile - String-based editing for native toolset
- * Routes to editFileStr for string find-and-replace with oldMatch/newMatch parameters
+ * Routes to editFileStr for string find-and-replace with oldMatch/newMatch parameters.
+ *
+ * Returns a delta response: full data for changed parts, stubs for unchanged ones.
+ * - fileState: always full (the edited file always changes)
+ * - references: {id, unchanged: true} for pre-existing refs; full for new ones
+ * - queryResults: {queryResultId, unchanged: true} for results with same hash; full for new/changed
  */
 registerFrontendTool('EditFile', async (args, _context) => {
   const { fileId, oldMatch, newMatch } = args;
 
-  const state = getStore().getState();
-  const fileState = state.files.files[fileId];
+  // Snapshot state before edit to compute delta
+  const stateBefore = getStore().getState();
+  const fileState = stateBefore.files.files[fileId];
+  const [augmentedBefore] = selectAugmentedFiles(stateBefore, [fileId]) ?? [];
+  const prevQueryResultIds = new Set<string>(
+    (augmentedBefore?.queryResults ?? []).map((qr: any) => qr.id).filter(Boolean)
+  );
+  const prevRefIds = new Set<number>(fileState?.references ?? []);
 
   // Edit (stages changes in Redux as draft)
   const result = await editFileStr({ fileId, oldMatch, newMatch });
   if (!result.success) {
-    throw new Error(result.error || 'Edit failed');
+    return { success: false, error: result.error || 'Edit failed' };
   }
 
   // Auto-execute query for questions (agent sees results immediately)
@@ -437,57 +450,65 @@ registerFrontendTool('EditFile', async (args, _context) => {
     }
   }
 
-  // Return the updated CompressedAugmentedFile (same format as ReadFiles) so the model can
-  // verify edits landed in content and also see references + query results.
-  // Also include success:true + diff so EditFileDisplay can render the inline diff in chat.
+  // Build delta response
   const [augmented] = await readFiles([fileId], {});
+  const compressed = compressAugmentedFile(augmented);
+
+  // References delta: stub for pre-existing refs (their content didn't change during this edit)
+  const deltaReferences = compressed.references.map(ref =>
+    prevRefIds.has(ref.id) ? { id: ref.id, unchanged: true } : ref
+  );
+
+  // QueryResults delta: stub for results with the same hash as before the edit.
+  // A different hash means the query/params changed → new result → include full data.
+  const deltaQueryResults = compressed.queryResults.map((qr: any) => {
+    const qrId: string | undefined = qr.id;
+    if (qrId && prevQueryResultIds.has(qrId)) {
+      return { queryResultId: qrId, unchanged: true };
+    }
+    return qr;
+  });
+
   return {
     success: true,
     diff: result.diff,
-    ...compressAugmentedFile(augmented)
+    fileState: compressed.fileState,
+    references: deltaReferences,
+    queryResults: deltaQueryResults,
   };
 });
 
 /**
- * CreateFile - Create a new file:
- * - Creating a question → always creates as draft (virtual ID), no navigation or modal
- * - Creating a dashboard → navigate to new file creation page
+ * CreateFile - Create a new virtual file (draft, any type).
+ * Always creates as a draft in Redux (negative virtual ID) — no navigation.
+ *
+ * Args: {file_type, name?, path?, content?}
+ * - path: folder path to create in (replaces old `folder` param)
+ * - content: generic object merged on top of the template defaults
+ *
+ * Returns: {success: true, state: CompressedAugmentedFile}
  */
 registerFrontendTool('CreateFile', async (args, _context) => {
-  const { file_type, name, query, database_name, viz_settings, folder } = args;
+  const { file_type, name, path, content } = args;
 
-  if (file_type === 'question') {
-    // Create virtual file (draft) — always, regardless of current page context
-    const virtualId = await createVirtualFile('question', { folder, query, databaseName: database_name });
+  // Create virtual file (draft) for any type — no navigation
+  const virtualId = await createVirtualFile(file_type, { folder: path });
 
-    if (name) {
-      await editFileOp({ fileId: virtualId, changes: { name } });
-    }
-    if (viz_settings) {
-      await editFileOp({ fileId: virtualId, changes: { content: { vizSettings: viz_settings } } });
-    }
-
-    return {
-      success: true,
-      id: virtualId,
-      message: `Created draft question "${name}" (virtualId: ${virtualId}).`
-    };
+  if (name) {
+    await editFileOp({ fileId: virtualId, changes: { name } });
+  }
+  if (content && Object.keys(content).length > 0) {
+    await editFileOp({ fileId: virtualId, changes: { content } });
   }
 
-  // Dashboard → navigate to new file creation page
-  const router = getRouter();
-  if (!router) {
-    return { success: false, message: 'Router not available' };
+  const [augmented] = await readFiles([virtualId], {});
+  if (!augmented) {
+    return { success: false, error: `Failed to read created file (virtualId: ${virtualId})` };
   }
-  const virtualFileId = -Date.now();
-  const params = new URLSearchParams();
-  params.set('virtualId', String(virtualFileId));
-  if (folder) params.set('folder', folder);
-  const url = preserveParams(`/new/${file_type}?${params.toString()}`);
-  router.push(url);
+
   return {
     success: true,
-    message: `Navigating to create new ${file_type}`
+    state: compressAugmentedFile(augmented),
   };
 });
 
