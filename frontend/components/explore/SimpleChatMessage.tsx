@@ -115,7 +115,8 @@ export default function SimpleChatMessage({ message, databaseName, isCompact = f
     }, {
         role: 'tool',
         tool_call_id: message.tool_call_id,
-        content: message.content
+        content: message.content,
+        ...(message.details && { details: message.details as import('@/lib/types').ToolCallDetails })
     }]
     return (
         <Grid
