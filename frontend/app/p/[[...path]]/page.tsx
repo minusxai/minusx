@@ -35,7 +35,7 @@ export default function PathPage({ params }: PathPageProps) {
   const { config } = useConfigs();
 
   // Determine if we're on mobile or desktop (true = mobile, false = desktop)
-  const isMobile = useBreakpointValue({ base: true, md: false }, { ssr: true });
+  const isMobile = useBreakpointValue({ base: true, md: false }, { ssr: false });
 
   // Unwrap params Promise (Next.js 16 requirement)
   const { path } = use(params);
