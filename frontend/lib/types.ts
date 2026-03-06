@@ -644,10 +644,15 @@ export interface ToolCall {
 export interface ToolCallDetails {
   success: boolean;
   error?: string;
+  message?: string;  // human-readable status message
 }
 
 export interface EditFileDetails extends ToolCallDetails {
   diff: string;
+}
+
+export interface ClarifyDetails extends ToolCallDetails {
+  selection?: any;  // the user's selection (for highlighting chosen option)
 }
 
 export interface ToolMessage {
@@ -655,6 +660,24 @@ export interface ToolMessage {
   tool_call_id: string;
   content: string | any;    // Can be string or object
   details?: ToolCallDetails;  // Structured metadata for UI rendering (not sent to LLM)
+}
+
+/**
+ * Convert a ToolMessage to typed details for display components.
+ * Prefers structured `details` (new); falls back to parsing `content` (old conversations
+ * and server-side Python tools that don't populate `details`).
+ * Spreading parsed content allows tool-specific fields (e.g. `selection`) through.
+ */
+export function contentToDetails<T extends ToolCallDetails>(toolMessage: ToolMessage): T {
+  if (toolMessage.details) return toolMessage.details as T;
+  try {
+    const parsed = typeof toolMessage.content === 'string'
+      ? JSON.parse(toolMessage.content)
+      : (toolMessage.content ?? {});
+    return { success: false, ...parsed } as T;
+  } catch {
+    return { success: false } as T;
+  }
 }
 
 export type CompletedToolCall = [ToolCall, ToolMessage];

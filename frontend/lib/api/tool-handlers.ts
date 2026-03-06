@@ -5,7 +5,7 @@
  * Used for tools that require user interaction or client-specific capabilities.
  */
 
-import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, DatabaseWithSchema, DocumentContent, QuestionContent } from '@/lib/types';
+import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema, DocumentContent, QuestionContent } from '@/lib/types';
 import { setEphemeral, selectMergedContent, selectEphemeralParamValues, selectDirtyFiles, type FileId } from '@/store/filesSlice';
 import type { AppDispatch, RootState } from '@/store/store';
 import { getStore } from '@/store/store';
@@ -320,44 +320,39 @@ registerFrontendTool('ClarifyFrontend', async (args, context) => {
 
   // Handle cancellation
   if (userResponse?.cancelled) {
-    const content = { success: false, message: 'User cancelled the clarification request' };
-    return { content, details: { success: false, error: content.message } };
+    const msg = 'User cancelled the clarification request';
+    const content = { success: false, message: msg };
+    return { content, details: { success: false, error: msg, message: msg } satisfies ClarifyDetails };
   }
 
   // Handle "Figure it out" option
   if (userResponse?.figureItOut) {
-    const content = {
-      success: true,
-      message: 'User chose: Figure it out (agent should decide based on context)',
-      selection: { label: 'Figure it out', figureItOut: true }
-    };
-    return { content, details: { success: true } };
+    const selection = { label: 'Figure it out', figureItOut: true };
+    const msg = 'User chose: Figure it out (agent should decide based on context)';
+    const content = { success: true, message: msg, selection };
+    return { content, details: { success: true, message: msg, selection } satisfies ClarifyDetails };
   }
 
   // Handle "Other" option with custom text
   if (userResponse?.other) {
-    const content = {
-      success: true,
-      message: `User provided custom response: ${userResponse.text}`,
-      selection: { label: 'Other', other: true, text: userResponse.text }
-    };
-    return { content, details: { success: true } };
+    const selection = { label: 'Other', other: true, text: userResponse.text };
+    const msg = `User provided custom response: ${userResponse.text}`;
+    const content = { success: true, message: msg, selection };
+    return { content, details: { success: true, message: msg, selection } satisfies ClarifyDetails };
   }
 
   // Format response message for regular selections
-  const formatSelection = (selection: any) => {
-    if (Array.isArray(selection)) {
-      return selection.map((s: any) => s.label).join(', ');
+  const formatSelection = (sel: any) => {
+    if (Array.isArray(sel)) {
+      return sel.map((s: any) => s.label).join(', ');
     }
-    return selection?.label || selection;
+    return sel?.label || sel;
   };
 
-  const content = {
-    success: true,
-    message: `User selected: ${formatSelection(userResponse)}`,
-    selection: userResponse
-  };
-  return { content, details: { success: true } };
+  const selection = userResponse;
+  const msg = `User selected: ${formatSelection(userResponse)}`;
+  const content = { success: true, message: msg, selection };
+  return { content, details: { success: true, message: msg, selection } satisfies ClarifyDetails };
 });
 
 // ============================================================================
@@ -548,12 +543,12 @@ registerFrontendTool('PublishAll', async (_args, context) => {
   // so re-reading would incorrectly return 'No unsaved changes'.
   if (userResponse.cancelled) {
     const msg = `Publish cancelled. ${userResponse.remaining} file${userResponse.remaining === 1 ? '' : 's'} still have unsaved changes.`;
-    return { content: { success: false, message: msg }, details: { success: false, error: msg } };
+    return { content: { success: false, message: msg }, details: { success: false, error: msg, message: msg } };
   }
 
   const fileCount = userInputs?.[0]?.props?.fileCount ?? 0;
   const msg = `Published ${fileCount} file${fileCount === 1 ? '' : 's'} successfully.`;
-  return { content: { success: true, message: msg }, details: { success: true } };
+  return { content: { success: true, message: msg }, details: { success: true, message: msg } };
 });
 
 /**

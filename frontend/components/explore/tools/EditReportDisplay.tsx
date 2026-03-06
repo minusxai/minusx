@@ -2,7 +2,7 @@
 
 import { HStack, Text, Icon, GridItem } from '@chakra-ui/react';
 import { LuCheck, LuX, LuCirclePlus, LuTrash2, LuClock, LuPencil, LuMail, LuFileText } from 'react-icons/lu';
-import { DisplayProps } from '@/lib/types';
+import { DisplayProps, contentToDetails } from '@/lib/types';
 
 export default function EditReportDisplay({ toolCallTuple, showThinking }: DisplayProps) {
   const [toolCall, toolMessage] = toolCallTuple;
@@ -19,17 +19,7 @@ export default function EditReportDisplay({ toolCallTuple, showThinking }: Displ
 
   const { operation, reference_id, reference_type } = args;
 
-  // Parse result
-  let result: any;
-  try {
-    result = typeof toolMessage.content === 'string'
-      ? JSON.parse(toolMessage.content)
-      : toolMessage.content;
-  } catch {
-    result = { success: false };
-  }
-
-  const { success } = result;
+  const { success } = contentToDetails(toolMessage);
 
   // Failed - show minimal display hidden behind thinking
   if (!success) {

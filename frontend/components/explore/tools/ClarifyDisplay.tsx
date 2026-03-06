@@ -2,7 +2,7 @@
 
 import { Box, HStack, VStack, Text, Icon, Badge, GridItem } from '@chakra-ui/react';
 import { LuCheck, LuX, LuBadgeInfo } from 'react-icons/lu';
-import { DisplayProps } from '@/lib/types';
+import { DisplayProps, ClarifyDetails, contentToDetails } from '@/lib/types';
 
 export default function ClarifyDisplay({ toolCallTuple }: DisplayProps) {
   const [toolCall, toolMessage] = toolCallTuple;
@@ -19,17 +19,7 @@ export default function ClarifyDisplay({ toolCallTuple }: DisplayProps) {
 
   const { question, options = [] } = args;
 
-  // Parse result
-  let result: any;
-  try {
-    result = typeof toolMessage.content === 'string'
-      ? JSON.parse(toolMessage.content)
-      : toolMessage.content;
-  } catch {
-    result = { success: false, message: 'Failed to parse result' };
-  }
-
-  const { success, message, selection } = result;
+  const { success, message, selection } = contentToDetails<ClarifyDetails>(toolMessage);
 
   // Check for special selections
   const isFigureItOut = selection?.figureItOut;

@@ -2,7 +2,7 @@
 
 import { HStack, Text, Icon, GridItem } from '@chakra-ui/react';
 import { LuCheck, LuX, LuClock, LuBell, LuSettings } from 'react-icons/lu';
-import { DisplayProps } from '@/lib/types';
+import { DisplayProps, contentToDetails } from '@/lib/types';
 
 export default function EditAlertDisplay({ toolCallTuple, showThinking }: DisplayProps) {
   const [toolCall, toolMessage] = toolCallTuple;
@@ -18,16 +18,7 @@ export default function EditAlertDisplay({ toolCallTuple, showThinking }: Displa
 
   const { operation, question_id } = args;
 
-  let result: any;
-  try {
-    result = typeof toolMessage.content === 'string'
-      ? JSON.parse(toolMessage.content)
-      : toolMessage.content;
-  } catch {
-    result = { success: false };
-  }
-
-  const { success } = result;
+  const { success } = contentToDetails(toolMessage);
 
   if (!success) {
     return showThinking ? (

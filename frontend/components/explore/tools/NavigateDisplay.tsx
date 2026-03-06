@@ -2,7 +2,7 @@
 
 import { HStack, Text, Icon, GridItem } from '@chakra-ui/react';
 import { LuCheck, LuX, LuFile, LuFolder, LuFilePlus2, LuArrowRight } from 'react-icons/lu';
-import { DisplayProps } from '@/lib/types';
+import { DisplayProps, contentToDetails } from '@/lib/types';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
@@ -23,17 +23,7 @@ export default function NavigateDisplay({ toolCallTuple, showThinking }: Display
 
   const { file_id, path, newFileType } = args;
 
-  // Parse result
-  let result: any;
-  try {
-    result = typeof toolMessage.content === 'string'
-      ? JSON.parse(toolMessage.content)
-      : toolMessage.content;
-  } catch {
-    result = { success: false };
-  }
-
-  const { success } = result;
+  const { success } = contentToDetails(toolMessage);
 
   // Failed navigation - show minimal display hidden behind thinking
   if (!success) {
