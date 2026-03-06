@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Box, HStack, VStack, Text, IconButton, Icon, Badge, Spinner } from '@chakra-ui/react';
 import { LuBug, LuChevronDown, LuChevronRight, LuClock, LuCpu } from 'react-icons/lu';
+import Editor from '@monaco-editor/react';
 import type { MessageDebugInfo } from '@/lib/types';
 import { useAppSelector } from '@/store/hooks';
 import { selectShowDebug } from '@/store/uiSlice';
@@ -37,13 +38,34 @@ function StatsTable({ stats }: { stats: Record<string, unknown> }) {
 }
 
 function JsonSection({ title, raw }: { title: string; raw: string }) {
+  const colorMode = useAppSelector((state) => state.ui.colorMode);
   let parsed: unknown;
   try { parsed = JSON.parse(raw); } catch { parsed = raw; }
+  const jsonString = typeof parsed === 'string' ? parsed : JSON.stringify(parsed, null, 2);
   return (
     <Box>
       <Text fontSize="2xs" fontWeight="600" color="fg.muted" mb={0.5}>{title}</Text>
-      <Box p={1.5} bg="bg.surface" borderRadius="sm" fontFamily="mono" fontSize="2xs" overflowX="auto" maxH="300px" overflowY="auto">
-        <pre>{JSON.stringify(parsed, null, 2)}</pre>
+      <Box border="1px solid" borderColor="border.default" borderRadius="sm" overflow="hidden">
+        <Editor
+          height="300px"
+          defaultLanguage="json"
+          value={jsonString}
+          theme={colorMode === 'dark' ? 'vs-dark' : 'vs-light'}
+          options={{
+            readOnly: true,
+            minimap: { enabled: false },
+            fontFamily: 'var(--font-jetbrains-mono)',
+            fontSize: 11,
+            lineNumbers: 'off',
+            folding: true,
+            scrollBeyondLastLine: false,
+            wordWrap: 'on',
+            wrappingIndent: 'indent',
+            automaticLayout: true,
+            tabSize: 2,
+            padding: { top: 4, bottom: 4 },
+          }}
+        />
       </Box>
     </Box>
   );
