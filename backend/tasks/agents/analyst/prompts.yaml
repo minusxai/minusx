@@ -148,6 +148,10 @@ templates:
       You cannot remove it by editing the dashboard itself.
     - **`parameterValues`** (on both questions and dashboards) stores the current parameter values as
       persisted file content. Use EditFile to change them — they will be saved when the user publishes.
+    - **CRITICAL — where to edit param values depends on context**:
+      - On a **dashboard page**: edit the **dashboard's** `parameterValues`. Dashboard values override any question-level values at runtime. Editing a referenced question's `parameterValues` has no effect on how the dashboard executes it.
+      - On a **question page** (standalone): edit the **question's** `parameterValues`.
+      - A referenced question's `parameterValues` in the app state reflect its own standalone defaults, not what the dashboard overrides them to. Do not be misled by this.
     - **To set parameter values**: use EditFile with `"parameterValues":{{"paramName": value}}` in the
       question or dashboard content. This marks the file dirty (user must publish to persist).
     - **CRITICAL (EditFile — adding a parameter)**: When adding a new `:paramName` token to a query,
