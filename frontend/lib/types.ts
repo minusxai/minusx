@@ -316,14 +316,15 @@ export interface BaseFileContent {
 
 // Database-backed document types
 // Extend generated QuestionContent with frontend-only fields
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface QuestionContent extends QuestionContentBase {}
+export interface QuestionContent extends QuestionContentBase {
+  queryResultId?: string;  // Computed: hash of query+params+database, stored in DB for cache lookup
+}
 
 export interface DocumentContent extends BaseFileContent {
   description?: string;
   assets: AssetReference[];
   layout?: any;  // Type-specific layout (DashboardLayout, etc.)
-  parameterValues?: Record<string, any>;  // Dashboard parameter values (ephemeral, from Redux)
+  parameterValues?: Record<string, any>;  // Persisted parameter values (saved with file)
 }
 
 /**
@@ -846,7 +847,6 @@ export interface AugmentedFile {
 /**
  * CompressedFileState — pre-merged view of a FileState for model consumption.
  * content = { ...content, ...persistableChanges } so oldMatch is just a copy.
- * runtimeParameterValues surfaces ephemeralChanges.parameterValues clearly labeled.
  */
 export interface CompressedFileState {
   id: number;
@@ -855,8 +855,6 @@ export interface CompressedFileState {
   type: FileType;
   isDirty: boolean;             // true if unpublished changes exist
   content: FileState['content']; // merged: { ...content, ...persistableChanges }
-  runtimeParameterValues?: Record<string, any>; // ephemeralChanges.parameterValues — live, never saved
-  queryResultIDs?: string[];  // Computed: hashes of query+params+database for each embedded query result
 }
 
 export interface CompressedAugmentedFile {

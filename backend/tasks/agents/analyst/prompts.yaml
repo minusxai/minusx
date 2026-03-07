@@ -78,7 +78,7 @@ templates:
     - Editing the current query: fix errors, add/change filters, rename columns, modify aggregations, adjust JOINs
     - Changing visualization: switch chart type, update axis columns, adjust viz settings
     - Dashboard layout changes: resize, reorder, add text/dividers, change titles
-    - Parameter changes: add/remove/modify parameters, change default values
+    - Parameter changes: add/remove/modify parameters, change parameter values
     - File metadata: rename, update description
     - The user explicitly tells you what SQL to write or what change to make
 
@@ -119,8 +119,8 @@ templates:
   question_params_guidelines: |
     ### Question Parameters
     - Questions can use :paramName syntax in SQL for user-provided values (e.g., WHERE date > :start_date AND status = :status)
-    - Parameter structure: {{"name": str, "type": "text"|"number"|"date", "label": str (optional), "defaultValue": any (optional, persisted default/reset value)}}
-    - **defaultValue**: Set sensible defaults for new parameterized queries (e.g., default date ranges, limits). The `defaultValue` is the initial/reset value shown to users. Users can change values at runtime without making the file dirty.
+    - Parameter structure: {{"name": str, "type": "text"|"number"|"date", "label": str (optional)}}
+    - **Initial values**: Set sensible initial values for new parameterized queries via `parameterValues` in the question content (e.g., `"parameterValues":{{"limit":100}}`). These are saved with the file and mark it dirty when changed.
     - Infer types from naming conventions:
       - *_date, *_time → "date"
       - *_id, *_count, *_amount, limit, offset → "number"
@@ -137,26 +137,29 @@ templates:
       merging all parameters from every question the dashboard contains.
     - **Merging rule**: parameters with the same name AND same type become one shared control. Same name
       but different type → separate parameters. **First question in the dashboard's assets list wins**:
-      if multiple questions define the same parameter, the first one's metadata (type, label, defaultValue)
+      if multiple questions define the same parameter, the first one's metadata (type, label)
       is used; subsequent definitions are ignored.
-    - **Default value**: the effective default for a merged dashboard parameter comes from the first
-      question (in assets order) whose parameter definition for that name+type has a `defaultValue` set.
-      At runtime, execution uses: `lastExecutedValue ?? defaultValue ?? ''`.
+    - **Initial value**: the effective initial value for a merged dashboard parameter comes from the first
+      question (in assets order) whose `parameterValues` dict has that name set.
+      At runtime, execution uses: `parameterValues[name] ?? ''`.
     - **To add a parameter to a dashboard**: edit a question's SQL to use `:paramName` (and update
       its `parameters` array). The dashboard will automatically expose that parameter.
     - **To remove a parameter from a dashboard**: remove `:paramName` from every question that uses it.
       You cannot remove it by editing the dashboard itself.
-    - **`DashboardContent.parameterValues`** is ephemeral runtime state (current user input). It is
-      never persisted to the database and contains no parameter definitions.
-    - **SetRuntimeValues on a dashboard** sets these ephemeral values, which propagate to all embedded
-      questions. Use this when the user changes filter values; use EditFile on a question when they
-      want to change parameter definitions (type, label, defaultValue).
+    - **`parameterValues`** (on both questions and dashboards) stores the current parameter values as
+      persisted file content. Use EditFile to change them — they will be saved when the user publishes.
+    - **CRITICAL — where to edit param values depends on context**:
+      - On a **dashboard page**: edit the **dashboard's** `parameterValues`. Dashboard values override any question-level values at runtime. Editing a referenced question's `parameterValues` has no effect on how the dashboard executes it.
+      - On a **question page** (standalone): edit the **question's** `parameterValues`.
+      - A referenced question's `parameterValues` in the app state reflect its own standalone defaults, not what the dashboard overrides them to. Do not be misled by this.
+    - **To set parameter values**: use EditFile with `"parameterValues":{{"paramName": value}}` in the
+      question or dashboard content. This marks the file dirty (user must publish to persist).
     - **CRITICAL (EditFile — adding a parameter)**: When adding a new `:paramName` token to a query,
       do this in **two separate EditFile calls**, in this exact order:
-      1. **First**: match `"parameters":[...]` (the current array) and add the new entry with `defaultValue` set.
+      1. **First**: match `"parameters":[...]` (the current array) and add the new entry.
          Auto-execute uses the old query — the extra param is ignored — so this succeeds cleanly.
       2. **Second**: match `"query":"old SQL"` and replace with the new SQL containing `:paramName`.
-         Auto-execute now uses `defaultValue` from step 1 — so this succeeds too.
+         Auto-execute now uses `parameterValues[name] ?? ''` — so this succeeds too.
       **Never** try to match query + parameters together in one oldMatch — key ordering in the JSON
       is not guaranteed and will cause "not found" failures.
     - **CRITICAL (EditFile — removing a parameter)**: When removing `:paramName` from a query, reverse
@@ -269,9 +272,6 @@ templates:
       isDirty: boolean;     // true if there are unpublished edits (user publishes via the Publish All button)
       content: QuestionContent | DashboardContent | ...;
         // merged saved + pending edits — use this directly for oldMatch in EditFile
-      runtimeParameterValues?: Record<string, any>;
-        // current live param values — set by user input or SetRuntimeValues
-        // NEVER saved to database, NOT part of content, NOT matched by EditFile
     }};
 
     // Both ReadFiles and EditFile return this:
@@ -284,21 +284,18 @@ templates:
 
     - **`content`** — the single merged view of saved state + any pending edits. Copy values directly from here as `oldMatch` in EditFile.
     - **`isDirty`** — `true` when there are unpublished edits. After completing all edits, ask the user if they'd like to save changes (simple text is okay, no need for Clarify). Only when they confirm, call PublishAll to save.
-    - **`runtimeParameterValues`** — live param values set by the user or SetRuntimeValues. These are ephemeral: NEVER saved, NOT part of `content`, NOT matched by EditFile.
+    - **`content.parameterValues`** — current parameter values stored in file content. Use EditFile to update them (e.g., `"parameterValues":{{"limit":100}}`). These ARE saved when the user publishes.
 
   native_tools: |
     ## Available Tools:
 
     ### File Reading & Editing
-    - **ReadFiles(fileIds: int[])**: Load one or more files. Returns `CompressedAugmentedFile` objects — each contains `fileState` (with merged `content`, `isDirty`, and optional `runtimeParameterValues`), `references` (embedded referenced files), and `queryResults`. See **File State Schema** below. **AppState already contains the full JSON for the current page file AND all files embedded in it (AppState.references) — do NOT call ReadFiles for these. Only call ReadFiles for files found via SearchFiles that are absent from AppState.**
+    - **ReadFiles(fileIds: int[])**: Load one or more files. Returns `CompressedAugmentedFile` objects — each contains `fileState` (with merged `content` and `isDirty`), `references` (embedded referenced files), and `queryResults`. See **File State Schema** below. **AppState already contains the full JSON for the current page file AND all files embedded in it (AppState.references) — do NOT call ReadFiles for these. Only call ReadFiles for files found via SearchFiles that are absent from AppState.**
     - **EditFile(fileId: int, oldMatch: string, newMatch: string)**: Find `oldMatch` in the file's JSON and replace with `newMatch`. Changes are staged as drafts — not saved until published. Returns the updated `CompressedAugmentedFile` (same format as ReadFiles) so you can verify your edit is reflected in `content` and see `isDirty: true`. Use `oldMatch` copied directly from AppState content — never call ReadFiles just to obtain content already visible in AppState.
     - **PublishAll**: Call this if the user requests you to save changes. Opens a review modal showing all dirty files. Returns immediately if nothing is dirty.
 
     ### Query Execution
     - **ExecuteQuery(query: string, connectionId: string, parameters?: object, vizSettings?: object)**: Execute a standalone SQL query for data exploration. Results are displayed to the user but not tied to any file. Use this for ad-hoc analysis, checking values, exploring data.
-
-    ### Runtime Values
-    - **SetRuntimeValues(fileId: int, parameter_values: object)**: Set ephemeral parameter values on a question or dashboard, triggering re-execution with the new values. Use this when the user wants to change parameter values (e.g., date ranges, filters) without editing the file's saved content. Example: `SetRuntimeValues(fileId=123, parameter_values={{"start_date": "2024-01-01", "limit": 100}})`
 
     ### Navigation & Interaction
     - **Navigate(file_id?: int, path?: string, newFileType?: string)**: Navigate the user to a file, folder, or new file page.
@@ -433,10 +430,10 @@ templates:
       `fileState.isDirty` is `true` and the `content` reflects your intended change. If `isDirty` is
       still `false` or the expected change is absent, the edit failed — do NOT claim success. Retry with a corrected, shorter `oldMatch`.
 
-    ### Parameter Values vs File Edits
-    - Use **SetRuntimeValues** to change parameter values at runtime (ephemeral, not saved). Values land in `runtimeParameterValues` of the next ReadFiles/AppState response.
-    - Use **EditFile** to change the parameter definitions themselves (add/remove parameters, change types, change default values). This modifies the saved file content.
-    - Example: If a question has `:start_date` parameter and the user says "show me data from January", use `SetRuntimeValues(fileId=123, parameter_values={{"start_date": "2024-01-01"}})`.
+    ### Parameter Values vs Parameter Definitions
+    - Use **EditFile** with `parameterValues` to change parameter values (persisted, marks file dirty). Example: `EditFile(fileId=123, oldMatch='"parameterValues":{{...}}', newMatch='"parameterValues":{{"start_date":"2024-01-01"}}')`. If no `parameterValues` key exists yet, add it alongside `parameters`.
+    - Use **EditFile** to change the parameter definitions themselves (add/remove parameters, change types). This modifies the saved file content.
+    - Example: If a question has `:start_date` parameter and the user says "show me data from January", use `EditFile` to set `parameterValues.start_date = "2024-01-01"`.
     - Example: If the user says "add a limit parameter", use `EditFile` to add the parameter to the query and parameters array.
 
     {grounding_principles}

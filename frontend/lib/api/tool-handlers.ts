@@ -5,8 +5,8 @@
  * Used for tools that require user interaction or client-specific capabilities.
  */
 
-import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema, DocumentContent, QuestionContent } from '@/lib/types';
-import { setEphemeral, selectMergedContent, selectEphemeralParamValues, selectDirtyFiles, type FileId } from '@/store/filesSlice';
+import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema } from '@/lib/types';
+import { setEphemeral, selectMergedContent, selectDirtyFiles, type FileId } from '@/store/filesSlice';
 import type { AppDispatch, RootState } from '@/store/store';
 import { getStore } from '@/store/store';
 import type { UserInput } from './user-input-exception';
@@ -246,38 +246,6 @@ registerFrontendTool('Navigate', async (args, context) => {
   return { content: { success: false, message: msg }, details: { success: false, error: msg } };
 });
 
-// Operation handlers
-
-/**
- * Set dashboard parameter values (ephemeral, not saved)
- */
-function handleSetParameterValues(
-  content: DocumentContent,
-  parameterValues?: Array<{name: string, value: any}> | Record<string, any>
-): Partial<DocumentContent> {
-  if (!parameterValues) {
-    throw new Error('parameter_values required for set_parameter_values operation');
-  }
-
-  // Convert array format to dict if needed
-  let valuesDict: Record<string, any>;
-  if (Array.isArray(parameterValues)) {
-    valuesDict = parameterValues.reduce((acc, pv) => ({
-      ...acc,
-      [pv.name]: pv.value
-    }), {});
-  } else {
-    valuesDict = parameterValues;
-  }
-
-  // Merge with existing values
-  return {
-    parameterValues: {
-      ...(content.parameterValues || {}),
-      ...valuesDict
-    }
-  };
-}
 
 /**
  * PresentFinalAnswerFrontend - Frontend execution of PresentFinalAnswer
@@ -406,11 +374,7 @@ registerFrontendTool('EditFile', async (args, _context) => {
     const finalContent = selectMergedContent(updatedState, fileId) as any;
 
     if (finalContent?.query && finalContent?.database_name) {
-      const ephemeralValues = selectEphemeralParamValues(updatedState, fileId);
-      const params = (finalContent.parameters || []).reduce((acc: any, p: any) => {
-        acc[p.name] = ephemeralValues[p.name] ?? p.defaultValue ?? '';
-        return acc;
-      }, {} as Record<string, any>);
+      const params = finalContent.parameterValues || {};
 
       // Auto-execute is best-effort: a failed execution (e.g. no data, bad param) must NOT
       // cause EditFile to report failure. The edit was already staged successfully.
@@ -509,11 +473,7 @@ registerFrontendTool('CreateFile', async (args, _context) => {
     const finalContent = selectMergedContent(updatedState, virtualId) as any;
 
     if (finalContent?.query && finalContent?.database_name) {
-      const ephemeralValues = selectEphemeralParamValues(updatedState, virtualId);
-      const params = (finalContent.parameters || []).reduce((acc: any, p: any) => {
-        acc[p.name] = ephemeralValues[p.name] ?? p.defaultValue ?? '';
-        return acc;
-      }, {} as Record<string, any>);
+      const params = finalContent.parameterValues || {};
 
       try {
         await getQueryResult({
@@ -586,57 +546,3 @@ registerFrontendTool('PublishAll', async (_args, context) => {
   return { content: { success: true, message: msg }, details: { success: true, message: msg } };
 });
 
-/**
- * SetRuntimeValues - Set ephemeral runtime values (parameter values) on a file
- * Works for both questions and dashboards
- */
-registerFrontendTool('SetRuntimeValues', async (args, context) => {
-  const { fileId, parameter_values } = args;
-  const { dispatch, state } = context;
-
-  if (!dispatch || fileId === undefined) {
-    const msg = 'Missing dispatch or fileId';
-    return { content: { success: false, message: msg }, details: { success: false, error: msg } };
-  }
-
-  // Get merged content to merge with existing parameter values
-  const reduxState = state || getStore().getState();
-  const mergedContent = selectMergedContent(reduxState, fileId);
-
-  if (!mergedContent) {
-    const err = `File content not available. FileId: ${fileId}`;
-    return { content: { success: false, error: err }, details: { success: false, error: err } };
-  }
-
-  // Reuse existing helper to normalize parameter_values format
-  const paramUpdates = handleSetParameterValues(mergedContent as DocumentContent, parameter_values);
-  const paramValues = paramUpdates.parameterValues || {};
-
-  // Build lastExecuted with actual query/database from file content
-  // For questions, useQueryResult skips execution when query is empty,
-  // so we must populate from the file's current content.
-  const fileState = reduxState.files.files[fileId];
-  const isQuestion = fileState?.type === 'question';
-  const questionContent = isQuestion ? mergedContent as QuestionContent : null;
-
-  const lastExecuted = {
-    query: questionContent?.query || '',
-    params: paramValues,
-    database: questionContent?.database_name || '',
-    references: questionContent?.references || []
-  };
-
-  // Set ephemeral state + lastExecuted to trigger execution
-  dispatch(setEphemeral({
-    fileId: fileId as FileId,
-    changes: {
-      parameterValues: paramValues,
-      lastExecuted
-    }
-  }));
-
-  const paramEntries = Object.entries(paramValues);
-  const paramSummary = paramEntries.map(([k, v]) => `${k}=${v}`).join(', ');
-  const msg = `Set ${paramEntries.length} parameter value(s): ${paramSummary}`;
-  return { content: { success: true, message: msg }, details: { success: true } };
-});

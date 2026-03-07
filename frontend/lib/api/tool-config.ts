@@ -7,7 +7,6 @@ import NavigateDisplay from '@/components/explore/tools/NavigateDisplay';
 import EditDashboardDisplay from '@/components/explore/tools/EditDashboardDisplay';
 import EditReportDisplay from '@/components/explore/tools/EditReportDisplay';
 import EditAlertDisplay from '@/components/explore/tools/EditAlertDisplay';
-import SetRuntimeValuesDisplay from '@/components/explore/tools/SetRuntimeValuesDisplay';
 import EditFileDisplay from '@/components/explore/tools/EditFileDisplay';
 import ReadFilesDisplay from '@/components/explore/tools/ReadFilesDisplay';
 import SearchFilesDisplay from '@/components/explore/tools/SearchFilesDisplay';
@@ -59,9 +58,6 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
   },
   'EditAlert': {
     displayComponent: EditAlertDisplay
-  },
-  'SetRuntimeValues': {
-    displayComponent: SetRuntimeValuesDisplay
   },
   'EditFile': {
     displayComponent: EditFileDisplay

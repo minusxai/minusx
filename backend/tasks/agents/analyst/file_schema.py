@@ -96,7 +96,6 @@ class QuestionParameter(BaseModel):
     name: str
     type: ParameterType
     label: Optional[str] = None
-    defaultValue: Optional[Union[str, float]] = None
 
 class QuestionReference(BaseModel):
     """Composed question reference — lets this query use @alias as a CTE."""
@@ -108,6 +107,7 @@ class QuestionContent(BaseModel):
     query: str = Field(..., description="SQL query string, may contain :paramName tokens")
     vizSettings: VisualizationSettings
     parameters: Optional[List[QuestionParameter]] = None
+    parameterValues: Optional[Dict[str, Any]] = None
     database_name: str = Field(..., description="connection name (empty string if none)")
     references: Optional[List[QuestionReference]] = None
 

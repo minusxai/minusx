@@ -21,7 +21,6 @@ export type EphemeralChanges = Partial<DbFile['content']> & {
     database: string;
     references: any[];
   };
-  parameterValues?: Record<string, any>;  // Ephemeral runtime param overrides (not persisted)
 };
 
 /**
@@ -1132,12 +1131,13 @@ export const selectContextFromPath = createSelector(
 );
 
 /**
- * Get ephemeral parameter values for a file
- * Used by question/dashboard views to get runtime param overrides
+ * Get current parameter values for a file (from merged content)
+ * Used by question/dashboard views for param display and execution
  */
 const EMPTY_PARAM_VALUES: Record<string, any> = {};
-export const selectEphemeralParamValues = (state: RootState, id: FileId): Record<string, any> => {
-  return (state.files.files[id]?.ephemeralChanges as EphemeralChanges)?.parameterValues || EMPTY_PARAM_VALUES;
+export const selectParamValues = (state: RootState, id: FileId): Record<string, any> => {
+  const content = selectMergedContent(state, id) as any;
+  return content?.parameterValues || EMPTY_PARAM_VALUES;
 };
 
 export default filesSlice.reducer;

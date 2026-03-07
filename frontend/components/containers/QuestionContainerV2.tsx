@@ -13,7 +13,7 @@
  */
 import { useCallback, useEffect, useRef } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectMergedContent, selectEphemeralParamValues, setEphemeral, type FileId } from '@/store/filesSlice';
+import { selectMergedContent, setEphemeral, type FileId } from '@/store/filesSlice';
 import { selectProposedQuery } from '@/store/uiSlice';
 import { useFile, useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { editFile } from '@/lib/api/file-state';
@@ -42,19 +42,13 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
   // Phase 3: Get merged content (content + persistableChanges + ephemeralChanges)
   const mergedContent = useAppSelector(state => selectMergedContent(state, fileId)) as QuestionContent | undefined;
 
-  // Get ephemeral parameter values
-  const ephemeralParamValues = useAppSelector(state => selectEphemeralParamValues(state, fileId));
-
   // Phase 3: Get query to execute (from ephemeralChanges.lastExecuted or fallback to current)
   // lastExecuted tracks what was most recently *explicitly* executed (user click or auto-execute).
   // We display results for lastExecuted so edits don't wipe out visible results mid-typing.
   const lastExecuted = file?.ephemeralChanges?.lastExecuted;
   const queryToExecute = lastExecuted || {
     query: mergedContent?.query || '',
-    params: (mergedContent?.parameters || []).reduce((acc, p) => ({
-      ...acc,
-      [p.name]: ephemeralParamValues[p.name] ?? p.defaultValue
-    }), {}),
+    params: mergedContent?.parameterValues || {},
     database: mergedContent?.database_name || '',
     references: mergedContent?.references || []
   };
@@ -83,11 +77,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
   const handleExecute = useCallback((overrideParamValues?: Record<string, any>) => {
     if (!mergedContent) return;
 
-    const params = mergedContent.parameters || [];
-    const effectiveValues = overrideParamValues || params.reduce((acc, p) => ({
-      ...acc,
-      [p.name]: ephemeralParamValues[p.name] ?? p.defaultValue
-    }), {} as Record<string, any>);
+    const effectiveValues = overrideParamValues ?? mergedContent.parameterValues ?? {};
 
     const newQuery = {
       query: mergedContent.query,
@@ -100,7 +90,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
       fileId,
       changes: { lastExecuted: newQuery }
     }));
-  }, [mergedContent, fileId, dispatch, ephemeralParamValues]);
+  }, [mergedContent, fileId, dispatch]);
 
   // Auto-execute once per mount with current mergedContent (includes persistableChanges).
   // Using a ref (not lastExecuted) as the guard so every fresh mount runs the current query —
@@ -113,13 +103,11 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
     handleExecute();
   }, [file, mergedContent, handleExecute]);
 
-  // Handle ephemeral parameter value change
+  // Handle parameter value change — persisted into file content (marks file dirty)
   const handleParameterValueChange = useCallback((paramName: string, value: string | number) => {
-    dispatch(setEphemeral({
-      fileId,
-      changes: { parameterValues: { ...ephemeralParamValues, [paramName]: value } }
-    }));
-  }, [fileId, dispatch, ephemeralParamValues]);
+    const currentValues = mergedContent?.parameterValues || {};
+    editFile({ fileId, changes: { content: { parameterValues: { ...currentValues, [paramName]: value } } } });
+  }, [fileId, mergedContent]);
 
   // Get proposed query from UI state (set by UserInputComponent for diff view)
   const proposedQuery = useAppSelector(state =>
@@ -149,7 +137,6 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
       queryLoading={queryLoading}
       queryError={queryError}
       queryStale={queryStale}
-      ephemeralParamValues={ephemeralParamValues}
       lastSubmittedParamValues={lastExecuted?.params}
       proposedQuery={containerMode === 'preview' ? undefined : proposedQuery}
       originalQuery={originalQuery}

@@ -10,7 +10,8 @@ import 'react-grid-layout/css/styles.css';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import JsonEditor from '../slides/JsonEditor';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectMergedContent, selectEphemeralParamValues, selectIsDirty, setEphemeral } from '@/store/filesSlice';
+import { selectMergedContent, selectIsDirty, setEphemeral } from '@/store/filesSlice';
+import { editFile } from '@/lib/api/file-state';
 import { openFileModal, selectDashboardEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
@@ -99,8 +100,9 @@ export default function DashboardView({
     }
   }
 
-  // Read ephemeral parameter values from Redux
-  const ephemeralParamValues = useAppSelector(state => selectEphemeralParamValues(state, fileId));
+  // Read current parameter values from merged content (persisted in file)
+  const mergedDashboardContent = useAppSelector(state => selectMergedContent(state, fileId)) as any;
+  const paramValues = mergedDashboardContent?.parameterValues || EMPTY_PARAMS;
 
   // Last-submitted param values from lastExecuted (gates execution)
   // NOTE: ?? EMPTY_PARAMS (not ?? {}) — a new {} each render makes effectiveSubmittedValues unstable
@@ -206,14 +208,16 @@ export default function DashboardView({
     return mergedParameters;
   }, [mergedParameters]);
 
-  // Effective submitted values: only these flow to query execution
+  // Effective submitted values: only these flow to query execution.
+  // lastExecutedParams gates stale detection; paramValues is the persisted fallback
+  // (used on initial load and after publish clears ephemeral state).
   const effectiveSubmittedValues = useMemo(() => {
     const values: Record<string, any> = {};
     for (const p of mergedParameters) {
-      values[p.name] = lastExecutedParams[p.name] ?? p.defaultValue ?? '';
+      values[p.name] = lastExecutedParams[p.name] ?? paramValues[p.name] ?? '';
     }
     return values;
-  }, [mergedParameters, lastExecutedParams]);
+  }, [mergedParameters, lastExecutedParams, paramValues]);
 
   // Handler for removing questions (needs to be defined before questionGridItems)
   const handleRemoveQuestion = useCallback((questionIdStr: string) => {
@@ -383,26 +387,22 @@ export default function DashboardView({
             <Box mb={4}>
               <ParameterRow
                 parameters={parameterValuesForDisplay}
-                parameterValues={ephemeralParamValues}
+                parameterValues={paramValues}
                 lastSubmittedValues={effectiveSubmittedValues}
                 onValueChange={(paramName, value) => {
-                  dispatch(setEphemeral({
-                    fileId,
-                    changes: { parameterValues: { ...ephemeralParamValues, [paramName]: value } }
-                  }));
+                  editFile({ fileId, changes: { content: { parameterValues: { ...paramValues, [paramName]: value } } } });
                 }}
-                onSubmit={(paramValues) => {
-                  // Update ephemeral typing state + lastExecuted.params to trigger execution
+                onSubmit={(newParamValues) => {
+                  // Persist new values + update lastExecuted.params to trigger execution
+                  editFile({ fileId, changes: { content: { parameterValues: newParamValues } } });
                   dispatch(setEphemeral({
                     fileId,
                     changes: {
-                      parameterValues: paramValues,
-                      lastExecuted: { query: '', params: paramValues, database: '', references: [] }
+                      lastExecuted: { query: '', params: newParamValues, database: '', references: [] }
                     }
                   }));
                 }}
                 disableTypeChange={true}
-                disableSetDefault={true}
                 onHoverParam={setHoveredParamKey}
               />
             </Box>

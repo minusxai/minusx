@@ -114,7 +114,9 @@ export type Parameters = QuestionParameter[] | null;
 export type Name2 = string;
 export type ParameterType = "text" | "number" | "date";
 export type Label = string | null;
-export type Defaultvalue = string | number | null;
+export type Parametervalues = {
+  [k: string]: unknown;
+} | null;
 /**
  * connection name (empty string if none)
  */
@@ -150,7 +152,7 @@ export type W = number;
  * height in grid units (min 3)
  */
 export type H = number;
-export type Parametervalues = {
+export type Parametervalues1 = {
   [k: string]: unknown;
 } | null;
 export type References2 = number[] | null;
@@ -168,6 +170,7 @@ export interface QuestionContent {
   query: Query;
   vizSettings: VizSettings;
   parameters?: Parameters;
+  parameterValues?: Parametervalues;
   database_name: DatabaseName;
   references?: References;
 }
@@ -225,7 +228,6 @@ export interface QuestionParameter {
   name: Name2;
   type: ParameterType;
   label?: Label;
-  defaultValue?: Defaultvalue;
 }
 /**
  * Composed question reference — lets this query use @alias as a CTE.
@@ -246,7 +248,7 @@ export interface DashboardContent {
   description?: Description1;
   assets: Assets;
   layout?: DashboardLayout | null;
-  parameterValues?: Parametervalues;
+  parameterValues?: Parametervalues1;
 }
 /**
  * A reference to another question embedded in the dashboard.

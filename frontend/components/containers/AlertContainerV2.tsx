@@ -124,10 +124,7 @@ export default function AlertContainerV2({ fileId }: AlertContainerV2Props) {
       const questionContent = (questionFile as any).content as QuestionContent;
 
       // 2. Execute the query using centralized getQueryResult
-      const params = (questionContent.parameters || []).reduce<Record<string, any>>((acc, p) => {
-        acc[p.name] = p.defaultValue ?? '';
-        return acc;
-      }, {});
+      const params = questionContent.parameterValues || {};
 
       const queryResult = await getQueryResult({
         query: questionContent.query,

@@ -62,26 +62,25 @@ function getRootParams(state: RootState, fileState: FileState): Record<string, a
 }
 
 /**
- * Applies inheritedParams as overrides to a question's own stored parameter defaults.
- * Returns both forms needed downstream:
- *   array — patched QuestionParameter[] for display in the app state
- *   dict  — flat {name: value} for cache hash computation
+ * Resolves effective parameter values for a question.
+ * Merges the question's own parameterValues with inherited params (inherited wins).
+ * Returns a dict filtered to only params the question defines.
  *
  * Only params the question itself defines are included; unrelated inherited
  * params are dropped (prevents sibling-question param pollution in the hash).
  */
 function resolveEffectiveParams(
   parameters: QuestionParameter[],
+  ownParamValues: Record<string, any>,
   inheritedParams: Record<string, any>
-): { array: QuestionParameter[]; dict: Record<string, any> } {
-  const array = parameters.map(p => ({
-    ...p,
-    defaultValue: Object.prototype.hasOwnProperty.call(inheritedParams, p.name)
+): Record<string, any> {
+  const dict: Record<string, any> = {};
+  for (const p of parameters) {
+    dict[p.name] = Object.prototype.hasOwnProperty.call(inheritedParams, p.name)
       ? inheritedParams[p.name]
-      : (p.defaultValue),
-  }));
-  const dict = array.reduce<Record<string, any>>((acc, p) => { acc[p.name] = p.defaultValue; return acc; }, {});
-  return { array, dict };
+      : (ownParamValues[p.name] ?? '');
+  }
+  return dict;
 }
 
 /**
@@ -97,12 +96,14 @@ function buildEffectiveReference(refFile: FileState, inheritedParams: Record<str
   const content = refFile.content as QuestionContent;
   if (!content.parameters?.length) return stripped;
 
-  const { array: effectiveParameters } = resolveEffectiveParams(
-    content.parameters, inheritedParams
-  );
+  const ownParamValues = content.parameterValues ?? {};
+  const effectiveParamsDict = resolveEffectiveParams(content.parameters, ownParamValues, inheritedParams);
+  const effectiveQueryResultId = content.query && content.database_name
+    ? getQueryHash(content.query, effectiveParamsDict, content.database_name)
+    : content.queryResultId;
   return {
     ...stripped,
-    content: { ...content, parameters: effectiveParameters },
+    content: { ...content, queryResultId: effectiveQueryResultId },
   };
 }
 
@@ -129,7 +130,8 @@ function augmentWithParams(
   if (fileState.type === 'question') {
     const content = selectMergedContent(state, fileState.id) as QuestionContent;
     if (content?.query) {
-      const { dict: params } = resolveEffectiveParams(content.parameters || [], inheritedParams);
+      const ownParamValues = content.parameterValues ?? {};
+      const params = resolveEffectiveParams(content.parameters || [], ownParamValues, inheritedParams);
       const qr = selectQueryResult(state, content.query, params, content.database_name);
       if (qr?.data) {
         const id = getQueryHash(content.query, params, content.database_name);
@@ -296,23 +298,6 @@ export function compressAugmentedFile(augmented: AugmentedFile): CompressedAugme
       fs.metadataChanges?.name !== undefined ||
       fs.metadataChanges?.path !== undefined
     );
-    const runtimeParameterValues = (fs.ephemeralChanges as { parameterValues?: Record<string, any> })?.parameterValues;
-
-    // Compute queryResultIDs for questions from merged content
-    let queryResultIDs: string[] | undefined;
-    if (fs.type === 'question') {
-      const qc = mergedContent as QuestionContent;
-      if (qc.query && qc.database_name) {
-        const params = (qc.parameters || []).reduce<Record<string, any>>((acc, p) => {
-          acc[p.name] = p.defaultValue ?? '';
-          return acc;
-        }, {});
-        queryResultIDs = [getQueryHash(qc.query, params, qc.database_name)];
-      } else {
-        queryResultIDs = [];
-      }
-    }
-
     return {
       id: fs.id,
       name: fs.metadataChanges?.name ?? fs.name,
@@ -320,9 +305,6 @@ export function compressAugmentedFile(augmented: AugmentedFile): CompressedAugme
       type: fs.type as FileType,
       isDirty,
       content: mergedContent as FileState['content'],
-      ...(runtimeParameterValues && Object.keys(runtimeParameterValues).length > 0
-        ? { runtimeParameterValues } : {}),
-      ...(queryResultIDs !== undefined ? { queryResultIDs } : {}),
     };
   };
   return {
@@ -850,19 +832,6 @@ export async function publishFile(
     ? { ...fileState.content, ...fileState.persistableChanges }
     : fileState.content;
 
-  // Normalize parameters on save: migrate value → defaultValue, strip value
-  if (fileState.type === 'question' && contentToSave) {
-    const qContent = contentToSave as QuestionContent;
-    if (qContent.parameters?.length) {
-      contentToSave = {
-        ...qContent,
-        parameters: qContent.parameters.map(p => {
-          const normalized = { ...p, defaultValue: p.defaultValue ?? null };
-          return normalized;
-        })
-      };
-    }
-  }
 
   if (!contentToSave) {
     throw new Error(`File ${fileId} has no content to save`);
