@@ -31,13 +31,6 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
   'ClarifyFrontend': {
     displayComponent: null,
   },
-  [ToolNames.PRESENT_FINAL_ANSWER]: {
-    displayComponent: ContentDisplay,
-  },
-  // Frontend variant (PresentFinalAnswerFrontend) - no display component
-  'PresentFinalAnswerFrontend': {
-    displayComponent: null,
-  },
   [ToolNames.TALK_TO_USER]: {
     displayComponent: ContentDisplay,
   },

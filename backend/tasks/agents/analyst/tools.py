@@ -235,43 +235,6 @@ class TalkToUser(Tool):
             return json.dumps({'success': True, 'content': self.content, 'citations': self.citations})
 
 
-@register_agent
-class PresentFinalAnswer(Tool):
-    """DEPRECATED: Use <thinking> and <answer> XML tags instead.
-
-    This tool is kept for backwards compatibility with old conversation logs.
-    New conversations should use XML tags directly in the model's response:
-    - <thinking> tags for internal reasoning and exploration
-    - <answer> tags for user-facing responses
-
-    Present the final analysis to the user after completing all exploratory work.
-    Use this tool to structure your final conclusions after running exploratory queries.
-    This separates your working process from the final answer the user sees.
-
-    **IMPORTANT**:
-    - Call this AFTER completing all data exploration and analysis
-    - Put your complete findings in this tool instead of writing long markdown responses
-    - Use markdown formatting for the answer (headers, lists, bold, table, etc.)
-    - Use Markdown table if you want to show results, instead of a list of items, especially if could use columns
-    - End with a helpful message to continue the conversation like "What else would you like me to do?" or 
-      "Would you like to see further slices on ColumnB?" etc.
-    """
-
-    def __init__(
-        self,
-        answer: str = Field(..., description="The final answer in markdown format with your complete analysis, insights, and conclusions"),
-        **kwargs
-    ):
-        super().__init__(**kwargs)  # type: ignore
-        self.answer = answer
-
-    async def reduce(self, child_batches):
-        pass
-
-    async def run(self) -> str:
-        # Signal that this tool needs frontend execution for special rendering
-        raise UserInputException(self._unique_id)
-    
 
 # web_search is a server-side tool provided by Anthropic - no client-side implementation needed
 

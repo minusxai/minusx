@@ -247,20 +247,6 @@ registerFrontendTool('Navigate', async (args, context) => {
 });
 
 
-/**
- * PresentFinalAnswerFrontend - Frontend execution of PresentFinalAnswer
- * Returns the answer content which will be rendered specially in the UI
- */
-registerFrontendTool('PresentFinalAnswerFrontend', async (args) => {
-  const { answer } = args;
-
-  if (!answer || typeof answer !== 'string') {
-    throw new Error('answer is required and must be a string');
-  }
-
-  const content = { success: true, answer };
-  return { content, details: { success: true } };
-});
 
 /**
  * ClarifyFrontend - Ask user for clarification with options

@@ -303,40 +303,6 @@ registerTool('SearchFiles', async (args, user) => {
   };
 });
 
-/**
- * PresentFinalAnswer - Present final analysis to user
- * Delegates to frontend for special rendering (collapsed exploration + highlighted answer)
- */
-registerTool('PresentFinalAnswer', async (args, _user, childResults) => {
-  // Check if resuming with child results (from frontend execution)
-  if (childResults && childResults.length > 0) {
-    // childResults is Array<Array<{...}>> - grouped by run_id
-    // Flatten to get all child results
-    const allChildren = childResults.flat();
-    const frontendResult = allChildren[0];
-    // Return the frontend tool's result as our result
-    return frontendResult.result;
-  }
-
-  const { answer } = args;
-
-  if (!answer || typeof answer !== 'string') {
-    throw new Error('answer is required and must be a string');
-  }
-
-  // Pass to frontend for special rendering
-  throw new FrontendToolException({
-    spawnedTools: [
-      {
-        type: 'function',
-        function: {
-          name: 'PresentFinalAnswerFrontend',
-          arguments: { answer }
-        }
-      }
-    ]
-  });
-});
 
 /**
  * Clarify - Ask user for clarification with options

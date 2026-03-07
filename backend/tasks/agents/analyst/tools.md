@@ -29,4 +29,3 @@
 | Tool | Args | Result |
 |------|------|--------|
 | **TalkToUser** | `{content?: str, citations?: list, content_blocks?: [{...}]}` | `{success: true, content_blocks: [...]}` or `{success: true, content: str, citations: [...]}` |
-| **PresentFinalAnswer** | `{answer: str}` | `{success: true, answer: str}` |
