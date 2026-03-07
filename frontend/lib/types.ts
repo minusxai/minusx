@@ -316,9 +316,8 @@ export interface BaseFileContent {
 
 // Database-backed document types
 // Extend generated QuestionContent with frontend-only fields
-export interface QuestionContent extends QuestionContentBase {
-  queryResultId?: string;  // Frontend-only: hash of query+params+database for result cache
-}
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface QuestionContent extends QuestionContentBase {}
 
 export interface DocumentContent extends BaseFileContent {
   description?: string;
@@ -857,6 +856,7 @@ export interface CompressedFileState {
   isDirty: boolean;             // true if unpublished changes exist
   content: FileState['content']; // merged: { ...content, ...persistableChanges }
   runtimeParameterValues?: Record<string, any>; // ephemeralChanges.parameterValues — live, never saved
+  queryResultIDs?: string[];  // Computed: hashes of query+params+database for each embedded query result
 }
 
 export interface CompressedAugmentedFile {

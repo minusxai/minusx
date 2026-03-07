@@ -617,7 +617,7 @@ describe('readFiles - File State Manager', () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    it('should recalculate queryResultId', async () => {
+    it('should not store queryResultId in persistableChanges', async () => {
       const mockFile = createMockFile(1, 'question');
       mockStore.dispatch(setFile({ file: mockFile, references: [] }));
 
@@ -629,8 +629,8 @@ describe('readFiles - File State Manager', () => {
       const state = mockStore.getState() as RootState;
       const persistableChanges = state.files.files[1].persistableChanges as any;
 
-      // queryResultId should be set
-      expect(persistableChanges.queryResultId).toBeDefined();
+      // queryResultId should NOT be stored — it is computed dynamically in compressFileState
+      expect(persistableChanges.queryResultId).toBeUndefined();
     });
 
     it('should throw if file not found', async () => {

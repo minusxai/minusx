@@ -88,7 +88,8 @@ function resolveEffectiveParams(
  * Builds an effective FileState for a reference viewed in a parent's context.
  *   - Strips ephemeralChanges: the reference's transient state (lastExecuted, etc.)
  *     pertains to its own page, not to the parent context.
- *   - Patches question parameters + queryResultId to reflect effective inherited values.
+ *   - Patches question parameters to reflect effective inherited values.
+ *     queryResultIDs are computed downstream in compressFileState.
  */
 function buildEffectiveReference(refFile: FileState, inheritedParams: Record<string, any>): FileState {
   const stripped = { ...refFile, ephemeralChanges: {} };
@@ -96,15 +97,12 @@ function buildEffectiveReference(refFile: FileState, inheritedParams: Record<str
   const content = refFile.content as QuestionContent;
   if (!content.parameters?.length) return stripped;
 
-  const { array: effectiveParameters, dict: effectiveParamsDict } = resolveEffectiveParams(
+  const { array: effectiveParameters } = resolveEffectiveParams(
     content.parameters, inheritedParams
   );
-  const effectiveQueryResultId = content.query && content.database_name
-    ? getQueryHash(content.query, effectiveParamsDict, content.database_name)
-    : content.queryResultId;
   return {
     ...stripped,
-    content: { ...content, parameters: effectiveParameters, queryResultId: effectiveQueryResultId },
+    content: { ...content, parameters: effectiveParameters },
   };
 }
 
@@ -299,6 +297,22 @@ export function compressAugmentedFile(augmented: AugmentedFile): CompressedAugme
       fs.metadataChanges?.path !== undefined
     );
     const runtimeParameterValues = (fs.ephemeralChanges as { parameterValues?: Record<string, any> })?.parameterValues;
+
+    // Compute queryResultIDs for questions from merged content
+    let queryResultIDs: string[] | undefined;
+    if (fs.type === 'question') {
+      const qc = mergedContent as QuestionContent;
+      if (qc.query && qc.database_name) {
+        const params = (qc.parameters || []).reduce<Record<string, any>>((acc, p) => {
+          acc[p.name] = p.defaultValue ?? '';
+          return acc;
+        }, {});
+        queryResultIDs = [getQueryHash(qc.query, params, qc.database_name)];
+      } else {
+        queryResultIDs = [];
+      }
+    }
+
     return {
       id: fs.id,
       name: fs.metadataChanges?.name ?? fs.name,
@@ -307,7 +321,8 @@ export function compressAugmentedFile(augmented: AugmentedFile): CompressedAugme
       isDirty,
       content: mergedContent as FileState['content'],
       ...(runtimeParameterValues && Object.keys(runtimeParameterValues).length > 0
-        ? { runtimeParameterValues } : {})
+        ? { runtimeParameterValues } : {}),
+      ...(queryResultIDs !== undefined ? { queryResultIDs } : {}),
     };
   };
   return {

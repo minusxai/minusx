@@ -3,7 +3,6 @@ import type { DbFile, FileType, DocumentContent, AssetReference, QuestionContent
 import type { FileInfo } from '@/lib/data/types';
 import type { FileAnalyticsSummary, ConversationAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
 import type { RootState } from './store';
-import { getQueryHash } from '@/lib/utils/query-hash';
 import type { LoadError } from '@/lib/types/errors';
 import { replaceNegativeIdsInContent } from '@/lib/data/helpers/replace-references';
 
@@ -397,28 +396,6 @@ const filesSlice = createSlice({
           ...edits
         };
 
-        // For questions: recompute queryResultId if query/params/database changed
-        if (state.files[fileId].type === 'question' && edits) {
-          const questionEditsKeys = ['query', 'parameters', 'database_name'];
-          const hasQueryChanges = Object.keys(edits).some(key => questionEditsKeys.includes(key));
-
-          if (hasQueryChanges) {
-            // Merge current content with all changes to get complete picture
-            const mergedContent = {
-              ...state.files[fileId].content,
-              ...newPersistableChanges
-            } as QuestionContent;
-
-            const params = (mergedContent.parameters || []).reduce((acc, p) => {
-              acc[p.name] = p.defaultValue ?? '';
-              return acc;
-            }, {} as Record<string, any>);
-
-            const queryResultId = getQueryHash(mergedContent.query, params, mergedContent.database_name);
-            (newPersistableChanges as any).queryResultId = queryResultId;
-          }
-        }
-
         state.files[fileId].persistableChanges = newPersistableChanges;
       }
     },
@@ -430,22 +407,9 @@ const filesSlice = createSlice({
     setFullContent(state, action: PayloadAction<{ fileId: FileId; content: DbFile['content'] }>) {
       const { fileId, content } = action.payload;
       if (state.files[fileId]) {
-        let contentToStore = content;
-
-        // For questions: compute and add queryResultId
-        if (state.files[fileId].type === 'question' && content) {
-          const questionContent = content as QuestionContent;
-          const params = (questionContent.parameters || []).reduce((acc, p) => {
-            acc[p.name] = p.defaultValue ?? '';
-            return acc;
-          }, {} as Record<string, any>);
-          const queryResultId = getQueryHash(questionContent.query, params, questionContent.database_name);
-          contentToStore = { ...content, queryResultId } as DbFile['content'];
-        }
-
         // Store the full new content as persistableChanges
         // On save, this replaces file.content entirely
-        state.files[fileId].persistableChanges = contentToStore;
+        state.files[fileId].persistableChanges = content;
       }
     },
 
