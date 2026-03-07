@@ -208,14 +208,16 @@ export default function DashboardView({
     return mergedParameters;
   }, [mergedParameters]);
 
-  // Effective submitted values: only these flow to query execution
+  // Effective submitted values: only these flow to query execution.
+  // lastExecutedParams gates stale detection; paramValues is the persisted fallback
+  // (used on initial load and after publish clears ephemeral state).
   const effectiveSubmittedValues = useMemo(() => {
     const values: Record<string, any> = {};
     for (const p of mergedParameters) {
-      values[p.name] = lastExecutedParams[p.name] ?? '';
+      values[p.name] = lastExecutedParams[p.name] ?? paramValues[p.name] ?? '';
     }
     return values;
-  }, [mergedParameters, lastExecutedParams]);
+  }, [mergedParameters, lastExecutedParams, paramValues]);
 
   // Handler for removing questions (needs to be defined before questionGridItems)
   const handleRemoveQuestion = useCallback((questionIdStr: string) => {
