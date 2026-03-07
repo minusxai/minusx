@@ -64,8 +64,7 @@ interface QuestionViewV2Props {
   // Content-only state/handlers (header state lives in FileHeader via Redux)
   proposedQuery?: string;          // Proposed query for diff view (from pending confirmation)
 
-  // Ephemeral parameter state
-  ephemeralParamValues?: Record<string, any>;
+  // Parameter state
   lastSubmittedParamValues?: Record<string, any>;
 
   // Original (saved) query for diff display in preview mode
@@ -92,7 +91,6 @@ export default function QuestionViewV2({
   queryLoading,
   queryError,
   queryStale,
-  ephemeralParamValues,
   lastSubmittedParamValues,
   proposedQuery,
   originalQuery,
@@ -292,19 +290,11 @@ export default function QuestionViewV2({
     onChange({ parameters: updatedParams });
   };
 
-  // Handle parameter value change — ephemeral (not persisted)
+  // Handle parameter value change — persisted into file content (marks file dirty)
   const handleParameterValueChange = (paramName: string, value: string | number) => {
     if (onParameterValueChange) {
       onParameterValueChange(paramName, value);
     }
-  };
-
-  // Handle set default — persistable (updates parameter's defaultValue via onChange)
-  const handleSetDefault = (paramName: string, value: string | number | undefined) => {
-    const updatedParams = (content.parameters || []).map(p =>
-      p.name === paramName ? { ...p, defaultValue: value ?? null } : p
-    );
-    onChange({ parameters: updatedParams });
   };
 
   // Handle parameter submit (when user presses Enter or clicks Run)
@@ -387,14 +377,10 @@ export default function QuestionViewV2({
   }, [content.parameters, referencedQuestions]);
 
   // Handle query execution (Run button / Cmd+Enter)
-  // Build effective param values dict from ephemeral overrides + defaults
+  // Build effective param values dict from content.parameterValues
   const handleExecute = useCallback(() => {
-    const paramValues: Record<string, any> = {};
-    for (const p of parameters) {
-      paramValues[p.name] = ephemeralParamValues?.[p.name] ?? p.defaultValue ?? '';
-    }
-    onExecute(paramValues);
-  }, [onExecute, parameters, ephemeralParamValues]);
+    onExecute(content.parameterValues ?? {});
+  }, [onExecute, content.parameterValues]);
 
   // Handle query change with debounced param/ref sync
   const handleQueryChange = useCallback((newQuery: string) => {
@@ -797,12 +783,11 @@ export default function QuestionViewV2({
             {parameters.length > 0 && (
               <ParameterRow
                 parameters={parameters}
-                parameterValues={ephemeralParamValues}
+                parameterValues={content.parameterValues ?? undefined}
                 lastSubmittedValues={lastSubmittedParamValues}
                 onValueChange={handleParameterValueChange}
                 onSubmit={handleParametersSubmit}
                 onParametersChange={handleParametersStructuralChange}
-                onSetDefault={handleSetDefault}
               />
             )}
             {sqlPreviewId ? (

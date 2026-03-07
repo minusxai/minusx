@@ -15,7 +15,6 @@
 | **EditFile** | `{fileId: int, oldMatch: str, newMatch: str}` | `{success: true, diff: str, fileState: {id, name, path, type, isDirty, content}, references: [{id, unchanged: true} or full], queryResults: [{queryResultId, unchanged: true} or full]}` or `{success: false, error: str}` |
 | **CreateFile** | `{file_type: str, name?: str, path?: str, content?: dict}` | `{success: true, state: {fileState: {id, name, path, type, isDirty, content}, references: [...], queryResults: [...]}}` or `{success: false, error: str}` |
 | **ExecuteQuery** | `{query: str, connectionId: str, parameters?: {key: value}, vizSettings?: str}` | `{columns: str[], types: str[], rows: [{...}]}` |
-| **SetRuntimeValues** | `{fileId: int, parameter_values: {name: value}}` | `{success: true, message: str}` |
 
 ## App Tools
 

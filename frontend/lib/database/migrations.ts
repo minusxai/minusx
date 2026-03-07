@@ -656,6 +656,50 @@ export const MIGRATIONS: MigrationEntry[] = [
     },
     description: 'Migrate question parameter value → defaultValue'
   },
+  {
+    dataVersion: 17,
+    schemaVersion: undefined,  // No schema change
+    dataMigration: (data: InitData) => {
+      // Migrate question parameters: move defaultValue into parameterValues dict, strip from params
+      for (const companyData of data.companies as CompanyData[]) {
+        let migratedCount = 0;
+
+        for (const doc of companyData.documents) {
+          if (doc.type !== 'question') continue;
+
+          const content = doc.content as any;
+          if (!content?.parameters || !Array.isArray(content.parameters)) continue;
+
+          // Build parameterValues from existing defaultValues
+          const newParamValues: Record<string, any> = { ...(content.parameterValues || {}) };
+          let changed = false;
+
+          for (const param of content.parameters) {
+            if (param.defaultValue !== undefined && param.defaultValue !== null) {
+              // Only set if not already in parameterValues
+              if (!(param.name in newParamValues)) {
+                newParamValues[param.name] = param.defaultValue;
+              }
+              delete param.defaultValue;
+              changed = true;
+            }
+          }
+
+          if (changed) {
+            content.parameterValues = Object.keys(newParamValues).length > 0 ? newParamValues : undefined;
+            migratedCount++;
+          }
+        }
+
+        if (migratedCount > 0) {
+          console.log(`  ✅ Migrated defaultValue → parameterValues for ${migratedCount} questions in ${companyData.name}`);
+        }
+      }
+
+      return data;
+    },
+    description: 'Migrate question parameter defaultValue → content.parameterValues'
+  },
 ];
 
 /**

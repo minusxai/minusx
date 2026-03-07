@@ -5,6 +5,7 @@ import type { FileAnalyticsSummary, ConversationAnalyticsSummary } from '@/lib/a
 import type { RootState } from './store';
 import type { LoadError } from '@/lib/types/errors';
 import { replaceNegativeIdsInContent } from '@/lib/data/helpers/replace-references';
+import { getQueryHash } from '@/lib/utils/query-hash';
 
 // System file types that save in-place and are excluded from bulk Publish.
 // Defined as a Set here (instead of importing from file-metadata) to avoid
@@ -21,7 +22,6 @@ export type EphemeralChanges = Partial<DbFile['content']> & {
     database: string;
     references: any[];
   };
-  parameterValues?: Record<string, any>;  // Ephemeral runtime param overrides (not persisted)
 };
 
 /**
@@ -396,6 +396,25 @@ const filesSlice = createSlice({
           ...edits
         };
 
+        // For questions: recompute queryResultId if query/params/database changed
+        if (state.files[fileId].type === 'question' && edits) {
+          const questionEditsKeys = ['query', 'parameters', 'parameterValues', 'database_name'];
+          const hasQueryChanges = Object.keys(edits).some(key => questionEditsKeys.includes(key));
+
+          if (hasQueryChanges) {
+            // Merge current content with all changes to get complete picture
+            const mergedContent = {
+              ...state.files[fileId].content,
+              ...newPersistableChanges
+            } as QuestionContent;
+
+            const params = mergedContent.parameterValues || {};
+
+            const queryResultId = getQueryHash(mergedContent.query, params, mergedContent.database_name);
+            (newPersistableChanges as any).queryResultId = queryResultId;
+          }
+        }
+
         state.files[fileId].persistableChanges = newPersistableChanges;
       }
     },
@@ -407,9 +426,19 @@ const filesSlice = createSlice({
     setFullContent(state, action: PayloadAction<{ fileId: FileId; content: DbFile['content'] }>) {
       const { fileId, content } = action.payload;
       if (state.files[fileId]) {
+        let contentToStore = content;
+
+        // For questions: compute and add queryResultId
+        if (state.files[fileId].type === 'question' && content) {
+          const questionContent = content as QuestionContent;
+          const params = questionContent.parameterValues || {};
+          const queryResultId = getQueryHash(questionContent.query, params, questionContent.database_name);
+          contentToStore = { ...content, queryResultId } as unknown as DbFile['content'];
+        }
+
         // Store the full new content as persistableChanges
         // On save, this replaces file.content entirely
-        state.files[fileId].persistableChanges = content;
+        state.files[fileId].persistableChanges = contentToStore;
       }
     },
 
@@ -1132,12 +1161,13 @@ export const selectContextFromPath = createSelector(
 );
 
 /**
- * Get ephemeral parameter values for a file
- * Used by question/dashboard views to get runtime param overrides
+ * Get current parameter values for a file (from merged content)
+ * Used by question/dashboard views for param display and execution
  */
 const EMPTY_PARAM_VALUES: Record<string, any> = {};
-export const selectEphemeralParamValues = (state: RootState, id: FileId): Record<string, any> => {
-  return (state.files.files[id]?.ephemeralChanges as EphemeralChanges)?.parameterValues || EMPTY_PARAM_VALUES;
+export const selectParamValues = (state: RootState, id: FileId): Record<string, any> => {
+  const content = selectMergedContent(state, id) as any;
+  return content?.parameterValues || EMPTY_PARAM_VALUES;
 };
 
 export default filesSlice.reducer;

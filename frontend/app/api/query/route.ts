@@ -23,12 +23,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     // Handle both array format (QuestionParameter[]) and object format (Record<string, any>)
     const paramValues: Record<string, string | number> = {};
     if (Array.isArray(parameters)) {
-      // Array format: [{name: 'param1', value: 'val1', type: 'text'}, ...]
-      (parameters as QuestionParameter[]).forEach(p => {
-        if (p.defaultValue !== undefined && p.defaultValue !== null && p.defaultValue !== '') {
-          paramValues[p.name] = p.defaultValue;
-        }
-      });
+      // Array format: legacy, no-op (parameters are now just schema definitions)
     } else if (typeof parameters === 'object' && parameters !== null) {
       // Object format: {param1: 'val1', param2: 'val2'}
       Object.assign(paramValues, parameters);

@@ -12,7 +12,7 @@ from tasks.llm.client import allm_request as real_allm_request, describe_tool
 from tasks.llm.models import ALLMRequest, LlmSettings, UserInfo
 from tasks.llm.config import ANALYST_V2_MODEL, MAX_STEPS_LOWER_LEVEL
 from .tools import SearchDBSchema, SearchFiles, Clarify, Navigate, CreateFile
-from .tools import ReadFiles, EditFile, ExecuteQuery, SetRuntimeValues, PublishAll
+from .tools import ReadFiles, EditFile, ExecuteQuery, PublishAll
 from .prompt_loader import get_prompt
 
 
@@ -149,7 +149,7 @@ class AnalystAgent(Agent):
         if len(self.tool_thread) >= MAX_STEPS_LOWER_LEVEL - 5:
             return []
 
-        return [ReadFiles, EditFile, ExecuteQuery, SetRuntimeValues, PublishAll, Navigate, Clarify, SearchDBSchema, SearchFiles, CreateFile]
+        return [ReadFiles, EditFile, ExecuteQuery, PublishAll, Navigate, Clarify, SearchDBSchema, SearchFiles, CreateFile]
     
     def _get_history(self):
         previous_root_tasks = self._orchestrator.get_previous_root_tasks()

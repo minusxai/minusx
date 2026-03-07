@@ -46,19 +46,19 @@ export default function EmbeddedQuestionContainer({
   // Phase 3: Convert parameters to format useQueryResult expects
   const queryParams = useMemo(() => {
     const questionParams = localQuestion.parameters || [];
+    const ownParamValues = localQuestion.parameterValues || {};
     if (!externalParameters && !externalParamValues) {
-      // No external params — use question's own defaults
-      return questionParams.reduce((acc, p) => ({ ...acc, [p.name]: p.defaultValue }), {} as Record<string, any>);
+      // No external params — use question's own parameterValues
+      return questionParams.reduce((acc, p) => ({ ...acc, [p.name]: ownParamValues[p.name] ?? '' }), {} as Record<string, any>);
     }
-    // Use explicit values dict if provided (from dashboard ephemeral state),
-    // fall back to external param definitions, then question's own defaults.
+    // Use explicit values dict if provided (from dashboard state),
+    // fall back to question's own parameterValues.
     // Only include params the question actually uses to avoid polluting cache key.
-    const externalByName = new Map((externalParameters || []).map(p => [p.name, p]));
     return questionParams.reduce((acc, p) => ({
       ...acc,
-      [p.name]: externalParamValues?.[p.name] ?? externalByName.get(p.name)?.defaultValue ?? p.defaultValue
+      [p.name]: externalParamValues?.[p.name] ?? ownParamValues[p.name] ?? ''
     }), {} as Record<string, any>);
-  }, [externalParameters, externalParamValues, localQuestion.parameters]);
+  }, [externalParameters, externalParamValues, localQuestion.parameters, localQuestion.parameterValues]);
 
   // Phase 3: Use useQueryResult hook for automatic execution with TTL caching
   const {

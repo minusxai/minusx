@@ -12,8 +12,7 @@ import authReducer from '../authSlice';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
 import type { QuestionContent, DocumentContent, UserRole } from '@/lib/types';
-import { readFiles, publishFile, editFileStr, compressAugmentedFile, selectAugmentedFiles, tryNormalizeJsonFragment, compressQueryResult } from '@/lib/api/file-state';
-import { setEphemeral } from '@/store/filesSlice';
+import { readFiles, publishFile, editFileStr, editFile, compressAugmentedFile, selectAugmentedFiles, tryNormalizeJsonFragment, compressQueryResult } from '@/lib/api/file-state';
 import type { ToolCall, CompressedQueryResult, ExecuteQueryDetails, ToolMessage } from '@/lib/types';
 import { contentToDetails } from '@/lib/types';
 import { executeQuery } from '@/lib/api/execute-query.server';
@@ -828,10 +827,6 @@ describe('Phase 1: Unified File System API E2E', () => {
           payload: { files: [questionFile] }
         });
 
-        // Set ephemeral parameterValues to verify they appear as runtimeParameterValues
-        // and do NOT bleed into content in both responses
-        store.dispatch(setEphemeral({ fileId: questionId, changes: { parameterValues: { start_date: '2024-01-01' } } }));
-
         // Read current state (same way the model would via ReadFiles / AppState)
         const [before] = (await readFiles([questionId], {})).map(compressAugmentedFile);
         const content = before.fileState.content as any;
@@ -857,13 +852,8 @@ describe('Phase 1: Unified File System API E2E', () => {
         expect((editFileResponse.fileState.content as any).query).toContain('revenue FROM sales');
         expect(editFileResponse.fileState.isDirty).toBe(true);
 
-        // Ephemeral values appear as runtimeParameterValues, not in content
-        expect(editFileResponse.fileState.runtimeParameterValues).toEqual({ start_date: '2024-01-01' });
-        expect((editFileResponse.fileState.content as any).parameterValues).toBeUndefined();
-
         console.log('✓ EditFile and ReadFiles responses are identical');
         console.log('✓ isDirty=true, edit reflected in content');
-        console.log('✓ runtimeParameterValues present, not leaked into content');
       });
 
       it('AppState fileState is consistent with ReadFiles after an edit', async () => {
@@ -875,9 +865,6 @@ describe('Phase 1: Unified File System API E2E', () => {
           type: 'files/setFiles',
           payload: { files: [questionFile] }
         });
-
-        // Set ephemeral parameterValues to verify AppState and ReadFiles agree on runtimeParameterValues
-        store.dispatch(setEphemeral({ fileId: questionId, changes: { parameterValues: { limit: 100 } } }));
 
         // Make an edit
         const [before] = (await readFiles([questionId], {})).map(compressAugmentedFile);
@@ -902,12 +889,8 @@ describe('Phase 1: Unified File System API E2E', () => {
         // Must be identical — same Redux state, same compressAugmentedFile transform
         expect(appStateFileState).toEqual(readFilesFileState);
 
-        // Ephemeral values present as runtimeParameterValues in both
-        expect(appStateFileState.runtimeParameterValues).toEqual({ limit: 100 });
-
         console.log('✓ AppState and ReadFiles fileState are identical');
         console.log('✓ isDirty=true in both:', appStateFileState.isDirty);
-        console.log('✓ runtimeParameterValues consistent in both:', appStateFileState.runtimeParameterValues);
       });
 
       it('CompressedAugmentedFile correctly handles persistableChanges and ephemeralChanges', async () => {
@@ -930,9 +913,6 @@ describe('Phase 1: Unified File System API E2E', () => {
         });
         expect(editResult.success).toBe(true);
 
-        // Dispatch setEphemeral to set parameterValues (e.g. user changed a filter)
-        store.dispatch(setEphemeral({ fileId: questionId, changes: { parameterValues: { limit: 50 } } }));
-
         // Read via readFiles + compressAugmentedFile (what agents see)
         const compressed = compressAugmentedFile((await readFiles([questionId], {}))[0]);
         const { fileState } = compressed;
@@ -940,18 +920,10 @@ describe('Phase 1: Unified File System API E2E', () => {
         // persistableChanges must be reflected in content
         expect((fileState.content as any).description).toBe('Ephemeral isolation test');
 
-        // ephemeralChanges.parameterValues must NOT appear in content
-        expect((fileState.content as any).parameterValues).toBeUndefined();
-
-        // ephemeralChanges.parameterValues must appear as runtimeParameterValues
-        expect(fileState.runtimeParameterValues).toEqual({ limit: 50 });
-
         // File must be dirty (persistableChanges present)
         expect(fileState.isDirty).toBe(true);
 
         console.log('✓ persistableChanges reflected in content.description');
-        console.log('✓ ephemeralChanges.parameterValues NOT leaked into content');
-        console.log('✓ runtimeParameterValues = { limit: 50 }');
         console.log('✓ isDirty = true');
       });
 
@@ -1224,7 +1196,7 @@ describe('Phase 1: Unified File System API E2E', () => {
     let paramQuestionId: number;
 
     beforeAll(async () => {
-      // Create a question with a parameterized query and defaultValue (once for all tests)
+      // Create a question with a parameterized query and parameterValues (once for all tests)
       paramQuestionId = await DocumentDB.create(
         'Parameterized Sales',
         '/org/param-sales',
@@ -1233,7 +1205,8 @@ describe('Phase 1: Unified File System API E2E', () => {
           description: 'Sales with limit param',
           query: 'SELECT month, total FROM sales LIMIT :limit',
           database_name: 'test_db',
-          parameters: [{ name: 'limit', type: 'number' as const, defaultValue: 50 }],
+          parameters: [{ name: 'limit', type: 'number' as const }],
+          parameterValues: { limit: 50 },
           vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
         } as QuestionContent,
         [],
@@ -1247,8 +1220,8 @@ describe('Phase 1: Unified File System API E2E', () => {
       (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [qFile] } });
     });
 
-    it('uses defaultValue when no ephemeral value is set', async () => {
-      console.log('\n[TEST] EditFile tool handler: auto-execute uses defaultValue');
+    it('uses parameterValues from content when no override is set', async () => {
+      console.log('\n[TEST] EditFile tool handler: auto-execute uses parameterValues from content');
 
       const { pythonBackendFetch } = require('@/lib/api/python-backend-client');
       const callsBefore = pythonBackendFetch.mock.calls.length;
@@ -1276,21 +1249,21 @@ describe('Phase 1: Unified File System API E2E', () => {
         store.getState() as any
       );
 
-      // Verify auto-execute was triggered and used defaultValue=50 (not empty string)
+      // Verify auto-execute was triggered and used parameterValues.limit=50 (not empty string)
       const newCalls = pythonBackendFetch.mock.calls.slice(callsBefore);
       const executeCall = newCalls.find(([url]: [string]) => url.includes('/api/execute-query'));
       expect(executeCall).toBeDefined();
       const body = JSON.parse(executeCall[1].body);
       expect(body.parameters).toEqual({ limit: 50 });
 
-      console.log('✓ Auto-execute used defaultValue=50, not empty string');
+      console.log('✓ Auto-execute used parameterValues.limit=50 from content, not empty string');
     });
 
-    it('uses ephemeralValue over defaultValue when set', async () => {
-      console.log('\n[TEST] EditFile tool handler: ephemeralValue takes precedence over defaultValue');
+    it('uses updated parameterValues after content edit', async () => {
+      console.log('\n[TEST] EditFile tool handler: updated parameterValues in content take effect');
 
-      // Set an ephemeral runtime value (user changed the filter to 99)
-      store.dispatch(setEphemeral({ fileId: paramQuestionId, changes: { parameterValues: { limit: 99 } } }));
+      // Edit parameterValues in content (user changed the filter to 99, marks file dirty)
+      editFile({ fileId: paramQuestionId, changes: { content: { parameterValues: { limit: 99 } } } });
 
       const { pythonBackendFetch } = require('@/lib/api/python-backend-client');
       const callsBefore = pythonBackendFetch.mock.calls.length;
@@ -1317,14 +1290,14 @@ describe('Phase 1: Unified File System API E2E', () => {
         store.getState() as any
       );
 
-      // Verify auto-execute used ephemeral value=99, NOT defaultValue=50
+      // Verify auto-execute used updated value=99, NOT original 50
       const newCalls = pythonBackendFetch.mock.calls.slice(callsBefore);
       const executeCall = newCalls.find(([url]: [string]) => url.includes('/api/execute-query'));
       expect(executeCall).toBeDefined();
       const body = JSON.parse(executeCall[1].body);
       expect(body.parameters).toEqual({ limit: 99 });
 
-      console.log('✓ Auto-execute used ephemeralValue=99, ignoring defaultValue=50');
+      console.log('✓ Auto-execute used updated parameterValues.limit=99 from edited content');
     });
 
     it('returns CompressedAugmentedFile with queryResults after auto-execute', async () => {
@@ -1433,8 +1406,8 @@ describe('Phase 1: Unified File System API E2E', () => {
     });
 
     it('normalizes pretty-printed parameters arrays', () => {
-      const prettyParams = '"parameters": [{"name": "current_month", "type": "date", "defaultValue": "2026-03-01"}]';
-      const compactParams = '"parameters":[{"name":"current_month","type":"date","defaultValue":"2026-03-01"}]';
+      const prettyParams = '"parameters": [{"name": "current_month", "type": "date"}]';
+      const compactParams = '"parameters":[{"name":"current_month","type":"date"}]';
       expect(tryNormalizeJsonFragment(prettyParams)).toBe(compactParams);
     });
 
@@ -1462,7 +1435,8 @@ describe('Phase 1: Unified File System API E2E', () => {
           query: 'SELECT * FROM products WHERE category = :cat',
           database_name: 'test_db',
           vizSettings: { type: 'table' as const, xCols: [], yCols: [] },
-          parameters: [{ name: 'cat', type: 'text' as const, label: 'Category', defaultValue: 'Electronics' }],
+          parameters: [{ name: 'cat', type: 'text' as const, label: 'Category' }],
+          parameterValues: { cat: 'Electronics' },
           description: 'Normalization test question',
         } as QuestionContent,
         [],
@@ -1478,8 +1452,8 @@ describe('Phase 1: Unified File System API E2E', () => {
     it('matches pretty-printed parameters array from AppState (key-value with spaces)', async () => {
       // Simulate what the agent would copy verbatim from AppState (json.dumps(indent=2))
       // The space after ":" is the critical difference vs compact JSON
-      const prettyOldMatch = '"parameters": [{"name": "cat", "type": "text", "label": "Category", "defaultValue": "Electronics"}]';
-      const newMatch = '"parameters":[{"name":"cat","type":"text","label":"Category","defaultValue":"Electronics"},{"name":"limit","type":"number","defaultValue":10}]';
+      const prettyOldMatch = '"parameters": [{"name": "cat", "type": "text", "label": "Category"}]';
+      const newMatch = '"parameters":[{"name":"cat","type":"text","label":"Category"},{"name":"limit","type":"number"}]';
 
       const result = await editFileStr({
         fileId: normQuestionId,

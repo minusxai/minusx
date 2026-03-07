@@ -34,6 +34,7 @@ import { listAllConnections } from './connections.server';
 import { computeSchemaFromDatabases } from './loaders/context-loader-utils';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import { trackFileEvent, getFileAnalyticsSummary, getFilesAnalyticsSummary, getConversationAnalytics } from '@/lib/analytics/file-analytics.server';
+import { getQueryHash } from '@/lib/utils/query-hash';
 
 /**
  * Server-side implementation of files data layer
@@ -325,15 +326,25 @@ class FilesDataLayerServer implements IFilesDataLayer {
       }
     }
 
+    // For questions: compute and store queryResultId
+    let contentToCreate = content;
+    if (type === 'question') {
+      const questionContent = content as QuestionContent;
+      const params = questionContent.parameterValues || {};
+      const queryResultId = getQueryHash(questionContent.query, params, questionContent.database_name);
+      contentToCreate = { ...contentToCreate, queryResultId } as BaseFileContent;
+      console.log(`[FILES DataLayer] Computed queryResultId for new question ${name}: ${queryResultId}`);
+    }
+
     // Validate content schema before writing to DB
-    const createValidationError = validateFileState({ type, content });
+    const createValidationError = validateFileState({ type, content: contentToCreate });
     if (createValidationError) {
       throw new UserFacingError(`Invalid file content: ${createValidationError}`);
     }
 
     // Create file in database (returns numeric ID)
     // Phase 6: Pass references from client (server is dumb, no extraction)
-    const newFileId = await DocumentDB.create(name, finalPath, type, content, references, user.companyId);
+    const newFileId = await DocumentDB.create(name, finalPath, type, contentToCreate, references, user.companyId);
 
     if (!newFileId) {
       throw new Error('Failed to create file');
@@ -400,6 +411,16 @@ class FilesDataLayerServer implements IFilesDataLayer {
       contentToSave = contextContentWithoutComputed as BaseFileContent;
       console.log(`[FILES DataLayer] Stripped fullSchema and fullDocs from client content for context ${name}`);
     }
+
+    // For questions: compute and store queryResultId
+    if (existingFile.type === 'question') {
+      const questionContent = content as QuestionContent;
+      const params = questionContent.parameterValues || {};
+      const queryResultId = getQueryHash(questionContent.query, params, questionContent.database_name);
+      contentToSave = { ...contentToSave, queryResultId } as BaseFileContent;
+      console.log(`[FILES DataLayer] Computed queryResultId for question ${name}: ${queryResultId}`);
+    }
+
 
     // Validate content schema before writing to DB
     const saveValidationError = validateFileState({ type: existingFile.type, content: contentToSave });

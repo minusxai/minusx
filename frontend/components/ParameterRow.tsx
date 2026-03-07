@@ -8,14 +8,12 @@ import ParameterInput from './ParameterInput';
 
 interface ParameterRowProps {
   parameters: QuestionParameter[];
-  parameterValues?: Record<string, any>;        // ephemeral runtime values
+  parameterValues?: Record<string, any>;        // current values (from file content)
   lastSubmittedValues?: Record<string, any>;     // values last used for execution
-  onValueChange?: (paramName: string, value: string | number) => void;  // ephemeral
+  onValueChange?: (paramName: string, value: string | number) => void;
   onSubmit: (paramValues: Record<string, any>) => void;  // submit for execution
   onParametersChange?: (parameters: QuestionParameter[]) => void;  // structural
-  onSetDefault?: (paramName: string, value: string | number | undefined) => void;
   disableTypeChange?: boolean;
-  disableSetDefault?: boolean;
   onHoverParam?: (key: string | null) => void;
 }
 
@@ -26,17 +24,12 @@ export default function ParameterRow({
   onValueChange,
   onSubmit,
   onParametersChange,
-  onSetDefault,
   disableTypeChange = false,
-  disableSetDefault = false,
   onHoverParam,
 }: ParameterRowProps) {
-  // Compute effective value per param: ephemeral → defaultValue → undefined
+  // Compute effective value per param: parameterValues → undefined
   const getEffectiveValue = (param: QuestionParameter): string | number | undefined => {
-    const ephemeral = parameterValues?.[param.name];
-    if (ephemeral !== undefined) return ephemeral;
-    if (param.defaultValue !== undefined && param.defaultValue !== null) return param.defaultValue;
-    return undefined;
+    return parameterValues?.[param.name];
   };
 
   const handleValueChange = (paramName: string, value: string | number) => {
@@ -88,13 +81,10 @@ export default function ParameterRow({
           key={param.name}
           parameter={param}
           value={getEffectiveValue(param)}
-          defaultValue={param.defaultValue}
           onChange={(value) => handleValueChange(param.name, value)}
           onTypeChange={(type) => handleTypeChange(param.name, type)}
           onSubmit={handleSubmit}
-          onSetDefault={onSetDefault ? (value) => onSetDefault(param.name, value) : undefined}
           disableTypeChange={disableTypeChange}
-          disableSetDefault={disableSetDefault}
           onHoverParam={onHoverParam}
         />
       ))}

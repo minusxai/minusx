@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { Input, HStack, Text, MenuRoot, MenuTrigger, MenuContent, MenuItem, Portal, MenuPositioner, Box, IconButton } from '@chakra-ui/react';
-import { LuChevronDown, LuX, LuPin, LuRotateCcw } from 'react-icons/lu';
+import { LuChevronDown, LuX } from 'react-icons/lu';
 import { Tooltip } from '@/components/ui/tooltip';
 import { QuestionParameter } from '@/lib/types';
 import { getTypeColor, getTypeColorHex, getTypeIcon } from '@/lib/sql/sql-params';
@@ -13,26 +13,20 @@ const ROW_H = '32px';
 interface ParameterInputProps {
   parameter: QuestionParameter;
   value: string | number | undefined;
-  defaultValue?: string | number | null;
   onChange: (value: string | number) => void;
   onTypeChange: (type: 'text' | 'number' | 'date') => void;
   onSubmit?: (paramName?: string, value?: string | number) => void;
-  onSetDefault?: (value: string | number | undefined) => void;
   disableTypeChange?: boolean;
-  disableSetDefault?: boolean;
   onHoverParam?: (key: string | null) => void;
 }
 
 export default function ParameterInput({
   parameter,
   value,
-  defaultValue,
   onChange,
   onTypeChange,
   onSubmit,
-  onSetDefault,
   disableTypeChange = false,
-  disableSetDefault = false,
   onHoverParam,
 }: ParameterInputProps) {
   const paramKey = `${parameter.name}-${parameter.type}`;
@@ -60,8 +54,6 @@ export default function ParameterInput({
   };
 
   const hasValue = value !== undefined && value !== '' && value !== null;
-  const hasDefault = defaultValue !== undefined && defaultValue !== null && defaultValue !== '';
-  const isDifferentFromDefault = hasDefault && String(value) !== String(defaultValue);
 
   const typeOptions: Array<{ type: 'text' | 'number' | 'date'; label: string }> = [
     { type: 'text', label: 'Text' },
@@ -97,32 +89,6 @@ export default function ParameterInput({
         :{parameter.name}
       </Text>
 
-      {/* Default value badge - floating label (top right) */}
-      {hasDefault && (
-        <Tooltip content={`Default: ${String(defaultValue)}`}>
-          <Text
-            position="absolute"
-            top={-2}
-            right={2}
-            fontSize="2xs"
-            fontWeight="500"
-            color="fg.subtle"
-            fontFamily="mono"
-            bg="bg.muted"
-            border="1px solid"
-            borderColor="border.emphasized"
-            borderRadius={4}
-            px={1.5}
-            maxW="120px"
-            overflow="hidden"
-            textOverflow="ellipsis"
-            whiteSpace="nowrap"
-          >
-            default: {String(defaultValue)}
-          </Text>
-        </Tooltip>
-      )}
-
       <HStack gap={1.5} align="center">
 
         {/* Input field */}
@@ -149,52 +115,12 @@ export default function ParameterInput({
               borderColor: 'accent.teal',
               boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)',
             }}
-            placeholder={hasDefault ? String(defaultValue) : (parameter.type === 'number' ? '0' : 'value')}
+            placeholder={parameter.type === 'number' ? '0' : 'value'}
           />
         )}
 
-        {/* Reset to default: icon-only, visible when value differs from default */}
-        {isDifferentFromDefault && (
-          <Tooltip content={`Reset to default (${String(defaultValue)})`}>
-            <IconButton
-              aria-label="Reset to default"
-              variant="outline"
-              onClick={() => onChange(defaultValue as string | number)}
-              color="fg.subtle"
-              h={ROW_H}
-              w={ROW_H}
-              minW={ROW_H}
-              bg="bg.canvas"
-              borderColor="border.muted"
-              _hover={{ color: 'accent.teal', borderColor: 'accent.teal', bg: 'bg.surface' }}
-            >
-              <LuRotateCcw style={{ width: 10, height: 10 }} />
-            </IconButton>
-          </Tooltip>
-        )}
-
-        {/* Pin as default: visible when value exists and not in dashboard view */}
-        {hasValue && !disableSetDefault && onSetDefault && (
-          <Tooltip content="Set as default value">
-            <IconButton
-              aria-label="Set as default value"
-              variant="outline"
-              onClick={() => onSetDefault(value)}
-              color="fg.subtle"
-              h={ROW_H}
-              w={ROW_H}
-              minW={ROW_H}
-              bg="bg.canvas"
-              borderColor="border.muted"
-              _hover={{ color: 'accent.teal', borderColor: 'accent.teal', bg: 'bg.surface' }}
-            >
-              <LuPin style={{ width: 10, height: 10 }} />
-            </IconButton>
-          </Tooltip>
-        )}
-
-        {/* Clear button: visible when no default exists and value is non-empty */}
-        {hasValue && !hasDefault && (
+        {/* Clear button: visible when value is non-empty */}
+        {hasValue && (
           <Tooltip content="Clear value">
             <IconButton
               aria-label="Clear value"
