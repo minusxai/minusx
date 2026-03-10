@@ -34,7 +34,6 @@ import { listAllConnections } from './connections.server';
 import { computeSchemaFromDatabases } from './loaders/context-loader-utils';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import { trackFileEvent, getFileAnalyticsSummary, getFilesAnalyticsSummary, getConversationAnalytics } from '@/lib/analytics/file-analytics.server';
-import { getQueryHash } from '@/lib/utils/query-hash';
 
 /**
  * Server-side implementation of files data layer
@@ -326,15 +325,8 @@ class FilesDataLayerServer implements IFilesDataLayer {
       }
     }
 
-    // For questions: compute and store queryResultId
-    let contentToCreate = content;
-    if (type === 'question') {
-      const questionContent = content as QuestionContent;
-      const params = questionContent.parameterValues || {};
-      const queryResultId = getQueryHash(questionContent.query, params, questionContent.database_name);
-      contentToCreate = { ...contentToCreate, queryResultId } as BaseFileContent;
-      console.log(`[FILES DataLayer] Computed queryResultId for new question ${name}: ${queryResultId}`);
-    }
+    // No need to compute queryResultId — it's a runtime field on FileState, not persisted
+    const contentToCreate = content;
 
     // Validate content schema before writing to DB
     const createValidationError = validateFileState({ type, content: contentToCreate });
@@ -412,15 +404,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
       console.log(`[FILES DataLayer] Stripped fullSchema and fullDocs from client content for context ${name}`);
     }
 
-    // For questions: compute and store queryResultId
-    if (existingFile.type === 'question') {
-      const questionContent = content as QuestionContent;
-      const params = questionContent.parameterValues || {};
-      const queryResultId = getQueryHash(questionContent.query, params, questionContent.database_name);
-      contentToSave = { ...contentToSave, queryResultId } as BaseFileContent;
-      console.log(`[FILES DataLayer] Computed queryResultId for question ${name}: ${queryResultId}`);
-    }
-
+    // No need to compute queryResultId — it's a runtime field on FileState, not persisted
 
     // Validate content schema before writing to DB
     const saveValidationError = validateFileState({ type: existingFile.type, content: contentToSave });

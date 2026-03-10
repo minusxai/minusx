@@ -249,7 +249,7 @@ describe('editFile - Question Editing Flow', () => {
     expect(fileState?.persistableChanges).toMatchObject({
       query: newQuery
     });
-    // Note: queryResultId is also set automatically when query changes
+    // Note: queryResultId is computed at the FileState level (not in persistableChanges)
   });
 
   it('should merge multiple edits correctly', async () => {

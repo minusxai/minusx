@@ -3,8 +3,7 @@ import type { FileState } from '@/store/filesSlice';
 // Generated from backend/tasks/agents/analyst/file_schema.py
 // Regenerate: cd frontend && npm run generate-types
 import type {
-  QuestionContent as QuestionContentBase,
-  FileReference, InlineAsset, VizSettings,
+  QuestionContent, FileReference, InlineAsset, VizSettings,
 } from './types.gen';
 
 // Re-export FileType for convenience
@@ -16,6 +15,7 @@ export type {
   AggregationFunction, FormulaOperator, VisualizationType, ParameterType,
   PivotValueConfig, PivotFormula, PivotConfig, ColumnFormatConfig, VizSettings,
   QuestionParameter, QuestionReference,
+  QuestionContent,
   FileReference, InlineAsset,
   DashboardContent, DashboardLayout, DashboardLayoutItem,
   AtlasQuestionFile, AtlasDashboardFile,
@@ -312,12 +312,6 @@ export interface SchemaTableResponse {
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface BaseFileContent {
   // Empty base - each content type defines its own fields
-}
-
-// Database-backed document types
-// Extend generated QuestionContent with frontend-only fields
-export interface QuestionContent extends QuestionContentBase {
-  queryResultId?: string;  // Computed: hash of query+params+database, stored in DB for cache lookup
 }
 
 export interface DocumentContent extends BaseFileContent {
@@ -853,6 +847,7 @@ export interface CompressedFileState {
   path: string;   // effective path  (metadataChanges.path ?? path)
   type: FileType;
   isDirty: boolean;             // true if unpublished changes exist
+  queryResultId?: string;        // computed hash of query+params+database (questions only)
   content: FileState['content']; // merged: { ...content, ...persistableChanges }
 }
 
