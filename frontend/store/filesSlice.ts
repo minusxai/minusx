@@ -1,5 +1,6 @@
 import { createSlice, PayloadAction, createSelector } from '@reduxjs/toolkit';
 import type { DbFile, FileType, DocumentContent, AssetReference, QuestionContent, QuestionReference, DatabaseSchema } from '@/lib/types';
+import { getQueryHash } from '@/lib/utils/query-hash';
 import type { FileInfo } from '@/lib/data/types';
 import type { FileAnalyticsSummary, ConversationAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
 import type { RootState } from './store';
@@ -31,6 +32,9 @@ export type EphemeralChanges = Partial<DbFile['content']> & {
 export interface FileState extends DbFile {
   // Computed references (IDs of referenced files from content.assets)
   references: number[];
+
+  // Computed query result hash (for questions only)
+  queryResultId?: string;
 
   // UI state tracking
   loading: boolean;
@@ -143,7 +147,9 @@ const filesSlice = createSlice({
       // Store the main file — preserve existing analytics when not explicitly provided
       state.files[file.id] = {
         ...file,
+        content: stripQueryResultId(file),
         references: referenceIds,
+        queryResultId: computeQueryResultId(file),
         loading: false,
         saving: false,
         updatedAt: Date.now(),
@@ -174,7 +180,9 @@ const filesSlice = createSlice({
         const refReferenceIds = extractReferences(ref);
         state.files[ref.id] = {
           ...ref,
+          content: stripQueryResultId(ref),
           references: refReferenceIds,
+          queryResultId: computeQueryResultId(ref),
           loading: false,
           saving: false,
           updatedAt: Date.now(),
@@ -205,7 +213,9 @@ const filesSlice = createSlice({
         const referenceIds = extractReferences(file);
         state.files[file.id] = {
           ...file,
+          content: stripQueryResultId(file),
           references: referenceIds,
+          queryResultId: computeQueryResultId(file),
           loading: false,
           saving: false,
           updatedAt: Date.now(),
@@ -228,7 +238,9 @@ const filesSlice = createSlice({
         const refReferenceIds = extractReferences(ref);
         state.files[ref.id] = {
           ...ref,
+          content: stripQueryResultId(ref),
           references: refReferenceIds,
+          queryResultId: computeQueryResultId(ref),
           loading: false,
           saving: false,
           updatedAt: Date.now(),
@@ -847,6 +859,26 @@ const filesSlice = createSlice({
     }
   }
 });
+
+/**
+ * Helper: Compute queryResultId for a question file and strip it from content
+ * Returns { queryResultId, content } where content has queryResultId removed
+ */
+function computeQueryResultId(file: DbFile): string | undefined {
+  if (file.type !== 'question' || !file.content) return undefined;
+  const content = file.content as QuestionContent;
+  if (!content.query || !content.database_name) return undefined;
+  return getQueryHash(content.query, content.parameterValues || {}, content.database_name);
+}
+
+/**
+ * Helper: Strip queryResultId from content if present (legacy DB records may have it)
+ */
+function stripQueryResultId(file: DbFile): DbFile['content'] {
+  if (file.type !== 'question' || !file.content) return file.content;
+  const { queryResultId: _, ...rest } = file.content as any;
+  return rest as DbFile['content'];
+}
 
 /**
  * Helper: Extract reference IDs from file content

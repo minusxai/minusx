@@ -88,22 +88,24 @@ function resolveEffectiveParams(
  *   - Strips ephemeralChanges: the reference's transient state (lastExecuted, etc.)
  *     pertains to its own page, not to the parent context.
  *   - Patches question parameters to reflect effective inherited values.
- *     queryResultIDs are computed downstream in compressFileState.
+ *     queryResultIDs are computed here from the effective params.
  */
 function buildEffectiveReference(refFile: FileState, inheritedParams: Record<string, any>): FileState {
   const stripped = { ...refFile, ephemeralChanges: {} };
   if (refFile.type !== 'question' || !refFile.content) return stripped;
   const content = refFile.content as QuestionContent;
-  if (!content.parameters?.length) return stripped;
 
   const ownParamValues = content.parameterValues ?? {};
-  const effectiveParamsDict = resolveEffectiveParams(content.parameters, ownParamValues, inheritedParams);
+  const effectiveParamsDict = content.parameters?.length
+    ? resolveEffectiveParams(content.parameters, ownParamValues, inheritedParams)
+    : {};
   const effectiveQueryResultId = content.query && content.database_name
     ? getQueryHash(content.query, effectiveParamsDict, content.database_name)
-    : content.queryResultId;
+    : refFile.queryResultId;
   return {
     ...stripped,
-    content: { ...content, queryResultId: effectiveQueryResultId },
+    queryResultId: effectiveQueryResultId,
+    content: { ...content },
   };
 }
 
@@ -292,19 +294,28 @@ export function compressQueryResult(qr: QueryResult, maxChars = LIMIT_CHARS): Co
 
 export function compressAugmentedFile(augmented: AugmentedFile): CompressedAugmentedFile {
   const compressFileState = (fs: FileState): CompressedFileState => {
-    const mergedContent = { ...(fs.content || {}), ...(fs.persistableChanges || {}) };
+    const mergedContent = { ...(fs.content || {}), ...(fs.persistableChanges || {}) } as FileState['content'];
     const isDirty = !!(
       (fs.persistableChanges && Object.keys(fs.persistableChanges).length > 0) ||
       fs.metadataChanges?.name !== undefined ||
       fs.metadataChanges?.path !== undefined
     );
+    // Recompute queryResultId from merged content (reflects edits, not just DB state)
+    let queryResultId = fs.queryResultId;
+    if (fs.type === 'question') {
+      const qc = mergedContent as QuestionContent;
+      if (qc?.query && qc?.database_name) {
+        queryResultId = getQueryHash(qc.query, qc.parameterValues || {}, qc.database_name);
+      }
+    }
     return {
       id: fs.id,
       name: fs.metadataChanges?.name ?? fs.name,
       path: fs.metadataChanges?.path ?? fs.path,
       type: fs.type as FileType,
       isDirty,
-      content: mergedContent as FileState['content'],
+      ...(queryResultId ? { queryResultId } : {}),
+      content: mergedContent,
     };
   };
   return {
