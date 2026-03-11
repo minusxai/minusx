@@ -210,7 +210,9 @@ const filesSlice = createSlice({
 
       // Store all main files
       files.forEach(file => {
-        const referenceIds = extractReferences(file);
+        const referenceIds = file.type === 'folder'
+          ? (state.files[file.id]?.references ?? [])  // preserve children set by setFolderInfo
+          : extractReferences(file);
         state.files[file.id] = {
           ...file,
           content: stripQueryResultId(file),
@@ -268,7 +270,9 @@ const filesSlice = createSlice({
             name: fileInfo.name,
             path: fileInfo.path,
             type: fileInfo.type,
-            references: fileInfo.references,
+            references: fileInfo.type === 'folder'
+              ? (state.files[fileInfo.id]?.references ?? fileInfo.references)
+              : fileInfo.references,
             created_at: fileInfo.created_at,
             updated_at: fileInfo.updated_at,
             updatedAt: Date.now()
