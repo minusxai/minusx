@@ -313,17 +313,6 @@ export class DocumentDB {
   }
 
   /**
-   * Delete a file by integer ID
-   * @param company_id - The company ID for tenant isolation (REQUIRED for security)
-   */
-  static async delete(id: number, company_id: number): Promise<boolean> {
-    const db = await getAdapter();
-    const result = await db.query('DELETE FROM files WHERE id = $1 AND company_id = $2', [id, company_id]);
-
-    return result.rowCount > 0;
-  }
-
-  /**
    * Delete all files by a list of IDs, scoped by company_id
    * Used for bulk folder deletion after permission filtering
    * @param company_id - The company ID for tenant isolation (REQUIRED for security)
