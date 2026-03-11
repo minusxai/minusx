@@ -10,10 +10,10 @@ import {
   Box,
   Badge,
   Spinner,
-  Textarea,
   IconButton,
 } from '@chakra-ui/react';
 import { LuRotateCcw } from 'react-icons/lu';
+import Editor from '@monaco-editor/react';
 import type { ToolCall, ToolMessage } from '@/lib/types';
 import { isFrontendTool, executeToolCall } from '@/lib/api/tool-handlers';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
@@ -26,24 +26,56 @@ interface ToolInspectModalProps {
   onClose: () => void;
 }
 
-function JsonBlock({ value }: { value: unknown }) {
-  const text =
-    typeof value === 'string'
-      ? (() => { try { return JSON.stringify(JSON.parse(value), null, 2); } catch { return value; } })()
-      : JSON.stringify(value, null, 2);
+function toJsonString(value: unknown): string {
+  if (typeof value === 'string') {
+    try { return JSON.stringify(JSON.parse(value), null, 2); } catch { return value; }
+  }
+  return JSON.stringify(value, null, 2);
+}
+
+interface JsonEditorProps {
+  value: string;
+  readOnly?: boolean;
+  onChange?: (value: string) => void;
+  colorMode: string;
+  height?: string;
+}
+
+function JsonEditor({ value, readOnly = true, onChange, colorMode, height = '300px' }: JsonEditorProps) {
   return (
-    <Box
-      p={3}
-      bg="bg.surface"
-      borderRadius="md"
-      fontFamily="mono"
-      fontSize="xs"
-      overflowX="auto"
-      maxH="300px"
-      overflowY="auto"
-      whiteSpace="pre"
-    >
-      {text}
+    <Box border="1px solid" borderColor="border.default" borderRadius="md" overflow="hidden">
+      <Editor
+        height={height}
+        defaultLanguage="json"
+        value={value}
+        onChange={(v) => onChange?.(v ?? '')}
+        theme={colorMode === 'dark' ? 'vs-dark' : 'vs-light'}
+        options={{
+          readOnly,
+          minimap: { enabled: false },
+          fontFamily: 'var(--font-jetbrains-mono)',
+          fontSize: 11,
+          lineNumbers: 'off',
+          folding: true,
+          scrollBeyondLastLine: false,
+          wordWrap: 'on',
+          wrappingIndent: 'indent',
+          automaticLayout: true,
+          tabSize: 2,
+          padding: { top: 8, bottom: 8 },
+        }}
+        onMount={(_editor, monaco) => {
+          monaco.editor.defineTheme('custom-theme', {
+            base: colorMode === 'dark' ? 'vs-dark' : 'vs',
+            inherit: true,
+            rules: [],
+            colors: {
+              'editor.background': colorMode === 'dark' ? '#161b22' : '#ffffff',
+            },
+          });
+          monaco.editor.setTheme('custom-theme');
+        }}
+      />
     </Box>
   );
 }
@@ -56,6 +88,7 @@ export default function ToolInspectModal({
 }: ToolInspectModalProps) {
   const dispatch = useAppDispatch();
   const reduxState = useAppSelector(state => state);
+  const colorMode = useAppSelector(state => state.ui.colorMode);
 
   const originalArgs = JSON.stringify(toolCall.function.arguments ?? {}, null, 2);
   const [argsText, setArgsText] = useState(originalArgs);
@@ -201,16 +234,11 @@ export default function ToolInspectModal({
                     <LuRotateCcw />
                   </IconButton>
                 </HStack>
-                <Textarea
+                <JsonEditor
                   value={argsText}
-                  onChange={(e) => handleArgsChange(e.target.value)}
-                  fontFamily="mono"
-                  fontSize="xs"
-                  rows={14}
-                  resize="vertical"
-                  borderColor={argsValid ? 'border.default' : 'red.500'}
-                  _focus={{ borderColor: argsValid ? 'accent.teal' : 'red.500' }}
-                  spellCheck={false}
+                  readOnly={false}
+                  onChange={handleArgsChange}
+                  colorMode={colorMode}
                 />
                 {!argsValid && (
                   <Text fontSize="xs" color="red.500">Invalid JSON</Text>
@@ -222,7 +250,7 @@ export default function ToolInspectModal({
                 <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase">
                   Original Result
                 </Text>
-                <JsonBlock value={toolMessage.content} />
+                <JsonEditor value={toJsonString(toolMessage.content)} colorMode={colorMode} />
 
                 {hasRerun && (
                   <>
@@ -236,7 +264,7 @@ export default function ToolInspectModal({
                         </Text>
                       </Box>
                     ) : (
-                      <JsonBlock value={rerunResult} />
+                      <JsonEditor value={toJsonString(rerunResult)} colorMode={colorMode} />
                     )}
                   </>
                 )}
