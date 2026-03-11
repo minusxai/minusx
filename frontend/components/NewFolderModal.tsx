@@ -7,6 +7,8 @@ import { SelectRoot, SelectTrigger, SelectContent, SelectItem, SelectValueText }
 import { createListCollection } from '@chakra-ui/react';
 import { createFolder } from '@/lib/api/file-state';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
+import { isUnderSystemFolder } from '@/lib/mode/path-resolver';
+import { useAppSelector } from '@/store/hooks';
 
 interface NewFolderModalProps {
   isOpen: boolean;
@@ -16,6 +18,7 @@ interface NewFolderModalProps {
 
 export default function NewFolderModal({ isOpen, onClose, defaultParentPath = '/' }: NewFolderModalProps) {
   const router = useRouter();
+  const mode = useAppSelector(state => state.auth.user?.mode ?? 'org');
   const [folderName, setFolderName] = useState('');
   const [parentPath, setParentPath] = useState(defaultParentPath);
   const [isCreating, setIsCreating] = useState(false);
@@ -25,6 +28,7 @@ export default function NewFolderModal({ isOpen, onClose, defaultParentPath = '/
   const { files: folderFiles } = useFilesByCriteria({
     criteria: { type: 'folder' },
     skip: !isOpen,
+    partial: true,
   });
 
   // Extract unique folder paths from loaded files
@@ -33,11 +37,15 @@ export default function NewFolderModal({ isOpen, onClose, defaultParentPath = '/
     paths.add('/'); // Always include root
 
     folderFiles.forEach(file => {
+      if (isUnderSystemFolder(file.path, mode)) return;
       paths.add(file.path);
-      // Also add parent directories
+      // Also add parent directories (skip system paths)
       const pathParts = file.path.split('/').filter(Boolean);
       for (let i = 1; i <= pathParts.length - 1; i++) {
-        paths.add('/' + pathParts.slice(0, i).join('/'));
+        const parentPath = '/' + pathParts.slice(0, i).join('/');
+        if (!isUnderSystemFolder(parentPath, mode)) {
+          paths.add(parentPath);
+        }
       }
     });
 

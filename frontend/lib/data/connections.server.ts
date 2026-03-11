@@ -206,7 +206,7 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
 
     const content = conn.content as ConnectionContent;
 
-    await DocumentDB.delete(conn.id, user.companyId);
+    await DocumentDB.deleteByIds([conn.id], user.companyId);
 
     // Remove from Python backend
     try {
