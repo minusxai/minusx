@@ -148,24 +148,24 @@ export const DELETE = withAuth(async (
       }
     }
 
-    // If it's a folder, recursively delete all contents
+    // If it's a folder, check all descendants are deletable before removing anything
     if (file.type === 'folder') {
-      // Use optimized path filtering with depth=-1 for all descendants
-      const filesToDelete = await DocumentDB.listAll(user.companyId, undefined, [file.path], -1);
-
-      console.log(`[DELETE] Deleting folder "${file.name}" and ${filesToDelete.length} items inside it`);
-
-      // Delete all files and subfolders
-      for (const fileToDelete of filesToDelete) {
-        await DocumentDB.delete(fileToDelete.id, user.companyId);
+      const descendants = await DocumentDB.listAll(user.companyId, undefined, [file.path], -1, false);
+      const undeletable = descendants.filter(f => !canDeleteFileType(f.type));
+      if (undeletable.length > 0) {
+        return ApiErrors.forbidden(
+          `Cannot delete folder: contains ${undeletable.length} file(s) of undeletable type(s): ${[...new Set(undeletable.map(f => f.type))].join(', ')}`
+        );
       }
-    }
-
-    // Delete the folder/file itself
-    const success = await DocumentDB.delete(id, user.companyId);
-
-    if (!success) {
-      return ApiErrors.notFound('File');
+      const allIds = [...descendants.map(f => f.id), id];
+      await DocumentDB.deleteByIds(allIds, user.companyId);
+      console.log(`[DELETE] Deleted folder "${file.name}" and ${descendants.length} items inside it`);
+    } else {
+      // Delete the non-folder file itself
+      const deletedCount = await DocumentDB.deleteByIds([id], user.companyId);
+      if (deletedCount === 0) {
+        return ApiErrors.notFound('File');
+      }
     }
 
     // Track deleted event (fire-and-forget)
