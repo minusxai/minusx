@@ -360,7 +360,7 @@ class CreateFile(Tool):
         file_type: str = Field(..., description="File type to create: 'question', 'dashboard', 'report', etc."),
         name: Optional[str] = Field(None, description="Display name for the new file"),
         path: Optional[str] = Field(None, description="Folder path to create the file in (e.g. '/org/reports'). Defaults to user's home folder."),
-        content: Optional[dict] = Field(None, description=f"Initial content fields merged on top of template defaults. Schema: {ATLAS_FILE_SCHEMA_JSON}"),
+        content: Optional[dict] = Field(None, description="Initial content fields merged on top of template defaults. Schema: same as the 'content' field in EditFile"),
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
