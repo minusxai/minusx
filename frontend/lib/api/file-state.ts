@@ -40,7 +40,7 @@ import { validateFileState } from '@/lib/validation/content-validators';
 
 export { selectDirtyFiles } from '@/store/filesSlice';
 
-const LIMIT_CHARS = 50_000;
+const LIMIT_CHARS = 2_000;
 
 /**
  * Extracts the initial inherited params for the root file being augmented.
