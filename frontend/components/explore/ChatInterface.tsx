@@ -617,7 +617,7 @@ export default function ChatInterface({
                 if (thinkingText || toolCalls.length > 0) {
                   return (
                     <Box p={3} bg="bg.muted" borderRadius="md" my={2}>
-                      <HStack gap={2} justify="space-between" align="flex-start">
+                      <VStack gap={2} justify="space-between" align="flex-start">
                         <HStack gap={2} flex="1">
                           <Icon as={LuSparkles} boxSize={4} color="accent.teal" flexShrink={0} />
                           <Text
@@ -630,6 +630,7 @@ export default function ChatInterface({
                           </Text>
                         </HStack>
                         {thinkingText && toolCalls.length > 0 && (
+                        <HStack justify={'flex-end'}>
                           <Text
                             color="fg.subtle"
                             fontSize="xs"
@@ -638,8 +639,9 @@ export default function ChatInterface({
                           >
                             {toolCalls.length} tool{toolCalls.length !== 1 ? 's' : ''}
                           </Text>
+                        </HStack>
                         )}
-                      </HStack>
+                      </VStack>
                     </Box>
                   );
                 }
