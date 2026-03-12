@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Text, VStack, HStack, Input, Button, Flex, Badge } from '@chakra-ui/react';
+import { Box, Text, VStack, HStack, Input, Button, Flex, Badge, Portal } from '@chakra-ui/react';
 import { AlertContent, AlertRunContent, AlertSelector, AlertFunction, ComparisonOperator } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { LuPlay, LuClock, LuBell, LuMail, LuInfo, LuGripVertical, LuHistory, LuSettings, LuColumns3, LuScanSearch } from 'react-icons/lu';
@@ -10,6 +10,8 @@ import { useAppSelector } from '@/store/hooks';
 import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { selectIsDirty } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
+import { useFetch } from '@/lib/api/useFetch';
+import { API } from '@/lib/api/declarations';
 
 interface AlertRun {
   id: number;
@@ -243,6 +245,18 @@ export default function AlertView({
   // Get referenced question name
   const referencedQuestion = alert.questionId ? files[alert.questionId] : null;
 
+  // Fetch columns for selected question
+  const { data: columnsData, loading: columnsLoading } = useFetch<{ questionId: number }, { columns: { name: string; type: string }[] }>(
+    API.inferColumns.byQuestionId,
+    alert.questionId ? { questionId: alert.questionId } : undefined,
+    { enabled: !!alert.questionId }
+  );
+  const inferredColumns = columnsData?.columns || [];
+
+  const columnCollection = useMemo(() => createListCollection({
+    items: inferredColumns.map(c => ({ value: c.name, label: c.name }))
+  }), [inferredColumns]);
+
   return (
     <Box display="flex" flexDirection="column" overflow="hidden" flex="1" minH="0" fontFamily="mono">
       {/* Cron not active info banner */}
@@ -315,6 +329,7 @@ export default function AlertView({
                     <SelectTrigger bg="bg.surface">
                       <SelectValueText placeholder="Select a question..." />
                     </SelectTrigger>
+                    <Portal>
                     <SelectPositioner>
                       <SelectContent>
                         {questionCollection.items.map((item) => (
@@ -324,6 +339,7 @@ export default function AlertView({
                         ))}
                       </SelectContent>
                     </SelectPositioner>
+                    </Portal>
                   </SelectRoot>
                 ) : (
                   <Text fontSize="sm" fontWeight="600" color="fg.default">
@@ -350,26 +366,6 @@ export default function AlertView({
                 </HStack>
 
                 <VStack gap={2.5} align="stretch">
-                  {/* Column */}
-                  {alert.condition?.function !== 'count' && (
-                    <HStack gap={2}>
-                      <Text fontSize="xs" color="fg.muted" minW="65px" fontWeight="600">Column</Text>
-                      <Input
-                        value={alert.condition?.column || ''}
-                        onChange={(e) => onChange({
-                          condition: { ...alert.condition, column: e.target.value }
-                        })}
-                        placeholder="column_name"
-                        disabled={!editMode}
-                        size="sm"
-                        fontFamily="mono"
-                        fontSize="xs"
-                        flex={1}
-                        bg="bg.surface"
-                      />
-                    </HStack>
-                  )}
-
                   {/* Selector */}
                   <HStack gap={2}>
                     <Text fontSize="xs" color="fg.muted" minW="65px" fontWeight="600">Rows</Text>
@@ -396,18 +392,68 @@ export default function AlertView({
                         <SelectTrigger bg="bg.surface">
                           <SelectValueText />
                         </SelectTrigger>
-                        <SelectPositioner>
-                          <SelectContent>
-                            {selectorCollection.items.map((item) => (
-                              <SelectItem key={item.value} item={item}>
-                                {item.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </SelectPositioner>
+                        <Portal>
+                          <SelectPositioner>
+                            <SelectContent>
+                              {selectorCollection.items.map((item) => (
+                                <SelectItem key={item.value} item={item}>
+                                  {item.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </SelectPositioner>
+                        </Portal>
                       </SelectRoot>
                     </Box>
                   </HStack>
+
+                  {/* Column */}
+                  {alert.condition?.function !== 'count' && (
+                    <HStack gap={2}>
+                      <Text fontSize="xs" color="fg.muted" minW="65px" fontWeight="600">Column</Text>
+                      <Box flex={1}>
+                        {inferredColumns.length > 0 ? (
+                          <SelectRoot
+                            collection={columnCollection}
+                            value={alert.condition?.column ? [alert.condition.column] : []}
+                            onValueChange={(e) => onChange({
+                              condition: { ...alert.condition, column: e.value[0] }
+                            })}
+                            disabled={!editMode}
+                            size="sm"
+                          >
+                            <SelectTrigger bg="bg.surface">
+                              <SelectValueText placeholder={columnsLoading ? 'Loading...' : 'Select column'} />
+                            </SelectTrigger>
+                            <Portal>
+                              <SelectPositioner>
+                                <SelectContent>
+                                  {columnCollection.items.map((item) => (
+                                    <SelectItem key={item.value} item={item}>
+                                      {item.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </SelectPositioner>
+                            </Portal>
+                          </SelectRoot>
+                        ) : (
+                          <Input
+                            value={alert.condition?.column || ''}
+                            onChange={(e) => onChange({
+                              condition: { ...alert.condition, column: e.target.value }
+                            })}
+                            placeholder={columnsLoading ? 'Loading columns...' : 'column_name'}
+                            disabled={!editMode}
+                            size="sm"
+                            fontFamily="mono"
+                            fontSize="xs"
+                            bg="bg.surface"
+                          />
+                        )}
+                      </Box>
+                    </HStack>
+                  )}
 
                   {/* Function */}
                   <HStack gap={2}>
@@ -430,15 +476,17 @@ export default function AlertView({
                             <SelectTrigger bg="bg.surface">
                               <SelectValueText />
                             </SelectTrigger>
-                            <SelectPositioner>
-                              <SelectContent>
-                                {fnCollection.items.map((item) => (
-                                  <SelectItem key={item.value} item={item}>
-                                    {item.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </SelectPositioner>
+                            <Portal>
+                              <SelectPositioner>
+                                <SelectContent>
+                                  {fnCollection.items.map((item) => (
+                                    <SelectItem key={item.value} item={item}>
+                                      {item.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </SelectPositioner>
+                            </Portal>
                           </SelectRoot>
                         );
                       })()}
@@ -461,15 +509,17 @@ export default function AlertView({
                         <SelectTrigger bg="bg.surface">
                           <SelectValueText />
                         </SelectTrigger>
-                        <SelectPositioner>
-                          <SelectContent>
-                            {operatorCollection.items.map((item) => (
-                              <SelectItem key={item.value} item={item}>
-                                {item.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </SelectPositioner>
+                        <Portal>
+                          <SelectPositioner>
+                            <SelectContent>
+                              {operatorCollection.items.map((item) => (
+                                <SelectItem key={item.value} item={item}>
+                                  {item.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </SelectPositioner>
+                        </Portal>
                       </SelectRoot>
                     </Box>
                     <Input
@@ -536,15 +586,17 @@ export default function AlertView({
                       <SelectTrigger bg="bg.surface">
                         <SelectValueText placeholder="Select schedule" />
                       </SelectTrigger>
-                      <SelectPositioner>
-                        <SelectContent>
-                          {cronCollection.items.map((item) => (
-                            <SelectItem key={item.value} item={item}>
-                              {item.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </SelectPositioner>
+                      <Portal>
+                        <SelectPositioner>
+                          <SelectContent>
+                            {cronCollection.items.map((item) => (
+                              <SelectItem key={item.value} item={item}>
+                                {item.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </SelectPositioner>
+                      </Portal>
                     </SelectRoot>
                   </Box>
 
@@ -576,15 +628,17 @@ export default function AlertView({
                       <SelectTrigger bg="bg.surface">
                         <SelectValueText placeholder="TZ" />
                       </SelectTrigger>
-                      <SelectPositioner>
-                        <SelectContent>
-                          {timezoneCollection.items.map((item) => (
-                            <SelectItem key={item.value} item={item}>
-                              {item.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </SelectPositioner>
+                      <Portal>
+                        <SelectPositioner>
+                          <SelectContent>
+                            {timezoneCollection.items.map((item) => (
+                              <SelectItem key={item.value} item={item}>
+                                {item.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </SelectPositioner>
+                      </Portal>
                     </SelectRoot>
                   </Box>
                 </HStack>
@@ -705,15 +759,17 @@ export default function AlertView({
                       <SelectTrigger>
                         <SelectValueText placeholder="Select run..." />
                       </SelectTrigger>
-                      <SelectPositioner>
-                        <SelectContent>
-                          {runsCollection.items.map((item) => (
-                            <SelectItem key={item.value} item={item}>
-                              {item.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </SelectPositioner>
+                      <Portal>
+                        <SelectPositioner>
+                          <SelectContent>
+                            {runsCollection.items.map((item) => (
+                              <SelectItem key={item.value} item={item}>
+                                {item.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </SelectPositioner>
+                      </Portal>
                     </SelectRoot>
                   </Box>
                 )}

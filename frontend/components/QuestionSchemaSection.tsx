@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Box, VStack, HStack, Text, Icon, Spinner } from '@chakra-ui/react';
 import { LuChartBar, LuChevronRight, LuChevronDown, LuColumns3 } from 'react-icons/lu';
 import { FilesAPI } from '@/lib/data/files';
+import { fetchWithCache } from '@/lib/api/fetch-wrapper';
+import { API } from '@/lib/api/declarations';
 import { QuestionContent } from '@/lib/types';
 import { extractReferencesFromSQL } from '@/lib/sql/sql-references';
 
@@ -99,17 +101,16 @@ export default function QuestionSchemaSection() {
     if (!columnsByQuestionId[q.id]) {
       setColumnsByQuestionId(prev => ({ ...prev, [q.id]: 'loading' }));
       try {
-        const res = await fetch('/api/infer-columns', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ questionId: q.id }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setColumnsByQuestionId(prev => ({ ...prev, [q.id]: data.columns || [] }));
-        } else {
-          setColumnsByQuestionId(prev => ({ ...prev, [q.id]: 'error' }));
-        }
+        const endpoint = API.inferColumns.byQuestionId;
+        const data = await fetchWithCache<{ columns: InferredColumn[] }>(
+          endpoint.url as string,
+          {
+            method: endpoint.method,
+            body: JSON.stringify({ questionId: q.id }),
+            cacheStrategy: endpoint.cache,
+          } as RequestInit & { cacheStrategy?: typeof endpoint.cache }
+        );
+        setColumnsByQuestionId(prev => ({ ...prev, [q.id]: data.columns || [] }));
       } catch {
         setColumnsByQuestionId(prev => ({ ...prev, [q.id]: 'error' }));
       }
@@ -154,18 +155,15 @@ export default function QuestionSchemaSection() {
               cursor="pointer"
               _hover={{ bg: 'bg.muted' }}
               transition="background 0.15s"
+              onClick={() => toggleExpand(q)}
             >
-              {/* Expand/collapse toggle */}
               <Icon
                 as={isExpanded ? LuChevronDown : LuChevronRight}
                 boxSize={3}
                 color="fg.muted"
                 flexShrink={0}
-                onClick={() => toggleExpand(q)}
-                cursor="pointer"
               />
               <Icon as={LuChartBar} boxSize={3} color="accent.success" flexShrink={0} />
-              {/* Question name — inserts @alias at cursor */}
               <Text
                 fontSize="xs"
                 fontFamily="mono"
@@ -173,8 +171,6 @@ export default function QuestionSchemaSection() {
                 fontWeight="500"
                 flex="1"
                 truncate
-                title={`Insert @${q.alias}`}
-                // onClick={() => insertAtCursor(`@${q.alias}`)}
                 _hover={{ color: 'accent.success' }}
                 transition="color 0.15s"
               >
@@ -185,8 +181,6 @@ export default function QuestionSchemaSection() {
                 fontFamily="mono"
                 color="fg.subtle"
                 flexShrink={0}
-                title="Click to expand columns"
-                onClick={() => toggleExpand(q)}
               >
                 #{q.id}
               </Text>

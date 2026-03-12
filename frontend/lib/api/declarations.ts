@@ -160,6 +160,18 @@ export const API = {
     },
   },
 
+  // Infer Columns API
+  inferColumns: {
+    byQuestionId: {
+      url: '/api/infer-columns',
+      method: 'POST',
+      cache: {
+        ttl: 5 * 60 * 1000,  // 5 minutes (schema doesn't change often)
+        deduplicate: true,
+      },
+    },
+  },
+
   // Chat API
   chat: {
     send: {
