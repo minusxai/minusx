@@ -30,6 +30,8 @@ export default function MoveFileModal({ isOpen, onClose, fileId, fileName, fileP
     partial: true,
   });
 
+  const isFolder = filePath ? folderFiles.some(f => f.id === fileId) : false;
+
   const folders = (() => {
     const paths = new Set<string>();
     folderFiles.forEach(file => {
@@ -43,7 +45,13 @@ export default function MoveFileModal({ isOpen, onClose, fileId, fileName, fileP
         }
       }
     });
-    return Array.from(paths).sort();
+    return Array.from(paths)
+      .filter(p => {
+        if (p === currentParent) return false;            // already here
+        if (isFolder && (p === filePath || p.startsWith(filePath + '/'))) return false; // self or descendant
+        return true;
+      })
+      .sort();
   })();
 
   useEffect(() => {
