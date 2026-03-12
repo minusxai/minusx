@@ -10,6 +10,8 @@ import { useAppSelector } from '@/store/hooks';
 import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { selectIsDirty } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
+import { useFetch } from '@/lib/api/useFetch';
+import { API } from '@/lib/api/declarations';
 
 interface AlertRun {
   id: number;
@@ -243,6 +245,18 @@ export default function AlertView({
   // Get referenced question name
   const referencedQuestion = alert.questionId ? files[alert.questionId] : null;
 
+  // Fetch columns for selected question
+  const { data: columnsData, loading: columnsLoading } = useFetch<{ questionId: number }, { columns: { name: string; type: string }[] }>(
+    API.inferColumns.byQuestionId,
+    alert.questionId ? { questionId: alert.questionId } : undefined,
+    { enabled: !!alert.questionId }
+  );
+  const inferredColumns = columnsData?.columns || [];
+
+  const columnCollection = useMemo(() => createListCollection({
+    items: inferredColumns.map(c => ({ value: c.name, label: c.name }))
+  }), [inferredColumns]);
+
   return (
     <Box display="flex" flexDirection="column" overflow="hidden" flex="1" minH="0" fontFamily="mono">
       {/* Cron not active info banner */}
@@ -352,26 +366,6 @@ export default function AlertView({
                 </HStack>
 
                 <VStack gap={2.5} align="stretch">
-                  {/* Column */}
-                  {alert.condition?.function !== 'count' && (
-                    <HStack gap={2}>
-                      <Text fontSize="xs" color="fg.muted" minW="65px" fontWeight="600">Column</Text>
-                      <Input
-                        value={alert.condition?.column || ''}
-                        onChange={(e) => onChange({
-                          condition: { ...alert.condition, column: e.target.value }
-                        })}
-                        placeholder="column_name"
-                        disabled={!editMode}
-                        size="sm"
-                        fontFamily="mono"
-                        fontSize="xs"
-                        flex={1}
-                        bg="bg.surface"
-                      />
-                    </HStack>
-                  )}
-
                   {/* Selector */}
                   <HStack gap={2}>
                     <Text fontSize="xs" color="fg.muted" minW="65px" fontWeight="600">Rows</Text>
@@ -412,6 +406,54 @@ export default function AlertView({
                       </SelectRoot>
                     </Box>
                   </HStack>
+
+                  {/* Column */}
+                  {alert.condition?.function !== 'count' && (
+                    <HStack gap={2}>
+                      <Text fontSize="xs" color="fg.muted" minW="65px" fontWeight="600">Column</Text>
+                      <Box flex={1}>
+                        {inferredColumns.length > 0 ? (
+                          <SelectRoot
+                            collection={columnCollection}
+                            value={alert.condition?.column ? [alert.condition.column] : []}
+                            onValueChange={(e) => onChange({
+                              condition: { ...alert.condition, column: e.value[0] }
+                            })}
+                            disabled={!editMode}
+                            size="sm"
+                          >
+                            <SelectTrigger bg="bg.surface">
+                              <SelectValueText placeholder={columnsLoading ? 'Loading...' : 'Select column'} />
+                            </SelectTrigger>
+                            <Portal>
+                              <SelectPositioner>
+                                <SelectContent>
+                                  {columnCollection.items.map((item) => (
+                                    <SelectItem key={item.value} item={item}>
+                                      {item.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </SelectPositioner>
+                            </Portal>
+                          </SelectRoot>
+                        ) : (
+                          <Input
+                            value={alert.condition?.column || ''}
+                            onChange={(e) => onChange({
+                              condition: { ...alert.condition, column: e.target.value }
+                            })}
+                            placeholder={columnsLoading ? 'Loading columns...' : 'column_name'}
+                            disabled={!editMode}
+                            size="sm"
+                            fontFamily="mono"
+                            fontSize="xs"
+                            bg="bg.surface"
+                          />
+                        )}
+                      </Box>
+                    </HStack>
+                  )}
 
                   {/* Function */}
                   <HStack gap={2}>
