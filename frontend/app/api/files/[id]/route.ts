@@ -101,10 +101,40 @@ export const PATCH = withAuth(async (
       return ApiErrors.validationError('path is required');
     }
 
-    if (!content) {
-      return ApiErrors.validationError('content is required');
+    // Metadata-only update: name/path only, content untouched
+    if (content === undefined) {
+      const file = await DocumentDB.getById(id, user.companyId);
+      if (!file) {
+        return ApiErrors.notFound('File');
+      }
+      const oldPath = file.path;
+
+      if (file.type === 'folder' && oldPath !== path) {
+        // Step 1: Fetch all descendants (metadata only, no content)
+        const descendants = await DocumentDB.listAll(user.companyId, undefined, [oldPath], -1, false);
+
+        // Step 2: Check move permission on every descendant
+        const blocked = descendants.filter(f => !canDeleteFileType(f.type));
+        if (blocked.length > 0) {
+          return ApiErrors.forbidden(
+            `Cannot move folder: contains ${blocked.length} file(s) of protected type(s): ${[...new Set(blocked.map(f => f.type))].join(', ')}`
+          );
+        }
+
+        // Step 3: Atomic update — only the exact IDs we checked
+        const descendantIds = descendants.map(f => f.id);
+        await DocumentDB.moveFolderAndChildren(id, descendantIds, oldPath, path, name, user.companyId);
+      } else {
+        const success = await DocumentDB.updateMetadata(id, name, path, user.companyId);
+        if (!success) {
+          return ApiErrors.notFound('File');
+        }
+      }
+
+      return successResponse({ id, name, path, oldPath });
     }
 
+    // Full save: update name, path, and content
     // Phase 6: Client sends pre-extracted references (server is dumb, just saves what it receives)
     const result = await saveFile(id, name, path, content, references || [], user);
 

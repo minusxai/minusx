@@ -1,11 +1,12 @@
 'use client';
 
 import { Box, IconButton, Menu, Portal, HStack, Icon, Button, Text, Dialog, CloseButton } from '@chakra-ui/react';
-import { LuEllipsis, LuCopy, LuTrash2 } from 'react-icons/lu';
+import { LuEllipsis, LuCopy, LuTrash2, LuFolderInput } from 'react-icons/lu';
 import { useState } from 'react';
 import { useAccessRules } from '@/lib/auth/access-rules.client';
 import { FileType } from '@/lib/types';
 import { deleteFile } from '@/lib/api/file-state';
+import MoveFileModal from './MoveFileModal';
 
 interface FileActionMenuProps {
   fileId: number;
@@ -17,6 +18,7 @@ interface FileActionMenuProps {
 
 export default function FileActionMenu({ fileId, fileName, filePath, fileType, size = 'sm' }: FileActionMenuProps) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const { canDeleteFileType } = useAccessRules();
   const canDelete = canDeleteFileType(fileType);
 
@@ -86,6 +88,20 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
                 <span>Duplicate</span>
               </HStack>
             </Menu.Item> */}
+            <Menu.Item
+              value="move"
+              cursor="pointer"
+              borderRadius="sm"
+              px={3}
+              py={2}
+              _hover={{ bg: 'bg.muted' }}
+              onClick={() => setIsMoveModalOpen(true)}
+            >
+              <HStack gap={2}>
+                <Icon as={LuFolderInput} boxSize={4} />
+                <span>Move</span>
+              </HStack>
+            </Menu.Item>
             {canDelete && (
               <Menu.Item
                 value="delete"
@@ -107,6 +123,14 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
         </Menu.Positioner>
         </Portal>
       </Menu.Root>
+
+      <MoveFileModal
+        isOpen={isMoveModalOpen}
+        onClose={() => setIsMoveModalOpen(false)}
+        fileId={fileId}
+        fileName={fileName}
+        filePath={filePath}
+      />
 
       {/* Delete Confirmation Dialog */}
       <Dialog.Root open={isDeleteDialogOpen} onOpenChange={(e) => setIsDeleteDialogOpen(e.open)}>
