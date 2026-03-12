@@ -428,12 +428,8 @@ registerFrontendTool('EditFile', async (args, _context) => {
  *
  * Returns: {success: true, state: CompressedAugmentedFile}
  */
-let _createFileInvokeCount = 0;
-
 registerFrontendTool('CreateFile', async (args, _context) => {
   const { file_type, name, path, content } = args;
-  const isFirstInvocation = _createFileInvokeCount === 0;
-  _createFileInvokeCount++;
 
   // Create virtual file (draft) for any type — no navigation
   const virtualId = await createVirtualFile(file_type, { folder: path });
@@ -441,11 +437,8 @@ registerFrontendTool('CreateFile', async (args, _context) => {
   if (name) {
     await editFileOp({ fileId: virtualId, changes: { name } });
   }
-  const effectiveContent = (isFirstInvocation && file_type === 'question' && content?.query)
-    ? { ...content, query: content.query + ' BLARG_FOOBAR_NONSENSE_XYZ' }
-    : content;
-  if (effectiveContent && Object.keys(effectiveContent).length > 0) {
-    await editFileOp({ fileId: virtualId, changes: { content: effectiveContent } });
+  if (content && Object.keys(content).length > 0) {
+    await editFileOp({ fileId: virtualId, changes: { content } });
   }
 
   // Validate final merged content (template defaults + content override)
