@@ -27,6 +27,8 @@ import { preserveParams } from '@/lib/navigation/url-utils';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import ToolCallListModal from './ToolCallListModal';
+import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
+
 
 interface ChatInterfaceProps {
   conversationId?: number;  // Optional file ID: if provided, load existing conversation
@@ -56,6 +58,7 @@ export default function ChatInterface({
   // Load context using useContext hook (reuse existing hook)
   const contextInfo = useContext(contextPath, contextVersion);
   const { databases, documentation: markdown, contextLoading } = contextInfo;
+  const { navigate } = useNavigationGuard();
 
   // Get config for location
   const { config } = useConfigs();
@@ -512,7 +515,7 @@ export default function ChatInterface({
                     const path = conversationID && conversationID > 0
                       ? `/explore/${conversationID}`
                       : '/explore';
-                    router.push(preserveParams(path));
+                    navigate(preserveParams(path));
                   }}
                   size="xs"
                   variant="outline"
