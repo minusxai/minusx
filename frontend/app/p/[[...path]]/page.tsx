@@ -79,14 +79,11 @@ export default function PathPage({ params }: PathPageProps) {
         return;
       }
 
-      // Check if requested path is a parent folder (going UP the chain within mode)
-      const isParentPath = resolvedHomeFolder.startsWith(fullPath + '/');
-
-      // Check if requested path is home folder or subfolder
+      // Check if requested path is home folder or subfolder of home folder
       const isHomeOrSubPath = fullPath === resolvedHomeFolder || fullPath.startsWith(resolvedHomeFolder + '/');
 
-      // If not a parent and not in home tree, redirect back to home folder
-      if (!isParentPath && !isHomeOrSubPath) {
+      // Non-admins cannot browse parent folders — redirect to home folder
+      if (!isHomeOrSubPath) {
         router.replace(`/p${resolvedHomeFolder}`);
         return;
       }

@@ -22,7 +22,9 @@ import type {
   ContextContent,
   DatabaseContext,
   ContextVersion,
-  DatabaseSchema
+  DatabaseSchema,
+  QuestionContent,
+  DocumentContent
 } from '@/lib/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import * as pythonBackend from '@/lib/backend/python-backend';
@@ -1100,6 +1102,208 @@ describe('Context Loader Integration with Versioning', () => {
 
       // Support sees only users
       expect(supportTables).toEqual(['users']);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Subfolder user access scenarios
+  //
+  // These tests cover a viewer whose home_folder resolves to a subfolder
+  // (e.g. home_folder='sales' → /org/sales) rather than the mode root (/org).
+  // Four related bugs are exercised:
+  //
+  //   A. Ancestor context access  — can the user load /org/context?
+  //   B. Context discovery        — does getFiles({type:'context'}) return it?
+  //   C. Referenced file access   — are dashboard's questions (in parent folder)
+  //                                 returned alongside the dashboard?
+  //   D. Admin subfolder          — admins bypass path rules regardless of home_folder
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('Subfolder viewer — ancestor context access (Bug A+B)', () => {
+    const subfolderViewer: EffectiveUser = {
+      userId: 20,
+      name: 'Subfolder Viewer',
+      email: 'subfolder-viewer@example.com',
+      role: 'viewer',
+      companyId: 1,
+      companyName: 'test-company',
+      mode: 'org',
+      home_folder: 'sales'   // resolves to /org/sales
+    };
+
+    const subfolderAdmin: EffectiveUser = {
+      userId: 21,
+      name: 'Subfolder Admin',
+      email: 'subfolder-admin@example.com',
+      role: 'admin',
+      companyId: 1,
+      companyName: 'test-company',
+      mode: 'org',
+      home_folder: 'sales'   // admins get full mode access regardless
+    };
+
+    const deeplyNestedViewer: EffectiveUser = {
+      userId: 22,
+      name: 'Deeply Nested Viewer',
+      email: 'nested-viewer@example.com',
+      role: 'viewer',
+      companyId: 1,
+      companyName: 'test-company',
+      mode: 'org',
+      home_folder: 'sales/team1'  // resolves to /org/sales/team1
+    };
+
+    it('can load ancestor context via loadFiles', async () => {
+      // /org/context is an ancestor of /org/sales — accessible via isAncestorContext
+      const { data: contexts } = await FilesAPI.loadFiles([orgContextId], subfolderViewer);
+      expect(contexts).toHaveLength(1);
+      const content = contexts[0].content as ContextContent;
+      expect(content.versions).toHaveLength(1); // non-admin sees published version only
+      expect(content.versions![0].version).toBe(1);
+    });
+
+    it('can load context inside their own home folder', async () => {
+      // /org/sales/context is inside /org/sales — accessible via homeAccess
+      const { data: contexts } = await FilesAPI.loadFiles([salesContextId], subfolderViewer);
+      expect(contexts).toHaveLength(1);
+    });
+
+    it('cannot load an unrelated sibling context outside their path', async () => {
+      const marketingCtxId = await DocumentDB.create(
+        'context', '/org/marketing/context', 'context',
+        {
+          versions: [{ version: 1, databases: [], docs: [], createdAt: new Date().toISOString(), createdBy: 1, description: '' }],
+          published: { all: 1 }, fullSchema: [], fullDocs: []
+        } as ContextContent,
+        [], 1
+      );
+      // loadFiles filters inaccessible files silently — expect empty result
+      const { data } = await FilesAPI.loadFiles([marketingCtxId], subfolderViewer);
+      expect(data).toHaveLength(0);
+    });
+
+    it('getFiles without path filter returns both ancestor and home-folder contexts (Bug B)', async () => {
+      // This is exactly what ensureContextsLoaded() calls — no paths, type=context
+      const result = await FilesAPI.getFiles({ type: 'context', depth: -1 }, subfolderViewer);
+      const paths = result.data.map(f => f.path);
+      expect(paths).toContain('/org/context');       // ancestor — via isAncestorContext
+      expect(paths).toContain('/org/sales/context'); // home folder — via homeAccess
+    });
+
+    it('getFiles WITH path filter does NOT return ancestor context (justifies omitting path in ensureContextsLoaded)', async () => {
+      const result = await FilesAPI.getFiles({ paths: ['/org/sales'], type: 'context', depth: -1 }, subfolderViewer);
+      const paths = result.data.map(f => f.path);
+      expect(paths).not.toContain('/org/context');   // ancestor outside path filter
+      expect(paths).toContain('/org/sales/context'); // inside /org/sales — returned
+    });
+
+    it('admin with subfolder home_folder sees all versions (full mode access)', async () => {
+      const { data: contexts } = await FilesAPI.loadFiles([orgContextId], subfolderAdmin);
+      expect(contexts).toHaveLength(1);
+      const content = contexts[0].content as ContextContent;
+      expect(content.versions).toHaveLength(2); // admin sees all versions
+    });
+
+    it('deeply nested viewer can access both grandparent and parent ancestor contexts', async () => {
+      // home_folder='sales/team1' → /org/sales/team1
+      // /org/context:       contextDir=/org,       /org/sales/team1 startsWith /org/ ✓
+      // /org/sales/context: contextDir=/org/sales, /org/sales/team1 startsWith /org/sales/ ✓
+      const result = await FilesAPI.getFiles({ type: 'context', depth: -1 }, deeplyNestedViewer);
+      const paths = result.data.map(f => f.path);
+      expect(paths).toContain('/org/context');
+      expect(paths).toContain('/org/sales/context');
+    });
+
+    it('deeply nested viewer can fully load ancestor context content', async () => {
+      const { data: contexts } = await FilesAPI.loadFiles([orgContextId], deeplyNestedViewer);
+      expect(contexts).toHaveLength(1);
+      const content = contexts[0].content as ContextContent;
+      expect(content.versions).toHaveLength(1);
+      expect(content.fullSchema!.find(db => db.databaseName === 'duckdb_main')).toBeDefined();
+    });
+  });
+
+  describe('Subfolder viewer — dashboard references questions in parent folder (Bug C)', () => {
+    const subfolderViewer: EffectiveUser = {
+      userId: 30,
+      name: 'Dashboard Viewer',
+      email: 'dashboard-viewer@example.com',
+      role: 'viewer',
+      companyId: 1,
+      companyName: 'test-company',
+      mode: 'org',
+      home_folder: 'sales'   // resolves to /org/sales
+    };
+
+    it('dashboard in home folder returns referenced questions even when questions are in parent folder', async () => {
+      // Question lives at /org/my-question — OUTSIDE /org/sales (subfolder viewer's home)
+      const questionContent: QuestionContent = {
+        query: 'SELECT 1',
+        description: '',
+        vizSettings: { type: 'table' },
+        parameters: [],
+        database_name: 'duckdb_main'
+      };
+      const questionId = await DocumentDB.create(
+        'question', '/org/my-question', 'question',
+        questionContent, [], 1
+      );
+
+      // Dashboard lives at /org/sales/my-dashboard — INSIDE home folder
+      // References the question in the parent folder
+      const dashboardContent: DocumentContent = {
+        description: '',
+        assets: [{ type: 'question', id: questionId }],
+        layout: { columns: 12, items: [] }
+      };
+      const dashboardId = await DocumentDB.create(
+        'dashboard', '/org/sales/my-dashboard', 'dashboard',
+        dashboardContent, [questionId], 1
+      );
+
+      const { data: files, metadata } = await FilesAPI.loadFiles([dashboardId], subfolderViewer);
+
+      // Dashboard itself is accessible (in home folder)
+      expect(files).toHaveLength(1);
+      expect(files[0].path).toBe('/org/sales/my-dashboard');
+
+      // Referenced question MUST be in the references list even though it's in /org (parent)
+      // If this fails, the dashboard renders empty — Bug C
+      expect(metadata.references).toHaveLength(1);
+      expect(metadata.references[0].path).toBe('/org/my-question');
+    });
+
+    it('dashboard in home folder returns referenced questions in sibling folders', async () => {
+      // Question in /org/shared/report-question — outside home, not ancestor
+      const questionId = await DocumentDB.create(
+        'question', '/org/shared/report-question', 'question',
+        { query: 'SELECT 2', description: '', vizSettings: { type: 'table' }, parameters: [], database_name: 'duckdb_main' } as QuestionContent,
+        [], 1
+      );
+
+      const dashboardId = await DocumentDB.create(
+        'dashboard', '/org/sales/team-dashboard', 'dashboard',
+        { description: '', assets: [{ type: 'question', id: questionId }], layout: { columns: 12, items: [] } } as DocumentContent,
+        [questionId], 1
+      );
+
+      const { data: files, metadata } = await FilesAPI.loadFiles([dashboardId], subfolderViewer);
+      expect(files).toHaveLength(1);
+      // Reference must be returned — access via reference chain, not direct path check
+      expect(metadata.references).toHaveLength(1);
+      expect(metadata.references[0].path).toBe('/org/shared/report-question');
+    });
+
+    it('user cannot directly load a question outside their accessible paths', async () => {
+      // Direct load (not via reference) of a parent-folder question is still denied
+      const questionId = await DocumentDB.create(
+        'question', '/org/top-level-question', 'question',
+        { query: 'SELECT 3', description: '', vizSettings: { type: 'table' }, parameters: [], database_name: 'duckdb_main' } as QuestionContent,
+        [], 1
+      );
+
+      const { data } = await FilesAPI.loadFiles([questionId], subfolderViewer);
+      // Direct access denied — not in home folder, not a reference
+      expect(data).toHaveLength(0);
     });
   });
 });
