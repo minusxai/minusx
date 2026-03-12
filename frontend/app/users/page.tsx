@@ -77,6 +77,7 @@ export default function UsersPage() {
       const data = await fetchWithCache('/api/users', {
         method: 'GET',
         cacheStrategy: API.users.list.cache,
+        skipCache: true,
       });
 
       if (data.success) {
