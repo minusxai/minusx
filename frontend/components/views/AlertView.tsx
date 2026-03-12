@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Text, VStack, HStack, Input, Button, Flex, Badge } from '@chakra-ui/react';
+import { Box, Text, VStack, HStack, Input, Button, Flex, Badge, Portal } from '@chakra-ui/react';
 import { AlertContent, AlertRunContent, AlertSelector, AlertFunction, ComparisonOperator } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { LuPlay, LuClock, LuBell, LuMail, LuInfo, LuGripVertical, LuHistory, LuSettings, LuColumns3, LuScanSearch } from 'react-icons/lu';
@@ -315,6 +315,7 @@ export default function AlertView({
                     <SelectTrigger bg="bg.surface">
                       <SelectValueText placeholder="Select a question..." />
                     </SelectTrigger>
+                    <Portal>
                     <SelectPositioner>
                       <SelectContent>
                         {questionCollection.items.map((item) => (
@@ -324,6 +325,7 @@ export default function AlertView({
                         ))}
                       </SelectContent>
                     </SelectPositioner>
+                    </Portal>
                   </SelectRoot>
                 ) : (
                   <Text fontSize="sm" fontWeight="600" color="fg.default">
@@ -396,15 +398,17 @@ export default function AlertView({
                         <SelectTrigger bg="bg.surface">
                           <SelectValueText />
                         </SelectTrigger>
-                        <SelectPositioner>
-                          <SelectContent>
-                            {selectorCollection.items.map((item) => (
-                              <SelectItem key={item.value} item={item}>
-                                {item.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </SelectPositioner>
+                        <Portal>
+                          <SelectPositioner>
+                            <SelectContent>
+                              {selectorCollection.items.map((item) => (
+                                <SelectItem key={item.value} item={item}>
+                                  {item.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </SelectPositioner>
+                        </Portal>
                       </SelectRoot>
                     </Box>
                   </HStack>
@@ -430,15 +434,17 @@ export default function AlertView({
                             <SelectTrigger bg="bg.surface">
                               <SelectValueText />
                             </SelectTrigger>
-                            <SelectPositioner>
-                              <SelectContent>
-                                {fnCollection.items.map((item) => (
-                                  <SelectItem key={item.value} item={item}>
-                                    {item.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </SelectPositioner>
+                            <Portal>
+                              <SelectPositioner>
+                                <SelectContent>
+                                  {fnCollection.items.map((item) => (
+                                    <SelectItem key={item.value} item={item}>
+                                      {item.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </SelectPositioner>
+                            </Portal>
                           </SelectRoot>
                         );
                       })()}
@@ -461,15 +467,17 @@ export default function AlertView({
                         <SelectTrigger bg="bg.surface">
                           <SelectValueText />
                         </SelectTrigger>
-                        <SelectPositioner>
-                          <SelectContent>
-                            {operatorCollection.items.map((item) => (
-                              <SelectItem key={item.value} item={item}>
-                                {item.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </SelectPositioner>
+                        <Portal>
+                          <SelectPositioner>
+                            <SelectContent>
+                              {operatorCollection.items.map((item) => (
+                                <SelectItem key={item.value} item={item}>
+                                  {item.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </SelectPositioner>
+                        </Portal>
                       </SelectRoot>
                     </Box>
                     <Input
@@ -536,15 +544,17 @@ export default function AlertView({
                       <SelectTrigger bg="bg.surface">
                         <SelectValueText placeholder="Select schedule" />
                       </SelectTrigger>
-                      <SelectPositioner>
-                        <SelectContent>
-                          {cronCollection.items.map((item) => (
-                            <SelectItem key={item.value} item={item}>
-                              {item.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </SelectPositioner>
+                      <Portal>
+                        <SelectPositioner>
+                          <SelectContent>
+                            {cronCollection.items.map((item) => (
+                              <SelectItem key={item.value} item={item}>
+                                {item.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </SelectPositioner>
+                      </Portal>
                     </SelectRoot>
                   </Box>
 
@@ -576,15 +586,17 @@ export default function AlertView({
                       <SelectTrigger bg="bg.surface">
                         <SelectValueText placeholder="TZ" />
                       </SelectTrigger>
-                      <SelectPositioner>
-                        <SelectContent>
-                          {timezoneCollection.items.map((item) => (
-                            <SelectItem key={item.value} item={item}>
-                              {item.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </SelectPositioner>
+                      <Portal>
+                        <SelectPositioner>
+                          <SelectContent>
+                            {timezoneCollection.items.map((item) => (
+                              <SelectItem key={item.value} item={item}>
+                                {item.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </SelectPositioner>
+                      </Portal>
                     </SelectRoot>
                   </Box>
                 </HStack>
@@ -705,15 +717,17 @@ export default function AlertView({
                       <SelectTrigger>
                         <SelectValueText placeholder="Select run..." />
                       </SelectTrigger>
-                      <SelectPositioner>
-                        <SelectContent>
-                          {runsCollection.items.map((item) => (
-                            <SelectItem key={item.value} item={item}>
-                              {item.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </SelectPositioner>
+                      <Portal>
+                        <SelectPositioner>
+                          <SelectContent>
+                            {runsCollection.items.map((item) => (
+                              <SelectItem key={item.value} item={item}>
+                                {item.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </SelectPositioner>
+                      </Portal>
                     </SelectRoot>
                   </Box>
                 )}
