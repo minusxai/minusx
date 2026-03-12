@@ -30,7 +30,6 @@ import { withPythonBackend } from '@/test/harness/python-backend';
 import { setupMockFetch, commonInterceptors } from '@/test/harness/mock-fetch';
 import { setupTestDb } from '@/test/harness/test-db';
 import { selectAppState } from '@/store/appStateSelector';
-import { executeToolCall } from '@/lib/api/tool-handlers';
 import { setNavigation } from '@/store/navigationSlice';
 import { setFiles } from '@/store/filesSlice';
 import filesReducer from '@/store/filesSlice';
@@ -202,56 +201,6 @@ describe('LLM Message Encoding', () => {
     expect(calls.length).toBe(2);
   }, 60000);
 
-  it('appState.state and readFiles output are structurally identical for the same file', async () => {
-    const { DocumentDB } = await import('@/lib/database/documents-db');
-    const dashboardFile = await DocumentDB.getById(TUTORIAL_DASHBOARD_ID, 1);
-    expect(dashboardFile).toBeDefined();
-
-    const referencedIds: number[] = (dashboardFile!.content as any)?.assets
-      ?.filter((a: any) => a.type === 'question')
-      ?.map((a: any) => a.id) ?? [];
-    const referenceFiles = (await Promise.all(
-      referencedIds.map(id => DocumentDB.getById(id, 1))
-    )).filter(Boolean) as NonNullable<Awaited<ReturnType<typeof DocumentDB.getById>>>[];
-
-    // Compute appState the same way the app does (via selectAppState)
-    const pageStore = configureStore({
-      reducer: {
-        files:        filesReducer,
-        queryResults: queryResultsReducer,
-        navigation:   navigationReducer,
-        auth:         authReducer,
-      } as any
-    });
-    pageStore.dispatch(setFiles({ files: [dashboardFile!], references: referenceFiles }));
-    pageStore.dispatch(setNavigation({ pathname: `/f/${TUTORIAL_DASHBOARD_ID}`, searchParams: {} }));
-
-    const { appState } = selectAppState(pageStore.getState() as RootState);
-    expect(appState!.type).toBe('file');
-    const appStateFileState = (appState as any).state;
-
-    // Execute the ReadFiles tool exactly as the LLM would trigger it
-    const store = getStore();
-    const toolMessage = await executeToolCall(
-      {
-        id: 'test_read_001',
-        type: 'function',
-        function: { name: 'ReadFiles', arguments: { fileIds: [TUTORIAL_DASHBOARD_ID] } }
-      },
-      { databaseName: 'test_connection', schemas: [] },
-      store.dispatch,
-      undefined,
-      store.getState() as RootState
-    );
-
-    // Compare as strings — no parsing needed.
-    // ReadFiles serializes { success: true, files: [CompressedAugmentedFile] }.
-    // appState.state IS that same CompressedAugmentedFile, so the expected string
-    // can be built directly from appState without touching the tool output.
-    expect(toolMessage.content).toBe(
-      JSON.stringify({ success: true, files: [appStateFileState] })
-    );
-  });
 
   it('should not double-encode dashboard app_state or ReadFiles result', async () => {
     const store = getStore();
@@ -454,5 +403,19 @@ describe('LLM Message Encoding', () => {
 
     const calls = await mockServer.getCalls();
     expect(calls.length).toBe(3);
+
+    // Verify that what Python embedded as app_state in the prompt matches what
+    // ReadFiles returned — both should be the same compact JSON string.
+    // This catches any Python serialization mismatch (e.g. wrong separators, re-encoding).
+    const turn1UserMsg = calls[0].request.messages.find((m: any) => m.role === 'user');
+    const appStateInPrompt = turn1UserMsg!.content.match(/<AppState>([\s\S]*?)<\/AppState>/)?.[1];
+    expect(appStateInPrompt).toBeDefined();
+    // Python compact json.dumps(app_state, separators=(',',':')) must equal JS JSON.stringify(appState)
+    expect(appStateInPrompt).toBe(JSON.stringify(appState));
+
+    const turn2ToolMsg = calls[1].request.messages.find((m: any) => m.role === 'tool' && m.tool_call_id === 'call_read_001');
+    const readFilesContent = turn2ToolMsg!.content;
+    // The CompressedAugmentedFile inside ReadFiles must equal the one inside app_state
+    expect(readFilesContent).toBe(JSON.stringify({ success: true, files: [(appState as any).state] }));
   }, 60000);
 });
