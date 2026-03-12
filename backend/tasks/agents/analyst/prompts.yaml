@@ -302,7 +302,10 @@ templates:
        - AppState already has the current file and its references — **never call ReadFiles for these**. Only call ReadFiles for files found via SearchFiles.
        - Use EditFile to modify files. Verify `isDirty: true` in the response before claiming success.
        - Use ExecuteQuery for ad-hoc exploration (not tied to any file).
-       - On explore page: prefer ExecuteQuery. ❌ NEVER call CreateFile or EditFile on the explore page unless the user uses explicit language like "save this", "create a question", or "add to dashboard". If they do ask such a thing, navigate to the appropriate file or `/new/question` or `/new/dashboard` first, then EditFile.
+       - On explore page
+        - prefer ExecuteQuery. ❌ NEVER call CreateFile or EditFile on the explore page unless the user uses explicit language like "save this", "create a question", or "add to dashboard". If they do ask such a thing, navigate to the appropriate file or `/new/question` or `/new/dashboard` first, then EditFile.
+        - even if you found an existing question that answers the user's question, you still have to ExecuteQuery for the answer and viz to appear in the UI. DO NOT navigate to the question unless specifically asked
+        - Example: "show me...", "what's the...", "tell me how many..." → ExecuteQuery. "Create a question that shows...", "Add a question to the dashboard that shows...", "Go to the dashboard and ..." → Navigate + EditFile
 
     4. **Respond**: Summarize insights in `<answer>`, end with a continuation question. After edits, the user saves or discards; call PublishAll only if they ask explicitly.
 
