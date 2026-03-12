@@ -1039,6 +1039,48 @@ export async function deleteFile(options: DeleteFileOptions): Promise<void> {
 }
 
 /**
+ * MoveFile - Update a file's name/path and sync Redux + affected parent folders
+ *
+ * On success:
+ * - Updates the file's metadata in Redux via setFileInfo
+ * - Force-reloads the old parent folder (removes file from its listing)
+ * - Force-reloads the new parent folder (adds file to its listing)
+ */
+export async function moveFile(fileId: number, name: string, newPath: string): Promise<void> {
+  const response = await fetch(`/api/files/${fileId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, path: newPath }),
+  });
+
+  if (!response.ok) {
+    const body = await response.json();
+    throw new Error(body.error?.message || 'Failed to move file');
+  }
+
+  const { data } = await response.json();
+  const { oldPath } = data as { id: number; name: string; path: string; oldPath: string };
+
+  // Update the file's metadata in Redux
+  const state = getStore().getState();
+  const file = selectFile(state, fileId);
+  if (file) {
+    getStore().dispatch(setFileInfo([{
+      ...file,
+      name,
+      path: newPath,
+      references: file.references ?? [],
+    }]));
+  }
+
+  // Reload only the two affected parent folders
+  const oldParent = oldPath.split('/').slice(0, -1).join('/') || '/';
+  const newParent = newPath.split('/').slice(0, -1).join('/') || '/';
+  const parentsToReload = new Set([oldParent, newParent]);
+  await Promise.all([...parentsToReload].map(p => readFolder(p, { forceLoad: true })));
+}
+
+/**
  * Options for reloadFile
  */
 export interface ReloadFileOptions {

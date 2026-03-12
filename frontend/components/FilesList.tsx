@@ -11,6 +11,7 @@ import { useRouter } from '@/lib/navigation/use-navigation';
 import { generateFileUrl } from '@/lib/slug-utils';
 import { Link } from '@/components/ui/Link';
 import DashboardUsageBadge from './DashboardUsageBadge';
+import { moveFile } from '@/lib/api/file-state';
 
 interface FilesListProps {
   files: DbFile[];
@@ -164,25 +165,10 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
     });
 
     try {
-      const response = await fetch(`/api/files/${fileId}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ name: draggedFile.name, path: newPath }),
-      });
-
-      if (!response.ok) {
-        const body = await response.json();
-        console.error('[FilesList] Move failed:', body);
-        throw new Error(body.error?.message || 'Failed to move file');
-      }
-
-      console.log('[FilesList] Move successful, refreshing...');
-      // Refresh the page to show updated list
-      router.refresh();
+      await moveFile(fileId, draggedFile.name, newPath);
+      console.log('[FilesList] Move successful');
     } catch (error) {
-      console.error('Error moving file:', error);
+      console.error('[FilesList] Move failed:', error);
       alert(`Failed to move file: ${error}`);
     } finally {
       setDropTargetId(null);

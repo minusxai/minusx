@@ -107,11 +107,12 @@ export const PATCH = withAuth(async (
       if (!file) {
         return ApiErrors.notFound('File');
       }
+      const oldPath = file.path;
       const success = await DocumentDB.updateMetadata(id, name, path, user.companyId);
       if (!success) {
         return ApiErrors.notFound('File');
       }
-      return successResponse({ id, name, path });
+      return successResponse({ id, name, path, oldPath });
     }
 
     // Full save: update name, path, and content
