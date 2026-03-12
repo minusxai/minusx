@@ -63,7 +63,7 @@ export default function ClarifyDisplay({ toolCallTuple }: DisplayProps) {
         )}
 
         {/* Options with selection state */}
-        <HStack gap={2} flexWrap="wrap">
+        <VStack gap={1} align="stretch">
           {options.map((opt: any, idx: number) => {
             const isSelected = selectedLabels.has(opt.label);
             return (
@@ -78,8 +78,11 @@ export default function ClarifyDisplay({ toolCallTuple }: DisplayProps) {
                 fontWeight="medium"
                 fontFamily="mono"
                 opacity={!success ? 0.5 : (isSelected ? 1 : 0.6)}
+                display="flex"
+                alignItems="center"
+                whiteSpace="normal"
               >
-                {isSelected && <Icon as={LuCheck} boxSize={3} mr={1} />}
+                {isSelected && <Icon as={LuCheck} boxSize={3} mr={1} flexShrink={0} />}
                 {opt.label}
               </Badge>
             );
@@ -96,8 +99,11 @@ export default function ClarifyDisplay({ toolCallTuple }: DisplayProps) {
               fontSize="sm"
               fontWeight="medium"
               fontFamily="mono"
+              display="flex"
+              alignItems="center"
+              whiteSpace="normal"
             >
-              <Icon as={LuCheck} boxSize={3} mr={1} />
+              <Icon as={LuCheck} boxSize={3} mr={1} flexShrink={0} />
               Figure it out
             </Badge>
           )}
@@ -111,12 +117,15 @@ export default function ClarifyDisplay({ toolCallTuple }: DisplayProps) {
               fontSize="sm"
               fontWeight="medium"
               fontFamily="mono"
+              display="flex"
+              alignItems="center"
+              whiteSpace="normal"
             >
-              <Icon as={LuCheck} boxSize={3} mr={1} />
+              <Icon as={LuCheck} boxSize={3} mr={1} flexShrink={0} />
               Other
             </Badge>
           )}
-        </HStack>
+        </VStack>
 
         {/* Status message */}
         <HStack gap={1}>
