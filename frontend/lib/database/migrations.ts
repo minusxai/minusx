@@ -700,6 +700,72 @@ export const MIGRATIONS: MigrationEntry[] = [
     },
     description: 'Migrate question parameter defaultValue → content.parameterValues'
   },
+  {
+    dataVersion: 18,
+    schemaVersion: undefined,
+    dataMigration: (data: InitData) => {
+      for (const companyData of data.companies as CompanyData[]) {
+        // Find /org files with id < 100
+        const docsToRemap = companyData.documents.filter(
+          doc => doc.id < 100 && (doc.path === '/org' || doc.path.startsWith('/org/'))
+        );
+
+        if (docsToRemap.length === 0) continue;
+
+        console.log(`  [V18] Company "${companyData.name}": found ${docsToRemap.length} /org doc(s) with id < 100`);
+
+        // Find max ID currently in use
+        const maxId = companyData.documents.reduce((max, doc) => Math.max(max, doc.id), 0);
+        let nextId = Math.max(maxId, 199) + 1;
+
+        // Build old→new ID mapping
+        const idRemap = new Map<number, number>();
+        for (const doc of docsToRemap) {
+          idRemap.set(doc.id, nextId++);
+        }
+
+        // Apply remapping to all documents
+        for (const doc of companyData.documents) {
+          // Remap the document's own ID
+          if (idRemap.has(doc.id)) {
+            const oldId = doc.id;
+            doc.id = idRemap.get(doc.id)!;
+            console.log(`    Remapped ${doc.path}: ID ${oldId} → ${doc.id}`);
+          }
+
+          // Remap file_references array
+          if (doc.references && doc.references.length > 0) {
+            doc.references = doc.references.map((refId: number) => idRemap.get(refId) ?? refId);
+          }
+
+          // Remap content.assets (FileReference items in dashboards)
+          const assets = (doc.content as any)?.assets;
+          if (Array.isArray(assets)) {
+            for (const asset of assets) {
+              if (asset.type === 'question' && typeof asset.id === 'number' && idRemap.has(asset.id)) {
+                asset.id = idRemap.get(asset.id)!;
+              }
+            }
+          }
+
+          // Remap content.layout.items (layout positions reference question IDs)
+          const layoutItems = (doc.content as any)?.layout?.items;
+          if (Array.isArray(layoutItems)) {
+            for (const item of layoutItems) {
+              if (typeof item.id === 'number' && idRemap.has(item.id)) {
+                item.id = idRemap.get(item.id)!;
+              }
+            }
+          }
+        }
+
+        console.log(`  ✅ [V18] Remapped ${docsToRemap.length} /org docs for company "${companyData.name}"`);
+      }
+
+      return data;
+    },
+    description: 'Reassign /org file IDs < 100 to IDs > 100 to prevent tutorial reset from deleting them'
+  },
 ];
 
 /**
