@@ -133,7 +133,13 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
           }
         }}
         onSave={handleSave}
-        onPublish={!isSystemFile ? () => setIsPublishModalOpen(true) : undefined}
+        onPublish={!isSystemFile ? () => {
+          if (dirtyFiles.length === 0 || (dirtyFiles.length === 1 && dirtyFiles[0].id === fileId)) {
+            handleSave();
+          } else {
+            setIsPublishModalOpen(true);
+          }
+        } : undefined}
         anyDirtyFiles={anyDirtyFiles}
         questionId={fileType === 'question' ? fileId : undefined}
         viewMode={viewMode}
