@@ -87,20 +87,34 @@ export function ContextSelector({ selectedContextPath, selectedVersion, onSelect
   }, [contexts]);
 
   // Build current value - find matching option
-  // When selectedVersion is undefined, find the first option matching the path (published version)
+  // Must always resolve to an existing option value so GenericSelector doesn't fall back to options[0].
+  // Problem: contexts load partially (no versions) → path-only options. Once full content loads,
+  // options switch to versioned format (path:N). If we still hold path-only currentValue it won't
+  // match any option and GenericSelector silently shows options[0] (the "unselect" bug).
   const currentValue = useMemo(() => {
-    if (selectedVersion) {
-      return `${selectedContextPath}:${selectedVersion}`;
+    if (!selectedContextPath) return '';
+
+    // 1. Prefer exact versioned match when a version is already pinned
+    if (selectedVersion !== undefined) {
+      const versionedKey = `${selectedContextPath}:${selectedVersion}`;
+      if (options.find(opt => opt.value === versionedKey)) return versionedKey;
     }
-    // Find option matching path (could be path alone or path:version for published)
+
+    // 2. Exact path match (single-version contexts that have no version suffix in options)
     const exactMatch = options.find(opt => opt.value === selectedContextPath);
     if (exactMatch) return exactMatch.value;
 
-    // For multi-version contexts, find the published version (first one matching path)
-    const pathMatch = options.find(opt => opt.value.startsWith(selectedContextPath + ':'));
-    if (pathMatch) return pathMatch.value;
+    // 3. Context now has full versions loaded — prefer the published (checkmarked) version
+    const publishedMatch = options.find(
+      opt => opt.value.startsWith(selectedContextPath + ':') && opt.showCheckmark
+    );
+    if (publishedMatch) return publishedMatch.value;
 
-    return selectedContextPath || '';
+    // 4. Any version of this context (last resort — avoids falling through to options[0])
+    const anyVersionMatch = options.find(opt => opt.value.startsWith(selectedContextPath + ':'));
+    if (anyVersionMatch) return anyVersionMatch.value;
+
+    return '';
   }, [selectedContextPath, selectedVersion, options]);
 
   if (!user) return null;

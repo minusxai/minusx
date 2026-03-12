@@ -381,6 +381,8 @@ export default function ChatInterface({
         agent: 'AnalystAgent',
         agent_args: {
           connection_id: selectedDatabase || null,
+          context_path: contextPath || null,
+          context_version: contextVersion ?? null,
           schema: simplifiedSchema,
           context: markdown || '',
           app_state: appState,
@@ -402,6 +404,8 @@ export default function ChatInterface({
         conversationID,
         agent_args: {
           connection_id: database?.databaseName || null,
+          context_path: contextPath || null,
+          context_version: contextVersion ?? null,
           schema: simplifiedSchema,
           context: markdown || '',
           app_state: appState,
