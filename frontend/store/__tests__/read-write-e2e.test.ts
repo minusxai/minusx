@@ -21,6 +21,9 @@ import type { Mode } from '@/lib/mode/mode-types';
 import { POST as queryPostHandler } from '@/app/api/query/route';
 import { POST as batchPostHandler } from '@/app/api/files/batch/route';
 import { GET as fileGetHandler, PATCH as filePatchHandler } from '@/app/api/files/[id]/route';
+import { GET as filesListGetHandler } from '@/app/api/files/route';
+import { readFilesByCriteria } from '@/lib/api/file-state';
+import { selectContextFromPath } from '@/store/filesSlice';
 
 // Mock db-config to use test database
 jest.mock('@/lib/database/db-config', () => {
@@ -164,6 +167,18 @@ describe('Phase 1: Unified File System API E2E', () => {
           status: response.status,
           json: async () => data
         } as Response;
+      }
+
+      // Route GET /api/files (list, no ID) — e.g. /api/files?type=context&depth=-1
+      if (urlStr.match(/\/api\/files(\?|$)/) && (!init?.method || init?.method === 'GET')) {
+        const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;
+        const request = new NextRequest(fullUrl, {
+          method: 'GET',
+          headers: { ...init?.headers, 'x-company-id': '1', 'x-user-id': '1' }
+        });
+        const response = await filesListGetHandler(request);
+        const data = await response.json();
+        return { ok: response.status === 200, status: response.status, json: async () => data } as Response;
       }
 
       // Route /api/files/[id] PATCH/PUT calls to real handler (for updating single file)
@@ -1486,6 +1501,126 @@ describe('Phase 1: Unified File System API E2E', () => {
       const compressed = compressAugmentedFile(augmented);
       expect((compressed.fileState.content as any).description).toBe('Updated description');
       console.log('✓ editFileStr matched pretty-printed key-value pair from AppState');
+    });
+  });
+
+  // ===========================================================================
+  // Subfolder viewer — ancestor context discovery (Bug 2)
+  //
+  // A viewer with home_folder='sales' (→ /org/sales) should see schema/docs
+  // from an ancestor context at /org/context. The fix is removing paths:[homeFolder]
+  // from useContexts criteria — letting the server's isAncestorContext logic run.
+  //
+  // NOTE: useContexts is a React hook; we cannot test it directly without RTL.
+  // Instead we test the underlying readFilesByCriteria layer:
+  //   - WITH paths:[homeFolder]  → ancestor context NOT in Redux (documents the bug)
+  //   - WITHOUT paths filter     → ancestor context IS in Redux (documents the fix)
+  // The fix is a 1-line change in useContexts.ts.
+  // ===========================================================================
+  describe('Subfolder viewer — ancestor context discovery via readFilesByCriteria', () => {
+    let subfolderStore: ReturnType<typeof configureStore>;
+    let ancestorContextId: number;
+
+    // EffectiveUser (server-side, used by getEffectiveUser mock)
+    const subfolderViewerEffective = {
+      userId: 50,
+      email: 'subfolder-viewer-redux@example.com',
+      name: 'Subfolder Viewer Redux',
+      role: 'viewer' as UserRole,
+      companyId: 1,
+      companyName: 'test-company',
+      home_folder: 'sales',  // resolves to /org/sales
+      mode: 'org' as Mode
+    };
+    // AuthUser (Redux state, uses id instead of userId)
+    const subfolderViewerAuth = {
+      id: 50,
+      email: 'subfolder-viewer-redux@example.com',
+      name: 'Subfolder Viewer Redux',
+      role: 'viewer' as UserRole,
+      companyId: 1,
+      companyName: 'test-company',
+      home_folder: 'sales',
+      mode: 'org' as Mode
+    };
+
+    beforeAll(async () => {
+      // Override auth mock to return the subfolder viewer
+      const authMock = jest.requireMock('@/lib/auth/auth-helpers');
+      authMock.getEffectiveUser.mockResolvedValue(subfolderViewerEffective);
+
+      // Ancestor context at /org/context — outside the viewer's home /org/sales
+      ancestorContextId = await DocumentDB.create(
+        'context',
+        '/org/context',
+        'context',
+        {
+          versions: [{
+            version: 1,
+            databases: [],
+            docs: [{ content: 'Org-level docs' }],
+            createdAt: new Date().toISOString(),
+            createdBy: 1,
+            description: 'Org context'
+          }],
+          published: { all: 1 },
+          fullSchema: [],
+          fullDocs: []
+        },
+        [],
+        1
+      );
+    });
+
+    afterAll(() => {
+      // Restore admin mock
+      const authMock = jest.requireMock('@/lib/auth/auth-helpers');
+      authMock.getEffectiveUser.mockResolvedValue({
+        userId: 1, email: 'test@example.com', name: 'Test User',
+        role: 'admin', companyId: 1, companyName: 'test-company',
+        home_folder: '/org', mode: 'org'
+      });
+    });
+
+    beforeEach(() => {
+      // Fresh store for each test so Redux state is isolated
+      subfolderStore = configureStore({
+        reducer: { files: filesReducer, queryResults: queryResultsReducer, auth: authReducer },
+        preloadedState: { auth: { user: subfolderViewerAuth, loading: false } }
+      });
+      testStore = subfolderStore;
+    });
+
+    afterEach(() => {
+      // Restore outer store so other tests are unaffected
+      testStore = store;
+    });
+
+    it('WITH paths:[homeFolder] — ancestor context NOT returned (documents the bug in useContexts)', async () => {
+      // This is what the CURRENT (broken) useContexts does:
+      // criteria = { type: 'context', paths: [homeFolder], depth: -1 }
+      await readFilesByCriteria({
+        criteria: { type: 'context', paths: ['/org/sales'], depth: -1 },
+        partial: true
+      });
+
+      const ctx = selectContextFromPath(subfolderStore.getState() as RootState, '/org/sales/my-question');
+      // Ancestor context NOT found — this is the bug
+      expect(ctx).toBeUndefined();
+    });
+
+    it('WITHOUT paths filter — ancestor context IS returned (documents the correct criteria for useContexts)', async () => {
+      // This is what the FIXED useContexts should do:
+      // criteria = { type: 'context', depth: -1 }  (no paths — server handles filtering)
+      await readFilesByCriteria({
+        criteria: { type: 'context', depth: -1 },
+        partial: true
+      });
+
+      const ctx = selectContextFromPath(subfolderStore.getState() as RootState, '/org/sales/my-question');
+      // Ancestor context IS found via server's isAncestorContext logic
+      expect(ctx).toBeDefined();
+      expect(ctx?.path).toBe('/org/context');
     });
   });
 });
