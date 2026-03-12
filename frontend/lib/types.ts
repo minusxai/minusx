@@ -107,6 +107,7 @@ export interface CompressedQueryResult {
   totalRows: number;   // original full row count
   truncated: boolean;  // true if data was cut short by LIMIT_CHARS
   id?: string;         // query hash (from QueryResult.id)
+  error?: string;      // set when query execution failed
 }
 
 export interface Rectangle {

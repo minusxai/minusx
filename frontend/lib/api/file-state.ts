@@ -135,9 +135,11 @@ function augmentWithParams(
       const ownParamValues = content.parameterValues ?? {};
       const params = resolveEffectiveParams(content.parameters || [], ownParamValues, inheritedParams);
       const qr = selectQueryResult(state, content.query, params, content.database_name);
+      const id = getQueryHash(content.query, params, content.database_name);
       if (qr?.data) {
-        const id = getQueryHash(content.query, params, content.database_name);
         result.set(id, { ...(qr.data || {}), id });
+      } else if (qr?.error) {
+        result.set(id, { columns: [], types: [], rows: [], id, error: qr.error } as any);
       }
     }
   }
@@ -274,7 +276,10 @@ export function selectAugmentedFiles(state: RootState, fileIds: number[]): Augme
  * - runtimeParameterValues = ephemeralChanges.parameterValues (clearly labeled, never saved)
  * - loading/saving/ephemeralChanges.lastExecuted are dropped (noise for the model)
  */
-export function compressQueryResult(qr: QueryResult, maxChars = LIMIT_CHARS): CompressedQueryResult {
+export function compressQueryResult(qr: QueryResult & { error?: string }, maxChars = LIMIT_CHARS): CompressedQueryResult {
+  if ((qr as any).error) {
+    return { columns: [], types: [], data: '', totalRows: 0, truncated: false, id: qr.id, error: (qr as any).error };
+  }
   const { columns, types, rows } = qr;
   const totalRows = rows.length;
 
