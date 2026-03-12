@@ -320,6 +320,49 @@ export class DocumentDB {
   }
 
   /**
+   * Atomically move a folder and all its descendants by rewriting path prefixes.
+   * Uses a single UPDATE scoped to the exact IDs that were permission-checked (no TOCTOU gap).
+   * @param folderId - The folder being moved
+   * @param descendantIds - Pre-checked descendant IDs (may be empty)
+   * @param oldPath - Current folder path (used as prefix for descendants)
+   * @param newPath - New folder path
+   * @param newName - New folder display name
+   * @param company_id - The company ID for tenant isolation (REQUIRED for security)
+   * @returns Number of rows updated
+   */
+  static async moveFolderAndChildren(
+    folderId: number,
+    descendantIds: number[],
+    oldPath: string,
+    newPath: string,
+    newName: string,
+    company_id: number
+  ): Promise<number> {
+    if (descendantIds.length === 0) {
+      const updated = await this.updateMetadata(folderId, newName, newPath, company_id);
+      return updated ? 1 : 0;
+    }
+
+    const db = await getAdapter();
+    const allIds = [folderId, ...descendantIds];
+    // Params: $1=folderId, $2=newName, $3=newPath, $4=oldPath, $5=company_id, $6..=allIds
+    const placeholders = allIds.map((_, i) => `$${i + 6}`).join(', ');
+    const result = await db.query(
+      `UPDATE files
+       SET
+         name = CASE WHEN id = $1 THEN $2 ELSE name END,
+         path = CASE
+           WHEN id = $1 THEN $3
+           ELSE $3 || substring(path from length($4) + 1)
+         END,
+         updated_at = CURRENT_TIMESTAMP
+       WHERE company_id = $5 AND id IN (${placeholders})`,
+      [folderId, newName, newPath, oldPath, company_id, ...allIds]
+    );
+    return result.rowCount;
+  }
+
+  /**
    * Delete all files by a list of IDs, scoped by company_id
    * Used for bulk folder deletion after permission filtering
    * @param company_id - The company ID for tenant isolation (REQUIRED for security)

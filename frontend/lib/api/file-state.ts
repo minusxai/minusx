@@ -1078,6 +1078,12 @@ export async function moveFile(fileId: number, name: string, newPath: string): P
   const newParent = newPath.split('/').slice(0, -1).join('/') || '/';
   const parentsToReload = new Set([oldParent, newParent]);
   await Promise.all([...parentsToReload].map(p => readFolder(p, { forceLoad: true })));
+
+  // For folder moves, also reload the moved folder itself so children get fresh paths
+  const movedFile = selectFile(getStore().getState(), fileId);
+  if (movedFile?.type === 'folder') {
+    await readFolder(newPath, { forceLoad: true });
+  }
 }
 
 /**

@@ -108,10 +108,29 @@ export const PATCH = withAuth(async (
         return ApiErrors.notFound('File');
       }
       const oldPath = file.path;
-      const success = await DocumentDB.updateMetadata(id, name, path, user.companyId);
-      if (!success) {
-        return ApiErrors.notFound('File');
+
+      if (file.type === 'folder' && oldPath !== path) {
+        // Step 1: Fetch all descendants (metadata only, no content)
+        const descendants = await DocumentDB.listAll(user.companyId, undefined, [oldPath], -1, false);
+
+        // Step 2: Check move permission on every descendant
+        const blocked = descendants.filter(f => !canDeleteFileType(f.type));
+        if (blocked.length > 0) {
+          return ApiErrors.forbidden(
+            `Cannot move folder: contains ${blocked.length} file(s) of protected type(s): ${[...new Set(blocked.map(f => f.type))].join(', ')}`
+          );
+        }
+
+        // Step 3: Atomic update — only the exact IDs we checked
+        const descendantIds = descendants.map(f => f.id);
+        await DocumentDB.moveFolderAndChildren(id, descendantIds, oldPath, path, name, user.companyId);
+      } else {
+        const success = await DocumentDB.updateMetadata(id, name, path, user.companyId);
+        if (!success) {
+          return ApiErrors.notFound('File');
+        }
       }
+
       return successResponse({ id, name, path, oldPath });
     }
 
