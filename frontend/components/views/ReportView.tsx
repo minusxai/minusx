@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Text, VStack, HStack, Input, Button, Textarea, Flex, Badge, IconButton } from '@chakra-ui/react';
+import { Box, Text, VStack, HStack, Input, Button, Textarea, Flex, Badge, IconButton, Portal } from '@chakra-ui/react';
 import { ReportContent, ReportReference, ReportRunContent } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { LuPlay, LuClock, LuMail, LuInfo, LuPlus, LuTrash2, LuFileText, LuGripVertical, LuListChecks, LuHistory } from 'react-icons/lu';
@@ -286,15 +286,17 @@ export default function ReportView({
                       <SelectTrigger bg="bg.surface">
                         <SelectValueText placeholder="Select schedule" />
                       </SelectTrigger>
-                      <SelectPositioner>
-                        <SelectContent>
-                        {cronCollection.items.map((item) => (
-                          <SelectItem key={item.value} item={item}>
-                            {item.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                      </SelectPositioner>
+                      <Portal>
+                        <SelectPositioner>
+                          <SelectContent>
+                            {cronCollection.items.map((item) => (
+                              <SelectItem key={item.value} item={item}>
+                                {item.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </SelectPositioner>
+                      </Portal>
                     </SelectRoot>
                   </Box>
 
@@ -326,15 +328,17 @@ export default function ReportView({
                       <SelectTrigger bg="bg.surface">
                         <SelectValueText placeholder="TZ" />
                       </SelectTrigger>
-                      <SelectPositioner>
-                        <SelectContent>
-                        {timezoneCollection.items.map((item) => (
-                          <SelectItem key={item.value} item={item}>
-                            {item.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                      </SelectPositioner>
+                      <Portal>
+                        <SelectPositioner>
+                          <SelectContent>
+                            {timezoneCollection.items.map((item) => (
+                              <SelectItem key={item.value} item={item}>
+                                {item.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </SelectPositioner>
+                      </Portal>
                     </SelectRoot>
                   </Box>
                 </HStack>
@@ -424,15 +428,17 @@ export default function ReportView({
                                     >
                                       <SelectValueText />
                                     </SelectTrigger>
-                                    <SelectPositioner>
-                                      <SelectContent>
-                                        {referenceTypeCollection.items.map((item) => (
-                                          <SelectItem key={item.value} item={item}>
-                                            {item.label}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </SelectPositioner>
+                                    <Portal>
+                                      <SelectPositioner>
+                                        <SelectContent>
+                                          {referenceTypeCollection.items.map((item) => (
+                                            <SelectItem key={item.value} item={item}>
+                                              {item.label}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </SelectPositioner>
+                                    </Portal>
                                   </SelectRoot>
 
                                   <SelectRoot
@@ -451,15 +457,17 @@ export default function ReportView({
                                     >
                                       <SelectValueText placeholder="Select..." />
                                     </SelectTrigger>
-                                    <SelectPositioner>
-                                      <SelectContent>
-                                        {(q.reference.type === 'question' ? questionCollection : dashboardCollection).items.map((item) => (
-                                          <SelectItem key={item.value} item={item}>
-                                            {item.label}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </SelectPositioner>
+                                    <Portal>
+                                      <SelectPositioner>
+                                        <SelectContent>
+                                          {(q.reference.type === 'question' ? questionCollection : dashboardCollection).items.map((item) => (
+                                            <SelectItem key={item.value} item={item}>
+                                              {item.label}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </SelectPositioner>
+                                    </Portal>
                                   </SelectRoot>
                                 </HStack>
                               ) : (
@@ -683,15 +691,17 @@ export default function ReportView({
                       <SelectTrigger>
                         <SelectValueText placeholder="Select run..." />
                       </SelectTrigger>
-                      <SelectPositioner>
-                        <SelectContent>
-                        {runsCollection.items.map((item) => (
-                          <SelectItem key={item.value} item={item}>
-                            {item.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                      </SelectPositioner>
+                      <Portal>
+                        <SelectPositioner>
+                          <SelectContent>
+                            {runsCollection.items.map((item) => (
+                              <SelectItem key={item.value} item={item}>
+                                {item.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </SelectPositioner>
+                      </Portal>
                     </SelectRoot>
                   </Box>
                 )}
