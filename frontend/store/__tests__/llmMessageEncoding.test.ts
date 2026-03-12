@@ -62,14 +62,47 @@ jest.mock('@/lib/database/db-config', () => {
   };
 });
 
-// Tutorial dashboard ID from atlas_documents.db — confirmed via `npm run export-db`
+// Fixture dashboard — created in customInit below, no dependency on atlas_documents.db
 const TUTORIAL_DASHBOARD_ID = 12; // /tutorial/user-engagement-dashboard
+
+const FIXTURE_QUESTION_CONTENT = {
+  query: 'SELECT * FROM sales',
+  database_name: 'default_db',
+  vizSettings: { type: 'table' }
+};
+
+const FIXTURE_DASHBOARD_CONTENT = {
+  assets: [{ type: 'question', id: 11 }],
+  layout: []
+};
 
 describe('LLM Message Encoding', () => {
   const { getPythonPort, getLLMMockPort, getLLMMockServer } = withPythonBackend({ withLLMMock: true });
   const { getStore } = setupTestDb(getTestDbPath('atlas_llm_encoding'), {
-    withTutorialFiles: true,
-    withTestConnection: true
+    withTestConnection: true,
+    customInit: async (dbPath) => {
+      const { createAdapter } = await import('@/lib/database/adapter/factory');
+      const db = await createAdapter({ type: 'sqlite', sqlitePath: dbPath });
+      const now = new Date().toISOString();
+
+      // Question file (id=11) referenced by the dashboard
+      await db.query(
+        `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [1, 11, 'Sales Overview', '/tutorial/sales-overview', 'question',
+          JSON.stringify(FIXTURE_QUESTION_CONTENT), '[]', now, now]
+      );
+
+      // Dashboard file (id=12) at the tutorial path the test expects
+      await db.query(
+        `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [1, TUTORIAL_DASHBOARD_ID, 'User Engagement Dashboard', '/tutorial/user-engagement-dashboard', 'dashboard',
+          JSON.stringify(FIXTURE_DASHBOARD_CONTENT), '[11]', now, now]
+      );
+
+      await db.close();
+    }
   });
   const mockFetch = setupMockFetch({
     getPythonPort,

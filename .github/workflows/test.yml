@@ -66,10 +66,6 @@ jobs:
         working-directory: ./frontend
         run: npm run validate
 
-      - name: Initialize database (required for withTutorialFiles tests)
-        working-directory: ./frontend
-        run: npm run import-db -- --replace-db=y
-
       - name: Run frontend tests
         working-directory: ./frontend
         run: npm test -- --ci --coverage --maxWorkers=2
