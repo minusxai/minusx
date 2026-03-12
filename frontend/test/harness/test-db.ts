@@ -4,6 +4,8 @@
  * Handles initializing and cleaning up test databases.
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   initTestDatabase,
   cleanupTestDatabase,
@@ -19,6 +21,29 @@ export interface TestDbOptions {
   customInit?: (dbPath: string) => Promise<void>;
   /** Automatically add test connection (id: 'test_connection') */
   withTestConnection?: boolean;
+  /**
+   * Copy the live atlas_documents.db (tutorial data) instead of creating an
+   * empty database.  Gives tests access to the full set of tutorial files
+   * (questions, dashboards, contexts, etc.) without any manual fixture setup.
+   *
+   * Compatible with withTestConnection and customInit — those run after the copy.
+   */
+  withTutorialFiles?: boolean;
+}
+
+/** Path to the live tutorial database that seeds the app on first run.
+ *  Mirrors the IS_DEV resolution in db-config.ts: one level up from frontend/. */
+const TUTORIAL_DB_PATH = path.join(process.cwd(), '..', 'data', 'atlas_documents.db');
+
+/**
+ * Initialise a test database from the live tutorial data.
+ * Deletes any stale test DB first, then copies atlas_documents.db.
+ */
+async function initTutorialDatabase(dbPath: string): Promise<void> {
+  [dbPath, `${dbPath}-shm`, `${dbPath}-wal`].forEach(f => {
+    if (fs.existsSync(f)) fs.unlinkSync(f);
+  });
+  fs.copyFileSync(TUTORIAL_DB_PATH, dbPath);
 }
 
 /**
@@ -29,34 +54,21 @@ export async function addTestConnection(dbPath: string) {
   const { createAdapter } = await import('@/lib/database/adapter/factory');
   const db = await createAdapter({ type: 'sqlite', sqlitePath: dbPath });
 
-  const doc = {
-    id: 1,
-    name: 'default_db',
-    path: '/org/connections/test_connection',
-    type: 'connection',
-    content: {
-      id: 'test_connection',
-      name: 'default_db',
-      type: 'duckdb',
-      config: { file_path: 'test.duckdb' }
-    },
-    company_id: 1,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  };
+  const now = new Date().toISOString();
 
+  // Use INSERT OR IGNORE on path so re-running is idempotent and tutorial DBs
+  // (which may already have files at id=1) don't cause conflicts.
   await db.query(
-    `INSERT INTO files (id, name, path, type, content, company_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR IGNORE INTO files (name, path, type, content, company_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [
-      doc.id,
-      doc.name,
-      doc.path,
-      doc.type,
-      JSON.stringify(doc.content),
-      doc.company_id,
-      doc.created_at,
-      doc.updated_at
+      'default_db',
+      '/org/connections/test_connection',
+      'connection',
+      JSON.stringify({ id: 'test_connection', name: 'default_db', type: 'duckdb', config: { file_path: 'test.duckdb' } }),
+      1,
+      now,
+      now
     ]
   );
 
@@ -89,7 +101,7 @@ export async function addTestConnection(dbPath: string) {
  * ```
  */
 export function setupTestDb(dbPath: string, options: TestDbOptions = {}): TestDbHarness {
-  const { customInit, withTestConnection = false } = options;
+  const { customInit, withTestConnection = false, withTutorialFiles = false } = options;
   let store: ReturnType<typeof setupTestStore>;
 
   beforeEach(async () => {
@@ -97,7 +109,11 @@ export function setupTestDb(dbPath: string, options: TestDbOptions = {}): TestDb
     const { resetAdapter } = await import('@/lib/database/adapter/factory');
     await resetAdapter();
 
-    await initTestDatabase(dbPath);
+    if (withTutorialFiles) {
+      await initTutorialDatabase(dbPath);
+    } else {
+      await initTestDatabase(dbPath);
+    }
     if (withTestConnection) {
       await addTestConnection(dbPath);
     }
