@@ -101,10 +101,20 @@ export const PATCH = withAuth(async (
       return ApiErrors.validationError('path is required');
     }
 
-    if (!content) {
-      return ApiErrors.validationError('content is required');
+    // Metadata-only update: name/path only, content untouched
+    if (content === undefined) {
+      const file = await DocumentDB.getById(id, user.companyId);
+      if (!file) {
+        return ApiErrors.notFound('File');
+      }
+      const success = await DocumentDB.updateMetadata(id, name, path, user.companyId);
+      if (!success) {
+        return ApiErrors.notFound('File');
+      }
+      return successResponse({ id, name, path });
     }
 
+    // Full save: update name, path, and content
     // Phase 6: Client sends pre-extracted references (server is dumb, just saves what it receives)
     const result = await saveFile(id, name, path, content, references || [], user);
 

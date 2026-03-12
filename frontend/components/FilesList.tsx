@@ -169,13 +169,13 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ newPath }),
+        body: JSON.stringify({ name: draggedFile.name, path: newPath }),
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        console.error('[FilesList] Move failed:', error);
-        throw new Error(error.error || 'Failed to move file');
+        const body = await response.json();
+        console.error('[FilesList] Move failed:', body);
+        throw new Error(body.error?.message || 'Failed to move file');
       }
 
       console.log('[FilesList] Move successful, refreshing...');
