@@ -39,6 +39,13 @@ export class DocumentDB {
    * @returns The per-company generated integer ID
    */
   static async create(name: string, path: string, type: string, content: BaseFileContent, references: number[], company_id: number): Promise<number> {
+    if (references.some(ref => ref < 0)) {
+      throw new Error(
+        `Cannot store negative reference IDs in the database: [${references.filter(r => r < 0).join(', ')}]. ` +
+        `This indicates a bug — virtual file IDs must be resolved before saving.`
+      );
+    }
+
     const db = await getAdapter();
     const dbType = getDbType();
 

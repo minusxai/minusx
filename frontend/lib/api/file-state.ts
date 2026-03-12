@@ -922,10 +922,24 @@ export async function publishAll(): Promise<void> {
 
   const idMap: Record<number, number> = {};
 
-  // Step 1: Batch-create virtual files (negative IDs)
-  const virtualFiles = allDirty.filter(f => f.id < 0);
-  if (virtualFiles.length > 0) {
-    const toCreate = virtualFiles.map(f => {
+  // Step 1: Topologically create virtual files — resolve dependencies level by level
+  let remainingVirtual = allDirty.filter(f => f.id < 0);
+
+  while (remainingVirtual.length > 0) {
+    const remainingVirtualIds = new Set(remainingVirtual.map(f => f.id));
+
+    // Files ready to save: all their virtual-ID references are already resolved
+    const readyToSave = remainingVirtual.filter(f => {
+      const merged = { ...(f.content || {}), ...(f.persistableChanges || {}) };
+      const refs = extractReferencesFromContent(merged as any, f.type as FileType);
+      return refs.every(ref => !remainingVirtualIds.has(ref));
+    });
+
+    if (readyToSave.length === 0) {
+      throw new Error('Circular dependency detected among virtual files — cannot determine save order.');
+    }
+
+    const toCreate = readyToSave.map(f => {
       const merged = { ...(f.content || {}), ...(f.persistableChanges || {}) };
       return {
         virtualId: f.id,
@@ -936,13 +950,26 @@ export async function publishAll(): Promise<void> {
         references: extractReferencesFromContent(merged as any, f.type as FileType),
       };
     });
+
     const { data: created } = await FilesAPI.batchCreateFiles(toCreate as any);
+    const batchIdMap: Record<number, number> = {};
     for (const { virtualId, file } of created) {
       idMap[virtualId] = file.id;
+      batchIdMap[virtualId] = file.id;
       getStore().dispatch(addFile(file));
       getStore().dispatch(clearEdits(virtualId));
       getStore().dispatch(clearMetadataEdits(virtualId));
     }
+
+    // Replace IDs in ALL remaining files (real + virtual) so next iteration sees resolved IDs
+    getStore().dispatch(replaceVirtualIds(batchIdMap));
+
+    // Refresh remaining virtual list from updated Redux state
+    const savedIds = new Set(readyToSave.map(f => f.id));
+    remainingVirtual = remainingVirtual
+      .filter(f => !savedIds.has(f.id))
+      .map(f => getStore().getState().files.files[f.id])
+      .filter(Boolean) as FileState[];
   }
 
   // Step 2: Atomically replace stale negative IDs across all dirty real files (single dispatch)

@@ -845,12 +845,16 @@ const filesSlice = createSlice({
         const fileId = Number(fileIdStr);
         const file = state.files[fileId];
 
-        // Skip virtual files themselves and files with no pending changes
-        if (!file || fileId < 0) continue;
-        if (!file.persistableChanges || Object.keys(file.persistableChanges).length === 0) continue;
+        // Skip files with no pending changes (virtual files DO need their refs updated mid-loop)
+        if (!file) continue;
+        const hasPendingChanges = file.persistableChanges && Object.keys(file.persistableChanges).length > 0;
+        const isVirtual = fileId < 0;
+        if (!hasPendingChanges && !isVirtual) continue;
 
         // Merge base content + pending changes, then rewrite any negative IDs
-        const merged = { ...file.content, ...file.persistableChanges } as any;
+        const merged = isVirtual
+          ? { ...file.content, ...(file.persistableChanges || {}) } as any
+          : { ...file.content, ...file.persistableChanges } as any;
         const updated = replaceNegativeIdsInContent(merged, file.type as FileType, idMap);
 
         if (JSON.stringify(updated) !== JSON.stringify(merged)) {
