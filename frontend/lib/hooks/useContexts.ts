@@ -48,8 +48,8 @@ export function useContexts(options: UseContextsOptions = {}): UseContextsReturn
 
   // Memoize criteria to prevent unnecessary re-fetches
   const criteria = useMemo(
-    () => ({ type: 'context' as const, paths: [homeFolder], depth: -1 }),
-    [homeFolder]
+    () => ({ type: 'context' as const, depth: -1 }),
+    []
   );
 
   // Load all context metadata (partial)
