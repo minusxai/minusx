@@ -27,9 +27,21 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
   const router = useRouter();
   const user = useAppSelector(state => state.auth.user);
 
-  // Context selection state (using path instead of ID)
-  const [selectedContextPath, setSelectedContextPath] = useState<string | null>(null);
-  const [selectedVersion, setSelectedVersion] = useState<number | undefined>(undefined);
+  // Read context stored in Redux conversation (available synchronously on navigation)
+  const storedContextPath = useAppSelector(state =>
+    conversationId
+      ? (state.chat.conversations[conversationId]?.agent_args?.context_path ?? null)
+      : null
+  );
+  const storedContextVersion = useAppSelector(state =>
+    conversationId
+      ? (state.chat.conversations[conversationId]?.agent_args?.context_version ?? undefined)
+      : undefined
+  );
+
+  // Context selection state — prefer stored context from conversation over default null
+  const [selectedContextPath, setSelectedContextPath] = useState<string | null>(storedContextPath);
+  const [selectedVersion, setSelectedVersion] = useState<number | undefined>(storedContextVersion);
 
   // Find home context (any context file that is direct child of homeFolder)
   const filesState = useAppSelector(state => state.files.files);
@@ -44,6 +56,17 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
   });
   const homeContextPath = homeContext?.path;
 
+  // When navigating to a different conversation, sync selectedContextPath/Version to that
+  // conversation's stored context (same pattern as DB's storedConnectionId sync in ChatInterface).
+  useEffect(() => {
+    if (storedContextPath) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedContextPath(storedContextPath);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedVersion(storedContextVersion);
+    }
+  }, [storedContextPath, storedContextVersion]);
+
   // Initialize selectedContextPath with homeContextPath only on first load — intentional setState in effect
   useEffect(() => {
     if (!selectedContextPath && homeContextPath) {
@@ -55,6 +78,28 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
       }
     }
   }, [homeContextPath, selectedContextPath, homeContext]);
+
+  // When the selected context's full content loads (partial → full), pin selectedVersion to its
+  // published version. Without this, the user's path-only selection (selectedVersion = undefined)
+  // stays after the context fully loads with multi-version options, causing a display mismatch in
+  // ContextSelector (currentValue doesn't match any versioned option → GenericSelector falls back
+  // to options[0], making it look like the selection was reset).
+  const selectedContextFile = useAppSelector(state =>
+    selectedContextPath
+      ? Object.values(state.files.files).find(
+          f => f.type === 'context' && f.path === selectedContextPath
+        ) ?? null
+      : null
+  );
+  useEffect(() => {
+    if (!selectedContextPath || selectedVersion !== undefined) return;
+    const content = selectedContextFile?.content as ContextContent | undefined;
+    const published = content?.published?.all;
+    if (published !== undefined) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedVersion(published);
+    }
+  }, [selectedContextPath, selectedVersion, selectedContextFile]);
 
   // Get context info using path (always uses useContext hook now)
   const contextPath = selectedContextPath || homeContextPath || homeFolder;
