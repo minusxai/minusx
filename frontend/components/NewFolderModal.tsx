@@ -34,7 +34,6 @@ export default function NewFolderModal({ isOpen, onClose, defaultParentPath = '/
   // Extract unique folder paths from loaded files
   const folders = (() => {
     const paths = new Set<string>();
-    paths.add('/'); // Always include root
 
     folderFiles.forEach(file => {
       if (isUnderSystemFolder(file.path, mode)) return;
