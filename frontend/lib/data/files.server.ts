@@ -108,12 +108,18 @@ class FilesDataLayerServer implements IFilesDataLayer {
       }).catch(err => console.error('[analytics] trackFileEvent failed:', err));
     }
 
-    // References are accessed via the parent file's reference list — the parent's permission
-    // check is sufficient. Only enforce mode isolation (no cross-mode leakage).
+    // Reference filtering depends on the parent file type:
+    //   Folder  → children are filesystem entries; apply full canAccessFile (path rules enforced)
+    //   Content → embedded assets (questions in a dashboard, etc.); the parent's permission check
+    //             is sufficient — only enforce type access + mode isolation, not path
     const modePrefix = `/${user.mode}`;
-    const filteredReferences = references.filter(
-      ref => ref.path === modePrefix || ref.path.startsWith(modePrefix + '/')
-    );
+    const filteredReferences = references.filter(ref => {
+      if (file.type === 'folder') {
+        return canAccessFile(ref, user, overrides);
+      }
+      if (!canAccessFileType(user.role, ref.type, overrides)) return false;
+      return ref.path === modePrefix || ref.path.startsWith(modePrefix + '/');
+    });
 
     // Apply custom loaders AFTER permission checks (Phase 3)
     const loaderStart = Date.now();
@@ -141,18 +147,34 @@ class FilesDataLayerServer implements IFilesDataLayer {
     // Filter by unified permission check (Phase 4)
     const filteredFiles = files.filter(f => canAccessFile(f, user, overrides));
 
-    const uniqueRefIds = await extractAllReferenceIds(filteredFiles);
+    // Track which reference IDs came from folder parents vs content parents so we can
+    // apply the right permission check per ref (see comment below).
+    const folderFiles = filteredFiles.filter(f => f.type === 'folder');
+    const contentFiles = filteredFiles.filter(f => f.type !== 'folder');
+    const [folderRefIdArrays, contentRefIdArrays] = await Promise.all([
+      Promise.all(folderFiles.map(f => extractReferenceIds(f))),
+      Promise.all(contentFiles.map(f => extractReferenceIds(f))),
+    ]);
+    const folderRefIds = new Set(folderRefIdArrays.flat());
+    const uniqueRefIds = [...new Set([...folderRefIdArrays.flat(), ...contentRefIdArrays.flat()])];
+
     const [references, analytics] = await Promise.all([
       uniqueRefIds.length > 0 ? DocumentDB.getByIds(uniqueRefIds, user.companyId) : Promise.resolve([]),
       getFilesAnalyticsSummary(filteredFiles.map(f => f.id), user.companyId).catch(() => ({})),
     ]);
 
-    // References are accessed via the parent file's reference list — the parent's permission
-    // check is sufficient. Only enforce mode isolation (no cross-mode leakage).
+    // Reference filtering depends on the parent file type:
+    //   Folder  → children are filesystem entries; apply full canAccessFile (path rules enforced)
+    //   Content → embedded assets (questions in a dashboard, etc.); the parent's permission check
+    //             is sufficient — only enforce type access + mode isolation, not path
     const modePrefix = `/${user.mode}`;
-    const filteredReferences = references.filter(
-      ref => ref.path === modePrefix || ref.path.startsWith(modePrefix + '/')
-    );
+    const filteredReferences = references.filter(ref => {
+      if (folderRefIds.has(ref.id)) {
+        return canAccessFile(ref, user, overrides);
+      }
+      if (!canAccessFileType(user.role, ref.type, overrides)) return false;
+      return ref.path === modePrefix || ref.path.startsWith(modePrefix + '/');
+    });
 
     // Apply loaders AFTER permission checks (Phase 3)
     const transformedFiles = await Promise.all(
