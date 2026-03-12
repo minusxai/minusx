@@ -108,8 +108,12 @@ class FilesDataLayerServer implements IFilesDataLayer {
       }).catch(err => console.error('[analytics] trackFileEvent failed:', err));
     }
 
-    // Filter references by unified permission check (Phase 4)
-    const filteredReferences = references.filter(ref => canAccessFile(ref, user, overrides));
+    // References are accessed via the parent file's reference list — the parent's permission
+    // check is sufficient. Only enforce mode isolation (no cross-mode leakage).
+    const modePrefix = `/${user.mode}`;
+    const filteredReferences = references.filter(
+      ref => ref.path === modePrefix || ref.path.startsWith(modePrefix + '/')
+    );
 
     // Apply custom loaders AFTER permission checks (Phase 3)
     const loaderStart = Date.now();
@@ -143,8 +147,12 @@ class FilesDataLayerServer implements IFilesDataLayer {
       getFilesAnalyticsSummary(filteredFiles.map(f => f.id), user.companyId).catch(() => ({})),
     ]);
 
-    // Filter references by unified permission check (Phase 4)
-    const filteredReferences = references.filter(ref => canAccessFile(ref, user, overrides));
+    // References are accessed via the parent file's reference list — the parent's permission
+    // check is sufficient. Only enforce mode isolation (no cross-mode leakage).
+    const modePrefix = `/${user.mode}`;
+    const filteredReferences = references.filter(
+      ref => ref.path === modePrefix || ref.path.startsWith(modePrefix + '/')
+    );
 
     // Apply loaders AFTER permission checks (Phase 3)
     const transformedFiles = await Promise.all(
