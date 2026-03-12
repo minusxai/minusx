@@ -313,9 +313,9 @@ export function compressAugmentedFile(augmented: AugmentedFile): CompressedAugme
       name: fs.metadataChanges?.name ?? fs.name,
       path: fs.metadataChanges?.path ?? fs.path,
       type: fs.type as FileType,
+      content: mergedContent,
       isDirty,
       ...(queryResultId ? { queryResultId } : {}),
-      content: mergedContent,
     };
   };
   return {
@@ -637,14 +637,29 @@ export async function editFileStr(
     ? { ...baseContent, ...fileState.persistableChanges }
     : baseContent;
 
-  // Build FULL file JSON (same format as readFilesStr)
+  // Build FULL file JSON — must match compressFileState exactly so oldMatch copied
+  // from ReadFiles or appState output always works verbatim.
   const currentName = selectEffectiveName(state, fileId) || '';
+  const isDirty = !!(
+    (fileState.persistableChanges && Object.keys(fileState.persistableChanges).length > 0) ||
+    fileState.metadataChanges?.name !== undefined ||
+    fileState.metadataChanges?.path !== undefined
+  );
+  let queryResultId = fileState.queryResultId;
+  if (fileState.type === 'question') {
+    const qc = mergedContent as QuestionContent;
+    if (qc?.query && qc?.database_name) {
+      queryResultId = getQueryHash(qc.query, qc.parameterValues || {}, qc.database_name);
+    }
+  }
   const fullFile = {
     id: fileState.id,
     name: currentName,
-    path: fileState.path,
+    path: fileState.metadataChanges?.path ?? fileState.path,
     type: fileState.type,
-    content: mergedContent
+    content: mergedContent,
+    isDirty,
+    ...(queryResultId ? { queryResultId } : {}),
   };
 
   // Convert to JSON string (compact)
@@ -666,7 +681,7 @@ export async function editFileStr(
   const editedStr = fullFileStr.replace(actualOldMatch, newMatch);
 
   // Parse edited file as JSON
-  let editedFile: { id: number; name: string; path: string; type: FileType; content: any };
+  let editedFile: { id: number; name: string; path: string; type: FileType; isDirty: boolean; queryResultId?: string; content: any };
   try {
     editedFile = JSON.parse(editedStr);
   } catch (error) {

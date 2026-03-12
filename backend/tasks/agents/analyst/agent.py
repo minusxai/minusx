@@ -132,7 +132,7 @@ class AnalystAgent(Agent):
 
     def _get_user_message(self) -> dict:
         """Generate user message with the goal and app state."""
-        app_state_str = json.dumps(self.app_state, indent=2) if self.app_state else "null"
+        app_state_str = json.dumps(self.app_state, separators=(',', ':')) if self.app_state else "null"
         attachments_str = self._format_attachments()
 
         content = get_prompt(
