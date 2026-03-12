@@ -49,8 +49,58 @@ import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { CompletionsAPI } from '../completions.server';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 
+// Schema that matches the getSchemaFromPython mock — stored in the connection so
+// getTableSuggestions/getColumnSuggestions can read it without hitting the backend.
+const TEST_SCHEMA = {
+  schemas: [
+    {
+      schema: 'main',
+      tables: [
+        {
+          table: 'users',
+          columns: [
+            { name: 'id', type: 'INTEGER' },
+            { name: 'name', type: 'VARCHAR' },
+            { name: 'email', type: 'VARCHAR' },
+            { name: 'created_at', type: 'TIMESTAMP' }
+          ]
+        },
+        {
+          table: 'orders',
+          columns: [
+            { name: 'id', type: 'INTEGER' },
+            { name: 'user_id', type: 'INTEGER' },
+            { name: 'amount', type: 'DECIMAL' },
+            { name: 'status', type: 'VARCHAR' }
+          ]
+        }
+      ]
+    }
+  ]
+};
+
 describe('Completions Suggestions - E2E Tests', () => {
-  setupTestDb(getTestDbPath('completions_suggestions'), { withTestConnection: true });
+  setupTestDb(getTestDbPath('completions_suggestions'), {
+    withTestConnection: true,
+    customInit: async (dbPath) => {
+      const { createAdapter } = await import('@/lib/database/adapter/factory');
+      const db = await createAdapter({ type: 'sqlite', sqlitePath: dbPath });
+      await db.query(
+        `UPDATE files SET content = ? WHERE path = ?`,
+        [
+          JSON.stringify({
+            id: 'test_connection',
+            name: 'default_db',
+            type: 'duckdb',
+            config: { file_path: 'test.duckdb' },
+            schema: TEST_SCHEMA
+          }),
+          '/org/connections/test_connection'
+        ]
+      );
+      await db.close();
+    }
+  });
 
   // Mock user for testing
   const mockUser: EffectiveUser = {

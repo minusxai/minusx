@@ -43,6 +43,12 @@ async function initTutorialDatabase(dbPath: string): Promise<void> {
   [dbPath, `${dbPath}-shm`, `${dbPath}-wal`].forEach(f => {
     if (fs.existsSync(f)) fs.unlinkSync(f);
   });
+  if (!fs.existsSync(TUTORIAL_DB_PATH)) {
+    throw new Error(
+      `Tutorial database not found at ${TUTORIAL_DB_PATH}. ` +
+      `Run \`npm run import-db -- --replace-db=y\` to create it.`
+    );
+  }
   fs.copyFileSync(TUTORIAL_DB_PATH, dbPath);
 }
 
@@ -58,19 +64,35 @@ export async function addTestConnection(dbPath: string) {
 
   // Use INSERT OR IGNORE on path so re-running is idempotent and tutorial DBs
   // (which may already have files at id=1) don't cause conflicts.
-  await db.query(
-    `INSERT OR IGNORE INTO files (name, path, type, content, company_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    [
-      'default_db',
-      '/org/connections/test_connection',
-      'connection',
-      JSON.stringify({ id: 'test_connection', name: 'default_db', type: 'duckdb', config: { file_path: 'test.duckdb' } }),
-      1,
-      now,
-      now
-    ]
+  // Check if connection already exists (idempotent for tutorial DBs)
+  const existing = await db.query<{ id: number }>(
+    `SELECT id FROM files WHERE company_id = $1 AND path = $2`,
+    [1, '/org/connections/test_connection']
   );
+
+  if (existing.rows.length === 0) {
+    // Get next id (same pattern as DocumentDB.create for SQLite)
+    const maxIdResult = await db.query<{ next_id: number }>(
+      `SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM files WHERE company_id = $1`,
+      [1]
+    );
+    const nextId = maxIdResult.rows[0].next_id;
+
+    await db.query(
+      `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        1, nextId,
+        'default_db',
+        '/org/connections/test_connection',
+        'connection',
+        JSON.stringify({ id: 'test_connection', name: 'default_db', type: 'duckdb', config: { file_path: 'test.duckdb' } }),
+        '[]',
+        now,
+        now
+      ]
+    );
+  }
 
   await db.close();
 }
