@@ -12,7 +12,7 @@ import authReducer from '../authSlice';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
 import type { QuestionContent, DocumentContent, UserRole } from '@/lib/types';
-import { readFiles, publishFile, editFileStr, editFile, compressAugmentedFile, selectAugmentedFiles, tryNormalizeJsonFragment, compressQueryResult } from '@/lib/api/file-state';
+import { readFiles, publishFile, editFileStr, editFile, compressAugmentedFile, selectAugmentedFiles, compressQueryResult } from '@/lib/api/file-state';
 import type { ToolCall, CompressedQueryResult, ExecuteQueryDetails, ToolMessage } from '@/lib/types';
 import { contentToDetails } from '@/lib/types';
 import { executeQuery } from '@/lib/api/execute-query.server';
@@ -1034,8 +1034,8 @@ describe('Phase 1: Unified File System API E2E', () => {
         // Verify error
         expect(result.success).toBe(false);
         if (!result.success) {
-          expect(result.error).toContain('Invalid JSON');
-          console.log('✓ editFileStr correctly rejected invalid JSON');
+          expect(result.error).toContain('Invalid file encoding after edit');
+          console.log('✓ editFileStr correctly rejected invalid file encoding');
           console.log(`Error: ${result.error}`);
         }
       });
@@ -1196,6 +1196,228 @@ describe('Phase 1: Unified File System API E2E', () => {
         expect(questionState2.persistableChanges.description).toBe('Revenue Report');
         expect(questionState2.persistableChanges.query).toContain('WHERE month = :month');
         console.log('✓ Both edits accumulated in persistableChanges');
+      });
+
+      // ── Special character edge cases ─────────────────────────────────────────
+      // These verify that encodeFileStr correctly handles chars that JSON.stringify
+      // would escape in string values but should remain raw for LLM matching.
+
+      it('matches SQL with real newlines in oldMatch', async () => {
+        const id = await DocumentDB.create('Multiline SQL', '/org/ec-multiline', 'question', {
+          query: 'SELECT month, revenue\nFROM sales\nWHERE year = 2024',
+          database_name: 'test_db',
+          vizSettings: { type: 'table' as const, xCols: [], yCols: [] },
+        } as QuestionContent, [], 1);
+        const file = await DocumentDB.getById(id, 1);
+        (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
+
+        const result = await editFileStr({
+          fileId: id,
+          oldMatch: 'SELECT month, revenue\nFROM sales\nWHERE year = 2024',
+          newMatch: 'SELECT month, revenue\nFROM sales\nWHERE year = 2025',
+        });
+
+        expect(result.success).toBe(true);
+        const [aug] = await readFiles([id], {});
+        expect((compressAugmentedFile(aug).fileState.content as any).query)
+          .toBe('SELECT month, revenue\nFROM sales\nWHERE year = 2025');
+      });
+
+      it('matches SQL with double-quoted identifiers in oldMatch', async () => {
+        const id = await DocumentDB.create('Quoted SQL', '/org/ec-quoted', 'question', {
+          query: 'SELECT * FROM "users" WHERE "active" = true',
+          database_name: 'test_db',
+          vizSettings: { type: 'table' as const, xCols: [], yCols: [] },
+        } as QuestionContent, [], 1);
+        const file = await DocumentDB.getById(id, 1);
+        (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
+
+        // encodeFileStr escapes " to \" so LLM writes \" (backslash+quote) in oldMatch
+        const result = await editFileStr({
+          fileId: id,
+          oldMatch: 'SELECT * FROM \\"users\\" WHERE \\"active\\" = true',
+          newMatch: 'SELECT * FROM \\"accounts\\" WHERE \\"active\\" = true',
+        });
+
+        expect(result.success).toBe(true);
+        const [aug] = await readFiles([id], {});
+        expect((compressAugmentedFile(aug).fileState.content as any).query)
+          .toBe('SELECT * FROM "accounts" WHERE "active" = true');
+      });
+
+      it('matches SQL with backslashes in oldMatch', async () => {
+        const id = await DocumentDB.create('Backslash SQL', '/org/ec-backslash', 'question', {
+          query: "SELECT * FROM t WHERE name LIKE '%\\_%'",
+          database_name: 'test_db',
+          vizSettings: { type: 'table' as const, xCols: [], yCols: [] },
+        } as QuestionContent, [], 1);
+        const file = await DocumentDB.getById(id, 1);
+        (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
+
+        // encodeFileStr escapes \ to \\ so LLM writes \\ (two backslashes) in oldMatch
+        const result = await editFileStr({
+          fileId: id,
+          oldMatch: "SELECT * FROM t WHERE name LIKE '%\\\\_%'",
+          newMatch: "SELECT * FROM t WHERE name LIKE '%\\\\x%'",
+        });
+
+        expect(result.success).toBe(true);
+        const [aug] = await readFiles([id], {});
+        expect((compressAugmentedFile(aug).fileState.content as any).query)
+          .toBe("SELECT * FROM t WHERE name LIKE '%\\x%'");
+      });
+
+      it('matches SQL combining newlines, tabs and double-quoted identifiers', async () => {
+        const id = await DocumentDB.create('Combined SQL', '/org/ec-combined', 'question', {
+          query: 'SELECT *\n\tFROM "orders"\nWHERE status = "active"',
+          database_name: 'test_db',
+          vizSettings: { type: 'table' as const, xCols: [], yCols: [] },
+        } as QuestionContent, [], 1);
+        const file = await DocumentDB.getById(id, 1);
+        (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
+
+        const result = await editFileStr({
+          fileId: id,
+          oldMatch: 'SELECT *\n\tFROM \\"orders\\"\nWHERE status = \\"active\\"',
+          newMatch: 'SELECT *\n\tFROM \\"orders\\"\nWHERE status = \\"completed\\"',
+        });
+
+        expect(result.success).toBe(true);
+        const [aug] = await readFiles([id], {});
+        expect((compressAugmentedFile(aug).fileState.content as any).query)
+          .toBe('SELECT *\n\tFROM "orders"\nWHERE status = "completed"');
+      });
+
+      it('replaceAll: true replaces all occurrences of oldMatch', async () => {
+        console.log('\n[TEST] editFileStr - replaceAll: true replaces all occurrences');
+
+        const id = await DocumentDB.create(
+          'Multi Occurrence',
+          '/org/multi-occurrence',
+          'question',
+          {
+            description: 'foo foo',
+            query: 'SELECT foo FROM foo_table',
+            database_name: 'test_db',
+            vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
+          } as QuestionContent,
+          [],
+          1
+        );
+        const file = await DocumentDB.getById(id, 1);
+        (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
+
+        const result = await editFileStr({
+          fileId: id,
+          oldMatch: 'foo',
+          newMatch: 'bar',
+          replaceAll: true,
+        });
+
+        expect(result.success).toBe(true);
+        const [aug] = await readFiles([id], {});
+        const content = compressAugmentedFile(aug).fileState.content as any;
+        expect(content.description).toBe('bar bar');
+        expect(content.query).toContain('bar');
+        console.log('✓ replaceAll: true replaced all occurrences');
+      });
+
+      it('replaceAll: false succeeds when match is unique', async () => {
+        console.log('\n[TEST] editFileStr - replaceAll: false with unique match');
+
+        const id = await DocumentDB.create(
+          'Unique Match',
+          '/org/unique-match',
+          'question',
+          {
+            description: 'unique description here',
+            query: 'SELECT month, revenue FROM sales',
+            database_name: 'test_db',
+            vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
+          } as QuestionContent,
+          [],
+          1
+        );
+        const file = await DocumentDB.getById(id, 1);
+        (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
+
+        const result = await editFileStr({
+          fileId: id,
+          oldMatch: 'unique description here',
+          newMatch: 'updated description here',
+          replaceAll: false,
+        });
+
+        expect(result.success).toBe(true);
+        const [aug] = await readFiles([id], {});
+        const content = compressAugmentedFile(aug).fileState.content as any;
+        expect(content.description).toBe('updated description here');
+        console.log('✓ replaceAll: false succeeded with unique match');
+      });
+
+      it('replaceAll: false returns error when match is not unique', async () => {
+        console.log('\n[TEST] editFileStr - replaceAll: false with multiple occurrences');
+
+        const id = await DocumentDB.create(
+          'Duplicate Match',
+          '/org/duplicate-match',
+          'question',
+          {
+            description: 'dup dup',
+            query: 'SELECT dup FROM sales',
+            database_name: 'test_db',
+            vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
+          } as QuestionContent,
+          [],
+          1
+        );
+        const file = await DocumentDB.getById(id, 1);
+        (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
+
+        const result = await editFileStr({
+          fileId: id,
+          oldMatch: 'dup',
+          newMatch: 'xxx',
+          replaceAll: false,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/oldMatch found \d+ times/);
+        console.log(`✓ replaceAll: false correctly errored: ${result.error}`);
+      });
+
+      it('default (replaceAll omitted) replaces all occurrences', async () => {
+        console.log('\n[TEST] editFileStr - default replaceAll replaces all');
+
+        const id = await DocumentDB.create(
+          'Default ReplaceAll',
+          '/org/default-replaceall',
+          'question',
+          {
+            description: 'abc abc',
+            query: 'SELECT abc FROM abc_table',
+            database_name: 'test_db',
+            vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
+          } as QuestionContent,
+          [],
+          1
+        );
+        const file = await DocumentDB.getById(id, 1);
+        (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
+
+        // replaceAll omitted — should default to true and replace all
+        const result = await editFileStr({
+          fileId: id,
+          oldMatch: 'abc',
+          newMatch: 'xyz',
+        });
+
+        expect(result.success).toBe(true);
+        const [aug] = await readFiles([id], {});
+        const content = compressAugmentedFile(aug).fileState.content as any;
+        expect(content.description).toBe('xyz xyz');
+        expect(content.query).toContain('xyz');
+        console.log('✓ default replaceAll replaced all occurrences');
       });
     });
   });
@@ -1410,99 +1632,6 @@ describe('Phase 1: Unified File System API E2E', () => {
     });
   });
 
-  describe('tryNormalizeJsonFragment', () => {
-    it('normalizes pretty-printed key-value pairs to compact form', () => {
-      // Simulates what AppState produces with json.dumps(indent=2)
-      expect(tryNormalizeJsonFragment('"query": "SELECT * FROM t"'))
-        .toBe('"query":"SELECT * FROM t"');
-
-      expect(tryNormalizeJsonFragment('"description": "My question"'))
-        .toBe('"description":"My question"');
-    });
-
-    it('normalizes pretty-printed parameters arrays', () => {
-      const prettyParams = '"parameters": [{"name": "current_month", "type": "date"}]';
-      const compactParams = '"parameters":[{"name":"current_month","type":"date"}]';
-      expect(tryNormalizeJsonFragment(prettyParams)).toBe(compactParams);
-    });
-
-    it('returns original string for non-JSON fragments (raw SQL)', () => {
-      const sql = 'AND date_trunc(\'month\', visit_date) = :current_month';
-      expect(tryNormalizeJsonFragment(sql)).toBe(sql);
-    });
-
-    it('handles already-compact fragments by returning them unchanged', () => {
-      const compact = '"parameters":[{"name":"x","type":"date"}]';
-      expect(tryNormalizeJsonFragment(compact)).toBe(compact);
-    });
-  });
-
-  describe('editFileStr - pretty-printed JSON normalization', () => {
-    let normQuestionId: number;
-
-    beforeAll(async () => {
-      // Create a question with a parameterized query (uses static DocumentDB.create)
-      normQuestionId = await DocumentDB.create(
-        'Norm Test Q',
-        '/org/norm-test-q',
-        'question',
-        {
-          query: 'SELECT * FROM products WHERE category = :cat',
-          database_name: 'test_db',
-          vizSettings: { type: 'table' as const, xCols: [], yCols: [] },
-          parameters: [{ name: 'cat', type: 'text' as const, label: 'Category' }],
-          parameterValues: { cat: 'Electronics' },
-          description: 'Normalization test question',
-        } as QuestionContent,
-        [],
-        1
-      );
-    });
-
-    beforeEach(async () => {
-      const normFile = await DocumentDB.getById(normQuestionId, 1);
-      (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [normFile] } });
-    });
-
-    it('matches pretty-printed parameters array from AppState (key-value with spaces)', async () => {
-      // Simulate what the agent would copy verbatim from AppState (json.dumps(indent=2))
-      // The space after ":" is the critical difference vs compact JSON
-      const prettyOldMatch = '"parameters": [{"name": "cat", "type": "text", "label": "Category"}]';
-      const newMatch = '"parameters":[{"name":"cat","type":"text","label":"Category"},{"name":"limit","type":"number"}]';
-
-      const result = await editFileStr({
-        fileId: normQuestionId,
-        oldMatch: prettyOldMatch,
-        newMatch
-      });
-
-      expect(result.success).toBe(true);
-
-      // Verify the edit landed in Redux
-      const [augmented] = await readFiles([normQuestionId], {});
-      const compressed = compressAugmentedFile(augmented);
-      expect((compressed.fileState.content as any).parameters).toHaveLength(2);
-      expect((compressed.fileState.content as any).parameters[1].name).toBe('limit');
-      console.log('✓ editFileStr matched pretty-printed parameters array from AppState');
-    });
-
-    it('matches pretty-printed key:"value" pairs (space after colon)', async () => {
-      const prettyOldMatch = '"description": "Normalization test question"';
-      const newMatch = '"description":"Updated description"';
-
-      const result = await editFileStr({
-        fileId: normQuestionId,
-        oldMatch: prettyOldMatch,
-        newMatch
-      });
-
-      expect(result.success).toBe(true);
-      const [augmented] = await readFiles([normQuestionId], {});
-      const compressed = compressAugmentedFile(augmented);
-      expect((compressed.fileState.content as any).description).toBe('Updated description');
-      console.log('✓ editFileStr matched pretty-printed key-value pair from AppState');
-    });
-  });
 
   // ===========================================================================
   // Subfolder viewer — ancestor context discovery (Bug 2)

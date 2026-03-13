@@ -31,6 +31,7 @@ import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import { API } from '@/lib/api/declarations';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
+import { encodeFileStr, decodeFileStr } from '@/lib/api/file-encoding';
 import type { RootState } from '@/store/store';
 import type { AugmentedFile, CompressedAugmentedFile, CompressedFileState, CompressedQueryResult, FileState, QueryResult, QuestionContent, QuestionParameter, FileType, DocumentContent, DbFile, BaseFileContent, QuestionReference } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
@@ -565,38 +566,6 @@ export async function editFile(options: EditFileOptions): Promise<void> {
 }
 
 
-/**
- * Attempt to compact a JSON fragment extracted from pretty-printed output (e.g. AppState,
- * which is rendered with json.dumps(indent=2)).
- *
- * Strategy: wrap the fragment as an object value `{ <fragment> }` to make it parseable,
- * then re-serialize compactly and strip the wrapper. Falls back to the original string if
- * the fragment cannot be normalized (e.g. it is a raw SQL substring, not a JSON fragment).
- *
- * Examples:
- *   '"parameters": [{"name": "x", "type": "date"}]'
- *   → '"parameters":[{"name":"x","type":"date"}]'
- *
- *   '"query": "SELECT * FROM t"'
- *   → '"query":"SELECT * FROM t"'
- */
-export function tryNormalizeJsonFragment(fragment: string): string {
-  // Try wrapping as an object property: { <fragment> }
-  try {
-    const parsed = JSON.parse(`{${fragment}}`);
-    const serialized = JSON.stringify(parsed);
-    // Remove surrounding {}
-    return serialized.slice(1, -1);
-  } catch {
-    // Not a valid key-value fragment — fall through
-  }
-  // Try as a standalone JSON value (array, object, string, number, etc.)
-  try {
-    return JSON.stringify(JSON.parse(fragment));
-  } catch {
-    return fragment;  // Give up: not a JSON fragment at all
-  }
-}
 
 /**
  * Options for editFileStr (string-based editing)
@@ -605,6 +574,7 @@ export interface EditFileStrOptions {
   fileId: number;
   oldMatch: string;    // String to search for
   newMatch: string;    // String to replace with
+  replaceAll?: boolean; // default true: replace all occurrences; false: error if multiple found
 }
 
 /**
@@ -667,32 +637,36 @@ export async function editFileStr(
     ...(queryResultId ? { queryResultId } : {}),
   };
 
-  // Convert to JSON string (compact)
-  const fullFileStr = JSON.stringify(fullFile);
+  // Encode file: like JSON.stringify but string values keep raw chars (real newlines,
+  // tabs, etc.) so the LLM's oldMatch (which sees raw chars via tool result decoding)
+  // matches directly — no fallback escaping needed.
+  const fullFileStr = encodeFileStr(fullFile);
 
-  // Check if oldMatch exists; if not, try normalizing whitespace (handles pretty-printed JSON
-  // from AppState which uses json.dumps(indent=2) vs the compact JSON.stringify stored here).
-  let actualOldMatch = oldMatch;
   if (!fullFileStr.includes(oldMatch)) {
-    const normalized = tryNormalizeJsonFragment(oldMatch);
-    if (normalized !== oldMatch && fullFileStr.includes(normalized)) {
-      actualOldMatch = normalized;
-    } else {
-      return { success: false, error: `String "${oldMatch}" not found in file` };
-    }
+    return { success: false, error: `String "${oldMatch}" not found in file` };
   }
 
-  // Apply string replace (first occurrence only)
-  const editedStr = fullFileStr.replace(actualOldMatch, newMatch);
+  const replaceAll = options.replaceAll ?? true;
+  let editedStr: string;
 
-  // Parse edited file as JSON
+  if (!replaceAll) {
+    const count = fullFileStr.split(oldMatch).length - 1;
+    if (count > 1) {
+      return { success: false, error: `oldMatch found ${count} times — it is not unique. Either (a) add more surrounding context to oldMatch so it matches exactly one location, or (b) use replaceAll=true to replace all ${count} occurrences` };
+    }
+    editedStr = fullFileStr.replace(oldMatch, newMatch);
+  } else {
+    editedStr = fullFileStr.split(oldMatch).join(newMatch);
+  }
+
+  // Decode back to object
   let editedFile: { id: number; name: string; path: string; type: FileType; isDirty: boolean; queryResultId?: string; content: any };
   try {
-    editedFile = JSON.parse(editedStr);
+    editedFile = decodeFileStr(editedStr) as typeof editedFile;
   } catch (error) {
     return {
       success: false,
-      error: `Invalid JSON after edit: ${error instanceof Error ? error.message : 'Unknown error'}`
+      error: `Invalid file encoding after edit: ${error instanceof Error ? error.message : 'Unknown error'}`
     };
   }
 
