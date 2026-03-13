@@ -519,6 +519,7 @@ export async function createNewCompany(
   // Do all text replacements first
   const processedTemplate = templateContent
     .replace(/"{{COMPANY_ID}}"/g, String(nextCompanyId))
+    .replace(/\{\{COMPANY_ID\}\}/g, String(nextCompanyId))
     .replace(/\{\{COMPANY_NAME\}\}/g, companyName)
     .replace(/\{\{ADMIN_EMAIL\}\}/g, adminEmail)
     .replace(/\{\{ADMIN_NAME\}\}/g, adminName)

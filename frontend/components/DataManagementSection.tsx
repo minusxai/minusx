@@ -715,7 +715,7 @@ export default function DataManagementSection() {
         <Box py={4} px={4}>
           <Flex justify="space-between" align="center" mb={resetTutorialStatus ? 2 : 0}>
             <Text fontSize="sm" fontWeight="medium" fontFamily="mono">
-              Reset Tutorial
+              Reset Tutorial & Other Modes
             </Text>
             <Button
               size="sm"
@@ -743,7 +743,7 @@ export default function DataManagementSection() {
             </Button>
           </Flex>
           <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={resetTutorialStatus ? 2 : 0}>
-            Restore tutorial mode to its original state, removing any changes or files added in tutorial mode
+            Restore tutorial and other modes (internals, etc.) to their original state, removing any changes or files added in those modes
           </Text>
           {resetTutorialStatus && (
             <Text fontSize="xs" color={resetTutorialStatus.success ? 'accent.teal' : 'accent.danger'} fontFamily="mono">
@@ -767,12 +767,12 @@ export default function DataManagementSection() {
               borderColor="border.default"
             >
               <Dialog.Header px={6} py={4} borderBottom="1px solid" borderColor="border.default">
-                <Dialog.Title fontWeight="700" fontSize="xl" fontFamily="mono">Reset Tutorial</Dialog.Title>
+                <Dialog.Title fontWeight="700" fontSize="xl" fontFamily="mono">Reset Tutorial & Other Modes</Dialog.Title>
               </Dialog.Header>
               <Dialog.Body px={6} py={5}>
                 <Text fontSize="sm" lineHeight="1.6" fontFamily="mono">
-                  This will delete all tutorial files and restore the original 27 template documents.
-                  Any questions, dashboards, or conversations created in tutorial mode will be permanently lost.
+                  This will delete all files in tutorial and other modes (internals, etc.) and restore their original template documents.
+                  Any questions, dashboards, or conversations created in those modes will be permanently lost.
                 </Text>
               </Dialog.Body>
               <Dialog.Footer px={6} py={4} gap={3} borderTop="1px solid" borderColor="border.default" justifyContent="flex-end">
@@ -782,7 +782,7 @@ export default function DataManagementSection() {
                   </Button>
                 </Dialog.ActionTrigger>
                 <Button colorPalette="red" fontFamily="mono" onClick={handleResetTutorial}>
-                  Reset Tutorial
+                  Reset
                 </Button>
               </Dialog.Footer>
               <Dialog.CloseTrigger />
