@@ -41,6 +41,7 @@ function toInspectTuple(msg: FlatToolCall): ToolCallTuple {
     role: 'tool',
     tool_call_id: msg.tool_call_id,
     content: msg.content,
+    details: msg.details as ToolMessage['details'],
   };
   return [toolCall, toolMessage];
 }

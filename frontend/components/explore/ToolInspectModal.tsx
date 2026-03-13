@@ -93,6 +93,7 @@ export default function ToolInspectModal({
   const originalArgs = JSON.stringify(toolCall.function.arguments ?? {}, null, 2);
   const [argsText, setArgsText] = useState(originalArgs);
   const [argsValid, setArgsValid] = useState(true);
+  const [resultTab, setResultTab] = useState<'content' | 'details'>('content');
   const [isRunning, setIsRunning] = useState(false);
   const [rerunResult, setRerunResult] = useState<unknown>(null);
   const [rerunError, setRerunError] = useState<string | null>(null);
@@ -247,10 +248,35 @@ export default function ToolInspectModal({
 
               {/* Result Panel */}
               <VStack flex="1" align="stretch" gap={2} minW="0">
-                <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase">
-                  Original Result
-                </Text>
-                <JsonEditor value={toJsonString(toolMessage.content)} colorMode={colorMode} />
+                <HStack justify="space-between" align="center">
+                  <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase">
+                    Result
+                  </Text>
+                  <HStack gap={0} border="1px solid" borderColor="border.default" borderRadius="md" overflow="hidden">
+                    {(['content', 'details'] as const).map((tab) => (
+                      <Box
+                        key={tab}
+                        as="button"
+                        px={2}
+                        py={0.5}
+                        fontSize="xs"
+                        fontWeight="500"
+                        cursor="pointer"
+                        bg={resultTab === tab ? 'bg.emphasized' : 'transparent'}
+                        color={resultTab === tab ? 'fg' : 'fg.muted'}
+                        _hover={{ bg: 'bg.emphasized' }}
+                        onClick={() => setResultTab(tab)}
+                        textTransform="capitalize"
+                      >
+                        {tab}
+                      </Box>
+                    ))}
+                  </HStack>
+                </HStack>
+                <JsonEditor
+                  value={resultTab === 'content' ? toJsonString(toolMessage.content) : toJsonString(toolMessage.details ?? null)}
+                  colorMode={colorMode}
+                />
 
                 {hasRerun && (
                   <>
