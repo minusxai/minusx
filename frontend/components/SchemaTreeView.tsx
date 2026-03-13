@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Box, VStack, HStack, Text, Icon, Collapsible, IconButton, Input } from '@chakra-ui/react';
 import { LuTable, LuChevronRight, LuChevronDown, LuColumns3, LuSearch, LuX, LuDatabase, LuEye, LuRefreshCw } from 'react-icons/lu';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -70,6 +70,13 @@ export default function SchemaTreeView({
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set());
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+  const [whitelistForSort, setWhitelistForSort] = useState(whitelist);
+
+  // Update sort snapshot when new schema data is loaded (fresh data gets fresh sort)
+  useEffect(() => {
+    setWhitelistForSort(whitelist);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schemas]);
 
   // Track visible counts for tables in each schema
   const [visibleTableCounts, setVisibleTableCounts] = useState<Record<string, number>>({});
@@ -130,10 +137,12 @@ export default function SchemaTreeView({
     }
 
     // Sort schemas: selected ones first (only in selectable mode)
+    // Uses whitelistForSort (a snapshot) so toggling checkboxes doesn't cause re-sort mid-interaction.
+    // The snapshot is refreshed on schema collapse and when schemas prop changes.
     if (selectable) {
       result = [...result].sort((a, b) => {
-        const aSelected = isSchemaWhitelisted(a.schema);
-        const bSelected = isSchemaWhitelisted(b.schema);
+        const aSelected = whitelistForSort.some(item => item.type === 'schema' && item.name === a.schema);
+        const bSelected = whitelistForSort.some(item => item.type === 'schema' && item.name === b.schema);
 
         if (aSelected && !bSelected) return -1;
         if (!aSelected && bSelected) return 1;
@@ -145,8 +154,8 @@ export default function SchemaTreeView({
       // Sort tables within each schema: selected ones first
       result = result.map((schemaItem) => {
         const sortedTables = [...schemaItem.tables].sort((a, b) => {
-          const aSelected = isTableWhitelisted(schemaItem.schema, a.table);
-          const bSelected = isTableWhitelisted(schemaItem.schema, b.table);
+          const aSelected = whitelistForSort.some(item => item.type === 'table' && item.name === a.table && item.schema === schemaItem.schema);
+          const bSelected = whitelistForSort.some(item => item.type === 'table' && item.name === b.table && item.schema === schemaItem.schema);
 
           if (aSelected && !bSelected) return -1;
           if (!aSelected && bSelected) return 1;
@@ -162,7 +171,7 @@ export default function SchemaTreeView({
     }
 
     return result;
-  }, [schemas, searchQuery, showColumns, selectable, whitelist]);
+  }, [schemas, searchQuery, showColumns, selectable, whitelistForSort]);
 
   // Get filtered columns for a table
   const getFilteredColumns = (schemaName: string, table: { table: string; columns: Array<{ name: string; type: string }> }) => {
@@ -276,6 +285,8 @@ export default function SchemaTreeView({
     setExpandedSchemas((prev) => {
       const next = new Set(prev);
       if (next.has(schemaName)) {
+        // Collapsing — refresh sort snapshot so re-expansion sorts correctly
+        setWhitelistForSort(whitelist);
         next.delete(schemaName);
       } else {
         next.add(schemaName);
