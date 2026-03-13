@@ -193,14 +193,19 @@ class AnalystAgent(Agent):
             finish_reason = response.get("finish_reason", "")
             
 
-            # If LLM finished with content (no more tool calls), return result
-            if finish_reason == "stop":
+            # "stop" = normal completion; "length" = context window exhausted.
+            # Both are terminal — "length" must not loop or it will make the
+            # context even longer and leave the thread ending with a bare
+            # assistant message, which the Anthropic API rejects.
+            if finish_reason in ("stop", "length"):
                 response = {
                     "success": True
                 }
                 if content:
                     response["content"] = content
                     response["citations"] = citations
+                elif finish_reason == "length":
+                    response["content"] = "Response truncated due to context length."
                 return response
 
             # Convert tool calls to AgentCalls and dispatch
