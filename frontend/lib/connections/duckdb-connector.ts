@@ -96,7 +96,7 @@ export class DuckDbConnector extends NodeConnector {
       return { success: false, message: `File not found: ${this.absPath}` };
     }
     try {
-      const instance = await getOrCreateDuckDbInstance(this.absPath);
+      const instance = await getOrCreateDuckDbInstance(this.absPath, 'READ_ONLY');
       const conn = await instance.connect();
       try {
         await conn.run('SELECT 1');
@@ -114,7 +114,7 @@ export class DuckDbConnector extends NodeConnector {
   }
 
   async query(sql: string, params?: Record<string, string | number>): Promise<QueryResult> {
-    const instance = await getOrCreateDuckDbInstance(this.absPath);
+    const instance = await getOrCreateDuckDbInstance(this.absPath, 'READ_ONLY');
     const conn = await instance.connect();
     try {
       // Replace named params (:name) with positional $1, $2, ... (DuckDB syntax)
@@ -141,7 +141,7 @@ export class DuckDbConnector extends NodeConnector {
   }
 
   async getSchema(): Promise<SchemaEntry[]> {
-    const instance = await getOrCreateDuckDbInstance(this.absPath);
+    const instance = await getOrCreateDuckDbInstance(this.absPath, 'READ_ONLY');
     const conn = await instance.connect();
     try {
       const result = await conn.run(`

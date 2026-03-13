@@ -167,14 +167,17 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
 
     await DocumentDB.update(conn.id, name, conn.path, content, [], user.companyId);  // Phase 6: Connections have no references
 
-    // Re-initialize on Python backend and capture schema
+    // Re-initialize on Python backend and capture schema.
+    // DuckDB connections are handled entirely in Node.js — skip Python to avoid lock conflict.
     let schema: DatabaseSchema | null = null;
-    try {
-      await removeConnectionFromPython(name);
-      const initResult = await initializeConnectionOnPython(name, content.type, config);
-      schema = initResult.schema || null;
-    } catch (error) {
-      console.error(`[ConnectionsAPI] Failed to re-initialize connection ${name}:`, error);
+    if (!getNodeConnector(name, content.type, config)) {
+      try {
+        await removeConnectionFromPython(name);
+        const initResult = await initializeConnectionOnPython(name, content.type, config);
+        schema = initResult.schema || null;
+      } catch (error) {
+        console.error(`[ConnectionsAPI] Failed to re-initialize connection ${name}:`, error);
+      }
     }
 
     const updated = await DocumentDB.getById(conn.id, user.companyId);
