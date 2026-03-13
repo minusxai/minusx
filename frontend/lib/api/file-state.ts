@@ -565,38 +565,6 @@ export async function editFile(options: EditFileOptions): Promise<void> {
 }
 
 
-/**
- * Attempt to compact a JSON fragment extracted from pretty-printed output (e.g. AppState,
- * which is rendered with json.dumps(indent=2)).
- *
- * Strategy: wrap the fragment as an object value `{ <fragment> }` to make it parseable,
- * then re-serialize compactly and strip the wrapper. Falls back to the original string if
- * the fragment cannot be normalized (e.g. it is a raw SQL substring, not a JSON fragment).
- *
- * Examples:
- *   '"parameters": [{"name": "x", "type": "date"}]'
- *   → '"parameters":[{"name":"x","type":"date"}]'
- *
- *   '"query": "SELECT * FROM t"'
- *   → '"query":"SELECT * FROM t"'
- */
-export function tryNormalizeJsonFragment(fragment: string): string {
-  // Try wrapping as an object property: { <fragment> }
-  try {
-    const parsed = JSON.parse(`{${fragment}}`);
-    const serialized = JSON.stringify(parsed);
-    // Remove surrounding {}
-    return serialized.slice(1, -1);
-  } catch {
-    // Not a valid key-value fragment — fall through
-  }
-  // Try as a standalone JSON value (array, object, string, number, etc.)
-  try {
-    return JSON.stringify(JSON.parse(fragment));
-  } catch {
-    return fragment;  // Give up: not a JSON fragment at all
-  }
-}
 
 /**
  * Options for editFileStr (string-based editing)
@@ -670,20 +638,23 @@ export async function editFileStr(
   // Convert to JSON string (compact)
   const fullFileStr = JSON.stringify(fullFile);
 
-  // Check if oldMatch exists; if not, try normalizing whitespace (handles pretty-printed JSON
-  // from AppState which uses json.dumps(indent=2) vs the compact JSON.stringify stored here).
+  // Check if oldMatch exists. If not, try escaping control characters: the LLM receives
+  // oldMatch with real newlines (JSON-decoded from ReadFiles/AppState), but fullFileStr is
+  // JSON.stringify'd so those chars appear as \n two-char escape sequences.
   let actualOldMatch = oldMatch;
+  let actualNewMatch = newMatch;
   if (!fullFileStr.includes(oldMatch)) {
-    const normalized = tryNormalizeJsonFragment(oldMatch);
-    if (normalized !== oldMatch && fullFileStr.includes(normalized)) {
-      actualOldMatch = normalized;
+    const escaped = oldMatch.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t');
+    if (escaped !== oldMatch && fullFileStr.includes(escaped)) {
+      actualOldMatch = escaped;
+      actualNewMatch = newMatch.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t');
     } else {
       return { success: false, error: `String "${oldMatch}" not found in file` };
     }
   }
 
   // Apply string replace (first occurrence only)
-  const editedStr = fullFileStr.replace(actualOldMatch, newMatch);
+  const editedStr = fullFileStr.replace(actualOldMatch, actualNewMatch);
 
   // Parse edited file as JSON
   let editedFile: { id: number; name: string; path: string; type: FileType; isDirty: boolean; queryResultId?: string; content: any };

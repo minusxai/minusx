@@ -351,15 +351,12 @@ describe('LLM Message Encoding', () => {
               type: 'function',
               function: {
                 name: 'EditFile',
-                // oldMatch is a pretty-printed fragment (newlines + curly-brace context) that
-                // the LLM would naturally produce from the ReadFiles/appState output.
-                // editFileStr normalises it via tryNormalizeJsonFragment before matching
-                // against the compact JSON.stringify representation.
-                // "name" and "path" are adjacent in {id,name,path,type,content} so
-                // the normalised fragment is guaranteed to appear in fullFileStr.
+                // oldMatch is a compact fragment as the LLM sees it from ReadFiles/AppState
+                // (both serialize as compact JSON). "name" and "path" are adjacent in
+                // {id,name,path,type,content} so the fragment is guaranteed to appear in fullFileStr.
                 arguments: JSON.stringify({
                   fileId: TUTORIAL_DASHBOARD_ID,
-                  oldMatch: '"name": "User Engagement Dashboard",\n  "path": "/tutorial/user-engagement-dashboard"',
+                  oldMatch: '"name":"User Engagement Dashboard","path":"/tutorial/user-engagement-dashboard"',
                   newMatch: '"name":"User Engagement Dashboard Edited","path":"/tutorial/user-engagement-dashboard"'
                 })
               }
