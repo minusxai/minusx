@@ -114,8 +114,12 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
       throw new Error(`Connection '${input.name}' already exists`);
     }
 
-    // Validate with Python backend before creating
-    const validationResult = await validateConnectionBeforeCreate(input.type, input.config);
+    // Validate connection before creating.
+    // DuckDB connections are tested in Node.js; all others go through Python.
+    const nodeConnector = getNodeConnector(input.name, input.type, input.config);
+    const validationResult = nodeConnector
+      ? await nodeConnector.testConnection(false)
+      : await validateConnectionBeforeCreate(input.type, input.config);
     if (!validationResult.success) {
       throw new Error(`Connection test failed: ${validationResult.message}`);
     }
