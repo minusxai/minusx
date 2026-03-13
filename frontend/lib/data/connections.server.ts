@@ -28,6 +28,7 @@ import {
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { getSafeConfig, validateConnectionName, RESERVED_NAMES, validateDuckDbFilePath } from './helpers/connections';
 import { resolvePath } from '@/lib/mode/path-resolver';
+import { getNodeConnector } from '@/lib/connections';
 
 class ConnectionsDataLayerServer implements IConnectionsDataLayer {
   async listAll(user: EffectiveUser, includeSchemas = false): Promise<ListConnectionsResult> {
@@ -55,7 +56,10 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
     const schemaPromises = connections.map(async conn => {
       const content = conn.content as ConnectionContent;
       try {
-        const schema = await getSchemaFromPython(conn.name, content.type, content.config);
+        const connector = getNodeConnector(conn.name, content.type, content.config);
+        const schema = connector
+          ? { schemas: await connector.getSchema() }
+          : await getSchemaFromPython(conn.name, content.type, content.config);
         return { name: conn.name, schema };
       } catch (error) {
         console.error(`[ConnectionsAPI] Failed to fetch schema for ${conn.name}:`, error);

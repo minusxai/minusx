@@ -8,6 +8,7 @@ import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { getSchemaFromPython } from '@/lib/backend/python-backend';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { CustomLoader } from './types';
+import { getNodeConnector } from '@/lib/connections';
 
 /**
  * Check if schema is stale (older than 24 hours)
@@ -51,11 +52,14 @@ export const connectionLoader: CustomLoader = async (file: DbFile, user: Effecti
     return file;
   }
 
-  // Fetch fresh schema from Python backend
+  // Fetch fresh schema — use Node.js connector for DuckDB types, Python for everything else
   console.log(`[connectionLoader] Fetching fresh schema for ${file.name} (refresh=${options?.refresh}, stale=${isStale})`);
   let freshSchema: DatabaseSchema;
   try {
-    const result = await getSchemaFromPython(file.name, content.type, content.config);
+    const connector = getNodeConnector(file.name, content.type, content.config);
+    const result = connector
+      ? { schemas: await connector.getSchema() }
+      : await getSchemaFromPython(file.name, content.type, content.config);
     freshSchema = {
       ...result,
       updated_at: new Date().toISOString()
