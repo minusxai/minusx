@@ -13,6 +13,11 @@ jest.mock('@/lib/database/db-config', () => {
   };
 });
 
+// Mock Node.js connector so schema falls through to getSchemaFromPython mock below
+jest.mock('@/lib/connections', () => ({
+  getNodeConnector: () => null,
+}));
+
 // Mock schema introspection to return test schema
 jest.mock('@/lib/backend/python-backend', () => ({
   getSchemaFromPython: jest.fn().mockResolvedValue({
