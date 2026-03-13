@@ -574,6 +574,7 @@ export interface EditFileStrOptions {
   fileId: number;
   oldMatch: string;    // String to search for
   newMatch: string;    // String to replace with
+  replaceAll?: boolean; // default true: replace all occurrences; false: error if multiple found
 }
 
 /**
@@ -645,8 +646,18 @@ export async function editFileStr(
     return { success: false, error: `String "${oldMatch}" not found in file` };
   }
 
-  // Apply string replace (first occurrence only)
-  const editedStr = fullFileStr.replace(oldMatch, newMatch);
+  const replaceAll = options.replaceAll ?? true;
+  let editedStr: string;
+
+  if (!replaceAll) {
+    const count = fullFileStr.split(oldMatch).length - 1;
+    if (count > 1) {
+      return { success: false, error: `String found ${count} times — provide more surrounding context to make it unique, or omit replaceAll to replace all occurrences` };
+    }
+    editedStr = fullFileStr.replace(oldMatch, newMatch);
+  } else {
+    editedStr = fullFileStr.split(oldMatch).join(newMatch);
+  }
 
   // Decode back to object
   let editedFile: { id: number; name: string; path: string; type: FileType; isDirty: boolean; queryResultId?: string; content: any };

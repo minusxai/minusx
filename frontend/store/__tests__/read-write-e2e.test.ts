@@ -1287,6 +1287,138 @@ describe('Phase 1: Unified File System API E2E', () => {
         expect((compressAugmentedFile(aug).fileState.content as any).query)
           .toBe('SELECT *\n\tFROM "orders"\nWHERE status = "completed"');
       });
+
+      it('replaceAll: true replaces all occurrences of oldMatch', async () => {
+        console.log('\n[TEST] editFileStr - replaceAll: true replaces all occurrences');
+
+        const id = await DocumentDB.create(
+          'Multi Occurrence',
+          '/org/multi-occurrence',
+          'question',
+          {
+            description: 'foo foo',
+            query: 'SELECT foo FROM foo_table',
+            database_name: 'test_db',
+            vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
+          } as QuestionContent,
+          [],
+          1
+        );
+        const file = await DocumentDB.getById(id, 1);
+        (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
+
+        const result = await editFileStr({
+          fileId: id,
+          oldMatch: 'foo',
+          newMatch: 'bar',
+          replaceAll: true,
+        });
+
+        expect(result.success).toBe(true);
+        const [aug] = await readFiles([id], {});
+        const content = compressAugmentedFile(aug).fileState.content as any;
+        expect(content.description).toBe('bar bar');
+        expect(content.query).toContain('bar');
+        console.log('✓ replaceAll: true replaced all occurrences');
+      });
+
+      it('replaceAll: false succeeds when match is unique', async () => {
+        console.log('\n[TEST] editFileStr - replaceAll: false with unique match');
+
+        const id = await DocumentDB.create(
+          'Unique Match',
+          '/org/unique-match',
+          'question',
+          {
+            description: 'unique description here',
+            query: 'SELECT month, revenue FROM sales',
+            database_name: 'test_db',
+            vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
+          } as QuestionContent,
+          [],
+          1
+        );
+        const file = await DocumentDB.getById(id, 1);
+        (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
+
+        const result = await editFileStr({
+          fileId: id,
+          oldMatch: 'unique description here',
+          newMatch: 'updated description here',
+          replaceAll: false,
+        });
+
+        expect(result.success).toBe(true);
+        const [aug] = await readFiles([id], {});
+        const content = compressAugmentedFile(aug).fileState.content as any;
+        expect(content.description).toBe('updated description here');
+        console.log('✓ replaceAll: false succeeded with unique match');
+      });
+
+      it('replaceAll: false returns error when match is not unique', async () => {
+        console.log('\n[TEST] editFileStr - replaceAll: false with multiple occurrences');
+
+        const id = await DocumentDB.create(
+          'Duplicate Match',
+          '/org/duplicate-match',
+          'question',
+          {
+            description: 'dup dup',
+            query: 'SELECT dup FROM sales',
+            database_name: 'test_db',
+            vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
+          } as QuestionContent,
+          [],
+          1
+        );
+        const file = await DocumentDB.getById(id, 1);
+        (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
+
+        const result = await editFileStr({
+          fileId: id,
+          oldMatch: 'dup',
+          newMatch: 'xxx',
+          replaceAll: false,
+        });
+
+        expect(result.success).toBe(false);
+        expect(result.error).toMatch(/found \d+ times/);
+        console.log(`✓ replaceAll: false correctly errored: ${result.error}`);
+      });
+
+      it('default (replaceAll omitted) replaces all occurrences', async () => {
+        console.log('\n[TEST] editFileStr - default replaceAll replaces all');
+
+        const id = await DocumentDB.create(
+          'Default ReplaceAll',
+          '/org/default-replaceall',
+          'question',
+          {
+            description: 'abc abc',
+            query: 'SELECT abc FROM abc_table',
+            database_name: 'test_db',
+            vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
+          } as QuestionContent,
+          [],
+          1
+        );
+        const file = await DocumentDB.getById(id, 1);
+        (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
+
+        // replaceAll omitted — should default to true and replace all
+        const result = await editFileStr({
+          fileId: id,
+          oldMatch: 'abc',
+          newMatch: 'xyz',
+        });
+
+        expect(result.success).toBe(true);
+        const [aug] = await readFiles([id], {});
+        const content = compressAugmentedFile(aug).fileState.content as any;
+        expect(content.description).toBe('xyz xyz');
+        expect(content.query).toContain('xyz');
+        console.log('✓ default replaceAll replaced all occurrences');
+      });
     });
   });
 

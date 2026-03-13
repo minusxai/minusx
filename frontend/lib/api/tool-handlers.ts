@@ -336,7 +336,7 @@ registerFrontendTool('ReadFiles', async (args, _context) => {
  * - queryResults: {queryResultId, unchanged: true} for results with same hash; full for new/changed
  */
 registerFrontendTool('EditFile', async (args, _context) => {
-  const { fileId, oldMatch, newMatch } = args;
+  const { fileId, oldMatch, newMatch, replaceAll } = args;
 
   // Snapshot state before edit to compute delta
   const stateBefore = getStore().getState();
@@ -348,7 +348,7 @@ registerFrontendTool('EditFile', async (args, _context) => {
   const prevRefIds = new Set<number>(fileState?.references ?? []);
 
   // Edit (stages changes in Redux as draft)
-  const result = await editFileStr({ fileId, oldMatch, newMatch });
+  const result = await editFileStr({ fileId, oldMatch, newMatch, replaceAll });
   if (!result.success) {
     const err = result.error || 'Edit failed';
     return { content: { success: false, error: err }, details: { success: false, error: err } };

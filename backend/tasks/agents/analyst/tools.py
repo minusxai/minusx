@@ -306,12 +306,14 @@ class EditFile(Tool):
         fileId: int = Field(..., description="File ID to edit"),
         oldMatch: str = Field(..., description="String to search for in full file JSON (including name, path, content)"),
         newMatch: str = Field(..., description=f"String to replace with. File JSON schema: {ATLAS_FILE_SCHEMA_JSON}"),
+        replaceAll: bool = Field(True, description="If true (default), replace all occurrences of oldMatch. If false, replace only the first occurrence and error if multiple are found."),
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
         self.fileId = fileId
         self.oldMatch = oldMatch
         self.newMatch = newMatch
+        self.replaceAll = replaceAll
 
     async def reduce(self, child_batches):
         pass
