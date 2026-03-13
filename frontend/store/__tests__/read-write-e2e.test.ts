@@ -1034,8 +1034,8 @@ describe('Phase 1: Unified File System API E2E', () => {
         // Verify error
         expect(result.success).toBe(false);
         if (!result.success) {
-          expect(result.error).toContain('Invalid JSON');
-          console.log('✓ editFileStr correctly rejected invalid JSON');
+          expect(result.error).toContain('Invalid file encoding after edit');
+          console.log('✓ editFileStr correctly rejected invalid file encoding');
           console.log(`Error: ${result.error}`);
         }
       });
@@ -1196,6 +1196,96 @@ describe('Phase 1: Unified File System API E2E', () => {
         expect(questionState2.persistableChanges.description).toBe('Revenue Report');
         expect(questionState2.persistableChanges.query).toContain('WHERE month = :month');
         console.log('✓ Both edits accumulated in persistableChanges');
+      });
+
+      // ── Special character edge cases ─────────────────────────────────────────
+      // These verify that encodeFileStr correctly handles chars that JSON.stringify
+      // would escape in string values but should remain raw for LLM matching.
+
+      it('matches SQL with real newlines in oldMatch', async () => {
+        const id = await DocumentDB.create('Multiline SQL', '/org/ec-multiline', 'question', {
+          query: 'SELECT month, revenue\nFROM sales\nWHERE year = 2024',
+          database_name: 'test_db',
+          vizSettings: { type: 'table' as const, xCols: [], yCols: [] },
+        } as QuestionContent, [], 1);
+        const file = await DocumentDB.getById(id, 1);
+        (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
+
+        const result = await editFileStr({
+          fileId: id,
+          oldMatch: 'SELECT month, revenue\nFROM sales\nWHERE year = 2024',
+          newMatch: 'SELECT month, revenue\nFROM sales\nWHERE year = 2025',
+        });
+
+        expect(result.success).toBe(true);
+        const [aug] = await readFiles([id], {});
+        expect((compressAugmentedFile(aug).fileState.content as any).query)
+          .toBe('SELECT month, revenue\nFROM sales\nWHERE year = 2025');
+      });
+
+      it('matches SQL with double-quoted identifiers in oldMatch', async () => {
+        const id = await DocumentDB.create('Quoted SQL', '/org/ec-quoted', 'question', {
+          query: 'SELECT * FROM "users" WHERE "active" = true',
+          database_name: 'test_db',
+          vizSettings: { type: 'table' as const, xCols: [], yCols: [] },
+        } as QuestionContent, [], 1);
+        const file = await DocumentDB.getById(id, 1);
+        (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
+
+        // encodeFileStr escapes " to \" so LLM writes \" (backslash+quote) in oldMatch
+        const result = await editFileStr({
+          fileId: id,
+          oldMatch: 'SELECT * FROM \\"users\\" WHERE \\"active\\" = true',
+          newMatch: 'SELECT * FROM \\"accounts\\" WHERE \\"active\\" = true',
+        });
+
+        expect(result.success).toBe(true);
+        const [aug] = await readFiles([id], {});
+        expect((compressAugmentedFile(aug).fileState.content as any).query)
+          .toBe('SELECT * FROM "accounts" WHERE "active" = true');
+      });
+
+      it('matches SQL with backslashes in oldMatch', async () => {
+        const id = await DocumentDB.create('Backslash SQL', '/org/ec-backslash', 'question', {
+          query: "SELECT * FROM t WHERE name LIKE '%\\_%'",
+          database_name: 'test_db',
+          vizSettings: { type: 'table' as const, xCols: [], yCols: [] },
+        } as QuestionContent, [], 1);
+        const file = await DocumentDB.getById(id, 1);
+        (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
+
+        // encodeFileStr escapes \ to \\ so LLM writes \\ (two backslashes) in oldMatch
+        const result = await editFileStr({
+          fileId: id,
+          oldMatch: "SELECT * FROM t WHERE name LIKE '%\\\\_%'",
+          newMatch: "SELECT * FROM t WHERE name LIKE '%\\\\x%'",
+        });
+
+        expect(result.success).toBe(true);
+        const [aug] = await readFiles([id], {});
+        expect((compressAugmentedFile(aug).fileState.content as any).query)
+          .toBe("SELECT * FROM t WHERE name LIKE '%\\x%'");
+      });
+
+      it('matches SQL combining newlines, tabs and double-quoted identifiers', async () => {
+        const id = await DocumentDB.create('Combined SQL', '/org/ec-combined', 'question', {
+          query: 'SELECT *\n\tFROM "orders"\nWHERE status = "active"',
+          database_name: 'test_db',
+          vizSettings: { type: 'table' as const, xCols: [], yCols: [] },
+        } as QuestionContent, [], 1);
+        const file = await DocumentDB.getById(id, 1);
+        (store.dispatch as any)({ type: 'files/setFiles', payload: { files: [file] } });
+
+        const result = await editFileStr({
+          fileId: id,
+          oldMatch: 'SELECT *\n\tFROM \\"orders\\"\nWHERE status = \\"active\\"',
+          newMatch: 'SELECT *\n\tFROM \\"orders\\"\nWHERE status = \\"completed\\"',
+        });
+
+        expect(result.success).toBe(true);
+        const [aug] = await readFiles([id], {});
+        expect((compressAugmentedFile(aug).fileState.content as any).query)
+          .toBe('SELECT *\n\tFROM "orders"\nWHERE status = "completed"');
       });
     });
   });

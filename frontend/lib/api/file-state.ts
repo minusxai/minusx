@@ -31,6 +31,7 @@ import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import { API } from '@/lib/api/declarations';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
+import { encodeFileStr, decodeFileStr } from '@/lib/api/file-encoding';
 import type { RootState } from '@/store/store';
 import type { AugmentedFile, CompressedAugmentedFile, CompressedFileState, CompressedQueryResult, FileState, QueryResult, QuestionContent, QuestionParameter, FileType, DocumentContent, DbFile, BaseFileContent, QuestionReference } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
@@ -635,35 +636,26 @@ export async function editFileStr(
     ...(queryResultId ? { queryResultId } : {}),
   };
 
-  // Convert to JSON string (compact)
-  const fullFileStr = JSON.stringify(fullFile);
+  // Encode file: like JSON.stringify but string values keep raw chars (real newlines,
+  // tabs, etc.) so the LLM's oldMatch (which sees raw chars via tool result decoding)
+  // matches directly — no fallback escaping needed.
+  const fullFileStr = encodeFileStr(fullFile);
 
-  // Check if oldMatch exists. If not, try escaping control characters: the LLM receives
-  // oldMatch with real newlines (JSON-decoded from ReadFiles/AppState), but fullFileStr is
-  // JSON.stringify'd so those chars appear as \n two-char escape sequences.
-  let actualOldMatch = oldMatch;
-  let actualNewMatch = newMatch;
   if (!fullFileStr.includes(oldMatch)) {
-    const escaped = oldMatch.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t');
-    if (escaped !== oldMatch && fullFileStr.includes(escaped)) {
-      actualOldMatch = escaped;
-      actualNewMatch = newMatch.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/\t/g, '\\t');
-    } else {
-      return { success: false, error: `String "${oldMatch}" not found in file` };
-    }
+    return { success: false, error: `String "${oldMatch}" not found in file` };
   }
 
   // Apply string replace (first occurrence only)
-  const editedStr = fullFileStr.replace(actualOldMatch, actualNewMatch);
+  const editedStr = fullFileStr.replace(oldMatch, newMatch);
 
-  // Parse edited file as JSON
+  // Decode back to object
   let editedFile: { id: number; name: string; path: string; type: FileType; isDirty: boolean; queryResultId?: string; content: any };
   try {
-    editedFile = JSON.parse(editedStr);
+    editedFile = decodeFileStr(editedStr) as typeof editedFile;
   } catch (error) {
     return {
       success: false,
-      error: `Invalid JSON after edit: ${error instanceof Error ? error.message : 'Unknown error'}`
+      error: `Invalid file encoding after edit: ${error instanceof Error ? error.message : 'Unknown error'}`
     };
   }
 
