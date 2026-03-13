@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { DuckDBTypeId } from '@duckdb/node-api';
 import { NodeConnector, SchemaEntry, QueryResult, TestConnectionResult } from './base';
-import { getOrCreateDuckDbInstance } from './duckdb-registry';
+import { withDuckDbConnection } from './duckdb-registry';
 
 const SKIP_SCHEMAS = new Set(['system', 'temp']);
 
@@ -96,13 +96,9 @@ export class DuckDbConnector extends NodeConnector {
       return { success: false, message: `File not found: ${this.absPath}` };
     }
     try {
-      const instance = await getOrCreateDuckDbInstance(this.absPath, 'READ_ONLY');
-      const conn = await instance.connect();
-      try {
+      await withDuckDbConnection(this.absPath, 'READ_ONLY', async (conn) => {
         await conn.run('SELECT 1');
-      } finally {
-        conn.closeSync();
-      }
+      });
       if (includeSchema) {
         const schemas = await this.getSchema();
         return { success: true, message: 'Connection successful', schema: { schemas } };
@@ -114,9 +110,7 @@ export class DuckDbConnector extends NodeConnector {
   }
 
   async query(sql: string, params?: Record<string, string | number>): Promise<QueryResult> {
-    const instance = await getOrCreateDuckDbInstance(this.absPath, 'READ_ONLY');
-    const conn = await instance.connect();
-    try {
+    return withDuckDbConnection(this.absPath, 'READ_ONLY', async (conn) => {
       // Replace named params (:name) with positional $1, $2, ... (DuckDB syntax)
       const paramValues: unknown[] = [];
       const positionalSql = sql.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key) => {
@@ -135,15 +129,11 @@ export class DuckDbConnector extends NodeConnector {
       const rawRows = await result.getRowObjectsJS() as Record<string, unknown>[];
       const rows = rawRows.map(serializeRow);
       return { columns, types, rows };
-    } finally {
-      conn.closeSync();
-    }
+    });
   }
 
   async getSchema(): Promise<SchemaEntry[]> {
-    const instance = await getOrCreateDuckDbInstance(this.absPath, 'READ_ONLY');
-    const conn = await instance.connect();
-    try {
+    return withDuckDbConnection(this.absPath, 'READ_ONLY', async (conn) => {
       const result = await conn.run(`
         SELECT table_schema, table_name, column_name, data_type
         FROM information_schema.columns
@@ -180,8 +170,6 @@ export class DuckDbConnector extends NodeConnector {
         schema,
         tables: Array.from(tables.entries()).map(([table, columns]) => ({ table, columns })),
       }));
-    } finally {
-      conn.closeSync();
-    }
+    });
   }
 }

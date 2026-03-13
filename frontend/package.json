@@ -22,7 +22,8 @@
   "dependencies": {
     "@chakra-ui/react": "^3.30.0",
     "@duckdb/duckdb-wasm": "^1.30.0",
-    "@duckdb/node-api": "^1.4.4-r.3",
+    "@duckdb/node-api": "^1.5.0-r.1",
+    "@duckdb/node-bindings": "^1.5.0-r.1",
     "@lexical/react": "^0.40.0",
     "@lexical/utils": "^0.40.0",
     "@monaco-editor/react": "^4.7.0",

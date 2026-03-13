@@ -1,8 +1,7 @@
 import 'server-only';
 import * as path from 'path';
 import * as fs from 'fs';
-import { DuckDBInstance } from '@duckdb/node-api';
-import { getOrCreateDuckDbInstance } from '@/lib/connections/duckdb-registry';
+import { withDuckDbConnection } from '@/lib/connections/duckdb-registry';
 
 // Schema for per-company analytics database
 const SCHEMA_SQL = `
@@ -63,18 +62,6 @@ function getAnalyticsDbDir(): string {
   return path.join(base, 'data', 'analytics');
 }
 
-async function initSchema(instance: DuckDBInstance): Promise<void> {
-  const conn = await instance.connect();
-  try {
-    // Run each statement individually — @duckdb/node-api run() handles one statement at a time
-    for (const stmt of SCHEMA_SQL.split(';').map(s => s.trim()).filter(Boolean)) {
-      await conn.run(stmt);
-    }
-  } finally {
-    conn.closeSync();
-  }
-}
-
 /**
  * Check whether the analytics DuckDB file already exists for a given company.
  * Used by read-side queries to avoid creating a DB just for a read.
@@ -86,50 +73,50 @@ export function analyticsDbExists(companyId: number): boolean {
 }
 
 /**
- * Returns the DuckDBInstance for the given company, creating it on first access.
- * Uses the shared duckdb-registry so the analytics DB and any user-configured
- * DuckDB connection pointing at the same file share a single instance (no lock conflict).
+ * Resolve the absolute DB path for a company, ensuring the directory exists.
  */
-export async function getAnalyticsDb(companyId: number): Promise<DuckDBInstance> {
+function getAnalyticsDbPath(companyId: number): string {
   const dir = getAnalyticsDbDir();
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
+  return path.join(dir, `${companyId}.duckdb`);
+}
 
-  const dbPath = path.join(dir, `${companyId}.duckdb`);
-  const instance = await getOrCreateDuckDbInstance(dbPath);
-
-  // Run schema init once per path (all CREATE IF NOT EXISTS — safe to repeat, but skip for perf)
-  if (!initializedPaths.has(dbPath)) {
-    await initSchema(instance);
-    initializedPaths.add(dbPath);
-  }
-
-  return instance;
+/**
+ * Ensure schema is initialized for a given path (once per process).
+ */
+async function ensureSchema(dbPath: string): Promise<void> {
+  if (initializedPaths.has(dbPath)) return;
+  await withDuckDbConnection(dbPath, 'READ_WRITE', async (conn) => {
+    for (const stmt of SCHEMA_SQL.split(';').map(s => s.trim()).filter(Boolean)) {
+      await conn.run(stmt);
+    }
+  });
+  initializedPaths.add(dbPath);
 }
 
 /**
  * Run a parameterized write statement (INSERT/UPDATE/DELETE).
- * Creates a short-lived connection and closes it after use.
+ * Serialized via the per-file mutex in duckdb-registry.
  */
-export async function runStatement(db: DuckDBInstance, sql: string, params: unknown[]): Promise<void> {
-  const conn = await db.connect();
-  try {
+export async function runStatement(companyId: number, sql: string, params: unknown[]): Promise<void> {
+  const dbPath = getAnalyticsDbPath(companyId);
+  await ensureSchema(dbPath);
+  await withDuckDbConnection(dbPath, 'READ_WRITE', async (conn) => {
     await conn.run(toPositional(sql), params as never);
-  } finally {
-    conn.closeSync();
-  }
+  });
 }
 
 /**
  * Run a parameterized read query and return all rows as plain JS objects.
+ * Serialized via the per-file mutex in duckdb-registry.
  */
-export async function runQuery<T = Record<string, unknown>>(db: DuckDBInstance, sql: string, params: unknown[]): Promise<T[]> {
-  const conn = await db.connect();
-  try {
+export async function runQuery<T = Record<string, unknown>>(companyId: number, sql: string, params: unknown[]): Promise<T[]> {
+  const dbPath = getAnalyticsDbPath(companyId);
+  await ensureSchema(dbPath);
+  return withDuckDbConnection(dbPath, 'READ_WRITE', async (conn) => {
     const result = await conn.run(toPositional(sql), params as never);
     return await result.getRowObjectsJS() as T[];
-  } finally {
-    conn.closeSync();
-  }
+  });
 }

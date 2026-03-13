@@ -17,9 +17,9 @@ import * as os from 'os';
 jest.unmock('@/lib/analytics/file-analytics.server');
 
 // NOTE: process.env.ANALYTICS_DB_DIR is read at *call time* (not import time),
-// so setting it in beforeAll() before any getAnalyticsDb() call works correctly.
+// so setting it in beforeAll() before any runQuery() call works correctly.
 import { trackFileEvent } from '@/lib/analytics/file-analytics.server';
-import { getAnalyticsDb, runQuery } from '@/lib/analytics/file-analytics.db';
+import { runQuery } from '@/lib/analytics/file-analytics.db';
 
 const TEST_DIR = path.join(os.tmpdir(), `minusx-analytics-test-${process.pid}`);
 
@@ -47,29 +47,21 @@ describe('File Analytics - DuckDB event tracking', () => {
 
   describe('schema initialization', () => {
     it('creates the DuckDB file and file_events table on first access', async () => {
-      const db = await getAnalyticsDb(COMPANY_A);
-      expect(db).toBeDefined();
-
-      const dbPath = path.join(TEST_DIR, `${COMPANY_A}.duckdb`);
-      expect(fs.existsSync(dbPath)).toBe(true);
-
+      // runQuery triggers ensureSchema which creates the DB
       const rows = await runQuery<{ count: bigint }>(
-        db,
+        COMPANY_A,
         'SELECT COUNT(*) AS count FROM file_events',
         []
       );
       expect(Number(rows[0].count)).toBe(0);
-    });
 
-    it('returns the same Database instance on repeated calls (pool hit)', async () => {
-      const db1 = await getAnalyticsDb(COMPANY_A);
-      const db2 = await getAnalyticsDb(COMPANY_A);
-      expect(db1).toBe(db2);
+      const dbPath = path.join(TEST_DIR, `${COMPANY_A}.duckdb`);
+      expect(fs.existsSync(dbPath)).toBe(true);
     });
 
     it('is idempotent: CREATE TABLE IF NOT EXISTS does not error on re-init', async () => {
-      // getAnalyticsDb is called again — should not throw even though table exists
-      await expect(getAnalyticsDb(COMPANY_A)).resolves.toBeDefined();
+      // runQuery calls ensureSchema again — should not throw even though table exists
+      await expect(runQuery(COMPANY_A, 'SELECT 1', [])).resolves.toBeDefined();
     });
   });
 
@@ -91,9 +83,8 @@ describe('File Analytics - DuckDB event tracking', () => {
         companyId: COMPANY_A,
       });
 
-      const db = await getAnalyticsDb(COMPANY_A);
       const rows = await runQuery<Record<string, unknown>>(
-        db,
+        COMPANY_A,
         "SELECT * FROM file_events WHERE event_type = 'created' AND file_id = 10",
         []
       );
@@ -126,9 +117,8 @@ describe('File Analytics - DuckDB event tracking', () => {
         companyId: COMPANY_A,
       });
 
-      const db = await getAnalyticsDb(COMPANY_A);
       const rows = await runQuery<Record<string, unknown>>(
-        db,
+        COMPANY_A,
         "SELECT * FROM file_events WHERE event_type = 'updated' AND file_id = 10",
         []
       );
@@ -149,9 +139,8 @@ describe('File Analytics - DuckDB event tracking', () => {
         companyId: COMPANY_A,
       });
 
-      const db = await getAnalyticsDb(COMPANY_A);
       const rows = await runQuery<Record<string, unknown>>(
-        db,
+        COMPANY_A,
         "SELECT * FROM file_events WHERE event_type = 'read_direct' AND file_id = 20",
         []
       );
@@ -174,9 +163,8 @@ describe('File Analytics - DuckDB event tracking', () => {
         referencedByFileType: 'dashboard',
       });
 
-      const db = await getAnalyticsDb(COMPANY_A);
       const rows = await runQuery<Record<string, unknown>>(
-        db,
+        COMPANY_A,
         "SELECT * FROM file_events WHERE event_type = 'read_as_reference' AND file_id = 10",
         []
       );
@@ -198,10 +186,9 @@ describe('File Analytics - DuckDB event tracking', () => {
         companyId: COMPANY_A,
       });
 
-      const db = await getAnalyticsDb(COMPANY_A);
       // file 10 has accumulated: created → updated → read_as_reference → deleted
       const rows = await runQuery<{ event_type: string }>(
-        db,
+        COMPANY_A,
         "SELECT event_type FROM file_events WHERE file_id = 10 ORDER BY id",
         []
       );
@@ -226,9 +213,8 @@ describe('File Analytics - DuckDB event tracking', () => {
         // No fileType, filePath, fileName, userId, userEmail, userRole, referenced*
       });
 
-      const db = await getAnalyticsDb(COMPANY_A);
       const rows = await runQuery<Record<string, unknown>>(
-        db,
+        COMPANY_A,
         'SELECT * FROM file_events WHERE file_id = 30',
         []
       );
@@ -265,9 +251,8 @@ describe('File Analytics - DuckDB event tracking', () => {
     });
 
     it("Company B's events are not visible in Company A's DB", async () => {
-      const dbA = await getAnalyticsDb(COMPANY_A);
       const rows = await runQuery<{ file_id: number }>(
-        dbA,
+        COMPANY_A,
         'SELECT file_id FROM file_events WHERE file_id = 100',
         []
       );
@@ -276,9 +261,8 @@ describe('File Analytics - DuckDB event tracking', () => {
     });
 
     it("Company B's DB has exactly the one event inserted for it", async () => {
-      const dbB = await getAnalyticsDb(COMPANY_B);
       const rows = await runQuery<{ count: bigint }>(
-        dbB,
+        COMPANY_B,
         'SELECT COUNT(*) AS count FROM file_events',
         []
       );
@@ -297,9 +281,8 @@ describe('File Analytics - DuckDB event tracking', () => {
       await trackFileEvent({ eventType: 'updated', fileId: 41, userEmail: 'alice@example.com', companyId: COMPANY_A });
       await trackFileEvent({ eventType: 'updated', fileId: 42, userEmail: 'alice@example.com', companyId: COMPANY_A });
 
-      const db = await getAnalyticsDb(COMPANY_A);
       const rows = await runQuery<{ user_email: string; edit_count: bigint }>(
-        db,
+        COMPANY_A,
         "SELECT user_email, COUNT(*) AS edit_count FROM file_events WHERE event_type = 'updated' AND user_email IS NOT NULL GROUP BY user_email ORDER BY edit_count DESC",
         []
       );
@@ -312,9 +295,8 @@ describe('File Analytics - DuckDB event tracking', () => {
     });
 
     it('supports DATE_TRUNC for time-series sparklines', async () => {
-      const db = await getAnalyticsDb(COMPANY_A);
       const rows = await runQuery<{ day: unknown; events: bigint }>(
-        db,
+        COMPANY_A,
         "SELECT DATE_TRUNC('day', timestamp) AS day, COUNT(*) AS events FROM file_events GROUP BY day ORDER BY day",
         []
       );
@@ -324,9 +306,8 @@ describe('File Analytics - DuckDB event tracking', () => {
     });
 
     it('supports COUNT DISTINCT user_email for unique viewers', async () => {
-      const db = await getAnalyticsDb(COMPANY_A);
       const rows = await runQuery<{ unique_viewers: bigint }>(
-        db,
+        COMPANY_A,
         "SELECT COUNT(DISTINCT user_email) AS unique_viewers FROM file_events WHERE event_type = 'read_direct'",
         []
       );

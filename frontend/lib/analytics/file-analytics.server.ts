@@ -1,5 +1,5 @@
 import 'server-only';
-import { getAnalyticsDb, runStatement, runQuery } from './file-analytics.db';
+import { runStatement, runQuery } from './file-analytics.db';
 import { FileEvent, FileAnalyticsSummary, ConversationAnalyticsSummary } from './file-analytics.types';
 import type { LLMCallDetail } from '@/lib/chat-orchestration';
 
@@ -14,9 +14,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
  * Fire-and-forget: call without await from critical paths.
  */
 export async function trackFileEvent(event: FileEvent): Promise<void> {
-  const db = await getAnalyticsDb(event.companyId);
-
-  await runStatement(db, INSERT_SQL, [
+  await runStatement(event.companyId, INSERT_SQL, [
     event.eventType,
     event.fileId,
     event.fileType ?? null,
@@ -70,13 +68,10 @@ export async function getFileAnalyticsSummary(
   companyId: number
 ): Promise<FileAnalyticsSummary | null> {
   try {
-    const db = await getAnalyticsDb(companyId);
-
-    const [aggRows, createdByRows, lastEditedByRows] = await Promise.all([
-      runQuery<Record<string, unknown>>(db, AGGREGATION_SQL, [fileId]),
-      runQuery<Record<string, unknown>>(db, CREATED_BY_SQL, [fileId]),
-      runQuery<Record<string, unknown>>(db, LAST_EDITED_BY_SQL, [fileId]),
-    ]);
+    // Run sequentially — DuckDB access is serialized per-file anyway
+    const aggRows = await runQuery<Record<string, unknown>>(companyId, AGGREGATION_SQL, [fileId]);
+    const createdByRows = await runQuery<Record<string, unknown>>(companyId, CREATED_BY_SQL, [fileId]);
+    const lastEditedByRows = await runQuery<Record<string, unknown>>(companyId, LAST_EDITED_BY_SQL, [fileId]);
 
     const agg = aggRows[0] ?? {};
     return {
@@ -106,7 +101,6 @@ export async function getFilesAnalyticsSummary(
 ): Promise<Record<number, FileAnalyticsSummary>> {
   try {
     if (fileIds.length === 0) return {};
-    const db = await getAnalyticsDb(companyId);
 
     const placeholders = fileIds.map(() => '?').join(', ');
 
@@ -139,11 +133,10 @@ WHERE file_id IN (${placeholders}) AND event_type = 'updated'
 GROUP BY file_id
 `;
 
-    const [aggRows, createdByRows, lastEditedByRows] = await Promise.all([
-      runQuery<Record<string, unknown>>(db, BATCH_AGG_SQL, fileIds),
-      runQuery<Record<string, unknown>>(db, BATCH_CREATED_BY_SQL, fileIds),
-      runQuery<Record<string, unknown>>(db, BATCH_LAST_EDITED_BY_SQL, fileIds),
-    ]);
+    // Run sequentially — DuckDB access is serialized per-file anyway
+    const aggRows = await runQuery<Record<string, unknown>>(companyId, BATCH_AGG_SQL, fileIds);
+    const createdByRows = await runQuery<Record<string, unknown>>(companyId, BATCH_CREATED_BY_SQL, fileIds);
+    const lastEditedByRows = await runQuery<Record<string, unknown>>(companyId, BATCH_LAST_EDITED_BY_SQL, fileIds);
 
     // Index by fileId
     const createdByMap = new Map<number, string | null>();
@@ -206,23 +199,24 @@ export async function trackLLMCallEvents(
   conversationId: number,
   companyId: number
 ): Promise<void> {
-  const db = await getAnalyticsDb(companyId);
-  const inserts = Object.values(llmCalls).map((call) =>
-    runStatement(db, INSERT_LLM_SQL, [
-      conversationId,
-      call.llm_call_id ?? null,
-      call.model,
-      call.total_tokens,
-      call.prompt_tokens,
-      call.completion_tokens,
-      call.cost,
-      call.duration,
-      call.finish_reason ?? null,
-    ]).catch((err: unknown) =>
-      console.error('[analytics] trackLLMCallEvents insert failed:', err)
-    )
-  );
-  await Promise.allSettled(inserts);
+  // Insert sequentially to avoid concurrent DuckDB access
+  for (const call of Object.values(llmCalls)) {
+    try {
+      await runStatement(companyId, INSERT_LLM_SQL, [
+        conversationId,
+        call.llm_call_id ?? null,
+        call.model,
+        call.total_tokens,
+        call.prompt_tokens,
+        call.completion_tokens,
+        call.cost,
+        call.duration,
+        call.finish_reason ?? null,
+      ]);
+    } catch (err) {
+      console.error('[analytics] trackLLMCallEvents insert failed:', err);
+    }
+  }
 }
 
 const CONV_AGG_SQL = `
@@ -245,8 +239,7 @@ export async function getConversationAnalytics(
   companyId: number
 ): Promise<ConversationAnalyticsSummary | null> {
   try {
-    const db = await getAnalyticsDb(companyId);
-    const rows = await runQuery<Record<string, unknown>>(db, CONV_AGG_SQL, [conversationId]);
+    const rows = await runQuery<Record<string, unknown>>(companyId, CONV_AGG_SQL, [conversationId]);
 
     if (rows.length === 0) return null;
 
