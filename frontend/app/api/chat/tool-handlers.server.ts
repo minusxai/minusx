@@ -17,6 +17,8 @@ import { JSONPath } from 'jsonpath-plus';
 import { searchInField } from '@/lib/search/file-search-utils';
 import { searchFilesInFolder } from '@/lib/search/file-search';
 import { executeQuery as execQuery } from '@/lib/api/execute-query.server';
+import { getNodeConnector } from '@/lib/connections';
+import { compressQueryResult } from '@/lib/api/file-state';
 
 // ============================================================================
 // Tool Implementations
@@ -333,12 +335,27 @@ registerTool('Clarify', async (args, _user, childResults) => {
 
 /**
  * ExecuteQuery - Standalone query execution (backend tool)
- * Executes SQL without modifying any files
+ * Executes SQL without modifying any files.
+ * DuckDB connections are handled in Node.js to avoid Python's exclusive file lock.
  */
-registerTool('ExecuteQuery', async (args) => {
+registerTool('ExecuteQuery', async (args, user) => {
   const { query, connectionId, parameters = {} } = args;
 
-  // Execute query
+  // Look up connection type; if Node.js handles it, bypass Python entirely
+  const connPath = resolvePath(user.mode, `/database/${connectionId}`);
+  const connFile = await DocumentDB.getByPath(connPath, user.companyId);
+  if (connFile?.content) {
+    const { type, config } = connFile.content as ConnectionContent;
+    const connector = getNodeConnector(connectionId, type, config);
+    if (connector) {
+      const result = await connector.query(query, parameters);
+      const compressed = compressQueryResult(result);
+      const details = { success: true, queryResult: result };
+      return { content: compressed, details };
+    }
+  }
+
+  // Fall through to Python for postgresql, bigquery, etc.
   const result = await execQuery({
     query,
     connectionId,
