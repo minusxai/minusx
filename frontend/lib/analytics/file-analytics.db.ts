@@ -2,6 +2,7 @@ import 'server-only';
 import * as path from 'path';
 import * as fs from 'fs';
 import { DuckDBInstance } from '@duckdb/node-api';
+import { getOrCreateDuckDbInstance } from '@/lib/connections/duckdb-registry';
 
 // Schema for per-company analytics database
 const SCHEMA_SQL = `
@@ -47,10 +48,8 @@ CREATE INDEX IF NOT EXISTS idx_llm_conv ON llm_call_events(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_llm_ts   ON llm_call_events(timestamp);
 `;
 
-// Module-level pool: one DuckDBInstance per companyId, persists for process lifetime
-const pool = new Map<number, DuckDBInstance>();
-// Tracks in-progress initializations to prevent concurrent init for same company
-const initPromises = new Map<number, Promise<DuckDBInstance>>();
+// Track which absolute paths have already had initSchema run (idempotent guard)
+const initializedPaths = new Set<string>();
 
 // Convert legacy ? placeholders to $1, $2, ... (DuckDB prepared statement syntax)
 function toPositional(sql: string): string {
@@ -88,35 +87,25 @@ export function analyticsDbExists(companyId: number): boolean {
 
 /**
  * Returns the DuckDBInstance for the given company, creating it on first access.
- * Thread-safe: deduplicates concurrent init calls via initPromises.
+ * Uses the shared duckdb-registry so the analytics DB and any user-configured
+ * DuckDB connection pointing at the same file share a single instance (no lock conflict).
  */
 export async function getAnalyticsDb(companyId: number): Promise<DuckDBInstance> {
-  if (pool.has(companyId)) {
-    return pool.get(companyId)!;
+  const dir = getAnalyticsDbDir();
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
   }
 
-  if (initPromises.has(companyId)) {
-    return initPromises.get(companyId)!;
-  }
+  const dbPath = path.join(dir, `${companyId}.duckdb`);
+  const instance = await getOrCreateDuckDbInstance(dbPath);
 
-  const initPromise = (async () => {
-    const dir = getAnalyticsDbDir();
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-
-    const dbPath = path.join(dir, `${companyId}.duckdb`);
-    const instance = await DuckDBInstance.create(dbPath);
-
+  // Run schema init once per path (all CREATE IF NOT EXISTS — safe to repeat, but skip for perf)
+  if (!initializedPaths.has(dbPath)) {
     await initSchema(instance);
+    initializedPaths.add(dbPath);
+  }
 
-    pool.set(companyId, instance);
-    initPromises.delete(companyId);
-    return instance;
-  })();
-
-  initPromises.set(companyId, initPromise);
-  return initPromise;
+  return instance;
 }
 
 /**

@@ -1,4 +1,5 @@
 import { BACKEND_URL } from '@/lib/constants';
+import { getNodeConnector } from '@/lib/connections';
 
 export async function initializeConnectionOnPython(
   name: string,
@@ -86,12 +87,25 @@ export async function testConnectionConfig(
 }
 
 /**
- * Fetch schema from Python backend
+ * Fetch schema from Python backend (or Node.js for DuckDB-type connections).
  *
  * NOTE: No Next.js caching here - caching is handled by connection loader
  * which stores schemas in the database with proper refresh logic
  */
 export async function getSchemaFromPython(name: string, type: string, config: Record<string, any>) {
+  // Handle DuckDB (and csv/google-sheets) entirely in Node.js — avoids Python's exclusive file lock
+  const connector = getNodeConnector(name, type, config);
+  if (connector) {
+    try {
+      const schemas = await connector.getSchema();
+      console.log(`[getSchemaFromPython] Node.js schema for ${name}: ${schemas.length} schemas`);
+      return { schemas };
+    } catch (error: any) {
+      console.error(`[getSchemaFromPython] Node.js schema error for ${name}:`, error);
+      return { schemas: [] };
+    }
+  }
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes
 
