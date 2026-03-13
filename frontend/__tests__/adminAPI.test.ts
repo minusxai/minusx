@@ -557,7 +557,7 @@ describe('POST /api/admin/reset-tutorial', () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.success).toBe(true);
-    expect(body.documentsCreated).toBe(26);
+    expect(body.documentsCreated).toBe(46);
 
     const { createAdapter } = await import('@/lib/database/adapter/factory');
     const db = await createAdapter({ type: 'sqlite', sqlitePath: TEST_DB_PATH });
@@ -715,14 +715,14 @@ describe('POST /api/admin/reset-tutorial', () => {
     const response1 = await resetTutorialHandler(request1, {} as any);
     expect(response1.status).toBe(200);
     const body1 = await response1.json();
-    expect(body1.documentsCreated).toBe(26);
+    expect(body1.documentsCreated).toBe(46);
 
     const request2 = createResetRequest();
     const response2 = await resetTutorialHandler(request2, {} as any);
     expect(response2.status).toBe(200);
     const body2 = await response2.json();
     expect(body2.success).toBe(true);
-    expect(body2.documentsCreated).toBe(26);
+    expect(body2.documentsCreated).toBe(46);
 
     const { createAdapter } = await import('@/lib/database/adapter/factory');
     const db = await createAdapter({ type: 'sqlite', sqlitePath: TEST_DB_PATH });
