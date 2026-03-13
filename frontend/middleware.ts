@@ -141,9 +141,10 @@ export default auth((req) => {
     requestHeaders.set('x-impersonate-user', asUser);
   }
 
-  // Set mode header (always, default to 'org' if not present or invalid)
+  // Set mode header — 'internals' restricted to admins only
   if (mode && isValidMode(mode)) {
-    requestHeaders.set('x-mode', mode);
+    const isInternalsAllowed = mode !== 'internals' || (req.auth.user?.role && isAdmin(req.auth.user.role));
+    requestHeaders.set('x-mode', isInternalsAllowed ? mode : 'org');
   } else {
     requestHeaders.set('x-mode', 'org');
   }

@@ -1,9 +1,9 @@
 /**
- * Admin-only API endpoint for resetting tutorial mode to pristine template state
+ * Admin-only API endpoint for resetting tutorial and internals modes to pristine template state
  * POST /api/admin/reset-tutorial
  *
- * Wipes all tutorial-mode documents (paths under /tutorial/) and re-inserts
- * the 27 canonical tutorial docs from company-template.json.
+ * Wipes all tutorial-mode and internals-mode documents and re-inserts
+ * the canonical seed docs from company-template.json.
  * Useful for demos, onboarding resets, and testing.
  * Requires admin role.
  */
@@ -34,6 +34,7 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
 
     const processedTemplate = templateContent
       .replace(/"{{COMPANY_ID}}"/g, String(companyId))
+      .replace(/\{\{COMPANY_ID\}\}/g, String(companyId))
       .replace(/\{\{COMPANY_NAME\}\}/g, '')
       .replace(/\{\{ADMIN_EMAIL\}\}/g, '')
       .replace(/\{\{ADMIN_NAME\}\}/g, '')
@@ -44,7 +45,7 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
 
     const initData = JSON.parse(processedTemplate);
 
-    // Filter to tutorial docs only
+    // Filter to tutorial and internals seed docs
     const allDocs: Array<{
       id: number;
       name: string;
@@ -57,27 +58,29 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
       updated_at: string;
     }> = initData.companies[0].documents;
 
-    const tutorialDocs = allDocs.filter(
-      (doc) => doc.path === '/tutorial' || doc.path.startsWith('/tutorial/')
+    const seedDocs = allDocs.filter(
+      (doc) =>
+        doc.path === '/tutorial' || doc.path.startsWith('/tutorial/') ||
+        doc.path === '/internals' || doc.path.startsWith('/internals/')
     );
 
-    // Execute in a transaction: delete all tutorial state, then re-insert template docs
+    // Execute in a transaction: delete all tutorial/internals state, then re-insert template docs
     const db = await getAdapter();
     await db.transaction(async (tx) => {
-      // Delete user-created tutorial files (any ID, tutorial path)
+      // Delete user-created tutorial and internals files (any ID, by path)
       await tx.query(
-        "DELETE FROM files WHERE company_id = $1 AND (path = '/tutorial' OR path LIKE '/tutorial/%')",
+        "DELETE FROM files WHERE company_id = $1 AND (path = '/tutorial' OR path LIKE '/tutorial/%' OR path = '/internals' OR path LIKE '/internals/%')",
         [companyId]
       );
 
-      // Delete seed data orphans (low IDs that may not match tutorial paths after user edits)
+      // Delete seed data orphans (low IDs that may not match paths after user edits)
       await tx.query(
         'DELETE FROM files WHERE company_id = $1 AND id < 100',
         [companyId]
       );
 
-      // Re-insert all 27 tutorial template documents
-      for (const doc of tutorialDocs) {
+      // Re-insert all tutorial and internals template documents
+      for (const doc of seedDocs) {
         await tx.query(
           'INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
           [
@@ -100,8 +103,8 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
 
     return NextResponse.json({
       success: true,
-      message: 'Tutorial reset to pristine template state',
-      documentsCreated: tutorialDocs.length,
+      message: 'Tutorial and internals reset to pristine template state',
+      documentsCreated: seedDocs.length,
     });
   } catch (error: any) {
     console.error('Reset tutorial error:', error);

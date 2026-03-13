@@ -28,6 +28,7 @@ import {
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { getSafeConfig, validateConnectionName, RESERVED_NAMES, validateDuckDbFilePath } from './helpers/connections';
 import { resolvePath } from '@/lib/mode/path-resolver';
+import { getNodeConnector } from '@/lib/connections';
 
 class ConnectionsDataLayerServer implements IConnectionsDataLayer {
   async listAll(user: EffectiveUser, includeSchemas = false): Promise<ListConnectionsResult> {
@@ -55,7 +56,10 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
     const schemaPromises = connections.map(async conn => {
       const content = conn.content as ConnectionContent;
       try {
-        const schema = await getSchemaFromPython(conn.name, content.type, content.config);
+        const connector = getNodeConnector(conn.name, content.type, content.config);
+        const schema = connector
+          ? { schemas: await connector.getSchema() }
+          : await getSchemaFromPython(conn.name, content.type, content.config);
         return { name: conn.name, schema };
       } catch (error) {
         console.error(`[ConnectionsAPI] Failed to fetch schema for ${conn.name}:`, error);
@@ -110,8 +114,12 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
       throw new Error(`Connection '${input.name}' already exists`);
     }
 
-    // Validate with Python backend before creating
-    const validationResult = await validateConnectionBeforeCreate(input.type, input.config);
+    // Validate connection before creating.
+    // DuckDB connections are tested in Node.js; all others go through Python.
+    const nodeConnector = getNodeConnector(input.name, input.type, input.config);
+    const validationResult = nodeConnector
+      ? await nodeConnector.testConnection(false)
+      : await validateConnectionBeforeCreate(input.type, input.config);
     if (!validationResult.success) {
       throw new Error(`Connection test failed: ${validationResult.message}`);
     }
@@ -163,14 +171,17 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
 
     await DocumentDB.update(conn.id, name, conn.path, content, [], user.companyId);  // Phase 6: Connections have no references
 
-    // Re-initialize on Python backend and capture schema
+    // Re-initialize on Python backend and capture schema.
+    // DuckDB connections are handled entirely in Node.js — skip Python to avoid lock conflict.
     let schema: DatabaseSchema | null = null;
-    try {
-      await removeConnectionFromPython(name);
-      const initResult = await initializeConnectionOnPython(name, content.type, config);
-      schema = initResult.schema || null;
-    } catch (error) {
-      console.error(`[ConnectionsAPI] Failed to re-initialize connection ${name}:`, error);
+    if (!getNodeConnector(name, content.type, config)) {
+      try {
+        await removeConnectionFromPython(name);
+        const initResult = await initializeConnectionOnPython(name, content.type, config);
+        schema = initResult.schema || null;
+      } catch (error) {
+        console.error(`[ConnectionsAPI] Failed to re-initialize connection ${name}:`, error);
+      }
     }
 
     const updated = await DocumentDB.getById(conn.id, user.companyId);

@@ -86,10 +86,12 @@ export async function testConnectionConfig(
 }
 
 /**
- * Fetch schema from Python backend
+ * Fetch schema from Python backend.
  *
  * NOTE: No Next.js caching here - caching is handled by connection loader
- * which stores schemas in the database with proper refresh logic
+ * which stores schemas in the database with proper refresh logic.
+ * NOTE: DuckDB interception happens in the server-only callers
+ * (connection-loader.ts, connections.server.ts) before this is called.
  */
 export async function getSchemaFromPython(name: string, type: string, config: Record<string, any>) {
   const controller = new AbortController();

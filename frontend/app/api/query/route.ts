@@ -1,10 +1,13 @@
-import type { QuestionParameter, QuestionReference, QuestionContent } from '@/lib/types';
+import type { QuestionParameter, QuestionReference, QuestionContent, ConnectionContent } from '@/lib/types';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
 import { NextRequest } from 'next/server';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import { CTEfyQuery, ResolvedReference } from '@/lib/sql/query-composer';
 import { FilesAPI } from '@/lib/data/files.server';
+import { DocumentDB } from '@/lib/database/documents-db';
+import { resolvePath } from '@/lib/mode/path-resolver';
+import { getNodeConnector } from '@/lib/connections';
 
 // Route segment config: optimize for API routes
 export const dynamic = 'force-dynamic';
@@ -50,6 +53,20 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       // Use extracted function to build CTEs
       finalQuery = CTEfyQuery(query, resolvedRefs);
       console.log(`[QUERY API] CTE construction took ${Date.now() - cteStart}ms`);
+    }
+
+    // Check if the connection type can be handled in Node.js (DuckDB, csv, google-sheets)
+    const connPath = resolvePath(user.mode, `/database/${database_name}`);
+    const connFile = await DocumentDB.getByPath(connPath, user.companyId);
+    if (connFile?.content) {
+      const { type, config } = connFile.content as ConnectionContent;
+      const connector = getNodeConnector(database_name, type, config);
+      if (connector) {
+        console.log(`[QUERY API] Executing ${type} query in Node.js`);
+        const result = await connector.query(finalQuery, paramValues);
+        console.log(`[QUERY API] Total request time: ${Date.now() - startTime}ms`);
+        return successResponse(result);
+      }
     }
 
     console.log(`[QUERY API] Forwarding to Python backend: /api/execute-query`);
