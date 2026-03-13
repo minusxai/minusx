@@ -7,6 +7,25 @@ import { getOrCreateDuckDbInstance } from './duckdb-registry';
 
 const SKIP_SCHEMAS = new Set(['system', 'temp']);
 
+// JSON can't serialize BigInt — convert to number (safe for typical analytics IDs/counts).
+// Values exceeding Number.MAX_SAFE_INTEGER are stringified to preserve precision.
+function serializeValue(v: unknown): unknown {
+  if (typeof v === 'bigint') {
+    return v <= BigInt(Number.MAX_SAFE_INTEGER) && v >= BigInt(Number.MIN_SAFE_INTEGER)
+      ? Number(v)
+      : v.toString();
+  }
+  if (Array.isArray(v)) return v.map(serializeValue);
+  if (v !== null && typeof v === 'object') return serializeRow(v as Record<string, unknown>);
+  return v;
+}
+
+function serializeRow(row: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const k in row) out[k] = serializeValue(row[k]);
+  return out;
+}
+
 /**
  * Resolve a DuckDB file path to an absolute path.
  * Mirrors Python's backend/config.py:resolve_duckdb_path().
@@ -113,7 +132,8 @@ export class DuckDbConnector extends NodeConnector {
         columns.push(result.columnName(i));
         types.push(duckDbTypeIdToString(result.columnTypeId(i)));
       }
-      const rows = await result.getRowObjectsJS() as Record<string, unknown>[];
+      const rawRows = await result.getRowObjectsJS() as Record<string, unknown>[];
+      const rows = rawRows.map(serializeRow);
       return { columns, types, rows };
     } finally {
       conn.closeSync();
