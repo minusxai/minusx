@@ -1,29 +1,21 @@
 import 'server-only';
 import * as path from 'path';
 import * as fs from 'fs';
-import { DuckDBTypeId } from '@duckdb/node-api';
 import { NodeConnector, SchemaEntry, QueryResult, TestConnectionResult } from './base';
 import { getOrCreateDuckDbInstance } from './duckdb-registry';
 
 const SKIP_SCHEMAS = new Set(['system', 'temp']);
 
-// JSON can't serialize BigInt — convert to number (safe for typical analytics IDs/counts).
-// Values exceeding Number.MAX_SAFE_INTEGER are stringified to preserve precision.
-function serializeValue(v: unknown): unknown {
-  if (typeof v === 'bigint') {
-    return v <= BigInt(Number.MAX_SAFE_INTEGER) && v >= BigInt(Number.MIN_SAFE_INTEGER)
-      ? Number(v)
-      : v.toString();
-  }
-  if (Array.isArray(v)) return v.map(serializeValue);
-  if (v !== null && typeof v === 'object') return serializeRow(v as Record<string, unknown>);
-  return v;
-}
-
-function serializeRow(row: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const k in row) out[k] = serializeValue(row[k]);
-  return out;
+// Make rows JSON-safe: JSON.stringify handles Date→ISO string natively;
+// BigInt needs an explicit replacer since it throws otherwise.
+function makeJsonSafe(rows: Record<string, unknown>[]): Record<string, unknown>[] {
+  return JSON.parse(JSON.stringify(rows, (_, v) => {
+    if (typeof v === 'bigint') {
+      return v <= BigInt(Number.MAX_SAFE_INTEGER) && v >= BigInt(Number.MIN_SAFE_INTEGER)
+        ? Number(v) : v.toString();
+    }
+    return v;
+  }));
 }
 
 /**
@@ -44,38 +36,6 @@ export function resolveDuckDbFilePath(filePath: string): string {
   }
   const base = process.env.BASE_DUCKDB_DATA_PATH || '..';
   return path.resolve(base, filePath);
-}
-
-function duckDbTypeIdToString(typeId: number): string {
-  switch (typeId) {
-    case DuckDBTypeId.BIGINT:       return 'BIGINT';
-    case DuckDBTypeId.INTEGER:      return 'INTEGER';
-    case DuckDBTypeId.SMALLINT:     return 'SMALLINT';
-    case DuckDBTypeId.TINYINT:      return 'TINYINT';
-    case DuckDBTypeId.UBIGINT:      return 'UBIGINT';
-    case DuckDBTypeId.UINTEGER:     return 'UINTEGER';
-    case DuckDBTypeId.USMALLINT:    return 'USMALLINT';
-    case DuckDBTypeId.UTINYINT:     return 'UTINYINT';
-    case DuckDBTypeId.HUGEINT:      return 'HUGEINT';
-    case DuckDBTypeId.DOUBLE:       return 'DOUBLE';
-    case DuckDBTypeId.FLOAT:        return 'FLOAT';
-    case DuckDBTypeId.DECIMAL:      return 'DECIMAL';
-    case DuckDBTypeId.VARCHAR:      return 'VARCHAR';
-    case DuckDBTypeId.BOOLEAN:      return 'BOOLEAN';
-    case DuckDBTypeId.DATE:         return 'DATE';
-    case DuckDBTypeId.TIMESTAMP:    return 'TIMESTAMP';
-    case DuckDBTypeId.TIMESTAMP_S:  return 'TIMESTAMP_S';
-    case DuckDBTypeId.TIMESTAMP_MS: return 'TIMESTAMP_MS';
-    case DuckDBTypeId.TIMESTAMP_NS: return 'TIMESTAMP_NS';
-    case DuckDBTypeId.TIMESTAMP_TZ: return 'TIMESTAMP WITH TIME ZONE';
-    case DuckDBTypeId.BLOB:         return 'BLOB';
-    case DuckDBTypeId.UUID:         return 'UUID';
-    case DuckDBTypeId.INTERVAL:     return 'INTERVAL';
-    case DuckDBTypeId.LIST:         return 'LIST';
-    case DuckDBTypeId.STRUCT:       return 'STRUCT';
-    case DuckDBTypeId.MAP:          return 'MAP';
-    default:                        return 'VARCHAR';
-  }
 }
 
 /**
@@ -130,10 +90,10 @@ export class DuckDbConnector extends NodeConnector {
       const types: string[] = [];
       for (let i = 0; i < colCount; i++) {
         columns.push(result.columnName(i));
-        types.push(duckDbTypeIdToString(result.columnTypeId(i)));
+        types.push(result.columnType(i).toString());
       }
       const rawRows = await result.getRowObjectsJS() as Record<string, unknown>[];
-      const rows = rawRows.map(serializeRow);
+      const rows = makeJsonSafe(rawRows);
       return { columns, types, rows };
     } finally {
       conn.closeSync();
