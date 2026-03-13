@@ -191,7 +191,7 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
             {/* Show citations with thinking if no answer exists */}
             {showCitationsWithThinking && renderCitations(true)}
 
-            {showThinking && parsed?.unparsed && (
+            {parsed?.unparsed && (
                 <GridItem
                     key={`unparsed`}
                     colSpan={12}
