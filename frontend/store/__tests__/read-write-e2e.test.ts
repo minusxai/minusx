@@ -1382,7 +1382,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         });
 
         expect(result.success).toBe(false);
-        expect(result.error).toMatch(/found \d+ times/);
+        expect(result.error).toMatch(/oldMatch found \d+ times/);
         console.log(`✓ replaceAll: false correctly errored: ${result.error}`);
       });
 

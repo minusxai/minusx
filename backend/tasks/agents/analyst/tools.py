@@ -294,6 +294,13 @@ class EditFile(Tool):
     parameters array in the same newMatch. The frontend auto-syncs on user edit, but EditFile
     bypasses that — orphaned or missing parameters will cause query execution to fail.
 
+    replaceAll behaviour:
+    - replaceAll=true (default): replace EVERY occurrence of oldMatch in the file JSON.
+      Use this when renaming a column/table that appears in multiple places (SELECT, WHERE, GROUP BY, etc.).
+    - replaceAll=false: replace only if oldMatch is unique. If it appears more than once the
+      tool returns an error — add more surrounding context to oldMatch to make it unique, or
+      switch back to replaceAll=true if you really want all occurrences replaced.
+
     The tool validates changes and returns a diff.
     Changes are staged as drafts in Redux. The user reviews and publishes all pending changes
     via the Publish All button. You do not need to call Navigate or PublishFile.
@@ -306,7 +313,7 @@ class EditFile(Tool):
         fileId: int = Field(..., description="File ID to edit"),
         oldMatch: str = Field(..., description="String to search for in full file JSON (including name, path, content)"),
         newMatch: str = Field(..., description=f"String to replace with. File JSON schema: {ATLAS_FILE_SCHEMA_JSON}"),
-        replaceAll: bool = Field(True, description="If true (default), replace all occurrences of oldMatch. If false, replace only the first occurrence and error if multiple are found."),
+        replaceAll: bool = Field(True, description="If true (default), replace ALL occurrences of oldMatch — good for renaming a column/table that appears many times. If false, the tool errors when oldMatch is not unique so you can widen the match and be precise."),
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore

@@ -652,7 +652,7 @@ export async function editFileStr(
   if (!replaceAll) {
     const count = fullFileStr.split(oldMatch).length - 1;
     if (count > 1) {
-      return { success: false, error: `String found ${count} times — provide more surrounding context to make it unique, or omit replaceAll to replace all occurrences` };
+      return { success: false, error: `oldMatch found ${count} times — it is not unique. Either (a) add more surrounding context to oldMatch so it matches exactly one location, or (b) use replaceAll=true to replace all ${count} occurrences` };
     }
     editedStr = fullFileStr.replace(oldMatch, newMatch);
   } else {
