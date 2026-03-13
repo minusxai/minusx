@@ -38,22 +38,21 @@ const CRON_PRESETS = [
   { value: '0 9 * * 1-5', label: 'Weekdays at 9am' },
   { value: '0 9 1 * *', label: 'Monthly on 1st' },
   { value: '0 17 * * 5', label: 'Fridays at 5pm' },
+  { value: '__custom__', label: 'Custom Schedule' },
 ];
+
+const CRON_PRESET_VALUES = new Set(CRON_PRESETS.filter(p => p.value !== '__custom__').map(p => p.value));
 
 const cronCollection = createListCollection({
   items: CRON_PRESETS.map(p => ({ value: p.value, label: p.label }))
 });
 
 const TIMEZONES = [
-  { value: 'America/New_York', label: 'ET' },
-  { value: 'America/Chicago', label: 'CT' },
-  { value: 'America/Denver', label: 'MT' },
-  { value: 'America/Los_Angeles', label: 'PT' },
   { value: 'UTC', label: 'UTC' },
-  { value: 'Europe/London', label: 'GMT' },
-  { value: 'Europe/Paris', label: 'CET' },
-  { value: 'Asia/Tokyo', label: 'JST' },
-  { value: 'Asia/Kolkata', label: 'IST' },
+  { value: 'America/Los_Angeles', label: 'America/Los_Angeles' },
+  { value: 'America/New_York', label: 'America/New_York' },
+  { value: 'Asia/Jakarta', label: 'Asia/Jakarta' },
+  { value: 'Asia/Kolkata', label: 'Asia/Kolkata' },
 ];
 
 const timezoneCollection = createListCollection({
@@ -524,10 +523,18 @@ export default function AlertView({
                     </Box>
                     <Input
                       type="number"
-                      value={alert.condition?.threshold ?? 0}
-                      onChange={(e) => onChange({
-                        condition: { ...alert.condition, threshold: parseFloat(e.target.value) || 0 }
-                      })}
+                      defaultValue={alert.condition?.threshold ?? 0}
+                      onChange={(e) => {
+                        const val = e.target.valueAsNumber;
+                        if (!isNaN(val)) onChange({ condition: { ...alert.condition, threshold: val } });
+                      }}
+                      onBlur={(e) => {
+                        const val = e.target.valueAsNumber;
+                        if (isNaN(val)) {
+                          e.target.value = '0';
+                          onChange({ condition: { ...alert.condition, threshold: 0 } });
+                        }
+                      }}
                       disabled={!editMode}
                       size="sm"
                       fontFamily="mono"
@@ -573,13 +580,15 @@ export default function AlertView({
                 </HStack>
 
                 <HStack gap={2}>
-                  <Box flex={2}>
+                  <Box flex={1}>
                     <SelectRoot
                       collection={cronCollection}
-                      value={[alert.schedule?.cron || '0 9 * * 1']}
-                      onValueChange={(e) => onChange({
-                        schedule: { ...alert.schedule, cron: e.value[0] }
-                      })}
+                      value={[CRON_PRESET_VALUES.has(alert.schedule?.cron || '') ? (alert.schedule?.cron || '0 9 * * 1') : '__custom__']}
+                      onValueChange={(e) => {
+                        if (e.value[0] !== '__custom__') {
+                          onChange({ schedule: { ...alert.schedule, cron: e.value[0] } });
+                        }
+                      }}
                       disabled={!editMode}
                       size="sm"
                     >

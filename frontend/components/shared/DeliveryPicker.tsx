@@ -189,6 +189,7 @@ export function DeliveryPicker({ emails, onChange, disabled }: DeliveryPickerPro
             onFocus={() => setShowDropdown(true)}
             onBlur={handleBlur}
             onKeyDown={handleKeyDown}
+            autoComplete="one-time-code"
             placeholder={emails.length === 0 ? 'Add email or select user...' : ''}
             size="xs"
             variant="outline"
