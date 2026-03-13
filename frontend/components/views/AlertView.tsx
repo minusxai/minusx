@@ -524,10 +524,18 @@ export default function AlertView({
                     </Box>
                     <Input
                       type="number"
-                      value={alert.condition?.threshold ?? 0}
-                      onChange={(e) => onChange({
-                        condition: { ...alert.condition, threshold: parseFloat(e.target.value) || 0 }
-                      })}
+                      defaultValue={alert.condition?.threshold ?? 0}
+                      onChange={(e) => {
+                        const val = e.target.valueAsNumber;
+                        if (!isNaN(val)) onChange({ condition: { ...alert.condition, threshold: val } });
+                      }}
+                      onBlur={(e) => {
+                        const val = e.target.valueAsNumber;
+                        if (isNaN(val)) {
+                          e.target.value = '0';
+                          onChange({ condition: { ...alert.condition, threshold: 0 } });
+                        }
+                      }}
                       disabled={!editMode}
                       size="sm"
                       fontFamily="mono"
