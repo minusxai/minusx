@@ -315,6 +315,7 @@ templates:
     - **One field per edit**. Never span multiple content keys (e.g. `"query":"...","parameters":[...]`) — JSON key order is not guaranteed.
     - For SQL edits: match the minimum unique clause (a single line/condition), not the full query.
     - AppState is pretty-printed, stored format is compact — EditFile normalizes this, but shorter matches are safer.
+    - File content in app state and tool outputs, use **literal newlines** (not `\n` escape sequences so no double backslash needed when trying to match)
     - Verify `isDirty: true` after each edit. If false or change is absent, retry with shorter `oldMatch`.
 
     ### SQL

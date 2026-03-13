@@ -642,7 +642,13 @@ export async function editFileStr(
   // matches directly — no fallback escaping needed.
   const fullFileStr = encodeFileStr(fullFile);
 
-  if (!fullFileStr.includes(oldMatch)) {
+  // Normalize \n escape sequences to literal newlines (LLM sometimes outputs \\n instead of real newlines)
+  const normalizedOldMatch = oldMatch.includes('\\n') ? oldMatch.replace(/\\n/g, '\n') : oldMatch;
+  const normalizedNewMatch = newMatch.includes('\\n') ? newMatch.replace(/\\n/g, '\n') : newMatch;
+  const effectiveOldMatch = fullFileStr.includes(oldMatch) ? oldMatch : normalizedOldMatch;
+  const effectiveNewMatch = oldMatch === effectiveOldMatch ? newMatch : normalizedNewMatch;
+
+  if (!fullFileStr.includes(effectiveOldMatch)) {
     return { success: false, error: `String "${oldMatch}" not found in file` };
   }
 
@@ -650,13 +656,13 @@ export async function editFileStr(
   let editedStr: string;
 
   if (!replaceAll) {
-    const count = fullFileStr.split(oldMatch).length - 1;
+    const count = fullFileStr.split(effectiveOldMatch).length - 1;
     if (count > 1) {
       return { success: false, error: `oldMatch found ${count} times — it is not unique. Either (a) add more surrounding context to oldMatch so it matches exactly one location, or (b) use replaceAll=true to replace all ${count} occurrences` };
     }
-    editedStr = fullFileStr.replace(oldMatch, newMatch);
+    editedStr = fullFileStr.replace(effectiveOldMatch, effectiveNewMatch);
   } else {
-    editedStr = fullFileStr.split(oldMatch).join(newMatch);
+    editedStr = fullFileStr.split(effectiveOldMatch).join(effectiveNewMatch);
   }
 
   // Decode back to object
