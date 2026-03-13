@@ -108,9 +108,8 @@ export const formatNumber = (value: number, decimalPoints?: number): string => {
 export const DATE_FORMAT_OPTIONS = [
   { value: 'iso', label: '2024-01-15' },
   { value: 'us', label: '01/15/2024' },
-  { value: 'eu', label: '15/01/2024' },
   { value: 'short', label: 'Jan 15, 2024' },
-  { value: 'month-year', label: 'Jan 2024' },
+  { value: 'month-year', label: "Jan'24" },
   { value: 'year', label: '2024' },
 ] as const
 
@@ -119,16 +118,15 @@ export const formatDateValue = (dateStr: string, format: string): string => {
   if (isNaN(d.getTime())) return dateStr
 
   const pad = (n: number) => n.toString().padStart(2, '0')
-  const month = d.toLocaleString('en-US', { month: 'short' })
-  const day = d.getDate()
-  const year = d.getFullYear()
+  const month = d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })
+  const day = d.getUTCDate()
+  const year = d.getUTCFullYear()
 
   switch (format) {
-    case 'iso': return `${year}-${pad(d.getMonth() + 1)}-${pad(day)}`
-    case 'us': return `${pad(d.getMonth() + 1)}/${pad(day)}/${year}`
-    case 'eu': return `${pad(day)}/${pad(d.getMonth() + 1)}/${year}`
+    case 'iso': return `${year}-${pad(d.getUTCMonth() + 1)}-${pad(day)}`
+    case 'us': return `${pad(d.getUTCMonth() + 1)}/${pad(day)}/${year}`
     case 'short': return `${month} ${day}, ${year}`
-    case 'month-year': return `${month} ${year}`
+    case 'month-year': return `${month}'${(year % 100).toString().padStart(2, '0')}`
     case 'year': return `${year}`
     default: return dateStr
   }
@@ -498,8 +496,8 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
     if (!isDateData) return null
 
     const dates = xAxisData.map(v => new Date(v))
-    const years = new Set(dates.map(d => d.getFullYear()))
-    const yearMonths = new Set(dates.map(d => `${d.getFullYear()}-${d.getMonth()}`))
+    const years = new Set(dates.map(d => d.getUTCFullYear()))
+    const yearMonths = new Set(dates.map(d => `${d.getUTCFullYear()}-${d.getUTCMonth()}`))
     const uniqueDates = new Set(xAxisData)
 
     return {
@@ -640,22 +638,23 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           // Priority when space is tight: Year > Month > Day
           const date = new Date(value)
           if (!isNaN(date.getTime()) && /^\d{4}-\d{2}-\d{2}/.test(value) && dateFormatNeeds) {
-            const month = date.toLocaleString('en-US', { month: 'short' })
-            const day = date.getDate()
-            const year = date.getFullYear()
+            const month = date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })
+            const day = date.getUTCDate()
+            const year = date.getUTCFullYear()
             const shortYear = (year % 100).toString().padStart(2, '0')
+            const pad = (n: number) => n.toString().padStart(2, '0')
             const { needsDay } = dateFormatNeeds
 
             // Always try to show year first (most important), then month, then day
             // Only drop components when space is insufficient
             if (maxLabelLength >= 9 && needsDay) {
-              return `${day}-${month}-${shortYear}` // "31-Dec-24" (9 chars) - full detail
+              return `${year}-${month}-${pad(day)}` // "2024-Sep-01" - full detail
             } else if (maxLabelLength >= 6) {
-              return `${month}'${shortYear}` // "Dec'24" (6 chars) - drop day, keep year+month
+              return `${month}'${shortYear}` // "Sep'24" - drop day, keep year+month
             } else if (maxLabelLength >= 3) {
-              return `'${shortYear}` // "'24" (3 chars) - year only
+              return `${year}` // "2024" - full year
             }
-            return month // "Dec" - fallback
+            return month // "Sep" - fallback
           }
 
           // Dynamically truncate long labels based on available space
