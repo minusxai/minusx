@@ -4,7 +4,7 @@ Tests the core sqlglot-based autocomplete engine independently.
 """
 
 import pytest
-from autocomplete import get_completions
+from sql_utils.autocomplete import get_completions
 
 
 def test_column_completion_filtered_by_tables_in_scope():
