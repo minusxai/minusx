@@ -10,8 +10,6 @@ import json
 import asyncio
 import logging
 import traceback
-import sqlglot
-from sqlglot import exp as sqlexp
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List, Callable
 from dotenv import load_dotenv
@@ -32,6 +30,7 @@ from processors import process_csv_upload, delete_csv_connection
 from processors import process_google_sheets_import, delete_google_sheets_connection
 from sql_utils.limit_enforcer import enforce_query_limit
 from sql_utils.validator import validate_sql as validate_sql_syntax
+from sql_utils.column_inferrer import infer_columns
 from sql_utils.autocomplete import get_completions, AutocompleteRequest, get_mention_completions, MentionItem
 from sql_ir import parse_sql_to_ir, ir_to_sql, UnsupportedSQLError, QueryIR
 
@@ -505,104 +504,14 @@ class InferColumnsRequest(BaseModel):
     dialect: Optional[str] = None
 
 
-class InferredColumn(BaseModel):
-    name: str
-    type: str
-
-
-class InferColumnsResponse(BaseModel):
-    columns: List[InferredColumn]
-    error: Optional[str] = None
-
-
-@app.post("/api/infer-columns", response_model=InferColumnsResponse)
+@app.post("/api/infer-columns")
 async def infer_columns_endpoint(request: InferColumnsRequest):
-    """
-    Infer output column names and types from a SQL query using sqlglot.
-    Does not execute the query - uses static analysis only.
-    Falls back to 'unknown' type for unresolvable expressions.
-    """
-    try:
-        dialect = request.dialect or "postgres"
-        ast = sqlglot.parse_one(request.query, read=dialect)
-
-        # Find the outermost SELECT statement
-        select_stmt = ast
-        if not isinstance(select_stmt, sqlexp.Select):
-            # Try to find a Select node
-            select_stmt = ast.find(sqlexp.Select)
-
-        if not select_stmt:
-            return InferColumnsResponse(columns=[], error="Could not find SELECT statement")
-
-        columns: List[InferredColumn] = []
-        for expr in select_stmt.expressions:
-            # Determine column name
-            if isinstance(expr, sqlexp.Alias):
-                col_name = expr.alias
-                inner = expr.this
-            elif isinstance(expr, sqlexp.Column):
-                col_name = expr.name
-                inner = expr
-            elif isinstance(expr, sqlexp.Star):
-                # SELECT * - try to expand from schema_data
-                # schema_data structure: [{databaseName, schemas: [{schema, tables: [{table, columns}]}]}]
-                if request.schema_data:
-                    for schema_entry in request.schema_data:
-                        for schema_obj in schema_entry.get("schemas", []):
-                            for table_entry in schema_obj.get("tables", []):
-                                for col in table_entry.get("columns", []):
-                                    columns.append(InferredColumn(
-                                        name=col.get("name", "?"),
-                                        type=col.get("type", "unknown")
-                                    ))
-                else:
-                    columns.append(InferredColumn(name="*", type="unknown"))
-                continue
-            else:
-                # Use SQL text as name fallback
-                col_name = expr.sql(dialect=dialect)
-                inner = expr
-
-            # Determine type - try to infer from expression
-            col_type = "unknown"
-            if isinstance(inner, sqlexp.Cast):
-                col_type = inner.to.sql(dialect=dialect).lower()
-            elif isinstance(inner, sqlexp.Anonymous) or isinstance(inner, sqlexp.Func):
-                func_name = inner.sql_name().lower() if hasattr(inner, 'sql_name') else ""
-                if any(x in func_name for x in ("count", "sum", "avg", "min", "max")):
-                    col_type = "number"
-                elif any(x in func_name for x in ("date", "timestamp", "now", "current")):
-                    col_type = "timestamp"
-                elif any(x in func_name for x in ("concat", "lower", "upper", "trim", "substr")):
-                    col_type = "text"
-            elif isinstance(inner, sqlexp.Literal):
-                if inner.is_number:
-                    col_type = "number"
-                else:
-                    col_type = "text"
-            elif isinstance(inner, sqlexp.Column):
-                # Try to look up column type from schema_data
-                # schema_data structure: [{databaseName, schemas: [{schema, tables: [{table, columns}]}]}]
-                col_ref_name = inner.name
-                table_ref = inner.table if inner.table else None
-                for schema_entry in request.schema_data:
-                    for schema_obj in schema_entry.get("schemas", []):
-                        for table_entry in schema_obj.get("tables", []):
-                            if table_ref and table_entry.get("table") != table_ref:
-                                continue
-                            for col in table_entry.get("columns", []):
-                                if col.get("name") == col_ref_name:
-                                    col_type = col.get("type", "unknown")
-                                    break
-
-            columns.append(InferredColumn(name=col_name, type=col_type))
-
-        return InferColumnsResponse(columns=columns)
-
-    except Exception as e:
-        logger.warning(f"[infer-columns] Error inferring columns: {e}")
-        return InferColumnsResponse(columns=[], error=str(e))
+    """Infer output column names and types from a SQL query using sqlglot static analysis."""
+    result = infer_columns(request.query, request.schema_data, request.dialect or "postgres")
+    return {
+        "columns": [{"name": c.name, "type": c.type} for c in result.columns],
+        "error": result.error,
+    }
 
 
 class MentionRequest(BaseModel):
