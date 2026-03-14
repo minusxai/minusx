@@ -13,6 +13,7 @@ import {
   TableSuggestionsResult,
   ColumnSuggestionsOptions,
   ColumnSuggestionsResult,
+  ValidateSqlResult,
 } from './types';
 
 const API_BASE = '';  // Same origin
@@ -350,6 +351,21 @@ class CompletionsDataLayerClient implements ICompletionsDataLayer {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       };
+    }
+  }
+
+  async validateSql(query: string, databaseName?: string): Promise<ValidateSqlResult> {
+    try {
+      const res = await fetch(`${API_BASE}/api/validate-sql`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, databaseName }),
+      });
+      if (!res.ok) return { valid: true, errors: [] };
+      return res.json();
+    } catch (error) {
+      console.error('[Completions Client] SQL validation error:', error);
+      return { valid: true, errors: [] };
     }
   }
 }

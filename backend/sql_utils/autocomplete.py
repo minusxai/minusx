@@ -3,6 +3,7 @@ SQL Autocomplete Engine
 Uses sqlglot for robust SQL parsing and context-aware suggestions.
 """
 
+import re
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 import sqlglot
@@ -89,7 +90,6 @@ def needs_column_completion(text: str) -> bool:
         r'\bON\s+\w*$',
         r',\s*\w*$',
     ]
-    import re
     return any(re.search(p, text, re.IGNORECASE) for p in patterns)
 
 
@@ -101,7 +101,6 @@ def needs_table_completion(text: str) -> bool:
         r'\bINTO\s+\w*$',
         r'\bUPDATE\s+\w*$',
     ]
-    import re
     return any(re.search(p, text, re.IGNORECASE) for p in patterns)
 
 
@@ -236,7 +235,6 @@ def get_dot_completions(
     text_before_cursor: str
 ) -> List[CompletionItem]:
     """Get completions for dot notation (schema.table or table.column)"""
-    import re
     # Limit search to last 200 chars to prevent regex DoS
     search_text = text_before_cursor[-200:] if len(text_before_cursor) > 200 else text_before_cursor
     match = re.search(r'(\w+)\.\w*$', search_text)
@@ -309,7 +307,6 @@ def get_schema_dot_completions_fallback(
     Handle schema.table pattern when SQL parsing fails (incomplete SQL).
     No AST available, so we use regex to extract schema name.
     """
-    import re
     # Limit search to last 200 chars to prevent regex DoS
     search_text = text_before_cursor[-200:] if len(text_before_cursor) > 200 else text_before_cursor
     match = re.search(r'(\w+)\.\w*$', search_text)

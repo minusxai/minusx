@@ -142,7 +142,10 @@ export default function SqlEditor({
   const startHeightRef = useRef(0);
   const { config } = useConfigs();
   const agentName = config.branding.agentName;
-  
+  const validationRequestIdRef = useRef(0);
+  const validationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const databaseNameRef = useRef(databaseName);
+
 
   // Keep the ref updated with the latest onRun callback
   useEffect(() => {
@@ -166,6 +169,50 @@ export default function SqlEditor({
     schemaDataRef.current = schemaData;
   }, [schemaData]);
 
+  // Keep databaseName ref updated
+  useEffect(() => {
+    databaseNameRef.current = databaseName;
+  }, [databaseName]);
+
+  // Debounced SQL validation function
+  const triggerValidation = (editor: any, monaco: any) => {
+    if (validationTimeoutRef.current) {
+      clearTimeout(validationTimeoutRef.current);
+    }
+    validationTimeoutRef.current = setTimeout(async () => {
+      const model = editor.getModel();
+      if (!model || readOnly) return;
+
+      const query = model.getValue().trim();
+      if (!query) {
+        monaco.editor.setModelMarkers(model, 'sql-validation', []);
+        return;
+      }
+
+      validationRequestIdRef.current += 1;
+      const requestId = validationRequestIdRef.current;
+
+      const result = await CompletionsAPI.validateSql(query, databaseNameRef.current);
+
+      // Staleness check
+      if (requestId !== validationRequestIdRef.current) return;
+
+      if (result.valid) {
+        monaco.editor.setModelMarkers(model, 'sql-validation', []);
+      } else {
+        const markers = result.errors.map((err) => ({
+          startLineNumber: err.line,
+          startColumn: err.col,
+          endLineNumber: err.line,
+          endColumn: err.end_col,
+          message: err.message,
+          severity: monaco.MarkerSeverity.Error,
+        }));
+        monaco.editor.setModelMarkers(model, 'sql-validation', markers);
+      }
+    }, 800);
+  };
+
   // Debounced API autocomplete fetch with staleness checking (promise-aware)
   const debouncedFetchCompletions = useMemo(
     () => debouncePromise(async (query: string, cursorOffset: number, context: any, requestId: number) => {
@@ -181,7 +228,7 @@ export default function SqlEditor({
         console.error('Autocomplete error:', error);
         return { suggestions: [], requestId };
       }
-    }, 100),  // 100ms debounce
+    }, 200),  // 200ms debounce
     []
   );
 
@@ -332,6 +379,22 @@ export default function SqlEditor({
       }
     };
   }, [readOnly]);
+
+  // Cleanup validation timeout and markers on unmount
+  useEffect(() => {
+    return () => {
+      if (validationTimeoutRef.current) {
+        clearTimeout(validationTimeoutRef.current);
+      }
+      // Clear markers
+      if (editorRef.current && monacoRef.current) {
+        const model = editorRef.current.getModel();
+        if (model) {
+          monacoRef.current.editor.setModelMarkers(model, 'sql-validation', []);
+        }
+      }
+    };
+  }, []);
 
   const handleChange = (value: string | undefined) => {
     if (onChange && value !== undefined) {
@@ -632,10 +695,15 @@ export default function SqlEditor({
                 editor.onDidChangeModelContent(() => {
                   if (decorationTimeout) clearTimeout(decorationTimeout);
                   decorationTimeout = setTimeout(updateDecorations, 150);
+                  // Trigger SQL validation
+                  triggerValidation(editor, monaco);
                 });
 
                 // Initial decoration
                 updateDecorations();
+
+                // Initial SQL validation
+                triggerValidation(editor, monaco);
 
                 if (onRun && !readOnly) {
                   editor.addCommand(
@@ -667,6 +735,7 @@ export default function SqlEditor({
                 wrappingIndent: 'indent',
                 automaticLayout: true,
                 tabSize: 2,
+                fixedOverflowWidgets: true,
                 // Enable autocomplete suggestions
                 suggestOnTriggerCharacters: true,
                 quickSuggestions: true,

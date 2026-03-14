@@ -164,3 +164,21 @@ export interface ColumnSuggestionsResult {
   columns?: ColumnSuggestion[];
   error?: string;
 }
+
+/**
+ * SQL validation error with position info
+ */
+export interface SqlValidationError {
+  message: string;
+  line: number;      // 1-indexed
+  col: number;       // 1-indexed
+  end_col: number;   // 1-indexed
+}
+
+/**
+ * SQL validation result
+ */
+export interface ValidateSqlResult {
+  valid: boolean;
+  errors: SqlValidationError[];
+}
