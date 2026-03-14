@@ -83,7 +83,7 @@ export const Table = ({ columns, types, rows, pageSize: fixedPageSize }: TablePr
   const [currentPage, setCurrentPage] = useState(1)
   const [stats, setStats] = useState<Record<string, ColumnStats> | null>(null)
   const [histograms, setHistograms] = useState<Record<string, Array<{ bin: number; binMin: number; binMax: number; count: number }>>>({})
-  const [loadingStats, setLoadingStats] = useState(true)
+  const [loadingStats, setLoadingStats] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerHeight, setContainerHeight] = useState<number>(0)
   const [containerWidth, setContainerWidth] = useState<number>(0)
@@ -246,6 +246,14 @@ export const Table = ({ columns, types, rows, pageSize: fixedPageSize }: TablePr
     return (
       <Box color="fg.subtle" fontSize="sm" textAlign="center" py={8}>
         No data available
+      </Box>
+    )
+  }
+
+  if (rows.length === 0) {
+    return (
+      <Box color="fg.subtle" fontSize="sm" textAlign="center" h={"100%"} display="flex" alignItems="center" justifyContent="center">
+        Uh-oh, no data in results!
       </Box>
     )
   }
