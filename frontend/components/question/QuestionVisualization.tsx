@@ -283,7 +283,7 @@ export function QuestionVisualization({
               <>
                 {currentState?.vizSettings?.type === 'table' && (
                   <Box flex="1" minHeight="0" overflow="hidden" display="flex" width={"100%"} alignItems={"stretch"} flexDirection={"column"}>
-                    <Table columns={data.columns} types={data.types} rows={data.rows} />
+                    <Table columns={data.columns} types={data.types} rows={data.rows} sql={currentState?.query} databaseName={currentState?.database_name} />
                   </Box>
                 )}
                 {(currentState?.vizSettings?.type === 'line' ||

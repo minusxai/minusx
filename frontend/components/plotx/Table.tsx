@@ -5,12 +5,15 @@ import { calculateColumnStats, ColumnStats, getColumnType, loadDataIntoTable, ge
 import { calculateHistogram } from '@/lib/chart/histogram'
 import { MiniHistogram } from './MiniHistogram'
 import { MiniBarChart } from './MiniBarChart'
+import { DrillDownCard, type DrillDownState } from './DrillDownCard'
 
 interface TableProps {
   columns: string[]
   types?: string[]
   rows: Record<string, any>[]
   pageSize?: number // Optional fixed page size, otherwise calculated from height
+  sql?: string
+  databaseName?: string
 }
 
 type ColumnType = 'text' | 'number' | 'date' | 'json'
@@ -79,8 +82,10 @@ const getTypeColor = (type: ColumnType) => {
   }
 }
 
-export const Table = ({ columns, types, rows, pageSize: fixedPageSize }: TableProps) => {
+export const Table = ({ columns, types, rows, pageSize: fixedPageSize, sql, databaseName }: TableProps) => {
   const [currentPage, setCurrentPage] = useState(1)
+  const [drillDown, setDrillDown] = useState<DrillDownState | null>(null)
+  const closeDrillDown = useCallback(() => setDrillDown(null), [])
   const [stats, setStats] = useState<Record<string, ColumnStats> | null>(null)
   const [histograms, setHistograms] = useState<Record<string, Array<{ bin: number; binMin: number; binMax: number; count: number }>>>({})
   const [loadingStats, setLoadingStats] = useState(false)
@@ -429,6 +434,16 @@ export const Table = ({ columns, types, rows, pageSize: fixedPageSize }: TablePr
                       overflow="hidden"
                       textOverflow="ellipsis"
                       whiteSpace="nowrap"
+                      cursor="pointer"
+                      _hover={{ bg: 'bg.muted' }}
+                      onClick={(e) => {
+                        setDrillDown({
+                          filters: { [column]: formatValue(row[column], columnTypes[originalIndex]) },
+                          filterTypes: { [column]: columnTypes[originalIndex] },
+                          yColumn: column,
+                          position: { x: e.clientX, y: e.clientY },
+                        })
+                      }}
                     >
                       {formatValue(row[column], columnTypes[originalIndex])}
                     </ChakraTable.Cell>
@@ -557,6 +572,7 @@ export const Table = ({ columns, types, rows, pageSize: fixedPageSize }: TablePr
           </HStack>
         )}
       </HStack>
+      <DrillDownCard drillDown={drillDown} onClose={closeDrillDown} sql={sql} databaseName={databaseName} />
     </Box>
   )
 }
