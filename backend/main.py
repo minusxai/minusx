@@ -10,6 +10,8 @@ import json
 import asyncio
 import logging
 import traceback
+import sqlglot
+from sqlglot import exp as sqlexp
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional, List, Callable
 from dotenv import load_dotenv
@@ -29,7 +31,8 @@ from pipelines.tap_tester import test_tap
 from processors import process_csv_upload, delete_csv_connection
 from processors import process_google_sheets_import, delete_google_sheets_connection
 from sql_utils.limit_enforcer import enforce_query_limit
-from autocomplete import get_completions, AutocompleteRequest, get_mention_completions, MentionItem
+from sql_utils.validator import validate_sql as validate_sql_syntax
+from sql_utils.autocomplete import get_completions, AutocompleteRequest, get_mention_completions, MentionItem
 from sql_ir import parse_sql_to_ir, ir_to_sql, UnsupportedSQLError, QueryIR
 
 # Import orchestration components
@@ -477,6 +480,24 @@ async def sql_autocomplete(request: AutocompleteRequest):
         return {"suggestions": []}
 
 
+class ValidateSqlRequest(BaseModel):
+    """Request to validate SQL syntax"""
+    query: str
+    db_type: str = "postgres"
+
+
+@app.post("/api/validate-sql")
+async def validate_sql(request: ValidateSqlRequest):
+    """Validate SQL syntax using sqlglot and return error positions."""
+    try:
+        dialect = _get_dialect_for_connection(request.db_type)
+        result = validate_sql_syntax(request.query, dialect)
+        return {"valid": result.valid, "errors": [e.__dict__ for e in result.errors]}
+    except Exception as e:
+        logger.error(f"SQL validation error: {e}")
+        return {"valid": True, "errors": []}
+
+
 class InferColumnsRequest(BaseModel):
     """Request to infer output columns from a SQL query"""
     query: str
@@ -502,9 +523,6 @@ async def infer_columns_endpoint(request: InferColumnsRequest):
     Falls back to 'unknown' type for unresolvable expressions.
     """
     try:
-        import sqlglot
-        from sqlglot import exp as sqlexp
-
         dialect = request.dialect or "postgres"
         ast = sqlglot.parse_one(request.query, read=dialect)
 
