@@ -192,7 +192,7 @@ async function calculateTextStats(tableName: string, column: string): Promise<Te
   }
 }
 
-export function getColumnType(sqlType: string): 'number' | 'date' | 'text' {
+export function getColumnType(sqlType: string): 'number' | 'date' | 'text' | 'json' {
   const type = sqlType.toUpperCase()
 
   if (
@@ -208,6 +208,16 @@ export function getColumnType(sqlType: string): 'number' | 'date' | 'text' {
 
   if (type.includes('DATE') || type.includes('TIME') || type.includes('TIMESTAMP')) {
     return 'date'
+  }
+
+  if (
+    type.includes('JSON') ||
+    type.includes('STRUCT') ||
+    type.includes('MAP') ||
+    type.includes('LIST') ||
+    type.includes('ARRAY')
+  ) {
+    return 'json'
   }
 
   return 'text'

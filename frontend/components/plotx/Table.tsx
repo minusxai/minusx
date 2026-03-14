@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Table as ChakraTable, Box, HStack, Button, Text, VStack, Menu, Portal, Icon, Spinner } from '@chakra-ui/react'
-import { LuChevronLeft, LuChevronRight, LuChevronDown, LuType, LuHash, LuCalendar, LuColumns3, LuCheck } from 'react-icons/lu'
+import { LuChevronLeft, LuChevronRight, LuChevronDown, LuType, LuHash, LuCalendar, LuBraces, LuColumns3, LuCheck } from 'react-icons/lu'
 import { calculateColumnStats, ColumnStats, getColumnType, loadDataIntoTable, generateRandomTableName } from '@/lib/database/duckdb'
 import { calculateHistogram } from '@/lib/chart/histogram'
 import { MiniHistogram } from './MiniHistogram'
@@ -13,7 +13,7 @@ interface TableProps {
   pageSize?: number // Optional fixed page size, otherwise calculated from height
 }
 
-type ColumnType = 'text' | 'number' | 'date'
+type ColumnType = 'text' | 'number' | 'date' | 'json'
 
 const formatValue = (value: any, type: ColumnType): string => {
   if (value === null || value === undefined) {
@@ -35,8 +35,18 @@ const formatValue = (value: any, type: ColumnType): string => {
       }
       return String(value)
 
+    case 'json':
+      if (typeof value === 'object') {
+        return JSON.stringify(value)
+      }
+      return String(value)
+
     case 'text':
     default:
+      // Handle objects that end up as text type (fallback)
+      if (typeof value === 'object') {
+        return JSON.stringify(value)
+      }
       return String(value)
   }
 }
@@ -47,6 +57,8 @@ const getTypeIcon = (type: ColumnType) => {
       return LuHash
     case 'date':
       return LuCalendar
+    case 'json':
+      return LuBraces
     case 'text':
     default:
       return LuType
@@ -59,6 +71,8 @@ const getTypeColor = (type: ColumnType) => {
       return '#2980b9' // Belize Hole (theme primary blue)
     case 'date':
       return '#9b59b6' // Amethyst (theme purple)
+    case 'json':
+      return '#1abc9c' // Turquoise/teal
     case 'text':
     default:
       return '#f39c12' // Orange (theme warning)

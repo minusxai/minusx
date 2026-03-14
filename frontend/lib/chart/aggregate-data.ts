@@ -49,6 +49,9 @@ export const aggregateData = (
       if (val instanceof Date) {
         return val.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
       }
+      if (typeof val === 'object' && val !== null) {
+        return JSON.stringify(val)
+      }
       return String(val)
     }).join(' | ')
 
