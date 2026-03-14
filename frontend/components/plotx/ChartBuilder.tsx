@@ -92,44 +92,36 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     return conflicts
   }, [initialXCols, initialYCols, columns])
 
-  // Auto-select columns: use initialXCols/initialYCols if provided, otherwise auto-select
-  const [xAxisColumns, setXAxisColumns] = useState<string[]>(() => {
+  // Auto-select columns: always derived from props so agent edits immediately take effect
+  const xAxisColumns = useMemo<string[]>(() => {
     if (initialXCols && initialXCols.length > 0) {
       const validCols = initialXCols.filter(col => columns.includes(col))
       if (validCols.length > 0) return validCols
     }
     return groupedColumns.dates.length > 0 ? [groupedColumns.dates[0]] : []
-  })
+  }, [initialXCols, columns, groupedColumns])
 
-  const [yAxisColumns, setYAxisColumns] = useState<string[]>(() => {
+  const yAxisColumns = useMemo<string[]>(() => {
     if (initialYCols && initialYCols.length > 0) {
       const validCols = initialYCols.filter(col => columns.includes(col))
       if (validCols.length > 0) return validCols
     }
     return groupedColumns.numbers.length > 0 ? [groupedColumns.numbers[0]] : []
-  })
+  }, [initialYCols, columns, groupedColumns])
 
-  // Track if user has manually changed column selection
-  const [hasUserModifiedColumns, setHasUserModifiedColumns] = useState(false)
-
-
-
-  // Column format config
-  const [columnFormats, setColumnFormats] = useState<Record<string, ColumnFormatConfig>>(initialColumnFormats || {})
+  // Column format config — always derived from props
+  const columnFormats = useMemo<Record<string, ColumnFormatConfig>>(() => initialColumnFormats ?? {}, [initialColumnFormats])
 
   const handleColumnFormatChange = useCallback((column: string, config: ColumnFormatConfig) => {
     const isEmpty = !config.alias && config.decimalPoints === undefined && !config.dateFormat
-    setColumnFormats(prev => {
-      const next = { ...prev }
-      if (isEmpty) {
-        delete next[column]
-      } else {
-        next[column] = config
-      }
-      onColumnFormatsChange?.(next)
-      return next
-    })
-  }, [onColumnFormatsChange])
+    const next = { ...(initialColumnFormats ?? {}) }
+    if (isEmpty) {
+      delete next[column]
+    } else {
+      next[column] = config
+    }
+    onColumnFormatsChange?.(next)
+  }, [initialColumnFormats, onColumnFormatsChange])
 
   // Helper: resolve display name using alias
   const getDisplayName = useCallback((col: string) => columnFormats[col]?.alias || col, [columnFormats])
@@ -176,36 +168,24 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   // Handle drop on X axis
   const handleDropX = useCallback((col: string) => {
     if (!xAxisColumns.includes(col)) {
-      const newXCols = [...xAxisColumns, col]
-      setXAxisColumns(newXCols)
-      setHasUserModifiedColumns(true)
-      onAxisChange?.(newXCols, yAxisColumns)
+      onAxisChange?.([...xAxisColumns, col], yAxisColumns)
     }
   }, [xAxisColumns, yAxisColumns, onAxisChange])
 
   // Handle drop on Y axis
   const handleDropY = useCallback((col: string) => {
     if (!yAxisColumns.includes(col)) {
-      const newYCols = [...yAxisColumns, col]
-      setYAxisColumns(newYCols)
-      setHasUserModifiedColumns(true)
-      onAxisChange?.(xAxisColumns, newYCols)
+      onAxisChange?.(xAxisColumns, [...yAxisColumns, col])
     }
   }, [yAxisColumns, xAxisColumns, onAxisChange])
 
   // Remove column from axis
   const removeFromX = useCallback((column: string) => {
-    const newXCols = xAxisColumns.filter(c => c !== column)
-    setXAxisColumns(newXCols)
-    setHasUserModifiedColumns(true)
-    onAxisChange?.(newXCols, yAxisColumns)
+    onAxisChange?.(xAxisColumns.filter(c => c !== column), yAxisColumns)
   }, [xAxisColumns, yAxisColumns, onAxisChange])
 
   const removeFromY = useCallback((column: string) => {
-    const newYCols = yAxisColumns.filter(c => c !== column)
-    setYAxisColumns(newYCols)
-    setHasUserModifiedColumns(true)
-    onAxisChange?.(xAxisColumns, newYCols)
+    onAxisChange?.(xAxisColumns, yAxisColumns.filter(c => c !== column))
   }, [yAxisColumns, xAxisColumns, onAxisChange])
 
   // Build axis zones for AxisBuilder
@@ -440,7 +420,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
       {/* Chart Area */}
       <VStack flex="1" align="stretch" gap={0} minWidth={0} overflow="hidden" minHeight="0" height={useCompactView ? "auto" : undefined}>
         {/* Column Conflict Warning */}
-        {columnConflicts.length > 0 && !hasUserModifiedColumns && (
+        {columnConflicts.length > 0 && (
           <Box
             p={3}
             bg="accent.warning/10"
