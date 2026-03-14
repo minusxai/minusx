@@ -2,13 +2,14 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Box, HStack, VStack, Text, IconButton, Input, Button } from '@chakra-ui/react'
-import { LuSend, LuTable } from 'react-icons/lu'
+import { LuSend, LuTable, LuClipboard, LuCheck } from 'react-icons/lu'
 import { useAppDispatch } from '@/store/hooks'
 import { setSidebarPendingMessage, setRightSidebarCollapsed, setActiveSidebarSection } from '@/store/uiSlice'
 import { useConfigs } from '@/lib/hooks/useConfigs'
 
 export interface DrillDownState {
   filters: Record<string, string>
+  filterTypes?: Record<string, string>
   yColumn: string
   position: { x: number; y: number }
 }
@@ -28,6 +29,7 @@ export const DrillDownCard = ({ drillDown, onClose, sql, databaseName }: DrillDo
   const cardRef = useRef<HTMLDivElement>(null)
   const [askInput, setAskInput] = useState('')
   const [askFocused, setAskFocused] = useState(false)
+  const [copiedCol, setCopiedCol] = useState<string | null>(null)
 
   // Reset state when drill-down changes — intentional setState in effect
   useEffect(() => {
@@ -59,8 +61,12 @@ export const DrillDownCard = ({ drillDown, onClose, sql, databaseName }: DrillDo
   const handleSeeRecords = useCallback(() => {
     if (!drillDown || !sql) return
     const whereClauses = Object.entries(drillDown.filters).map(([col, val]) => {
+      const colType = drillDown.filterTypes?.[col]
+      if (colType === 'number') {
+        return `\`${col}\` = ${String(val)}`
+      }
       const escapedVal = String(val).replace(/'/g, "''")
-      return `"${col}" = '${escapedVal}'`
+      return `\`${col}\` = '${escapedVal}'`
     })
     const whereClause = whereClauses.length > 0 ? `\nWHERE ${whereClauses.join('\n  AND ')}` : ''
     const cteSql = `WITH base AS (\n${sql}\n)\nSELECT * FROM base${whereClause}`
@@ -90,9 +96,9 @@ export const DrillDownCard = ({ drillDown, onClose, sql, databaseName }: DrillDo
 
   if (!drillDown) return null
 
-  // Compute card position: anchor left or right of click depending on available space
+  // Compute card position: clamp to stay within viewport
   const cardW = askFocused ? 440 : 320
-  const cardH = 200
+  const cardH = 320
   const vw = window.innerWidth
   const vh = window.innerHeight
 
@@ -101,7 +107,11 @@ export const DrillDownCard = ({ drillDown, onClose, sql, databaseName }: DrillDo
   const x = anchorRight
     ? Math.max(8, drillDown.position.x - cardW)
     : Math.min(drillDown.position.x, vw - cardW - 8)
-  const y = Math.min(drillDown.position.y, vh - cardH - 8)
+  const spaceBelow = vh - drillDown.position.y
+  const anchorAbove = spaceBelow < cardH + 8
+  const y = anchorAbove
+    ? Math.max(8, drillDown.position.y - cardH)
+    : Math.min(drillDown.position.y, vh - cardH - 8)
 
   const filterEntries = Object.entries(drillDown.filters)
 
@@ -123,10 +133,39 @@ export const DrillDownCard = ({ drillDown, onClose, sql, databaseName }: DrillDo
     >
       <VStack align="stretch" gap={1.5}>
         {filterEntries.map(([col, val]) => (
-          <HStack key={col} gap={1.5} fontSize="xs">
-            <Text fontWeight="600" color="fg.muted" flexShrink={0}>{col}</Text>
-            <Text color="fg.default" fontFamily="mono" truncate>{String(val)}</Text>
-          </HStack>
+          <VStack key={col} align="start" gap={1}>
+            <HStack gap={1} w="100%">
+              <Text fontWeight="600" color="fg.muted" fontSize="xs" flex={1}>{col}</Text>
+              <IconButton
+                aria-label="Copy value"
+                size="2xs"
+                variant="ghost"
+                color={copiedCol === col ? 'accent.teal' : 'fg.muted'}
+                onClick={() => {
+                  navigator.clipboard.writeText(String(val))
+                  setCopiedCol(col)
+                  setTimeout(() => setCopiedCol(null), 1500)
+                }}
+              >
+                {copiedCol === col ? <>Copied <LuCheck /></> : <LuClipboard />}
+              </IconButton>
+            </HStack>
+            <Box
+              w="100%"
+              maxH="120px"
+              overflowY="auto"
+              bg="bg.muted"
+              borderRadius="md"
+              px={2}
+              py={1.5}
+              border="1px solid"
+              borderColor="border.muted"
+            >
+              <Text fontSize="xs" fontFamily="mono" color="fg.default" whiteSpace="pre-wrap" wordBreak="break-all">
+                {String(val)}
+              </Text>
+            </Box>
+          </VStack>
         ))}
         {filterEntries.length === 0 && (
           <Text fontSize="xs" color="fg.muted">Total aggregation</Text>

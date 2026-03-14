@@ -20,5 +20,7 @@ def infer_type_from_value(value) -> str:
         return 'VARCHAR'
     elif isinstance(value, bytes):
         return 'BLOB'
+    elif isinstance(value, (dict, list)):
+        return 'JSON'
     else:
         return 'UNKNOWN'

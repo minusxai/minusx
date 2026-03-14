@@ -2,18 +2,19 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Box, HStack, VStack, Text } from '@chakra-ui/react'
-import { LuHash, LuCalendar, LuType, LuX, LuSettings2 } from 'react-icons/lu'
+import { LuHash, LuCalendar, LuType, LuX, LuSettings2, LuBraces } from 'react-icons/lu'
 import { getColumnType } from '@/lib/database/duckdb'
 import { DATE_FORMAT_OPTIONS } from '@/lib/chart/chart-utils'
 import type { ColumnFormatConfig } from '@/lib/types'
 
 // Shared types
-export type ColumnType = 'date' | 'number' | 'text'
+export type ColumnType = 'date' | 'number' | 'text' | 'json'
 
 export const getTypeIcon = (type: ColumnType) => {
   switch (type) {
     case 'number': return LuHash
     case 'date': return LuCalendar
+    case 'json': return LuBraces
     case 'text': return LuType
   }
 }
@@ -22,6 +23,7 @@ export const getTypeColor = (type: ColumnType) => {
   switch (type) {
     case 'number': return '#2980b9' // Primary blue
     case 'date': return '#9b59b6'   // Purple
+    case 'json': return '#1abc9c'   // Turquoise/teal
     case 'text': return '#f39c12'   // Orange
   }
 }
