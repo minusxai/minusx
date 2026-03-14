@@ -210,7 +210,7 @@ export default function SqlEditor({
         }));
         monaco.editor.setModelMarkers(model, 'sql-validation', markers);
       }
-    }, 750);
+    }, 800);
   };
 
   // Debounced API autocomplete fetch with staleness checking (promise-aware)
@@ -228,7 +228,7 @@ export default function SqlEditor({
         console.error('Autocomplete error:', error);
         return { suggestions: [], requestId };
       }
-    }, 100),  // 100ms debounce
+    }, 200),  // 200ms debounce
     []
   );
 
@@ -735,6 +735,7 @@ export default function SqlEditor({
                 wrappingIndent: 'indent',
                 automaticLayout: true,
                 tabSize: 2,
+                fixedOverflowWidgets: true,
                 // Enable autocomplete suggestions
                 suggestOnTriggerCharacters: true,
                 quickSuggestions: true,

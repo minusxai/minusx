@@ -64,13 +64,29 @@ def validate_sql(query: str, dialect: str = "postgres") -> ValidationResult:
             line = err.get('line', 1)
             col = err.get('col', 1)
             highlight = err.get('highlight', '')
-            token_len = len(highlight) if highlight else 1
-            end_col = col + max(token_len, 1)
+            start_context = err.get('start_context', '')
+            end_context = err.get('end_context', '')
+
+            # Build a readable message: "near '...highlight...' — description"
+            snippet = (start_context + highlight + end_context).strip()
+            if len(snippet) > 40:
+                snippet = snippet[:40] + '...'
+            if snippet:
+                message = f"Syntax error near `{snippet}`: {description}"
+            else:
+                message = f"Syntax error: {description}"
+
+            # Widen the marker: extend left to cover start_context so the squiggly
+            # covers the likely mistake area, not just the token where the parser gave up
+            context_len = len(start_context.rstrip()) if start_context else 0
+            start_col = max(1, col - context_len)
+            highlight_len = len(highlight) if highlight else 1
+            end_col = col + max(highlight_len, 1)
 
             errors.append(SqlError(
-                message=description,
+                message=message,
                 line=line,
-                col=col,
+                col=start_col,
                 end_col=end_col,
             ))
 

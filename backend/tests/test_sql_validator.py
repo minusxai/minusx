@@ -95,3 +95,126 @@ class TestValidateSql:
         result = validate_sql("SELECT * FROM foo WHERE :start_date BETWEEN AND")
         assert result.valid is False
         assert result.errors[0].line == 1
+
+    # --- Multiline SQL with errors ---
+
+    def test_multiline_missing_from(self):
+        result = validate_sql("""\
+SELECT
+    u.id,
+    u.name,
+    o.total
+JION orders o ON o.user_id = u.id
+WHERE u.active = true
+""")
+        assert result.valid is False
+        assert len(result.errors) > 0
+
+    def test_multiline_unclosed_subquery(self):
+        result = validate_sql("""\
+SELECT *
+FROM (
+    SELECT id, name
+    FROM users
+    WHERE active = true
+
+WHERE id > 10
+""")
+        assert result.valid is False
+        assert len(result.errors) > 0
+
+    def test_multiline_error_reports_correct_line(self):
+        """Error on a later line should report line > 1."""
+        result = validate_sql("SELECT id\nFROM users\nWHERE id >\nORDER BY")
+        assert result.valid is False
+        err = result.errors[0]
+        assert err.line > 1
+
+    def test_multiline_cte_with_typo(self):
+        result = validate_sql("""\
+WITH monthly_revenue AS (
+    SELECT
+        DATE_TRUNC('month', created_at) AS month,
+        SUM(amount) AS revenue
+    FROM orders
+    GRUOP BY 1
+)
+SELECT *
+FROM monthly_revenue
+ORDER BY month
+""")
+        assert result.valid is False
+        assert len(result.errors) > 0
+
+    def test_multiline_double_where(self):
+        result = validate_sql("""\
+SELECT
+    u.name,
+    o.total
+FROM users u
+JOIN orders o ON o.user_id = u.id
+WHERE u.active = true
+WHERE o.created_at > '2024-01-01'
+""")
+        assert result.valid is False
+        assert len(result.errors) > 0
+
+    def test_multiline_valid_complex_query(self):
+        """A valid complex multiline query should pass."""
+        result = validate_sql("""\
+WITH active_users AS (
+    SELECT id, name, email
+    FROM users
+    WHERE active = true
+),
+user_orders AS (
+    SELECT
+        u.id,
+        u.name,
+        COUNT(o.id) AS order_count,
+        SUM(o.total) AS total_spent
+    FROM active_users u
+    LEFT JOIN orders o ON o.user_id = u.id
+    GROUP BY u.id, u.name
+)
+SELECT
+    name,
+    order_count,
+    total_spent,
+    CASE
+        WHEN total_spent > 1000 THEN 'high'
+        WHEN total_spent > 100 THEN 'medium'
+        ELSE 'low'
+    END AS tier
+FROM user_orders
+ORDER BY total_spent DESC
+LIMIT 50
+""")
+        assert result.valid is True
+
+    def test_multiline_with_params_and_references(self):
+        """Multiline query mixing :params and @references should validate."""
+        result = validate_sql("""\
+SELECT
+    r.month,
+    r.revenue,
+    c.cost,
+    r.revenue - c.cost AS profit
+FROM @revenue_by_month_1 r
+JOIN @costs_by_month_2 c ON c.month = r.month
+WHERE r.month >= :start_date
+    AND r.month <= :end_date
+ORDER BY r.month
+""")
+        assert result.valid is True
+
+    def test_multiline_mismatched_parens(self):
+        result = validate_sql("""\
+SELECT
+    id,
+    name,
+    (CASE WHEN active THEN 'yes' ELSE 'no' AS status
+FROM users
+""")
+        assert result.valid is False
+        assert len(result.errors) > 0
