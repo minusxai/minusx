@@ -237,7 +237,10 @@ export async function calculateColumnStats(
       const colType = getColumnType(sqlType)
 
       try {
-        if (colType === 'number') {
+        if (colType === 'json') {
+          // Skip stats for json columns
+          continue
+        } else if (colType === 'number') {
           stats[col] = await calculateNumberStats(tableName, col)
         } else if (colType === 'date') {
           stats[col] = await calculateDateStats(tableName, col)

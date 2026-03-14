@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Table as ChakraTable, Box, HStack, Button, Text, VStack, Menu, Portal, Icon, Spinner } from '@chakra-ui/react'
 import { LuChevronLeft, LuChevronRight, LuChevronDown, LuType, LuHash, LuCalendar, LuBraces, LuColumns3, LuCheck } from 'react-icons/lu'
 import { calculateColumnStats, ColumnStats, getColumnType, loadDataIntoTable, generateRandomTableName } from '@/lib/database/duckdb'
@@ -86,12 +86,18 @@ export const Table = ({ columns, types, rows, pageSize: fixedPageSize }: TablePr
   const [loadingStats, setLoadingStats] = useState(true)
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerHeight, setContainerHeight] = useState<number>(0)
+  const [containerWidth, setContainerWidth] = useState<number>(0)
   const [visibleColumns, setVisibleColumns] = useState<Set<string>>(new Set(columns))
 
-  // Reset visible columns when columns change — intentional setState in effect
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({})
+
+
+  // Reset visible columns and column widths when columns change — intentional setState in effect
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setVisibleColumns(new Set(columns))
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setColumnWidths({})
   }, [columns])
 
   const toggleColumn = (column: string) => {
@@ -116,6 +122,32 @@ export const Table = ({ columns, types, rows, pageSize: fixedPageSize }: TablePr
     }
   }
 
+  const handleResizeStart = useCallback((column: string, e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const headerEl = (e.target as HTMLElement).closest('th')
+    const startWidth = headerEl?.offsetWidth ?? 150
+    const startX = e.clientX
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const diff = moveEvent.clientX - startX
+      const newWidth = Math.max(100, startWidth + diff)
+      setColumnWidths(prev => ({ ...prev, [column]: newWidth }))
+    }
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }, [])
+
   // Map SQL types to column types
   const columnTypes: ColumnType[] = types
     ? types.map(getColumnType)
@@ -134,7 +166,9 @@ export const Table = ({ columns, types, rows, pageSize: fixedPageSize }: TablePr
     const updateHeight = () => {
       if (containerRef.current) {
         const height = containerRef.current.offsetHeight
+        const width = containerRef.current.offsetWidth
         if (height > 0) setContainerHeight(height)
+        if (width > 0) setContainerWidth(width)
       }
     }
 
@@ -221,6 +255,18 @@ export const Table = ({ columns, types, rows, pageSize: fixedPageSize }: TablePr
   const endIndex = startIndex + pageSize
   const currentRows = rows.slice(startIndex, endIndex)
 
+  // Compute total table width: sum of all column widths (resized or default)
+  const defaultColWidth = containerWidth > 0
+    ? Math.max(100, containerWidth / displayColumnIndices.length)
+    : 150
+  const hasResizedColumns = Object.keys(columnWidths).length > 0
+  const totalTableWidth = hasResizedColumns
+    ? displayColumnIndices.reduce((sum, idx) => {
+        const col = columns[idx]
+        return sum + (columnWidths[col] ?? defaultColWidth)
+      }, 0)
+    : undefined // let CSS handle it when no columns have been resized
+
   const handlePrevPage = () => {
     setCurrentPage((prev) => Math.max(1, prev - 1))
   }
@@ -238,8 +284,8 @@ export const Table = ({ columns, types, rows, pageSize: fixedPageSize }: TablePr
           </Text>
         </Box>
       ) : (
-      <Box overflow="auto" flex="1" minHeight="0">
-        <ChakraTable.Root key={displayColumnIndices.join(',')} variant="outline" size="sm" tableLayout="fixed">
+      <Box flex="1" minHeight="0" overflowX="scroll" overflowY="auto" css={{ '&::-webkit-scrollbar': { height: '10px', width: '10px' }, '&::-webkit-scrollbar-track': { background: 'var(--chakra-colors-bg-muted)', borderRadius: '5px' }, '&::-webkit-scrollbar-thumb': { background: '#16a085', borderRadius: '5px' }, '&::-webkit-scrollbar-thumb:hover': { background: '#1abc9c' } }}>
+        <ChakraTable.Root key={displayColumnIndices.join(',')} variant="outline" size="sm" tableLayout="fixed" minW={`${displayColumnIndices.length * 100}px`} width={totalTableWidth ? `${totalTableWidth}px` : undefined}>
           <ChakraTable.Header position="sticky" top={0} zIndex={1} bg="bg.muted">
             <ChakraTable.Row bg="bg.muted">
               {displayColumnIndices.map((originalIndex, displayIndex) => {
@@ -254,23 +300,42 @@ export const Table = ({ columns, types, rows, pageSize: fixedPageSize }: TablePr
                     py={3}
                     px={4}
                     textAlign="left"
-                    width={`${100 / displayColumnIndices.length}%`}
+                    width={columnWidths[column] ? `${columnWidths[column]}px` : `${100 / displayColumnIndices.length}%`}
                     borderRight="1px solid"
                     borderRightColor="border.default"
                     _last={{ borderRight: 'none' }}
+                    position="relative"
                   >
+                    {/* Resize handle */}
+                    <Box
+                      position="absolute"
+                      right={0}
+                      top={0}
+                      bottom={0}
+                      w="4px"
+                      cursor="col-resize"
+                      _hover={{ bg: 'accent.teal' }}
+                      transition="background 0.15s"
+                      zIndex={2}
+                      onMouseDown={(e) => handleResizeStart(column, e)}
+                    />
                     <VStack align="start" gap={1}>
-                      <HStack gap={1.5} justify="start">
+                      <HStack gap={1.5} justify="start" overflow="hidden" w="100%">
                         <Box
                           as={getTypeIcon(columnTypes[originalIndex])}
                           fontSize="11px"
                           color={getTypeColor(columnTypes[originalIndex])}
                         />
-                        <Text textTransform="uppercase" letterSpacing="0.05em">
+                        <Text textTransform="uppercase" letterSpacing="0.05em" truncate>
                           {column}
                         </Text>
                       </HStack>
                       <Box h="100px" w="100%" overflow="hidden">
+                        {columnTypes[originalIndex] === 'json' ? (
+                          <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" fontWeight="400">
+                            stats n/a
+                          </Text>
+                        ) : (<>
                         {loadingStats && !stats && (
                           <Box w="100%" h="100%" display="flex" alignItems="center" justifyContent="center">
                             <Spinner size="sm" color="fg.subtle" />
@@ -324,6 +389,7 @@ export const Table = ({ columns, types, rows, pageSize: fixedPageSize }: TablePr
                             )}
                           </>
                         )}
+                        </>)}
                       </Box>
                     </VStack>
                   </ChakraTable.ColumnHeader>
