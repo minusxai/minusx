@@ -61,9 +61,9 @@ export default function SmartEmbeddedQuestionContainer({
       {showTitle && (
         <Box
           bg={'bg.muted'}
-          px={4}
-          py={2}
-          borderBottom="2px solid"
+          px={3}
+          py={1}
+          borderBottom="1px solid"
           borderColor={editMode ? 'accent.teal' : 'border.default'}
           display="flex"
           justifyContent="space-between"

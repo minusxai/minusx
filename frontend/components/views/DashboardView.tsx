@@ -265,7 +265,7 @@ export default function DashboardView({
     if (!editMode) return null;
 
     const gridRowHeight = 80; // Must match rowHeight prop on ResponsiveGridLayout
-    const gridMargin = 10;   // Must match margin prop on ResponsiveGridLayout
+    const gridMargin = 6;    // Must match margin prop on ResponsiveGridLayout
     const cellHeight = gridRowHeight + gridMargin; // 90px per row (rowHeight + vertical margin)
     const minHeight = 1500;
     const cols = currentCols; // Use responsive column count
@@ -441,7 +441,7 @@ export default function DashboardView({
                 onResizeStop={handleLayoutChange}
                 draggableHandle=".drag-handle"
                 containerPadding={[0, 0]}
-                margin={[10, 10]}
+                margin={[6, 6]}
                 isDraggable={editMode}
                 isResizable={editMode}
                 style={{ minHeight: editMode ? '1500px' : 'auto' }}
