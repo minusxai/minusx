@@ -12,7 +12,6 @@ import {
   PythonChatResponse,
   LLMCallDetail
 } from '@/lib/chat-orchestration';
-import type { ToolCallDetails } from '@/lib/types';
 // Import tool handlers first to register them
 import './tool-handlers.server';
 import { orchestratePendingTools } from './orchestrator';
@@ -106,7 +105,6 @@ export async function POST(request: NextRequest) {
     let accumulatedLogDiff: ConversationLogEntry[] = [];
     accumulatedCompletedToolCalls = [];  // Use outer scope variable
     let accumulatedLLMCalls: Record<string, LLMCallDetail> = {};
-    const serverToolDetailsMap: Record<string, ToolCallDetails> = {};
     let pythonResponse: PythonChatResponse;
     currentConversationID = convFileId;  // Use outer scope variable - Start with created/loaded file ID
     let currentFileId = fileId;
@@ -172,6 +170,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Append to conversation (may fork if conflict detected)
+      // logDiff from Python already contains details in task_result entries
       const appendResult = await appendLogToConversation(
         currentFileId,
         pythonResponse.logDiff,
@@ -214,8 +213,6 @@ export async function POST(request: NextRequest) {
       currentLogIndex = result.updatedLogIndex;
       currentConversationID = result.updatedFileId;
       accumulatedLogDiff.push(...result.logEntries);
-      Object.assign(serverToolDetailsMap, result.detailsMap);
-
       // Combine remaining pending tools and spawned tools for frontend execution
       const allPendingTools = [...result.remainingPendingTools, ...result.spawnedTools];
 
@@ -246,11 +243,7 @@ export async function POST(request: NextRequest) {
       conversationID: currentConversationID,
       log_index: currentLogIndex,
       pending_tool_calls: finalPendingToolCalls,  // Includes spawned frontend tools
-      completed_tool_calls: accumulatedCompletedToolCalls.map(tc =>
-        serverToolDetailsMap[tc.tool_call_id]
-          ? { ...tc, details: serverToolDetailsMap[tc.tool_call_id] }
-          : tc
-      ),
+      completed_tool_calls: accumulatedCompletedToolCalls,
       credits: null,
       error: pythonResponse.error
     } as ChatResponse);

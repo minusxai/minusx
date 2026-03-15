@@ -63,7 +63,7 @@ export function parseLogToMessages(log: ConversationLogEntry[]): any[] {
       if (!task) continue; // Skip if no matching task
 
       // Create completed tool call from task + result
-      messages.push({
+      const completedToolCall: any = {
         role: 'tool',
         tool_call_id: task.unique_id,
         content: typeof entry.result === 'string' ? entry.result : JSON.stringify(entry.result),
@@ -73,7 +73,12 @@ export function parseLogToMessages(log: ConversationLogEntry[]): any[] {
           arguments: JSON.stringify(task.args)
         },
         created_at: entry.created_at
-      });
+      };
+      // Restore persisted UI details (e.g. queryResult with rows for ExecuteQuery)
+      if (entry.details) {
+        completedToolCall.details = entry.details;
+      }
+      messages.push(completedToolCall);
 
       // Remove from pending
       pendingTasks.delete(entry._task_unique_id);

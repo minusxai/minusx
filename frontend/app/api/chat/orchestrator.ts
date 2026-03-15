@@ -29,7 +29,7 @@ export interface ToolExecutionResult {
   role: "tool";
   tool_call_id: string;
   content: string | any;
-  details?: ToolCallDetails;  // Stripped before sending to Python; injected into response for frontend
+  details?: ToolCallDetails;  // Passed through to Python, stored in TaskResult, returned in completed_tool_calls
 }
 
 /**
@@ -55,7 +55,6 @@ export interface OrchestrationResult {
   updatedFileId: number;
   updatedLogIndex: number;
   logEntries: ConversationLogEntry[];
-  detailsMap: Record<string, ToolCallDetails>;  // tool_call_id → details (for server tools)
 }
 
 /**
@@ -63,7 +62,7 @@ export interface OrchestrationResult {
  */
 export interface OrchestrationCallbacks {
   onToolExecuting?: (tool: ToolCall) => void;
-  onToolCompleted?: (tool: ToolCall, result: CompletedToolCallPayload) => void;
+  onToolCompleted?: (tool: ToolCall, result: ToolExecutionResult) => void;
   onToolFailed?: (tool: ToolCall, error: Error) => void;
   onToolSpawned?: (parent: ToolCall, child: ToolCall) => void;
 }
@@ -167,14 +166,12 @@ export async function orchestratePendingTools(
       logEntries: [],
       updatedFileId: fileId,
       updatedLogIndex: logIndex,
-      detailsMap: {}
     };
   }
 
   const completedTools: CompletedToolCallPayload[] = [];
   const remainingPendingTools: ToolCall[] = [];
   const spawnedTools: ToolCall[] = [];
-  const detailsMap: Record<string, ToolCallDetails> = {};
   let currentFileId = fileId;
   let currentLogIndex = logIndex;
   const logEntries: ConversationLogEntry[] = [];
@@ -187,12 +184,11 @@ export async function orchestratePendingTools(
         callbacks?.onToolExecuting?.(toolCall);
 
         const result = await executeToolInternal(toolCall, user);
-        // Strip details before sending to Python; track separately
-        const { details, ...payloadForPython } = result;
-        completedTools.push(payloadForPython);
-        if (details) detailsMap[result.tool_call_id] = details;
+        // Include details in payload — Python stores it in TaskResult and passes it back;
+        // it is never forwarded to the LLM (task_to_tool_message uses only result, not details)
+        completedTools.push(result);
 
-        callbacks?.onToolCompleted?.(toolCall, payloadForPython);
+        callbacks?.onToolCompleted?.(toolCall, result);
       } catch (error) {
         // Check if tool is spawning frontend tools
         if (error instanceof FrontendToolException) {
@@ -266,7 +262,6 @@ export async function orchestratePendingTools(
     spawnedTools,
     updatedFileId: currentFileId,
     updatedLogIndex: currentLogIndex,
-    logEntries,
-    detailsMap
+    logEntries
   };
 }

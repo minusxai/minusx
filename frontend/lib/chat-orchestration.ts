@@ -46,6 +46,7 @@ export interface CompletedToolCallPayload {
   role: "tool";  // Required for OpenAI ChatCompletionToolMessageParamMX
   tool_call_id: string;
   content: string | any;  // Can be string or object (matches Python Union[str, dict])
+  details?: import('@/lib/types').ToolCallDetails;  // Passed through Python; stored in TaskResult; never sent to LLM
 }
 
 /**
