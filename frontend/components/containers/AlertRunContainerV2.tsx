@@ -11,10 +11,14 @@ import type { AlertRunContent } from '@/lib/types';
 import type { FileId } from '@/store/filesSlice';
 import type { FileViewMode } from '@/lib/ui/fileComponents';
 import { LuArrowLeft, LuBell } from 'react-icons/lu';
+import Link from 'next/link';
+import { preserveParams } from '@/lib/navigation/url-utils';
 
 interface AlertRunContainerV2Props {
   fileId: FileId;
   mode?: FileViewMode;
+  /** When true: hides the back-link and removes full-page centering (for inline use). */
+  inline?: boolean;
 }
 
 function StatusBadge({ status }: { status: AlertRunContent['status'] }) {
@@ -29,7 +33,7 @@ function StatusBadge({ status }: { status: AlertRunContent['status'] }) {
   return <Badge colorPalette={colorPalette}>{label}</Badge>;
 }
 
-export default function AlertRunContainerV2({ fileId }: AlertRunContainerV2Props) {
+export default function AlertRunContainerV2({ fileId, inline }: AlertRunContainerV2Props) {
   const { fileState: file } = useFile(fileId) ?? {};
 
   if (!file || file.loading) {
@@ -46,15 +50,15 @@ export default function AlertRunContainerV2({ fileId }: AlertRunContainerV2Props
     : null;
 
   return (
-    <Box p={6} maxW="600px" mx="auto" fontFamily="mono">
+    <Box p={inline ? 0 : 6} maxW={inline ? undefined : '600px'} mx={inline ? undefined : 'auto'} fontFamily="mono">
       <VStack align="stretch" gap={4}>
-        {/* Back link to parent alert */}
-        {run.alertId && (
+        {/* Back link to parent alert — hidden when rendered inline inside the alert view */}
+        {!inline && run.alertId && (
           <HStack gap={1.5}>
             <LuArrowLeft size={14} />
-            <a href={`/f/${run.alertId}`} style={{ fontSize: '12px', color: 'inherit', opacity: 0.7 }}>
+            <Link href={preserveParams(`/f/${run.alertId}`)} style={{ fontSize: '12px', color: 'inherit', opacity: 0.7 }}>
               {run.alertName || `Alert #${run.alertId}`}
-            </a>
+            </Link>
           </HStack>
         )}
 

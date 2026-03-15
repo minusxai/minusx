@@ -13,6 +13,7 @@ import { selectIsDirty } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
 import { useFetch } from '@/lib/api/useFetch';
 import { API } from '@/lib/api/declarations';
+import AlertRunContainerV2 from '@/components/containers/AlertRunContainerV2';
 
 interface AlertViewProps {
   alert: AlertContent;
@@ -133,12 +134,6 @@ const operatorCollection = createListCollection({
   ]
 });
 
-/** Map a JobRun to a displayable alert status */
-function getRunDisplayStatus(run: JobRun): 'triggered' | 'not_triggered' | 'failed' | 'running' {
-  if (run.status === 'RUNNING') return 'running';
-  if (run.status === 'FAILURE' || run.status === 'TIMEOUT') return 'failed';
-  return 'not_triggered';
-}
 
 export default function AlertView({
   alert,
@@ -809,63 +804,13 @@ export default function AlertView({
                   <Text color="fg.muted">Running alert check...</Text>
                 </VStack>
               ) : selectedRun ? (
-                (() => {
-                  const displayStatus = getRunDisplayStatus(selectedRun);
-
-                  return (
-                    <VStack align="stretch" gap={3}>
-                      <HStack justify="space-between">
-                        <Badge
-                          colorPalette={
-                            displayStatus === 'not_triggered' ? 'green' :
-                            displayStatus === 'failed' ? 'red' :
-                            displayStatus === 'running' ? 'yellow' : 'red'
-                          }
-                        >
-                          {displayStatus === 'not_triggered' ? 'OK' : displayStatus.toUpperCase()}
-                        </Badge>
-                        <Text fontSize="xs" color="fg.muted">
-                          {new Date(selectedRun.created_at).toLocaleString()}
-                        </Text>
-                      </HStack>
-
-                      {/* Run metadata */}
-                      <Box p={3} bg="bg.muted" borderRadius="md">
-                        <VStack align="stretch" gap={2}>
-                          {selectedRun.completed_at && (
-                            <HStack justify="space-between">
-                              <Text fontSize="xs" color="fg.muted">Duration</Text>
-                              <Text fontSize="xs" fontWeight="600">
-                                {Math.round((new Date(selectedRun.completed_at).getTime() - new Date(selectedRun.created_at).getTime()) / 1000)}s
-                              </Text>
-                            </HStack>
-                          )}
-                          <HStack justify="space-between">
-                            <Text fontSize="xs" color="fg.muted">Source</Text>
-                            <Badge size="sm" colorPalette={selectedRun.source === 'cron' ? 'blue' : 'gray'}>
-                              {selectedRun.source === 'cron' ? 'Scheduled' : 'Manual'}
-                            </Badge>
-                          </HStack>
-                        </VStack>
-                      </Box>
-
-                      {selectedRun.error && (
-                        <Box p={3} bg="red.subtle" borderRadius="md" color="red.fg">
-                          <Text fontSize="sm">{selectedRun.error}</Text>
-                        </Box>
-                      )}
-
-                      {/* Link to full run file */}
-                      {selectedRun.output_file_id && (
-                        <Text fontSize="xs" color="fg.subtle">
-                          <a href={`/f/${selectedRun.output_file_id}`} style={{ textDecoration: 'underline' }}>
-                            View full run details →
-                          </a>
-                        </Text>
-                      )}
-                    </VStack>
-                  );
-                })()
+                selectedRun.output_file_id ? (
+                  <AlertRunContainerV2 fileId={selectedRun.output_file_id} inline />
+                ) : (
+                  <VStack gap={2} align="center" justify="center" h="100%" color="fg.muted">
+                    <Text fontSize="sm">Run in progress...</Text>
+                  </VStack>
+                )
               ) : runs.length === 0 ? (
                 <VStack gap={4} align="center" justify="center" h="100%" color="fg.muted">
                   <LuBell size={48} opacity={0.3} />
