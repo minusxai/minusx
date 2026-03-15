@@ -26,6 +26,7 @@ import { redirectAfterSave } from '@/lib/ui/file-utils';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { isSystemFileType, type FileType } from '@/lib/ui/file-metadata';
 import { DocumentContent } from '@/lib/types';
+import { isVirtualFileId } from '@/store/filesSlice';
 import DocumentHeader from './DocumentHeader';
 import PublishModal from './PublishModal';
 
@@ -141,6 +142,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
           }
         } : undefined}
         anyDirtyFiles={anyDirtyFiles}
+        hideEditToggle={isVirtualFileId(fileId)}
         questionId={fileType === 'question' ? fileId : undefined}
         viewMode={viewMode}
         onViewModeChange={(m) => dispatch(setFileViewMode({ fileId, mode: m }))}
