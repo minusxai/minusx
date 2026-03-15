@@ -10,7 +10,7 @@ import { useFile } from '@/lib/hooks/file-state-hooks';
 import type { AlertOutput, AlertRunContent, RunFileContent, RunMessageRecord } from '@/lib/types';
 import type { FileId } from '@/store/filesSlice';
 import type { FileViewMode } from '@/lib/ui/fileComponents';
-import { LuArrowLeft, LuBell, LuMail } from 'react-icons/lu';
+import { LuArrowLeft, LuBell, LuExternalLink, LuMail } from 'react-icons/lu';
 import Link from 'next/link';
 import { preserveParams } from '@/lib/navigation/url-utils';
 
@@ -79,6 +79,11 @@ export default function AlertRunContainerV2({ fileId, inline }: AlertRunContaine
             <LuBell size={20} />
             <Text fontWeight="700" fontSize="lg">Alert Run</Text>
             <StatusBadge status={run.status === 'success' && output ? output.status : run.status} />
+            {inline && (
+              <Link href={preserveParams(`/f/${fileId}`)} style={{ marginLeft: 'auto', opacity: 0.5 }}>
+                <LuExternalLink size={14} />
+              </Link>
+            )}
           </HStack>
 
           {/* Details */}
@@ -171,6 +176,11 @@ export default function AlertRunContainerV2({ fileId, inline }: AlertRunContaine
           <LuBell size={20} />
           <Text fontWeight="700" fontSize="lg">Alert Run</Text>
           <StatusBadge status={run.status} />
+          {inline && (
+            <Link href={preserveParams(`/f/${fileId}`)} style={{ marginLeft: 'auto', opacity: 0.5 }}>
+              <LuExternalLink size={14} />
+            </Link>
+          )}
         </HStack>
 
         <Box p={4} bg="bg.muted" borderRadius="md" border="1px solid" borderColor="border.muted">
