@@ -1,13 +1,10 @@
-import type { QuestionParameter, QuestionReference, QuestionContent, ConnectionContent } from '@/lib/types';
+import type { QuestionReference, QuestionContent } from '@/lib/types';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
 import { NextRequest } from 'next/server';
-import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import { CTEfyQuery, ResolvedReference } from '@/lib/sql/query-composer';
 import { FilesAPI } from '@/lib/data/files.server';
-import { DocumentDB } from '@/lib/database/documents-db';
-import { resolvePath } from '@/lib/mode/path-resolver';
-import { getNodeConnector } from '@/lib/connections';
+import { runQuery } from '@/lib/connections/run-query';
 
 // Route segment config: optimize for API routes
 export const dynamic = 'force-dynamic';
@@ -55,45 +52,9 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       console.log(`[QUERY API] CTE construction took ${Date.now() - cteStart}ms`);
     }
 
-    // Check if the connection type can be handled in Node.js (DuckDB, csv, google-sheets)
-    const connPath = resolvePath(user.mode, `/database/${database_name}`);
-    const connFile = await DocumentDB.getByPath(connPath, user.companyId);
-    if (connFile?.content) {
-      const { type, config } = connFile.content as ConnectionContent;
-      const connector = getNodeConnector(database_name, type, config);
-      if (connector) {
-        console.log(`[QUERY API] Executing ${type} query in Node.js`);
-        const result = await connector.query(finalQuery, paramValues);
-        console.log(`[QUERY API] Total request time: ${Date.now() - startTime}ms`);
-        return successResponse(result);
-      }
-    }
-
-    console.log(`[QUERY API] Forwarding to Python backend: /api/execute-query`);
-    // Forward request to Python backend (company ID header added automatically)
-    // Python backend will idempotently initialize connection by fetching config from Next.js internal API
-    const fetchStart = Date.now();
-    const response = await pythonBackendFetch('/api/execute-query', {
-      method: 'POST',
-      body: JSON.stringify({
-        query: finalQuery,
-        parameters: paramValues,
-        database_name,
-      }),
-    });
-    console.log(`[QUERY API] Python backend fetch took ${Date.now() - fetchStart}ms`);
-
-    const dataStart = Date.now();
-    const data = await response.json();
-    console.log(`[QUERY API] Response JSON parse took ${Date.now() - dataStart}ms`);
-
-    if (!response.ok) {
-      // If backend returned an error, wrap it in standard format
-      return ApiErrors.externalApiError(data.detail || data.message || 'Query execution failed');
-    }
-
+    const result = await runQuery(database_name, finalQuery, paramValues, user);
     console.log(`[QUERY API] Total request time: ${Date.now() - startTime}ms`);
-    return successResponse(data);
+    return successResponse(result);
   } catch (error) {
     console.error(`[QUERY API] Error after ${Date.now() - startTime}ms:`, error);
     return handleApiError(error);
