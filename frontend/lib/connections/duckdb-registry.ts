@@ -1,5 +1,5 @@
 import 'server-only';
-import { DuckDBInstance } from '@duckdb/node-api';
+import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
 
 export type DuckDbAccessMode = 'READ_WRITE' | 'READ_ONLY';
 
@@ -22,4 +22,22 @@ export async function getOrCreateDuckDbInstance(
   });
   initPromises.set(absPath, p);
   return p;
+}
+
+/**
+ * Run a callback with a short-lived DuckDB connection.
+ * Handles connect + closeSync automatically.
+ */
+export async function withDuckDbConnection<T>(
+  absPath: string,
+  accessMode: DuckDbAccessMode,
+  fn: (conn: DuckDBConnection) => Promise<T>
+): Promise<T> {
+  const instance = await getOrCreateDuckDbInstance(absPath, accessMode);
+  const conn = await instance.connect();
+  try {
+    return await fn(conn);
+  } finally {
+    conn.closeSync();
+  }
 }
