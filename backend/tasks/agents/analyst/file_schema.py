@@ -134,8 +134,8 @@ class DashboardLayoutItem(BaseModel):
     id: int  # question ID
     x: int
     y: int
-    w: int = Field(..., ge=3, description="width in grid units (min 3)")
-    h: int = Field(..., ge=3, description="height in grid units (min 3)")
+    w: int = Field(..., ge=2, description="width in grid units (min 2)")
+    h: int = Field(..., ge=2, description="height in grid units (min 2)")
 
 class DashboardLayout(BaseModel):
     columns: Optional[int] = 12

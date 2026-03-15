@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, Text } from '@chakra-ui/react';
-import { AssetReference, DocumentContent, QuestionContent, QuestionParameter } from '@/lib/types';
+import { AssetReference, DashboardLayoutItem, DocumentContent, QuestionContent, QuestionParameter } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
 import ParameterRow from '../ParameterRow';
 import { useState, useMemo, useCallback, useEffect } from 'react';
@@ -18,6 +18,10 @@ import { syncParametersWithSQL } from '@/lib/sql/sql-params';
 import { shallowEqual } from 'react-redux';
 
 const EMPTY_PARAMS: Record<string, any> = {};
+const DASHBOARD_MIN_W = 2;
+const DASHBOARD_MIN_H = 2;
+const DASHBOARD_DEFAULT_W = 6;
+const DASHBOARD_DEFAULT_H = 6;
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -61,12 +65,12 @@ const generateDefaultLayout = (assets: AssetReference[]): Layout[] => {
   const questionAssets = assets?.filter(asset => asset.type === 'question' && ('id' in asset) && asset.id) || [];
   return questionAssets?.map((asset, i) => ({
     i: ('id' in asset && asset.type === 'question') ? asset.id.toString() : '',  // Convert integer ID to string for grid layout
-    x: (i % 2) * 6, // 2 columns
-    y: Math.floor(i / 2) * 6,
-    w: 6,
-    h: 6,
-    minW: 3,
-    minH: 3,
+    x: (i % 2) * DASHBOARD_DEFAULT_W, // 2 columns
+    y: Math.floor(i / 2) * DASHBOARD_DEFAULT_H,
+    w: DASHBOARD_DEFAULT_W,
+    h: DASHBOARD_DEFAULT_H,
+    minW: DASHBOARD_MIN_W,
+    minH: DASHBOARD_MIN_H,
   }));
 };
 
@@ -124,15 +128,22 @@ export default function DashboardView({
 
     let baseLayout: Layout[];
     if (document.layout?.items) {
-      baseLayout = document.layout.items.map((item: any) => ({
-        i: String(item.id),
-        x: item.x,
-        y: item.y,
-        w: item.w,
-        h: item.h,
-        minW: 3,
-        minH: 3,
-      }));
+      const layoutMap = new Map<string, DashboardLayoutItem>(document.layout.items.map((item: DashboardLayoutItem) => [String(item.id), item]));
+      const questionAssets = document.assets?.filter(a => a.type === 'question' && ('id' in a) && a.id) || [];
+
+      // Find the bottom of the existing layout to place missing assets below
+      const maxY = document.layout.items.reduce((max: number, item: DashboardLayoutItem) => Math.max(max, item.y + item.h), 0);
+
+      baseLayout = questionAssets.map((asset, i) => {
+        const id = String((asset as { id: number }).id);
+        const item = layoutMap.get(id);
+        if (item) {
+          return { i: id, x: item.x, y: item.y, w: item.w, h: item.h, minW: DASHBOARD_MIN_W, minH: DASHBOARD_MIN_H };
+        }
+        // Asset exists but has no layout entry — place below existing items with default size
+        const missingIndex = questionAssets.slice(0, i).filter(a => !layoutMap.has(String((a as { id: number }).id))).length;
+        return { i: id, x: (missingIndex % 2) * DASHBOARD_DEFAULT_W, y: maxY + Math.floor(missingIndex / 2) * DASHBOARD_DEFAULT_H, w: DASHBOARD_DEFAULT_W, h: DASHBOARD_DEFAULT_H, minW: DASHBOARD_MIN_W, minH: DASHBOARD_MIN_H };
+      });
     } else {
       baseLayout = generateDefaultLayout(document.assets);
     }
@@ -253,12 +264,15 @@ export default function DashboardView({
   const gridBackground = useMemo(() => {
     if (!editMode) return null;
 
+    const gridRowHeight = 80; // Must match rowHeight prop on ResponsiveGridLayout
+    const gridMargin = 10;   // Must match margin prop on ResponsiveGridLayout
+    const cellHeight = gridRowHeight + gridMargin; // 90px per row (rowHeight + vertical margin)
     const minHeight = 1500;
-    const rowHeight = 92;
     const cols = currentCols; // Use responsive column count
     const maxLayoutRow = layouts.lg.reduce((max: number, item: Layout) => Math.max(max, item.y + item.h), 0);
-    const minRows = Math.ceil(minHeight / rowHeight);
+    const minRows = Math.ceil(minHeight / cellHeight);
     const numRows = Math.max(minRows, maxLayoutRow + 10);
+    const halfMargin = gridMargin / 2; // 5px — half the margin on each side of a cell
 
     return (
       <Box
@@ -281,10 +295,11 @@ export default function DashboardView({
               key={i}
               position="absolute"
               left={`${col * colWidthPercent}%`}
-              top={`${row * 92}px`}
+              top={`${row * cellHeight}px`}
               width={`${colWidthPercent}%`}
-              height="92px"
-              p="6px"
+              height={`${cellHeight}px`}
+              px={`${halfMargin}px`}
+              py={`${halfMargin}px`}
               pointerEvents="none"
             >
               <Box
