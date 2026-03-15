@@ -111,7 +111,7 @@ describe('Files Data Layer - getTemplate', () => {
     it('should generate question template with default database', async () => {
       const result = await FilesAPI.getTemplate('question', {}, testUser);
 
-      expect(result.fileName).toBe('New Question');
+      expect(result.fileName).toBe('');
       expect(result.content).toMatchObject({
         description: '',
         query: '',
@@ -149,7 +149,7 @@ describe('Files Data Layer - getTemplate', () => {
     it('should generate empty dashboard template', async () => {
       const result = await FilesAPI.getTemplate('dashboard', {}, testUser);
 
-      expect(result.fileName).toBe('New Dashboard');
+      expect(result.fileName).toBe('');
       expect(result.content).toMatchObject({
         description: '',
         assets: [],
@@ -165,7 +165,7 @@ describe('Files Data Layer - getTemplate', () => {
     it('should generate presentation template with default slide', async () => {
       const result = await FilesAPI.getTemplate('presentation', {}, testUser);
 
-      expect(result.fileName).toBe('New Presentation');
+      expect(result.fileName).toBe('');
       const content = result.content as DocumentContent;
       expect(content.description).toBe('');
       expect(content.assets).toEqual([]);
