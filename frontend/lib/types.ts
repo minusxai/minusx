@@ -457,6 +457,7 @@ export interface JobRun {
   source: JobRunSource;
 }
 
+/** @deprecated Use RunFileContent with output: AlertOutput instead */
 export interface AlertRunContent extends BaseFileContent {
   alertId: number;
   alertName: string;
@@ -472,13 +473,74 @@ export interface AlertRunContent extends BaseFileContent {
   error?: string;
 }
 
+// Alert-specific output stored inside RunFileContent.output
+export interface AlertOutput {
+  alertId: number;
+  alertName: string;
+  status: 'triggered' | 'not_triggered';
+  actualValue: number | null;
+  threshold: number;
+  operator: ComparisonOperator;
+  selector: AlertSelector;
+  function: AlertFunction;
+  column?: string;
+}
+
+export interface EmailMetadata {
+  to: string[];
+  subject: string;
+  /**
+   * When false (default): one email, all recipients in To: field.
+   * When true: individual email per recipient via Batch API, chunked at 100.
+   */
+  batch?: boolean;
+}
+
+export interface RunMessage {
+  type: 'email';
+  content: string;
+  metadata: EmailMetadata;
+}
+
+export interface RunMessageRecord extends RunMessage {
+  status: 'pending' | 'sent' | 'failed';
+  sentAt?: string;
+  deliveryError?: string;
+}
+
+// Generic run file content — the stored type for alert_run files in Phase 2+
+export interface RunFileContent extends BaseFileContent {
+  job_type: string;
+  status: 'running' | 'success' | 'failure';
+  startedAt: string;
+  completedAt?: string;
+  error?: string;
+  output?: Record<string, any>;
+  messages?: RunMessageRecord[];
+}
+
+// What handlers return
+export interface JobHandlerResult {
+  output: Record<string, any>;
+  messages: RunMessage[];
+}
+
+// What handlers receive
+export interface JobRunnerInput {
+  runFileId: number;
+  jobId: string;
+  jobType: string;
+  file: any;
+  previousRuns: JobRun[];
+}
+
 /**
  * Database file entity
  * Extends BaseFileMetadata with content and multi-tenant support
  * content can be null for metadata-only loads (Phase 2: Partial Loading)
  */
 export interface DbFile extends BaseFileMetadata {
-  content: QuestionContent | DocumentContent | ContextContent | ConnectionContent | ConnectorContent | UsersContent | FolderContent | ConfigContent | SessionRecordingFileContent | StylesContent | ReportContent | ReportRunContent | AlertContent | AlertRunContent | null;
+  content: QuestionContent | DocumentContent | ContextContent | ConnectionContent | ConnectorContent | UsersContent | FolderContent | ConfigContent | SessionRecordingFileContent | StylesContent | ReportContent | ReportRunContent | AlertContent | AlertRunContent | RunFileContent | null;
   company_id: number;     // NOT NULL column in DB
 }
 

@@ -18,7 +18,8 @@ import { DocumentDB } from '@/lib/database/documents-db';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { JOB_DEFINITIONS } from '@/lib/jobs/job-definitions';
 import { JOB_HANDLERS } from '@/lib/jobs/job-registry';
-import type { AlertContent } from '@/lib/types';
+import { sendEmail } from '@/lib/email/send-email';
+import type { AlertContent, RunFileContent, RunMessageRecord } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -80,9 +81,6 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
     await JobRunsDB.ensureTable();
 
     const now = new Date();
-    // Dedup window: current minute ±30s
-    const windowStart = new Date(now.getTime() - 30_000);
-    const windowEnd = new Date(now.getTime() + 30_000);
 
     let triggered = 0;
     let skipped = 0;
@@ -108,6 +106,9 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
 
         const jobId = String(jobFile.id);
 
+        // Dedup: skip if a run already exists in the current minute window (±30s)
+        const windowStart = new Date(now.getTime() - 30_000);
+        const windowEnd = new Date(now.getTime() + 30_000);
         const { runId, isNewRun } = await JobRunsDB.findOrCreate({
           job_id: jobId,
           job_type: jobDef.job_type,
@@ -119,34 +120,109 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
 
         if (!isNewRun) { skipped++; continue; }
 
-        try {
-          const result = await handler.execute(jobId, content, user, runId);
+        const previousRuns = await JobRunsDB.getByJobId(jobId, jobDef.job_type, user.companyId, 10);
+        const startedAt = new Date().toISOString();
 
-          // Persist result file — use timestamp to avoid sequence/files table sync issues
-          const runPath = resolvePath(user.mode, `/logs/runs/${Date.now()}`);
+        // Create run file upfront with status='running'
+        const runPath = resolvePath(user.mode, `/logs/runs/${Date.now()}`);
+        const initialContent: RunFileContent = {
+          job_type: jobDef.job_type,
+          status: 'running',
+          startedAt,
+        };
+        let runFileId: number;
+        let runFileName: string;
+        let runFilePath: string;
+
+        try {
           const createResult = await FilesAPI.createFile(
             {
-              name: `run-${runId}`,
+              name: `run-${jobId}-${jobDef.job_type}`,
               path: runPath,
-              type: result.file_type,
-              content: result.content,
+              type: 'alert_run',
+              content: initialContent,
               references: [jobFile.id],
               options: { createPath: true },
             },
             user
           );
+          runFileId = createResult.data.id;
+          runFileName = createResult.data.name;
+          runFilePath = createResult.data.path;
+        } catch (createErr) {
+          const errorMessage = createErr instanceof Error ? createErr.message : 'Unknown error';
+          console.error(`[cron] Failed to create run file for job ${jobId}:`, errorMessage);
+          await JobRunsDB.complete(runId, 'FAILURE', errorMessage);
+          failed++;
+          continue;
+        }
 
-          const error = result.status === 'FAILURE' ? (result.content as any).error ?? 'Job failed' : undefined;
-          await JobRunsDB.complete(runId, result.status, createResult.data.id, result.file_type, error);
+        // Link the run file to the job_run record
+        await JobRunsDB.setOutputFile(runId, runFileId, 'alert_run');
 
-          if (result.status === 'SUCCESS') {
-            triggered++;
-          } else {
-            failed++;
+        try {
+          const result = await handler.execute(
+            { runFileId, jobId, jobType: jobDef.job_type, file: content, previousRuns },
+            user
+          );
+
+          // Build message records (pending)
+          const messages: RunMessageRecord[] = result.messages.map((m) => ({ ...m, status: 'pending' }));
+
+          const successContent: RunFileContent = {
+            job_type: jobDef.job_type,
+            status: 'success',
+            startedAt,
+            completedAt: new Date().toISOString(),
+            output: result.output,
+            messages,
+          };
+          await FilesAPI.saveFile(runFileId, runFileName, runFilePath, successContent, [jobFile.id], user);
+
+          // Deliver messages
+          for (const msg of messages) {
+            if (msg.type === 'email') {
+              try {
+                await sendEmail(
+                  msg.metadata.to,
+                  msg.metadata.subject,
+                  msg.content,
+                  undefined,
+                  msg.metadata.batch
+                );
+                msg.status = 'sent';
+                msg.sentAt = new Date().toISOString();
+              } catch (err) {
+                msg.status = 'failed';
+                msg.deliveryError = err instanceof Error ? err.message : 'Unknown delivery error';
+              }
+            }
           }
+
+          if (messages.length > 0) {
+            await FilesAPI.saveFile(
+              runFileId,
+              runFileName,
+              runFilePath,
+              { ...successContent, messages },
+              [jobFile.id],
+              user
+            );
+          }
+
+          await JobRunsDB.complete(runId, 'SUCCESS');
+          triggered++;
         } catch (execError) {
           const errorMessage = execError instanceof Error ? execError.message : 'Unknown error';
-          await JobRunsDB.complete(runId, 'FAILURE', undefined, undefined, errorMessage);
+          const failureContent: RunFileContent = {
+            job_type: jobDef.job_type,
+            status: 'failure',
+            startedAt,
+            completedAt: new Date().toISOString(),
+            error: errorMessage,
+          };
+          await FilesAPI.saveFile(runFileId, runFileName, runFilePath, failureContent, [jobFile.id], user);
+          await JobRunsDB.complete(runId, 'FAILURE', errorMessage);
           failed++;
         }
       }

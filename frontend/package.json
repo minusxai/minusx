@@ -58,6 +58,7 @@
     "react-moveable": "^0.56.0",
     "react-redux": "^9.2.0",
     "remark-gfm": "^4.0.1",
+    "resend": "^6.9.3",
     "rrweb": "^2.0.0-alpha.4",
     "rrweb-player": "^1.0.0-alpha.4",
     "server-only": "^0.0.1",

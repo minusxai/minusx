@@ -2,6 +2,15 @@
  * POST /api/jobs/run
  * Trigger a job execution (manual or forced).
  * Dispatches to registered job handlers via JOB_HANDLERS.
+ *
+ * Flow:
+ *  1. Validate job_id, job_type, look up handler
+ *  2. Dedup: skip if a RUNNING run already exists for this job
+ *  3. Create run file upfront with status='running'
+ *  4. Create job_run record with output_file_id set immediately
+ *  5. Execute handler → {output, messages}
+ *  6. Deliver messages (email), update run file with final statuses
+ *  7. Complete job_run record
  */
 import { NextRequest } from 'next/server';
 import { withAuth } from '@/lib/api/with-auth';
@@ -10,6 +19,8 @@ import { JobRunsDB } from '@/lib/database/job-runs-db';
 import { FilesAPI } from '@/lib/data/files.server';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { JOB_HANDLERS } from '@/lib/jobs/job-registry';
+import { sendEmail } from '@/lib/email/send-email';
+import type { RunFileContent, RunMessageRecord } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -28,7 +39,6 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       return ApiErrors.badRequest(`Unsupported job_type: ${job_type}`);
     }
 
-    // Ensure job_runs table exists (handles existing DBs without migration)
     await JobRunsDB.ensureTable();
 
     const jobFileId = parseInt(job_id, 10);
@@ -43,38 +53,119 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       return ApiErrors.notFound('Job file');
     }
 
-    // Create job_run record immediately (status=RUNNING)
-    const runId = await JobRunsDB.create({
-      job_id,
-      job_type,
-      company_id: user.companyId,
-      source: 'manual',
-    });
+    // Dedup: skip if already running
+    const existingRun = await JobRunsDB.getRunningByJobId(job_id, job_type, user.companyId);
+    if (existingRun) {
+      return successResponse({
+        runId: existingRun.id,
+        fileId: existingRun.output_file_id,
+        status: 'already_running',
+      });
+    }
 
-    // Execute the job handler
-    const result = await handler.execute(job_id, jobFile.content, user, runId);
+    // Load previous runs for handler context
+    const previousRuns = await JobRunsDB.getByJobId(job_id, job_type, user.companyId, 10);
 
-    // Persist the result file at /logs/runs/{timestamp} — timestamp avoids sequence
-    // conflicts if job_runs table is ever reset while files table retains old entries.
+    const startedAt = new Date().toISOString();
+
+    // Create run file upfront with status='running'
     const runPath = resolvePath(user.mode, `/logs/runs/${Date.now()}`);
+    const initialContent: RunFileContent = {
+      job_type,
+      status: 'running',
+      startedAt,
+    };
     const createResult = await FilesAPI.createFile(
       {
-        name: `run-${runId}`,
+        name: `run-${job_id}-${job_type}`,
         path: runPath,
-        type: result.file_type,
-        content: result.content,
+        type: 'alert_run',
+        content: initialContent,
         references: [jobFileId],
         options: { createPath: true },
       },
       user
     );
-    const resultFileId = createResult.data.id;
+    const runFile = createResult.data;
+    const runFileId = runFile.id;
 
-    // Complete the job_run record
-    const error = result.status === 'FAILURE' ? (result.content as any).error ?? 'Job failed' : undefined;
-    await JobRunsDB.complete(runId, result.status, resultFileId, result.file_type, error);
+    // Create job_run record with output file linked upfront
+    const runId = await JobRunsDB.create({
+      job_id,
+      job_type,
+      company_id: user.companyId,
+      output_file_id: runFileId,
+      output_file_type: 'alert_run',
+      source: 'manual',
+    });
 
-    return successResponse({ runId, fileId: resultFileId, status: result.status });
+    try {
+      const result = await handler.execute(
+        { runFileId, jobId: job_id, jobType: job_type, file: jobFile.content, previousRuns },
+        user
+      );
+
+      // Build message records (pending)
+      const messages: RunMessageRecord[] = result.messages.map((m) => ({ ...m, status: 'pending' }));
+
+      // Save run file with output + pending messages
+      const successContent: RunFileContent = {
+        job_type,
+        status: 'success',
+        startedAt,
+        completedAt: new Date().toISOString(),
+        output: result.output,
+        messages,
+      };
+      await FilesAPI.saveFile(runFileId, runFile.name, runFile.path, successContent, [jobFileId], user);
+
+      // Deliver messages
+      for (const msg of messages) {
+        if (msg.type === 'email') {
+          try {
+            await sendEmail(
+              msg.metadata.to,
+              msg.metadata.subject,
+              msg.content,
+              undefined,
+              msg.metadata.batch
+            );
+            msg.status = 'sent';
+            msg.sentAt = new Date().toISOString();
+          } catch (err) {
+            msg.status = 'failed';
+            msg.deliveryError = err instanceof Error ? err.message : 'Unknown delivery error';
+          }
+        }
+      }
+
+      // Save final message statuses if any messages were dispatched
+      if (messages.length > 0) {
+        await FilesAPI.saveFile(
+          runFileId,
+          runFile.name,
+          runFile.path,
+          { ...successContent, messages },
+          [jobFileId],
+          user
+        );
+      }
+
+      await JobRunsDB.complete(runId, 'SUCCESS');
+      return successResponse({ runId, fileId: runFileId, status: 'SUCCESS' });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      const failureContent: RunFileContent = {
+        job_type,
+        status: 'failure',
+        startedAt,
+        completedAt: new Date().toISOString(),
+        error: errorMessage,
+      };
+      await FilesAPI.saveFile(runFileId, runFile.name, runFile.path, failureContent, [jobFileId], user);
+      await JobRunsDB.complete(runId, 'FAILURE', errorMessage);
+      return successResponse({ runId, fileId: runFileId, status: 'FAILURE' });
+    }
   } catch (error) {
     return handleApiError(error);
   }

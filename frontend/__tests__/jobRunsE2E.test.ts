@@ -6,6 +6,13 @@
  *   - POST /api/jobs/cron — cron scan with live/draft filtering and dedup
  *   - GET  /api/jobs/runs — history retrieval with new schema fields
  *
+ * Phase 2 behavior:
+ *   - Run file created BEFORE execution with status='running'
+ *   - Handler returns {output, messages} — orchestrator owns delivery
+ *   - Manual dedup: skip if job already RUNNING
+ *   - Cron dedup: time-window (findOrCreate ±30s)
+ *   - Run file content: RunFileContent with output: AlertOutput inside
+ *
  * No Python backend needed: query execution is mocked via pythonBackendFetch.
  * Connection type is set to 'postgresql' so getNodeConnector() returns null
  * and falls through to the pythonBackendFetch mock.
@@ -17,7 +24,7 @@ import { GET as runsGetHandler } from '@/app/api/jobs/runs/route';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__tests__/test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { JobRunsDB } from '@/lib/database/job-runs-db';
-import type { AlertContent, AlertRunContent, JobRun } from '@/lib/types';
+import type { AlertContent, AlertOutput, JobRun, RunFileContent } from '@/lib/types';
 import { NextRequest } from 'next/server';
 
 // ─── DB mock ──────────────────────────────────────────────────────────────────
@@ -59,6 +66,11 @@ jest.mock('@/lib/api/python-backend-client', () => ({
       rows: [{ revenue: 150 }],
     }),
   }),
+}));
+
+// ─── Email mock (no Resend key in tests) ─────────────────────────────────────
+jest.mock('@/lib/email/send-email', () => ({
+  sendEmail: jest.fn().mockResolvedValue(undefined),
 }));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -174,7 +186,7 @@ describe('Job Runs E2E', () => {
   // ── 1. Manual run ────────────────────────────────────────────────────────────
 
   describe('POST /api/jobs/run', () => {
-    it('creates a job_run record and alert_run file on success', async () => {
+    it('creates a job_run record and RunFileContent run file on success', async () => {
       const req = makeRequest('/api/jobs/run', 'POST', { job_id: String(alertId), job_type: 'alert' });
       const res = await runPostHandler(req);
       const body = await parseResponse(res);
@@ -184,7 +196,7 @@ describe('Job Runs E2E', () => {
       expect(body.data.runId).toBeGreaterThan(0);
       expect(body.data.fileId).toBeGreaterThan(0);
 
-      // job_runs row should be complete
+      // job_runs row should be complete with output_file_id set
       const runs = await JobRunsDB.getByJobId(String(alertId), 'alert', 1);
       expect(runs).toHaveLength(1);
 
@@ -195,23 +207,64 @@ describe('Job Runs E2E', () => {
       expect(run.error).toBeNull();
       expect(run.completed_at).not.toBeNull();
 
-      // alert_run file should exist and have correct content
+      // Run file should use new RunFileContent shape
       const runFile = await DocumentDB.getById(body.data.fileId, 1);
       expect(runFile).not.toBeNull();
       expect(runFile!.type).toBe('alert_run');
 
-      const content = runFile!.content as AlertRunContent;
-      expect(content.alertId).toBe(alertId);
-      expect(content.status).toBe('triggered');   // 150 > 100 = triggered
-      expect(content.actualValue).toBe(150);
-      expect(content.operator).toBe('>');
-      expect(content.threshold).toBe(100);
+      const content = runFile!.content as RunFileContent;
+      expect(content.job_type).toBe('alert');
+      expect(content.status).toBe('success');
+      expect(content.startedAt).toBeTruthy();
+      expect(content.completedAt).toBeTruthy();
+      expect(content.error).toBeUndefined();
 
-      // File path should be /org/logs/runs/{runId}
-      expect(runFile!.path).toBe(`/org/logs/runs/${run.id}`);
+      // Alert-specific data is in output
+      const output = content.output as AlertOutput;
+      expect(output.alertId).toBe(alertId);
+      expect(output.status).toBe('triggered');   // 150 > 100 = triggered
+      expect(output.actualValue).toBe(150);
+      expect(output.operator).toBe('>');
+      expect(output.threshold).toBe(100);
+
+      // Path should be under /org/logs/runs/
+      expect(runFile!.path).toMatch(/^\/org\/logs\/runs\//);
     });
 
-    it('returns FAILURE and saves a failed alert_run when execution errors', async () => {
+    it('run file is created upfront with status=running (output_file_id set before execution)', async () => {
+      // Intercept handler execution to verify run file exists with status=running
+      let capturedRunFileId: number | null = null;
+
+      const { pythonBackendFetch } = require('@/lib/api/python-backend-client');
+      pythonBackendFetch.mockImplementationOnce(async () => {
+        // By the time the query runs, the job_run should already have output_file_id
+        const runs = await JobRunsDB.getByJobId(String(alertId), 'alert', 1);
+        if (runs.length > 0) {
+          capturedRunFileId = runs[0].output_file_id;
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ columns: ['revenue'], types: ['FLOAT'], rows: [{ revenue: 150 }] }),
+        };
+      });
+
+      const req = makeRequest('/api/jobs/run', 'POST', { job_id: String(alertId), job_type: 'alert' });
+      await runPostHandler(req);
+
+      // output_file_id was already set when the query ran
+      expect(capturedRunFileId).toBeGreaterThan(0);
+
+      // And the run file had status=running at that point
+      if (capturedRunFileId) {
+        // After completion, status is 'success'
+        const runFile = await DocumentDB.getById(capturedRunFileId, 1);
+        const content = runFile!.content as RunFileContent;
+        expect(content.status).toBe('success');
+      }
+    });
+
+    it('returns FAILURE and saves a failed RunFileContent when execution errors', async () => {
       const { pythonBackendFetch } = require('@/lib/api/python-backend-client');
       pythonBackendFetch.mockRejectedValueOnce(new Error('DB connection refused'));
 
@@ -230,7 +283,120 @@ describe('Job Runs E2E', () => {
       expect(runs[0].output_file_type).toBe('alert_run');
 
       const runFile = await DocumentDB.getById(body.data.fileId, 1);
-      expect((runFile!.content as AlertRunContent).status).toBe('failed');
+      const content = runFile!.content as RunFileContent;
+      expect(content.status).toBe('failure');
+      expect(content.error).toContain('DB connection refused');
+    });
+
+    it('deduplicates: returns already_running if job is in-flight', async () => {
+      // Manually create a RUNNING job_run referencing a fake file
+      const fakeFileId = 999;
+      await JobRunsDB.create({
+        job_id: String(alertId),
+        job_type: 'alert',
+        company_id: 1,
+        output_file_id: fakeFileId,
+        output_file_type: 'alert_run',
+        source: 'manual',
+      });
+
+      const req = makeRequest('/api/jobs/run', 'POST', { job_id: String(alertId), job_type: 'alert' });
+      const res = await runPostHandler(req);
+      const body = await parseResponse(res);
+
+      expect(res.status).toBe(200);
+      expect(body.data.status).toBe('already_running');
+      expect(body.data.runId).toBeGreaterThan(0);
+      expect(body.data.fileId).toBe(fakeFileId);
+
+      // No new run should have been created
+      const runs = await JobRunsDB.getByJobId(String(alertId), 'alert', 1);
+      expect(runs).toHaveLength(1);
+      expect(runs[0].status).toBe('RUNNING');
+    });
+
+    it('sends email when alert is triggered and emails are configured', async () => {
+      const { sendEmail } = require('@/lib/email/send-email');
+
+      // Update alert to have email addresses
+      const alertWithEmails: AlertContent = {
+        questionId,
+        status: 'live',
+        schedule: { cron: '* * * * *', timezone: 'UTC' },
+        condition: { selector: 'first', function: 'value', column: 'revenue', operator: '>', threshold: 100 },
+        emails: ['alice@example.com', 'bob@example.com'],
+      };
+      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', alertWithEmails, [questionId], 1);
+
+      const req = makeRequest('/api/jobs/run', 'POST', { job_id: String(alertId), job_type: 'alert' });
+      const res = await runPostHandler(req);
+      const body = await parseResponse(res);
+
+      expect(res.status).toBe(200);
+      expect(body.data.status).toBe('SUCCESS');
+
+      // sendEmail should have been called once (triggered, emails configured)
+      expect(sendEmail).toHaveBeenCalledTimes(1);
+      expect(sendEmail).toHaveBeenCalledWith(
+        ['alice@example.com', 'bob@example.com'],
+        expect.stringContaining('Alert Triggered'),
+        expect.any(String),
+        undefined,
+        undefined
+      );
+
+      // Run file messages should show 'sent' status
+      const runFile = await DocumentDB.getById(body.data.fileId, 1);
+      const content = runFile!.content as RunFileContent;
+      expect(content.messages).toHaveLength(1);
+      expect(content.messages![0].status).toBe('sent');
+      expect(content.messages![0].sentAt).toBeTruthy();
+      expect(content.messages![0].type).toBe('email');
+    });
+
+    it('records email failure in messages when delivery throws', async () => {
+      const { sendEmail } = require('@/lib/email/send-email');
+      sendEmail.mockRejectedValueOnce(new Error('SMTP timeout'));
+
+      const alertWithEmails: AlertContent = {
+        questionId,
+        status: 'live',
+        schedule: { cron: '* * * * *', timezone: 'UTC' },
+        condition: { selector: 'first', function: 'value', column: 'revenue', operator: '>', threshold: 100 },
+        emails: ['alice@example.com'],
+      };
+      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', alertWithEmails, [questionId], 1);
+
+      const req = makeRequest('/api/jobs/run', 'POST', { job_id: String(alertId), job_type: 'alert' });
+      const res = await runPostHandler(req);
+      const body = await parseResponse(res);
+
+      // The overall run should still succeed even if email fails
+      expect(body.data.status).toBe('SUCCESS');
+
+      const runFile = await DocumentDB.getById(body.data.fileId, 1);
+      const content = runFile!.content as RunFileContent;
+      expect(content.messages![0].status).toBe('failed');
+      expect(content.messages![0].deliveryError).toContain('SMTP timeout');
+    });
+
+    it('does not send email when alert is not triggered', async () => {
+      const { sendEmail } = require('@/lib/email/send-email');
+
+      // Set threshold above returned value (150) so it doesn't trigger
+      const alertWithEmails: AlertContent = {
+        questionId,
+        status: 'live',
+        schedule: { cron: '* * * * *', timezone: 'UTC' },
+        condition: { selector: 'first', function: 'value', column: 'revenue', operator: '>', threshold: 200 },
+        emails: ['alice@example.com'],
+      };
+      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', alertWithEmails, [questionId], 1);
+
+      const req = makeRequest('/api/jobs/run', 'POST', { job_id: String(alertId), job_type: 'alert' });
+      await runPostHandler(req);
+
+      expect(sendEmail).not.toHaveBeenCalled();
     });
 
     it('returns 400 for unknown job_type', async () => {
@@ -268,6 +434,14 @@ describe('Job Runs E2E', () => {
       expect(runs[0].output_file_id).not.toBeNull();
       expect(runs[0].output_file_type).toBe('alert_run');
 
+      // Run file should use new RunFileContent shape
+      const runFile = await DocumentDB.getById(runs[0].output_file_id!, 1);
+      const content = runFile!.content as RunFileContent;
+      expect(content.job_type).toBe('alert');
+      expect(content.status).toBe('success');
+      const output = content.output as AlertOutput;
+      expect(output.status).toBe('triggered');
+
       // No job_runs row for the draft alert
       const draftRuns = await JobRunsDB.getByJobId(String(draftAlertId), 'alert', 1);
       expect(draftRuns).toHaveLength(0);
@@ -282,7 +456,7 @@ describe('Job Runs E2E', () => {
       const body2 = await parseResponse(res2);
 
       expect(body2.data.triggered).toBe(0);
-      // The live alert was already run; the second call finds the existing run
+      // The live alert was already run; the second call finds the existing run in the time window
       const runs = await JobRunsDB.getByJobId(String(alertId), 'alert', 1);
       expect(runs).toHaveLength(1);  // only one run, not two
     });

@@ -91,30 +91,33 @@ export class JobRunsDB {
   }
 
   /**
-   * Force-create a new job run (no window dedup — for manual triggers).
-   * Returns the new run ID.
+   * Force-create a new job run with the output file linked upfront.
+   * output_file_id and output_file_type are set immediately since the run file
+   * is created before execution starts. Returns the new run ID.
    */
   static async create(params: {
     job_id: string;
     job_type: string;
     company_id: number;
+    output_file_id: number;
+    output_file_type: string;
     timeout?: number;
     source?: JobRunSource;
   }): Promise<number> {
     const db = await getAdapter();
-    const { job_id, job_type, company_id, timeout = 30, source = 'manual' } = params;
+    const { job_id, job_type, company_id, output_file_id, output_file_type, timeout = 30, source = 'manual' } = params;
 
-    // Use a read-only CTE so the query starts with WITH — the SQLite adapter
-    // detects WITH as a SELECT and calls .all(), which respects the RETURNING clause.
     const result = await db.query<{ id: number }>(
       `WITH row_data AS (
-         SELECT $1 AS job_id, $2 AS job_type, $3 AS company_id, $4 AS timeout, $5 AS source
+         SELECT $1 AS job_id, $2 AS job_type, $3 AS company_id,
+                $4 AS output_file_id, $5 AS output_file_type,
+                $6 AS timeout, $7 AS source
        )
-       INSERT INTO job_runs (job_id, job_type, company_id, timeout, source, status)
-       SELECT job_id, job_type, company_id, timeout, source, 'RUNNING'
+       INSERT INTO job_runs (job_id, job_type, company_id, output_file_id, output_file_type, timeout, source, status)
+       SELECT job_id, job_type, company_id, output_file_id, output_file_type, timeout, source, 'RUNNING'
        FROM row_data
        RETURNING id`,
-      [job_id, job_type, company_id, timeout, source]
+      [job_id, job_type, company_id, output_file_id, output_file_type, timeout, source]
     );
     return result.rows[0].id;
   }
@@ -135,17 +138,12 @@ export class JobRunsDB {
     const db = await getAdapter();
     const { job_id, job_type, company_id, window_start, window_end, timeout = 30, source = 'cron' } = params;
 
-    // SQLite stores CURRENT_TIMESTAMP as 'YYYY-MM-DD HH:MM:SS' (no T, no Z).
-    // ISO strings use 'YYYY-MM-DDTHH:MM:SS.mmmZ', and string comparison
-    // would fail because space (ASCII 32) < 'T' (ASCII 84).
-    // Normalize bounds to SQLite format when running on SQLite.
     const toWindowBound = (d: Date): string =>
       getDbType() === 'sqlite'
         ? d.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '')
         : d.toISOString();
 
     return db.transaction(async (tx) => {
-      // Check for existing run within the window
       const existing = await tx.query<{ id: number }>(
         `SELECT id FROM job_runs
          WHERE job_id = $1 AND job_type = $2 AND company_id = $3
@@ -173,29 +171,57 @@ export class JobRunsDB {
   }
 
   /**
-   * Mark a job run as complete and optionally record the result file ID.
+   * Mark a job run as complete. output_file_id is already set from create(),
+   * so only status and error need to be updated.
    */
   static async complete(
     runId: number,
     status: 'SUCCESS' | 'FAILURE' | 'TIMEOUT',
-    output_file_id?: number,
-    output_file_type?: string,
     error?: string
   ): Promise<void> {
     const db = await getAdapter();
     await db.query(
       `UPDATE job_runs
-       SET status = $1, completed_at = CURRENT_TIMESTAMP,
-           output_file_id = $2, output_file_type = $3, error = $4
-       WHERE id = $5`,
-      [
-        status,
-        output_file_id ?? null,
-        output_file_type ?? null,
-        error ?? null,
-        runId,
-      ]
+       SET status = $1, completed_at = CURRENT_TIMESTAMP, error = $2
+       WHERE id = $3`,
+      [status, error ?? null, runId]
     );
+  }
+
+  /**
+   * Link a run file to an existing job_run (used by cron after pre-creating the file).
+   */
+  static async setOutputFile(
+    runId: number,
+    output_file_id: number,
+    output_file_type: string
+  ): Promise<void> {
+    const db = await getAdapter();
+    await db.query(
+      `UPDATE job_runs SET output_file_id = $1, output_file_type = $2 WHERE id = $3`,
+      [output_file_id, output_file_type, runId]
+    );
+  }
+
+  /**
+   * Find an in-progress run for a given job (used for manual dedup).
+   * Returns the RUNNING run if one exists, null otherwise.
+   */
+  static async getRunningByJobId(
+    job_id: string,
+    job_type: string,
+    company_id: number
+  ): Promise<JobRun | null> {
+    const db = await getAdapter();
+    const result = await db.query<JobRunRow>(
+      `SELECT * FROM job_runs
+       WHERE job_id = $1 AND job_type = $2 AND company_id = $3 AND status = 'RUNNING'
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [job_id, job_type, company_id]
+    );
+    if (result.rows.length === 0) return null;
+    return rowToJobRun(result.rows[0]);
   }
 
   /**
