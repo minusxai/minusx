@@ -94,7 +94,7 @@ export const PiePlot = (props: PiePlotProps) => {
         data: pieData.map(d => d.name),
         top: chartTitle && showChartTitle ? 35 : 10,
         orient: 'horizontal',
-        type: pieData.length > 10 ? 'scroll' : 'plain',
+        type: 'scroll',
         pageIconSize: 10,
         pageTextStyle: { fontSize: 10 },
       },

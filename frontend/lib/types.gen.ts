@@ -145,11 +145,11 @@ export type Id5 = number;
 export type X = number;
 export type Y = number;
 /**
- * width in grid units (min 3)
+ * width in grid units (min 2)
  */
 export type W = number;
 /**
- * height in grid units (min 3)
+ * height in grid units (min 2)
  */
 export type H = number;
 export type Parametervalues1 = {

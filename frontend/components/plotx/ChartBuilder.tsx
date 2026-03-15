@@ -451,7 +451,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
               {xAxisColumns.length === 0 ? (
                 <SingleValue series={aggregatedData.series} />
               ) : (
-                <Box width="100%" flex="1" display="flex" alignItems="center" justifyContent="center" minWidth="200px" minHeight="0">
+                <Box width="100%" flex="1" display="flex" alignItems="center" justifyContent="center" minWidth="100px" minHeight="0">
                   {chartType === 'line' && (
                     <LinePlot
                       xAxisData={aggregatedData.xAxisData}
