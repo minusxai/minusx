@@ -34,7 +34,7 @@ export const TrendPlot = ({ series, columnFormats, yAxisColumns }: TrendPlotProp
 
   if (!series || series.length === 0) {
     return (
-      <Box color="fg.subtle" fontSize="sm" textAlign="center" py={8}>
+      <Box color="fg.muted" fontSize="sm" textAlign="center" py={8}>
         No data to display
       </Box>
     )
@@ -83,7 +83,7 @@ export const TrendPlot = ({ series, columnFormats, yAxisColumns }: TrendPlotProp
             isDecrease = percentChange < 0
           }
 
-          const color = colors[index % colors.length]
+          const color = series.length === 1 ? 'var(--chakra-colors-fg-default)' : colors[index % colors.length]
           const trendColor = isIncrease ? CHART_COLORS.teal : isDecrease ? CHART_COLORS.danger : color
 
           return (
@@ -97,7 +97,7 @@ export const TrendPlot = ({ series, columnFormats, yAxisColumns }: TrendPlotProp
               <Text
                 fontSize={isSmall ? '2xs' : 'xs'}
                 fontWeight="700"
-                color="fg.subtle"
+                color="fg.muted"
                 textTransform="uppercase"
                 letterSpacing="0.05em"
                 fontFamily="mono"
