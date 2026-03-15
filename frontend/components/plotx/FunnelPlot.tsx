@@ -113,7 +113,7 @@ export const FunnelPlot = (props: FunnelPlotProps) => {
         data: funnelData.map(d => d.name),
         top: chartTitle && showChartTitle ? 35 : 10,
         orient: 'horizontal',
-        type: funnelData.length > 10 ? 'scroll' : 'plain',
+        type: 'scroll',
         pageIconSize: 10,
         pageTextStyle: { fontSize: 10 },
       },

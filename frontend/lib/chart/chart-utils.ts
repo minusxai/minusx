@@ -616,7 +616,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         : series.map(s => s.name),
       top: chartTitle && showChartTitle ? 30 : 10,
       orient: 'horizontal',
-      type: series.length > 10 ? 'scroll' : 'plain',
+      type: 'scroll',
       pageIconSize: 10, // Smaller navigation buttons
       pageTextStyle: {fontSize: 10},
     },
