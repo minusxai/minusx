@@ -152,6 +152,26 @@ export const POSTGRES_SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_access_tokens_company ON access_tokens(company_id);
   CREATE INDEX IF NOT EXISTS idx_access_tokens_expires_at ON access_tokens(expires_at);
 
+  -- Job runs table for tracking scheduled and manual job executions
+  CREATE TABLE IF NOT EXISTS job_runs (
+    id               SERIAL PRIMARY KEY,
+    created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at     TIMESTAMP NULL,
+    job_id           TEXT NOT NULL,
+    job_type         TEXT NOT NULL,
+    company_id       INTEGER NOT NULL,
+    output_file_id   INTEGER NULL,
+    output_file_type TEXT NULL,
+    status           TEXT NOT NULL DEFAULT 'RUNNING',
+    error            TEXT NULL,
+    timeout          INTEGER NOT NULL DEFAULT 30,
+    source           TEXT NOT NULL DEFAULT 'manual',
+    FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_job_runs_company_job ON job_runs(company_id, job_id, job_type);
+  CREATE INDEX IF NOT EXISTS idx_job_runs_created_at ON job_runs(created_at DESC);
+
   -- Configs table for storing system configuration values
   CREATE TABLE IF NOT EXISTS configs (
     key TEXT PRIMARY KEY,

@@ -1,9 +1,10 @@
 'use client';
 
-import { Box, Text, VStack, HStack, Input, Button, Flex, Badge, Portal } from '@chakra-ui/react';
-import { AlertContent, AlertRunContent, AlertSelector, AlertFunction, ComparisonOperator } from '@/lib/types';
+import { Box, Text, VStack, HStack, Input, Button, Flex, Badge, Portal, Switch } from '@chakra-ui/react';
+import type { CheckedChangeDetails } from '@zag-js/switch';
+import { AlertContent, AlertSelector, AlertFunction, ComparisonOperator, JobRun } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { LuPlay, LuClock, LuBell, LuMail, LuInfo, LuGripVertical, LuHistory, LuSettings, LuColumns3, LuScanSearch } from 'react-icons/lu';
+import { LuPlay, LuClock, LuBell, LuMail, LuInfo, LuGripVertical, LuHistory, LuSettings, LuScanSearch } from 'react-icons/lu';
 import { DeliveryPicker } from '@/components/shared/DeliveryPicker';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { useAppSelector } from '@/store/hooks';
@@ -12,18 +13,14 @@ import { selectIsDirty } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
 import { useFetch } from '@/lib/api/useFetch';
 import { API } from '@/lib/api/declarations';
-
-interface AlertRun {
-  id: number;
-  name: string;
-  content: AlertRunContent;
-}
+import AlertRunContainerV2 from '@/components/containers/AlertRunContainerV2';
 
 interface AlertViewProps {
   alert: AlertContent;
+  alertName: string;
   fileId: number;
   isRunning: boolean;
-  runs?: AlertRun[];
+  runs?: JobRun[];
   selectedRunId?: number | null;
 
   onChange: (updates: Partial<AlertContent>) => void;
@@ -103,7 +100,6 @@ function buildConditionSummary(condition: AlertContent['condition'] | undefined 
   const thresh = condition.threshold;
   const rowLabel = sel === 'all' ? 'all rows' : `${sel} row`;
 
-  // Build the "what" part
   let what: string;
   if (fn === 'count') {
     what = 'row count';
@@ -120,7 +116,6 @@ function buildConditionSummary(condition: AlertContent['condition'] | undefined 
   } else if (fn === 'years_ago') {
     what = `years since ${col} in ${rowLabel}`;
   } else {
-    // sum, avg, min, max
     what = `${fn} of ${col} across ${rowLabel}`;
   }
 
@@ -139,8 +134,10 @@ const operatorCollection = createListCollection({
   ]
 });
 
+
 export default function AlertView({
   alert,
+  alertName,
   fileId,
   isRunning,
   runs = [],
@@ -149,10 +146,10 @@ export default function AlertView({
   onCheckNow,
   onSelectRun
 }: AlertViewProps) {
-  // editMode, viewMode, and isDirty sourced from Redux (managed by FileHeader)
   const editMode = useAppSelector(state => selectFileEditMode(state, fileId));
   const activeTab = useAppSelector(state => selectFileViewMode(state, fileId));
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
+  const isLive = (alert.status ?? 'draft') === 'live';
 
   // Resizable panel state
   const [leftPanelWidth, setLeftPanelWidth] = useState(50);
@@ -165,13 +162,11 @@ export default function AlertView({
 
   useEffect(() => {
     if (!mainContentRef.current) return;
-
     const resizeObserver = new ResizeObserver(entries => {
       for (const entry of entries) {
         setContainerWidth(entry.contentRect.width);
       }
     });
-
     resizeObserver.observe(mainContentRef.current);
     return () => resizeObserver.disconnect();
   }, []);
@@ -188,7 +183,6 @@ export default function AlertView({
   const handleResizeMove = useCallback((clientX: number) => {
     if (!isResizing || !mainContentRef.current) return;
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
-
     rafRef.current = requestAnimationFrame(() => {
       if (!mainContentRef.current) return;
       const containerRect = mainContentRef.current.getBoundingClientRect();
@@ -219,7 +213,6 @@ export default function AlertView({
     };
   }, [isResizing, handleResizeMove, handleResizeEnd]);
 
-  // Get available questions from Redux
   const files = useAppSelector(state => state.files.files);
   const questions = useMemo(() =>
     Object.values(files).filter(f => f.type === 'question' && f.id > 0),
@@ -234,14 +227,11 @@ export default function AlertView({
   const runsCollection = useMemo(() => createListCollection({
     items: runs.map(r => ({
       value: r.id.toString(),
-      label: new Date(r.content.startedAt).toLocaleString()
+      label: new Date(r.created_at).toLocaleString()
     }))
   }), [runs]);
 
-  // Get selected run
   const selectedRun = runs.find(r => r.id === selectedRunId);
-
-  // Get referenced question name
   const referencedQuestion = alert.questionId ? files[alert.questionId] : null;
 
   // Fetch columns for selected question
@@ -258,12 +248,31 @@ export default function AlertView({
 
   return (
     <Box display="flex" flexDirection="column" overflow="hidden" flex="1" minH="0" fontFamily="mono">
-      {/* Cron not active info banner */}
-      <HStack gap={2} px={4} py={2} bg="yellow.subtle" borderBottomWidth="1px" borderColor="yellow.muted" borderRadius={"md"}>
-        <LuInfo size={14} color="var(--chakra-colors-yellow-fg)" />
-        <Text fontSize="xs" color="yellow.fg">
-          Scheduled runs are not active yet. Use <strong>Check Now</strong> to test your alert.
+      {/* Status bar: Live/Draft toggle + cron info */}
+      <HStack gap={3} px={4} py={2} bg={isLive ? 'green.subtle' : 'yellow.subtle'} borderBottomWidth="1px" borderColor={isLive ? 'green.muted' : 'yellow.muted'} borderRadius="md">
+        <LuInfo size={14} color={isLive ? 'var(--chakra-colors-green-fg)' : 'var(--chakra-colors-yellow-fg)'} />
+        <Text fontSize="xs" color={isLive ? 'green.fg' : 'yellow.fg'} flex={1}>
+          {isLive
+            ? 'This alert is live. Scheduled runs will execute when the cron endpoint is triggered.'
+            : 'Draft mode — scheduled runs are disabled. Use Check Now to test.'}
         </Text>
+        <HStack gap={2}>
+          <Text fontSize="xs" fontWeight="600" color={isLive ? 'green.fg' : 'yellow.fg'}>
+            {isLive ? 'Live' : 'Draft'}
+          </Text>
+          <Switch.Root
+            size="sm"
+            checked={isLive}
+            disabled={!editMode}
+            onCheckedChange={(e: CheckedChangeDetails) => onChange({ status: e.checked ? 'live' : 'draft' })}
+            colorPalette="green"
+          >
+            <Switch.HiddenInput />
+            <Switch.Control>
+              <Switch.Thumb />
+            </Switch.Control>
+          </Switch.Root>
+        </HStack>
       </HStack>
 
       {/* JSON View */}
@@ -320,24 +329,22 @@ export default function AlertView({
                   <SelectRoot
                     collection={questionCollection}
                     value={alert.questionId ? [alert.questionId.toString()] : []}
-                    onValueChange={(e) => onChange({
-                      questionId: parseInt(e.value[0], 10)
-                    })}
+                    onValueChange={(e) => onChange({ questionId: parseInt(e.value[0], 10) })}
                     size="sm"
                   >
                     <SelectTrigger bg="bg.surface">
                       <SelectValueText placeholder="Select a question..." />
                     </SelectTrigger>
                     <Portal>
-                    <SelectPositioner>
-                      <SelectContent>
-                        {questionCollection.items.map((item) => (
-                          <SelectItem key={item.value} item={item}>
-                            {item.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </SelectPositioner>
+                      <SelectPositioner>
+                        <SelectContent>
+                          {questionCollection.items.map((item) => (
+                            <SelectItem key={item.value} item={item}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </SelectPositioner>
                     </Portal>
                   </SelectRoot>
                 ) : (
@@ -545,7 +552,7 @@ export default function AlertView({
                   </HStack>
                 </VStack>
 
-                {/* Condition summary — prose */}
+                {/* Condition summary */}
                 {(() => {
                   const summary = buildConditionSummary(alert.condition);
                   if (!summary) return null;
@@ -612,9 +619,7 @@ export default function AlertView({
                   <Box flex={1}>
                     <Input
                       value={alert.schedule?.cron || ''}
-                      onChange={(e) => onChange({
-                        schedule: { ...alert.schedule, cron: e.target.value }
-                      })}
+                      onChange={(e) => onChange({ schedule: { ...alert.schedule, cron: e.target.value } })}
                       placeholder="cron"
                       disabled={!editMode}
                       size="sm"
@@ -628,9 +633,7 @@ export default function AlertView({
                     <SelectRoot
                       collection={timezoneCollection}
                       value={[alert.schedule?.timezone || 'America/New_York']}
-                      onValueChange={(e) => onChange({
-                        schedule: { ...alert.schedule, timezone: e.value[0] }
-                      })}
+                      onValueChange={(e) => onChange({ schedule: { ...alert.schedule, timezone: e.value[0] } })}
                       disabled={!editMode}
                       size="sm"
                     >
@@ -801,93 +804,13 @@ export default function AlertView({
                   <Text color="fg.muted">Running alert check...</Text>
                 </VStack>
               ) : selectedRun ? (
-                <VStack align="stretch" gap={3}>
-                  <HStack justify="space-between">
-                    <Badge
-                      colorPalette={
-                        selectedRun.content.status === 'triggered' ? 'red' :
-                        selectedRun.content.status === 'not_triggered' ? 'green' :
-                        selectedRun.content.status === 'failed' ? 'red' : 'yellow'
-                      }
-                    >
-                      {selectedRun.content.status === 'triggered' ? 'TRIGGERED' :
-                       selectedRun.content.status === 'not_triggered' ? 'OK' :
-                       selectedRun.content.status.toUpperCase()}
-                    </Badge>
-                    <Text fontSize="xs" color="fg.muted">
-                      {new Date(selectedRun.content.startedAt).toLocaleString()}
-                    </Text>
-                  </HStack>
-
-                  {/* Result details */}
-                  <Box p={3} bg="bg.muted" borderRadius="md">
-                    <VStack align="stretch" gap={2}>
-                      <HStack justify="space-between">
-                        <Text fontSize="xs" color="fg.muted">Metric</Text>
-                        <Text fontSize="xs" fontWeight="600">
-                          {buildConditionSummary(selectedRun.content as unknown as AlertContent['condition'])?.what || selectedRun.content.function}
-                        </Text>
-                      </HStack>
-                      {selectedRun.content.actualValue !== null && (
-                        <HStack justify="space-between">
-                          <Text fontSize="xs" color="fg.muted">Actual value</Text>
-                          <Text fontSize="xs" fontWeight="600">{selectedRun.content.actualValue}</Text>
-                        </HStack>
-                      )}
-                      <HStack justify="space-between">
-                        <Text fontSize="xs" color="fg.muted">Condition</Text>
-                        <Text fontSize="xs" fontWeight="600">
-                          {selectedRun.content.operator} {selectedRun.content.threshold}
-                        </Text>
-                      </HStack>
-                    </VStack>
-                  </Box>
-
-                  {selectedRun.content.error && (
-                    <Box p={3} bg="red.subtle" borderRadius="md" color="red.fg">
-                      <Text fontSize="sm">{selectedRun.content.error}</Text>
-                    </Box>
-                  )}
-
-                  {/* Narrative summary */}
-                  {selectedRun.content.status !== 'failed' && (
-                    <Box
-                      p={3}
-                      borderRadius="md"
-                      border="1px solid"
-                      borderColor={selectedRun.content.status === 'triggered' ? 'red.muted' : 'green.muted'}
-                      bg={selectedRun.content.status === 'triggered' ? 'red.subtle' : 'green.subtle'}
-                    >
-                      <Text fontSize="sm" lineHeight="1.6">
-                        {(() => {
-                          const r = selectedRun.content;
-                          const summary = buildConditionSummary(r as unknown as AlertContent['condition']);
-                          const val = r.actualValue?.toLocaleString() ?? 'N/A';
-                          const suffix = r.function === 'pct_change' ? '%' : '';
-
-                          if (r.status === 'triggered') {
-                            return (
-                              <>
-                                The <Text as="span" fontWeight="700">{summary?.what}</Text> was{' '}
-                                <Text as="span" fontWeight="700">{val}{suffix}</Text>, which is{' '}
-                                <Text as="span" fontWeight="700">{r.operator} {summary?.thresh}</Text>.{' '}
-                                The alert condition was met.
-                              </>
-                            );
-                          }
-                          return (
-                            <>
-                              The <Text as="span" fontWeight="700">{summary?.what}</Text> was{' '}
-                              <Text as="span" fontWeight="700">{val}{suffix}</Text>, which does not satisfy{' '}
-                              <Text as="span" fontWeight="700">{r.operator} {summary?.thresh}</Text>.{' '}
-                              No action needed.
-                            </>
-                          );
-                        })()}
-                      </Text>
-                    </Box>
-                  )}
-                </VStack>
+                selectedRun.output_file_id ? (
+                  <AlertRunContainerV2 fileId={selectedRun.output_file_id} inline />
+                ) : (
+                  <VStack gap={2} align="center" justify="center" h="100%" color="fg.muted">
+                    <Text fontSize="sm">Run in progress...</Text>
+                  </VStack>
+                )
               ) : runs.length === 0 ? (
                 <VStack gap={4} align="center" justify="center" h="100%" color="fg.muted">
                   <LuBell size={48} opacity={0.3} />
