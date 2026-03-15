@@ -50,6 +50,7 @@ export interface DocumentHeaderProps {
   additionalBadges?: ReactNode;  // Additional badges to show next to type badge
   readOnlyName?: boolean;        // If true, name cannot be edited
   hideDescription?: boolean;     // If true, description field is not shown
+  hideEditToggle?: boolean;      // If true, Edit/Cancel button is hidden (e.g. for new unsaved files)
 
   // JSON view toggle (optional - shown only for admins when provided)
   viewMode?: 'visual' | 'json';  // Current view mode
@@ -84,6 +85,7 @@ export default function DocumentHeader({
   additionalBadges,
   readOnlyName = false,
   hideDescription = false,
+  hideEditToggle = false,
   viewMode = 'visual',
   onViewModeChange,
   questionId,
@@ -268,6 +270,7 @@ export default function DocumentHeader({
             )}
 
             {/* Edit/Cancel Button */}
+            {!hideEditToggle && (
             <IconButton
               onClick={onEditModeToggle}
               aria-label={editMode ? 'Cancel editing' : 'Edit'}
@@ -278,6 +281,7 @@ export default function DocumentHeader({
               {!editMode && <LuPencil />}
               {editMode ? 'Cancel' : 'Edit'}
             </IconButton>
+            )}
             {/* JSON View Toggle (shown only when showJson setting is enabled) */}
             {onViewModeChange && showJson && (
               <TabSwitcher
