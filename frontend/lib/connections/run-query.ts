@@ -38,11 +38,9 @@ export async function runQuery(
     if (connector) {
       return connector.query(query, params);
     }
-  } else {
-    throw new Error(`Connection not found: ${databaseName}`);
   }
 
-  // Fall back to Python backend
+  // Fall back to Python backend (handles all non-Node types, and unknown connections)
   const response = await pythonBackendFetch('/api/execute-query', {
     method: 'POST',
     body: JSON.stringify({ query, parameters: params, database_name: databaseName }),
