@@ -1057,6 +1057,9 @@ export const selectIsDirty = (state: RootState, id: FileId): boolean => {
   const file = state.files.files[id];
   if (!file) return false;
 
+  // Virtual (unsaved) files are always dirty
+  if (isVirtualFileId(id)) return true;
+
   const hasContentChanges = file.persistableChanges && Object.keys(file.persistableChanges).length > 0;
   const hasMetadataChanges = file.metadataChanges && (file.metadataChanges.name !== undefined || file.metadataChanges.path !== undefined);
 
