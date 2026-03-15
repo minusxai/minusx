@@ -3,4 +3,4 @@
  */
 
 export const LATEST_DATA_VERSION = 18;  // V18: Reassign /org file IDs < 100 to IDs > 100
-export const LATEST_SCHEMA_VERSION = 7;  // V7: Add job_runs table
+export const LATEST_SCHEMA_VERSION = 8;  // V8: Revise job_runs table (drop input/output, rename columns)

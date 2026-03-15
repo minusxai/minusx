@@ -1,7 +1,8 @@
 /**
  * POST /api/jobs/cron
  * Called by an external cron on a per-minute schedule.
- * Scans all 'live' alerts and triggers those whose cron expression fires in the current minute.
+ * Iterates JOB_DEFINITIONS, loads all matching files, filters by isActive,
+ * and dispatches each to the corresponding JOB_HANDLERS entry.
  *
  * External trigger options:
  *   - Vercel Cron Jobs (vercel.json)
@@ -15,10 +16,9 @@ import { JobRunsDB } from '@/lib/database/job-runs-db';
 import { FilesAPI } from '@/lib/data/files.server';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { resolvePath } from '@/lib/mode/path-resolver';
-import { getNodeConnector } from '@/lib/connections';
-import { pythonBackendFetch } from '@/lib/api/python-backend-client';
-import { evaluateCondition, extractMetricValue } from '@/lib/alert/evaluate-alert';
-import type { AlertContent, AlertRunContent, QuestionContent, ConnectionContent } from '@/lib/types';
+import { JOB_DEFINITIONS } from '@/lib/jobs/job-definitions';
+import { JOB_HANDLERS } from '@/lib/jobs/job-registry';
+import type { AlertContent } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -84,101 +84,71 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
     const windowStart = new Date(now.getTime() - 30_000);
     const windowEnd = new Date(now.getTime() + 30_000);
 
-    // Load all alert files for this company (with content to check status)
-    const allAlertFiles = await DocumentDB.listAll(user.companyId, 'alert', undefined, -1, true);
-
     let triggered = 0;
     let skipped = 0;
     let failed = 0;
 
-    for (const alertFile of allAlertFiles) {
-      const alert = alertFile.content as AlertContent | null;
-      if (!alert || alert.status !== 'live') { skipped++; continue; }
-      if (!alert.schedule?.cron || !isCronDue(alert.schedule.cron, now)) { skipped++; continue; }
-      if (!alert.questionId || alert.questionId <= 0) { skipped++; continue; }
+    for (const jobDef of JOB_DEFINITIONS) {
+      const handler = JOB_HANDLERS[jobDef.job_type];
+      if (!handler) continue;
 
-      const alertId = alertFile.id;
-      const alertName = alertFile.name;
-      const runInput = { alertId, alertName, questionId: alert.questionId, condition: alert.condition };
+      // Load all files of this job type for this company
+      const allFiles = await DocumentDB.listAll(user.companyId, jobDef.file_type, undefined, -1, true);
 
-      const { runId, isNewRun } = await JobRunsDB.findOrCreate({
-        job_id: String(alertId),
-        job_type: 'alert',
-        company_id: user.companyId,
-        window_start: windowStart,
-        window_end: windowEnd,
-        input: runInput,
-        source: 'cron',
-      });
+      for (const jobFile of allFiles) {
+        const content = jobFile.content as AlertContent | null;
+        if (!content || !jobDef.isActive(content)) { skipped++; continue; }
 
-      if (!isNewRun) { skipped++; continue; }
-
-      const startedAt = new Date().toISOString();
-      try {
-        // Load question
-        const questionResult = await FilesAPI.loadFile(alert.questionId, user);
-        const question = questionResult.data.content as QuestionContent;
-
-        const paramValues: Record<string, string | number> = {};
-        if (question.parameterValues && typeof question.parameterValues === 'object') {
-          Object.assign(paramValues, question.parameterValues);
+        // For alerts, check schedule
+        if (jobDef.job_type === 'alert') {
+          const alert = content as AlertContent;
+          if (!alert.schedule?.cron || !isCronDue(alert.schedule.cron, now)) { skipped++; continue; }
+          if (!alert.questionId || alert.questionId <= 0) { skipped++; continue; }
         }
 
-        let queryResult: { columns: string[]; types: string[]; rows: Record<string, any>[] };
+        const jobId = String(jobFile.id);
 
-        const connPath = resolvePath(user.mode, `/database/${question.database_name}`);
-        const connFile = await DocumentDB.getByPath(connPath, user.companyId);
-        if (connFile?.content) {
-          const { type, config } = connFile.content as ConnectionContent;
-          const connector = getNodeConnector(question.database_name, type, config);
-          if (connector) {
-            queryResult = await connector.query(question.query, paramValues);
+        const { runId, isNewRun } = await JobRunsDB.findOrCreate({
+          job_id: jobId,
+          job_type: jobDef.job_type,
+          company_id: user.companyId,
+          window_start: windowStart,
+          window_end: windowEnd,
+          source: 'cron',
+        });
+
+        if (!isNewRun) { skipped++; continue; }
+
+        try {
+          const result = await handler.execute(jobId, content, user, runId);
+
+          // Persist result file
+          const runPath = resolvePath(user.mode, `/logs/runs/${runId}`);
+          const createResult = await FilesAPI.createFile(
+            {
+              name: `run-${runId}`,
+              path: runPath,
+              type: result.file_type,
+              content: result.content,
+              references: [jobFile.id],
+              options: { createPath: true },
+            },
+            user
+          );
+
+          const error = result.status === 'FAILURE' ? (result.content as any).error ?? 'Job failed' : undefined;
+          await JobRunsDB.complete(runId, result.status, createResult.data.id, result.file_type, error);
+
+          if (result.status === 'SUCCESS') {
+            triggered++;
           } else {
-            const response = await pythonBackendFetch('/api/execute-query', {
-              method: 'POST',
-              body: JSON.stringify({ query: question.query, parameters: paramValues, database_name: question.database_name }),
-            });
-            if (!response.ok) {
-              const data = await response.json();
-              throw new Error(data.detail || 'Query execution failed');
-            }
-            queryResult = await response.json();
+            failed++;
           }
-        } else {
-          throw new Error(`Connection not found: ${question.database_name}`);
+        } catch (execError) {
+          const errorMessage = execError instanceof Error ? execError.message : 'Unknown error';
+          await JobRunsDB.complete(runId, 'FAILURE', undefined, undefined, errorMessage);
+          failed++;
         }
-
-        const actualValue = extractMetricValue(queryResult.rows, alert.condition);
-        const isTriggered = evaluateCondition(actualValue, alert.condition.operator, alert.condition.threshold);
-
-        const completedAt = new Date().toISOString();
-        const runContent: AlertRunContent = {
-          alertId,
-          alertName,
-          startedAt,
-          completedAt,
-          status: isTriggered ? 'triggered' : 'not_triggered',
-          actualValue,
-          threshold: alert.condition.threshold,
-          operator: alert.condition.operator,
-          selector: alert.condition.selector,
-          function: alert.condition.function,
-          column: alert.condition.column,
-        };
-
-        const timestamp = new Date(startedAt).toISOString().replace(/[:.]/g, '-');
-        const runPath = resolvePath(user.mode, `/logs/alerts/${alertId}/${timestamp}`);
-        const createResult = await FilesAPI.createFile(
-          { name: timestamp, path: runPath, type: 'alert_run', content: runContent, references: [alertId], options: { createPath: true } },
-          user
-        );
-
-        await JobRunsDB.complete(runId, 'SUCCESS', createResult.data.id, { actualValue, triggered: isTriggered });
-        triggered++;
-      } catch (execError) {
-        const errorMessage = execError instanceof Error ? execError.message : 'Unknown error';
-        await JobRunsDB.complete(runId, 'FAILURE', undefined, undefined, errorMessage);
-        failed++;
       }
     }
 

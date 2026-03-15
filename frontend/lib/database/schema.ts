@@ -102,19 +102,18 @@ export const DATABASE_SCHEMA = `
 
   -- Job runs table for tracking scheduled and manual job executions
   CREATE TABLE IF NOT EXISTS job_runs (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    completed_at  TIMESTAMP NULL,
-    job_id        TEXT NOT NULL,
-    job_type      TEXT NOT NULL,
-    company_id    INTEGER NOT NULL,
-    file_id       INTEGER NULL,
-    status        TEXT NOT NULL DEFAULT 'RUNNING',
-    input         TEXT NOT NULL DEFAULT '{}',
-    output        TEXT NULL,
-    error_message TEXT NULL,
-    timeout       INTEGER NOT NULL DEFAULT 30,
-    source        TEXT NOT NULL DEFAULT 'manual',
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at     TIMESTAMP NULL,
+    job_id           TEXT NOT NULL,
+    job_type         TEXT NOT NULL,
+    company_id       INTEGER NOT NULL,
+    output_file_id   INTEGER NULL,
+    output_file_type TEXT NULL,
+    status           TEXT NOT NULL DEFAULT 'RUNNING',
+    error            TEXT NULL,
+    timeout          INTEGER NOT NULL DEFAULT 30,
+    source           TEXT NOT NULL DEFAULT 'manual',
     FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
   );
 

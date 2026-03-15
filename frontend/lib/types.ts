@@ -449,11 +449,10 @@ export interface JobRun {
   job_id: string;
   job_type: string;
   company_id: number;
-  file_id: number | null;          // ID of the result file (e.g. alert_run); navigate via /f/{file_id}
+  output_file_id: number | null;    // ID of the result file (e.g. alert_run); navigate via /f/{output_file_id}
+  output_file_type: string | null;  // Type of the result file (e.g. 'alert_run')
   status: JobRunStatus;
-  input: Record<string, any>;      // Job-specific input (condition, questionId, etc.)
-  output: Record<string, any> | null;  // Supplementary result metadata
-  error_message: string | null;
+  error: string | null;
   timeout: number;
   source: JobRunSource;
 }

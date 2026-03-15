@@ -137,8 +137,6 @@ const operatorCollection = createListCollection({
 function getRunDisplayStatus(run: JobRun): 'triggered' | 'not_triggered' | 'failed' | 'running' {
   if (run.status === 'RUNNING') return 'running';
   if (run.status === 'FAILURE' || run.status === 'TIMEOUT') return 'failed';
-  // SUCCESS: check if the condition was triggered
-  if (run.output?.triggered === true) return 'triggered';
   return 'not_triggered';
 }
 
@@ -813,52 +811,27 @@ export default function AlertView({
               ) : selectedRun ? (
                 (() => {
                   const displayStatus = getRunDisplayStatus(selectedRun);
-                  const actualValue = selectedRun.output?.actualValue as number | null ?? null;
-                  const condition = selectedRun.input?.condition as AlertContent['condition'] | undefined;
-                  const summary = buildConditionSummary(condition ?? null);
 
                   return (
                     <VStack align="stretch" gap={3}>
                       <HStack justify="space-between">
                         <Badge
                           colorPalette={
-                            displayStatus === 'triggered' ? 'red' :
                             displayStatus === 'not_triggered' ? 'green' :
-                            displayStatus === 'failed' ? 'red' : 'yellow'
+                            displayStatus === 'failed' ? 'red' :
+                            displayStatus === 'running' ? 'yellow' : 'red'
                           }
                         >
-                          {displayStatus === 'triggered' ? 'TRIGGERED' :
-                           displayStatus === 'not_triggered' ? 'OK' :
-                           displayStatus.toUpperCase()}
+                          {displayStatus === 'not_triggered' ? 'OK' : displayStatus.toUpperCase()}
                         </Badge>
                         <Text fontSize="xs" color="fg.muted">
                           {new Date(selectedRun.created_at).toLocaleString()}
                         </Text>
                       </HStack>
 
-                      {/* Result details */}
+                      {/* Run metadata */}
                       <Box p={3} bg="bg.muted" borderRadius="md">
                         <VStack align="stretch" gap={2}>
-                          {condition && (
-                            <HStack justify="space-between">
-                              <Text fontSize="xs" color="fg.muted">Metric</Text>
-                              <Text fontSize="xs" fontWeight="600">{summary?.what || condition.function}</Text>
-                            </HStack>
-                          )}
-                          {actualValue !== null && (
-                            <HStack justify="space-between">
-                              <Text fontSize="xs" color="fg.muted">Actual value</Text>
-                              <Text fontSize="xs" fontWeight="600">{actualValue}</Text>
-                            </HStack>
-                          )}
-                          {condition && (
-                            <HStack justify="space-between">
-                              <Text fontSize="xs" color="fg.muted">Condition</Text>
-                              <Text fontSize="xs" fontWeight="600">
-                                {condition.operator} {condition.threshold}
-                              </Text>
-                            </HStack>
-                          )}
                           {selectedRun.completed_at && (
                             <HStack justify="space-between">
                               <Text fontSize="xs" color="fg.muted">Duration</Text>
@@ -867,54 +840,25 @@ export default function AlertView({
                               </Text>
                             </HStack>
                           )}
-                          {selectedRun.source === 'cron' && (
-                            <HStack justify="space-between">
-                              <Text fontSize="xs" color="fg.muted">Source</Text>
-                              <Badge size="sm" colorPalette="blue">Scheduled</Badge>
-                            </HStack>
-                          )}
+                          <HStack justify="space-between">
+                            <Text fontSize="xs" color="fg.muted">Source</Text>
+                            <Badge size="sm" colorPalette={selectedRun.source === 'cron' ? 'blue' : 'gray'}>
+                              {selectedRun.source === 'cron' ? 'Scheduled' : 'Manual'}
+                            </Badge>
+                          </HStack>
                         </VStack>
                       </Box>
 
-                      {selectedRun.error_message && (
+                      {selectedRun.error && (
                         <Box p={3} bg="red.subtle" borderRadius="md" color="red.fg">
-                          <Text fontSize="sm">{selectedRun.error_message}</Text>
-                        </Box>
-                      )}
-
-                      {/* Narrative summary */}
-                      {displayStatus !== 'failed' && displayStatus !== 'running' && summary && actualValue !== null && (
-                        <Box
-                          p={3}
-                          borderRadius="md"
-                          border="1px solid"
-                          borderColor={displayStatus === 'triggered' ? 'red.muted' : 'green.muted'}
-                          bg={displayStatus === 'triggered' ? 'red.subtle' : 'green.subtle'}
-                        >
-                          <Text fontSize="sm" lineHeight="1.6">
-                            {displayStatus === 'triggered' ? (
-                              <>
-                                The <Text as="span" fontWeight="700">{summary.what}</Text> was{' '}
-                                <Text as="span" fontWeight="700">{actualValue.toLocaleString()}</Text>, which is{' '}
-                                <Text as="span" fontWeight="700">{summary.op} {summary.thresh}</Text>.{' '}
-                                The alert condition was met.
-                              </>
-                            ) : (
-                              <>
-                                The <Text as="span" fontWeight="700">{summary.what}</Text> was{' '}
-                                <Text as="span" fontWeight="700">{actualValue.toLocaleString()}</Text>, which does not satisfy{' '}
-                                <Text as="span" fontWeight="700">{summary.op} {summary.thresh}</Text>.{' '}
-                                No action needed.
-                              </>
-                            )}
-                          </Text>
+                          <Text fontSize="sm">{selectedRun.error}</Text>
                         </Box>
                       )}
 
                       {/* Link to full run file */}
-                      {selectedRun.file_id && (
+                      {selectedRun.output_file_id && (
                         <Text fontSize="xs" color="fg.subtle">
-                          <a href={`/f/${selectedRun.file_id}`} style={{ textDecoration: 'underline' }}>
+                          <a href={`/f/${selectedRun.output_file_id}`} style={{ textDecoration: 'underline' }}>
                             View full run details →
                           </a>
                         </Text>

@@ -14,11 +14,10 @@ interface JobRunRow {
   job_id: string;
   job_type: string;
   company_id: number;
-  file_id: number | null;
+  output_file_id: number | null;
+  output_file_type: string | null;
   status: string;
-  input: string;
-  output: string | null;
-  error_message: string | null;
+  error: string | null;
   timeout: number;
   source: string;
 }
@@ -31,11 +30,10 @@ function rowToJobRun(row: JobRunRow): JobRun {
     job_id: row.job_id,
     job_type: row.job_type,
     company_id: row.company_id,
-    file_id: row.file_id,
+    output_file_id: row.output_file_id,
+    output_file_type: row.output_file_type,
     status: row.status as JobRunStatus,
-    input: JSON.parse(row.input || '{}'),
-    output: row.output ? JSON.parse(row.output) : null,
-    error_message: row.error_message,
+    error: row.error,
     timeout: row.timeout,
     source: row.source as JobRunSource,
   };
@@ -43,19 +41,18 @@ function rowToJobRun(row: JobRunRow): JobRun {
 
 const SQLITE_DDL = `
   CREATE TABLE IF NOT EXISTS job_runs (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    completed_at  TIMESTAMP NULL,
-    job_id        TEXT NOT NULL,
-    job_type      TEXT NOT NULL,
-    company_id    INTEGER NOT NULL,
-    file_id       INTEGER NULL,
-    status        TEXT NOT NULL DEFAULT 'RUNNING',
-    input         TEXT NOT NULL DEFAULT '{}',
-    output        TEXT NULL,
-    error_message TEXT NULL,
-    timeout       INTEGER NOT NULL DEFAULT 30,
-    source        TEXT NOT NULL DEFAULT 'manual',
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at     TIMESTAMP NULL,
+    job_id           TEXT NOT NULL,
+    job_type         TEXT NOT NULL,
+    company_id       INTEGER NOT NULL,
+    output_file_id   INTEGER NULL,
+    output_file_type TEXT NULL,
+    status           TEXT NOT NULL DEFAULT 'RUNNING',
+    error            TEXT NULL,
+    timeout          INTEGER NOT NULL DEFAULT 30,
+    source           TEXT NOT NULL DEFAULT 'manual',
     FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
   );
   CREATE INDEX IF NOT EXISTS idx_job_runs_company_job ON job_runs(company_id, job_id, job_type);
@@ -64,19 +61,18 @@ const SQLITE_DDL = `
 
 const POSTGRES_DDL = `
   CREATE TABLE IF NOT EXISTS job_runs (
-    id            SERIAL PRIMARY KEY,
-    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    completed_at  TIMESTAMP NULL,
-    job_id        TEXT NOT NULL,
-    job_type      TEXT NOT NULL,
-    company_id    INTEGER NOT NULL,
-    file_id       INTEGER NULL,
-    status        TEXT NOT NULL DEFAULT 'RUNNING',
-    input         TEXT NOT NULL DEFAULT '{}',
-    output        TEXT NULL,
-    error_message TEXT NULL,
-    timeout       INTEGER NOT NULL DEFAULT 30,
-    source        TEXT NOT NULL DEFAULT 'manual',
+    id               SERIAL PRIMARY KEY,
+    created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at     TIMESTAMP NULL,
+    job_id           TEXT NOT NULL,
+    job_type         TEXT NOT NULL,
+    company_id       INTEGER NOT NULL,
+    output_file_id   INTEGER NULL,
+    output_file_type TEXT NULL,
+    status           TEXT NOT NULL DEFAULT 'RUNNING',
+    error            TEXT NULL,
+    timeout          INTEGER NOT NULL DEFAULT 30,
+    source           TEXT NOT NULL DEFAULT 'manual',
     FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
   );
   CREATE INDEX IF NOT EXISTS idx_job_runs_company_job ON job_runs(company_id, job_id, job_type);
@@ -102,18 +98,17 @@ export class JobRunsDB {
     job_id: string;
     job_type: string;
     company_id: number;
-    input: object;
     timeout?: number;
     source?: JobRunSource;
   }): Promise<number> {
     const db = await getAdapter();
-    const { job_id, job_type, company_id, input, timeout = 30, source = 'manual' } = params;
+    const { job_id, job_type, company_id, timeout = 30, source = 'manual' } = params;
 
     const result = await db.query<{ id: number }>(
-      `INSERT INTO job_runs (job_id, job_type, company_id, input, timeout, source, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'RUNNING')
+      `INSERT INTO job_runs (job_id, job_type, company_id, timeout, source, status)
+       VALUES ($1, $2, $3, $4, $5, 'RUNNING')
        RETURNING id`,
-      [job_id, job_type, company_id, JSON.stringify(input), timeout, source]
+      [job_id, job_type, company_id, timeout, source]
     );
     return result.rows[0].id;
   }
@@ -128,12 +123,11 @@ export class JobRunsDB {
     company_id: number;
     window_start: Date;
     window_end: Date;
-    input: object;
     timeout?: number;
     source?: JobRunSource;
   }): Promise<{ runId: number; action: string; isNewRun: boolean }> {
     const db = await getAdapter();
-    const { job_id, job_type, company_id, window_start, window_end, input, timeout = 30, source = 'cron' } = params;
+    const { job_id, job_type, company_id, window_start, window_end, timeout = 30, source = 'cron' } = params;
 
     return db.transaction(async (tx) => {
       // Check for existing run within the window
@@ -150,10 +144,10 @@ export class JobRunsDB {
       }
 
       const inserted = await tx.query<{ id: number }>(
-        `INSERT INTO job_runs (job_id, job_type, company_id, input, timeout, source, status)
-         VALUES ($1, $2, $3, $4, $5, $6, 'RUNNING')
+        `INSERT INTO job_runs (job_id, job_type, company_id, timeout, source, status)
+         VALUES ($1, $2, $3, $4, $5, 'RUNNING')
          RETURNING id`,
-        [job_id, job_type, company_id, JSON.stringify(input), timeout, source]
+        [job_id, job_type, company_id, timeout, source]
       );
       return { runId: inserted.rows[0].id, action: 'created', isNewRun: true };
     });
@@ -165,21 +159,21 @@ export class JobRunsDB {
   static async complete(
     runId: number,
     status: 'SUCCESS' | 'FAILURE' | 'TIMEOUT',
-    file_id?: number,
-    output?: object,
-    error_message?: string
+    output_file_id?: number,
+    output_file_type?: string,
+    error?: string
   ): Promise<void> {
     const db = await getAdapter();
     await db.query(
       `UPDATE job_runs
        SET status = $1, completed_at = CURRENT_TIMESTAMP,
-           file_id = $2, output = $3, error_message = $4
+           output_file_id = $2, output_file_type = $3, error = $4
        WHERE id = $5`,
       [
         status,
-        file_id ?? null,
-        output ? JSON.stringify(output) : null,
-        error_message ?? null,
+        output_file_id ?? null,
+        output_file_type ?? null,
+        error ?? null,
         runId,
       ]
     );

@@ -701,6 +701,13 @@ export const MIGRATIONS: MigrationEntry[] = [
     description: 'Migrate question parameter defaultValue → content.parameterValues'
   },
   {
+    dataVersion: undefined,  // No data format change
+    schemaVersion: 8,        // Schema bumps to 8 for revised job_runs table
+    schemaMigration: null,   // null = recreate DB with new schema
+    dataMigration: (data: InitData) => data,
+    description: 'Revise job_runs table: drop input/output blobs, rename file_id→output_file_id, error_message→error, add output_file_type'
+  },
+  {
     dataVersion: 18,
     schemaVersion: undefined,
     dataMigration: (data: InitData) => {
