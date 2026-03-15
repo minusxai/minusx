@@ -22,11 +22,25 @@ interface JobRunRow {
   source: string;
 }
 
+/**
+ * SQLite stores CURRENT_TIMESTAMP as 'YYYY-MM-DD HH:MM:SS' (UTC, no timezone marker).
+ * JavaScript's Date constructor treats this as *local* time, which is wrong.
+ * Normalize to ISO 8601 with explicit 'Z' so Date.parse always treats it as UTC.
+ * Postgres timestamps already include timezone info and pass through unchanged.
+ */
+function normalizeTimestamp(ts: string): string {
+  // Match exact SQLite format: 'YYYY-MM-DD HH:MM:SS' (no T, no timezone)
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(ts)) {
+    return ts.replace(' ', 'T') + 'Z';
+  }
+  return ts;
+}
+
 function rowToJobRun(row: JobRunRow): JobRun {
   return {
     id: row.id,
-    created_at: row.created_at,
-    completed_at: row.completed_at,
+    created_at: normalizeTimestamp(row.created_at),
+    completed_at: row.completed_at ? normalizeTimestamp(row.completed_at) : null,
     job_id: row.job_id,
     job_type: row.job_type,
     company_id: row.company_id,
