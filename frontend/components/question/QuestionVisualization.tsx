@@ -40,23 +40,37 @@ interface QuestionVisualizationProps {
   onColumnFormatsChange?: (formats: Record<string, ColumnFormatConfig>) => void;
 }
 
-function AnimatedLoadingText() {
+function QueryLoadingIndicator() {
   const [dotCount, setDotCount] = useState(1);
+  const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    const dotInterval = setInterval(() => {
       setDotCount((prev) => (prev >= 3 ? 1 : prev + 1));
     }, 400);
-    return () => clearInterval(interval);
+    const timerInterval = setInterval(() => {
+      setElapsed((prev) => prev + 1);
+    }, 1000);
+    return () => {
+      clearInterval(dotInterval);
+      clearInterval(timerInterval);
+    };
   }, []);
 
   return (
-    <Text fontFamily="mono">
-      Loading
-      <Box as="span" display="inline-block">
-        {'.'.repeat(dotCount)}
-      </Box>
-    </Text>
+    <VStack gap={2}>
+      <Text fontFamily="mono">
+        Loading
+        <Box as="span" display="inline-block">
+          {'.'.repeat(dotCount)}
+        </Box>
+      </Text>
+      {elapsed >= 10 && (
+        <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+          Query is still running... ({elapsed}s elapsed)
+        </Text>
+      )}
+    </VStack>
   );
 }
 
@@ -250,36 +264,27 @@ export function QuestionVisualization({
           </Box>
         )}
 
-        {/* Loading spinner */}
-        {loading && (
-          <VStack
-            position="absolute"
-            top="0"
-            left="0"
-            right="0"
-            bottom="0"
-            display="flex"
-            alignItems="center"
-            justifyContent="center"
-            zIndex="10"
-          >
-            <Spinner size="xl" color="accent.teal" />
-            <AnimatedLoadingText />
-          </VStack>
-        )}
-
         {/* Data content */}
         {!error && (
           <Box
             p={currentState?.vizSettings?.type === 'table' && config.showHeader ? 6 : 0}
-            opacity={!loading && data ? 1 : 0.3}
             flex="1"
             display="flex"
             flexDirection="column"
             overflow="hidden"
             minHeight="0"
           >
-            {(data && !loading) ? (
+            {loading ? (
+              <VStack
+                flex="1"
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+              >
+                <Spinner size="xl" color="accent.teal" />
+                <QueryLoadingIndicator />
+              </VStack>
+            ) : data ? (
               <>
                 {currentState?.vizSettings?.type === 'table' && (
                   <Box flex="1" minHeight="0" overflow="hidden" display="flex" width={"100%"} alignItems={"stretch"} flexDirection={"column"}>
@@ -319,11 +324,7 @@ export function QuestionVisualization({
                   </Box>
                 )}
               </>
-            ) : (
-              <HStack color="fg.subtle" fontSize="sm" fontFamily="mono" h={"full"} width={"full"} alignItems={"center"} justifyContent={"center"}>
-                <Text>No data</Text>
-              </HStack>
-            )}
+            ) : null}
           </Box>
         )}
       </Box>
