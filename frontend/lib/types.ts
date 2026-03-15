@@ -435,6 +435,27 @@ export interface AlertContent extends BaseFileContent {
   questionId: number;        // Reference to a saved question
   condition: AlertCondition;
   emails?: string[];         // Delivery email addresses
+  status?: 'live' | 'draft'; // Whether scheduled cron runs are active (default: 'draft')
+}
+
+// Job run types (from job_runs table)
+export type JobRunStatus = 'RUNNING' | 'SUCCESS' | 'FAILURE' | 'TIMEOUT';
+export type JobRunSource = 'manual' | 'cron';
+
+export interface JobRun {
+  id: number;
+  created_at: string;
+  completed_at: string | null;
+  job_id: string;
+  job_type: string;
+  company_id: number;
+  file_id: number | null;          // ID of the result file (e.g. alert_run); navigate via /f/{file_id}
+  status: JobRunStatus;
+  input: Record<string, any>;      // Job-specific input (condition, questionId, etc.)
+  output: Record<string, any> | null;  // Supplementary result metadata
+  error_message: string | null;
+  timeout: number;
+  source: JobRunSource;
 }
 
 export interface AlertRunContent extends BaseFileContent {

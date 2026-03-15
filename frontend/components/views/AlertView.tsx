@@ -1,9 +1,10 @@
 'use client';
 
-import { Box, Text, VStack, HStack, Input, Button, Flex, Badge, Portal } from '@chakra-ui/react';
-import { AlertContent, AlertRunContent, AlertSelector, AlertFunction, ComparisonOperator } from '@/lib/types';
+import { Box, Text, VStack, HStack, Input, Button, Flex, Badge, Portal, Switch } from '@chakra-ui/react';
+import type { CheckedChangeDetails } from '@zag-js/switch';
+import { AlertContent, AlertSelector, AlertFunction, ComparisonOperator, JobRun } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { LuPlay, LuClock, LuBell, LuMail, LuInfo, LuGripVertical, LuHistory, LuSettings, LuColumns3, LuScanSearch } from 'react-icons/lu';
+import { LuPlay, LuClock, LuBell, LuMail, LuInfo, LuGripVertical, LuHistory, LuSettings, LuScanSearch } from 'react-icons/lu';
 import { DeliveryPicker } from '@/components/shared/DeliveryPicker';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { useAppSelector } from '@/store/hooks';
@@ -13,17 +14,12 @@ import { createListCollection } from '@chakra-ui/react';
 import { useFetch } from '@/lib/api/useFetch';
 import { API } from '@/lib/api/declarations';
 
-interface AlertRun {
-  id: number;
-  name: string;
-  content: AlertRunContent;
-}
-
 interface AlertViewProps {
   alert: AlertContent;
+  alertName: string;
   fileId: number;
   isRunning: boolean;
-  runs?: AlertRun[];
+  runs?: JobRun[];
   selectedRunId?: number | null;
 
   onChange: (updates: Partial<AlertContent>) => void;
@@ -103,7 +99,6 @@ function buildConditionSummary(condition: AlertContent['condition'] | undefined 
   const thresh = condition.threshold;
   const rowLabel = sel === 'all' ? 'all rows' : `${sel} row`;
 
-  // Build the "what" part
   let what: string;
   if (fn === 'count') {
     what = 'row count';
@@ -120,7 +115,6 @@ function buildConditionSummary(condition: AlertContent['condition'] | undefined 
   } else if (fn === 'years_ago') {
     what = `years since ${col} in ${rowLabel}`;
   } else {
-    // sum, avg, min, max
     what = `${fn} of ${col} across ${rowLabel}`;
   }
 
@@ -139,8 +133,18 @@ const operatorCollection = createListCollection({
   ]
 });
 
+/** Map a JobRun to a displayable alert status */
+function getRunDisplayStatus(run: JobRun): 'triggered' | 'not_triggered' | 'failed' | 'running' {
+  if (run.status === 'RUNNING') return 'running';
+  if (run.status === 'FAILURE' || run.status === 'TIMEOUT') return 'failed';
+  // SUCCESS: check if the condition was triggered
+  if (run.output?.triggered === true) return 'triggered';
+  return 'not_triggered';
+}
+
 export default function AlertView({
   alert,
+  alertName,
   fileId,
   isRunning,
   runs = [],
@@ -149,10 +153,10 @@ export default function AlertView({
   onCheckNow,
   onSelectRun
 }: AlertViewProps) {
-  // editMode, viewMode, and isDirty sourced from Redux (managed by FileHeader)
   const editMode = useAppSelector(state => selectFileEditMode(state, fileId));
   const activeTab = useAppSelector(state => selectFileViewMode(state, fileId));
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
+  const isLive = (alert.status ?? 'draft') === 'live';
 
   // Resizable panel state
   const [leftPanelWidth, setLeftPanelWidth] = useState(50);
@@ -165,13 +169,11 @@ export default function AlertView({
 
   useEffect(() => {
     if (!mainContentRef.current) return;
-
     const resizeObserver = new ResizeObserver(entries => {
       for (const entry of entries) {
         setContainerWidth(entry.contentRect.width);
       }
     });
-
     resizeObserver.observe(mainContentRef.current);
     return () => resizeObserver.disconnect();
   }, []);
@@ -188,7 +190,6 @@ export default function AlertView({
   const handleResizeMove = useCallback((clientX: number) => {
     if (!isResizing || !mainContentRef.current) return;
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
-
     rafRef.current = requestAnimationFrame(() => {
       if (!mainContentRef.current) return;
       const containerRect = mainContentRef.current.getBoundingClientRect();
@@ -219,7 +220,6 @@ export default function AlertView({
     };
   }, [isResizing, handleResizeMove, handleResizeEnd]);
 
-  // Get available questions from Redux
   const files = useAppSelector(state => state.files.files);
   const questions = useMemo(() =>
     Object.values(files).filter(f => f.type === 'question' && f.id > 0),
@@ -234,14 +234,11 @@ export default function AlertView({
   const runsCollection = useMemo(() => createListCollection({
     items: runs.map(r => ({
       value: r.id.toString(),
-      label: new Date(r.content.startedAt).toLocaleString()
+      label: new Date(r.created_at).toLocaleString()
     }))
   }), [runs]);
 
-  // Get selected run
   const selectedRun = runs.find(r => r.id === selectedRunId);
-
-  // Get referenced question name
   const referencedQuestion = alert.questionId ? files[alert.questionId] : null;
 
   // Fetch columns for selected question
@@ -258,12 +255,31 @@ export default function AlertView({
 
   return (
     <Box display="flex" flexDirection="column" overflow="hidden" flex="1" minH="0" fontFamily="mono">
-      {/* Cron not active info banner */}
-      <HStack gap={2} px={4} py={2} bg="yellow.subtle" borderBottomWidth="1px" borderColor="yellow.muted" borderRadius={"md"}>
-        <LuInfo size={14} color="var(--chakra-colors-yellow-fg)" />
-        <Text fontSize="xs" color="yellow.fg">
-          Scheduled runs are not active yet. Use <strong>Check Now</strong> to test your alert.
+      {/* Status bar: Live/Draft toggle + cron info */}
+      <HStack gap={3} px={4} py={2} bg={isLive ? 'green.subtle' : 'yellow.subtle'} borderBottomWidth="1px" borderColor={isLive ? 'green.muted' : 'yellow.muted'} borderRadius="md">
+        <LuInfo size={14} color={isLive ? 'var(--chakra-colors-green-fg)' : 'var(--chakra-colors-yellow-fg)'} />
+        <Text fontSize="xs" color={isLive ? 'green.fg' : 'yellow.fg'} flex={1}>
+          {isLive
+            ? 'This alert is live. Scheduled runs will execute when the cron endpoint is triggered.'
+            : 'Draft mode — scheduled runs are disabled. Use Check Now to test.'}
         </Text>
+        <HStack gap={2}>
+          <Text fontSize="xs" fontWeight="600" color={isLive ? 'green.fg' : 'yellow.fg'}>
+            {isLive ? 'Live' : 'Draft'}
+          </Text>
+          <Switch.Root
+            size="sm"
+            checked={isLive}
+            disabled={!editMode}
+            onCheckedChange={(e: CheckedChangeDetails) => onChange({ status: e.checked ? 'live' : 'draft' })}
+            colorPalette="green"
+          >
+            <Switch.HiddenInput />
+            <Switch.Control>
+              <Switch.Thumb />
+            </Switch.Control>
+          </Switch.Root>
+        </HStack>
       </HStack>
 
       {/* JSON View */}
@@ -320,24 +336,22 @@ export default function AlertView({
                   <SelectRoot
                     collection={questionCollection}
                     value={alert.questionId ? [alert.questionId.toString()] : []}
-                    onValueChange={(e) => onChange({
-                      questionId: parseInt(e.value[0], 10)
-                    })}
+                    onValueChange={(e) => onChange({ questionId: parseInt(e.value[0], 10) })}
                     size="sm"
                   >
                     <SelectTrigger bg="bg.surface">
                       <SelectValueText placeholder="Select a question..." />
                     </SelectTrigger>
                     <Portal>
-                    <SelectPositioner>
-                      <SelectContent>
-                        {questionCollection.items.map((item) => (
-                          <SelectItem key={item.value} item={item}>
-                            {item.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </SelectPositioner>
+                      <SelectPositioner>
+                        <SelectContent>
+                          {questionCollection.items.map((item) => (
+                            <SelectItem key={item.value} item={item}>
+                              {item.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </SelectPositioner>
                     </Portal>
                   </SelectRoot>
                 ) : (
@@ -545,7 +559,7 @@ export default function AlertView({
                   </HStack>
                 </VStack>
 
-                {/* Condition summary — prose */}
+                {/* Condition summary */}
                 {(() => {
                   const summary = buildConditionSummary(alert.condition);
                   if (!summary) return null;
@@ -612,9 +626,7 @@ export default function AlertView({
                   <Box flex={1}>
                     <Input
                       value={alert.schedule?.cron || ''}
-                      onChange={(e) => onChange({
-                        schedule: { ...alert.schedule, cron: e.target.value }
-                      })}
+                      onChange={(e) => onChange({ schedule: { ...alert.schedule, cron: e.target.value } })}
                       placeholder="cron"
                       disabled={!editMode}
                       size="sm"
@@ -628,9 +640,7 @@ export default function AlertView({
                     <SelectRoot
                       collection={timezoneCollection}
                       value={[alert.schedule?.timezone || 'America/New_York']}
-                      onValueChange={(e) => onChange({
-                        schedule: { ...alert.schedule, timezone: e.value[0] }
-                      })}
+                      onValueChange={(e) => onChange({ schedule: { ...alert.schedule, timezone: e.value[0] } })}
                       disabled={!editMode}
                       size="sm"
                     >
@@ -801,93 +811,117 @@ export default function AlertView({
                   <Text color="fg.muted">Running alert check...</Text>
                 </VStack>
               ) : selectedRun ? (
-                <VStack align="stretch" gap={3}>
-                  <HStack justify="space-between">
-                    <Badge
-                      colorPalette={
-                        selectedRun.content.status === 'triggered' ? 'red' :
-                        selectedRun.content.status === 'not_triggered' ? 'green' :
-                        selectedRun.content.status === 'failed' ? 'red' : 'yellow'
-                      }
-                    >
-                      {selectedRun.content.status === 'triggered' ? 'TRIGGERED' :
-                       selectedRun.content.status === 'not_triggered' ? 'OK' :
-                       selectedRun.content.status.toUpperCase()}
-                    </Badge>
-                    <Text fontSize="xs" color="fg.muted">
-                      {new Date(selectedRun.content.startedAt).toLocaleString()}
-                    </Text>
-                  </HStack>
+                (() => {
+                  const displayStatus = getRunDisplayStatus(selectedRun);
+                  const actualValue = selectedRun.output?.actualValue as number | null ?? null;
+                  const condition = selectedRun.input?.condition as AlertContent['condition'] | undefined;
+                  const summary = buildConditionSummary(condition ?? null);
 
-                  {/* Result details */}
-                  <Box p={3} bg="bg.muted" borderRadius="md">
-                    <VStack align="stretch" gap={2}>
+                  return (
+                    <VStack align="stretch" gap={3}>
                       <HStack justify="space-between">
-                        <Text fontSize="xs" color="fg.muted">Metric</Text>
-                        <Text fontSize="xs" fontWeight="600">
-                          {buildConditionSummary(selectedRun.content as unknown as AlertContent['condition'])?.what || selectedRun.content.function}
+                        <Badge
+                          colorPalette={
+                            displayStatus === 'triggered' ? 'red' :
+                            displayStatus === 'not_triggered' ? 'green' :
+                            displayStatus === 'failed' ? 'red' : 'yellow'
+                          }
+                        >
+                          {displayStatus === 'triggered' ? 'TRIGGERED' :
+                           displayStatus === 'not_triggered' ? 'OK' :
+                           displayStatus.toUpperCase()}
+                        </Badge>
+                        <Text fontSize="xs" color="fg.muted">
+                          {new Date(selectedRun.created_at).toLocaleString()}
                         </Text>
                       </HStack>
-                      {selectedRun.content.actualValue !== null && (
-                        <HStack justify="space-between">
-                          <Text fontSize="xs" color="fg.muted">Actual value</Text>
-                          <Text fontSize="xs" fontWeight="600">{selectedRun.content.actualValue}</Text>
-                        </HStack>
+
+                      {/* Result details */}
+                      <Box p={3} bg="bg.muted" borderRadius="md">
+                        <VStack align="stretch" gap={2}>
+                          {condition && (
+                            <HStack justify="space-between">
+                              <Text fontSize="xs" color="fg.muted">Metric</Text>
+                              <Text fontSize="xs" fontWeight="600">{summary?.what || condition.function}</Text>
+                            </HStack>
+                          )}
+                          {actualValue !== null && (
+                            <HStack justify="space-between">
+                              <Text fontSize="xs" color="fg.muted">Actual value</Text>
+                              <Text fontSize="xs" fontWeight="600">{actualValue}</Text>
+                            </HStack>
+                          )}
+                          {condition && (
+                            <HStack justify="space-between">
+                              <Text fontSize="xs" color="fg.muted">Condition</Text>
+                              <Text fontSize="xs" fontWeight="600">
+                                {condition.operator} {condition.threshold}
+                              </Text>
+                            </HStack>
+                          )}
+                          {selectedRun.completed_at && (
+                            <HStack justify="space-between">
+                              <Text fontSize="xs" color="fg.muted">Duration</Text>
+                              <Text fontSize="xs" fontWeight="600">
+                                {Math.round((new Date(selectedRun.completed_at).getTime() - new Date(selectedRun.created_at).getTime()) / 1000)}s
+                              </Text>
+                            </HStack>
+                          )}
+                          {selectedRun.source === 'cron' && (
+                            <HStack justify="space-between">
+                              <Text fontSize="xs" color="fg.muted">Source</Text>
+                              <Badge size="sm" colorPalette="blue">Scheduled</Badge>
+                            </HStack>
+                          )}
+                        </VStack>
+                      </Box>
+
+                      {selectedRun.error_message && (
+                        <Box p={3} bg="red.subtle" borderRadius="md" color="red.fg">
+                          <Text fontSize="sm">{selectedRun.error_message}</Text>
+                        </Box>
                       )}
-                      <HStack justify="space-between">
-                        <Text fontSize="xs" color="fg.muted">Condition</Text>
-                        <Text fontSize="xs" fontWeight="600">
-                          {selectedRun.content.operator} {selectedRun.content.threshold}
-                        </Text>
-                      </HStack>
-                    </VStack>
-                  </Box>
 
-                  {selectedRun.content.error && (
-                    <Box p={3} bg="red.subtle" borderRadius="md" color="red.fg">
-                      <Text fontSize="sm">{selectedRun.content.error}</Text>
-                    </Box>
-                  )}
-
-                  {/* Narrative summary */}
-                  {selectedRun.content.status !== 'failed' && (
-                    <Box
-                      p={3}
-                      borderRadius="md"
-                      border="1px solid"
-                      borderColor={selectedRun.content.status === 'triggered' ? 'red.muted' : 'green.muted'}
-                      bg={selectedRun.content.status === 'triggered' ? 'red.subtle' : 'green.subtle'}
-                    >
-                      <Text fontSize="sm" lineHeight="1.6">
-                        {(() => {
-                          const r = selectedRun.content;
-                          const summary = buildConditionSummary(r as unknown as AlertContent['condition']);
-                          const val = r.actualValue?.toLocaleString() ?? 'N/A';
-                          const suffix = r.function === 'pct_change' ? '%' : '';
-
-                          if (r.status === 'triggered') {
-                            return (
+                      {/* Narrative summary */}
+                      {displayStatus !== 'failed' && displayStatus !== 'running' && summary && actualValue !== null && (
+                        <Box
+                          p={3}
+                          borderRadius="md"
+                          border="1px solid"
+                          borderColor={displayStatus === 'triggered' ? 'red.muted' : 'green.muted'}
+                          bg={displayStatus === 'triggered' ? 'red.subtle' : 'green.subtle'}
+                        >
+                          <Text fontSize="sm" lineHeight="1.6">
+                            {displayStatus === 'triggered' ? (
                               <>
-                                The <Text as="span" fontWeight="700">{summary?.what}</Text> was{' '}
-                                <Text as="span" fontWeight="700">{val}{suffix}</Text>, which is{' '}
-                                <Text as="span" fontWeight="700">{r.operator} {summary?.thresh}</Text>.{' '}
+                                The <Text as="span" fontWeight="700">{summary.what}</Text> was{' '}
+                                <Text as="span" fontWeight="700">{actualValue.toLocaleString()}</Text>, which is{' '}
+                                <Text as="span" fontWeight="700">{summary.op} {summary.thresh}</Text>.{' '}
                                 The alert condition was met.
                               </>
-                            );
-                          }
-                          return (
-                            <>
-                              The <Text as="span" fontWeight="700">{summary?.what}</Text> was{' '}
-                              <Text as="span" fontWeight="700">{val}{suffix}</Text>, which does not satisfy{' '}
-                              <Text as="span" fontWeight="700">{r.operator} {summary?.thresh}</Text>.{' '}
-                              No action needed.
-                            </>
-                          );
-                        })()}
-                      </Text>
-                    </Box>
-                  )}
-                </VStack>
+                            ) : (
+                              <>
+                                The <Text as="span" fontWeight="700">{summary.what}</Text> was{' '}
+                                <Text as="span" fontWeight="700">{actualValue.toLocaleString()}</Text>, which does not satisfy{' '}
+                                <Text as="span" fontWeight="700">{summary.op} {summary.thresh}</Text>.{' '}
+                                No action needed.
+                              </>
+                            )}
+                          </Text>
+                        </Box>
+                      )}
+
+                      {/* Link to full run file */}
+                      {selectedRun.file_id && (
+                        <Text fontSize="xs" color="fg.subtle">
+                          <a href={`/f/${selectedRun.file_id}`} style={{ textDecoration: 'underline' }}>
+                            View full run details →
+                          </a>
+                        </Text>
+                      )}
+                    </VStack>
+                  );
+                })()
               ) : runs.length === 0 ? (
                 <VStack gap={4} align="center" justify="center" h="100%" color="fg.muted">
                   <LuBell size={48} opacity={0.3} />

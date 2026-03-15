@@ -658,7 +658,8 @@ class FilesDataLayerServer implements IFilesDataLayer {
             operator: '>',
             threshold: 0
           },
-          emails: []
+          emails: [],
+          status: 'draft',
         };
 
         return {
