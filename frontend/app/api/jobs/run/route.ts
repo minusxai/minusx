@@ -54,8 +54,9 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     // Execute the job handler
     const result = await handler.execute(job_id, jobFile.content, user, runId);
 
-    // Persist the result file at /logs/runs/{runId}
-    const runPath = resolvePath(user.mode, `/logs/runs/${runId}`);
+    // Persist the result file at /logs/runs/{timestamp} — timestamp avoids sequence
+    // conflicts if job_runs table is ever reset while files table retains old entries.
+    const runPath = resolvePath(user.mode, `/logs/runs/${Date.now()}`);
     const createResult = await FilesAPI.createFile(
       {
         name: `run-${runId}`,

@@ -122,8 +122,8 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
         try {
           const result = await handler.execute(jobId, content, user, runId);
 
-          // Persist result file
-          const runPath = resolvePath(user.mode, `/logs/runs/${runId}`);
+          // Persist result file — use timestamp to avoid sequence/files table sync issues
+          const runPath = resolvePath(user.mode, `/logs/runs/${Date.now()}`);
           const createResult = await FilesAPI.createFile(
             {
               name: `run-${runId}`,
