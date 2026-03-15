@@ -649,7 +649,7 @@ describe('editFile - Dashboard content validation', () => {
     expect(result.error).toMatch(/Invalid dashboard content/);
   });
 
-  it('rejects layout item w below minimum (3)', async () => {
+  it('rejects layout item w below minimum (2)', async () => {
     await readFiles([dashboardId]);
     const result = await editFileStr({
       fileId: dashboardId,
@@ -660,12 +660,12 @@ describe('editFile - Dashboard content validation', () => {
     expect(result.error).toMatch(/Invalid dashboard content/);
   });
 
-  it('rejects layout item h below minimum (3)', async () => {
+  it('rejects layout item h below minimum (2)', async () => {
     await readFiles([dashboardId]);
     const result = await editFileStr({
       fileId: dashboardId,
       oldMatch: '"h":4',
-      newMatch: '"h":2',
+      newMatch: '"h":1',
     });
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/Invalid dashboard content/);
