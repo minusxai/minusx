@@ -101,21 +101,31 @@ export default function DocumentHeader({
   const isSystemFile = isSystemFileType(fileType as FileType);
   const showPublishButton = !isSystemFile && !!onPublish;
 
-  // Validate and save
-  const handleSave = useCallback(() => {
+  // Validate name before save/publish
+  const validateName = useCallback((): boolean => {
     const placeholders = DEFAULT_PLACEHOLDERS[fileType];
     const trimmedName = name.trim();
 
-    // Validate name (required)
-    if (!trimmedName || trimmedName === placeholders.name) {
+    if (!trimmedName || trimmedName === placeholders?.name) {
       setValidationError(`Please enter a ${metadata.label} name before saving.`);
-      return;
+      return false;
     }
 
-    // Clear validation error and proceed with save
     setValidationError(null);
+    return true;
+  }, [name, fileType, metadata.label]);
+
+  // Validate and save
+  const handleSave = useCallback(() => {
+    if (!validateName()) return;
     onSave();
-  }, [name, fileType, metadata.label, onSave]);
+  }, [validateName, onSave]);
+
+  // Validate and publish
+  const handlePublish = useCallback(() => {
+    if (!validateName()) return;
+    onPublish?.();
+  }, [validateName, onPublish]);
 
   // Combined error (validation takes precedence)
   const displayError = validationError || saveError;
@@ -244,7 +254,7 @@ export default function DocumentHeader({
             {/* Publish: shown only when the current file has unsaved changes */}
             {editMode && showPublishButton ? (
               <IconButton
-                onClick={onPublish}
+                onClick={handlePublish}
                 aria-label="Publish changes"
                 size="xs"
                 colorPalette="teal"

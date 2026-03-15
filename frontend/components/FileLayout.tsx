@@ -71,8 +71,9 @@ export default function FileLayout(props: FileLayoutProps) {
     });
   }
 
-  // Add filename as final item (no href)
-  breadcrumbItems.push({ label: fileName });
+  // Add filename as final item (no href) - show type-based placeholder for untitled files
+  const fileMetadata = getFileTypeMetadata(fileType as any);
+  breadcrumbItems.push({ label: fileName || `New ${fileMetadata.label}` });
 
   // Phase 1: Always use children prop
   // Type-based rendering is now handled by FileView component via fileComponents mapping
