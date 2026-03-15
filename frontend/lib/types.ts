@@ -761,6 +761,7 @@ export interface TaskResultEntry {
   _task_unique_id: string;
   result: string | any | null;
   created_at: string;  // ISO timestamp
+  details?: ToolCallDetails;  // UI-only: preserved across reloads, ignored by Python backend
 }
 
 export interface TaskDebugEntry {
@@ -906,4 +907,5 @@ export interface ExecuteQueryDetails extends ToolCallDetails {
   columns?: string[];
   types?: string[];
   rows?: Record<string, any>[];
+  data?: string;  // Markdown table from compressQueryResult (present in historical messages)
 }

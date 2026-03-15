@@ -4,17 +4,16 @@ import {
   getOrCreateConversation,
   appendLogToConversation
 } from '@/lib/conversations';
-import { ToolCall, ConversationLogEntry, ToolCallDetails } from '@/lib/types';
+import { ToolCall, ConversationLogEntry } from '@/lib/types';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import {
   ChatRequest,
-  CompletedToolCallPayload,
   CompletedToolCallFromPython,
   LLMCallDetail
 } from '@/lib/chat-orchestration';
 // Import tool handlers first to register them
 import '../tool-handlers.server';
-import { orchestratePendingTools } from '../orchestrator';
+import { orchestratePendingTools, ToolExecutionResult } from '../orchestrator';
 import { trackLLMCallEvents } from '@/lib/analytics/file-analytics.server';
 import { UserInterruptError } from '@/lib/errors/user-interrupt-error';
 
@@ -149,7 +148,6 @@ export async function POST(request: NextRequest) {
       let currentConversationID = 0;
       let currentLogIndex = 0;
       let accumulatedCompletedToolCalls: CompletedToolCallFromPython[] = [];
-      const serverToolDetailsMap: Record<string, ToolCallDetails> = {};
 
       try {
         // Parse request
@@ -295,6 +293,8 @@ export async function POST(request: NextRequest) {
           }
 
           // Append to conversation (may fork)
+          // logDiff from Python already contains details in task_result entries
+          // (Python stores details passed in completed_tool_calls directly into TaskResult)
           const appendResult = await appendLogToConversation(
             currentFileId,
             pythonDoneEvent.logDiff,
@@ -330,17 +330,17 @@ export async function POST(request: NextRequest) {
             user,
             request.signal,  // Pass abort signal
             {
-              // Emit SSE events for completed tools (no details here — fires mid-orchestration)
-              onToolCompleted: (tool: ToolCall, toolResult: CompletedToolCallPayload) => {
+              onToolCompleted: (tool: ToolCall, result: ToolExecutionResult) => {
                 const event: StreamingEvent = {
                   conversationID: currentConversationID,
                   type: 'ToolCompleted',
                   payload: {
                     role: 'tool',
-                    tool_call_id: toolResult.tool_call_id,
-                    content: toolResult.content,
+                    tool_call_id: result.tool_call_id,
+                    content: result.content,
                     run_id: '',
                     function: tool.function,
+                    details: result.details,
                     created_at: new Date().toISOString()
                   } as CompletedToolCallFromPython
                 };
@@ -348,9 +348,6 @@ export async function POST(request: NextRequest) {
               }
             }
           );
-
-          // Collect details from this orchestration pass for injection into done event
-          Object.assign(serverToolDetailsMap, result.detailsMap);
 
           // Update state from orchestration result
           currentFileId = result.updatedFileId;
@@ -383,21 +380,14 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Helper: inject server tool details into completed_tool_calls by tool_call_id
-        const withDetails = (calls: CompletedToolCallFromPython[]) =>
-          calls.map(tc =>
-            serverToolDetailsMap[tc.tool_call_id]
-              ? { ...tc, details: serverToolDetailsMap[tc.tool_call_id] }
-              : tc
-          );
-
         // Send final done event
+        // completed_tool_calls already carry details — Python stores and returns them as-is
         safeEnqueue(controller, encoder, 'done', {
           type: 'done',
           conversationID: currentConversationID,
           log_index: currentLogIndex,
           pending_tool_calls: finalPendingToolCalls,
-          completed_tool_calls: withDetails(accumulatedCompletedToolCalls),
+          completed_tool_calls: accumulatedCompletedToolCalls,
           timestamp: new Date().toISOString()
         });
         controller.close();
@@ -411,11 +401,7 @@ export async function POST(request: NextRequest) {
             conversationID: currentConversationID,
             log_index: currentLogIndex,
             pending_tool_calls: [],
-            completed_tool_calls: accumulatedCompletedToolCalls.map(tc =>
-              serverToolDetailsMap[tc.tool_call_id]
-                ? { ...tc, details: serverToolDetailsMap[tc.tool_call_id] }
-                : tc
-            ),
+            completed_tool_calls: accumulatedCompletedToolCalls,
             timestamp: new Date().toISOString()
           });
           controller.close();
@@ -435,11 +421,7 @@ export async function POST(request: NextRequest) {
           conversationID: currentConversationID,
           log_index: currentLogIndex,
           pending_tool_calls: [],
-          completed_tool_calls: accumulatedCompletedToolCalls.map(tc =>
-            serverToolDetailsMap[tc.tool_call_id]
-              ? { ...tc, details: serverToolDetailsMap[tc.tool_call_id] }
-              : tc
-          ),
+          completed_tool_calls: accumulatedCompletedToolCalls,
           timestamp: new Date().toISOString()
         });
         controller.close();
