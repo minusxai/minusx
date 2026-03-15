@@ -14,7 +14,6 @@ import { withAuth } from '@/lib/api/with-auth';
 import { successResponse, handleApiError } from '@/lib/api/api-responses';
 import { JobRunsDB } from '@/lib/database/job-runs-db';
 import { FilesAPI } from '@/lib/data/files.server';
-import { DocumentDB } from '@/lib/database/documents-db';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { JOB_DEFINITIONS } from '@/lib/jobs/job-definitions';
 import { JOB_HANDLERS } from '@/lib/jobs/job-registry';
@@ -90,8 +89,11 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
       const handler = JOB_HANDLERS[jobDef.job_type];
       if (!handler) continue;
 
-      // Load all files of this job type for this company
-      const allFiles = await DocumentDB.listAll(user.companyId, jobDef.file_type, undefined, -1, true);
+      // Load all files of this job type for this company (two-pass: IDs then content)
+      const { data: fileInfos } = await FilesAPI.getFiles({ type: jobDef.file_type, depth: -1 }, user);
+      const { data: allFiles } = fileInfos.length > 0
+        ? await FilesAPI.loadFiles(fileInfos.map(f => f.id), user)
+        : { data: [] };
 
       for (const jobFile of allFiles) {
         const content = jobFile.content as AlertContent | null;

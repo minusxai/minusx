@@ -137,8 +137,16 @@ export class JobRunsDB {
   }
 
   /**
-   * Atomic find-or-create within a time window (prevents duplicate cron runs).
-   * Returns { runId, action, isNewRun }.
+   * Atomic find-or-create within a time window (cron dedup).
+   *
+   * Mirrors the Python find_or_create_job_run CTE logic:
+   *   - Active RUNNING (within timeout) → return existing, no new run
+   *   - SUCCESS in window             → return existing, no new run
+   *   - RUNNING but timed out         → mark old run TIMEOUT, create new run
+   *   - FAILURE or TIMEOUT in window  → create new run (retry)
+   *   - Nothing in window             → create new run
+   *
+   * timeout is in MINUTES (matching Python reference).
    */
   static async findOrCreate(params: {
     job_id: string;
@@ -157,17 +165,47 @@ export class JobRunsDB {
         ? d.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '')
         : d.toISOString();
 
+    // Per-row timeout cutoff: each row uses its own timeout column (in minutes)
+    const timedOutExpr = getDbType() === 'sqlite'
+      ? `created_at <= datetime('now', '-' || timeout || ' minutes')`
+      : `created_at <= CURRENT_TIMESTAMP - INTERVAL '1 minute' * timeout`;
+
     return db.transaction(async (tx) => {
-      const existing = await tx.query<{ id: number }>(
-        `SELECT id FROM job_runs
+      // Find most recent run in window, compute whether it has timed out
+      const existing = await tx.query<JobRunRow & { is_timed_out: number }>(
+        `SELECT *, CASE WHEN status = 'RUNNING' AND ${timedOutExpr} THEN 1 ELSE 0 END AS is_timed_out
+         FROM job_runs
          WHERE job_id = $1 AND job_type = $2 AND company_id = $3
            AND created_at >= $4 AND created_at <= $5
+         ORDER BY created_at DESC
          LIMIT 1`,
         [job_id, job_type, company_id, toWindowBound(window_start), toWindowBound(window_end)]
       );
 
       if (existing.rows.length > 0) {
-        return { runId: existing.rows[0].id, action: 'found', isNewRun: false };
+        const run = existing.rows[0];
+        const isTimedOut = Number(run.is_timed_out) === 1;
+
+        // Active RUNNING → dedup, no new run
+        if (run.status === 'RUNNING' && !isTimedOut) {
+          return { runId: run.id, action: 'found_running', isNewRun: false };
+        }
+
+        // SUCCESS → don't retry
+        if (run.status === 'SUCCESS') {
+          return { runId: run.id, action: 'found_completed', isNewRun: false };
+        }
+
+        // Timed-out RUNNING → mark as TIMEOUT then fall through to create
+        if (isTimedOut) {
+          await tx.query(
+            `UPDATE job_runs SET status = 'TIMEOUT', completed_at = CURRENT_TIMESTAMP,
+                 error = 'Job timed out - marked on next cron attempt'
+             WHERE id = $1`,
+            [run.id]
+          );
+        }
+        // FAILURE, TIMEOUT (prior), or timed-out RUNNING → fall through to create new run
       }
 
       const inserted = await tx.query<{ id: number }>(
@@ -219,7 +257,9 @@ export class JobRunsDB {
 
   /**
    * Find an in-progress run for a given job (used for manual dedup).
-   * Returns the RUNNING run if one exists, null otherwise.
+   * Atomically marks any stale RUNNING runs (past their timeout) as TIMEOUT,
+   * then returns the active run if one exists within its timeout window.
+   * timeout is in MINUTES (matching Python reference).
    */
   static async getRunningByJobId(
     job_id: string,
@@ -227,15 +267,34 @@ export class JobRunsDB {
     company_id: number
   ): Promise<JobRun | null> {
     const db = await getAdapter();
-    const result = await db.query<JobRunRow>(
-      `SELECT * FROM job_runs
-       WHERE job_id = $1 AND job_type = $2 AND company_id = $3 AND status = 'RUNNING'
-       ORDER BY created_at DESC
-       LIMIT 1`,
-      [job_id, job_type, company_id]
-    );
-    if (result.rows.length === 0) return null;
-    return rowToJobRun(result.rows[0]);
+
+    // Per-row timeout cutoff: each row uses its own timeout column (in minutes)
+    const timedOutExpr = getDbType() === 'sqlite'
+      ? `created_at <= datetime('now', '-' || timeout || ' minutes')`
+      : `created_at <= CURRENT_TIMESTAMP - INTERVAL '1 minute' * timeout`;
+
+    return db.transaction(async (tx) => {
+      // Mark all stale RUNNING runs as TIMEOUT
+      await tx.query(
+        `UPDATE job_runs SET status = 'TIMEOUT', completed_at = CURRENT_TIMESTAMP,
+             error = 'Job timed out - marked on next manual trigger attempt'
+         WHERE job_id = $1 AND job_type = $2 AND company_id = $3
+           AND status = 'RUNNING' AND ${timedOutExpr}`,
+        [job_id, job_type, company_id]
+      );
+
+      // Now find an active (non-timed-out) RUNNING run
+      const result = await tx.query<JobRunRow>(
+        `SELECT * FROM job_runs
+         WHERE job_id = $1 AND job_type = $2 AND company_id = $3
+           AND status = 'RUNNING'
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [job_id, job_type, company_id]
+      );
+      if (result.rows.length === 0) return null;
+      return rowToJobRun(result.rows[0]);
+    });
   }
 
   /**

@@ -288,8 +288,8 @@ describe('Job Runs E2E', () => {
       expect(content.error).toContain('DB connection refused');
     });
 
-    it('deduplicates: returns already_running if job is in-flight', async () => {
-      // Manually create a RUNNING job_run referencing a fake file
+    it('deduplicates: returns already_running if job is in-flight (within timeout)', async () => {
+      // Manually create a RUNNING job_run referencing a fake file (default timeout=30s)
       const fakeFileId = 999;
       await JobRunsDB.create({
         job_id: String(alertId),
@@ -313,6 +313,38 @@ describe('Job Runs E2E', () => {
       const runs = await JobRunsDB.getByJobId(String(alertId), 'alert', 1);
       expect(runs).toHaveLength(1);
       expect(runs[0].status).toBe('RUNNING');
+    });
+
+    it('ignores stale RUNNING runs: proceeds if existing run has exceeded its timeout', async () => {
+      // Create a RUNNING run with timeout=0 — it is immediately past its window.
+      // This simulates a run left stuck in RUNNING state by a crash or old code.
+      await JobRunsDB.create({
+        job_id: String(alertId),
+        job_type: 'alert',
+        company_id: 1,
+        output_file_id: 999,
+        output_file_type: 'alert_run',
+        source: 'manual',
+        timeout: 0,  // expires immediately
+      });
+
+      const req = makeRequest('/api/jobs/run', 'POST', { job_id: String(alertId), job_type: 'alert' });
+      const res = await runPostHandler(req);
+      const body = await parseResponse(res);
+
+      // Should proceed with a new run, not return already_running
+      expect(res.status).toBe(200);
+      expect(body.data.status).toBe('SUCCESS');
+
+      // Two runs total: the stale one (now TIMEOUT) and the new one (SUCCESS)
+      const runs = await JobRunsDB.getByJobId(String(alertId), 'alert', 1);
+      expect(runs).toHaveLength(2);
+      const newRun = runs.find(r => r.status === 'SUCCESS');
+      const staleRun = runs.find(r => r.status === 'TIMEOUT');
+      expect(newRun).toBeDefined();
+      // Stale run was atomically marked TIMEOUT in the same transaction as dedup check
+      expect(staleRun).toBeDefined();
+      expect(staleRun!.error).toContain('timed out');
     });
 
     it('sends email when alert is triggered and emails are configured', async () => {
