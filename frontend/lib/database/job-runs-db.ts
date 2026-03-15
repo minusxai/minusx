@@ -104,9 +104,15 @@ export class JobRunsDB {
     const db = await getAdapter();
     const { job_id, job_type, company_id, timeout = 30, source = 'manual' } = params;
 
+    // Use a read-only CTE so the query starts with WITH — the SQLite adapter
+    // detects WITH as a SELECT and calls .all(), which respects the RETURNING clause.
     const result = await db.query<{ id: number }>(
-      `INSERT INTO job_runs (job_id, job_type, company_id, timeout, source, status)
-       VALUES ($1, $2, $3, $4, $5, 'RUNNING')
+      `WITH row_data AS (
+         SELECT $1 AS job_id, $2 AS job_type, $3 AS company_id, $4 AS timeout, $5 AS source
+       )
+       INSERT INTO job_runs (job_id, job_type, company_id, timeout, source, status)
+       SELECT job_id, job_type, company_id, timeout, source, 'RUNNING'
+       FROM row_data
        RETURNING id`,
       [job_id, job_type, company_id, timeout, source]
     );
@@ -129,6 +135,15 @@ export class JobRunsDB {
     const db = await getAdapter();
     const { job_id, job_type, company_id, window_start, window_end, timeout = 30, source = 'cron' } = params;
 
+    // SQLite stores CURRENT_TIMESTAMP as 'YYYY-MM-DD HH:MM:SS' (no T, no Z).
+    // ISO strings use 'YYYY-MM-DDTHH:MM:SS.mmmZ', and string comparison
+    // would fail because space (ASCII 32) < 'T' (ASCII 84).
+    // Normalize bounds to SQLite format when running on SQLite.
+    const toWindowBound = (d: Date): string =>
+      getDbType() === 'sqlite'
+        ? d.toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '')
+        : d.toISOString();
+
     return db.transaction(async (tx) => {
       // Check for existing run within the window
       const existing = await tx.query<{ id: number }>(
@@ -136,7 +151,7 @@ export class JobRunsDB {
          WHERE job_id = $1 AND job_type = $2 AND company_id = $3
            AND created_at >= $4 AND created_at <= $5
          LIMIT 1`,
-        [job_id, job_type, company_id, window_start.toISOString(), window_end.toISOString()]
+        [job_id, job_type, company_id, toWindowBound(window_start), toWindowBound(window_end)]
       );
 
       if (existing.rows.length > 0) {
@@ -144,8 +159,12 @@ export class JobRunsDB {
       }
 
       const inserted = await tx.query<{ id: number }>(
-        `INSERT INTO job_runs (job_id, job_type, company_id, timeout, source, status)
-         VALUES ($1, $2, $3, $4, $5, 'RUNNING')
+        `WITH row_data AS (
+           SELECT $1 AS job_id, $2 AS job_type, $3 AS company_id, $4 AS timeout, $5 AS source
+         )
+         INSERT INTO job_runs (job_id, job_type, company_id, timeout, source, status)
+         SELECT job_id, job_type, company_id, timeout, source, 'RUNNING'
+         FROM row_data
          RETURNING id`,
         [job_id, job_type, company_id, timeout, source]
       );
