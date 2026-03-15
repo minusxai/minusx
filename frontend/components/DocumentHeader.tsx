@@ -50,6 +50,7 @@ export interface DocumentHeaderProps {
   additionalBadges?: ReactNode;  // Additional badges to show next to type badge
   readOnlyName?: boolean;        // If true, name cannot be edited
   hideDescription?: boolean;     // If true, description field is not shown
+  hideEditToggle?: boolean;      // If true, Edit/Cancel button is hidden (e.g. for new unsaved files)
 
   // JSON view toggle (optional - shown only for admins when provided)
   viewMode?: 'visual' | 'json';  // Current view mode
@@ -84,6 +85,7 @@ export default function DocumentHeader({
   additionalBadges,
   readOnlyName = false,
   hideDescription = false,
+  hideEditToggle = false,
   viewMode = 'visual',
   onViewModeChange,
   questionId,
@@ -99,21 +101,31 @@ export default function DocumentHeader({
   const isSystemFile = isSystemFileType(fileType as FileType);
   const showPublishButton = !isSystemFile && !!onPublish;
 
-  // Validate and save
-  const handleSave = useCallback(() => {
+  // Validate name before save/publish
+  const validateName = useCallback((): boolean => {
     const placeholders = DEFAULT_PLACEHOLDERS[fileType];
     const trimmedName = name.trim();
 
-    // Validate name (required)
-    if (!trimmedName || trimmedName === placeholders.name) {
+    if (!trimmedName || trimmedName === placeholders?.name) {
       setValidationError(`Please enter a ${metadata.label} name before saving.`);
-      return;
+      return false;
     }
 
-    // Clear validation error and proceed with save
     setValidationError(null);
+    return true;
+  }, [name, fileType, metadata.label]);
+
+  // Validate and save
+  const handleSave = useCallback(() => {
+    if (!validateName()) return;
     onSave();
-  }, [name, fileType, metadata.label, onSave]);
+  }, [validateName, onSave]);
+
+  // Validate and publish
+  const handlePublish = useCallback(() => {
+    if (!validateName()) return;
+    onPublish?.();
+  }, [validateName, onPublish]);
 
   // Combined error (validation takes precedence)
   const displayError = validationError || saveError;
@@ -242,7 +254,7 @@ export default function DocumentHeader({
             {/* Publish: shown only when the current file has unsaved changes */}
             {editMode && showPublishButton ? (
               <IconButton
-                onClick={onPublish}
+                onClick={handlePublish}
                 aria-label="Publish changes"
                 size="xs"
                 colorPalette="teal"
@@ -268,6 +280,7 @@ export default function DocumentHeader({
             )}
 
             {/* Edit/Cancel Button */}
+            {!hideEditToggle && (
             <IconButton
               onClick={onEditModeToggle}
               aria-label={editMode ? 'Cancel editing' : 'Edit'}
@@ -278,6 +291,7 @@ export default function DocumentHeader({
               {!editMode && <LuPencil />}
               {editMode ? 'Cancel' : 'Edit'}
             </IconButton>
+            )}
             {/* JSON View Toggle (shown only when showJson setting is enabled) */}
             {onViewModeChange && showJson && (
               <TabSwitcher

@@ -538,7 +538,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
         return {
           content,
-          fileName: 'New Question',
+          fileName: '',
           metadata: { availableDatabases: databaseNames }
         };
       }
@@ -552,7 +552,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
         return {
           content,
-          fileName: 'New Dashboard'
+          fileName: ''
         };
       }
 
@@ -569,7 +569,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
         return {
           content,
-          fileName: 'New Presentation'
+          fileName: ''
         };
       }
 
@@ -640,7 +640,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
         return {
           content,
-          fileName: 'New Report'
+          fileName: ''
         };
       }
 
@@ -663,7 +663,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
         return {
           content,
-          fileName: 'New Alert'
+          fileName: ''
         };
       }
 
