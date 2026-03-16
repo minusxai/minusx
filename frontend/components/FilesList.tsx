@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { Box, HStack, Text, Icon, VStack, IconButton, Flex, SimpleGrid, Button, Menu } from '@chakra-ui/react';
-import { LuList, LuLayoutGrid, LuChevronDown, LuFiles } from 'react-icons/lu';
+import { Box, HStack, Text, Icon, VStack, IconButton, Flex, SimpleGrid, Button } from '@chakra-ui/react';
+import { LuList, LuLayoutGrid, LuFiles } from 'react-icons/lu';
 import { DbFile } from '@/lib/types';
 import { FILE_TYPE_METADATA, getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import FileActionMenu from './FileActionMenu';
@@ -74,13 +74,6 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
 
   // Apply limit if specified
   const filteredFiles = limit ? sorted.slice(0, limit) : sorted;
-
-  // Get label for current filter
-  const getFilterLabel = () => {
-    if (selectedTypes.length === 0) return 'All types';
-    if (selectedTypes.length === 1) return FILE_TYPE_METADATA[selectedTypes[0]].label;
-    return `${selectedTypes.length} types`;
-  };
 
   // Toggle type selection
   const toggleType = (type: FileType) => {
@@ -181,108 +174,47 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
       {/* Toolbar: Filter + View Toggle */}
       {showToolbar && (
       <HStack justify="space-between" mb={3}>
-        {/* Filter Dropdown */}
-        <Menu.Root>
-          <Menu.Trigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              fontWeight="500"
-              gap={2}
-              px={2}
-            >
-              <Text>{getFilterLabel()}</Text>
-              <Icon as={LuChevronDown} boxSize={3.5} />
-            </Button>
-          </Menu.Trigger>
-          <Menu.Positioner>
-            <Menu.Content
-              minW="200px"
-              p={1}
-              bg="bg.surface"
-              borderColor="border.default"
-              shadow="lg"
-            >
-              {/* All Types Option */}
-              <Menu.Item
-                value="all"
-                onClick={(e) => {
-                  e.preventDefault();
-                  setSelectedTypes([]);
-                }}
-                closeOnSelect={false}
-                bg={selectedTypes.length === 0 ? 'accent.teal/10' : 'transparent'}
-                color={selectedTypes.length === 0 ? 'accent.teal' : 'fg.default'}
-                fontWeight={selectedTypes.length === 0 ? '600' : '400'}
-                borderRadius="sm"
-                px={3}
-                py={2}
-                cursor="pointer"
-                _hover={{ bg: selectedTypes.length === 0 ? 'accent.teal/10' : 'bg.muted' }}
+        {/* Filter Chips */}
+        <HStack gap={1.5} flexWrap="wrap">
+          <Button
+            size="2xs"
+            variant={selectedTypes.length === 0 ? 'solid' : 'outline'}
+            bg={selectedTypes.length === 0 ? 'accent.teal' : 'transparent'}
+            color={selectedTypes.length === 0 ? 'white' : 'fg.muted'}
+            borderColor={selectedTypes.length === 0 ? 'accent.teal' : 'border.default'}
+            _hover={{ bg: selectedTypes.length === 0 ? 'accent.teal' : 'bg.muted' }}
+            fontWeight="500"
+            fontSize="xs"
+            borderRadius="md"
+            px={2}
+            onClick={() => setSelectedTypes([])}
+          >
+            All
+          </Button>
+          {filterTypes.map((type) => {
+            const typeColor = FILE_TYPE_METADATA[type].color;
+            const active = isTypeSelected(type);
+            return (
+              <Button
+                key={type}
+                size="2xs"
+                variant={active ? 'solid' : 'outline'}
+                bg={active ? typeColor : 'transparent'}
+                color={active ? 'white' : 'fg.muted'}
+                borderColor={active ? typeColor : 'border.default'}
+                _hover={{ bg: active ? typeColor : 'bg.muted' }}
+                fontSize="2xs"
+                borderRadius="md"
+                px={2}
+                gap={1.5}
+                onClick={() => toggleType(type)}
               >
-                <HStack gap={2} w="100%">
-                  <Box
-                    w={4}
-                    h={4}
-                    borderRadius="sm"
-                    border="2px solid"
-                    borderColor={selectedTypes.length === 0 ? 'accent.teal' : 'border.default'}
-                    bg={selectedTypes.length === 0 ? 'accent.teal' : 'transparent'}
-                    display="flex"
-                    alignItems="center"
-                    justifyContent="center"
-                    flexShrink={0}
-                  >
-                    {selectedTypes.length === 0 && (
-                      <Box w={2} h={2} bg="white" borderRadius="xs" />
-                    )}
-                  </Box>
-                  <Text flex="1">All types</Text>
-                </HStack>
-              </Menu.Item>
-
-              {/* Type Options */}
-              {filterTypes.map((type) => (
-                <Menu.Item
-                  key={type}
-                  value={type}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    toggleType(type);
-                  }}
-                  closeOnSelect={false}
-                  bg={isTypeSelected(type) ? 'accent.teal/10' : 'transparent'}
-                  borderRadius="sm"
-                  px={3}
-                  py={2}
-                  cursor="pointer"
-                  _hover={{ bg: 'bg.muted' }}
-                >
-                  <HStack gap={2} w="100%">
-                    <Box
-                      w={4}
-                      h={4}
-                      borderRadius="sm"
-                      border="2px solid"
-                      borderColor={isTypeSelected(type) ? 'accent.teal' : 'border.default'}
-                      bg={isTypeSelected(type) ? 'accent.teal' : 'transparent'}
-                      display="flex"
-                      alignItems="center"
-                      justifyContent="center"
-                      flexShrink={0}
-                    >
-                      {isTypeSelected(type) && (
-                        <Box w={2} h={2} bg="white" borderRadius="xs" />
-                      )}
-                    </Box>
-                    <Icon as={FILE_TYPE_METADATA[type].icon} boxSize={4} color={FILE_TYPE_METADATA[type].color} flexShrink={0} />
-                    <Text flex="1">{FILE_TYPE_METADATA[type].label}</Text>
-                  </HStack>
-                </Menu.Item>
-              ))}
-            </Menu.Content>
-          </Menu.Positioner>
-        </Menu.Root>
+                <Icon as={FILE_TYPE_METADATA[type].icon} boxSize={3.5} />
+                {FILE_TYPE_METADATA[type].label}
+              </Button>
+            );
+          })}
+        </HStack>
 
         {/* View Toggle */}
         <HStack
@@ -292,6 +224,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
           p={0.5}
           border="1px solid"
           borderColor="border.default"
+          flexShrink={0}
         >
           <Tooltip content="List view" positioning={{ placement: 'bottom' }}>
             <IconButton
