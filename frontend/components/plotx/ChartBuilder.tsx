@@ -327,11 +327,10 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   // Use the compact view flag passed from parent
   const useCompactView = useCompactViewProp
 
-  // Pivot-specific state
-  const [pivotConfig, setPivotConfig] = useState<PivotConfig | undefined>(initialPivotConfig)
+  // Pivot config — always derived from props so agent edits immediately take effect
+  const pivotConfig = initialPivotConfig
 
   const handlePivotConfigChange = useCallback((config: PivotConfig) => {
-    setPivotConfig(config)
     onPivotConfigChange?.(config)
   }, [onPivotConfigChange])
 
