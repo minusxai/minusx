@@ -521,6 +521,13 @@ export const PivotTable = ({
   const colFormulas = formulaResults?.columnFormulas ?? []
   const hasColFormulas = colFormulas.length > 0
 
+  // Fixed width for frozen row-dimension columns so sticky left offsets align
+  const ROW_DIM_COL_W = 120
+  const getLeftOffset = (dimIdx: number) => dimIdx * ROW_DIM_COL_W
+  const isLastDim = (dimIdx: number) => dimIdx === numRowDims - 1
+  // Extra padding on the last frozen column to cover sub-pixel gaps
+  const dimColWidth = (dimIdx: number) => isLastDim(dimIdx) ? ROW_DIM_COL_W + 2 : ROW_DIM_COL_W
+
   // Helper: render cells for a row using columnEntries
   const renderDataCells = (rowIndex: number) => {
     return columnEntries.map((entry, i) => {
@@ -708,13 +715,16 @@ export const PivotTable = ({
                     textTransform="uppercase"
                     letterSpacing="0.05em"
                     color="fg.muted"
-                    borderRight={dimIdx === numRowDims - 1 ? '2px solid' : '1px solid'}
-                    borderColor={dimIdx === numRowDims - 1 ? 'border.default' : 'border.muted'}
-                    position={dimIdx === 0 ? 'sticky' : undefined}
-                    left={dimIdx === 0 ? 0 : undefined}
+                    borderRight={isLastDim(dimIdx) ? undefined : '1px solid'}
+                    borderColor="border.muted"
+
+                    position="sticky"
+                    left={`${getLeftOffset(dimIdx)}px`}
                     bg="bg.muted"
-                    zIndex={dimIdx === 0 ? 4 : 3}
-                    minW="100px"
+                    zIndex={4}
+                    w={`${ROW_DIM_COL_W}px`}
+                    minW={`${ROW_DIM_COL_W}px`}
+                    maxW={`${ROW_DIM_COL_W}px`}
                   >
                     {rowDimNames?.[dimIdx] || ''}
                   </ChakraTable.ColumnHeader>
@@ -786,13 +796,16 @@ export const PivotTable = ({
                     textTransform="uppercase"
                     letterSpacing="0.05em"
                     color="fg.muted"
-                    borderRight={dimIdx === numRowDims - 1 ? '2px solid' : '1px solid'}
-                    borderColor={dimIdx === numRowDims - 1 ? 'border.default' : 'border.muted'}
-                    position={dimIdx === 0 ? 'sticky' : undefined}
-                    left={dimIdx === 0 ? 0 : undefined}
+                    borderRight={isLastDim(dimIdx) ? undefined : '1px solid'}
+                    borderColor="border.muted"
+
+                    position="sticky"
+                    left={`${getLeftOffset(dimIdx)}px`}
                     bg="bg.muted"
-                    zIndex={dimIdx === 0 ? 4 : 3}
-                    minW="100px"
+                    zIndex={4}
+                    w={`${ROW_DIM_COL_W}px`}
+                    minW={`${ROW_DIM_COL_W}px`}
+                    maxW={`${ROW_DIM_COL_W}px`}
                   >
                     {rowDimNames?.[dimIdx] || ''}
                   </ChakraTable.ColumnHeader>
@@ -849,12 +862,12 @@ export const PivotTable = ({
                     letterSpacing="0.05em"
                     fontStyle="italic"
                     color="accent.secondary"
-                    borderRight="2px solid"
                     borderTop="1px dashed"
                     borderColor="accent.secondary/40"
+
                     position="sticky"
                     left={0}
-                    bg="accent.secondary/12"
+                    bg="bg.surface"
                     zIndex={2}
                   >
                     <Box display="flex" alignItems="center" gap={1}>
@@ -922,14 +935,14 @@ export const PivotTable = ({
                     textTransform="uppercase"
                     letterSpacing="0.05em"
                     color="fg.default"
-                    borderRight="2px solid"
                     borderTop={borderTop}
                     borderBottom={S === 0 ? '2px solid' : undefined}
                     borderColor={borderTopColor}
-                    position={S === 0 ? 'sticky' : undefined}
-                    left={S === 0 ? 0 : undefined}
-                    bg={subtotalBg}
-                    zIndex={S === 0 ? 2 : undefined}
+
+                    position="sticky"
+                    left={`${getLeftOffset(S)}px`}
+                    bg="bg.muted"
+                    zIndex={2}
                     cursor="pointer"
                     onClick={() => toggleGroup(groupKey)}
                     _hover={{ opacity: 0.8 }}
@@ -991,13 +1004,17 @@ export const PivotTable = ({
                       rowSpan={spanInfo.rowSpan}
                       fontWeight="600"
                       fontSize="sm"
-                      borderRight={dimIdx === numRowDims - 1 ? '2px solid' : '1px solid'}
-                      borderColor={dimIdx === numRowDims - 1 ? 'border.default' : 'border.muted'}
-                      position={dimIdx === 0 ? 'sticky' : undefined}
-                      left={dimIdx === 0 ? 0 : undefined}
+                      borderRight={isLastDim(dimIdx) ? undefined : '1px solid'}
+                      borderColor="border.muted"
+  
+                      position="sticky"
+                      left={`${getLeftOffset(dimIdx)}px`}
                       bg="bg.surface"
-                      zIndex={dimIdx === 0 ? 2 : undefined}
+                      zIndex={2}
                       verticalAlign="top"
+                      w={`${ROW_DIM_COL_W}px`}
+                      minW={`${ROW_DIM_COL_W}px`}
+                      maxW={`${ROW_DIM_COL_W}px`}
                     >
                       {fmtHeader(rowHeaders[rowIndex][dimIdx], rowDimNames?.[dimIdx])}
                     </ChakraTable.Cell>
@@ -1051,12 +1068,12 @@ export const PivotTable = ({
                 textTransform="uppercase"
                 letterSpacing="0.05em"
                 color="fg.default"
-                borderRight="2px solid"
                 borderTop="2px solid"
                 borderColor="border.default"
+
                 position="sticky"
                 left={0}
-                bg="accent.teal/40"
+                bg="bg.muted"
                 zIndex={2}
               >
                 Grand Total
