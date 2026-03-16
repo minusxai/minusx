@@ -699,7 +699,7 @@ export const PivotTable = ({
       borderColor="border.muted"
       borderRadius="md"
     >
-      <ChakraTable.Root size="sm" css={{ borderCollapse: 'collapse' }}>
+      <ChakraTable.Root size="sm" css={{ borderCollapse: 'separate', borderSpacing: 0 }}>
         <ChakraTable.Header position="sticky" top={0} zIndex={5} bg="bg.muted">
           {/* Column header rows */}
           {augmentedColHeaderRows.map((headerRow, rowIdx) => (
