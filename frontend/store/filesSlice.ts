@@ -96,12 +96,16 @@ function hashString(str: string): number {
   return hash;
 }
 
+// Module-level counter — guarantees uniqueness across all calls in a session.
+// Resets on page reload, which is safe: virtual IDs are never persisted.
+let _virtualIdCounter = 0;
+
 /**
  * Generate a virtual ID for a new user-created file (namespace 1)
- * ID is always 10 digits: -(1_000_000_000 + Date.now() % 1_000_000_000)
+ * ID is always 10 digits: -(1_000_000_000 + counter)
  */
 export function generateVirtualId(): number {
-  return -(1_000_000_000 + (Date.now() % 1_000_000_000));
+  return -(1_000_000_000 + (++_virtualIdCounter));
 }
 
 /**
