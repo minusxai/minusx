@@ -61,7 +61,7 @@ COPY --from=builder /app/lib ./lib
 COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
 # Install tsx for running TypeScript scripts
-RUN npm install tsx
+RUN npm install --ignore-scripts tsx
 
 # Expose frontend port
 EXPOSE 3000
