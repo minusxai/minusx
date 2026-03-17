@@ -1,5 +1,5 @@
 import type { EChartsOption } from 'echarts'
-import { withMinusXTheme, COLOR_PALETTE } from './echarts-theme'
+import { withMinusXTheme } from './echarts-theme'
 import type { ColumnFormatConfig } from '@/lib/types'
 
 // Chart props interface
@@ -15,6 +15,7 @@ export interface ChartProps {
   xAxisColumns?: string[]  // Actual X-axis column names (for format config lookup)
   chartTitle?: string  // Title shown in chart and included in downloads
   showChartTitle?: boolean  // Whether to show title in chart (always shown in downloads)
+  colorPalette: string[]  // Effective color palette (hex values)
 }
 
 // Calculate axis label interval based on data length, container width, and max label length after truncation
@@ -338,10 +339,11 @@ interface BaseChartConfig {
   columnFormats?: Record<string, ColumnFormatConfig>
   chartTitle?: string
   showChartTitle?: boolean
+  colorPalette: string[]
 }
 
 export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
-  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true } = config
+  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette } = config
 
   // Resolve format configs for axes
   const { yDecimalPoints, xDateFormat } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
@@ -385,7 +387,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         ? series[index].data.map((y, i) => [xAxisData[i], y])
         : series[index].data,
       itemStyle: {
-        color: COLOR_PALETTE[index % COLOR_PALETTE.length],
+        color: palette[index % palette.length],
       },
       ...(useDualYAxis && { yAxisIndex: yAxisAssignments[index] }),
     }
@@ -691,5 +693,5 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
     series: chartSeries,
   }
 
-  return withMinusXTheme({ ...baseOption, ...additionalOptions }, colorMode)
+  return withMinusXTheme({ ...baseOption, ...additionalOptions, color: palette }, colorMode)
 }

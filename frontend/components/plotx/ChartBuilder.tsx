@@ -21,6 +21,8 @@ import { resolveColumnType } from './AxisComponents'
 import { aggregateData } from '@/lib/chart/aggregate-data'
 import { aggregatePivotData, computeFormulas, getUniqueTopLevelRowValues, getUniqueTopLevelColumnValues } from '@/lib/chart/pivot-utils'
 import type { PivotConfig, ColumnFormatConfig } from '@/lib/types'
+import { getEffectiveColorPalette } from '@/lib/chart/echarts-theme'
+import { ColorPicker } from './ColorPicker'
 
 interface ChartBuilderProps {
   columns: string[]
@@ -41,6 +43,8 @@ interface ChartBuilderProps {
   onColumnFormatsChange?: (formats: Record<string, ColumnFormatConfig>) => void
   settingsExpanded?: boolean
   showChartTitle?: boolean
+  colorOverrides?: Record<string, string> | null
+  onColorsChange?: (colors: Record<string, string>) => void
 }
 
 interface GroupedColumns {
@@ -49,7 +53,9 @@ interface GroupedColumns {
   categories: string[]
 }
 
-export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true }: ChartBuilderProps) => {
+export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true, colorOverrides, onColorsChange }: ChartBuilderProps) => {
+  const colorPalette = useMemo(() => getEffectiveColorPalette(colorOverrides), [colorOverrides])
+
   // Group columns by type
   const groupedColumns: GroupedColumns = useMemo(() => {
     const groups: GroupedColumns = {
@@ -414,7 +420,15 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     <Box display="flex" flexDirection="column" gap={0} height={'100%'} width="100%">
       {/* Axis Builder (column palette + drop zones) */}
       {showAxisBuilder && (!useCompactView || settingsExpandedProp) && (
-        <AxisBuilder columns={columns} types={types} zones={chartZones} columnFormats={columnFormats} onColumnFormatChange={handleColumnFormatChange} />
+        <AxisBuilder columns={columns} types={types} zones={chartZones} columnFormats={columnFormats} onColumnFormatChange={handleColumnFormatChange}>
+          {onColorsChange && (
+            <ColorPicker
+              colorOverrides={colorOverrides ?? {}}
+              numSeries={aggregatedData.series.length}
+              onChange={onColorsChange}
+            />
+          )}
+        </AxisBuilder>
       )}
 
       {/* Chart Area */}
@@ -465,6 +479,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       onChartClick={handleChartClick}
                       chartTitle={chartTitle}
                       showChartTitle={showChartTitle}
+                      colorPalette={colorPalette}
                     />
                   )}
                   {chartType === 'bar' && (
@@ -480,6 +495,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       onChartClick={handleChartClick}
                       chartTitle={chartTitle}
                       showChartTitle={showChartTitle}
+                      colorPalette={colorPalette}
                     />
                   )}
                   {chartType === 'combo' && (
@@ -495,6 +511,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       onChartClick={handleChartClick}
                       chartTitle={chartTitle}
                       showChartTitle={showChartTitle}
+                      colorPalette={colorPalette}
                     />
                   )}
                   {chartType === 'area' && (
@@ -510,6 +527,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       onChartClick={handleChartClick}
                       chartTitle={chartTitle}
                       showChartTitle={showChartTitle}
+                      colorPalette={colorPalette}
                     />
                   )}
                   {chartType === 'scatter' && (
@@ -525,6 +543,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       onChartClick={handleChartClick}
                       chartTitle={chartTitle}
                       showChartTitle={showChartTitle}
+                      colorPalette={colorPalette}
                     />
                   )}
                   {chartType === 'funnel' && (
@@ -540,6 +559,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       onChartClick={handleChartClick}
                       chartTitle={chartTitle}
                       showChartTitle={showChartTitle}
+                      colorPalette={colorPalette}
                     />
                   )}
                   {chartType === 'pie' && (
@@ -555,6 +575,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       onChartClick={handleChartClick}
                       chartTitle={chartTitle}
                       showChartTitle={showChartTitle}
+                      colorPalette={colorPalette}
                     />
                   )}
                   {chartType === 'trend' && (
@@ -573,6 +594,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       onChartClick={handleChartClick}
                       chartTitle={chartTitle}
                       showChartTitle={showChartTitle}
+                      colorPalette={colorPalette}
                     />
                   )}
                 </Box>

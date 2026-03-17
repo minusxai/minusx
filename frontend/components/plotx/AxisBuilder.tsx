@@ -60,21 +60,24 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
   return (
     <Box display="flex" flexDirection="column" gap={3} width="100%" p={3} bg="bg.canvas" borderBottom="1px solid" borderColor="border.muted">
       {/* Column palette */}
-      <HStack gap={2} flexWrap="wrap">
-        {columns.map(col => (
-          <ColumnChip
-            key={col}
-            column={col}
-            type={resolveColumnType(col, columns, types)}
-            isAssigned={assignedColumns.has(col)}
-            isDragging={draggedColumn === col}
-            isMobileSelected={selectedColumnForMobile === col}
-            isTouchDevice={isTouchDevice}
-            onDragStart={(e) => handleDragStart(e, col)}
-            onDragEnd={handleDragEnd}
-            onMobileSelect={() => handleMobileSelect(col)}
-          />
-        ))}
+      <HStack gap={2} flexWrap="wrap" justifyContent="space-between">
+        <HStack gap={2} flexWrap="wrap">
+          {columns.map(col => (
+            <ColumnChip
+              key={col}
+              column={col}
+              type={resolveColumnType(col, columns, types)}
+              isAssigned={assignedColumns.has(col)}
+              isDragging={draggedColumn === col}
+              isMobileSelected={selectedColumnForMobile === col}
+              isTouchDevice={isTouchDevice}
+              onDragStart={(e) => handleDragStart(e, col)}
+              onDragEnd={handleDragEnd}
+              onMobileSelect={() => handleMobileSelect(col)}
+            />
+          ))}
+        </HStack>
+        {children}
       </HStack>
 
       {/* Mobile instruction */}
@@ -110,7 +113,6 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
         ))}
       </Box>
 
-      {children}
     </Box>
   )
 }

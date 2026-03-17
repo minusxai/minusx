@@ -5,7 +5,7 @@ import { EChart } from './EChart'
 import { useChartContainer } from './useChartContainer'
 import { ChartError } from './ChartError'
 import { isValidChartData, resolveChartFormats, buildToolbox, getTimestamp, type ChartProps } from '@/lib/chart/chart-utils'
-import { withMinusXTheme, COLOR_PALETTE } from '@/lib/chart/echarts-theme'
+import { withMinusXTheme } from '@/lib/chart/echarts-theme'
 import type { EChartsOption } from 'echarts'
 
 interface PiePlotProps extends ChartProps {
@@ -13,7 +13,7 @@ interface PiePlotProps extends ChartProps {
 }
 
 export const PiePlot = (props: PiePlotProps) => {
-  const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns, chartTitle, showChartTitle = true } = props
+  const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns, chartTitle, showChartTitle = true, colorPalette: customPalette } = props
   const colorMode = useAppSelector((state) => state.ui.colorMode)
   const { containerRef, containerWidth, containerHeight, chartEvents } = useChartContainer(onChartClick)
 
@@ -42,7 +42,7 @@ export const PiePlot = (props: PiePlotProps) => {
     const coloredData = pieData.map((item, index) => ({
       ...item,
       itemStyle: {
-        color: COLOR_PALETTE[index % COLOR_PALETTE.length],
+        color: customPalette[index % customPalette.length],
       },
     }))
 

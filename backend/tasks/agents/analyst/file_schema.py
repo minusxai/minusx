@@ -76,6 +76,7 @@ class VisualizationSettings(BaseModel):
     yCols: Optional[List[str]] = Field([], description="list of column names in the y axis (for non-pivot chart types)")
     pivotConfig: Optional[PivotConfig] = Field(None, description="pivot table configuration (only used when type is 'pivot')")
     columnFormats: Optional[Dict[str, ColumnFormatConfig]] = Field(None, description="per-column display formatting keyed by column name. Only set when user asks to rename columns, change decimal places, or change date format. Good defaults are applied automatically.")
+    colors: Optional[Dict[str, str]] = Field(None, description="color overrides mapping series index to color key (e.g. {'0': 'danger', '2': 'warning'}). Only overridden indices are stored.")
     model_config = {
         "populate_by_name": True,
         "title": "VizSettings"

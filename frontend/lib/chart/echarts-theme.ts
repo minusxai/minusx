@@ -38,6 +38,21 @@ export const COLOR_PALETTE = [
   CHART_COLORS.carrot,     // 10. Dark Orange
 ]
 
+// Ordered keys for UI display
+export const CHART_COLOR_KEYS = Object.keys(CHART_COLORS) as (keyof typeof CHART_COLORS)[]
+
+// Resolve color overrides into an effective palette.
+// colorOverrides maps series index (as string) to color key: {"0": "danger", "2": "warning"}
+export function getEffectiveColorPalette(colorOverrides?: Record<string, string> | null): string[] {
+  if (!colorOverrides || Object.keys(colorOverrides).length === 0) return [...COLOR_PALETTE]
+  const palette = [...COLOR_PALETTE]
+  for (const [idx, key] of Object.entries(colorOverrides)) {
+    const hex = CHART_COLORS[key as keyof typeof CHART_COLORS]
+    if (hex) palette[parseInt(idx, 10)] = hex
+  }
+  return palette
+}
+
 // Light mode colors (matching theme.ts)
 const LIGHT_THEME = {
   bgCanvas: '#FAFBFC',

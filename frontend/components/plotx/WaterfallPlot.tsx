@@ -5,7 +5,7 @@ import { EChart } from './EChart'
 import { useChartContainer } from './useChartContainer'
 import { ChartError } from './ChartError'
 import { isValidChartData, resolveChartFormats, buildToolbox, getTimestamp, type ChartProps } from '@/lib/chart/chart-utils'
-import { withMinusXTheme, COLOR_PALETTE } from '@/lib/chart/echarts-theme'
+import { withMinusXTheme } from '@/lib/chart/echarts-theme'
 import type { EChartsOption } from 'echarts'
 
 interface WaterfallPlotProps extends ChartProps {
@@ -13,7 +13,7 @@ interface WaterfallPlotProps extends ChartProps {
 }
 
 export const WaterfallPlot = (props: WaterfallPlotProps) => {
-  const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns, chartTitle, showChartTitle = true } = props
+  const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns, chartTitle, showChartTitle = true, colorPalette: customPalette } = props
   const colorMode = useAppSelector((state) => state.ui.colorMode)
   const { containerRef, containerWidth, containerHeight, chartEvents } = useChartContainer(onChartClick)
 
@@ -88,7 +88,7 @@ export const WaterfallPlot = (props: WaterfallPlotProps) => {
       URL.revokeObjectURL(url)
     }
 
-    const increaseColor = COLOR_PALETTE[0] // teal
+    const increaseColor = customPalette[0] // teal
     const decreaseColor = '#e74c3c' // red
 
     const baseOption: EChartsOption = {
@@ -153,7 +153,7 @@ export const WaterfallPlot = (props: WaterfallPlotProps) => {
           name: 'Total',
           type: 'bar',
           stack: 'waterfall',
-          itemStyle: { color: COLOR_PALETTE[1] },
+          itemStyle: { color: customPalette[1 % customPalette.length] },
           data: totalData,
         },
       ],
