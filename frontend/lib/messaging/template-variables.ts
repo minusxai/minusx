@@ -6,6 +6,9 @@
 export const TEMPLATE_VARIABLES = {
   USER_NUMBER: '{{USER_NUMBER}}',
   AUTH_OTP: '{{AUTH_OTP}}',
+  EMAIL_TO: '{{EMAIL_TO}}',
+  EMAIL_SUBJECT: '{{EMAIL_SUBJECT}}',
+  EMAIL_BODY: '{{EMAIL_BODY}}',
 } as const;
 
 /**

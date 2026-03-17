@@ -67,6 +67,22 @@ export async function executeWebhook(
 }
 
 /**
+ * Send an email via a configured email webhook
+ * @param webhook - Email webhook configuration
+ * @param to - Recipient address
+ * @param subject - Email subject
+ * @param body - Email body
+ */
+export async function sendEmailViaWebhook(
+  webhook: MessagingWebhook,
+  to: string,
+  subject: string,
+  body: string
+): Promise<WebhookResult> {
+  return executeWebhook(webhook, { EMAIL_TO: to, EMAIL_SUBJECT: subject, EMAIL_BODY: body });
+}
+
+/**
  * Validate a webhook configuration
  * Checks URL format, method, headers structure, and body JSON validity
  * @param webhook - Webhook configuration to validate

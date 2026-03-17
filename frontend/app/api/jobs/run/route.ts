@@ -19,7 +19,8 @@ import { JobRunsDB } from '@/lib/database/job-runs-db';
 import { FilesAPI } from '@/lib/data/files.server';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { JOB_HANDLERS } from '@/lib/jobs/job-registry';
-import { sendEmail } from '@/lib/email/send-email';
+import { getConfigsByCompanyId } from '@/lib/data/configs.server';
+import { sendEmailViaWebhook } from '@/lib/messaging/webhook-executor';
 import type { RunFileContent, RunMessageRecord } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -120,21 +121,25 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       await FilesAPI.saveFile(runFileId, runFile.name, runFile.path, successContent, [jobFileId], user);
 
       // Deliver messages
+      const { config } = await getConfigsByCompanyId(user.companyId, user.mode);
+      const emailWebhook = config.messaging?.webhooks?.find(w => w.type === 'email');
       for (const msg of messages) {
         if (msg.type === 'email') {
-          try {
-            await sendEmail(
-              msg.metadata.to,
-              msg.metadata.subject,
-              msg.content,
-              undefined,
-              msg.metadata.batch
-            );
-            msg.status = 'sent';
-            msg.sentAt = new Date().toISOString();
-          } catch (err) {
+          if (!emailWebhook) {
+            console.warn('[jobs/run] No email webhook configured, skipping email delivery');
             msg.status = 'failed';
-            msg.deliveryError = err instanceof Error ? err.message : 'Unknown delivery error';
+            msg.deliveryError = 'No email webhook configured';
+          } else {
+            try {
+              for (const recipient of msg.metadata.to) {
+                await sendEmailViaWebhook(emailWebhook, recipient, msg.metadata.subject, msg.content);
+              }
+              msg.status = 'sent';
+              msg.sentAt = new Date().toISOString();
+            } catch (err) {
+              msg.status = 'failed';
+              msg.deliveryError = err instanceof Error ? err.message : 'Unknown delivery error';
+            }
           }
         }
       }
