@@ -194,8 +194,8 @@ GROUP BY file_id
 
 const INSERT_LLM_SQL = `
 INSERT INTO llm_call_events
-  (conversation_id, llm_call_id, model, total_tokens, prompt_tokens, completion_tokens, cost, duration_s, finish_reason)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  (conversation_id, llm_call_id, model, total_tokens, prompt_tokens, completion_tokens, cost, duration_s, finish_reason, trigger, user_id, user_email, user_role)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
 
 /**
@@ -204,7 +204,10 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 export async function trackLLMCallEvents(
   llmCalls: Record<string, LLMCallDetail>,
   conversationId: number,
-  companyId: number
+  companyId: number,
+  userId: number,
+  userEmail: string,
+  userRole: string,
 ): Promise<void> {
   const db = await getAnalyticsDb(companyId);
   const inserts = Object.values(llmCalls).map((call) =>
@@ -218,6 +221,10 @@ export async function trackLLMCallEvents(
       call.cost,
       call.duration,
       call.finish_reason ?? null,
+      call.trigger ?? null,
+      userId,
+      userEmail,
+      userRole,
     ]).catch((err: unknown) =>
       console.error('[analytics] trackLLMCallEvents insert failed:', err)
     )

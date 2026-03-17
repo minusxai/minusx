@@ -41,6 +41,10 @@ CREATE TABLE IF NOT EXISTS llm_call_events (
   cost              FLOAT8    NOT NULL DEFAULT 0,
   duration_s        FLOAT8    NOT NULL DEFAULT 0,
   finish_reason     VARCHAR,
+  trigger           VARCHAR,
+  user_id           INTEGER,
+  user_email        VARCHAR,
+  user_role         VARCHAR,
   timestamp         TIMESTAMP NOT NULL DEFAULT current_timestamp
 );
 
