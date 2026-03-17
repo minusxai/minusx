@@ -50,14 +50,19 @@ export async function executeWebhook(
 
     // 3. Make HTTP request
     const requestBody = body ? JSON.stringify(body) : undefined;
-    const response = await fetch(webhook.url, {
-      method: webhook.method,
-      headers: {
-        'Content-Type': 'application/json',
-        ...headers,
-      },
-      body: requestBody,
-    });
+    let response: Response;
+    try {
+      response = await fetch(webhook.url, {
+        method: webhook.method,
+        headers: {
+          'Content-Type': 'application/json',
+          ...headers,
+        },
+        body: requestBody,
+      });
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Unknown error', requestBody };
+    }
 
     const responseBody = await response.text().catch(() => undefined);
 

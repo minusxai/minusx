@@ -246,8 +246,10 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
                 }
               }
             } catch (err) {
+              const deliveryError = err instanceof Error ? err.message : 'Unknown delivery error';
+              msg.logs = [...(msg.logs ?? []), { attemptedAt: new Date().toISOString(), success: false, error: deliveryError }];
               msg.status = 'failed';
-              msg.deliveryError = err instanceof Error ? err.message : 'Unknown delivery error';
+              msg.deliveryError = deliveryError;
             }
           }
 
