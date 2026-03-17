@@ -599,6 +599,8 @@ See `store/__tests__/test-utils.ts` for available utilities and `chatE2E.test.ts
 
 ## Previous Mistakes
 
+**Schema parity (SQLite + Postgres):** Any change to `lib/database/schema.ts` MUST be mirrored in `lib/database/postgres-schema.ts` (and vice versa) in the same commit — including new columns, indexes, and `ALTER TABLE` guards for existing tables.
+
 **Tool Registration:** When a tool spawns another tool via `FrontendToolException`, the spawned tool MUST be registered with `@register_agent` because the Python orchestrator needs to instantiate it from the registry when processing the conversation log.
 
 **Module Import Timing (BACKEND_URL):** When testing API routes that use `BACKEND_URL` constant, always use `setupMockFetch()`. Without it, `BACKEND_URL` is evaluated at module import time (before test port allocation), causing fetch calls to default port 8001 instead of dynamic test port. `setupMockFetch()` intercepts and redirects port 8001 → test port.

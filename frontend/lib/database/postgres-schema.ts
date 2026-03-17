@@ -91,6 +91,8 @@ export const POSTGRES_SCHEMA = `
     type TEXT NOT NULL,
     content TEXT NOT NULL,
     file_references TEXT NOT NULL DEFAULT '[]',
+    version INTEGER NOT NULL DEFAULT 1,
+    last_edit_id TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (company_id, id),
@@ -109,6 +111,28 @@ export const POSTGRES_SCHEMA = `
     END IF;
   END $$;
 
+  -- Add version column if it doesn't exist (migration for existing tables)
+  DO $$
+  BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name = 'files' AND column_name = 'version'
+    ) THEN
+      ALTER TABLE files ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
+    END IF;
+  END $$;
+
+  -- Add last_edit_id column if it doesn't exist (migration for existing tables)
+  DO $$
+  BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name = 'files' AND column_name = 'last_edit_id'
+    ) THEN
+      ALTER TABLE files ADD COLUMN last_edit_id TEXT;
+    END IF;
+  END $$;
+
   -- Drop redundant standalone type index (replaced by composite index below)
   DROP INDEX IF EXISTS idx_files_type;
 
@@ -117,6 +141,7 @@ export const POSTGRES_SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_files_path_company ON files(company_id, path);
   CREATE INDEX IF NOT EXISTS idx_files_updated_at ON files(updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_files_company_type_updated ON files(company_id, type, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_files_last_edit_id ON files(last_edit_id) WHERE last_edit_id IS NOT NULL;
 
   -- Trigger to auto-update updated_at for files
   CREATE OR REPLACE FUNCTION update_files_updated_at()
