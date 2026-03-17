@@ -330,7 +330,7 @@ interface BaseChartConfig {
   yAxisLabel?: string
   yAxisColumns?: string[]
   xAxisColumns?: string[]
-  chartType: 'line' | 'bar' | 'area' | 'scatter'
+  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'combo'
   additionalOptions?: Partial<EChartsOption>
   colorMode?: 'light' | 'dark'
   containerWidth?: number
@@ -411,6 +411,27 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           showSymbol: false,
           stack: 'total',
           areaStyle: {},
+        }
+      case 'combo':
+        if (index === 0) {
+          return {
+            ...baseConfig,
+            type: 'bar' as const,
+            itemStyle: {
+              ...baseConfig.itemStyle,
+              opacity: 0.5,
+            },
+          }
+        }
+        return {
+          ...baseConfig,
+          type: 'line' as const,
+          z: 10,
+          symbol: 'circle',
+          symbolSize: 6,
+          showSymbol: true,
+          showAllSymbol: true,
+          lineStyle: { opacity: 0.95, width: 2 },
         }
       case 'scatter':
         return {

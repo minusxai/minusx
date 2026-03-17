@@ -7,7 +7,7 @@ import { buildChartOption, isValidChartData, type ChartProps } from '@/lib/chart
 import type { EChartsOption } from 'echarts'
 
 interface BaseChartProps extends ChartProps {
-  chartType: 'line' | 'bar' | 'area' | 'scatter'
+  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'combo'
   emptyMessage?: string
   additionalOptions?: Partial<EChartsOption>
   height?: string | number
