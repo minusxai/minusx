@@ -36,6 +36,7 @@ services:
     volumes:
       - ./data:/app/data
       - atlas_documents:/app/atlas_documents
+      - ./static:/app/public/static
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_BACKEND_URL=http://backend:8001
