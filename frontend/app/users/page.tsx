@@ -49,7 +49,7 @@ export default function UsersPage() {
 
   // Check if WhatsApp webhook is configured from Redux
   const hasWhatsAppWebhook = config?.messaging?.webhooks?.some(
-    webhook => webhook.type === 'whatsapp'
+    webhook => webhook.type === 'phone_otp'
   ) ?? false;
 
   // Form state

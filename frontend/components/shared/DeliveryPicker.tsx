@@ -15,8 +15,8 @@ interface DeliveryPickerProps {
 }
 
 type DropdownOption =
-  | { kind: 'email'; user: User }
-  | { kind: 'whatsapp'; user: User };
+  | { kind: 'email_alert'; user: User }
+  | { kind: 'phone_alert'; user: User };
 
 function DropdownMenu({ containerRef, options, onSelect }: {
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -68,23 +68,23 @@ function DropdownMenu({ containerRef, options, onSelect }: {
           onMouseDown={(e: React.MouseEvent) => {
             e.preventDefault();
             onSelect(
-              opt.kind === 'email'
-                ? { channel: 'email', address: opt.user.email }
-                : { channel: 'whatsapp', address: opt.user.phone! }
+              opt.kind === 'email_alert'
+                ? { channel: 'email_alert', address: opt.user.email }
+                : { channel: 'phone_alert', address: opt.user.phone! }
             );
           }}
         >
-          {opt.kind === 'email'
+          {opt.kind === 'email_alert'
             ? <LuMail size={12} />
             : <LuMessageCircle size={12} />}
           <Box>
             <Text fontSize="xs" fontWeight="500">{opt.user.name}</Text>
             <Text fontSize="xs" color="fg.muted">
-              {opt.kind === 'email' ? opt.user.email : opt.user.phone}
+              {opt.kind === 'email_alert' ? opt.user.email : opt.user.phone}
             </Text>
           </Box>
-          <Badge size="xs" colorPalette={opt.kind === 'email' ? 'blue' : 'green'} ml="auto">
-            {opt.kind === 'email' ? 'Email' : 'WhatsApp'}
+          <Badge size="xs" colorPalette={opt.kind === 'email_alert' ? 'blue' : 'green'} ml="auto">
+            {opt.kind === 'email_alert' ? 'Email' : 'WhatsApp'}
           </Badge>
         </HStack>
       ))}
@@ -114,11 +114,11 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
     for (const user of users) {
       const matches = !query || user.name.toLowerCase().includes(query) || user.email.toLowerCase().includes(query);
       if (!matches) continue;
-      if (!recipientKeys.has(`email:${user.email}`)) {
-        opts.push({ kind: 'email', user });
+      if (!recipientKeys.has(`email_alert:${user.email}`)) {
+        opts.push({ kind: 'email_alert', user });
       }
-      if (user.phone && !recipientKeys.has(`whatsapp:${user.phone}`)) {
-        opts.push({ kind: 'whatsapp', user });
+      if (user.phone && !recipientKeys.has(`phone_alert:${user.phone}`)) {
+        opts.push({ kind: 'phone_alert', user });
       }
     }
     return opts;
@@ -136,7 +136,7 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
     const trimmed = email.trim().toLowerCase();
     if (!trimmed) return;
     if (validate && !EMAIL_REGEX.test(trimmed)) return;
-    addRecipient({ channel: 'email', address: trimmed });
+    addRecipient({ channel: 'email_alert', address: trimmed });
   };
 
   const removeRecipient = (index: number) => {
@@ -187,7 +187,7 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
             gap={1}
             fontSize="xs"
           >
-            {r.channel === 'email'
+            {r.channel === 'email_alert'
               ? <LuMail size={11} />
               : <LuMessageCircle size={11} />}
             <Text fontSize="xs" lineHeight="short">{r.address}</Text>

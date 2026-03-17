@@ -130,11 +130,11 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       // Deliver messages (skipped when send=false)
       if (send) {
         const { config } = await getConfigsByCompanyId(user.companyId, user.mode);
-        const emailWebhook = config.messaging?.webhooks?.find(w => w.type === 'email');
-        const whatsappWebhook = config.messaging?.webhooks?.find(w => w.type === 'whatsapp');
+        const emailWebhook = config.messaging?.webhooks?.find(w => w.type === 'email_alert');
+        const whatsappWebhook = config.messaging?.webhooks?.find(w => w.type === 'phone_alert');
         for (const msg of messages) {
           try {
-            if (msg.type === 'email') {
+            if (msg.type === 'email_alert') {
               if (!emailWebhook) {
                 msg.status = 'failed';
                 msg.deliveryError = 'No email webhook configured';
@@ -148,7 +148,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
                   msg.deliveryError = result.error ?? `HTTP ${result.statusCode}`;
                 }
               }
-            } else if (msg.type === 'whatsapp') {
+            } else if (msg.type === 'phone_alert') {
               if (!whatsappWebhook) {
                 msg.status = 'failed';
                 msg.deliveryError = 'No WhatsApp webhook configured';

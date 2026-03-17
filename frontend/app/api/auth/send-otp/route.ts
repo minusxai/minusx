@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Send OTP via first configured webhook (WhatsApp)
-    const webhook = config.messaging.webhooks.find(w => w.type === 'whatsapp') || config.messaging.webhooks[0];
+    const webhook = config.messaging.webhooks.find(w => w.type === 'phone_otp') || config.messaging.webhooks[0];
     const result = await executeWebhook(webhook, {
       USER_NUMBER: user.phone,
       AUTH_OTP: otp,

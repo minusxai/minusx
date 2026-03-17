@@ -835,6 +835,45 @@ export const MIGRATIONS: MigrationEntry[] = [
     },
     description: 'Migrate alert/report emails[] → recipients[] (flat union with channel + address)',
   },
+  {
+    dataVersion: 21,
+    schemaVersion: undefined,
+    dataMigration: (data: InitData) => {
+      // Rename webhook type discriminators:
+      //   config docs:  'whatsapp' → 'phone_otp',  'email' → 'email_alert'
+      //   alert/report docs:  channel 'email' → 'email_alert',  'whatsapp' → 'phone_alert'
+
+      for (const companyData of data.companies as CompanyData[]) {
+        for (const doc of companyData.documents) {
+          const content = doc.content as any;
+          if (!content) continue;
+
+          if (doc.type === 'config') {
+            const webhooks: any[] = content?.messaging?.webhooks;
+            if (Array.isArray(webhooks)) {
+              for (const w of webhooks) {
+                if (w.type === 'whatsapp') w.type = 'phone_otp';
+                else if (w.type === 'email') w.type = 'email_alert';
+              }
+            }
+          }
+
+          if (doc.type === 'alert' || doc.type === 'report') {
+            const recipients: any[] = content?.recipients;
+            if (Array.isArray(recipients)) {
+              for (const r of recipients) {
+                if (r.channel === 'email') r.channel = 'email_alert';
+                else if (r.channel === 'whatsapp') r.channel = 'phone_alert';
+              }
+            }
+          }
+        }
+      }
+
+      return data;
+    },
+    description: 'Rename webhook type discriminators: whatsapp→phone_otp, email→email_alert (config); email→email_alert, whatsapp→phone_alert (alert/report recipients)',
+  },
 ];
 
 /**

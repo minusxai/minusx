@@ -292,7 +292,7 @@ export interface StylesContent extends BaseFileContent {
  * Used in ConfigContent.messaging section
  */
 export interface MessagingWebhook {
-  type: 'whatsapp' | 'sms' | 'email';
+  type: 'phone_otp' | 'email_alert' | 'phone_alert' | 'sms';
   url: string;
   method: 'GET' | 'POST' | 'PUT';
   headers?: Record<string, string>;
@@ -433,8 +433,8 @@ export interface AlertSchedule {
 }
 
 export type AlertRecipient =
-  | { channel: 'email'; address: string }
-  | { channel: 'whatsapp'; address: string };
+  | { channel: 'email_alert'; address: string }
+  | { channel: 'phone_alert'; address: string };
 
 export interface AlertContent extends BaseFileContent {
   description?: string;
@@ -494,8 +494,8 @@ export interface AlertOutput {
 }
 
 export type RunMessage =
-  | { type: 'email';    content: string; metadata: { to: string; subject: string } }
-  | { type: 'whatsapp'; content: string; metadata: { to: string } };
+  | { type: 'email_alert';    content: string; metadata: { to: string; subject: string } }
+  | { type: 'phone_alert'; content: string; metadata: { to: string } };
 
 export type RunMessageRecord = RunMessage & {
   status: 'pending' | 'sent' | 'failed' | 'skipped';

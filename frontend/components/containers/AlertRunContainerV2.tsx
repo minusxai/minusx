@@ -44,7 +44,7 @@ function MessageStatusBadge({ status }: { status: RunMessageRecord['status'] }) 
 
 function MessageRow({ msg }: { msg: RunMessageRecord }) {
   const [open, setOpen] = useState(false);
-  const isEmail = msg.type === 'email';
+  const isEmail = msg.type === 'email_alert';
   return (
     <Box borderRadius="md" border="1px solid" borderColor="border.muted" overflow="hidden">
       <HStack

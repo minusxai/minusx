@@ -47,10 +47,10 @@ export const alertJobHandler: JobHandler = {
       const body = `Alert "${alertName}" triggered.\nValue: ${actualValue} ${alert.condition.operator} ${alert.condition.threshold}`;
       const subject = `[Alert Triggered] ${alertName}`;
       for (const recipient of alert.recipients) {
-        if (recipient.channel === 'email') {
-          messages.push({ type: 'email', content: body, metadata: { to: recipient.address, subject } });
-        } else if (recipient.channel === 'whatsapp') {
-          messages.push({ type: 'whatsapp', content: body, metadata: { to: recipient.address } });
+        if (recipient.channel === 'email_alert') {
+          messages.push({ type: 'email_alert', content: body, metadata: { to: recipient.address, subject } });
+        } else if (recipient.channel === 'phone_alert') {
+          messages.push({ type: 'phone_alert', content: body, metadata: { to: recipient.address } });
         }
       }
     }

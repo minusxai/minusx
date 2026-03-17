@@ -81,7 +81,7 @@ jest.mock('@/lib/data/configs.server', () => ({
       messaging: {
         webhooks: [
           {
-            type: 'email',
+            type: 'email_alert',
             url: 'https://hooks.example.com/email',
             method: 'POST',
             headers: {},
@@ -376,8 +376,8 @@ describe('Job Runs E2E', () => {
         schedule: { cron: '* * * * *', timezone: 'UTC' },
         condition: { selector: 'first', function: 'value', column: 'revenue', operator: '>', threshold: 100 },
         recipients: [
-          { channel: 'email', address: 'alice@example.com' },
-          { channel: 'email', address: 'bob@example.com' },
+          { channel: 'email_alert', address: 'alice@example.com' },
+          { channel: 'email_alert', address: 'bob@example.com' },
         ],
       };
       await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', alertWithRecipients, [questionId], 1);
@@ -392,7 +392,7 @@ describe('Job Runs E2E', () => {
       // One sendEmailViaWebhook call per recipient
       expect(sendEmailViaWebhook).toHaveBeenCalledTimes(2);
       expect(sendEmailViaWebhook).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'email' }),
+        expect.objectContaining({ type: 'email_alert' }),
         'alice@example.com',
         expect.stringContaining('Alert Triggered'),
         expect.any(String)
@@ -404,7 +404,7 @@ describe('Job Runs E2E', () => {
       expect(content.messages).toHaveLength(2);
       expect(content.messages![0].status).toBe('sent');
       expect(content.messages![0].sentAt).toBeTruthy();
-      expect(content.messages![0].type).toBe('email');
+      expect(content.messages![0].type).toBe('email_alert');
     });
 
     it('records delivery failure in messages when webhook returns HTTP error', async () => {
@@ -416,7 +416,7 @@ describe('Job Runs E2E', () => {
         status: 'live',
         schedule: { cron: '* * * * *', timezone: 'UTC' },
         condition: { selector: 'first', function: 'value', column: 'revenue', operator: '>', threshold: 100 },
-        recipients: [{ channel: 'email', address: 'alice@example.com' }],
+        recipients: [{ channel: 'email_alert', address: 'alice@example.com' }],
       };
       await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', alertWithRecipients, [questionId], 1);
 
@@ -442,7 +442,7 @@ describe('Job Runs E2E', () => {
         status: 'live',
         schedule: { cron: '* * * * *', timezone: 'UTC' },
         condition: { selector: 'first', function: 'value', column: 'revenue', operator: '>', threshold: 200 },
-        recipients: [{ channel: 'email', address: 'alice@example.com' }],
+        recipients: [{ channel: 'email_alert', address: 'alice@example.com' }],
       };
       await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', alertWithRecipients, [questionId], 1);
 
