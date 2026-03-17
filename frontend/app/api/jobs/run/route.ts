@@ -29,7 +29,12 @@ export const runtime = 'nodejs';
 export const POST = withAuth(async (request: NextRequest, user) => {
   try {
     const body = await request.json();
-    const { job_id, job_type } = body as { job_id: string; job_type: string };
+    const { job_id, job_type, force = false, send = true } = body as {
+      job_id: string;
+      job_type: string;
+      force?: boolean;
+      send?: boolean;
+    };
 
     if (!job_id || !job_type) {
       return ApiErrors.badRequest('job_id and job_type are required');
@@ -54,14 +59,16 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       return ApiErrors.notFound('Job file');
     }
 
-    // Dedup: skip if already running
-    const existingRun = await JobRunsDB.getRunningByJobId(job_id, job_type, user.companyId);
-    if (existingRun) {
-      return successResponse({
-        runId: existingRun.id,
-        fileId: existingRun.output_file_id,
-        status: 'already_running',
-      });
+    // Dedup: skip if already running (force bypasses by using a 1s window)
+    if (!force) {
+      const existingRun = await JobRunsDB.getRunningByJobId(job_id, job_type, user.companyId);
+      if (existingRun) {
+        return successResponse({
+          runId: existingRun.id,
+          fileId: existingRun.output_file_id,
+          status: 'already_running',
+        });
+      }
     }
 
     // Load previous runs for handler context
@@ -120,27 +127,33 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       };
       await FilesAPI.saveFile(runFileId, runFile.name, runFile.path, successContent, [jobFileId], user);
 
-      // Deliver messages
-      const { config } = await getConfigsByCompanyId(user.companyId, user.mode);
-      const emailWebhook = config.messaging?.webhooks?.find(w => w.type === 'email');
-      for (const msg of messages) {
-        if (msg.type === 'email') {
-          if (!emailWebhook) {
-            console.warn('[jobs/run] No email webhook configured, skipping email delivery');
-            msg.status = 'failed';
-            msg.deliveryError = 'No email webhook configured';
-          } else {
-            try {
-              for (const recipient of msg.metadata.to) {
-                await sendEmailViaWebhook(emailWebhook, recipient, msg.metadata.subject, msg.content);
-              }
-              msg.status = 'sent';
-              msg.sentAt = new Date().toISOString();
-            } catch (err) {
+      // Deliver messages (skipped when send=false)
+      if (send) {
+        const { config } = await getConfigsByCompanyId(user.companyId, user.mode);
+        const emailWebhook = config.messaging?.webhooks?.find(w => w.type === 'email');
+        for (const msg of messages) {
+          if (msg.type === 'email') {
+            if (!emailWebhook) {
+              console.warn('[jobs/run] No email webhook configured, skipping email delivery');
               msg.status = 'failed';
-              msg.deliveryError = err instanceof Error ? err.message : 'Unknown delivery error';
+              msg.deliveryError = 'No email webhook configured';
+            } else {
+              try {
+                for (const recipient of msg.metadata.to) {
+                  await sendEmailViaWebhook(emailWebhook, recipient, msg.metadata.subject, msg.content);
+                }
+                msg.status = 'sent';
+                msg.sentAt = new Date().toISOString();
+              } catch (err) {
+                msg.status = 'failed';
+                msg.deliveryError = err instanceof Error ? err.message : 'Unknown delivery error';
+              }
             }
           }
+        }
+      } else {
+        for (const msg of messages) {
+          msg.status = 'skipped';
         }
       }
 

@@ -24,7 +24,7 @@ interface AlertViewProps {
   selectedRunId?: number | null;
 
   onChange: (updates: Partial<AlertContent>) => void;
-  onCheckNow: () => Promise<void>;
+  onCheckNow: (options?: { force?: boolean; send?: boolean }) => Promise<void>;
   onSelectRun?: (runId: number | null) => void;
 }
 
@@ -150,6 +150,9 @@ export default function AlertView({
   const activeTab = useAppSelector(state => selectFileViewMode(state, fileId));
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
   const isLive = (alert.status ?? 'draft') === 'live';
+
+  const [forceRun, setForceRun] = useState(false);
+  const [sendNotifications, setSendNotifications] = useState(true);
 
   // Resizable panel state
   const [leftPanelWidth, setLeftPanelWidth] = useState(50);
@@ -786,15 +789,45 @@ export default function AlertView({
                   </Box>
                 )}
               </HStack>
-              <Button
-                onClick={onCheckNow}
-                disabled={isRunning || isDirty || !alert.questionId}
-                size="sm"
-                colorPalette="teal"
-              >
-                <LuPlay size={14} />
-                {isRunning ? 'Checking...' : 'Check Now'}
-              </Button>
+              <HStack gap={3}>
+                <HStack gap={1.5}>
+                  <Switch.Root
+                    size="sm"
+                    checked={forceRun}
+                    onCheckedChange={(e: CheckedChangeDetails) => setForceRun(e.checked)}
+                    colorPalette="orange"
+                  >
+                    <Switch.HiddenInput />
+                    <Switch.Control>
+                      <Switch.Thumb />
+                    </Switch.Control>
+                  </Switch.Root>
+                  <Text fontSize="xs" color="fg.muted">Force</Text>
+                </HStack>
+                <HStack gap={1.5}>
+                  <Switch.Root
+                    size="sm"
+                    checked={sendNotifications}
+                    onCheckedChange={(e: CheckedChangeDetails) => setSendNotifications(e.checked)}
+                    colorPalette="teal"
+                  >
+                    <Switch.HiddenInput />
+                    <Switch.Control>
+                      <Switch.Thumb />
+                    </Switch.Control>
+                  </Switch.Root>
+                  <Text fontSize="xs" color="fg.muted">Send</Text>
+                </HStack>
+                <Button
+                  onClick={() => onCheckNow({ force: forceRun, send: sendNotifications })}
+                  disabled={(isRunning && !forceRun) || isDirty || !alert.questionId}
+                  size="sm"
+                  colorPalette="teal"
+                >
+                  <LuPlay size={14} />
+                  {isRunning ? 'Checking...' : 'Check Now'}
+                </Button>
+              </HStack>
             </Flex>
 
             {/* Run Content */}

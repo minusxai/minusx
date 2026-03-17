@@ -29,7 +29,7 @@ export interface UseJobRunsResult {
   selectedRun: JobRun | null;
   isRunning: boolean;
   /** Trigger a manual run. No-op if already running. */
-  trigger: () => Promise<void>;
+  trigger: (options?: { force?: boolean; send?: boolean }) => Promise<void>;
   /** Select a run by ID (pass null to deselect). */
   selectRun: (runId: number | null) => void;
   /** Reload run history from the server. */
@@ -58,9 +58,9 @@ export function useJobRuns(jobId: number | null, jobType: string): UseJobRunsRes
     await loadJobRuns(id, jobType, { selectLatest: true });
   }, [id, jobType]);
 
-  const trigger = useCallback(async () => {
-    if (!id || isRunning) return;
-    await triggerJobRun(id, jobType);
+  const trigger = useCallback(async (options?: { force?: boolean; send?: boolean }) => {
+    if (!id || (isRunning && !options?.force)) return;
+    await triggerJobRun(id, jobType, options);
   }, [id, jobType, isRunning]);
 
   const selectRun = useCallback((runId: number | null) => {

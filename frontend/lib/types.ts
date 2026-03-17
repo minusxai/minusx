@@ -505,7 +505,7 @@ export interface RunMessage {
 }
 
 export interface RunMessageRecord extends RunMessage {
-  status: 'pending' | 'sent' | 'failed';
+  status: 'pending' | 'sent' | 'failed' | 'skipped';
   sentAt?: string;
   deliveryError?: string;
 }
