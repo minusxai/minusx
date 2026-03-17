@@ -16,6 +16,7 @@ import {
   LuGrid3X3,
   LuTrendingUp,
   LuChartNoAxesColumn,
+  LuChartNoAxesCombined,
 } from 'react-icons/lu';
 import type { VizSettings } from '@/lib/types';
 
@@ -29,6 +30,7 @@ const VIZ_TYPES: VizTypeOption[] = [
   { type: 'table', icon: <LuGrid3X3 size={18} />, label: 'Table view' },
   { type: 'line', icon: <LuChartLine size={18} />, label: 'Line chart' },
   { type: 'bar', icon: <LuChartColumn size={18} />, label: 'Bar chart' },
+  { type: 'combo', icon: <LuChartNoAxesCombined size={18} />, label: 'Combo chart' },
   { type: 'area', icon: <LuChartArea size={18} />, label: 'Area chart' },
   { type: 'scatter', icon: <LuChartScatter size={18} />, label: 'Scatter plot' },
   { type: 'funnel', icon: <LuFilter size={18} />, label: 'Funnel chart' },

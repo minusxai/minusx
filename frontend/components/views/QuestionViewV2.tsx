@@ -308,7 +308,7 @@ export default function QuestionViewV2({
   };
 
   // Handle viz type change
-  const handleVizTypeChange = (type: 'table' | 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall') => {
+  const handleVizTypeChange = (type: 'table' | 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo') => {
     onChange({ vizSettings: { ...content.vizSettings, type } });
   };
 

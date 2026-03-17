@@ -27,7 +27,8 @@ export type VisualizationType =
   | "pie"
   | "pivot"
   | "trend"
-  | "waterfall";
+  | "waterfall"
+  | "combo";
 /**
  * list of column names in the x axis (for non-pivot chart types)
  */
