@@ -296,6 +296,14 @@ export async function atomicImport(
   // SURGICAL IMPORT: Same for both databases (uses transactions)
   if (isSurgical) {
     console.log(`📦 Surgical import: Replacing companies [${companyIdsToImport!.join(', ')}]...`);
+
+    // For Postgres, ensure schema is up to date (adds any missing columns) before inserting
+    if (dbType === 'postgres') {
+      const schemaDb = await createAdapter({ type: 'postgres', postgresConnectionString: process.env.POSTGRES_URL });
+      await schemaDb.initializeSchema();
+      await schemaDb.close();
+    }
+
     await importToDatabase(targetDbPath, initData, companyIdsToImport);
 
     // Validate after import

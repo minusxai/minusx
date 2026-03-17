@@ -43,6 +43,15 @@ async function main() {
   console.log(`📊 Current versions: data=${currentDataVersion}, schema=${currentSchemaVersion}`);
   console.log(`📊 Target versions: data=${targetDataVersion}, schema=${targetSchemaVersion}`);
 
+  // For PostgreSQL: always run initializeSchema to apply any new ALTER TABLE ADD COLUMN
+  // guards, even when no data migration is needed. This ensures new columns added to
+  // postgres-schema.ts are applied on every deploy.
+  if (dbType === 'postgres') {
+    console.log('🔧 Ensuring PostgreSQL schema is up to date...');
+    await db.initializeSchema();
+    console.log('✅ PostgreSQL schema ready');
+  }
+
   // Check if migrations are needed
   const needsDataMigration = currentDataVersion < targetDataVersion;
   const needsSchemaRecreation = needsSchemaMigration(currentSchemaVersion);
