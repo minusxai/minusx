@@ -54,6 +54,8 @@ export interface BaseFileMetadata extends BaseEntity {
   path: string;
   type: FileType;
   references: number[];  // Phase 6: Array of file IDs this file references (cached from content)
+  version: number;            // OCC version counter (incremented on each update); default 1
+  last_edit_id: string | null;  // Last edit idempotency key (for OCC); null if not set
 }
 
 // Document-based architecture types

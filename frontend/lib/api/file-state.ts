@@ -19,7 +19,8 @@
  */
 
 import { getStore } from '@/store/store';
-import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, selectEffectivePath, deleteFile as deleteFileAction, setFilePlaceholder, generateVirtualId, pathToVirtualId, selectDirtyFiles, replaceVirtualIds } from '@/store/filesSlice';
+import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, selectEffectivePath, deleteFile as deleteFileAction, setFilePlaceholder, generateVirtualId, pathToVirtualId, selectDirtyFiles, replaceVirtualIds, hashString } from '@/store/filesSlice';
+import { ConflictError } from '@/lib/data/files';
 import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, setQueryLoading } from '@/store/queryResultsSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { FilesAPI, getFiles } from '@/lib/data/files';
@@ -40,6 +41,7 @@ import type { AppState } from '@/lib/appState';
 import { validateFileState } from '@/lib/validation/content-validators';
 
 export { selectDirtyFiles } from '@/store/filesSlice';
+export { ConflictError } from '@/lib/data/files';
 
 const LIMIT_CHARS = 2_000;
 
@@ -831,9 +833,6 @@ export async function publishFile(
     return { id: fileId, name: fileState.name };
   }
 
-  // Set saving state
-  getStore().dispatch(setSaving({ id: fileId, saving: true }));
-
   // Determine if this is a create or update
   const isVirtualFile = fileId < 0;
 
@@ -842,7 +841,6 @@ export async function publishFile(
   let contentToSave = fileState.persistableChanges
     ? { ...fileState.content, ...fileState.persistableChanges }
     : fileState.content;
-
 
   if (!contentToSave) {
     throw new Error(`File ${fileId} has no content to save`);
@@ -856,11 +854,6 @@ export async function publishFile(
     content: contentToSave,
     company_id: state.auth.user?.companyId
   };
-
-  // Save file
-  let savedId: number;
-  let savedName: string;
-  let updatedFile: DbFile;
 
   const extractReferences = extractReferencesFromContent;
   const references = extractReferences(fileData.content, fileData.type as FileType);
@@ -876,29 +869,55 @@ export async function publishFile(
     );
   }
 
-  if (isVirtualFile) {
-    // Create new file using FilesAPI
-    const result = await FilesAPI.createFile({
-      name: fileData.name,
-      path: fileData.path,
-      type: fileData.type as FileType,
-      content: fileData.content,
-      references
-    });
-    savedId = result.data.id;
-    savedName = result.data.name;
-    updatedFile = result.data;
-  } else {
-    const result = await FilesAPI.saveFile(
-      fileId,
-      fileData.name,
-      fileData.path,
-      fileData.content,
-      references
-    );
-    savedId = result.data.id;
-    savedName = result.data.name;
-    updatedFile = result.data;
+  // Derive editId for idempotency / OCC
+  const editId = isVirtualFile
+    ? String(hashString(`${fileId}:${JSON.stringify(contentToSave)}`))
+    : String(hashString(`${fileId}:${JSON.stringify(fileState.persistableChanges ?? {})}`));
+
+  // Set saving state
+  getStore().dispatch(setSaving({ id: fileId, saving: true }));
+
+  // Save file
+  let savedId: number;
+  let savedName: string;
+  let updatedFile: DbFile;
+
+  try {
+    if (isVirtualFile) {
+      // Create new file using FilesAPI
+      const result = await FilesAPI.createFile({
+        name: fileData.name,
+        path: fileData.path,
+        type: fileData.type as FileType,
+        content: fileData.content,
+        references,
+        editId
+      });
+      savedId = result.data.id;
+      savedName = result.data.name;
+      updatedFile = result.data;
+    } else {
+      const result = await FilesAPI.saveFile(
+        fileId,
+        fileData.name,
+        fileData.path,
+        fileData.content,
+        references,
+        undefined,
+        editId,
+        fileState.version
+      );
+      savedId = result.data.id;
+      savedName = result.data.name;
+      updatedFile = result.data;
+    }
+  } catch (error) {
+    if (error instanceof ConflictError) {
+      getStore().dispatch(setFile({ file: error.currentFile }));
+    }
+    throw error;
+  } finally {
+    getStore().dispatch(setSaving({ id: fileId, saving: false }));
   }
 
   // Update file state with response from API (so base content is updated)
@@ -1267,7 +1286,9 @@ export async function createVirtualFile(
     content: template.content,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
-    company_id: user?.companyId ?? 0
+    company_id: user?.companyId ?? 0,
+    version: 1,
+    last_edit_id: null,
   };
 
   // Add to Redux
@@ -1330,7 +1351,9 @@ export async function createFolder(
     content: { description: '' },
     created_at: now,
     updated_at: now,
-    company_id: companyId
+    company_id: companyId,
+    version: 1,
+    last_edit_id: null,
   };
 
   // Add to Redux

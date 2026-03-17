@@ -1,7 +1,7 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { successResponse, handleApiError, ApiErrors } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
-import { loadFile, saveFile } from '@/lib/data/files.server';
+import { loadFile, saveFile, ConflictError } from '@/lib/data/files.server';
 import { validateFileId } from '@/lib/data/helpers/validation';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { canDeleteFileType } from '@/lib/auth/access-rules';
@@ -91,7 +91,7 @@ export const PATCH = withAuth(async (
     const id = validateFileId(idStr);
 
     const body = await request.json();
-    const { name, path, content, references } = body;
+    const { name, path, content, references, editId, expectedVersion } = body;
 
     if (!name) {
       return ApiErrors.validationError('name is required');
@@ -136,9 +136,18 @@ export const PATCH = withAuth(async (
 
     // Full save: update name, path, and content
     // Phase 6: Client sends pre-extracted references (server is dumb, just saves what it receives)
-    const result = await saveFile(id, name, path, content, references || [], user);
-
-    return successResponse(result.data);
+    try {
+      const result = await saveFile(id, name, path, content, references || [], user, editId, expectedVersion);
+      return successResponse(result.data);
+    } catch (error) {
+      if (error instanceof ConflictError) {
+        return NextResponse.json(
+          { error: { type: 'ConflictError', currentFile: error.currentFile } },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
   } catch (error) {
     return handleApiError(error);
   }

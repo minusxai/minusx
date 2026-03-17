@@ -2,7 +2,16 @@ import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { IFilesDataLayer } from './files.interface';
 import { LoadFileResult, LoadFilesResult, GetFilesOptions, GetFilesResult, SaveFileResult, CreateFileInput, CreateFileResult, GetTemplateOptions, GetTemplateResult, BatchCreateInput, BatchCreateFileResult, BatchSaveFileInput, BatchSaveFileResult } from './types';
 import { FileExistsError, AccessPermissionError, FileNotFoundError, SerializedError, deserializeError } from '@/lib/errors';
-import { BaseFileContent, FileType } from '@/lib/types';
+import { BaseFileContent, DbFile, FileType } from '@/lib/types';
+
+export class ConflictError extends Error {
+  currentFile: DbFile;
+  constructor(currentFile: DbFile) {
+    super('Conflict: file has been modified by another client');
+    this.name = 'ConflictError';
+    this.currentFile = currentFile;
+  }
+}
 
 const API_BASE = '';  // Same origin
 
@@ -117,15 +126,20 @@ class FilesDataLayerClient implements IFilesDataLayer {
     return { data: json.data };
   }
 
-  async saveFile(id: number, name: string, path: string, content: BaseFileContent, references: number[], user?: EffectiveUser): Promise<SaveFileResult> {
+  async saveFile(id: number, name: string, path: string, content: BaseFileContent, references: number[], user?: EffectiveUser, editId?: string, expectedVersion?: number): Promise<SaveFileResult> {
     const res = await fetch(`${API_BASE}/api/files/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, path, content, references })  // Phase 6: Send pre-extracted references
+      body: JSON.stringify({ name, path, content, references, editId, expectedVersion })  // Phase 6: Send pre-extracted references
     });
 
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}));
+
+      // Handle conflict (409) — file was modified by another client
+      if (res.status === 409 && errorData.error?.type === 'ConflictError') {
+        throw new ConflictError(errorData.error.currentFile);
+      }
 
       // Check if this is a serialized error from the server
       if (errorData.error?.type && errorData.error?.message) {

@@ -35,6 +35,15 @@ import { computeSchemaFromDatabases } from './loaders/context-loader-utils';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import { trackFileEvent, getFileAnalyticsSummary, getFilesAnalyticsSummary, getConversationAnalytics } from '@/lib/analytics/file-analytics.server';
 
+export class ConflictError extends Error {
+  currentFile: DbFile;
+  constructor(currentFile: DbFile) {
+    super('Conflict: file has been modified by another client');
+    this.name = 'ConflictError';
+    this.currentFile = currentFile;
+  }
+}
+
 /**
  * Server-side implementation of files data layer
  * Uses direct database access with permission checks
@@ -236,7 +245,9 @@ class FilesDataLayerServer implements IFilesDataLayer {
       references: await extractReferenceIds(file),
       created_at: file.created_at,
       updated_at: file.updated_at,
-      company_id: file.company_id
+      company_id: file.company_id,
+      version: file.version,
+      last_edit_id: file.last_edit_id,
     })));
 
     const folderInfos: FileInfo[] = folderFiles.map(file => ({
@@ -247,7 +258,9 @@ class FilesDataLayerServer implements IFilesDataLayer {
       references: [],
       created_at: file.created_at,
       updated_at: file.updated_at,
-      company_id: file.company_id
+      company_id: file.company_id,
+      version: file.version,
+      last_edit_id: file.last_edit_id,
     }));
 
     return {
@@ -257,7 +270,18 @@ class FilesDataLayerServer implements IFilesDataLayer {
   }
 
   async createFile(input: CreateFileInput, user: EffectiveUser): Promise<CreateFileResult> {
-    const { name, path, type, content, references = [], options } = input;
+    const { name, path, type, content, references = [], options, editId } = input;
+
+    // Idempotency: if this editId was already used, return the existing file
+    if (editId) {
+      const existing = await DocumentDB.getByEditId(editId, user.companyId);
+      if (existing) {
+        const existingFile = await DocumentDB.getById(existing.id, user.companyId);
+        if (existingFile) {
+          return { data: existingFile };
+        }
+      }
+    }
     const overrides = await this._getOverrides(user);
 
     // Check file type access
@@ -372,7 +396,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     // Create file in database (returns numeric ID)
     // Phase 6: Pass references from client (server is dumb, no extraction)
-    const newFileId = await DocumentDB.create(name, finalPath, type, contentToCreate, references, user.companyId);
+    const newFileId = await DocumentDB.create(name, finalPath, type, contentToCreate, references, user.companyId, editId);
 
     if (!newFileId) {
       throw new Error('Failed to create file');
@@ -403,7 +427,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     };
   }
 
-  async saveFile(id: number, name: string, path: string, content: BaseFileContent, references: number[], user: EffectiveUser): Promise<SaveFileResult> {
+  async saveFile(id: number, name: string, path: string, content: BaseFileContent, references: number[], user: EffectiveUser, editId?: string, expectedVersion?: number): Promise<SaveFileResult> {
     // Get existing file
     const existingFile = await DocumentDB.getById(id, user.companyId);
 
@@ -455,10 +479,24 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
 
     // Phase 6: Server is dumb - just saves what client sends (no extraction)
-    const success = await DocumentDB.update(id, name, path, contentToSave, references, user.companyId);
+    const updateResult = await DocumentDB.update(id, name, path, contentToSave, references, user.companyId, editId, expectedVersion);
 
-    if (!success) {
-      throw new Error('Failed to save file');
+    if ('alreadyApplied' in updateResult && updateResult.alreadyApplied) {
+      // Already applied — return the current file as success
+      const currentFile = await DocumentDB.getById(id, user.companyId);
+      if (!currentFile) {
+        throw new Error('File not found after update');
+      }
+      return { data: currentFile };
+    }
+
+    if ('conflict' in updateResult && updateResult.conflict) {
+      // Version conflict — throw ConflictError with the current server file
+      const currentFile = await DocumentDB.getById(id, user.companyId);
+      if (!currentFile) {
+        throw new Error('File not found during conflict check');
+      }
+      throw new ConflictError(currentFile);
     }
 
     // Track updated event (fire-and-forget)
@@ -698,7 +736,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
   async batchSaveFiles(inputs: BatchSaveFileInput[], user: EffectiveUser): Promise<BatchSaveFileResult> {
     const results: DbFile[] = [];
     for (const input of inputs) {
-      const result = await this.saveFile(input.id, input.name, input.path, input.content, input.references, user);
+      const result = await this.saveFile(input.id, input.name, input.path, input.content, input.references, user, input.editId, input.expectedVersion);
       results.push(result.data);
     }
     return { data: results };

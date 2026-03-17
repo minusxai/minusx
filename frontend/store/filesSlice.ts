@@ -87,7 +87,7 @@ export function getNextVirtualFileId(files: Record<FileId, FileState>): FileId {
 }
 
 // djb2-style hash — stays within 32-bit range
-function hashString(str: string): number {
+export function hashString(str: string): number {
   let hash = 5381;
   for (let i = 0; i < str.length; i++) {
     hash = ((hash << 5) + hash) ^ str.charCodeAt(i);
@@ -321,6 +321,8 @@ const filesSlice = createSlice({
           created_at: '',
           updated_at: '',
           company_id: 0,  // Placeholder value
+          version: 1,
+          last_edit_id: null,
           loading,
           saving: false,
           updatedAt: 0,
@@ -354,6 +356,8 @@ const filesSlice = createSlice({
         created_at: '',
         updated_at: '',
         company_id: 0,
+        version: 1,
+        last_edit_id: null,
         loading: true,
         saving: false,
         updatedAt: 0,
@@ -390,6 +394,8 @@ const filesSlice = createSlice({
           created_at: '',
           updated_at: '',
           company_id: 0,
+          version: 1,
+          last_edit_id: null,
           loading: true,
           saving: false,
           updatedAt: 0,
@@ -576,6 +582,8 @@ const filesSlice = createSlice({
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
           company_id: 0,  // Synthetic folder placeholder
+          version: 1,
+          last_edit_id: null,
           loading: false,
           saving: false,
           updatedAt: Date.now(),

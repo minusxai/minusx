@@ -104,6 +104,8 @@ export async function exportDatabase(dbPath: string = DB_PATH, companyId?: numbe
       company_id: row.company_id,
       created_at: row.created_at,
       updated_at: row.updated_at,
+      version: row.version ?? 1,
+      last_edit_id: row.last_edit_id ?? null,
     }));
 
     // Map documents to export format
@@ -116,7 +118,9 @@ export async function exportDatabase(dbPath: string = DB_PATH, companyId?: numbe
       content: doc.content,
       company_id: doc.company_id!,  // Always present - we just queried it from DB (NOT NULL column)
       created_at: doc.created_at,
-      updated_at: doc.updated_at
+      updated_at: doc.updated_at,
+      version: doc.version,
+      last_edit_id: doc.last_edit_id,
     }));
 
     // Group by company (nested structure)
@@ -242,7 +246,7 @@ export async function importToDatabase(dbPath: string, initData: InitData, compa
         // Import documents for this company
         for (const doc of companyData.documents) {
           await tx.query(
-            'INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+            'INSERT INTO files (company_id, id, name, path, type, content, file_references, version, last_edit_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
             [
               companyData.id,  // company_id first (composite key)
               doc.id,
@@ -250,7 +254,9 @@ export async function importToDatabase(dbPath: string, initData: InitData, compa
               doc.path,
               doc.type,
               JSON.stringify(doc.content),
-              JSON.stringify(doc.references || []),  // Phase 6: Import file_references column
+              JSON.stringify((doc as any).references || []),  // Phase 6: Import file_references column
+              (doc as any).version ?? 1,
+              (doc as any).last_edit_id ?? null,
               doc.created_at,
               doc.updated_at
             ]

@@ -26,6 +26,8 @@ export interface DbRow {
   company_id: number;
   created_at: string;
   updated_at: string;
+  version: number;
+  last_edit_id: string | null;
 }
 
 // Phase 6: extractReferencesFromContent moved to client-side (lib/data/helpers/extract-references.ts)
@@ -38,7 +40,7 @@ export class DocumentDB {
    * @param company_id - The company ID for tenant isolation (REQUIRED for security)
    * @returns The per-company generated integer ID
    */
-  static async create(name: string, path: string, type: string, content: BaseFileContent, references: number[], company_id: number): Promise<number> {
+  static async create(name: string, path: string, type: string, content: BaseFileContent, references: number[], company_id: number, editId?: string): Promise<number> {
     if (references.some(ref => ref < 0)) {
       throw new Error(
         `Cannot store negative reference IDs in the database: [${references.filter(r => r < 0).join(', ')}]. ` +
@@ -69,11 +71,11 @@ export class DocumentDB {
           FROM files
           WHERE company_id = $2
         )
-        INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
-        SELECT $2, next_id, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        INSERT INTO files (company_id, id, name, path, type, content, file_references, version, last_edit_id, created_at, updated_at)
+        SELECT $2, next_id, $3, $4, $5, $6, $7, 1, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         FROM next_id_gen, lock
         RETURNING id
-      `, [lockId, company_id, name, path, type, JSON.stringify(content), JSON.stringify(references)]);
+      `, [lockId, company_id, name, path, type, JSON.stringify(content), JSON.stringify(references), editId ?? null]);
 
       return result.rows[0].id;
     } else {
@@ -85,11 +87,11 @@ export class DocumentDB {
           FROM files
           WHERE company_id = $1
         )
-        INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
-        SELECT $2, next_id, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+        INSERT INTO files (company_id, id, name, path, type, content, file_references, version, last_edit_id, created_at, updated_at)
+        SELECT $2, next_id, $3, $4, $5, $6, $7, 1, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
         FROM next_id_gen
         RETURNING id
-      `, [company_id, company_id, name, path, type, JSON.stringify(content), JSON.stringify(references)]);
+      `, [company_id, company_id, name, path, type, JSON.stringify(content), JSON.stringify(references), editId ?? null]);
 
       return result.rows[0].id;
     }
@@ -123,6 +125,8 @@ export class DocumentDB {
       company_id: row.company_id,
       created_at: row.created_at,
       updated_at: row.updated_at,
+      version: row.version ?? 1,
+      last_edit_id: row.last_edit_id ?? null,
     };
   }
 
@@ -162,6 +166,8 @@ export class DocumentDB {
       company_id: row.company_id,
       created_at: row.created_at,
       updated_at: row.updated_at,
+      version: row.version ?? 1,
+      last_edit_id: row.last_edit_id ?? null,
     }));
   }
 
@@ -193,6 +199,8 @@ export class DocumentDB {
       company_id: row.company_id,
       created_at: row.created_at,
       updated_at: row.updated_at,
+      version: row.version ?? 1,
+      last_edit_id: row.last_edit_id ?? null,
     };
   }
 
@@ -281,6 +289,8 @@ export class DocumentDB {
       company_id: row.company_id,
       created_at: row.created_at,
       updated_at: row.updated_at,
+      version: row.version ?? 1,
+      last_edit_id: row.last_edit_id ?? null,
     }));
   }
 
@@ -288,17 +298,73 @@ export class DocumentDB {
    * Update a file by integer ID
    * @param references - Pre-extracted references from client (Phase 6: server is dumb)
    * @param company_id - The company ID for tenant isolation (REQUIRED for security)
+   * @param editId - Optional idempotency key for this edit
+   * @param expectedVersion - Optional expected version for optimistic concurrency control
    */
-  static async update(id: number, name: string, path: string, content: BaseFileContent, references: number[], company_id: number): Promise<boolean> {
+  static async update(
+    id: number,
+    name: string,
+    path: string,
+    content: BaseFileContent,
+    references: number[],
+    company_id: number,
+    editId?: string,
+    expectedVersion?: number
+  ): Promise<
+    | { alreadyApplied: true; file: DbRow }
+    | { conflict: true; file: DbRow }
+    | { file: DbRow }
+  > {
     const db = await getAdapter();
 
-    // Phase 6: Server is dumb - client sends pre-extracted references
-    const result = await db.query(
-      'UPDATE files SET name = $1, path = $2, content = $3, file_references = $4, updated_at = CURRENT_TIMESTAMP WHERE id = $5 AND company_id = $6',
-      [name, path, JSON.stringify(content), JSON.stringify(references), id, company_id]
+    // Fetch current row for OCC checks
+    const current = await db.query<DbRow>(
+      'SELECT * FROM files WHERE id = $1 AND company_id = $2',
+      [id, company_id]
     );
 
-    return result.rowCount > 0;
+    if (current.rows.length === 0) {
+      throw new Error(`File ${id} not found`);
+    }
+
+    const currentRow = current.rows[0];
+
+    // Idempotency check: if this edit was already applied, return success
+    if (editId && editId === currentRow.last_edit_id) {
+      return { alreadyApplied: true, file: currentRow };
+    }
+
+    // Optimistic concurrency check: if version doesn't match, return conflict
+    if (expectedVersion !== undefined && currentRow.version !== expectedVersion) {
+      return { conflict: true, file: currentRow };
+    }
+
+    // Phase 6: Server is dumb - client sends pre-extracted references
+    await db.query(
+      'UPDATE files SET name = $1, path = $2, content = $3, file_references = $4, version = $5, last_edit_id = $6, updated_at = CURRENT_TIMESTAMP WHERE id = $7 AND company_id = $8',
+      [name, path, JSON.stringify(content), JSON.stringify(references), (currentRow.version ?? 1) + 1, editId ?? null, id, company_id]
+    );
+
+    const updated = await db.query<DbRow>(
+      'SELECT * FROM files WHERE id = $1 AND company_id = $2',
+      [id, company_id]
+    );
+
+    return { file: updated.rows[0] };
+  }
+
+  /**
+   * Get a file by last_edit_id (for idempotency checks on creates)
+   * @param editId - The edit ID to look up
+   * @param company_id - The company ID for tenant isolation
+   */
+  static async getByEditId(editId: string, company_id: number): Promise<DbRow | null> {
+    const db = await getAdapter();
+    const result = await db.query<DbRow>(
+      'SELECT * FROM files WHERE last_edit_id = $1 AND company_id = $2',
+      [editId, company_id]
+    );
+    return result.rows.length > 0 ? result.rows[0] : null;
   }
 
   /**

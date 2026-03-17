@@ -47,7 +47,7 @@ export interface IFilesDataLayer {
    * @param name - File name (from file.name metadata, not content)
    * @param path - File path (reconstructed with slugified name in useFile)
    */
-  saveFile(id: number, name: string, path: string, content: BaseFileContent, references: number[], user: EffectiveUser): Promise<SaveFileResult>;
+  saveFile(id: number, name: string, path: string, content: BaseFileContent, references: number[], user: EffectiveUser, editId?: string, expectedVersion?: number): Promise<SaveFileResult>;
 
   /**
    * Get pre-populated file template for a given file type

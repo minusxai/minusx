@@ -114,7 +114,9 @@ function createMockFile(id: number, type: FileType = 'question'): DbFile {
     references: [],
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
-    company_id: 1
+    company_id: 1,
+    version: 1,
+    last_edit_id: null,
   };
 }
 
@@ -470,8 +472,8 @@ describe('readFiles - File State Manager', () => {
       // Mock getFiles to return metadata
       mockGetFiles.mockResolvedValue({
         data: [
-          { id: file1.id, name: file1.name, path: file1.path, type: file1.type, references: [], created_at: file1.created_at, updated_at: file1.updated_at, company_id: 1 },
-          { id: file2.id, name: file2.name, path: file2.path, type: file2.type, references: [], created_at: file2.created_at, updated_at: file2.updated_at, company_id: 1 }
+          { id: file1.id, name: file1.name, path: file1.path, type: file1.type, references: [], created_at: file1.created_at, updated_at: file1.updated_at, company_id: 1, version: 1, last_edit_id: null },
+          { id: file2.id, name: file2.name, path: file2.path, type: file2.type, references: [], created_at: file2.created_at, updated_at: file2.updated_at, company_id: 1, version: 1, last_edit_id: null }
         ],
         metadata: { folders: [] }
       });
@@ -496,7 +498,7 @@ describe('readFiles - File State Manager', () => {
 
       mockGetFiles.mockResolvedValue({
         data: [
-          { id: file1.id, name: file1.name, path: file1.path, type: file1.type, references: [], created_at: file1.created_at, updated_at: file1.updated_at, company_id: 1 }
+          { id: file1.id, name: file1.name, path: file1.path, type: file1.type, references: [], created_at: file1.created_at, updated_at: file1.updated_at, company_id: 1, version: 1, last_edit_id: null }
         ],
         metadata: { folders: [] }
       });
@@ -531,7 +533,7 @@ describe('readFiles - File State Manager', () => {
 
       mockGetFiles.mockResolvedValue({
         data: [
-          { id: file1.id, name: file1.name, path: file1.path, type: file1.type, references: [], created_at: file1.created_at, updated_at: file1.updated_at, company_id: 1 }
+          { id: file1.id, name: file1.name, path: file1.path, type: file1.type, references: [], created_at: file1.created_at, updated_at: file1.updated_at, company_id: 1, version: 1, last_edit_id: null }
         ],
         metadata: { folders: [] }
       });
@@ -555,7 +557,7 @@ describe('readFiles - File State Manager', () => {
 
       mockGetFiles.mockResolvedValue({
         data: [
-          { id: file1.id, name: file1.name, path: file1.path, type: file1.type, references: [], created_at: file1.created_at, updated_at: file1.updated_at, company_id: 1 }
+          { id: file1.id, name: file1.name, path: file1.path, type: file1.type, references: [], created_at: file1.created_at, updated_at: file1.updated_at, company_id: 1, version: 1, last_edit_id: null }
         ],
         metadata: { folders: [] }
       });
@@ -1062,7 +1064,7 @@ describe('readFiles - File State Manager', () => {
       mockGetFiles.mockResolvedValue({
         data: [childFile1, childFile2],
         metadata: {
-          folders: [{ id: 100, name: 'org', path: '/org', type: 'folder', references: [], created_at: '', updated_at: '', company_id: 1 }]
+          folders: [{ id: 100, name: 'org', path: '/org', type: 'folder', references: [], created_at: '', updated_at: '', company_id: 1, version: 1, last_edit_id: null }]
         }
       });
 
@@ -1093,7 +1095,7 @@ describe('readFiles - File State Manager', () => {
       mockGetFiles.mockResolvedValue({
         data: [],
         metadata: {
-          folders: [{ id: 100, name: 'org', path: '/org', type: 'folder', references: [], created_at: '', updated_at: '', company_id: 1 }]
+          folders: [{ id: 100, name: 'org', path: '/org', type: 'folder', references: [], created_at: '', updated_at: '', company_id: 1, version: 1, last_edit_id: null }]
         }
       });
 

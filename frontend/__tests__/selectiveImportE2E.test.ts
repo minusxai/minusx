@@ -69,7 +69,9 @@ function createTestCompany(id: number, name: string, userCount: number, docCount
         : { query: 'SELECT 1', database_name: 'test_db', vizSettings: { type: 'table' } },
       company_id: id,
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      version: 1,
+      last_edit_id: null,
     }))
   };
 }
@@ -388,7 +390,9 @@ describe('Selective Import/Export E2E', () => {
               content: { type: 'duckdb' as const, name: 'test', database_type: 'duckdb', config: { file_path: 'test.duckdb' } } as any,
               company_id: 1,
               created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
+              updated_at: new Date().toISOString(),
+              version: 1,
+              last_edit_id: null,
             },
             {
               id: 2,
@@ -403,7 +407,9 @@ describe('Selective Import/Export E2E', () => {
               },
               company_id: 1,
               created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
+              updated_at: new Date().toISOString(),
+              version: 1,
+              last_edit_id: null,
             },
             {
               id: 3,
@@ -418,7 +424,9 @@ describe('Selective Import/Export E2E', () => {
               },
               company_id: 1,
               created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
+              updated_at: new Date().toISOString(),
+              version: 1,
+              last_edit_id: null,
             },
             {
               id: 4,
@@ -431,7 +439,9 @@ describe('Selective Import/Export E2E', () => {
               },
               company_id: 1,
               created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
+              updated_at: new Date().toISOString(),
+              version: 1,
+              last_edit_id: null,
             }
           ]
         }

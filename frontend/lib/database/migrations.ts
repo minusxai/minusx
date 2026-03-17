@@ -119,7 +119,9 @@ export const MIGRATIONS: MigrationEntry[] = [
           },
           company_id: companyData.id,
           created_at: now,
-          updated_at: now
+          updated_at: now,
+          version: 1,
+          last_edit_id: null,
         };
 
         companyData.documents.push(configDoc);
@@ -166,7 +168,9 @@ export const MIGRATIONS: MigrationEntry[] = [
           },
           company_id: companyData.id,
           created_at: now,
-          updated_at: now
+          updated_at: now,
+          version: 1,
+          last_edit_id: null,
         };
 
         companyData.documents.push(stylesDoc);
@@ -239,7 +243,9 @@ export const MIGRATIONS: MigrationEntry[] = [
             },
             company_id: companyData.id,
             created_at: now,
-            updated_at: now
+            updated_at: now,
+            version: 1,
+            last_edit_id: null,
           });
 
           console.log(`    ✅ Created /org folder (ID: ${nextId})`);
@@ -772,6 +778,21 @@ export const MIGRATIONS: MigrationEntry[] = [
       return data;
     },
     description: 'Reassign /org file IDs < 100 to IDs > 100 to prevent tutorial reset from deleting them'
+  },
+  {
+    schemaVersion: 7,
+    dataVersion: 19,
+    schemaMigration: null,
+    dataMigration: (data: InitData) => {
+      for (const companyData of data.companies as CompanyData[]) {
+        for (const doc of companyData.documents) {
+          (doc as any).last_edit_id = 'from_migration';
+          (doc as any).version = 1;
+        }
+      }
+      return data;
+    },
+    description: 'Add version and last_edit_id columns for OCC; seed existing rows with version=1, last_edit_id=from_migration'
   },
 ];
 

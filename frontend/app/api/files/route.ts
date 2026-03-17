@@ -85,7 +85,8 @@ export const POST = withAuth(async (
   user
 ) => {
   try {
-    const input: CreateFileInput = await request.json();
+    const body = await request.json();
+    const input: CreateFileInput = body;
     const result = await createFile(input, user);
 
     return NextResponse.json({

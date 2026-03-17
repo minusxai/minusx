@@ -77,6 +77,7 @@ export interface CreateFileInput {
   content: BaseFileContent;
   references?: number[];  // Phase 6: Client sends pre-extracted references
   options?: CreateFileOptions;  // Optional create options
+  editId?: string;  // Idempotency key for create operations
 }
 
 /**
@@ -129,6 +130,8 @@ export interface BatchSaveFileInput {
   path: string;
   content: BaseFileContent;
   references: number[];
+  editId?: string;
+  expectedVersion?: number;
 }
 
 /**

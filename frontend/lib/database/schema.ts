@@ -58,6 +58,8 @@ export const DATABASE_SCHEMA = `
     type TEXT NOT NULL,
     content TEXT NOT NULL,
     file_references TEXT NOT NULL DEFAULT '[]',  -- JSON array of file IDs this file references
+    version INTEGER NOT NULL DEFAULT 1,
+    last_edit_id TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (company_id, id),
@@ -73,6 +75,7 @@ export const DATABASE_SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_files_path_company ON files(company_id, path);
   CREATE INDEX IF NOT EXISTS idx_files_updated_at ON files(updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_files_company_type_updated ON files(company_id, type, updated_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_files_last_edit_id ON files(last_edit_id) WHERE last_edit_id IS NOT NULL;
 
   CREATE TRIGGER IF NOT EXISTS update_files_updated_at
   AFTER UPDATE ON files

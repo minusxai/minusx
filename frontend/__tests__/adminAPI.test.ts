@@ -79,7 +79,9 @@ function createTestCompany(id: number, name: string, userCount: number, docCount
     },
     company_id: id,
     created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
+    updated_at: new Date().toISOString(),
+    version: 1,
+    last_edit_id: null,
   });
 
   for (let i = 1; i < docCount; i++) {
@@ -97,7 +99,9 @@ function createTestCompany(id: number, name: string, userCount: number, docCount
       },
       company_id: id,
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      version: 1,
+      last_edit_id: null,
     });
   }
 
