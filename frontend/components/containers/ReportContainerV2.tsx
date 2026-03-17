@@ -155,7 +155,7 @@ export default function ReportContainerV2({ fileId }: ReportContainerV2Props) {
             report_name: effectiveName,
             references: enrichedReferences,
             report_prompt: mergedContent.reportPrompt,
-            emails: mergedContent.emails,
+            emails: (mergedContent.recipients || []).filter(r => r.channel === 'email').map(r => r.address),
             // Global context for all analyst agents
             connection_id: primaryConnectionId,
             schema: contextContent?.fullSchema || [],
