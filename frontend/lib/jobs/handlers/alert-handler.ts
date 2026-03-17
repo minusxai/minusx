@@ -5,7 +5,7 @@ import type { AlertContent, AlertOutput, JobHandlerResult, JobRunnerInput, Quest
 import type { JobHandler } from '../job-registry';
 
 export const alertJobHandler: JobHandler = {
-  async execute({ jobId, file, previousRuns: _previousRuns }, user): Promise<JobHandlerResult> {
+  async execute({ runFileId, jobId, file, previousRuns: _previousRuns }, user): Promise<JobHandlerResult> {
     const alert = file as AlertContent;
     const alertId = parseInt(jobId, 10);
 
@@ -46,7 +46,7 @@ export const alertJobHandler: JobHandler = {
     if (triggered && alert.recipients && alert.recipients.length > 0) {
       const body = `Alert "${alertName}" triggered.\nValue: ${actualValue} ${alert.condition.operator} ${alert.condition.threshold}`;
       const subject = `[Alert Triggered] ${alertName}`;
-      const alertLink = `${process.env.NEXTAUTH_URL ?? ''}/f/${alertId}`;
+      const alertLink = `${process.env.NEXTAUTH_URL ?? ''}/f/${runFileId}`;
       for (const recipient of alert.recipients) {
         if (recipient.channel === 'email_alert') {
           messages.push({ type: 'email_alert', content: body, metadata: { to: recipient.address, subject } });
