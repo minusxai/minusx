@@ -76,9 +76,9 @@ export class SqliteAdapter implements IDatabaseAdapter {
     try {
       const stmt = db.prepare(translatedSql);
 
-      // Check if this is a SELECT statement (returns data)
+      // Check if this is a query that returns rows
       const trimmedSql = sql.trim().toUpperCase();
-      const isSelect = trimmedSql.startsWith('SELECT') || trimmedSql.startsWith('WITH');
+      const isSelect = trimmedSql.startsWith('SELECT') || trimmedSql.startsWith('WITH') || trimmedSql.includes('RETURNING');
 
       if (isSelect) {
         // Use .all() for SELECT statements
