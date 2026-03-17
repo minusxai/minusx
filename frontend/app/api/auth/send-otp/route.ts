@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     }
 
     const userState: UserState | null = user.state ? JSON.parse(user.state) : null;
-    const requires2FA = userState?.twofa_whatsapp_enabled === true;
+    const requires2FA = userState?.twofa_phone_otp_enabled === true || (userState as any)?.twofa_whatsapp_enabled === true;
 
     if (!requires2FA) {
       return ApiErrors.badRequest('2FA is not enabled for this user');

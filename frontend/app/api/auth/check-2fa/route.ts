@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
 
     // Check if 2FA is required
     const userState: UserState | null = user.state ? JSON.parse(user.state) : null;
-    const requires2FA = user.phone && userState?.twofa_whatsapp_enabled === true;
+    const requires2FA = user.phone && (userState?.twofa_phone_otp_enabled === true || (userState as any)?.twofa_whatsapp_enabled === true);
 
     // Return result
     return successResponse({

@@ -20,7 +20,7 @@ import { FilesAPI } from '@/lib/data/files.server';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { JOB_HANDLERS } from '@/lib/jobs/job-registry';
 import { getConfigsByCompanyId } from '@/lib/data/configs.server';
-import { sendEmailViaWebhook, sendWhatsAppViaWebhook } from '@/lib/messaging/webhook-executor';
+import { sendEmailViaWebhook, sendPhoneAlertViaWebhook } from '@/lib/messaging/webhook-executor';
 import type { RunFileContent, RunMessageRecord } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -131,7 +131,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       if (send) {
         const { config } = await getConfigsByCompanyId(user.companyId, user.mode);
         const emailWebhook = config.messaging?.webhooks?.find(w => w.type === 'email_alert');
-        const whatsappWebhook = config.messaging?.webhooks?.find(w => w.type === 'phone_alert');
+        const phoneAlertWebhook = config.messaging?.webhooks?.find(w => w.type === 'phone_alert');
         for (const msg of messages) {
           try {
             if (msg.type === 'email_alert') {
@@ -149,11 +149,11 @@ export const POST = withAuth(async (request: NextRequest, user) => {
                 }
               }
             } else if (msg.type === 'phone_alert') {
-              if (!whatsappWebhook) {
+              if (!phoneAlertWebhook) {
                 msg.status = 'failed';
                 msg.deliveryError = 'No phone_alert webhook configured';
               } else {
-                const result = await sendWhatsAppViaWebhook(whatsappWebhook, msg.metadata.to, msg.content);
+                const result = await sendPhoneAlertViaWebhook(phoneAlertWebhook, msg.metadata.to, msg.content);
                 if (result.success) {
                   msg.status = 'sent';
                   msg.sentAt = new Date().toISOString();

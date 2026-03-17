@@ -71,7 +71,7 @@ jest.mock('@/lib/api/python-backend-client', () => ({
 // ─── Webhook executor mock ────────────────────────────────────────────────────
 jest.mock('@/lib/messaging/webhook-executor', () => ({
   sendEmailViaWebhook: jest.fn().mockResolvedValue({ success: true, statusCode: 200 }),
-  sendWhatsAppViaWebhook: jest.fn().mockResolvedValue({ success: true, statusCode: 200 }),
+  sendPhoneAlertViaWebhook: jest.fn().mockResolvedValue({ success: true, statusCode: 200 }),
 }));
 
 // ─── Company config mock (provide email webhook for delivery tests) ───────────

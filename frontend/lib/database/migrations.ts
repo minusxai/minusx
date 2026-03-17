@@ -854,6 +854,13 @@ export const MIGRATIONS: MigrationEntry[] = [
               for (const w of webhooks) {
                 if (w.type === 'whatsapp') w.type = 'phone_otp';
                 else if (w.type === 'email') w.type = 'email_alert';
+                // Rename {{WHATSAPP_TO}} / {{WHATSAPP_BODY}} template vars in webhook bodies
+                if (w.body && typeof w.body === 'object') {
+                  const bodyStr = JSON.stringify(w.body)
+                    .replace(/\{\{WHATSAPP_TO\}\}/g, '{{PHONE_ALERT_TO}}')
+                    .replace(/\{\{WHATSAPP_BODY\}\}/g, '{{PHONE_ALERT_BODY}}');
+                  w.body = JSON.parse(bodyStr);
+                }
               }
             }
           }
@@ -868,11 +875,26 @@ export const MIGRATIONS: MigrationEntry[] = [
             }
           }
         }
+
+        // Rename twofa_whatsapp_enabled → twofa_phone_otp_enabled in user state JSON
+        for (const user of companyData.users ?? []) {
+          const u = user as any;
+          if (u.state) {
+            try {
+              const state = JSON.parse(u.state);
+              if ('twofa_whatsapp_enabled' in state) {
+                state.twofa_phone_otp_enabled = state.twofa_whatsapp_enabled;
+                delete state.twofa_whatsapp_enabled;
+                u.state = JSON.stringify(state);
+              }
+            } catch { /* leave unparseable state as-is */ }
+          }
+        }
       }
 
       return data;
     },
-    description: 'Rename webhook type discriminators: whatsapp→phone_otp, email→email_alert (config); email→email_alert, whatsapp→phone_alert (alert/report recipients)',
+    description: 'Rename webhook type discriminators and identifiers: whatsapp→phone_otp/phone_alert, email→email_alert; {{WHATSAPP_TO/BODY}}→{{PHONE_ALERT_TO/BODY}}; twofa_whatsapp_enabled→twofa_phone_otp_enabled',
   },
 ];
 

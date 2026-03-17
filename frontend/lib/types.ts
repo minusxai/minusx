@@ -207,7 +207,7 @@ export interface ContextContent extends BaseFileContent {
 export type UserRole = 'admin' | 'editor' | 'viewer';
 
 export interface UserState {
-  twofa_whatsapp_enabled?: boolean;
+  twofa_phone_otp_enabled?: boolean;
   twofa_sms_enabled?: boolean;      // Future
   twofa_email_enabled?: boolean;    // Future
   // Other user preferences can be added here

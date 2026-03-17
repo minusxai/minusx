@@ -74,14 +74,14 @@ export async function executeWebhook(
 }
 
 /**
- * Send a WhatsApp message via a configured WhatsApp webhook
+ * Send a phone alert message via a configured phone_alert webhook
  */
-export async function sendWhatsAppViaWebhook(
+export async function sendPhoneAlertViaWebhook(
   webhook: MessagingWebhook,
   to: string,
   body: string
 ): Promise<WebhookResult> {
-  return executeWebhook(webhook, { WHATSAPP_TO: to, WHATSAPP_BODY: body });
+  return executeWebhook(webhook, { PHONE_ALERT_TO: to, PHONE_ALERT_BODY: body });
 }
 
 /**
