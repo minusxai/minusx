@@ -74,6 +74,23 @@ function isCronDue(cronExpr: string, date: Date): boolean {
   );
 }
 
+/**
+ * Walk backwards minute-by-minute from `now` to find the most recent time
+ * the cron expression was scheduled to fire. Returns null if not found within
+ * the search bound (default 1 year = 525,600 minutes).
+ */
+function getPrevFireTime(cronExpr: string, now: Date, maxMinutes = 525_600): Date | null {
+  // Start from the current minute (truncate seconds/ms)
+  const candidate = new Date(now);
+  candidate.setSeconds(0, 0);
+
+  for (let i = 0; i < maxMinutes; i++) {
+    if (isCronDue(cronExpr, candidate)) return new Date(candidate);
+    candidate.setMinutes(candidate.getMinutes() - 1);
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 
 export const POST = withAuth(async (_request: NextRequest, user) => {
@@ -109,9 +126,14 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
 
         const jobId = String(jobFile.id);
 
-        // Dedup: skip if a run already exists in the current minute window (±30s)
-        const windowStart = new Date(now.getTime() - 30_000);
-        const windowEnd = new Date(now.getTime() + 30_000);
+        // Dedup: skip if a run already exists within the current cron window.
+        // Window = [prev fire time, now] so a SUCCESS this period is not retried.
+        const cronExpr = jobDef.job_type === 'alert'
+          ? (content as AlertContent).schedule!.cron!
+          : null;
+        const prevFire = cronExpr ? getPrevFireTime(cronExpr, now) : null;
+        const windowStart = prevFire ?? new Date(now.getTime() - 60_000);
+        const windowEnd = now;
         const { runId, isNewRun } = await JobRunsDB.findOrCreate({
           job_id: jobId,
           job_type: jobDef.job_type,
