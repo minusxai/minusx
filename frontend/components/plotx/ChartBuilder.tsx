@@ -21,6 +21,8 @@ import { resolveColumnType } from './AxisComponents'
 import { aggregateData } from '@/lib/chart/aggregate-data'
 import { aggregatePivotData, computeFormulas, getUniqueTopLevelRowValues, getUniqueTopLevelColumnValues } from '@/lib/chart/pivot-utils'
 import type { PivotConfig, ColumnFormatConfig } from '@/lib/types'
+import { getEffectiveColorPalette } from '@/lib/chart/echarts-theme'
+import { ColorPicker } from './ColorPicker'
 
 interface ChartBuilderProps {
   columns: string[]
@@ -41,6 +43,8 @@ interface ChartBuilderProps {
   onColumnFormatsChange?: (formats: Record<string, ColumnFormatConfig>) => void
   settingsExpanded?: boolean
   showChartTitle?: boolean
+  colorOverrides?: Record<string, string> | null
+  onColorsChange?: (colors: Record<string, string>) => void
 }
 
 interface GroupedColumns {
@@ -49,7 +53,9 @@ interface GroupedColumns {
   categories: string[]
 }
 
-export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true }: ChartBuilderProps) => {
+export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true, colorOverrides, onColorsChange }: ChartBuilderProps) => {
+  const colorPalette = useMemo(() => getEffectiveColorPalette(colorOverrides), [colorOverrides])
+
   // Group columns by type
   const groupedColumns: GroupedColumns = useMemo(() => {
     const groups: GroupedColumns = {
@@ -414,7 +420,15 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     <Box display="flex" flexDirection="column" gap={0} height={'100%'} width="100%">
       {/* Axis Builder (column palette + drop zones) */}
       {showAxisBuilder && (!useCompactView || settingsExpandedProp) && (
-        <AxisBuilder columns={columns} types={types} zones={chartZones} columnFormats={columnFormats} onColumnFormatChange={handleColumnFormatChange} />
+        <AxisBuilder columns={columns} types={types} zones={chartZones} columnFormats={columnFormats} onColumnFormatChange={handleColumnFormatChange}>
+          {onColorsChange && (
+            <ColorPicker
+              colorOverrides={colorOverrides ?? {}}
+              numSeries={aggregatedData.series.length}
+              onChange={onColorsChange}
+            />
+          )}
+        </AxisBuilder>
       )}
 
       {/* Chart Area */}
@@ -452,129 +466,27 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                 <SingleValue series={aggregatedData.series} />
               ) : (
                 <Box width="100%" flex="1" display="flex" alignItems="center" justifyContent="center" minWidth="100px" minHeight="0">
-                  {chartType === 'line' && (
-                    <LinePlot
-                      xAxisData={aggregatedData.xAxisData}
-                      series={aggregatedData.series}
-                      xAxisLabel={getDisplayName(xAxisColumns[0])}
-                      yAxisLabel={buildYAxisLabel(yAxisColumns)}
-                      xAxisColumns={xAxisColumns}
-                      columnFormats={columnFormats}
-                      yAxisColumns={yAxisColumns}
-                      height={useCompactView && !fillHeight ? 300 : undefined}
-                      onChartClick={handleChartClick}
-                      chartTitle={chartTitle}
-                      showChartTitle={showChartTitle}
-                    />
-                  )}
-                  {chartType === 'bar' && (
-                    <BarPlot
-                      xAxisData={aggregatedData.xAxisData}
-                      series={aggregatedData.series}
-                      xAxisLabel={getDisplayName(xAxisColumns[0])}
-                      yAxisLabel={buildYAxisLabel(yAxisColumns)}
-                      xAxisColumns={xAxisColumns}
-                      columnFormats={columnFormats}
-                      yAxisColumns={yAxisColumns}
-                      height={useCompactView && !fillHeight ? 300 : undefined}
-                      onChartClick={handleChartClick}
-                      chartTitle={chartTitle}
-                      showChartTitle={showChartTitle}
-                    />
-                  )}
-                  {chartType === 'combo' && (
-                    <ComboPlot
-                      xAxisData={aggregatedData.xAxisData}
-                      series={aggregatedData.series}
-                      xAxisLabel={getDisplayName(xAxisColumns[0])}
-                      yAxisLabel={buildYAxisLabel(yAxisColumns)}
-                      xAxisColumns={xAxisColumns}
-                      columnFormats={columnFormats}
-                      yAxisColumns={yAxisColumns}
-                      height={useCompactView && !fillHeight ? 300 : undefined}
-                      onChartClick={handleChartClick}
-                      chartTitle={chartTitle}
-                      showChartTitle={showChartTitle}
-                    />
-                  )}
-                  {chartType === 'area' && (
-                    <AreaPlot
-                      xAxisData={aggregatedData.xAxisData}
-                      series={aggregatedData.series}
-                      xAxisLabel={getDisplayName(xAxisColumns[0])}
-                      yAxisLabel={buildYAxisLabel(yAxisColumns)}
-                      xAxisColumns={xAxisColumns}
-                      columnFormats={columnFormats}
-                      yAxisColumns={yAxisColumns}
-                      height={useCompactView && !fillHeight ? 300 : undefined}
-                      onChartClick={handleChartClick}
-                      chartTitle={chartTitle}
-                      showChartTitle={showChartTitle}
-                    />
-                  )}
-                  {chartType === 'scatter' && (
-                    <ScatterPlot
-                      xAxisData={aggregatedData.xAxisData}
-                      series={aggregatedData.series}
-                      xAxisLabel={getDisplayName(xAxisColumns[0])}
-                      yAxisLabel={buildYAxisLabel(yAxisColumns)}
-                      xAxisColumns={xAxisColumns}
-                      columnFormats={columnFormats}
-                      yAxisColumns={yAxisColumns}
-                      height={useCompactView && !fillHeight ? 300 : undefined}
-                      onChartClick={handleChartClick}
-                      chartTitle={chartTitle}
-                      showChartTitle={showChartTitle}
-                    />
-                  )}
-                  {chartType === 'funnel' && (
-                    <FunnelPlot
-                      xAxisData={aggregatedData.xAxisData}
-                      series={aggregatedData.series}
-                      xAxisLabel={getDisplayName(xAxisColumns[0])}
-                      yAxisLabel={buildYAxisLabel(yAxisColumns)}
-                      xAxisColumns={xAxisColumns}
-                      columnFormats={columnFormats}
-                      yAxisColumns={yAxisColumns}
-                      height={useCompactView && !fillHeight ? 300 : undefined}
-                      onChartClick={handleChartClick}
-                      chartTitle={chartTitle}
-                      showChartTitle={showChartTitle}
-                    />
-                  )}
-                  {chartType === 'pie' && (
-                    <PiePlot
-                      xAxisData={aggregatedData.xAxisData}
-                      series={aggregatedData.series}
-                      xAxisLabel={getDisplayName(xAxisColumns[0])}
-                      yAxisLabel={buildYAxisLabel(yAxisColumns)}
-                      xAxisColumns={xAxisColumns}
-                      columnFormats={columnFormats}
-                      yAxisColumns={yAxisColumns}
-                      height={useCompactView && !fillHeight ? 300 : undefined}
-                      onChartClick={handleChartClick}
-                      chartTitle={chartTitle}
-                      showChartTitle={showChartTitle}
-                    />
-                  )}
-                  {chartType === 'trend' && (
-                    <TrendPlot series={aggregatedData.series} columnFormats={columnFormats} yAxisColumns={yAxisColumns} />
-                  )}
-                  {chartType === 'waterfall' && (
-                    <WaterfallPlot
-                      xAxisData={aggregatedData.xAxisData}
-                      series={aggregatedData.series}
-                      xAxisLabel={getDisplayName(xAxisColumns[0])}
-                      yAxisLabel={buildYAxisLabel(yAxisColumns)}
-                      xAxisColumns={xAxisColumns}
-                      columnFormats={columnFormats}
-                      yAxisColumns={yAxisColumns}
-                      height={useCompactView && !fillHeight ? 300 : undefined}
-                      onChartClick={handleChartClick}
-                      chartTitle={chartTitle}
-                      showChartTitle={showChartTitle}
-                    />
-                  )}
+                  {(() => {
+                    const sharedProps = {
+                      xAxisData: aggregatedData.xAxisData,
+                      series: aggregatedData.series,
+                      xAxisLabel: getDisplayName(xAxisColumns[0]),
+                      yAxisLabel: buildYAxisLabel(yAxisColumns),
+                      xAxisColumns,
+                      columnFormats,
+                      yAxisColumns,
+                      height: useCompactView && !fillHeight ? 300 : undefined,
+                      onChartClick: handleChartClick,
+                      chartTitle,
+                      showChartTitle,
+                      colorPalette,
+                    }
+                    if (chartType === 'trend') return <TrendPlot series={aggregatedData.series} columnFormats={columnFormats} yAxisColumns={yAxisColumns} />
+                    const plotMap = { line: LinePlot, bar: BarPlot, combo: ComboPlot, area: AreaPlot, scatter: ScatterPlot, funnel: FunnelPlot, pie: PiePlot, waterfall: WaterfallPlot } as const
+                    const Plot = plotMap[chartType as keyof typeof plotMap]
+                    if (Plot) return <Plot {...sharedProps} />
+                    return null
+                  })()}
                 </Box>
               )}
             </>

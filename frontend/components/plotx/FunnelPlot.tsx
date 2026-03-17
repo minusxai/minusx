@@ -6,7 +6,7 @@ import { EChart } from './EChart'
 import { useChartContainer } from './useChartContainer'
 import { ChartError } from './ChartError'
 import { isValidChartData, resolveChartFormats, buildToolbox, getTimestamp, type ChartProps } from '@/lib/chart/chart-utils'
-import { withMinusXTheme, COLOR_PALETTE } from '@/lib/chart/echarts-theme'
+import { withMinusXTheme } from '@/lib/chart/echarts-theme'
 import type { EChartsOption } from 'echarts'
 
 // Theme-aware text colors
@@ -20,7 +20,7 @@ interface FunnelPlotProps extends ChartProps {
 }
 
 export const FunnelPlot = (props: FunnelPlotProps) => {
-  const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns, chartTitle, showChartTitle = true } = props
+  const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns, chartTitle, showChartTitle = true, colorPalette: customPalette } = props
   const colorMode = useAppSelector((state) => state.ui.colorMode)
   const { containerRef, containerWidth, containerHeight, chartEvents } = useChartContainer(onChartClick)
   const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>('horizontal')
@@ -47,7 +47,7 @@ export const FunnelPlot = (props: FunnelPlotProps) => {
     rawData.sort((a, b) => b.value - a.value)
 
     // Use single base color with decreasing opacity
-    const baseColor = COLOR_PALETTE[0] // Teal
+    const baseColor = customPalette[0]
     const funnelData = rawData.map((item, index) => {
       // Opacity decreases from 1.0 to 0.3 based on position
       const opacity = 1.0 - (index * 0.6) / Math.max(rawData.length - 1, 1)

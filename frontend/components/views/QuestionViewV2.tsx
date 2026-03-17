@@ -333,6 +333,11 @@ export default function QuestionViewV2({
     onChange({ vizSettings: { ...content.vizSettings, columnFormats } });
   };
 
+  // Handle colors change
+  const handleColorsChange = (colors: Record<string, string>) => {
+    onChange({ vizSettings: { ...content.vizSettings, colors } });
+  };
+
   // Handle adding a question reference
   const handleAddReference = (referencedQuestionId: number, alias: string) => {
     if (!questionId) return;
@@ -877,6 +882,7 @@ export default function QuestionViewV2({
                 onAxisChange={handleAxisChange}
                 onPivotConfigChange={handlePivotConfigChange}
                 onColumnFormatsChange={handleColumnFormatsChange}
+                onColorsChange={handleColorsChange}
               />
             )}
           </Box>

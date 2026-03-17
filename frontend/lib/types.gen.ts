@@ -111,6 +111,12 @@ export type Decimalpoints = number | null;
  * date display format: 'iso', 'us', 'eu', 'short', 'month-year', or 'year'
  */
 export type Dateformat = string | null;
+/**
+ * color overrides mapping series index to color key (e.g. {'0': 'danger', '2': 'warning'}). Only overridden indices are stored.
+ */
+export type Colors = {
+  [k: string]: string;
+} | null;
 export type Parameters = QuestionParameter[] | null;
 export type Name2 = string;
 export type ParameterType = "text" | "number" | "date";
@@ -187,6 +193,7 @@ export interface VizSettings {
    */
   pivotConfig?: PivotConfig | null;
   columnFormats?: Columnformats;
+  colors?: Colors;
 }
 /**
  * Configuration for pivot table visualization.
