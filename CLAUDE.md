@@ -76,10 +76,12 @@ The `import-db` script supports:
 
 ### Database Migrations
 
-To add a data migration:
+**Documents DB (SQLite/Postgres)** — uses a versioned migration framework:
 1. Increment `LATEST_DATA_VERSION` in `lib/database/constants.ts`
 2. Add a `MigrationEntry` to `MIGRATIONS` array in `lib/database/migrations.ts`
 3. Migration runs automatically on `npm run import-db`
+
+**Analytics DuckDB** (`frontend/lib/analytics/file-analytics.db.ts`) — has no migration framework. `initSchema()` runs `CREATE TABLE/INDEX IF NOT EXISTS` once per process restart, which is a no-op on existing databases. To add new columns to an existing table, append `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` guards to `SCHEMA_SQL` after the relevant `CREATE TABLE` block. These guards are idempotent (no-op on fresh installs) and fire automatically on each server restart.
 
 ## High-Level Architecture
 

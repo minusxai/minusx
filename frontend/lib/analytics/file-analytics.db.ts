@@ -41,11 +41,20 @@ CREATE TABLE IF NOT EXISTS llm_call_events (
   cost              FLOAT8    NOT NULL DEFAULT 0,
   duration_s        FLOAT8    NOT NULL DEFAULT 0,
   finish_reason     VARCHAR,
+  trigger           VARCHAR,
+  user_id           INTEGER,
+  user_email        VARCHAR,
+  user_role         VARCHAR,
   timestamp         TIMESTAMP NOT NULL DEFAULT current_timestamp
 );
 
 CREATE INDEX IF NOT EXISTS idx_llm_conv ON llm_call_events(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_llm_ts   ON llm_call_events(timestamp);
+
+ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS trigger VARCHAR;
+ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS user_id INTEGER;
+ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS user_email VARCHAR;
+ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS user_role VARCHAR;
 `;
 
 // Track which absolute paths have already had initSchema run (idempotent guard)

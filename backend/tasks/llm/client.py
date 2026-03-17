@@ -447,6 +447,13 @@ async def allm_request(request: ALLMRequest, on_content=None):
     if cost is None:
         cost = 0.0
 
+    # Determine what triggered this LLM call from the last message role
+    trigger = None
+    messages = completion_request.get("messages", [])
+    if messages:
+        last_role = messages[-1].get("role") if isinstance(messages[-1], dict) else getattr(messages[-1], "role", None)
+        trigger = last_role
+
     # Track LLM call in task debug context
     task_debug = get_task_debug()
     if 'cost' not in usage:
@@ -461,6 +468,7 @@ async def allm_request(request: ALLMRequest, on_content=None):
         cost=usage['cost'],
         completion_tokens_details=usage['completion_tokens_details'],
         prompt_tokens_details=usage['prompt_tokens_details'],
+        trigger=trigger,
         lllm_call_id=litellm_call_id,
         lllm_overhead_time_ms=litellm_overhead_time_ms,
     ))
