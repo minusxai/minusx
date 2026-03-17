@@ -35,7 +35,14 @@ export async function executeWebhook(
     let body: any = undefined;
     if (webhook.body) {
       const bodyStr = JSON.stringify(webhook.body);
-      const substitutedStr = substituteVariables(bodyStr, variables);
+      // JSON-escape each value before substituting into the stringified JSON,
+      // so that quotes, newlines, backslashes, etc. don't break JSON.parse.
+      const jsonSafeVariables: Record<string, string> = {};
+      for (const [key, value] of Object.entries(variables)) {
+        // JSON.stringify produces `"value"` — strip the surrounding quotes to get just the escaped content
+        jsonSafeVariables[key] = JSON.stringify(value).slice(1, -1);
+      }
+      const substitutedStr = substituteVariables(bodyStr, jsonSafeVariables);
       body = JSON.parse(substitutedStr);
     }
 

@@ -407,9 +407,9 @@ describe('Job Runs E2E', () => {
       expect(content.messages![0].type).toBe('email');
     });
 
-    it('records delivery failure in messages when webhook throws', async () => {
+    it('records delivery failure in messages when webhook returns HTTP error', async () => {
       const { sendEmailViaWebhook } = require('@/lib/messaging/webhook-executor');
-      sendEmailViaWebhook.mockRejectedValueOnce(new Error('SMTP timeout'));
+      sendEmailViaWebhook.mockResolvedValueOnce({ success: false, statusCode: 401, error: 'Unauthorized' });
 
       const alertWithRecipients: AlertContent = {
         questionId,
@@ -430,7 +430,7 @@ describe('Job Runs E2E', () => {
       const runFile = await DocumentDB.getById(body.data.fileId, 1);
       const content = runFile!.content as RunFileContent;
       expect(content.messages![0].status).toBe('failed');
-      expect(content.messages![0].deliveryError).toContain('SMTP timeout');
+      expect(content.messages![0].deliveryError).toContain('Unauthorized');
     });
 
     it('does not send notifications when alert is not triggered', async () => {

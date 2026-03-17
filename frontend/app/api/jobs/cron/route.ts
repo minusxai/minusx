@@ -216,9 +216,14 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
                   msg.status = 'failed';
                   msg.deliveryError = 'No email webhook configured';
                 } else {
-                  await sendEmailViaWebhook(emailWebhook, msg.metadata.to, msg.metadata.subject, msg.content);
-                  msg.status = 'sent';
-                  msg.sentAt = new Date().toISOString();
+                  const result = await sendEmailViaWebhook(emailWebhook, msg.metadata.to, msg.metadata.subject, msg.content);
+                  if (result.success) {
+                    msg.status = 'sent';
+                    msg.sentAt = new Date().toISOString();
+                  } else {
+                    msg.status = 'failed';
+                    msg.deliveryError = result.error ?? `HTTP ${result.statusCode}`;
+                  }
                 }
               } else if (msg.type === 'whatsapp') {
                 if (!whatsappWebhook) {
@@ -226,9 +231,14 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
                   msg.status = 'failed';
                   msg.deliveryError = 'No WhatsApp webhook configured';
                 } else {
-                  await sendWhatsAppViaWebhook(whatsappWebhook, msg.metadata.to, msg.content);
-                  msg.status = 'sent';
-                  msg.sentAt = new Date().toISOString();
+                  const result = await sendWhatsAppViaWebhook(whatsappWebhook, msg.metadata.to, msg.content);
+                  if (result.success) {
+                    msg.status = 'sent';
+                    msg.sentAt = new Date().toISOString();
+                  } else {
+                    msg.status = 'failed';
+                    msg.deliveryError = result.error ?? `HTTP ${result.statusCode}`;
+                  }
                 }
               }
             } catch (err) {
