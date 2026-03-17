@@ -89,6 +89,7 @@ export interface LLMCallDetail {
   completion_tokens: number;
   cost: number;
   finish_reason?: string | null;
+  trigger?: string | null;  // What initiated this LLM call: "user_message", "tool_result", etc.
 }
 
 /**

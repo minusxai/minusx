@@ -1153,6 +1153,7 @@ class LLMCallDetail(BaseModel):
     completion_tokens: int
     cost: float
     finish_reason: Optional[str] = None
+    trigger: Optional[str] = None  # What initiated this LLM call: "user_message", "tool_result", etc.
 
 
 class ConversationResponse(BaseModel):
@@ -1204,6 +1205,7 @@ def extract_llm_calls_from_log_diff(log_diff: ConversationLog) -> Dict[str, LLMC
                     completion_tokens=llm_debug.completion_tokens,
                     cost=llm_debug.cost,
                     finish_reason=llm_debug.finish_reason,
+                    trigger=llm_debug.trigger,
                 )
 
     return llm_calls

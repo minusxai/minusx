@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
       // Track LLM call analytics in DuckDB (fire-and-forget)
       // IMPORTANT: Use UPDATED currentConversationID (may have changed due to forking)
       if (pythonResponse.llm_calls && Object.keys(pythonResponse.llm_calls).length > 0) {
-        trackLLMCallEvents(pythonResponse.llm_calls, currentConversationID, user.companyId).catch(
+        trackLLMCallEvents(pythonResponse.llm_calls, currentConversationID, user.companyId, user.userId, user.email, user.role).catch(
           (err: unknown) => console.error('[LLM Analytics] Failed to track:', err)
         );
       }

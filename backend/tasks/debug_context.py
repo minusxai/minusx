@@ -20,6 +20,7 @@ class LLMDebug(BaseModel):
     completion_tokens_details: Optional[dict] = None
     prompt_tokens_details: Optional[dict] = None
     finish_reason: Optional[str] = None
+    trigger: Optional[str] = None  # What initiated this LLM call: "user_message", "tool_result", etc.
     lllm_call_id: Optional[str] = None
     lllm_overhead_time_ms: Optional[float] = None
 
