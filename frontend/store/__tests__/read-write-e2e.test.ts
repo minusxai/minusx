@@ -282,13 +282,8 @@ describe('Phase 1: Unified File System API E2E', () => {
       'dashboard',
       {
         description: 'Monthly revenue overview',
-        assets: [
-          {
-            type: 'question',
-            id: questionId
-          }
-        ],
-        layout: {}
+        columns: 12,
+        items: [{ type: 'question', id: questionId, x: 0, y: 0, w: 6, h: 4 }]
       } as DocumentContent,
       [questionId],
       companyId

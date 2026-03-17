@@ -15,10 +15,19 @@ export function replaceNegativeIdsInContent(
   const cloned = JSON.parse(JSON.stringify(content));
 
   if (type === 'dashboard' || type === 'presentation' || type === 'notebook') {
-    cloned.assets = (cloned.assets || []).map((a: any) =>
-      a.type === 'question' && idMap[a.id] ? { ...a, id: idMap[a.id] } : a
-    );
-    // Dashboard layout: { columns, items: DashboardLayoutItem[] } where item.id is the question ID
+    // New format: rewrite question items in co-located items array
+    if (Array.isArray(cloned.items)) {
+      cloned.items = cloned.items.map((item: any) =>
+        item.type === 'question' && idMap[item.id] ? { ...item, id: idMap[item.id] } : item
+      );
+    }
+    // Legacy fallback: separate assets array (handles in-flight Redux state during migration)
+    if (Array.isArray(cloned.assets)) {
+      cloned.assets = cloned.assets.map((a: any) =>
+        a.type === 'question' && idMap[a.id] ? { ...a, id: idMap[a.id] } : a
+      );
+    }
+    // Legacy fallback: separate layout.items array
     if (cloned.layout?.items) {
       cloned.layout = {
         ...cloned.layout,

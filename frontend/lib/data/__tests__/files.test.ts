@@ -152,11 +152,8 @@ describe('Files Data Layer - getTemplate', () => {
       expect(result.fileName).toBe('');
       expect(result.content).toMatchObject({
         description: '',
-        assets: [],
-        layout: {
-          columns: 12,
-          items: []
-        }
+        columns: 12,
+        items: []
       });
     });
   });
@@ -166,7 +163,7 @@ describe('Files Data Layer - getTemplate', () => {
       const result = await FilesAPI.getTemplate('presentation', {}, testUser);
 
       expect(result.fileName).toBe('');
-      const content = result.content as DocumentContent;
+      const content = result.content as any;
       expect(content.description).toBe('');
       expect(content.assets).toEqual([]);
       expect(content.layout).toMatchObject({

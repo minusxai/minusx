@@ -1,5 +1,5 @@
 {
-    "version": 11,
+    "version": 22,
     "companies": [
         {
             "id": "{{COMPANY_ID}}",
@@ -885,134 +885,20 @@
                     ],
                     "content": {
                         "description": "Top Important metrics for mxfood company",
-                        "assets": [
-                            {
-                                "type": "question",
-                                "id": 13
-                            },
-                            {
-                                "type": "question",
-                                "id": 14
-                            },
-                            {
-                                "type": "question",
-                                "id": 15
-                            },
-                            {
-                                "type": "question",
-                                "id": 16
-                            },
-                            {
-                                "type": "question",
-                                "id": 17
-                            },
-                            {
-                                "type": "question",
-                                "id": 18
-                            },
-                            {
-                                "type": "question",
-                                "id": 19
-                            },
-                            {
-                                "type": "question",
-                                "id": 20
-                            },
-                            {
-                                "type": "question",
-                                "id": 21
-                            },
-                            {
-                                "type": "question",
-                                "id": 22
-                            },
-                            {
-                                "type": "question",
-                                "id": 23
-                            }
-                        ],
-                        "layout": {
-                            "columns": 12,
-                            "items": [
-                                {
-                                    "id": 13,
-                                    "x": 9,
-                                    "y": 0,
-                                    "w": 3,
-                                    "h": 3
-                                },
-                                {
-                                    "id": 14,
-                                    "x": 0,
-                                    "y": 3,
-                                    "w": 5,
-                                    "h": 4
-                                },
-                                {
-                                    "id": 15,
-                                    "x": 5,
-                                    "y": 3,
-                                    "w": 4,
-                                    "h": 4
-                                },
-                                {
-                                    "id": 16,
-                                    "x": 4,
-                                    "y": 7,
-                                    "w": 8,
-                                    "h": 4
-                                },
-                                {
-                                    "id": 17,
-                                    "x": 0,
-                                    "y": 0,
-                                    "w": 3,
-                                    "h": 3
-                                },
-                                {
-                                    "id": 18,
-                                    "x": 3,
-                                    "y": 0,
-                                    "w": 3,
-                                    "h": 3
-                                },
-                                {
-                                    "id": 19,
-                                    "x": 6,
-                                    "y": 0,
-                                    "w": 3,
-                                    "h": 3
-                                },
-                                {
-                                    "id": 20,
-                                    "x": 0,
-                                    "y": 7,
-                                    "w": 4,
-                                    "h": 4
-                                },
-                                {
-                                    "id": 21,
-                                    "x": 0,
-                                    "y": 11,
-                                    "w": 6,
-                                    "h": 4
-                                },
-                                {
-                                    "id": 22,
-                                    "x": 9,
-                                    "y": 3,
-                                    "w": 3,
-                                    "h": 4
-                                },
-                                {
-                                    "id": 23,
-                                    "x": 6,
-                                    "y": 11,
-                                    "w": 6,
-                                    "h": 4
-                                }
-                            ]
-                        }
+                        "columns": 12,
+                        "items": [
+                            {"type": "question", "id": 13, "x": 9, "y": 0, "w": 3, "h": 3},
+                            {"type": "question", "id": 14, "x": 0, "y": 3, "w": 5, "h": 4},
+                            {"type": "question", "id": 15, "x": 5, "y": 3, "w": 4, "h": 4},
+                            {"type": "question", "id": 16, "x": 4, "y": 7, "w": 8, "h": 4},
+                            {"type": "question", "id": 17, "x": 0, "y": 0, "w": 3, "h": 3},
+                            {"type": "question", "id": 18, "x": 3, "y": 0, "w": 3, "h": 3},
+                            {"type": "question", "id": 19, "x": 6, "y": 0, "w": 3, "h": 3},
+                            {"type": "question", "id": 20, "x": 0, "y": 7, "w": 4, "h": 4},
+                            {"type": "question", "id": 21, "x": 0, "y": 11, "w": 6, "h": 4},
+                            {"type": "question", "id": 22, "x": 9, "y": 3, "w": 3, "h": 4},
+                            {"type": "question", "id": 23, "x": 6, "y": 11, "w": 6, "h": 4}
+                        ]
                     },
                     "company_id": "{{COMPANY_ID}}",
                     "created_at": "{{TIMESTAMP}}",
@@ -1033,79 +919,15 @@
                     ],
                     "content": {
                         "description": "",
-                        "assets": [
-                            {
-                                "type": "question",
-                                "id": 20
-                            },
-                            {
-                                "type": "question",
-                                "id": 19
-                            },
-                            {
-                                "type": "question",
-                                "id": 24
-                            },
-                            {
-                                "type": "question",
-                                "id": 25
-                            },
-                            {
-                                "type": "question",
-                                "id": 26
-                            },
-                            {
-                                "type": "question",
-                                "id": 27
-                            }
-                        ],
-                        "layout": {
-                            "columns": 12,
-                            "items": [
-                                {
-                                    "id": 20,
-                                    "x": 0,
-                                    "y": 0,
-                                    "w": 4,
-                                    "h": 4
-                                },
-                                {
-                                    "id": 19,
-                                    "x": 4,
-                                    "y": 0,
-                                    "w": 4,
-                                    "h": 4
-                                },
-                                {
-                                    "id": 24,
-                                    "x": 0,
-                                    "y": 4,
-                                    "w": 12,
-                                    "h": 4
-                                },
-                                {
-                                    "id": 25,
-                                    "x": 8,
-                                    "y": 0,
-                                    "w": 4,
-                                    "h": 4
-                                },
-                                {
-                                    "id": 26,
-                                    "x": 0,
-                                    "y": 8,
-                                    "w": 6,
-                                    "h": 5
-                                },
-                                {
-                                    "id": 27,
-                                    "x": 6,
-                                    "y": 8,
-                                    "w": 6,
-                                    "h": 5
-                                }
-                            ]
-                        }
+                        "columns": 12,
+                        "items": [
+                            {"type": "question", "id": 20, "x": 0, "y": 0, "w": 4, "h": 4},
+                            {"type": "question", "id": 19, "x": 4, "y": 0, "w": 4, "h": 4},
+                            {"type": "question", "id": 24, "x": 0, "y": 4, "w": 12, "h": 4},
+                            {"type": "question", "id": 25, "x": 8, "y": 0, "w": 4, "h": 4},
+                            {"type": "question", "id": 26, "x": 0, "y": 8, "w": 6, "h": 5},
+                            {"type": "question", "id": 27, "x": 6, "y": 8, "w": 6, "h": 5}
+                        ]
                     },
                     "company_id": "{{COMPANY_ID}}",
                     "created_at": "{{TIMESTAMP}}",
@@ -1956,68 +1778,14 @@
                     ],
                     "content": {
                         "description": "File system activity analytics across modes and users",
-                        "assets": [
-                            {
-                                "type": "question",
-                                "id": 37
-                            },
-                            {
-                                "type": "question",
-                                "id": 38
-                            },
-                            {
-                                "type": "question",
-                                "id": 39
-                            },
-                            {
-                                "type": "question",
-                                "id": 40
-                            },
-                            {
-                                "type": "question",
-                                "id": 41
-                            }
-                        ],
-                        "layout": {
-                            "columns": 12,
-                            "items": [
-                                {
-                                    "id": 37,
-                                    "x": 0,
-                                    "y": 0,
-                                    "w": 6,
-                                    "h": 4
-                                },
-                                {
-                                    "id": 38,
-                                    "x": 6,
-                                    "y": 0,
-                                    "w": 6,
-                                    "h": 4
-                                },
-                                {
-                                    "id": 41,
-                                    "x": 0,
-                                    "y": 4,
-                                    "w": 6,
-                                    "h": 4
-                                },
-                                {
-                                    "id": 40,
-                                    "x": 6,
-                                    "y": 4,
-                                    "w": 6,
-                                    "h": 4
-                                },
-                                {
-                                    "id": 39,
-                                    "x": 0,
-                                    "y": 8,
-                                    "w": 12,
-                                    "h": 5
-                                }
-                            ]
-                        }
+                        "columns": 12,
+                        "items": [
+                            {"type": "question", "id": 37, "x": 0, "y": 0, "w": 6, "h": 4},
+                            {"type": "question", "id": 38, "x": 6, "y": 0, "w": 6, "h": 4},
+                            {"type": "question", "id": 41, "x": 0, "y": 4, "w": 6, "h": 4},
+                            {"type": "question", "id": 40, "x": 6, "y": 4, "w": 6, "h": 4},
+                            {"type": "question", "id": 39, "x": 0, "y": 8, "w": 12, "h": 5}
+                        ]
                     },
                     "company_id": "{{COMPANY_ID}}",
                     "created_at": "{{TIMESTAMP}}",
@@ -2036,57 +1804,13 @@
                     ],
                     "content": {
                         "description": "LLM API usage, cost, and performance stats",
-                        "assets": [
-                            {
-                                "type": "question",
-                                "id": 42
-                            },
-                            {
-                                "type": "question",
-                                "id": 43
-                            },
-                            {
-                                "type": "question",
-                                "id": 44
-                            },
-                            {
-                                "type": "question",
-                                "id": 45
-                            }
-                        ],
-                        "layout": {
-                            "columns": 12,
-                            "items": [
-                                {
-                                    "id": 42,
-                                    "x": 0,
-                                    "y": 0,
-                                    "w": 4,
-                                    "h": 4
-                                },
-                                {
-                                    "id": 44,
-                                    "x": 4,
-                                    "y": 0,
-                                    "w": 8,
-                                    "h": 4
-                                },
-                                {
-                                    "id": 43,
-                                    "x": 0,
-                                    "y": 4,
-                                    "w": 8,
-                                    "h": 4
-                                },
-                                {
-                                    "id": 45,
-                                    "x": 8,
-                                    "y": 4,
-                                    "w": 4,
-                                    "h": 4
-                                }
-                            ]
-                        }
+                        "columns": 12,
+                        "items": [
+                            {"type": "question", "id": 42, "x": 0, "y": 0, "w": 4, "h": 4},
+                            {"type": "question", "id": 44, "x": 4, "y": 0, "w": 8, "h": 4},
+                            {"type": "question", "id": 43, "x": 0, "y": 4, "w": 8, "h": 4},
+                            {"type": "question", "id": 45, "x": 8, "y": 4, "w": 4, "h": 4}
+                        ]
                     },
                     "company_id": "{{COMPANY_ID}}",
                     "created_at": "{{TIMESTAMP}}",

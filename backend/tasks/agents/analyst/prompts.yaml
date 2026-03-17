@@ -80,9 +80,9 @@ templates:
 
     ### Dashboard Parameters
     - Dashboard parameters are **derived automatically** from the questions it contains — not stored on the dashboard.
-    - Same name + same type → merged into one control. First question in assets list wins for metadata.
+    - Same name + same type → merged into one control. First question in the items array wins for metadata.
     - **Initial value**: the effective initial value for a merged dashboard parameter comes from the first
-      question (in assets order) whose `parameterValues` dict has that name set.
+      question (in items order) whose `parameterValues` dict has that name set.
       At runtime, execution uses: `parameterValues[name] ?? ''`.
     
     - To add/remove a dashboard parameter: edit the underlying question's SQL and `parameters` array.
@@ -228,24 +228,20 @@ templates:
     ### Dashboard
     ```json
     {{
-      "assets": [
-        {{"type": "question", "id": 123}},
-        {{"type": "inline", "inlineType": "text", "content": "## Section Header\nSome markdown text"}},
-        {{"type": "inline", "inlineType": "divider", "content": ""}},
-        {{"type": "inline", "inlineType": "image", "content": "https://example.com/image.png"}}
-      ],
-      "layout": {{
-        "columns": 12,
-        "items": [
-          {{"id": 123, "x": 0, "y": 0, "w": 6, "h": 4}},
-          {{"id": "inline-0", "x": 6, "y": 0, "w": 6, "h": 2}}
-        ]
-      }}
+      "columns": 12,
+      "items": [
+        {{"type": "question", "id": 123, "x": 0, "y": 0, "w": 6, "h": 4}},
+        {{"type": "text", "id": "inline-0", "content": "## Section Header\nSome markdown text", "x": 6, "y": 0, "w": 6, "h": 2}},
+        {{"type": "divider", "id": "inline-1", "content": "", "x": 0, "y": 4, "w": 12, "h": 2}},
+        {{"type": "image", "id": "inline-2", "content": "https://example.com/image.png", "x": 0, "y": 6, "w": 6, "h": 4}}
+      ]
     }}
     ```
     - Layout uses a 12-column grid. `x` is column offset, `y` is row offset, `w` is width, `h` is height.
-    - Question items have id `<questionId>`, inline items have id `inline-<index>`.
-    - When adding a question to a dashboard, you MUST simultaneously add it to the `assets` list and place it in the `layout`. 
+    - Each item in `items` carries both its type/content and its grid position (x, y, w, h) in a single object.
+    - Question items: `{{"type": "question", "id": <questionId>, "x": ..., "y": ..., "w": ..., "h": ...}}`.
+    - Inline items: `{{"type": "text"|"image"|"divider", "id": "inline-<n>", "content": ..., "x": ..., "y": ..., "w": ..., "h": ...}}`.
+    - When adding a question to a dashboard, add a single object to `items` with both position and question id — no separate assets list or layout needed.
     - Minimum width, height for a question is 3
 
     ### Report

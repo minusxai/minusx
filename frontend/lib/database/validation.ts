@@ -38,50 +38,62 @@ export function validateFileReferences(documents: ExportedDocument[]): Validatio
       continue;
     }
 
-    // Dashboards: validate question references
-    if (type === 'dashboard' && 'assets' in content && content.assets) {
-      for (const asset of content.assets) {
-        // File references have type='question' and id field
-        if (asset.type === 'question') {
-          const refId = asset.id;
+    // Use any-cast for content to allow flexible property access across content types
+    const contentAny = content as any;
 
-          if (!refId) {
-            errors.push(
-              `Dashboard '${path}' (ID: ${id}) has question reference without ID`
-            );
-            continue;
-          }
+    // Dashboards: validate question references (new items format + legacy assets fallback)
+    if (type === 'dashboard') {
+      const questionRefs: Array<{ id: number }> = [];
+      // New format: items array
+      if (Array.isArray(contentAny.items)) {
+        for (const item of contentAny.items) {
+          if (item.type === 'question') questionRefs.push(item);
+        }
+      } else if (Array.isArray(contentAny.assets)) {
+        // Legacy format: assets array
+        for (const asset of contentAny.assets) {
+          if (asset.type === 'question') questionRefs.push(asset);
+        }
+      }
+      for (const ref of questionRefs) {
+        const refId = ref.id;
 
-          // Check if referenced document exists
-          if (!docMap.has(refId)) {
-            errors.push(
-              `Dashboard '${path}' (ID: ${id}) references non-existent question ID: ${refId}`
-            );
-            continue;
-          }
+        if (!refId) {
+          errors.push(
+            `Dashboard '${path}' (ID: ${id}) has question reference without ID`
+          );
+          continue;
+        }
 
-          // Check if referenced document is actually a question
-          const refType = docMap.get(refId);
-          if (refType !== 'question') {
-            errors.push(
-              `Dashboard '${path}' (ID: ${id}) references ID ${refId} as question, but it's type '${refType}'`
-            );
-          }
+        // Check if referenced document exists
+        if (!docMap.has(refId)) {
+          errors.push(
+            `Dashboard '${path}' (ID: ${id}) references non-existent question ID: ${refId}`
+          );
+          continue;
+        }
+
+        // Check if referenced document is actually a question
+        const refType = docMap.get(refId);
+        if (refType !== 'question') {
+          errors.push(
+            `Dashboard '${path}' (ID: ${id}) references ID ${refId} as question, but it's type '${refType}'`
+          );
         }
       }
     }
 
     // Presentations: validate rectangle assetId references
-    if (type === 'presentation' && 'layout' in content && content.layout?.slides) {
-      for (let slideIdx = 0; slideIdx < content.layout.slides.length; slideIdx++) {
-        const slide = content.layout.slides[slideIdx];
+    if (type === 'presentation' && contentAny.layout?.slides) {
+      for (let slideIdx = 0; slideIdx < contentAny.layout.slides.length; slideIdx++) {
+        const slide = contentAny.layout.slides[slideIdx];
 
         if (slide.rectangles) {
           for (const rect of slide.rectangles) {
             const assetId = rect.assetId;
 
             // Check if asset exists in content.assets
-            if (!('assets' in content) || !content.assets || !content.assets.find((a) => a.id === assetId)) {
+            if (!contentAny.assets || !contentAny.assets.find((a: any) => a.id === assetId)) {
               warnings.push(
                 `Presentation '${path}' (ID: ${id}) slide ${slideIdx} references non-existent asset: ${assetId}`
               );
@@ -92,8 +104,8 @@ export function validateFileReferences(documents: ExportedDocument[]): Validatio
     }
 
     // Notebooks: validate assets if they have file references (future)
-    if (type === 'notebook' && 'assets' in content && content.assets) {
-      for (const asset of content.assets) {
+    if (type === 'notebook' && contentAny.assets) {
+      for (const asset of contentAny.assets) {
         if (asset.type === 'question') {
           const refId = asset.id;
 

@@ -249,9 +249,12 @@ describe('LLM Message Encoding', () => {
     expect(dashboardFile).toBeDefined();
 
     // Load referenced question files too so compressAugmentedFile includes them
-    const referencedIds: number[] = (dashboardFile!.content as any)?.assets
-      ?.filter((a: any) => a.type === 'question')
-      ?.map((a: any) => a.id) ?? [];
+    const dashContent = dashboardFile!.content as any;
+    // New format: items array; legacy fallback: assets array
+    const dashItems = Array.isArray(dashContent?.items) ? dashContent.items : (dashContent?.assets ?? []);
+    const referencedIds: number[] = dashItems
+      .filter((a: any) => a.type === 'question')
+      .map((a: any) => a.id);
     const referenceFiles = (await Promise.all(
       referencedIds.map(id => DocumentDB.getById(id, 1))
     )).filter(Boolean) as NonNullable<Awaited<ReturnType<typeof DocumentDB.getById>>>[];

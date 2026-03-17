@@ -7,12 +7,19 @@ import { BaseFileContent, FileType } from '@/lib/types';
  * Phase 6: Moved from server to client - server should be dumb and just save what it receives
  */
 export function extractReferencesFromContent(content: BaseFileContent, type: FileType): number[] {
-  // Handle document types that use content.assets (dashboard, presentation, notebook)
+  // Handle document types that use content.items (new) or content.assets (legacy fallback)
   if (
     type === 'dashboard' ||
     type === 'presentation' ||
     type === 'notebook'
   ) {
+    // New format: co-located items array
+    if (Array.isArray((content as any)?.items)) {
+      return ((content as any).items as any[])
+        .filter((item: any) => item.type === 'question' && typeof item.id === 'number')
+        .map((item: any) => item.id);
+    }
+    // Legacy fallback: separate assets array
     const assets = (content as any)?.assets || [];
     return assets
       .filter((a: any) => a.type === 'question' && typeof a.id === 'number')

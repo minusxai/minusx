@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, Text } from '@chakra-ui/react';
-import { AssetReference, DashboardLayoutItem, DocumentContent, QuestionContent, QuestionParameter } from '@/lib/types';
+import { DashboardItem, DashboardQuestionItem, isDashboardQuestionItem, DocumentContent, QuestionContent, QuestionParameter } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
 import ParameterRow from '../ParameterRow';
 import { useState, useMemo, useCallback, useEffect } from 'react';
@@ -60,19 +60,6 @@ const compactMobileLayout = (layout: Layout[], toCols: number): Layout[] => {
   });
 };
 
-// Generate default layout for assets (only question assets are positioned in grid)
-const generateDefaultLayout = (assets: AssetReference[]): Layout[] => {
-  const questionAssets = assets?.filter(asset => asset.type === 'question' && ('id' in asset) && asset.id) || [];
-  return questionAssets?.map((asset, i) => ({
-    i: ('id' in asset && asset.type === 'question') ? asset.id.toString() : '',  // Convert integer ID to string for grid layout
-    x: (i % 2) * DASHBOARD_DEFAULT_W, // 2 columns
-    y: Math.floor(i / 2) * DASHBOARD_DEFAULT_H,
-    w: DASHBOARD_DEFAULT_W,
-    h: DASHBOARD_DEFAULT_H,
-    minW: DASHBOARD_MIN_W,
-    minH: DASHBOARD_MIN_H,
-  }));
-};
 
 export default function DashboardView({
   document,
@@ -119,34 +106,21 @@ export default function DashboardView({
   const { config } = useConfigs();
   const agentName = config.branding.agentName;
 
-  const questionCount = document?.assets?.filter(a => a.type === 'question').length || 0;
-
   // Compute layouts for all breakpoints from document
   // Desktop layout (12 cols) is the source of truth, mobile layouts are scaled
   const layouts = useMemo(() => {
     if (!document) return { lg: [], md: [], sm: [], xs: [], xxs: [] };
 
-    let baseLayout: Layout[];
-    if (document.layout?.items) {
-      const layoutMap = new Map<string, DashboardLayoutItem>(document.layout.items.map((item: DashboardLayoutItem) => [String(item.id), item]));
-      const questionAssets = document.assets?.filter(a => a.type === 'question' && ('id' in a) && a.id) || [];
-
-      // Find the bottom of the existing layout to place missing assets below
-      const maxY = document.layout.items.reduce((max: number, item: DashboardLayoutItem) => Math.max(max, item.y + item.h), 0);
-
-      baseLayout = questionAssets.map((asset, i) => {
-        const id = String((asset as { id: number }).id);
-        const item = layoutMap.get(id);
-        if (item) {
-          return { i: id, x: item.x, y: item.y, w: item.w, h: item.h, minW: DASHBOARD_MIN_W, minH: DASHBOARD_MIN_H };
-        }
-        // Asset exists but has no layout entry — place below existing items with default size
-        const missingIndex = questionAssets.slice(0, i).filter(a => !layoutMap.has(String((a as { id: number }).id))).length;
-        return { i: id, x: (missingIndex % 2) * DASHBOARD_DEFAULT_W, y: maxY + Math.floor(missingIndex / 2) * DASHBOARD_DEFAULT_H, w: DASHBOARD_DEFAULT_W, h: DASHBOARD_DEFAULT_H, minW: DASHBOARD_MIN_W, minH: DASHBOARD_MIN_H };
-      });
-    } else {
-      baseLayout = generateDefaultLayout(document.assets);
-    }
+    const questionItems = (document.items || []).filter(isDashboardQuestionItem);
+    const baseLayout: Layout[] = questionItems.map((item: DashboardQuestionItem) => ({
+      i: String(item.id),
+      x: item.x,
+      y: item.y,
+      w: item.w,
+      h: item.h,
+      minW: DASHBOARD_MIN_W,
+      minH: DASHBOARD_MIN_H,
+    }));
 
     // Generate compacted layouts for mobile/tablet (6 cols) - stacks vertically
     const mobileLayout = compactMobileLayout(baseLayout, 6);
@@ -158,13 +132,13 @@ export default function DashboardView({
       xs: mobileLayout, // 6 cols - vertically stacked
       xxs: mobileLayout // 6 cols - vertically stacked
     };
-  }, [document?.layout, document?.assets]);
+  }, [document?.items]);
 
-  // Extract question IDs from assets (SmartEmbeddedQuestionContainer will load content)
+  // Extract question IDs from items (SmartEmbeddedQuestionContainer will load content)
   // Simple filter/map - no useMemo needed for this cheap operation
-  const questionIds = document?.assets
-    ?.filter(asset => asset.type === 'question' && ('id' in asset) && asset.id)
-    ?.map(asset => (asset as { type: 'question'; id: number }).id) || [];
+  const questionIds = (document?.items || [])
+    .filter(isDashboardQuestionItem)
+    .map((item: DashboardQuestionItem) => item.id);
 
   // Extract and merge parameters from all questions in Redux
   // Questions are already loaded by SmartEmbeddedQuestionContainer's useFile calls
@@ -232,33 +206,17 @@ export default function DashboardView({
 
   // Handler for removing questions (needs to be defined before questionGridItems)
   const handleRemoveQuestion = useCallback((questionIdStr: string) => {
-    if (!document?.assets) return;
+    if (!document?.items) return;
 
     const questionId = parseInt(questionIdStr, 10);
 
-    // Remove from assets
-    const updatedAssets = document.assets.filter(
-      asset => {
-        if (asset.type !== 'question') return true;
-        const fileRef = asset as { type: 'question'; id: number; slug?: string };
-        return fileRef.id !== questionId;
-      }
+    // Remove item from the co-located items array
+    const updatedItems = document.items.filter(
+      (item: DashboardItem) => !(item.type === 'question' && (item as DashboardQuestionItem).id === questionId)
     );
 
-    // Remove from layout
-    const existingLayout = document.layout?.items || [];
-    const updatedLayoutItems = existingLayout.filter((item: any) => item.id !== questionIdStr);
-
-    const updatedLayout = {
-      columns: 12,
-      items: updatedLayoutItems
-    };
-
-    onChange({
-      assets: updatedAssets,
-      layout: updatedLayout
-    });
-  }, [document?.assets, document?.layout?.items, onChange]);
+    onChange({ items: updatedItems });
+  }, [document?.items, onChange]);
 
   // Memoize the grid background to prevent re-rendering on every keystroke
   const gridBackground = useMemo(() => {
@@ -366,19 +324,18 @@ export default function DashboardView({
   const handleLayoutChange = (newLayout: Layout[]) => {
     if (!document) return;
 
-    // Update the layout in current state
-    const updatedLayout = {
-      columns: 12,
-      items: newLayout.map(item => ({
-        id: Number(item.i),
-        x: item.x,
-        y: item.y,
-        w: item.w,
-        h: item.h,
-      }))
-    };
+    // Build position map from react-grid-layout output
+    const positionMap = new Map(newLayout.map(item => [Number(item.i), { x: item.x, y: item.y, w: item.w, h: item.h }]));
 
-    onChange({ layout: updatedLayout });
+    // Update x/y/w/h on question items only (preserve inline items as-is)
+    const updatedItems = (document.items || []).map((item: DashboardItem) => {
+      if (item.type !== 'question') return item;
+      const pos = positionMap.get((item as DashboardQuestionItem).id);
+      if (!pos) return item;
+      return { ...item, ...pos };
+    });
+
+    onChange({ items: updatedItems });
   };
 
   return (

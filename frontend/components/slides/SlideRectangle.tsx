@@ -60,7 +60,7 @@ export default function SlideRectangle({
   const [editContent, setEditContent] = useState(content);
 
   // Get content type first
-  const contentType = asset?.type || 'text';
+  const contentType = (asset?.type || 'text') as 'text' | 'markdown' | 'image' | 'question' | 'divider';
   const isQuestion = contentType === 'question';
 
   // Get shape styling

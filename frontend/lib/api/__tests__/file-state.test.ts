@@ -374,9 +374,9 @@ describe('readFiles - File State Manager', () => {
 
       // Dashboard references the question
       dashboardFile.content = {
-        assets: [{ type: 'question', id: questionFile.id }],
-        layout: { columns: 12, items: [] }
-      };
+        columns: 12,
+        items: [{ type: 'question', id: questionFile.id, x: 0, y: 0, w: 6, h: 4 }]
+      } as any;
 
       // Mock API to return both files
       mockLoadFiles.mockResolvedValue({
@@ -884,9 +884,9 @@ describe('readFiles - File State Manager', () => {
       const questionFile = createMockFile(1, 'question');
       const dashboardFile = createMockFile(2, 'dashboard');
       dashboardFile.content = {
-        assets: [{ type: 'question', id: 1 }],
-        layout: { columns: 12, items: [] }
-      };
+        columns: 12,
+        items: [{ type: 'question', id: 1, x: 0, y: 0, w: 6, h: 4 }]
+      } as any;
 
       mockLoadFiles.mockResolvedValue({
         data: [dashboardFile],

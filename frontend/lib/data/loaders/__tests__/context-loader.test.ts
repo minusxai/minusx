@@ -1257,8 +1257,8 @@ describe('Context Loader Integration with Versioning', () => {
       // References the question in the parent folder
       const dashboardContent: DocumentContent = {
         description: '',
-        assets: [{ type: 'question', id: questionId }],
-        layout: { columns: 12, items: [] }
+        columns: 12,
+        items: [{ type: 'question', id: questionId, x: 0, y: 0, w: 6, h: 4 }]
       };
       const dashboardId = await DocumentDB.create(
         'dashboard', '/org/sales/my-dashboard', 'dashboard',
@@ -1287,7 +1287,7 @@ describe('Context Loader Integration with Versioning', () => {
 
       const dashboardId = await DocumentDB.create(
         'dashboard', '/org/sales/team-dashboard', 'dashboard',
-        { description: '', assets: [{ type: 'question', id: questionId }], layout: { columns: 12, items: [] } } as DocumentContent,
+        { description: '', columns: 12, items: [{ type: 'question', id: questionId, x: 0, y: 0, w: 6, h: 4 }] } as DocumentContent,
         [questionId], 1
       );
 

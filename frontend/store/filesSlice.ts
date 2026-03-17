@@ -1,5 +1,5 @@
 import { createSlice, PayloadAction, createSelector } from '@reduxjs/toolkit';
-import type { DbFile, FileType, DocumentContent, AssetReference, QuestionContent, QuestionReference, DatabaseSchema } from '@/lib/types';
+import type { DbFile, FileType, DocumentContent, DashboardItem, DashboardQuestionItem, QuestionContent, QuestionReference, DatabaseSchema } from '@/lib/types';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import type { FileInfo } from '@/lib/data/types';
 import type { FileAnalyticsSummary, ConversationAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
@@ -744,33 +744,27 @@ const filesSlice = createSlice({
       const changes = dashboard.persistableChanges as Partial<DocumentContent> | undefined;
       if (!content) return;
 
-      // Get current assets (from changes if available, otherwise from content)
-      const currentAssets = changes?.assets ?? content.assets ?? [];
-      const currentLayout = changes?.layout ?? content.layout ?? { columns: 12, items: [] };
+      // Get current items (from changes if available, otherwise from content; legacy fallback from assets)
+      const currentItems: DashboardItem[] = changes?.items ?? content.items ?? [];
 
       // Check if question already exists
-      const questionIds = currentAssets
-        .filter((a: AssetReference) => a.type === 'question' && 'id' in a)
-        .map((a: AssetReference) => (a as { type: 'question'; id: number }).id);
+      const existingQuestionIds = currentItems
+        .filter((item: DashboardItem) => item.type === 'question')
+        .map((item: DashboardItem) => (item as DashboardQuestionItem).id);
 
-      if (questionIds.includes(questionId)) {
+      if (existingQuestionIds.includes(questionId)) {
         return; // Already exists
       }
 
       // Find position for new question (bottom of grid)
-      const maxY = currentLayout.items?.reduce((max: number, item: any) => {
+      const maxY = currentItems.reduce((max: number, item: DashboardItem) => {
         return Math.max(max, (item.y ?? 0) + (item.h ?? 4));
-      }, 0) ?? 0;
+      }, 0);
 
-      // Add new asset
-      const newAsset: AssetReference = {
+      // Add new item with position and default size (w:6, h:4)
+      const newItem: DashboardQuestionItem = {
         type: 'question',
-        id: questionId
-      };
-
-      // Add new layout item with default size (w:6, h:4)
-      const newLayoutItem = {
-        id: questionId.toString(),
+        id: questionId,
         x: 0,
         y: maxY,
         w: 6,
@@ -780,11 +774,7 @@ const filesSlice = createSlice({
       // Update persistableChanges
       state.files[dashboardId].persistableChanges = {
         ...changes,
-        assets: [...currentAssets, newAsset],
-        layout: {
-          columns: 12,
-          items: [...(currentLayout.items || []), newLayoutItem]
-        }
+        items: [...currentItems, newItem],
       };
     },
 
@@ -904,10 +894,18 @@ function stripQueryResultId(file: DbFile): DbFile['content'] {
  * Helper: Extract reference IDs from file content
  */
 function extractReferences(file: DbFile): number[] {
-  // Dashboards, presentations, notebooks use content.assets
+  // Dashboards, presentations, notebooks use content.items (new) or content.assets (legacy fallback)
   if (file.type === 'dashboard' || file.type === 'presentation' || file.type === 'notebook') {
     const content = file.content as any;
-    return content.assets
+    // New format: items array with co-located layout + assets
+    if (Array.isArray(content?.items)) {
+      return content.items
+        .filter((item: any) => item.type === 'question')
+        .map((item: any) => item.id)
+        .filter((id: any): id is number => typeof id === 'number');
+    }
+    // Legacy fallback: separate assets array
+    return content?.assets
       ?.filter((a: any) => a.type === 'question')
       ?.map((a: any) => a.id)
       .filter((id: any): id is number => typeof id === 'number') || [];

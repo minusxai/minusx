@@ -896,6 +896,112 @@ export const MIGRATIONS: MigrationEntry[] = [
     },
     description: 'Rename webhook type discriminators and identifiers: whatsapp→phone_otp/phone_alert, email→email_alert; {{WHATSAPP_TO/BODY}}→{{PHONE_ALERT_TO/BODY}}; twofa_whatsapp_enabled→twofa_phone_otp_enabled',
   },
+  {
+    dataVersion: 22,
+    schemaVersion: undefined,
+    dataMigration: (data: InitData) => {
+      // Co-locate dashboard layout + assets into a single `items` array.
+      // For each dashboard document:
+      //   1. Build a layoutMap keyed by question ID from layout.items
+      //   2. For each asset in assets[], look up its position from layoutMap
+      //   3. Questions/inline items with no layout entry get default placement (stacked below, 6-wide)
+      //   4. Set content.columns = layout.columns ?? 12, content.items = newItems
+      //   5. Delete content.assets and content.layout
+
+      for (const companyData of data.companies as CompanyData[]) {
+        let migratedCount = 0;
+
+        for (const doc of companyData.documents) {
+          if (doc.type !== 'dashboard') continue;
+
+          const content = doc.content as any;
+          if (!content) continue;
+
+          // Skip if already migrated (has items array but no assets)
+          if (Array.isArray(content.items) && !Array.isArray(content.assets)) continue;
+
+          const assets: any[] = Array.isArray(content.assets) ? content.assets : [];
+          const layoutItems: any[] = content.layout?.items || [];
+          const columns: number = content.layout?.columns ?? 12;
+
+          // Build layoutMap keyed by question ID (as number)
+          const layoutMap = new Map<number, any>();
+          for (const item of layoutItems) {
+            const id = typeof item.id === 'string' ? parseInt(item.id, 10) : item.id;
+            if (typeof id === 'number' && !isNaN(id)) {
+              layoutMap.set(id, item);
+            }
+          }
+
+          // Find max Y from existing layout for default placement of missing assets
+          const existingMaxY = layoutItems.reduce((max: number, item: any) => {
+            return Math.max(max, (item.y ?? 0) + (item.h ?? 4));
+          }, 0);
+
+          let missingIndex = 0;
+          const newItems: any[] = [];
+
+          for (const asset of assets) {
+            if (asset.type === 'question') {
+              const qId = typeof asset.id === 'number' ? asset.id : parseInt(String(asset.id), 10);
+              const layoutEntry = layoutMap.get(qId);
+              if (layoutEntry) {
+                newItems.push({
+                  type: 'question',
+                  id: qId,
+                  x: layoutEntry.x ?? 0,
+                  y: layoutEntry.y ?? 0,
+                  w: layoutEntry.w ?? 6,
+                  h: layoutEntry.h ?? 4,
+                });
+              } else {
+                // Default placement below existing items
+                newItems.push({
+                  type: 'question',
+                  id: qId,
+                  x: (missingIndex % 2) * 6,
+                  y: existingMaxY + Math.floor(missingIndex / 2) * 4,
+                  w: 6,
+                  h: 4,
+                });
+                missingIndex++;
+              }
+            } else if (['text', 'image', 'divider'].includes(asset.type)) {
+              // Inline asset — look up position by string id in layoutMap if possible
+              const inlineId = asset.id;
+              // Try to find matching layout entry by string id
+              const inlineLayoutEntry = layoutItems.find((item: any) => String(item.id) === String(inlineId));
+              newItems.push({
+                type: asset.type,
+                id: asset.id ?? undefined,
+                content: asset.content ?? undefined,
+                x: inlineLayoutEntry?.x ?? 0,
+                y: inlineLayoutEntry?.y ?? existingMaxY + Math.floor(missingIndex / 2) * 2,
+                w: inlineLayoutEntry?.w ?? 6,
+                h: inlineLayoutEntry?.h ?? 2,
+              });
+              if (!inlineLayoutEntry) missingIndex++;
+            }
+          }
+
+          // Apply migration
+          content.columns = columns;
+          content.items = newItems;
+          delete content.assets;
+          delete content.layout;
+
+          migratedCount++;
+        }
+
+        if (migratedCount > 0) {
+          console.log(`  ✅ [V22] Migrated ${migratedCount} dashboard(s) for company "${companyData.name}"`);
+        }
+      }
+
+      return data;
+    },
+    description: 'Co-locate dashboard layout + assets into single items array (DashboardItem[])',
+  },
 ];
 
 /**
@@ -919,11 +1025,20 @@ export function fixData(data: InitData): InitData {
       const content = doc.content as any;
       if (!content || typeof content !== 'object') continue;
 
-      // Dashboard: coerce layout item IDs from string to integer
+      // Dashboard: coerce question item IDs from string to integer in new items array
       if (doc.type === 'dashboard') {
-        const items = content.layout?.items;
-        if (Array.isArray(items)) {
-          content.layout.items = items.map((item: any) => ({
+        if (Array.isArray(content.items)) {
+          content.items = content.items.map((item: any) => {
+            if (item.type === 'question' && typeof item.id === 'string') {
+              return { ...item, id: parseInt(item.id, 10) };
+            }
+            return item;
+          });
+        }
+        // Legacy: also coerce layout.items for un-migrated rows
+        const layoutItems = content.layout?.items;
+        if (Array.isArray(layoutItems)) {
+          content.layout.items = layoutItems.map((item: any) => ({
             ...item,
             id: typeof item.id === 'string' ? parseInt(item.id, 10) : item.id,
           }));

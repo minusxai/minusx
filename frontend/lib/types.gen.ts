@@ -137,18 +137,9 @@ export type Name3 = string;
 export type Path1 = string;
 export type Type1 = "dashboard";
 export type Description1 = string | null;
+export type Columns1 = number | null;
 export type Type2 = "question";
 export type Id3 = number;
-export type Type3 = "text" | "image" | "divider";
-export type Id4 = string | null;
-export type Content = string | null;
-/**
- * ordered list of questions in the dashboard
- */
-export type Assets = (FileReference | InlineAsset)[];
-export type Columns1 = number | null;
-export type Items = DashboardLayoutItem[] | null;
-export type Id5 = number;
 export type X = number;
 export type Y = number;
 /**
@@ -159,6 +150,20 @@ export type W = number;
  * height in grid units (min 2)
  */
 export type H = number;
+export type Type3 = "text" | "image" | "divider";
+export type Id4 = string | null;
+export type Content = string | null;
+export type X1 = number;
+export type Y1 = number;
+/**
+ * width in grid units (min 2)
+ */
+export type W1 = number;
+/**
+ * height in grid units (min 2)
+ */
+export type H1 = number;
+export type Items = (DashboardQuestionItem | DashboardInlineItem)[];
 export type Parametervalues1 = {
   [k: string]: unknown;
 } | null;
@@ -254,33 +259,30 @@ export interface AtlasDashboardFile {
 }
 export interface DashboardContent {
   description?: Description1;
-  assets: Assets;
-  layout?: DashboardLayout | null;
+  columns?: Columns1;
+  items?: Items;
   parameterValues?: Parametervalues1;
 }
 /**
- * A reference to another question embedded in the dashboard.
+ * A question embedded in the dashboard with its grid position.
  */
-export interface FileReference {
+export interface DashboardQuestionItem {
   type: Type2;
   id: Id3;
-}
-/**
- * Inline content block (text, image, divider) — no external file.
- */
-export interface InlineAsset {
-  type: Type3;
-  id?: Id4;
-  content?: Content;
-}
-export interface DashboardLayout {
-  columns?: Columns1;
-  items?: Items;
-}
-export interface DashboardLayoutItem {
-  id: Id5;
   x: X;
   y: Y;
   w: W;
   h: H;
+}
+/**
+ * Inline content block (text, image, divider) with its grid position.
+ */
+export interface DashboardInlineItem {
+  type: Type3;
+  id?: Id4;
+  content?: Content;
+  x?: X1;
+  y?: Y1;
+  w?: W1;
+  h?: H1;
 }

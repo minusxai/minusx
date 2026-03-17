@@ -564,8 +564,8 @@ describe('editFile - Dashboard content validation', () => {
 
   // Initial dashboard content — serialises to a known JSON string for oldMatch
   const initialContent: DashboardContent = {
-    assets: [{ type: 'question', id: 99 }],
-    layout: { columns: 12, items: [{ id: 99, x: 0, y: 0, w: 6, h: 4 }] },
+    columns: 12,
+    items: [{ type: 'question', id: 99, x: 0, y: 0, w: 6, h: 4 }],
   };
 
   function setupStore() {

@@ -596,8 +596,8 @@ class FilesDataLayerServer implements IFilesDataLayer {
       case 'dashboard': {
         const content: DocumentContent = {
           description: '',
-          assets: [],
-          layout: { columns: 12, items: [] }
+          columns: 12,
+          items: []
         };
 
         return {

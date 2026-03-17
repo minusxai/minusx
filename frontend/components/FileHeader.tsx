@@ -111,7 +111,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
 
   // Dashboard badge: question count
   const questionCount = isDashboard
-    ? ((mergedContent as DocumentContent)?.assets?.filter(a => a.type === 'question').length ?? 0)
+    ? ((mergedContent as DocumentContent)?.items?.filter(item => item.type === 'question').length ?? 0)
     : undefined;
 
   return (

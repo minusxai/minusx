@@ -435,7 +435,7 @@ describe('Selective Import/Export E2E', () => {
               type: 'dashboard' as const,
               references: [],  // Phase 6: References extracted from content.assets
               content: {
-                assets: []
+                items: []
               },
               company_id: 1,
               created_at: new Date().toISOString(),

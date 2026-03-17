@@ -190,17 +190,11 @@ describe('publishAll E2E', () => {
       'dashboard',
       {
         description: 'Analytics overview',
-        assets: [
-          { type: 'question', id: question1Id },
-          { type: 'question', id: question2Id }
-        ],
-        layout: {
-          columns: 12,
-          items: [
-            { id: question1Id, x: 0, y: 0, w: 6, h: 4 },
-            { id: question2Id, x: 6, y: 0, w: 6, h: 4 }
-          ]
-        }
+        columns: 12,
+        items: [
+          { type: 'question', id: question1Id, x: 0, y: 0, w: 6, h: 4 },
+          { type: 'question', id: question2Id, x: 6, y: 0, w: 6, h: 4 }
+        ]
       } as DocumentContent,
       [question1Id, question2Id],
       companyId
@@ -306,9 +300,8 @@ describe('publishAll E2E', () => {
 
     // -----------------------------------------------------------------------
     // Step 4: Add virtual question to the dashboard
-    //   addQuestionToDashboard puts the negative virtualId in persistableChanges.assets
-    //   and in layout.items (as a string, since the reducer calls questionId.toString()).
-    //   publishAll must detect and rewrite both.
+    //   addQuestionToDashboard puts the negative virtualId in persistableChanges.items
+    //   publishAll must detect and rewrite it.
     // -----------------------------------------------------------------------
     store.dispatch({
       type: 'files/addQuestionToDashboard',
@@ -318,16 +311,12 @@ describe('publishAll E2E', () => {
     const stateAfterDashEdit = store.getState() as any;
     const dashChanges = stateAfterDashEdit.files.files[dashboardId].persistableChanges;
 
-    // assets must contain the virtual ID
-    const assetIdsBefore = (dashChanges.assets || []).map((a: any) => a.id);
-    expect(assetIdsBefore).toContain(virtualId);
-
-    // layout items contain the virtual ID (stored as string by addQuestionToDashboard)
-    const layoutItemIdsBefore = (dashChanges.layout?.items || []).map((item: any) =>
-      typeof item.id === 'string' ? parseInt(item.id, 10) : item.id
-    );
-    expect(layoutItemIdsBefore).toContain(virtualId);
-    console.log(`✓ Step 4: dashboard assets + layout contain virtual ID ${virtualId}`);
+    // items must contain the virtual ID
+    const itemIdsBefore = (dashChanges.items || [])
+      .filter((item: any) => item.type === 'question')
+      .map((item: any) => item.id);
+    expect(itemIdsBefore).toContain(virtualId);
+    console.log(`✓ Step 4: dashboard items contain virtual ID ${virtualId}`);
 
     // Total dirty files before publish: q1 + q2 + dashboard + virtualQuestion = 4
     const allFilesBefore = Object.values(stateAfterDashEdit.files.files) as any[];
@@ -343,8 +332,8 @@ describe('publishAll E2E', () => {
     // Internally this runs three steps:
     //   1. POST /api/files/batch-create  → creates virtual question, gets real ID
     //   2. dispatch(replaceVirtualIds(idMap))  → single atomic Redux action that
-    //      rewrites the negative ID in dashboard's persistableChanges.assets and
-    //      layout.items before anything is persisted
+    //      rewrites the negative ID in dashboard's persistableChanges.items
+    //      before anything is persisted
     //   3. POST /api/files/batch-save  → saves dashboard (now with real IDs) +
     //      both question edits in one round trip
     // -----------------------------------------------------------------------
@@ -364,8 +353,10 @@ describe('publishAll E2E', () => {
     const statePostPublish = store.getState() as any;
     const dashAfter = statePostPublish.files.files[dashboardId];
     // persistableChanges are cleared after save — verify no leftover negative IDs
-    if (dashAfter?.persistableChanges?.assets) {
-      const leftoverNegative = dashAfter.persistableChanges.assets.some((a: any) => a.id < 0);
+    if (dashAfter?.persistableChanges?.items) {
+      const leftoverNegative = dashAfter.persistableChanges.items
+        .filter((item: any) => item.type === 'question')
+        .some((item: any) => item.id < 0);
       expect(leftoverNegative).toBe(false);
     }
 
@@ -400,22 +391,19 @@ describe('publishAll E2E', () => {
     expect(dbDash).toBeDefined();
     const dbDashContent = dbDash!.content as DocumentContent;
 
-    // assets: newQuestionId present, virtualId absent, original IDs intact
-    const dbAssetIds = (dbDashContent.assets || []).map((a: any) => a.id);
-    expect(dbAssetIds).toContain(newQuestionId);
-    expect(dbAssetIds).not.toContain(virtualId);
-    expect(dbAssetIds).toContain(question1Id);
-    expect(dbAssetIds).toContain(question2Id);
-    console.log(`✓ Step 6b: dashboard assets rewritten — ${virtualId} → ${newQuestionId}`);
+    // items: newQuestionId present, virtualId absent, original IDs intact
+    const dbItemIds = (dbDashContent.items || [])
+      .filter((item: any) => item.type === 'question')
+      .map((item: any) => item.id);
+    expect(dbItemIds).toContain(newQuestionId);
+    expect(dbItemIds).not.toContain(virtualId);
+    expect(dbItemIds).toContain(question1Id);
+    expect(dbItemIds).toContain(question2Id);
+    console.log(`✓ Step 6b: dashboard items rewritten — ${virtualId} → ${newQuestionId}`);
 
-    // layout items: all IDs are positive, newQuestionId present
-    const dbLayoutItems: any[] = (dbDashContent.layout as any)?.items || [];
-    const dbLayoutItemIds = dbLayoutItems.map((item: any) =>
-      typeof item.id === 'string' ? parseInt(item.id, 10) : item.id
-    );
-    expect(dbLayoutItemIds).toContain(newQuestionId);
-    expect(dbLayoutItemIds.every((id: number) => id > 0)).toBe(true);
-    console.log('✓ Step 6b: dashboard layout items all positive, new question present');
+    // all question item IDs are positive
+    expect(dbItemIds.every((id: number) => id > 0)).toBe(true);
+    console.log('✓ Step 6b: dashboard items all positive, new question present');
 
     // file_references column updated (used for sidebar reference counts etc.)
     const dbDashRefs: number[] = (dbDash!.references as any) || [];

@@ -119,10 +119,10 @@ export default function RightSidebar({
   // Extract folder path from file path (for QuestionBrowserPanel)
   const dashboardFolderPath = filePath ? filePath.substring(0, filePath.lastIndexOf('/')) || '/' : '/';
 
-  // Get excluded question IDs from dashboard assets
-  const excludedQuestionIds = dashboardContent?.assets
-    ?.filter(a => a.type === 'question' && 'id' in a)
-    ?.map(a => (a as { type: 'question'; id: number }).id) || [];
+  // Get excluded question IDs from dashboard items
+  const excludedQuestionIds = dashboardContent?.items
+    ?.filter(item => item.type === 'question')
+    ?.map(item => (item as { type: 'question'; id: number }).id) || [];
 
   // Handler for adding questions to dashboard
   const handleAddQuestionToDashboard = (questionId: number) => {

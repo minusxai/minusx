@@ -118,35 +118,31 @@ class QuestionContent(BaseModel):
 # Dashboard Content
 # ============================================================================
 
-class FileAssetRef(BaseModel):
-    """A reference to another question embedded in the dashboard."""
+class DashboardQuestionItem(BaseModel):
+    """A question embedded in the dashboard with its grid position."""
     type: Literal['question']
     id: int
-    model_config = {"title": "FileReference"}
-
-class InlineAsset(BaseModel):
-    """Inline content block (text, image, divider) — no external file."""
-    type: Literal['text', 'image', 'divider']
-    id: Optional[str] = None
-    content: Optional[str] = None
-
-AssetReference = Annotated[Union[FileAssetRef, InlineAsset], Field(discriminator='type')]
-
-class DashboardLayoutItem(BaseModel):
-    id: int  # question ID
     x: int
     y: int
     w: int = Field(..., ge=2, description="width in grid units (min 2)")
     h: int = Field(..., ge=2, description="height in grid units (min 2)")
 
-class DashboardLayout(BaseModel):
-    columns: Optional[int] = 12
-    items: Optional[List[DashboardLayoutItem]] = None
+class DashboardInlineItem(BaseModel):
+    """Inline content block (text, image, divider) with its grid position."""
+    type: Literal['text', 'image', 'divider']
+    id: Optional[str] = None
+    content: Optional[str] = None
+    x: int = 0
+    y: int = 0
+    w: int = Field(6, ge=2, description="width in grid units (min 2)")
+    h: int = Field(2, ge=2, description="height in grid units (min 2)")
+
+DashboardItem = Annotated[Union[DashboardQuestionItem, DashboardInlineItem], Field(discriminator='type')]
 
 class DashboardContent(BaseModel):
     description: Optional[str] = None
-    assets: List[AssetReference] = Field(..., description="ordered list of questions in the dashboard")
-    layout: Optional[DashboardLayout] = None
+    columns: Optional[int] = 12
+    items: List[DashboardItem] = Field(default_factory=list)
     parameterValues: Optional[Dict[str, Any]] = None
 
 

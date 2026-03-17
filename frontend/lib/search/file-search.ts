@@ -26,8 +26,10 @@ const SEARCH_CONFIGS: Record<string, SearchFieldConfig[]> = {
     { field: 'path', weight: 2, accessor: (f) => f.path },
     { field: 'description', weight: 2, accessor: (f) => (f.content as any).description || '' },
     { field: 'asset_names', weight: 1, accessor: (f) => {
-      const assets = (f.content as any).assets || [];
-      return assets
+      const content = f.content as any;
+      // New format: items array; legacy fallback: assets array
+      const items = Array.isArray(content?.items) ? content.items : (content?.assets || []);
+      return items
         .filter((a: any) => a.type === 'text')
         .map((a: any) => a.content || '')
         .join(' ');

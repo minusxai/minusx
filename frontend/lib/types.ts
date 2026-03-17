@@ -3,7 +3,7 @@ import type { FileState } from '@/store/filesSlice';
 // Generated from backend/tasks/agents/analyst/file_schema.py
 // Regenerate: cd frontend && npm run generate-types
 import type {
-  QuestionContent, FileReference, InlineAsset, VizSettings,
+  QuestionContent, DashboardQuestionItem, DashboardInlineItem, VizSettings,
 } from './types.gen';
 
 // Re-export FileType for convenience
@@ -16,10 +16,12 @@ export type {
   PivotValueConfig, PivotFormula, PivotConfig, ColumnFormatConfig, VizSettings,
   QuestionParameter, QuestionReference,
   QuestionContent,
-  FileReference, InlineAsset,
-  DashboardContent, DashboardLayout, DashboardLayoutItem,
+  DashboardContent, DashboardQuestionItem, DashboardInlineItem,
   AtlasQuestionFile, AtlasDashboardFile,
 } from './types.gen';
+
+// Named union type for the discriminated items array (generated as `Items` in types.gen.ts)
+export type DashboardItem = DashboardQuestionItem | DashboardInlineItem;
 
 // Re-export SQL IR types
 export type {
@@ -62,17 +64,29 @@ export interface BaseFileMetadata extends BaseEntity {
 export type QuestionContainer = AnalyticsFileType | 'explore' | 'sidebar';
 
 
-// Named alias for the discriminated union (inlined in generated DashboardContent.assets)
-export type AssetReference = FileReference | InlineAsset;
-
-// Type guards for AssetReference
-export function isFileReference(asset: AssetReference): asset is FileReference {
-  return asset.type === 'question';
+// Type guards for DashboardItem
+export function isDashboardQuestionItem(item: DashboardItem): item is DashboardQuestionItem {
+  return item.type === 'question';
 }
 
-export function isInlineAsset(asset: AssetReference): asset is InlineAsset {
-  return ['text', 'image', 'divider'].includes(asset.type);
+export function isDashboardInlineItem(item: DashboardItem): item is DashboardInlineItem {
+  return ['text', 'image', 'divider'].includes(item.type);
 }
+
+// Backward-compat aliases used in DashboardView and other components
+export const isFileReference = isDashboardQuestionItem;
+export const isInlineAsset = isDashboardInlineItem;
+
+/**
+ * @deprecated Use DashboardItem instead. AssetReference kept for backward compatibility
+ * with PresentationView and slide components that use a different assets structure.
+ */
+export type AssetReference = {
+  type: string;
+  id?: string | number;
+  content?: string;
+  [key: string]: any;
+};
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface NotebookLayout {
@@ -320,9 +334,13 @@ export interface BaseFileContent {
 
 export interface DocumentContent extends BaseFileContent {
   description?: string;
-  assets: AssetReference[];
-  layout?: any;  // Type-specific layout (DashboardLayout, etc.)
+  // Dashboard fields (new co-located format)
+  columns?: number;
+  items?: DashboardItem[];
   parameterValues?: Record<string, any>;  // Persisted parameter values (saved with file)
+  // Presentation/notebook legacy fields (kept for backward compatibility with PresentationView)
+  assets?: any[];
+  layout?: any;
 }
 
 /**
