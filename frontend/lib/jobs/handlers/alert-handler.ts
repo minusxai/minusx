@@ -1,6 +1,7 @@
 import { FilesAPI } from '@/lib/data/files.server';
 import { runQuery } from '@/lib/connections/run-query';
 import { evaluateCondition, extractMetricValue } from '@/lib/alert/evaluate-alert';
+import { AUTH_URL } from '@/lib/config';
 import type { AlertContent, AlertOutput, JobHandlerResult, JobRunnerInput, QuestionContent } from '@/lib/types';
 import type { JobHandler } from '../job-registry';
 
@@ -46,7 +47,7 @@ export const alertJobHandler: JobHandler = {
     if (triggered && alert.recipients && alert.recipients.length > 0) {
       const body = `Alert "${alertName}" triggered.\nValue: ${actualValue} ${alert.condition.operator} ${alert.condition.threshold}`;
       const subject = `[Alert Triggered] ${alertName}`;
-      const alertLink = `${process.env.NEXTAUTH_URL ?? ''}/f/${runFileId}`;
+      const alertLink = `${AUTH_URL}/f/${runFileId}`;
       for (const recipient of alert.recipients) {
         if (recipient.channel === 'email_alert') {
           messages.push({ type: 'email_alert', content: body, metadata: { to: recipient.address, subject } });

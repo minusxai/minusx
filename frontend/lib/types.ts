@@ -502,6 +502,7 @@ export interface MessageAttemptLog {
   success: boolean;
   statusCode?: number;
   error?: string;
+  requestBody?: string;
   responseBody?: string;
 }
 

@@ -52,18 +52,20 @@ function AttemptLogRow({ log }: { log: MessageAttemptLog }) {
         {log.statusCode !== undefined && <Text fontSize="xs">{log.statusCode}</Text>}
         {log.error && <Text fontSize="xs" color="red.fg">{log.error}</Text>}
       </HStack>
+      {log.requestBody && (
+        <Box ml="55px">
+          <Text fontSize="xs" color="fg.muted" fontWeight="600" mb={0.5}>Request</Text>
+          <Box p={1.5} bg="bg.surface" borderRadius="sm" border="1px solid" borderColor="border.muted" maxH="120px" overflow="auto">
+            <Text fontSize="xs" whiteSpace="pre-wrap" color="fg.muted">{log.requestBody}</Text>
+          </Box>
+        </Box>
+      )}
       {log.responseBody && (
-        <Box
-          ml="55px"
-          p={1.5}
-          bg="bg.surface"
-          borderRadius="sm"
-          border="1px solid"
-          borderColor="border.muted"
-          maxH="120px"
-          overflow="auto"
-        >
-          <Text fontSize="xs" whiteSpace="pre-wrap" color="fg.muted">{log.responseBody}</Text>
+        <Box ml="55px">
+          <Text fontSize="xs" color="fg.muted" fontWeight="600" mb={0.5}>Response</Text>
+          <Box p={1.5} bg="bg.surface" borderRadius="sm" border="1px solid" borderColor="border.muted" maxH="120px" overflow="auto">
+            <Text fontSize="xs" whiteSpace="pre-wrap" color="fg.muted">{log.responseBody}</Text>
+          </Box>
         </Box>
       )}
     </VStack>

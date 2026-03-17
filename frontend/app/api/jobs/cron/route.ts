@@ -217,7 +217,7 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
                   msg.deliveryError = 'No email_alert webhook configured';
                 } else {
                   const result = await sendEmailViaWebhook(emailWebhook, msg.metadata.to, msg.metadata.subject, msg.content);
-                  const attemptLog: MessageAttemptLog = { attemptedAt: new Date().toISOString(), success: result.success, statusCode: result.statusCode, error: result.error, responseBody: result.responseBody };
+                  const attemptLog: MessageAttemptLog = { attemptedAt: new Date().toISOString(), success: result.success, statusCode: result.statusCode, error: result.error, requestBody: result.requestBody, responseBody: result.responseBody };
                   msg.logs = [...(msg.logs ?? []), attemptLog];
                   if (result.success) {
                     msg.status = 'sent';
@@ -234,7 +234,7 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
                   msg.deliveryError = 'No phone_alert webhook configured';
                 } else {
                   const result = await sendPhoneAlertViaWebhook(phoneAlertWebhook, msg.metadata.to, msg.content, { title: msg.metadata.title, desc: msg.metadata.desc, link: msg.metadata.link, summary: msg.metadata.summary });
-                  const attemptLog: MessageAttemptLog = { attemptedAt: new Date().toISOString(), success: result.success, statusCode: result.statusCode, error: result.error, responseBody: result.responseBody };
+                  const attemptLog: MessageAttemptLog = { attemptedAt: new Date().toISOString(), success: result.success, statusCode: result.statusCode, error: result.error, requestBody: result.requestBody, responseBody: result.responseBody };
                   msg.logs = [...(msg.logs ?? []), attemptLog];
                   if (result.success) {
                     msg.status = 'sent';

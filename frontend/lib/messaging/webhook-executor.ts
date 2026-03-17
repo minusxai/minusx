@@ -10,6 +10,7 @@ export interface WebhookResult {
   success: boolean;
   error?: string;
   statusCode?: number;
+  requestBody?: string;
   responseBody?: string;
 }
 
@@ -48,13 +49,14 @@ export async function executeWebhook(
     }
 
     // 3. Make HTTP request
+    const requestBody = body ? JSON.stringify(body) : undefined;
     const response = await fetch(webhook.url, {
       method: webhook.method,
       headers: {
         'Content-Type': 'application/json',
         ...headers,
       },
-      body: body ? JSON.stringify(body) : undefined,
+      body: requestBody,
     });
 
     const responseBody = await response.text().catch(() => undefined);
@@ -64,11 +66,12 @@ export async function executeWebhook(
         success: false,
         error: `HTTP ${response.status}: ${response.statusText}`,
         statusCode: response.status,
+        requestBody,
         responseBody,
       };
     }
 
-    return { success: true, statusCode: response.status, responseBody };
+    return { success: true, statusCode: response.status, requestBody, responseBody };
   } catch (err: any) {
     return {
       success: false,
