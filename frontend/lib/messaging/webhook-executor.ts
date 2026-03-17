@@ -67,6 +67,17 @@ export async function executeWebhook(
 }
 
 /**
+ * Send a WhatsApp message via a configured WhatsApp webhook
+ */
+export async function sendWhatsAppViaWebhook(
+  webhook: MessagingWebhook,
+  to: string,
+  body: string
+): Promise<WebhookResult> {
+  return executeWebhook(webhook, { WHATSAPP_TO: to, WHATSAPP_BODY: body });
+}
+
+/**
  * Send an email via a configured email webhook
  * @param webhook - Email webhook configuration
  * @param to - Recipient address

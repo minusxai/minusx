@@ -20,7 +20,7 @@ import { FilesAPI } from '@/lib/data/files.server';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { JOB_HANDLERS } from '@/lib/jobs/job-registry';
 import { getConfigsByCompanyId } from '@/lib/data/configs.server';
-import { sendEmailViaWebhook } from '@/lib/messaging/webhook-executor';
+import { sendEmailViaWebhook, sendWhatsAppViaWebhook } from '@/lib/messaging/webhook-executor';
 import type { RunFileContent, RunMessageRecord } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -131,24 +131,31 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       if (send) {
         const { config } = await getConfigsByCompanyId(user.companyId, user.mode);
         const emailWebhook = config.messaging?.webhooks?.find(w => w.type === 'email');
+        const whatsappWebhook = config.messaging?.webhooks?.find(w => w.type === 'whatsapp');
         for (const msg of messages) {
-          if (msg.type === 'email') {
-            if (!emailWebhook) {
-              console.warn('[jobs/run] No email webhook configured, skipping email delivery');
-              msg.status = 'failed';
-              msg.deliveryError = 'No email webhook configured';
-            } else {
-              try {
-                for (const recipient of msg.metadata.to) {
-                  await sendEmailViaWebhook(emailWebhook, recipient, msg.metadata.subject, msg.content);
-                }
+          try {
+            if (msg.type === 'email') {
+              if (!emailWebhook) {
+                msg.status = 'failed';
+                msg.deliveryError = 'No email webhook configured';
+              } else {
+                await sendEmailViaWebhook(emailWebhook, msg.metadata.to, msg.metadata.subject, msg.content);
                 msg.status = 'sent';
                 msg.sentAt = new Date().toISOString();
-              } catch (err) {
+              }
+            } else if (msg.type === 'whatsapp') {
+              if (!whatsappWebhook) {
                 msg.status = 'failed';
-                msg.deliveryError = err instanceof Error ? err.message : 'Unknown delivery error';
+                msg.deliveryError = 'No WhatsApp webhook configured';
+              } else {
+                await sendWhatsAppViaWebhook(whatsappWebhook, msg.metadata.to, msg.content);
+                msg.status = 'sent';
+                msg.sentAt = new Date().toISOString();
               }
             }
+          } catch (err) {
+            msg.status = 'failed';
+            msg.deliveryError = err instanceof Error ? err.message : 'Unknown delivery error';
           }
         }
       } else {

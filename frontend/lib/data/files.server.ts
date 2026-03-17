@@ -685,7 +685,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
           },
           references: [],
           reportPrompt: '',
-          emails: []
+          recipients: []
         };
 
         return {
@@ -708,7 +708,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
             operator: '>',
             threshold: 0
           },
-          emails: [],
+          recipients: [],
           status: 'draft',
         };
 

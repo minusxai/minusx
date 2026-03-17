@@ -2,22 +2,26 @@
 
 import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Box, HStack, Text, Input, Flex } from '@chakra-ui/react';
-import { LuX, LuChevronDown } from 'react-icons/lu';
+import { Box, HStack, Text, Input, Flex, Badge } from '@chakra-ui/react';
+import { LuX, LuChevronDown, LuMail, LuMessageCircle } from 'react-icons/lu';
 import { useFetch } from '@/lib/api/useFetch';
 import { API } from '@/lib/api/declarations';
-import { User } from '@/lib/types';
+import { AlertRecipient, User } from '@/lib/types';
 
 interface DeliveryPickerProps {
-  emails: string[];
-  onChange: (emails: string[]) => void;
+  recipients: AlertRecipient[];
+  onChange: (recipients: AlertRecipient[]) => void;
   disabled?: boolean;
 }
 
-function DropdownMenu({ containerRef, filteredUsers, addEmail }: {
+type DropdownOption =
+  | { kind: 'email'; user: User }
+  | { kind: 'whatsapp'; user: User };
+
+function DropdownMenu({ containerRef, options, onSelect }: {
   containerRef: React.RefObject<HTMLDivElement | null>;
-  filteredUsers: User[];
-  addEmail: (email: string) => void;
+  options: DropdownOption[];
+  onSelect: (recipient: AlertRecipient) => void;
 }) {
   const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
 
@@ -50,24 +54,39 @@ function DropdownMenu({ containerRef, filteredUsers, addEmail }: {
       borderRadius="md"
       boxShadow="md"
       zIndex={9999}
-      maxH="200px"
+      maxH="220px"
       overflowY="auto"
     >
-      {filteredUsers.map((user) => (
-        <Box
-          key={user.email}
+      {options.map((opt, i) => (
+        <HStack
+          key={i}
           px={3}
           py={2}
+          gap={2}
           cursor="pointer"
           _hover={{ bg: 'bg.muted' }}
           onMouseDown={(e: React.MouseEvent) => {
             e.preventDefault();
-            addEmail(user.email);
+            onSelect(
+              opt.kind === 'email'
+                ? { channel: 'email', address: opt.user.email }
+                : { channel: 'whatsapp', address: opt.user.phone! }
+            );
           }}
         >
-          <Text fontSize="xs" fontWeight="500">{user.name}</Text>
-          <Text fontSize="xs" color="fg.muted">{user.email}</Text>
-        </Box>
+          {opt.kind === 'email'
+            ? <LuMail size={12} />
+            : <LuMessageCircle size={12} />}
+          <Box>
+            <Text fontSize="xs" fontWeight="500">{opt.user.name}</Text>
+            <Text fontSize="xs" color="fg.muted">
+              {opt.kind === 'email' ? opt.user.email : opt.user.phone}
+            </Text>
+          </Box>
+          <Badge size="xs" colorPalette={opt.kind === 'email' ? 'blue' : 'green'} ml="auto">
+            {opt.kind === 'email' ? 'Email' : 'WhatsApp'}
+          </Badge>
+        </HStack>
       ))}
     </Box>
   );
@@ -75,7 +94,7 @@ function DropdownMenu({ containerRef, filteredUsers, addEmail }: {
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-export function DeliveryPicker({ emails, onChange, disabled }: DeliveryPickerProps) {
+export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPickerProps) {
   const [inputValue, setInputValue] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -84,54 +103,60 @@ export function DeliveryPicker({ emails, onChange, disabled }: DeliveryPickerPro
   const { data: usersResponse } = useFetch<void, { success: boolean; data: { users: User[] } }>(API.users.list);
   const users = usersResponse?.data?.users ?? [];
 
-  const filteredUsers = useMemo(() => {
-    if (users.length === 0) return [];
-    const query = inputValue.toLowerCase();
-    return users.filter(u =>
-      !emails.includes(u.email) &&
-      (u.name.toLowerCase().includes(query) || u.email.toLowerCase().includes(query))
-    );
-  }, [users, inputValue, emails]);
+  const recipientKeys = useMemo(
+    () => new Set(recipients.map(r => `${r.channel}:${r.address}`)),
+    [recipients]
+  );
 
-  const addEmail = (email: string, { validate = false } = {}) => {
-    const trimmed = email.trim().toLowerCase();
-    if (!trimmed || emails.includes(trimmed)) {
-      setInputValue('');
-      return;
+  const dropdownOptions = useMemo<DropdownOption[]>(() => {
+    const query = inputValue.toLowerCase();
+    const opts: DropdownOption[] = [];
+    for (const user of users) {
+      const matches = !query || user.name.toLowerCase().includes(query) || user.email.toLowerCase().includes(query);
+      if (!matches) continue;
+      if (!recipientKeys.has(`email:${user.email}`)) {
+        opts.push({ kind: 'email', user });
+      }
+      if (user.phone && !recipientKeys.has(`whatsapp:${user.phone}`)) {
+        opts.push({ kind: 'whatsapp', user });
+      }
     }
-    if (validate && !EMAIL_REGEX.test(trimmed)) {
-      return; // keep input so user can fix it
-    }
-    onChange([...emails, trimmed]);
+    return opts;
+  }, [users, inputValue, recipientKeys]);
+
+  const addRecipient = (recipient: AlertRecipient) => {
+    const key = `${recipient.channel}:${recipient.address}`;
+    if (recipientKeys.has(key)) return;
+    onChange([...recipients, recipient]);
     setInputValue('');
     setShowDropdown(false);
   };
 
-  const removeEmail = (email: string) => {
-    onChange(emails.filter(e => e !== email));
+  const addEmailFromInput = (email: string, { validate = false } = {}) => {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed) return;
+    if (validate && !EMAIL_REGEX.test(trimmed)) return;
+    addRecipient({ channel: 'email', address: trimmed });
+  };
+
+  const removeRecipient = (index: number) => {
+    onChange(recipients.filter((_, i) => i !== index));
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' || e.key === ',') {
       e.preventDefault();
-      if (inputValue.trim()) {
-        addEmail(inputValue, { validate: true });
-      }
+      if (inputValue.trim()) addEmailFromInput(inputValue, { validate: true });
     }
-    if (e.key === 'Backspace' && !inputValue && emails.length > 0) {
-      removeEmail(emails[emails.length - 1]);
+    if (e.key === 'Backspace' && !inputValue && recipients.length > 0) {
+      removeRecipient(recipients.length - 1);
     }
-    if (e.key === 'Escape') {
-      setShowDropdown(false);
-    }
+    if (e.key === 'Escape') setShowDropdown(false);
   };
 
   const handleBlur = () => {
-    // Delay to allow click on dropdown items
     setTimeout(() => {
-      if (inputValue.trim()) {
-        addEmail(inputValue, { validate: true });
-      }
+      if (inputValue.trim()) addEmailFromInput(inputValue, { validate: true });
       setShowDropdown(false);
     }, 150);
   };
@@ -150,13 +175,11 @@ export function DeliveryPicker({ emails, onChange, disabled }: DeliveryPickerPro
         alignItems="center"
         cursor={disabled ? 'not-allowed' : 'text'}
         opacity={disabled ? 0.6 : 1}
-        onClick={() => {
-          if (!disabled) inputRef.current?.focus();
-        }}
+        onClick={() => { if (!disabled) inputRef.current?.focus(); }}
       >
-        {emails.map((email) => (
+        {recipients.map((r, i) => (
           <HStack
-            key={email}
+            key={i}
             bg="bg.muted"
             borderRadius="sm"
             px={2}
@@ -164,13 +187,13 @@ export function DeliveryPicker({ emails, onChange, disabled }: DeliveryPickerPro
             gap={1}
             fontSize="xs"
           >
-            <Text fontSize="xs" lineHeight="short">{email}</Text>
+            {r.channel === 'email'
+              ? <LuMail size={11} />
+              : <LuMessageCircle size={11} />}
+            <Text fontSize="xs" lineHeight="short">{r.address}</Text>
             {!disabled && (
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  removeEmail(email);
-                }}
+                onClick={(e) => { e.stopPropagation(); removeRecipient(i); }}
                 style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', background: 'none', border: 'none', padding: 0, color: 'inherit' }}
               >
                 <LuX size={12} />
@@ -182,15 +205,12 @@ export function DeliveryPicker({ emails, onChange, disabled }: DeliveryPickerPro
           <Input
             ref={inputRef}
             value={inputValue}
-            onChange={(e) => {
-              setInputValue(e.target.value);
-              setShowDropdown(true);
-            }}
+            onChange={(e) => { setInputValue(e.target.value); setShowDropdown(true); }}
             onFocus={() => setShowDropdown(true)}
             onBlur={handleBlur}
             onKeyDown={handleKeyDown}
             autoComplete="one-time-code"
-            placeholder={emails.length === 0 ? 'Add email or select user...' : ''}
+            placeholder={recipients.length === 0 ? 'Add email or select user...' : ''}
             size="xs"
             variant="outline"
             border="none"
@@ -202,10 +222,7 @@ export function DeliveryPicker({ emails, onChange, disabled }: DeliveryPickerPro
         )}
         {!disabled && users.length > 0 && (
           <button
-            onClick={() => {
-              setShowDropdown(!showDropdown);
-              inputRef.current?.focus();
-            }}
+            onClick={() => { setShowDropdown(!showDropdown); inputRef.current?.focus(); }}
             style={{ display: 'flex', alignItems: 'center', flexShrink: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'inherit' }}
           >
             <LuChevronDown size={14} />
@@ -213,8 +230,8 @@ export function DeliveryPicker({ emails, onChange, disabled }: DeliveryPickerPro
         )}
       </Flex>
 
-      {showDropdown && !disabled && filteredUsers.length > 0 && createPortal(
-        <DropdownMenu containerRef={containerRef} filteredUsers={filteredUsers} addEmail={addEmail} />,
+      {showDropdown && !disabled && dropdownOptions.length > 0 && createPortal(
+        <DropdownMenu containerRef={containerRef} options={dropdownOptions} onSelect={addRecipient} />,
         document.body
       )}
     </Box>

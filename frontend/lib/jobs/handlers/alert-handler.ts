@@ -43,15 +43,16 @@ export const alertJobHandler: JobHandler = {
     };
 
     const messages: JobHandlerResult['messages'] = [];
-    if (triggered && alert.emails && alert.emails.length > 0) {
-      messages.push({
-        type: 'email',
-        content: `Alert "${alertName}" triggered.\nValue: ${actualValue} ${alert.condition.operator} ${alert.condition.threshold}`,
-        metadata: {
-          to: alert.emails,
-          subject: `[Alert Triggered] ${alertName}`,
-        },
-      });
+    if (triggered && alert.recipients && alert.recipients.length > 0) {
+      const body = `Alert "${alertName}" triggered.\nValue: ${actualValue} ${alert.condition.operator} ${alert.condition.threshold}`;
+      const subject = `[Alert Triggered] ${alertName}`;
+      for (const recipient of alert.recipients) {
+        if (recipient.channel === 'email') {
+          messages.push({ type: 'email', content: body, metadata: { to: recipient.address, subject } });
+        } else if (recipient.channel === 'whatsapp') {
+          messages.push({ type: 'whatsapp', content: body, metadata: { to: recipient.address } });
+        }
+      }
     }
 
     return { output, messages };

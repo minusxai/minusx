@@ -12,7 +12,7 @@ import { useFile } from '@/lib/hooks/file-state-hooks';
 import type { AlertOutput, AlertRunContent, RunFileContent, RunMessageRecord } from '@/lib/types';
 import type { FileId } from '@/store/filesSlice';
 import type { FileViewMode } from '@/lib/ui/fileComponents';
-import { LuArrowLeft, LuBell, LuExternalLink, LuMail } from 'react-icons/lu';
+import { LuArrowLeft, LuBell, LuExternalLink, LuMail, LuMessageCircle } from 'react-icons/lu';
 import Link from 'next/link';
 import { preserveParams } from '@/lib/navigation/url-utils';
 
@@ -44,6 +44,7 @@ function MessageStatusBadge({ status }: { status: RunMessageRecord['status'] }) 
 
 function MessageRow({ msg }: { msg: RunMessageRecord }) {
   const [open, setOpen] = useState(false);
+  const isEmail = msg.type === 'email';
   return (
     <Box borderRadius="md" border="1px solid" borderColor="border.muted" overflow="hidden">
       <HStack
@@ -56,18 +57,20 @@ function MessageRow({ msg }: { msg: RunMessageRecord }) {
       >
         <HStack gap={1.5} flex={1} minW={0}>
           {open ? <LuChevronDown size={13} /> : <LuChevronRight size={13} />}
-          <LuMail size={13} />
-          <Text fontSize="sm" truncate>{msg.metadata.to.join(', ')}</Text>
+          {isEmail ? <LuMail size={13} /> : <LuMessageCircle size={13} />}
+          <Text fontSize="sm" truncate>{msg.metadata.to}</Text>
         </HStack>
         <MessageStatusBadge status={msg.status} />
       </HStack>
       {open && (
         <Box px={3} py={2} bg="bg.muted" borderTopWidth="1px" borderColor="border.muted">
           <VStack align="stretch" gap={2}>
-            <HStack gap={2}>
-              <Text fontSize="xs" color="fg.muted" minW="55px" fontWeight="600">Subject</Text>
-              <Text fontSize="xs">{msg.metadata.subject}</Text>
-            </HStack>
+            {isEmail && (
+              <HStack gap={2}>
+                <Text fontSize="xs" color="fg.muted" minW="55px" fontWeight="600">Subject</Text>
+                <Text fontSize="xs">{(msg.metadata as { to: string; subject: string }).subject}</Text>
+              </HStack>
+            )}
             <Box>
               <Text fontSize="xs" color="fg.muted" fontWeight="600" mb={1}>Body</Text>
               <Box

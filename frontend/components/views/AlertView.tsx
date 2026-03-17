@@ -2,7 +2,7 @@
 
 import { Box, Text, VStack, HStack, Input, Button, Flex, Badge, Portal, Switch } from '@chakra-ui/react';
 import type { CheckedChangeDetails } from '@zag-js/switch';
-import { AlertContent, AlertSelector, AlertFunction, ComparisonOperator, JobRun } from '@/lib/types';
+import { AlertContent, AlertRecipient, AlertSelector, AlertFunction, ComparisonOperator, JobRun } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { LuPlay, LuClock, LuBell, LuMail, LuInfo, LuGripVertical, LuHistory, LuSettings, LuScanSearch } from 'react-icons/lu';
 import { DeliveryPicker } from '@/components/shared/DeliveryPicker';
@@ -677,8 +677,8 @@ export default function AlertView({
                 </HStack>
 
                 <DeliveryPicker
-                  emails={alert.emails || []}
-                  onChange={(emails) => onChange({ emails })}
+                  recipients={alert.recipients || []}
+                  onChange={(recipients) => onChange({ recipients })}
                   disabled={!editMode}
                 />
               </Box>

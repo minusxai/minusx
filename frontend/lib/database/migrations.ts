@@ -794,6 +794,47 @@ export const MIGRATIONS: MigrationEntry[] = [
     },
     description: 'Add version and last_edit_id columns for OCC; seed existing rows with version=1, last_edit_id=from_migration'
   },
+  {
+    dataVersion: 20,
+    schemaVersion: undefined,
+    dataMigration: (data: InitData) => {
+      // Migrate alert and report files: convert emails: string[] → recipients: AlertRecipient[]
+      // Each email becomes { channel: 'email_alert', address: '<email>' }
+      // No backward compatibility — old emails field is removed
+
+      for (const companyData of data.companies as CompanyData[]) {
+        let migratedCount = 0;
+
+        for (const doc of companyData.documents) {
+          if (doc.type !== 'alert' && doc.type !== 'report') continue;
+
+          const content = doc.content as any;
+          if (!content) continue;
+
+          if (Array.isArray(content.emails)) {
+            if (content.emails.length > 0) {
+              content.recipients = content.emails.map((address: string) => ({
+                channel: 'email_alert',
+                address,
+              }));
+              console.log(`    [V20] ${doc.path}: Migrated ${content.emails.length} email(s) to recipients`);
+            } else if (!content.recipients) {
+              content.recipients = [];
+            }
+            delete content.emails;
+            migratedCount++;
+          }
+        }
+
+        if (migratedCount > 0) {
+          console.log(`  ✅ [V20] Migrated ${migratedCount} doc(s) for company "${companyData.name}"`);
+        }
+      }
+
+      return data;
+    },
+    description: 'Migrate alert/report emails[] → recipients[] (flat union with channel + address)',
+  },
 ];
 
 /**

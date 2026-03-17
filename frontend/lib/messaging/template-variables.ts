@@ -9,6 +9,8 @@ export const TEMPLATE_VARIABLES = {
   EMAIL_TO: '{{EMAIL_TO}}',
   EMAIL_SUBJECT: '{{EMAIL_SUBJECT}}',
   EMAIL_BODY: '{{EMAIL_BODY}}',
+  WHATSAPP_TO: '{{WHATSAPP_TO}}',
+  WHATSAPP_BODY: '{{WHATSAPP_BODY}}',
 } as const;
 
 /**

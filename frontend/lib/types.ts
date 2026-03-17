@@ -217,6 +217,7 @@ export interface User {
   id?: number;               // user ID from database (added in Phase 1)
   name: string;              // full name of the user
   email: string;
+  phone?: string;            // optional phone number (used for WhatsApp delivery)
   home_folder?: string;      // relative path to home folder (e.g., "sales/team-a" or "" for mode root) - admins always get "" (mode-scoped)
   password_hash?: string;    // optional bcrypt hashed password
   role: UserRole;            // user role: admin (full access), editor (same as non-admin initially), viewer (same as non-admin initially) - NOT NULL in database
@@ -360,7 +361,7 @@ export interface ReportContent extends BaseFileContent {
   reportPrompt?: string;
 
   // Where to send
-  emails: string[];
+  recipients: AlertRecipient[];
 }
 
 /**
@@ -431,12 +432,16 @@ export interface AlertSchedule {
   timezone: string;
 }
 
+export type AlertRecipient =
+  | { channel: 'email'; address: string }
+  | { channel: 'whatsapp'; address: string };
+
 export interface AlertContent extends BaseFileContent {
   description?: string;
   schedule: AlertSchedule;
   questionId: number;        // Reference to a saved question
   condition: AlertCondition;
-  emails?: string[];         // Delivery email addresses
+  recipients?: AlertRecipient[]; // Delivery recipients (email or whatsapp, one entry per channel per person)
   status?: 'live' | 'draft'; // Whether scheduled cron runs are active (default: 'draft')
 }
 
@@ -488,27 +493,15 @@ export interface AlertOutput {
   column?: string;
 }
 
-export interface EmailMetadata {
-  to: string[];
-  subject: string;
-  /**
-   * When false (default): one email, all recipients in To: field.
-   * When true: individual email per recipient via Batch API, chunked at 100.
-   */
-  batch?: boolean;
-}
+export type RunMessage =
+  | { type: 'email';    content: string; metadata: { to: string; subject: string } }
+  | { type: 'whatsapp'; content: string; metadata: { to: string } };
 
-export interface RunMessage {
-  type: 'email';
-  content: string;
-  metadata: EmailMetadata;
-}
-
-export interface RunMessageRecord extends RunMessage {
+export type RunMessageRecord = RunMessage & {
   status: 'pending' | 'sent' | 'failed' | 'skipped';
   sentAt?: string;
   deliveryError?: string;
-}
+};
 
 // Generic run file content — the stored type for alert_run files in Phase 2+
 export interface RunFileContent extends BaseFileContent {
