@@ -133,6 +133,9 @@ export const POSTGRES_SCHEMA = `
     END IF;
   END $$;
 
+  -- Index on last_edit_id must come AFTER the ADD COLUMN guard above
+  CREATE INDEX IF NOT EXISTS idx_files_last_edit_id ON files(last_edit_id) WHERE last_edit_id IS NOT NULL;
+
   -- Drop redundant standalone type index (replaced by composite index below)
   DROP INDEX IF EXISTS idx_files_type;
 
@@ -141,7 +144,6 @@ export const POSTGRES_SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_files_path_company ON files(company_id, path);
   CREATE INDEX IF NOT EXISTS idx_files_updated_at ON files(updated_at DESC);
   CREATE INDEX IF NOT EXISTS idx_files_company_type_updated ON files(company_id, type, updated_at DESC);
-  CREATE INDEX IF NOT EXISTS idx_files_last_edit_id ON files(last_edit_id) WHERE last_edit_id IS NOT NULL;
 
   -- Trigger to auto-update updated_at for files
   CREATE OR REPLACE FUNCTION update_files_updated_at()
