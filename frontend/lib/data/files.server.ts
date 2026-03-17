@@ -364,6 +364,12 @@ class FilesDataLayerServer implements IFilesDataLayer {
       throw new UserFacingError(`Invalid file content: ${createValidationError}`);
     }
 
+    // Guard: references must be real (positive) IDs — virtual files must be saved first
+    const negativeCreateRefs = references.filter(id => id < 0);
+    if (negativeCreateRefs.length > 0) {
+      throw new Error(`Cannot create file: references contain unsaved virtual IDs [${negativeCreateRefs.join(', ')}]`);
+    }
+
     // Create file in database (returns numeric ID)
     // Phase 6: Pass references from client (server is dumb, no extraction)
     const newFileId = await DocumentDB.create(name, finalPath, type, contentToCreate, references, user.companyId);
@@ -440,6 +446,12 @@ class FilesDataLayerServer implements IFilesDataLayer {
     const saveValidationError = validateFileState({ type: existingFile.type, content: contentToSave });
     if (saveValidationError) {
       throw new UserFacingError(`Invalid file content: ${saveValidationError}`);
+    }
+
+    // Guard: references must be real (positive) IDs — virtual files must be saved first
+    const negativeSaveRefs = references.filter(id => id < 0);
+    if (negativeSaveRefs.length > 0) {
+      throw new Error(`Cannot save file ${id}: references contain unsaved virtual IDs [${negativeSaveRefs.join(', ')}]`);
     }
 
     // Phase 6: Server is dumb - just saves what client sends (no extraction)

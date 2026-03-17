@@ -865,6 +865,17 @@ export async function publishFile(
   const extractReferences = extractReferencesFromContent;
   const references = extractReferences(fileData.content, fileData.type as FileType);
 
+  // Guard: references must all be real (positive) IDs before hitting the DB.
+  // Negative IDs are virtual files that haven't been saved yet — use publishAll()
+  // to resolve them in topological order instead of publishFile().
+  const negativeRefs = references.filter(id => id < 0);
+  if (negativeRefs.length > 0) {
+    throw new Error(
+      `Cannot save file ${fileId}: references contain unsaved virtual IDs [${negativeRefs.join(', ')}]. ` +
+      `Use publishAll() to save files with unresolved references.`
+    );
+  }
+
   if (isVirtualFile) {
     // Create new file using FilesAPI
     const result = await FilesAPI.createFile({
