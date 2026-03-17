@@ -497,10 +497,19 @@ export type RunMessage =
   | { type: 'email_alert';    content: string; metadata: { to: string; subject: string } }
   | { type: 'phone_alert'; content: string; metadata: { to: string; title?: string; desc?: string; link?: string; summary?: string } };
 
+export interface MessageAttemptLog {
+  attemptedAt: string;
+  success: boolean;
+  statusCode?: number;
+  error?: string;
+  responseBody?: string;
+}
+
 export type RunMessageRecord = RunMessage & {
   status: 'pending' | 'sent' | 'failed' | 'skipped';
   sentAt?: string;
   deliveryError?: string;
+  logs?: MessageAttemptLog[];
 };
 
 // Generic run file content — the stored type for alert_run files in Phase 2+

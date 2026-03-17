@@ -9,7 +9,7 @@ import { Box, Text, VStack, HStack, Badge } from '@chakra-ui/react';
 import { useState } from 'react';
 import { LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import { useFile } from '@/lib/hooks/file-state-hooks';
-import type { AlertOutput, AlertRunContent, RunFileContent, RunMessageRecord } from '@/lib/types';
+import type { AlertOutput, AlertRunContent, MessageAttemptLog, RunFileContent, RunMessageRecord } from '@/lib/types';
 import type { FileId } from '@/store/filesSlice';
 import type { FileViewMode } from '@/lib/ui/fileComponents';
 import { LuArrowLeft, LuBell, LuExternalLink, LuMail, LuMessageCircle } from 'react-icons/lu';
@@ -42,8 +42,37 @@ function MessageStatusBadge({ status }: { status: RunMessageRecord['status'] }) 
   return <Badge colorPalette={colorPalette} size="sm">{status.toUpperCase()}</Badge>;
 }
 
+function AttemptLogRow({ log }: { log: MessageAttemptLog }) {
+  const time = new Date(log.attemptedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return (
+    <VStack align="stretch" gap={0.5}>
+      <HStack gap={2}>
+        <Text fontSize="xs" color="fg.muted" minW="55px">{time}</Text>
+        <Text fontSize="xs" color={log.success ? 'green.fg' : 'red.fg'}>{log.success ? '✓' : '✗'}</Text>
+        {log.statusCode !== undefined && <Text fontSize="xs">{log.statusCode}</Text>}
+        {log.error && <Text fontSize="xs" color="red.fg">{log.error}</Text>}
+      </HStack>
+      {log.responseBody && (
+        <Box
+          ml="55px"
+          p={1.5}
+          bg="bg.surface"
+          borderRadius="sm"
+          border="1px solid"
+          borderColor="border.muted"
+          maxH="120px"
+          overflow="auto"
+        >
+          <Text fontSize="xs" whiteSpace="pre-wrap" color="fg.muted">{log.responseBody}</Text>
+        </Box>
+      )}
+    </VStack>
+  );
+}
+
 function MessageRow({ msg }: { msg: RunMessageRecord }) {
   const [open, setOpen] = useState(false);
+  const [logsOpen, setLogsOpen] = useState(false);
   const isEmail = msg.type === 'email_alert';
   return (
     <Box borderRadius="md" border="1px solid" borderColor="border.muted" overflow="hidden">
@@ -96,6 +125,20 @@ function MessageRow({ msg }: { msg: RunMessageRecord }) {
                 <Text fontSize="xs" color="fg.muted" minW="55px" fontWeight="600">Sent at</Text>
                 <Text fontSize="xs">{new Date(msg.sentAt).toLocaleString()}</Text>
               </HStack>
+            )}
+            {msg.logs && msg.logs.length > 0 && (
+              <Box>
+                <HStack gap={2} cursor="pointer" onClick={() => setLogsOpen(o => !o)}>
+                  <Text fontSize="xs" color="fg.muted" minW="55px" fontWeight="600">Logs</Text>
+                  {logsOpen ? <LuChevronDown size={11} /> : <LuChevronRight size={11} />}
+                  {!logsOpen && <Text fontSize="xs" color="fg.muted">{msg.logs.length} attempt{msg.logs.length !== 1 ? 's' : ''}</Text>}
+                </HStack>
+                {logsOpen && (
+                  <VStack align="stretch" gap={0.5} mt={1} pl={1}>
+                    {msg.logs.map((log, i) => <AttemptLogRow key={i} log={log} />)}
+                  </VStack>
+                )}
+              </Box>
             )}
           </VStack>
         </Box>
