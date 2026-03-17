@@ -794,6 +794,108 @@ export const MIGRATIONS: MigrationEntry[] = [
     },
     description: 'Add version and last_edit_id columns for OCC; seed existing rows with version=1, last_edit_id=from_migration'
   },
+  {
+    dataVersion: 20,
+    schemaVersion: undefined,
+    dataMigration: (data: InitData) => {
+      // Migrate alert and report files: convert emails: string[] → recipients: AlertRecipient[]
+      // Each email becomes { channel: 'email_alert', address: '<email>' }
+      // No backward compatibility — old emails field is removed
+
+      for (const companyData of data.companies as CompanyData[]) {
+        let migratedCount = 0;
+
+        for (const doc of companyData.documents) {
+          if (doc.type !== 'alert' && doc.type !== 'report') continue;
+
+          const content = doc.content as any;
+          if (!content) continue;
+
+          if (Array.isArray(content.emails)) {
+            if (content.emails.length > 0) {
+              content.recipients = content.emails.map((address: string) => ({
+                channel: 'email_alert',
+                address,
+              }));
+              console.log(`    [V20] ${doc.path}: Migrated ${content.emails.length} email(s) to recipients`);
+            } else if (!content.recipients) {
+              content.recipients = [];
+            }
+            delete content.emails;
+            migratedCount++;
+          }
+        }
+
+        if (migratedCount > 0) {
+          console.log(`  ✅ [V20] Migrated ${migratedCount} doc(s) for company "${companyData.name}"`);
+        }
+      }
+
+      return data;
+    },
+    description: 'Migrate alert/report emails[] → recipients[] (flat union with channel + address)',
+  },
+  {
+    dataVersion: 21,
+    schemaVersion: undefined,
+    dataMigration: (data: InitData) => {
+      // Rename webhook type discriminators:
+      //   config docs:  'whatsapp' → 'phone_otp',  'email' → 'email_alert'
+      //   alert/report docs:  channel 'email' → 'email_alert',  'whatsapp' → 'phone_alert'
+
+      for (const companyData of data.companies as CompanyData[]) {
+        for (const doc of companyData.documents) {
+          const content = doc.content as any;
+          if (!content) continue;
+
+          if (doc.type === 'config') {
+            const webhooks: any[] = content?.messaging?.webhooks;
+            if (Array.isArray(webhooks)) {
+              for (const w of webhooks) {
+                if (w.type === 'whatsapp') w.type = 'phone_otp';
+                else if (w.type === 'email') w.type = 'email_alert';
+                // Rename {{WHATSAPP_TO}} / {{WHATSAPP_BODY}} template vars in webhook bodies
+                if (w.body && typeof w.body === 'object') {
+                  const bodyStr = JSON.stringify(w.body)
+                    .replace(/\{\{WHATSAPP_TO\}\}/g, '{{PHONE_ALERT_TO}}')
+                    .replace(/\{\{WHATSAPP_BODY\}\}/g, '{{PHONE_ALERT_BODY}}');
+                  w.body = JSON.parse(bodyStr);
+                }
+              }
+            }
+          }
+
+          if (doc.type === 'alert' || doc.type === 'report') {
+            const recipients: any[] = content?.recipients;
+            if (Array.isArray(recipients)) {
+              for (const r of recipients) {
+                if (r.channel === 'email') r.channel = 'email_alert';
+                else if (r.channel === 'whatsapp') r.channel = 'phone_alert';
+              }
+            }
+          }
+        }
+
+        // Rename twofa_whatsapp_enabled → twofa_phone_otp_enabled in user state JSON
+        for (const user of companyData.users ?? []) {
+          const u = user as any;
+          if (u.state) {
+            try {
+              const state = JSON.parse(u.state);
+              if ('twofa_whatsapp_enabled' in state) {
+                state.twofa_phone_otp_enabled = state.twofa_whatsapp_enabled;
+                delete state.twofa_whatsapp_enabled;
+                u.state = JSON.stringify(state);
+              }
+            } catch { /* leave unparseable state as-is */ }
+          }
+        }
+      }
+
+      return data;
+    },
+    description: 'Rename webhook type discriminators and identifiers: whatsapp→phone_otp/phone_alert, email→email_alert; {{WHATSAPP_TO/BODY}}→{{PHONE_ALERT_TO/BODY}}; twofa_whatsapp_enabled→twofa_phone_otp_enabled',
+  },
 ];
 
 /**

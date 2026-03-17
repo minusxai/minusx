@@ -49,7 +49,7 @@ export default function AlertContainerV2({ fileId }: AlertContainerV2Props) {
       runs={runs}
       selectedRunId={selectedRunId}
       onChange={handleChange}
-      onCheckNow={trigger}
+      onCheckNow={(options) => trigger(options)}
       onSelectRun={selectRun}
     />
   );

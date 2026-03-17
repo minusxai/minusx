@@ -19,7 +19,8 @@ import { JobRunsDB } from '@/lib/database/job-runs-db';
 import { FilesAPI } from '@/lib/data/files.server';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { JOB_HANDLERS } from '@/lib/jobs/job-registry';
-import { sendEmail } from '@/lib/email/send-email';
+import { getConfigsByCompanyId } from '@/lib/data/configs.server';
+import { sendEmailViaWebhook, sendPhoneAlertViaWebhook } from '@/lib/messaging/webhook-executor';
 import type { RunFileContent, RunMessageRecord } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -28,7 +29,12 @@ export const runtime = 'nodejs';
 export const POST = withAuth(async (request: NextRequest, user) => {
   try {
     const body = await request.json();
-    const { job_id, job_type } = body as { job_id: string; job_type: string };
+    const { job_id, job_type, force = false, send = true } = body as {
+      job_id: string;
+      job_type: string;
+      force?: boolean;
+      send?: boolean;
+    };
 
     if (!job_id || !job_type) {
       return ApiErrors.badRequest('job_id and job_type are required');
@@ -53,14 +59,16 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       return ApiErrors.notFound('Job file');
     }
 
-    // Dedup: skip if already running
-    const existingRun = await JobRunsDB.getRunningByJobId(job_id, job_type, user.companyId);
-    if (existingRun) {
-      return successResponse({
-        runId: existingRun.id,
-        fileId: existingRun.output_file_id,
-        status: 'already_running',
-      });
+    // Dedup: skip if already running (force bypasses by using a 1s window)
+    if (!force) {
+      const existingRun = await JobRunsDB.getRunningByJobId(job_id, job_type, user.companyId);
+      if (existingRun) {
+        return successResponse({
+          runId: existingRun.id,
+          fileId: existingRun.output_file_id,
+          status: 'already_running',
+        });
+      }
     }
 
     // Load previous runs for handler context
@@ -119,23 +127,50 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       };
       await FilesAPI.saveFile(runFileId, runFile.name, runFile.path, successContent, [jobFileId], user);
 
-      // Deliver messages
-      for (const msg of messages) {
-        if (msg.type === 'email') {
+      // Deliver messages (skipped when send=false)
+      if (send) {
+        const { config } = await getConfigsByCompanyId(user.companyId, user.mode);
+        const emailWebhook = config.messaging?.webhooks?.find(w => w.type === 'email_alert');
+        const phoneAlertWebhook = config.messaging?.webhooks?.find(w => w.type === 'phone_alert');
+        for (const msg of messages) {
           try {
-            await sendEmail(
-              msg.metadata.to,
-              msg.metadata.subject,
-              msg.content,
-              undefined,
-              msg.metadata.batch
-            );
-            msg.status = 'sent';
-            msg.sentAt = new Date().toISOString();
+            if (msg.type === 'email_alert') {
+              if (!emailWebhook) {
+                msg.status = 'failed';
+                msg.deliveryError = 'No email_alert webhook configured';
+              } else {
+                const result = await sendEmailViaWebhook(emailWebhook, msg.metadata.to, msg.metadata.subject, msg.content);
+                if (result.success) {
+                  msg.status = 'sent';
+                  msg.sentAt = new Date().toISOString();
+                } else {
+                  msg.status = 'failed';
+                  msg.deliveryError = result.error ?? `HTTP ${result.statusCode}`;
+                }
+              }
+            } else if (msg.type === 'phone_alert') {
+              if (!phoneAlertWebhook) {
+                msg.status = 'failed';
+                msg.deliveryError = 'No phone_alert webhook configured';
+              } else {
+                const result = await sendPhoneAlertViaWebhook(phoneAlertWebhook, msg.metadata.to, msg.content, { title: msg.metadata.title, desc: msg.metadata.desc, link: msg.metadata.link, summary: msg.metadata.summary });
+                if (result.success) {
+                  msg.status = 'sent';
+                  msg.sentAt = new Date().toISOString();
+                } else {
+                  msg.status = 'failed';
+                  msg.deliveryError = result.error ?? `HTTP ${result.statusCode}`;
+                }
+              }
+            }
           } catch (err) {
             msg.status = 'failed';
             msg.deliveryError = err instanceof Error ? err.message : 'Unknown delivery error';
           }
+        }
+      } else {
+        for (const msg of messages) {
+          msg.status = 'skipped';
         }
       }
 

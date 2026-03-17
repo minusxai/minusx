@@ -17,7 +17,8 @@ import { FilesAPI } from '@/lib/data/files.server';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { JOB_DEFINITIONS } from '@/lib/jobs/job-definitions';
 import { JOB_HANDLERS } from '@/lib/jobs/job-registry';
-import { sendEmail } from '@/lib/email/send-email';
+import { getConfigsByCompanyId } from '@/lib/data/configs.server';
+import { sendEmailViaWebhook, sendPhoneAlertViaWebhook } from '@/lib/messaging/webhook-executor';
 import type { AlertContent, RunFileContent, RunMessageRecord } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -73,6 +74,23 @@ function isCronDue(cronExpr: string, date: Date): boolean {
   );
 }
 
+/**
+ * Walk backwards minute-by-minute from `now` to find the most recent time
+ * the cron expression was scheduled to fire. Returns null if not found within
+ * the search bound (default 1 year = 525,600 minutes).
+ */
+function getPrevFireTime(cronExpr: string, now: Date, maxMinutes = 525_600): Date | null {
+  // Start from the current minute (truncate seconds/ms)
+  const candidate = new Date(now);
+  candidate.setSeconds(0, 0);
+
+  for (let i = 0; i < maxMinutes; i++) {
+    if (isCronDue(cronExpr, candidate)) return new Date(candidate);
+    candidate.setMinutes(candidate.getMinutes() - 1);
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 
 export const POST = withAuth(async (_request: NextRequest, user) => {
@@ -108,9 +126,14 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
 
         const jobId = String(jobFile.id);
 
-        // Dedup: skip if a run already exists in the current minute window (±30s)
-        const windowStart = new Date(now.getTime() - 30_000);
-        const windowEnd = new Date(now.getTime() + 30_000);
+        // Dedup: skip if a run already exists within the current cron window.
+        // Window = [prev fire time, now] so a SUCCESS this period is not retried.
+        const cronExpr = jobDef.job_type === 'alert'
+          ? (content as AlertContent).schedule!.cron!
+          : null;
+        const prevFire = cronExpr ? getPrevFireTime(cronExpr, now) : null;
+        const windowStart = prevFire ?? new Date(now.getTime() - 60_000);
+        const windowEnd = now;
         const { runId, isNewRun } = await JobRunsDB.findOrCreate({
           job_id: jobId,
           job_type: jobDef.job_type,
@@ -182,22 +205,45 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
           await FilesAPI.saveFile(runFileId, runFileName, runFilePath, successContent, [jobFile.id], user);
 
           // Deliver messages
+          const { config } = await getConfigsByCompanyId(user.companyId, user.mode);
+          const emailWebhook = config.messaging?.webhooks?.find(w => w.type === 'email_alert');
+          const phoneAlertWebhook = config.messaging?.webhooks?.find(w => w.type === 'phone_alert');
           for (const msg of messages) {
-            if (msg.type === 'email') {
-              try {
-                await sendEmail(
-                  msg.metadata.to,
-                  msg.metadata.subject,
-                  msg.content,
-                  undefined,
-                  msg.metadata.batch
-                );
-                msg.status = 'sent';
-                msg.sentAt = new Date().toISOString();
-              } catch (err) {
-                msg.status = 'failed';
-                msg.deliveryError = err instanceof Error ? err.message : 'Unknown delivery error';
+            try {
+              if (msg.type === 'email_alert') {
+                if (!emailWebhook) {
+                  console.warn('[cron] No email_alert webhook configured, skipping email delivery');
+                  msg.status = 'failed';
+                  msg.deliveryError = 'No email_alert webhook configured';
+                } else {
+                  const result = await sendEmailViaWebhook(emailWebhook, msg.metadata.to, msg.metadata.subject, msg.content);
+                  if (result.success) {
+                    msg.status = 'sent';
+                    msg.sentAt = new Date().toISOString();
+                  } else {
+                    msg.status = 'failed';
+                    msg.deliveryError = result.error ?? `HTTP ${result.statusCode}`;
+                  }
+                }
+              } else if (msg.type === 'phone_alert') {
+                if (!phoneAlertWebhook) {
+                  console.warn('[cron] No phone_alert webhook configured, skipping phone delivery');
+                  msg.status = 'failed';
+                  msg.deliveryError = 'No phone_alert webhook configured';
+                } else {
+                  const result = await sendPhoneAlertViaWebhook(phoneAlertWebhook, msg.metadata.to, msg.content, { title: msg.metadata.title, desc: msg.metadata.desc, link: msg.metadata.link, summary: msg.metadata.summary });
+                  if (result.success) {
+                    msg.status = 'sent';
+                    msg.sentAt = new Date().toISOString();
+                  } else {
+                    msg.status = 'failed';
+                    msg.deliveryError = result.error ?? `HTTP ${result.statusCode}`;
+                  }
+                }
               }
+            } catch (err) {
+              msg.status = 'failed';
+              msg.deliveryError = err instanceof Error ? err.message : 'Unknown delivery error';
             }
           }
 

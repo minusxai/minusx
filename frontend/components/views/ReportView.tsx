@@ -592,8 +592,8 @@ export default function ReportView({
                 </HStack>
 
                 <DeliveryPicker
-                  emails={report.emails || []}
-                  onChange={(emails) => onChange({ emails })}
+                  recipients={report.recipients || []}
+                  onChange={(recipients) => onChange({ recipients })}
                   disabled={!editMode}
                 />
               </Box>

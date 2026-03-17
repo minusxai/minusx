@@ -50,7 +50,11 @@ export async function loadJobRuns(
  * Sets isRunning in Redux during execution, then reloads history.
  * Throws on non-2xx responses.
  */
-export async function triggerJobRun(jobId: number, jobType: string): Promise<void> {
+export async function triggerJobRun(
+  jobId: number,
+  jobType: string,
+  options: { force?: boolean; send?: boolean } = {}
+): Promise<void> {
   if (jobId <= 0) return;
 
   const store = getStore();
@@ -60,7 +64,7 @@ export async function triggerJobRun(jobId: number, jobType: string): Promise<voi
     const response = await fetch('/api/jobs/run', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job_id: String(jobId), job_type: jobType }),
+      body: JSON.stringify({ job_id: String(jobId), job_type: jobType, ...options }),
     });
 
     if (!response.ok) {

@@ -47,9 +47,9 @@ export default function UsersPage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserWithId | null>(null);
 
-  // Check if WhatsApp webhook is configured from Redux
-  const hasWhatsAppWebhook = config?.messaging?.webhooks?.some(
-    webhook => webhook.type === 'whatsapp'
+  // Check if Phone 2FA webhook is configured from Redux
+  const hasPhoneOtpWebhook = config?.messaging?.webhooks?.some(
+    webhook => webhook.type === 'phone_otp'
   ) ?? false;
 
   // Form state
@@ -58,7 +58,7 @@ export default function UsersPage() {
     name: '',
     password: '',
     phone: '',
-    twofa_whatsapp_enabled: false,
+    twofa_phone_otp_enabled: false,
     role: 'viewer' as 'admin' | 'editor' | 'viewer',
     home_folder: '',
   });
@@ -106,7 +106,7 @@ export default function UsersPage() {
         name: formData.name,
         password: formData.password,
         phone: formData.phone || undefined,
-        state: formData.phone ? JSON.stringify({ twofa_whatsapp_enabled: formData.twofa_whatsapp_enabled }) : undefined,
+        state: formData.phone ? JSON.stringify({ twofa_phone_otp_enabled: formData.twofa_phone_otp_enabled }) : undefined,
         role: formData.role,
         home_folder: formData.home_folder,
       };
@@ -120,7 +120,7 @@ export default function UsersPage() {
       if (data.success) {
         setMessage({ type: 'success', text: `${formData.name} has been added successfully` });
         setIsAddModalOpen(false);
-        setFormData({ email: '', name: '', password: '', phone: '', twofa_whatsapp_enabled: false, role: 'viewer', home_folder: '' });
+        setFormData({ email: '', name: '', password: '', phone: '', twofa_phone_otp_enabled: false, role: 'viewer', home_folder: '' });
         fetchUsers();
       } else {
         setMessage({ type: 'error', text: data.error?.message || 'Failed to create user' });
@@ -140,7 +140,7 @@ export default function UsersPage() {
         role: formData.role,
         home_folder: formData.home_folder,
         phone: formData.phone || undefined,
-        state: JSON.stringify({ twofa_whatsapp_enabled: formData.twofa_whatsapp_enabled }),
+        state: JSON.stringify({ twofa_phone_otp_enabled: formData.twofa_phone_otp_enabled }),
       };
 
       // Only include password if it's been changed
@@ -158,7 +158,7 @@ export default function UsersPage() {
         setMessage({ type: 'success', text: `${formData.name} has been updated successfully` });
         setIsEditModalOpen(false);
         setSelectedUser(null);
-        setFormData({ email: '', name: '', password: '', phone: '', twofa_whatsapp_enabled: false, role: 'viewer', home_folder: '' });
+        setFormData({ email: '', name: '', password: '', phone: '', twofa_phone_otp_enabled: false, role: 'viewer', home_folder: '' });
         fetchUsers();
       } else {
         setMessage({ type: 'error', text: data.error?.message || 'Failed to update user' });
@@ -204,7 +204,7 @@ export default function UsersPage() {
     if (userAny.state) {
       try {
         const state = JSON.parse(userAny.state);
-        twofa_enabled = state.twofa_whatsapp_enabled === true;
+        twofa_enabled = state.twofa_phone_otp_enabled === true;
         console.log('[Users] Parsed state:', state);
         console.log('[Users] 2FA enabled:', twofa_enabled);
       } catch (e) {
@@ -217,14 +217,14 @@ export default function UsersPage() {
       name: user.name,
       password: '',
       phone: (userAny.phone as string) || '',
-      twofa_whatsapp_enabled: twofa_enabled,
+      twofa_phone_otp_enabled: twofa_enabled,
       role: user.role || 'viewer',
       home_folder: user.home_folder || '',
     };
 
     console.log('[Users] Setting form data:', formDataToSet);
-    console.log('[Users] Has WhatsApp webhook:', hasWhatsAppWebhook);
-    console.log('[Users] Should show toggle:', (formDataToSet.phone && hasWhatsAppWebhook) || formDataToSet.twofa_whatsapp_enabled);
+    console.log('[Users] Has Phone 2FA webhook:', hasPhoneOtpWebhook);
+    console.log('[Users] Should show toggle:', (formDataToSet.phone && hasPhoneOtpWebhook) || formDataToSet.twofa_phone_otp_enabled);
 
     setFormData(formDataToSet);
     setIsEditModalOpen(true);
@@ -289,7 +289,7 @@ export default function UsersPage() {
             </Text>
             <Button
               onClick={() => {
-                setFormData({ email: '', name: '', password: '', phone: '', twofa_whatsapp_enabled: false, role: 'viewer', home_folder: '' });
+                setFormData({ email: '', name: '', password: '', phone: '', twofa_phone_otp_enabled: false, role: 'viewer', home_folder: '' });
                 setIsAddModalOpen(true);
               }}
               bg="accent.teal"
@@ -470,22 +470,22 @@ export default function UsersPage() {
                     size="lg"
                   />
                 </Box>
-                {((formData.phone && hasWhatsAppWebhook) || formData.twofa_whatsapp_enabled) && (
+                {((formData.phone && hasPhoneOtpWebhook) || formData.twofa_phone_otp_enabled) && (
                   <Box>
                     <HStack gap={2}>
                       <input
                         type="checkbox"
-                        checked={formData.twofa_whatsapp_enabled}
-                        onChange={(e) => setFormData({ ...formData, twofa_whatsapp_enabled: e.target.checked })}
-                        disabled={!formData.phone || !hasWhatsAppWebhook}
+                        checked={formData.twofa_phone_otp_enabled}
+                        onChange={(e) => setFormData({ ...formData, twofa_phone_otp_enabled: e.target.checked })}
+                        disabled={!formData.phone || !hasPhoneOtpWebhook}
                       />
-                      <Text fontSize="sm" fontWeight="600">Enable WhatsApp 2FA</Text>
+                      <Text fontSize="sm" fontWeight="600">Enable Phone 2FA 2FA</Text>
                     </HStack>
                     <Text fontSize="xs" color="fg.muted" mt={1}>
                       {!formData.phone
                         ? 'Enter phone number to enable 2FA'
-                        : !hasWhatsAppWebhook
-                        ? 'Configure WhatsApp webhook in company config to enable 2FA'
+                        : !hasPhoneOtpWebhook
+                        ? 'Configure Phone 2FA webhook in company config to enable 2FA'
                         : 'Requires phone number and messaging configuration'
                       }
                     </Text>
@@ -626,22 +626,22 @@ export default function UsersPage() {
                     size="lg"
                   />
                 </Box>
-                {((formData.phone && hasWhatsAppWebhook) || formData.twofa_whatsapp_enabled) && (
+                {((formData.phone && hasPhoneOtpWebhook) || formData.twofa_phone_otp_enabled) && (
                   <Box>
                     <HStack gap={2}>
                       <input
                         type="checkbox"
-                        checked={formData.twofa_whatsapp_enabled}
-                        onChange={(e) => setFormData({ ...formData, twofa_whatsapp_enabled: e.target.checked })}
-                        disabled={!formData.phone || !hasWhatsAppWebhook}
+                        checked={formData.twofa_phone_otp_enabled}
+                        onChange={(e) => setFormData({ ...formData, twofa_phone_otp_enabled: e.target.checked })}
+                        disabled={!formData.phone || !hasPhoneOtpWebhook}
                       />
-                      <Text fontSize="sm" fontWeight="600">Enable WhatsApp 2FA</Text>
+                      <Text fontSize="sm" fontWeight="600">Enable Phone 2FA 2FA</Text>
                     </HStack>
                     <Text fontSize="xs" color="fg.muted" mt={1}>
                       {!formData.phone
                         ? 'Enter phone number to enable 2FA'
-                        : !hasWhatsAppWebhook
-                        ? 'Configure WhatsApp webhook in company config to enable 2FA'
+                        : !hasPhoneOtpWebhook
+                        ? 'Configure Phone 2FA webhook in company config to enable 2FA'
                         : 'Requires phone number and messaging configuration'
                       }
                     </Text>

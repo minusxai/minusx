@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     }
 
     const userState: UserState | null = user.state ? JSON.parse(user.state) : null;
-    const requires2FA = userState?.twofa_whatsapp_enabled === true;
+    const requires2FA = userState?.twofa_phone_otp_enabled === true || (userState as any)?.twofa_whatsapp_enabled === true;
 
     if (!requires2FA) {
       return ApiErrors.badRequest('2FA is not enabled for this user');
@@ -59,8 +59,8 @@ export async function POST(request: NextRequest) {
       return ApiErrors.internalError('Messaging configuration not found in company config');
     }
 
-    // Send OTP via first configured webhook (WhatsApp)
-    const webhook = config.messaging.webhooks.find(w => w.type === 'whatsapp') || config.messaging.webhooks[0];
+    // Send OTP via first configured webhook (Phone 2FA)
+    const webhook = config.messaging.webhooks.find(w => w.type === 'phone_otp') || config.messaging.webhooks[0];
     const result = await executeWebhook(webhook, {
       USER_NUMBER: user.phone,
       AUTH_OTP: otp,

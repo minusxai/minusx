@@ -43,15 +43,27 @@ export const alertJobHandler: JobHandler = {
     };
 
     const messages: JobHandlerResult['messages'] = [];
-    if (triggered && alert.emails && alert.emails.length > 0) {
-      messages.push({
-        type: 'email',
-        content: `Alert "${alertName}" triggered.\nValue: ${actualValue} ${alert.condition.operator} ${alert.condition.threshold}`,
-        metadata: {
-          to: alert.emails,
-          subject: `[Alert Triggered] ${alertName}`,
-        },
-      });
+    if (triggered && alert.recipients && alert.recipients.length > 0) {
+      const body = `Alert "${alertName}" triggered.\nValue: ${actualValue} ${alert.condition.operator} ${alert.condition.threshold}`;
+      const subject = `[Alert Triggered] ${alertName}`;
+      const alertLink = `${process.env.NEXTAUTH_URL ?? ''}/f/${alertId}`;
+      for (const recipient of alert.recipients) {
+        if (recipient.channel === 'email_alert') {
+          messages.push({ type: 'email_alert', content: body, metadata: { to: recipient.address, subject } });
+        } else if (recipient.channel === 'phone_alert') {
+          messages.push({
+            type: 'phone_alert',
+            content: body,
+            metadata: {
+              to:      recipient.address,
+              title:   alertName,
+              desc:    alert.description ?? '',
+              link:    alertLink,
+              summary: body,
+            },
+          });
+        }
+      }
     }
 
     return { output, messages };

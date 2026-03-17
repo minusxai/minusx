@@ -6,11 +6,13 @@
  * Supports both the new RunFileContent shape (Phase 2+) and the legacy AlertRunContent shape.
  */
 import { Box, Text, VStack, HStack, Badge } from '@chakra-ui/react';
+import { useState } from 'react';
+import { LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import type { AlertOutput, AlertRunContent, RunFileContent, RunMessageRecord } from '@/lib/types';
 import type { FileId } from '@/store/filesSlice';
 import type { FileViewMode } from '@/lib/ui/fileComponents';
-import { LuArrowLeft, LuBell, LuExternalLink, LuMail } from 'react-icons/lu';
+import { LuArrowLeft, LuBell, LuExternalLink, LuMail, LuMessageCircle } from 'react-icons/lu';
 import Link from 'next/link';
 import { preserveParams } from '@/lib/navigation/url-utils';
 
@@ -36,8 +38,70 @@ function StatusBadge({ status }: { status: ExecutionStatus }) {
 }
 
 function MessageStatusBadge({ status }: { status: RunMessageRecord['status'] }) {
-  const colorPalette = status === 'sent' ? 'green' : status === 'failed' ? 'red' : 'yellow';
+  const colorPalette = status === 'sent' ? 'green' : status === 'failed' ? 'red' : status === 'skipped' ? 'gray' : 'yellow';
   return <Badge colorPalette={colorPalette} size="sm">{status.toUpperCase()}</Badge>;
+}
+
+function MessageRow({ msg }: { msg: RunMessageRecord }) {
+  const [open, setOpen] = useState(false);
+  const isEmail = msg.type === 'email_alert';
+  return (
+    <Box borderRadius="md" border="1px solid" borderColor="border.muted" overflow="hidden">
+      <HStack
+        px={3}
+        py={2}
+        justify="space-between"
+        cursor="pointer"
+        onClick={() => setOpen(o => !o)}
+        _hover={{ bg: 'bg.subtle' }}
+      >
+        <HStack gap={1.5} flex={1} minW={0}>
+          {open ? <LuChevronDown size={13} /> : <LuChevronRight size={13} />}
+          {isEmail ? <LuMail size={13} /> : <LuMessageCircle size={13} />}
+          <Text fontSize="sm" truncate>{msg.metadata.to}</Text>
+        </HStack>
+        <MessageStatusBadge status={msg.status} />
+      </HStack>
+      {open && (
+        <Box px={3} py={2} bg="bg.muted" borderTopWidth="1px" borderColor="border.muted">
+          <VStack align="stretch" gap={2}>
+            {isEmail && (
+              <HStack gap={2}>
+                <Text fontSize="xs" color="fg.muted" minW="55px" fontWeight="600">Subject</Text>
+                <Text fontSize="xs">{(msg.metadata as { to: string; subject: string }).subject}</Text>
+              </HStack>
+            )}
+            <Box>
+              <Text fontSize="xs" color="fg.muted" fontWeight="600" mb={1}>Body</Text>
+              <Box
+                p={2}
+                bg="bg.surface"
+                borderRadius="sm"
+                border="1px solid"
+                borderColor="border.muted"
+                maxH="200px"
+                overflow="auto"
+              >
+                <Text fontSize="xs" whiteSpace="pre-wrap">{msg.content}</Text>
+              </Box>
+            </Box>
+            {msg.deliveryError && (
+              <HStack gap={2}>
+                <Text fontSize="xs" color="fg.muted" minW="55px" fontWeight="600">Error</Text>
+                <Text fontSize="xs" color="red.fg">{msg.deliveryError}</Text>
+              </HStack>
+            )}
+            {msg.sentAt && (
+              <HStack gap={2}>
+                <Text fontSize="xs" color="fg.muted" minW="55px" fontWeight="600">Sent at</Text>
+                <Text fontSize="xs">{new Date(msg.sentAt).toLocaleString()}</Text>
+              </HStack>
+            )}
+          </VStack>
+        </Box>
+      )}
+    </Box>
+  );
 }
 
 export default function AlertRunContainerV2({ fileId, inline }: AlertRunContainerV2Props) {
@@ -138,13 +202,7 @@ export default function AlertRunContainerV2({ fileId, inline }: AlertRunContaine
               <Text fontSize="sm" fontWeight="600" mb={2}>Notifications</Text>
               <VStack align="stretch" gap={2}>
                 {run.messages.map((msg, i) => (
-                  <HStack key={i} justify="space-between">
-                    <HStack gap={1.5}>
-                      <LuMail size={14} />
-                      <Text fontSize="sm">{msg.metadata.to.join(', ')}</Text>
-                    </HStack>
-                    <MessageStatusBadge status={msg.status} />
-                  </HStack>
+                  <MessageRow key={i} msg={msg} />
                 ))}
               </VStack>
             </Box>

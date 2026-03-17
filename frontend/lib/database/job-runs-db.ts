@@ -122,14 +122,8 @@ export class JobRunsDB {
     const { job_id, job_type, company_id, output_file_id, output_file_type, timeout = 30, source = 'manual' } = params;
 
     const result = await db.query<{ id: number }>(
-      `WITH row_data AS (
-         SELECT $1 AS job_id, $2 AS job_type, $3 AS company_id,
-                $4 AS output_file_id, $5 AS output_file_type,
-                $6 AS timeout, $7 AS source
-       )
-       INSERT INTO job_runs (job_id, job_type, company_id, output_file_id, output_file_type, timeout, source, status)
-       SELECT job_id, job_type, company_id, output_file_id, output_file_type, timeout, source, 'RUNNING'
-       FROM row_data
+      `INSERT INTO job_runs (job_id, job_type, company_id, output_file_id, output_file_type, timeout, source, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'RUNNING')
        RETURNING id`,
       [job_id, job_type, company_id, output_file_id, output_file_type, timeout, source]
     );
@@ -209,12 +203,8 @@ export class JobRunsDB {
       }
 
       const inserted = await tx.query<{ id: number }>(
-        `WITH row_data AS (
-           SELECT $1 AS job_id, $2 AS job_type, $3 AS company_id, $4 AS timeout, $5 AS source
-         )
-         INSERT INTO job_runs (job_id, job_type, company_id, timeout, source, status)
-         SELECT job_id, job_type, company_id, timeout, source, 'RUNNING'
-         FROM row_data
+        `INSERT INTO job_runs (job_id, job_type, company_id, timeout, source, status)
+         VALUES ($1, $2, $3, $4, $5, 'RUNNING')
          RETURNING id`,
         [job_id, job_type, company_id, timeout, source]
       );

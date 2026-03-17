@@ -35,7 +35,14 @@ export async function executeWebhook(
     let body: any = undefined;
     if (webhook.body) {
       const bodyStr = JSON.stringify(webhook.body);
-      const substitutedStr = substituteVariables(bodyStr, variables);
+      // JSON-escape each value before substituting into the stringified JSON,
+      // so that quotes, newlines, backslashes, etc. don't break JSON.parse.
+      const jsonSafeVariables: Record<string, string> = {};
+      for (const [key, value] of Object.entries(variables)) {
+        // JSON.stringify produces `"value"` — strip the surrounding quotes to get just the escaped content
+        jsonSafeVariables[key] = JSON.stringify(value).slice(1, -1);
+      }
+      const substitutedStr = substituteVariables(bodyStr, jsonSafeVariables);
       body = JSON.parse(substitutedStr);
     }
 
@@ -64,6 +71,41 @@ export async function executeWebhook(
       error: err.message || 'Unknown error',
     };
   }
+}
+
+/**
+ * Send a phone alert message via a configured phone_alert webhook
+ */
+export async function sendPhoneAlertViaWebhook(
+  webhook: MessagingWebhook,
+  to: string,
+  body: string,
+  extras?: { title?: string; desc?: string; link?: string; summary?: string }
+): Promise<WebhookResult> {
+  return executeWebhook(webhook, {
+    PHONE_ALERT_TO:      to,
+    PHONE_ALERT_BODY:    body,
+    PHONE_ALERT_TITLE:   extras?.title   ?? '',
+    PHONE_ALERT_DESC:    extras?.desc    ?? '',
+    PHONE_ALERT_LINK:    extras?.link    ?? '',
+    PHONE_ALERT_SUMMARY: extras?.summary ?? body,
+  });
+}
+
+/**
+ * Send an email via a configured email webhook
+ * @param webhook - Email webhook configuration
+ * @param to - Recipient address
+ * @param subject - Email subject
+ * @param body - Email body
+ */
+export async function sendEmailViaWebhook(
+  webhook: MessagingWebhook,
+  to: string,
+  subject: string,
+  body: string
+): Promise<WebhookResult> {
+  return executeWebhook(webhook, { EMAIL_TO: to, EMAIL_SUBJECT: subject, EMAIL_BODY: body });
 }
 
 /**

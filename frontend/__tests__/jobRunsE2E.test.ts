@@ -68,9 +68,29 @@ jest.mock('@/lib/api/python-backend-client', () => ({
   }),
 }));
 
-// ─── Email mock (no Resend key in tests) ─────────────────────────────────────
-jest.mock('@/lib/email/send-email', () => ({
-  sendEmail: jest.fn().mockResolvedValue(undefined),
+// ─── Webhook executor mock ────────────────────────────────────────────────────
+jest.mock('@/lib/messaging/webhook-executor', () => ({
+  sendEmailViaWebhook: jest.fn().mockResolvedValue({ success: true, statusCode: 200 }),
+  sendPhoneAlertViaWebhook: jest.fn().mockResolvedValue({ success: true, statusCode: 200 }),
+}));
+
+// ─── Company config mock (provide email webhook for delivery tests) ───────────
+jest.mock('@/lib/data/configs.server', () => ({
+  getConfigsByCompanyId: jest.fn().mockResolvedValue({
+    config: {
+      messaging: {
+        webhooks: [
+          {
+            type: 'email_alert',
+            url: 'https://hooks.example.com/email',
+            method: 'POST',
+            headers: {},
+            body: { to: '{{EMAIL_TO}}', subject: '{{EMAIL_SUBJECT}}', body: '{{EMAIL_BODY}}' },
+          },
+        ],
+      },
+    },
+  }),
 }));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -142,7 +162,7 @@ describe('Job Runs E2E', () => {
         operator: '>',
         threshold: 100,
       },
-      emails: [],
+      recipients: [],
     };
 
     // Live alert: condition revenue > 100, cron every minute
@@ -347,18 +367,20 @@ describe('Job Runs E2E', () => {
       expect(staleRun!.error).toContain('timed out');
     });
 
-    it('sends email when alert is triggered and emails are configured', async () => {
-      const { sendEmail } = require('@/lib/email/send-email');
+    it('sends email when alert is triggered and recipients are configured', async () => {
+      const { sendEmailViaWebhook } = require('@/lib/messaging/webhook-executor');
 
-      // Update alert to have email addresses
-      const alertWithEmails: AlertContent = {
+      const alertWithRecipients: AlertContent = {
         questionId,
         status: 'live',
         schedule: { cron: '* * * * *', timezone: 'UTC' },
         condition: { selector: 'first', function: 'value', column: 'revenue', operator: '>', threshold: 100 },
-        emails: ['alice@example.com', 'bob@example.com'],
+        recipients: [
+          { channel: 'email_alert', address: 'alice@example.com' },
+          { channel: 'email_alert', address: 'bob@example.com' },
+        ],
       };
-      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', alertWithEmails, [questionId], 1);
+      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', alertWithRecipients, [questionId], 1);
 
       const req = makeRequest('/api/jobs/run', 'POST', { job_id: String(alertId), job_type: 'alert' });
       const res = await runPostHandler(req);
@@ -367,68 +389,67 @@ describe('Job Runs E2E', () => {
       expect(res.status).toBe(200);
       expect(body.data.status).toBe('SUCCESS');
 
-      // sendEmail should have been called once (triggered, emails configured)
-      expect(sendEmail).toHaveBeenCalledTimes(1);
-      expect(sendEmail).toHaveBeenCalledWith(
-        ['alice@example.com', 'bob@example.com'],
+      // One sendEmailViaWebhook call per recipient
+      expect(sendEmailViaWebhook).toHaveBeenCalledTimes(2);
+      expect(sendEmailViaWebhook).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'email_alert' }),
+        'alice@example.com',
         expect.stringContaining('Alert Triggered'),
-        expect.any(String),
-        undefined,
-        undefined
+        expect.any(String)
       );
 
       // Run file messages should show 'sent' status
       const runFile = await DocumentDB.getById(body.data.fileId, 1);
       const content = runFile!.content as RunFileContent;
-      expect(content.messages).toHaveLength(1);
+      expect(content.messages).toHaveLength(2);
       expect(content.messages![0].status).toBe('sent');
       expect(content.messages![0].sentAt).toBeTruthy();
-      expect(content.messages![0].type).toBe('email');
+      expect(content.messages![0].type).toBe('email_alert');
     });
 
-    it('records email failure in messages when delivery throws', async () => {
-      const { sendEmail } = require('@/lib/email/send-email');
-      sendEmail.mockRejectedValueOnce(new Error('SMTP timeout'));
+    it('records delivery failure in messages when webhook returns HTTP error', async () => {
+      const { sendEmailViaWebhook } = require('@/lib/messaging/webhook-executor');
+      sendEmailViaWebhook.mockResolvedValueOnce({ success: false, statusCode: 401, error: 'Unauthorized' });
 
-      const alertWithEmails: AlertContent = {
+      const alertWithRecipients: AlertContent = {
         questionId,
         status: 'live',
         schedule: { cron: '* * * * *', timezone: 'UTC' },
         condition: { selector: 'first', function: 'value', column: 'revenue', operator: '>', threshold: 100 },
-        emails: ['alice@example.com'],
+        recipients: [{ channel: 'email_alert', address: 'alice@example.com' }],
       };
-      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', alertWithEmails, [questionId], 1);
+      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', alertWithRecipients, [questionId], 1);
 
       const req = makeRequest('/api/jobs/run', 'POST', { job_id: String(alertId), job_type: 'alert' });
       const res = await runPostHandler(req);
       const body = await parseResponse(res);
 
-      // The overall run should still succeed even if email fails
+      // The overall run should still succeed even if delivery fails
       expect(body.data.status).toBe('SUCCESS');
 
       const runFile = await DocumentDB.getById(body.data.fileId, 1);
       const content = runFile!.content as RunFileContent;
       expect(content.messages![0].status).toBe('failed');
-      expect(content.messages![0].deliveryError).toContain('SMTP timeout');
+      expect(content.messages![0].deliveryError).toContain('Unauthorized');
     });
 
-    it('does not send email when alert is not triggered', async () => {
-      const { sendEmail } = require('@/lib/email/send-email');
+    it('does not send notifications when alert is not triggered', async () => {
+      const { sendEmailViaWebhook } = require('@/lib/messaging/webhook-executor');
 
       // Set threshold above returned value (150) so it doesn't trigger
-      const alertWithEmails: AlertContent = {
+      const alertWithRecipients: AlertContent = {
         questionId,
         status: 'live',
         schedule: { cron: '* * * * *', timezone: 'UTC' },
         condition: { selector: 'first', function: 'value', column: 'revenue', operator: '>', threshold: 200 },
-        emails: ['alice@example.com'],
+        recipients: [{ channel: 'email_alert', address: 'alice@example.com' }],
       };
-      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', alertWithEmails, [questionId], 1);
+      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', alertWithRecipients, [questionId], 1);
 
       const req = makeRequest('/api/jobs/run', 'POST', { job_id: String(alertId), job_type: 'alert' });
       await runPostHandler(req);
 
-      expect(sendEmail).not.toHaveBeenCalled();
+      expect(sendEmailViaWebhook).not.toHaveBeenCalled();
     });
 
     it('returns 400 for unknown job_type', async () => {
@@ -500,7 +521,7 @@ describe('Job Runs E2E', () => {
         status: 'live',
         schedule: { cron: '0 3 * * *', timezone: 'UTC' },
         condition: { selector: 'first', function: 'value', column: 'revenue', operator: '>', threshold: 100 },
-        emails: [],
+        recipients: [],
       };
       await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', updatedContent, [questionId], 1);
 
