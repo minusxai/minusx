@@ -33,6 +33,14 @@ import type { RootState } from '@/store/store';
 // Mock FilesAPI
 jest.mock('@/lib/data/files', () => {
   const mockGetFilesFn = jest.fn();
+  class ConflictError extends Error {
+    currentFile: any;
+    constructor(currentFile: any) {
+      super('Conflict: file has been modified by another client');
+      this.name = 'ConflictError';
+      this.currentFile = currentFile;
+    }
+  }
   return {
     FilesAPI: {
       loadFiles: jest.fn(),
@@ -41,7 +49,8 @@ jest.mock('@/lib/data/files', () => {
       saveFile: jest.fn(),
       createFile: jest.fn()
     },
-    getFiles: mockGetFilesFn // Also export getFiles directly for readFolder
+    getFiles: mockGetFilesFn, // Also export getFiles directly for readFolder
+    ConflictError
   };
 });
 
