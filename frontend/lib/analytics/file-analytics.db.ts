@@ -79,6 +79,9 @@ async function initSchema(instance: DuckDBInstance): Promise<void> {
     for (const stmt of SCHEMA_SQL.split(';').map(s => s.trim()).filter(Boolean)) {
       await conn.run(stmt);
     }
+    // Flush WAL to the main DB file so a process kill after this point leaves
+    // no WAL to replay on next startup (avoids ALTER TABLE WAL replay bug in DuckDB).
+    await conn.run('CHECKPOINT');
   } finally {
     conn.closeSync();
   }

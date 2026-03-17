@@ -1,4 +1,5 @@
 import 'server-only';
+import * as fs from 'fs';
 import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
 
 export type DuckDbAccessMode = 'READ_WRITE' | 'READ_ONLY';
@@ -8,6 +9,25 @@ export type DuckDbAccessMode = 'READ_WRITE' | 'READ_ONLY';
 const registry = new Map<string, DuckDBInstance>();
 const initPromises = new Map<string, Promise<DuckDBInstance>>();
 
+async function createInstance(absPath: string, accessMode: DuckDbAccessMode): Promise<DuckDBInstance> {
+  try {
+    return await DuckDBInstance.create(absPath, { access_mode: accessMode });
+  } catch (err: any) {
+    // DuckDB WAL replay failures leave the DB unopenable. The WAL only contains
+    // schema migrations (ALTER TABLE ADD COLUMN) that will be re-applied on next
+    // initSchema run, so deleting it is safe — at worst a few analytics events
+    // from the last uncheckpointed session are lost.
+    const isWalError = err?.message?.includes('.wal') || err?.message?.includes('replaying WAL');
+    const walPath = `${absPath}.wal`;
+    if (isWalError && fs.existsSync(walPath)) {
+      console.warn(`[duckdb-registry] Corrupt WAL detected for ${absPath}, deleting and retrying`, err.message);
+      fs.unlinkSync(walPath);
+      return DuckDBInstance.create(absPath, { access_mode: accessMode });
+    }
+    throw err;
+  }
+}
+
 export async function getOrCreateDuckDbInstance(
   absPath: string,
   accessMode: DuckDbAccessMode = 'READ_WRITE'
@@ -15,10 +35,14 @@ export async function getOrCreateDuckDbInstance(
   if (registry.has(absPath)) return registry.get(absPath)!;
   if (initPromises.has(absPath)) return initPromises.get(absPath)!;
 
-  const p = DuckDBInstance.create(absPath, { access_mode: accessMode }).then(instance => {
+  const p = createInstance(absPath, accessMode).then(instance => {
     registry.set(absPath, instance);
     initPromises.delete(absPath);
     return instance;
+  }).catch(err => {
+    // Remove the failed promise so the next call retries from scratch
+    initPromises.delete(absPath);
+    throw err;
   });
   initPromises.set(absPath, p);
   return p;
