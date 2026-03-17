@@ -1,6 +1,7 @@
 from .base import DatabaseConnector
 from . import register_connector
 from sqlalchemy import create_engine, text
+from sqlalchemy.pool import NullPool
 from google.cloud import bigquery
 from google.oauth2 import service_account
 import json
@@ -28,7 +29,8 @@ class BigQueryConnector(DatabaseConnector):
             credentials_dict = self._parse_credentials()
             self._engine = create_engine(
                 f"bigquery://{project_id}",
-                credentials_info=credentials_dict
+                credentials_info=credentials_dict,
+                poolclass=NullPool
             )
         return self._engine
 
