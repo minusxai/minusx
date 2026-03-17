@@ -153,7 +153,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
                 msg.status = 'failed';
                 msg.deliveryError = 'No phone_alert webhook configured';
               } else {
-                const result = await sendPhoneAlertViaWebhook(phoneAlertWebhook, msg.metadata.to, msg.content);
+                const result = await sendPhoneAlertViaWebhook(phoneAlertWebhook, msg.metadata.to, msg.content, { title: msg.metadata.title, desc: msg.metadata.desc, link: msg.metadata.link, summary: msg.metadata.summary });
                 if (result.success) {
                   msg.status = 'sent';
                   msg.sentAt = new Date().toISOString();

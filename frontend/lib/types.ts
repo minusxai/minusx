@@ -495,7 +495,7 @@ export interface AlertOutput {
 
 export type RunMessage =
   | { type: 'email_alert';    content: string; metadata: { to: string; subject: string } }
-  | { type: 'phone_alert'; content: string; metadata: { to: string } };
+  | { type: 'phone_alert'; content: string; metadata: { to: string; title?: string; desc?: string; link?: string; summary?: string } };
 
 export type RunMessageRecord = RunMessage & {
   status: 'pending' | 'sent' | 'failed' | 'skipped';

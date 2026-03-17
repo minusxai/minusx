@@ -79,9 +79,17 @@ export async function executeWebhook(
 export async function sendPhoneAlertViaWebhook(
   webhook: MessagingWebhook,
   to: string,
-  body: string
+  body: string,
+  extras?: { title?: string; desc?: string; link?: string; summary?: string }
 ): Promise<WebhookResult> {
-  return executeWebhook(webhook, { PHONE_ALERT_TO: to, PHONE_ALERT_BODY: body });
+  return executeWebhook(webhook, {
+    PHONE_ALERT_TO:      to,
+    PHONE_ALERT_BODY:    body,
+    PHONE_ALERT_TITLE:   extras?.title   ?? '',
+    PHONE_ALERT_DESC:    extras?.desc    ?? '',
+    PHONE_ALERT_LINK:    extras?.link    ?? '',
+    PHONE_ALERT_SUMMARY: extras?.summary ?? body,
+  });
 }
 
 /**
