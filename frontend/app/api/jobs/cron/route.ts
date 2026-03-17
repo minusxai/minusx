@@ -212,9 +212,9 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
             try {
               if (msg.type === 'email_alert') {
                 if (!emailWebhook) {
-                  console.warn('[cron] No email webhook configured, skipping email delivery');
+                  console.warn('[cron] No email_alert webhook configured, skipping email delivery');
                   msg.status = 'failed';
-                  msg.deliveryError = 'No email webhook configured';
+                  msg.deliveryError = 'No email_alert webhook configured';
                 } else {
                   const result = await sendEmailViaWebhook(emailWebhook, msg.metadata.to, msg.metadata.subject, msg.content);
                   if (result.success) {
@@ -227,9 +227,9 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
                 }
               } else if (msg.type === 'phone_alert') {
                 if (!whatsappWebhook) {
-                  console.warn('[cron] No WhatsApp webhook configured, skipping WhatsApp delivery');
+                  console.warn('[cron] No phone_alert webhook configured, skipping phone delivery');
                   msg.status = 'failed';
-                  msg.deliveryError = 'No WhatsApp webhook configured';
+                  msg.deliveryError = 'No phone_alert webhook configured';
                 } else {
                   const result = await sendWhatsAppViaWebhook(whatsappWebhook, msg.metadata.to, msg.content);
                   if (result.success) {

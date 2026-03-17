@@ -137,7 +137,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
             if (msg.type === 'email_alert') {
               if (!emailWebhook) {
                 msg.status = 'failed';
-                msg.deliveryError = 'No email webhook configured';
+                msg.deliveryError = 'No email_alert webhook configured';
               } else {
                 const result = await sendEmailViaWebhook(emailWebhook, msg.metadata.to, msg.metadata.subject, msg.content);
                 if (result.success) {
@@ -151,7 +151,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
             } else if (msg.type === 'phone_alert') {
               if (!whatsappWebhook) {
                 msg.status = 'failed';
-                msg.deliveryError = 'No WhatsApp webhook configured';
+                msg.deliveryError = 'No phone_alert webhook configured';
               } else {
                 const result = await sendWhatsAppViaWebhook(whatsappWebhook, msg.metadata.to, msg.content);
                 if (result.success) {
