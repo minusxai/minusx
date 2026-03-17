@@ -47,7 +47,7 @@ export default function UsersPage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserWithId | null>(null);
 
-  // Check if WhatsApp webhook is configured from Redux
+  // Check if Phone 2FA webhook is configured from Redux
   const hasPhoneOtpWebhook = config?.messaging?.webhooks?.some(
     webhook => webhook.type === 'phone_otp'
   ) ?? false;
@@ -223,7 +223,7 @@ export default function UsersPage() {
     };
 
     console.log('[Users] Setting form data:', formDataToSet);
-    console.log('[Users] Has WhatsApp webhook:', hasPhoneOtpWebhook);
+    console.log('[Users] Has Phone 2FA webhook:', hasPhoneOtpWebhook);
     console.log('[Users] Should show toggle:', (formDataToSet.phone && hasPhoneOtpWebhook) || formDataToSet.twofa_phone_otp_enabled);
 
     setFormData(formDataToSet);
@@ -479,13 +479,13 @@ export default function UsersPage() {
                         onChange={(e) => setFormData({ ...formData, twofa_phone_otp_enabled: e.target.checked })}
                         disabled={!formData.phone || !hasPhoneOtpWebhook}
                       />
-                      <Text fontSize="sm" fontWeight="600">Enable WhatsApp 2FA</Text>
+                      <Text fontSize="sm" fontWeight="600">Enable Phone 2FA 2FA</Text>
                     </HStack>
                     <Text fontSize="xs" color="fg.muted" mt={1}>
                       {!formData.phone
                         ? 'Enter phone number to enable 2FA'
                         : !hasPhoneOtpWebhook
-                        ? 'Configure WhatsApp webhook in company config to enable 2FA'
+                        ? 'Configure Phone 2FA webhook in company config to enable 2FA'
                         : 'Requires phone number and messaging configuration'
                       }
                     </Text>
@@ -635,13 +635,13 @@ export default function UsersPage() {
                         onChange={(e) => setFormData({ ...formData, twofa_phone_otp_enabled: e.target.checked })}
                         disabled={!formData.phone || !hasPhoneOtpWebhook}
                       />
-                      <Text fontSize="sm" fontWeight="600">Enable WhatsApp 2FA</Text>
+                      <Text fontSize="sm" fontWeight="600">Enable Phone 2FA 2FA</Text>
                     </HStack>
                     <Text fontSize="xs" color="fg.muted" mt={1}>
                       {!formData.phone
                         ? 'Enter phone number to enable 2FA'
                         : !hasPhoneOtpWebhook
-                        ? 'Configure WhatsApp webhook in company config to enable 2FA'
+                        ? 'Configure Phone 2FA webhook in company config to enable 2FA'
                         : 'Requires phone number and messaging configuration'
                       }
                     </Text>

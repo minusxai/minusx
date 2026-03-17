@@ -217,7 +217,7 @@ export interface User {
   id?: number;               // user ID from database (added in Phase 1)
   name: string;              // full name of the user
   email: string;
-  phone?: string;            // optional phone number (used for WhatsApp delivery)
+  phone?: string;            // optional phone number (used for Phone 2FA delivery)
   home_folder?: string;      // relative path to home folder (e.g., "sales/team-a" or "" for mode root) - admins always get "" (mode-scoped)
   password_hash?: string;    // optional bcrypt hashed password
   role: UserRole;            // user role: admin (full access), editor (same as non-admin initially), viewer (same as non-admin initially) - NOT NULL in database
@@ -441,7 +441,7 @@ export interface AlertContent extends BaseFileContent {
   schedule: AlertSchedule;
   questionId: number;        // Reference to a saved question
   condition: AlertCondition;
-  recipients?: AlertRecipient[]; // Delivery recipients (email or whatsapp, one entry per channel per person)
+  recipients?: AlertRecipient[]; // Delivery recipients (email or phone 2FA, one entry per channel per person)
   status?: 'live' | 'draft'; // Whether scheduled cron runs are active (default: 'draft')
 }
 

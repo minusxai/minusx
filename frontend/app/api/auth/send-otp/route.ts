@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       return ApiErrors.internalError('Messaging configuration not found in company config');
     }
 
-    // Send OTP via first configured webhook (WhatsApp)
+    // Send OTP via first configured webhook (Phone 2FA)
     const webhook = config.messaging.webhooks.find(w => w.type === 'phone_otp') || config.messaging.webhooks[0];
     const result = await executeWebhook(webhook, {
       USER_NUMBER: user.phone,

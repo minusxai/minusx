@@ -84,7 +84,7 @@ function DropdownMenu({ containerRef, options, onSelect }: {
             </Text>
           </Box>
           <Badge size="xs" colorPalette={opt.kind === 'email_alert' ? 'blue' : 'green'} ml="auto">
-            {opt.kind === 'email_alert' ? 'Email' : 'WhatsApp'}
+            {opt.kind === 'email_alert' ? 'Email' : 'Phone 2FA'}
           </Badge>
         </HStack>
       ))}
