@@ -7,6 +7,7 @@ import { LuX, LuChevronDown, LuMail, LuMessageCircle } from 'react-icons/lu';
 import { useFetch } from '@/lib/api/useFetch';
 import { API } from '@/lib/api/declarations';
 import { AlertRecipient, User } from '@/lib/types';
+import { useConfigs } from '@/lib/hooks/useConfigs';
 
 interface DeliveryPickerProps {
   recipients: AlertRecipient[];
@@ -83,8 +84,8 @@ function DropdownMenu({ containerRef, options, onSelect }: {
               {opt.kind === 'email_alert' ? opt.user.email : opt.user.phone}
             </Text>
           </Box>
-          <Badge size="xs" colorPalette={opt.kind === 'email_alert' ? 'blue' : 'green'} ml="auto">
-            {opt.kind === 'email_alert' ? 'Email' : 'Phone 2FA'}
+          <Badge size="xs" color={opt.kind === 'email_alert' ? 'accent.danger' : 'accent.primary'} ml="auto">
+            {opt.kind === 'email_alert' ? 'email' : 'phone'}
           </Badge>
         </HStack>
       ))}
@@ -103,6 +104,23 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
   const { data: usersResponse } = useFetch<void, { success: boolean; data: { users: User[] } }>(API.users.list);
   const users = usersResponse?.data?.users ?? [];
 
+  const { config } = useConfigs();
+  const configuredWebhookTypes = useMemo(
+    () => new Set(config.messaging?.webhooks?.map(w => w.type) ?? []),
+    [config.messaging?.webhooks]
+  );
+  const hasAnyChannel = configuredWebhookTypes.has('email_alert') || configuredWebhookTypes.has('phone_alert');
+  const effectiveDisabled = disabled || !hasAnyChannel;
+
+  const userNameByAddress = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const user of users) {
+      map.set(user.email, user.name);
+      if (user.phone) map.set(user.phone, user.name);
+    }
+    return map;
+  }, [users]);
+
   const recipientKeys = useMemo(
     () => new Set(recipients.map(r => `${r.channel}:${r.address}`)),
     [recipients]
@@ -114,15 +132,15 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
     for (const user of users) {
       const matches = !query || user.name.toLowerCase().includes(query) || user.email.toLowerCase().includes(query);
       if (!matches) continue;
-      if (!recipientKeys.has(`email_alert:${user.email}`)) {
+      if (configuredWebhookTypes.has('email_alert') && !recipientKeys.has(`email_alert:${user.email}`)) {
         opts.push({ kind: 'email_alert', user });
       }
-      if (user.phone && !recipientKeys.has(`phone_alert:${user.phone}`)) {
+      if (configuredWebhookTypes.has('phone_alert') && user.phone && !recipientKeys.has(`phone_alert:${user.phone}`)) {
         opts.push({ kind: 'phone_alert', user });
       }
     }
     return opts;
-  }, [users, inputValue, recipientKeys]);
+  }, [users, inputValue, recipientKeys, configuredWebhookTypes]);
 
   const addRecipient = (recipient: AlertRecipient) => {
     const key = `${recipient.channel}:${recipient.address}`;
@@ -133,6 +151,7 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
   };
 
   const addEmailFromInput = (email: string, { validate = false } = {}) => {
+    if (!configuredWebhookTypes.has('email_alert')) return;
     const trimmed = email.trim().toLowerCase();
     if (!trimmed) return;
     if (validate && !EMAIL_REGEX.test(trimmed)) return;
@@ -173,9 +192,9 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
         border="1px solid"
         borderColor="border.muted"
         alignItems="center"
-        cursor={disabled ? 'not-allowed' : 'text'}
-        opacity={disabled ? 0.6 : 1}
-        onClick={() => { if (!disabled) inputRef.current?.focus(); }}
+        cursor={effectiveDisabled ? 'not-allowed' : 'text'}
+        opacity={effectiveDisabled ? 0.6 : 1}
+        onClick={() => { if (!effectiveDisabled) inputRef.current?.focus(); }}
       >
         {recipients.map((r, i) => (
           <HStack
@@ -187,11 +206,13 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
             gap={1}
             fontSize="xs"
           >
-            {r.channel === 'email_alert'
-              ? <LuMail size={11} />
-              : <LuMessageCircle size={11} />}
-            <Text fontSize="xs" lineHeight="short">{r.address}</Text>
-            {!disabled && (
+            <Text fontSize="xs" lineHeight="short">
+              {userNameByAddress.get(r.address) ?? r.address}
+            </Text>
+            <Badge size="xs" color={r.channel === 'email_alert' ? 'accent.danger' : 'accent.primary'}>
+              {r.channel === 'email_alert' ? 'email' : 'phone'}
+            </Badge>
+            {!effectiveDisabled && (
               <button
                 onClick={(e) => { e.stopPropagation(); removeRecipient(i); }}
                 style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', background: 'none', border: 'none', padding: 0, color: 'inherit' }}
@@ -201,7 +222,7 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
             )}
           </HStack>
         ))}
-        {!disabled && (
+        {!effectiveDisabled && (
           <Input
             ref={inputRef}
             value={inputValue}
@@ -220,7 +241,10 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
             fontSize="xs"
           />
         )}
-        {!disabled && users.length > 0 && (
+        {effectiveDisabled && !hasAnyChannel && (
+          <Text fontSize="xs" color="fg.muted" px={1}>No delivery channels configured</Text>
+        )}
+        {!effectiveDisabled && users.length > 0 && (
           <button
             onClick={() => { setShowDropdown(!showDropdown); inputRef.current?.focus(); }}
             style={{ display: 'flex', alignItems: 'center', flexShrink: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'inherit' }}
@@ -230,7 +254,7 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
         )}
       </Flex>
 
-      {showDropdown && !disabled && dropdownOptions.length > 0 && createPortal(
+      {showDropdown && !effectiveDisabled && dropdownOptions.length > 0 && createPortal(
         <DropdownMenu containerRef={containerRef} options={dropdownOptions} onSelect={addRecipient} />,
         document.body
       )}
