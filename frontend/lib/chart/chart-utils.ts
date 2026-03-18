@@ -147,18 +147,19 @@ export const resolveChartFormats = (
   const yDecimalPoints = yAxisColumns
     ?.map(col => columnFormats?.[col]?.decimalPoints)
     .find((dp): dp is number => dp != null)
-  const yPrefix = yAxisColumns
-    ?.map(col => columnFormats?.[col]?.prefix)
-    .find(Boolean)
-  const ySuffix = yAxisColumns
-    ?.map(col => columnFormats?.[col]?.suffix)
-    .find(Boolean)
+  // Only use prefix/suffix on shared axis if ALL Y columns agree
+  const yPrefixes = yAxisColumns?.map(col => columnFormats?.[col]?.prefix || '') ?? []
+  const ySuffixes = yAxisColumns?.map(col => columnFormats?.[col]?.suffix || '') ?? []
+  const allSamePrefix = yPrefixes.length > 0 && yPrefixes.every(p => p === yPrefixes[0])
+  const allSameSuffix = ySuffixes.length > 0 && ySuffixes.every(s => s === ySuffixes[0])
+  const yPrefix = allSamePrefix ? yPrefixes[0] || undefined : undefined
+  const ySuffix = allSameSuffix ? ySuffixes[0] || undefined : undefined
   const xDateFormat = xAxisColumns
     ?.map(col => columnFormats?.[col]?.dateFormat)
     .find(Boolean)
   const fmtName = (name: string) => xDateFormat ? formatDateValue(name, xDateFormat) : name
   const fmtValue = (value: number) => applyPrefixSuffix(formatLargeNumber(value), yPrefix, ySuffix)
-  return { yDecimalPoints, xDateFormat, fmtName, fmtValue, yPrefix, ySuffix }
+  return { yDecimalPoints, xDateFormat, fmtName, fmtValue, yPrefix, ySuffix, columnFormats }
 }
 
 // Validate chart data
@@ -621,7 +622,10 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           formatter: (params: any) => {
             const [x, y] = params.data
             const formattedX = x
-            const formattedY = typeof y === 'number' ? applyPrefixSuffix(formatWithScale(y, yScale), yPrefix, ySuffix) : y
+            const scatterCfg = columnFormats?.[params.seriesName]
+            const scatterPrefix = scatterCfg?.prefix || yPrefix
+            const scatterSuffix = scatterCfg?.suffix || ySuffix
+            const formattedY = typeof y === 'number' ? applyPrefixSuffix(formatWithScale(y, yScale), scatterPrefix, scatterSuffix) : y
             return `${params.seriesName}<br/>${xAxisLabel || 'X'}: ${formattedX}<br/>${yAxisLabel || 'Y'}: ${formattedY}`
           },
         }
@@ -641,7 +645,11 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
             const isDate = /^\d{4}-\d{2}-\d{2}/.test(raw)
             const header = xDateFormat ? formatDateValue(raw, xDateFormat) : isDate ? formatDateValue(raw, 'short') : raw
             const rows = items.map((p: any) => {
-              const val = typeof p.value === 'number' ? applyPrefixSuffix(formatWithScale(p.value, yScale), yPrefix, ySuffix) : String(p.value)
+              // Resolve per-series prefix/suffix: try matching series name to a Y column
+              const colCfg = columnFormats?.[p.seriesName]
+              const seriesPrefix = colCfg?.prefix || yPrefix
+              const seriesSuffix = colCfg?.suffix || ySuffix
+              const val = typeof p.value === 'number' ? applyPrefixSuffix(formatWithScale(p.value, yScale), seriesPrefix, seriesSuffix) : String(p.value)
               return `<tr><td>${p.marker} ${p.seriesName}</td><td style="text-align:right;padding-left:12px;font-weight:600">${val}</td></tr>`
             })
             return `${header}<table style="width:100%">${rows.join('')}</table>`
