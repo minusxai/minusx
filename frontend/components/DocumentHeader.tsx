@@ -262,7 +262,7 @@ export default function DocumentHeader({
                 px={2}
               >
                 <LuUpload />
-                Save & Publish
+                Save
               </IconButton>
             ) : editMode && (
               <IconButton
