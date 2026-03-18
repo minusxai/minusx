@@ -190,6 +190,14 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
     exitEditMode(selectedFileId, file?.type);
   }, [selectedFileId, dirtyFiles, exitEditMode]);
 
+  const handleDiscardAll = useCallback(() => {
+    const filesToDiscard = [...dirtyFiles];
+    for (const file of filesToDiscard) {
+      clearFileChanges({ fileId: file.id });
+      exitEditMode(file.id, file.type);
+    }
+  }, [dirtyFiles, exitEditMode]);
+
   const handlePublishAll = useCallback(async () => {
     setIsPublishing(true);
     setPublishError(null);
@@ -251,12 +259,22 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
                 <HStack gap={2} flexShrink={0}>
                   <Button
                     size="sm"
-                    colorPalette="teal"
+                    bg="accent.danger"
+                    color="white"
+                    onClick={handleDiscardAll}
+                  >
+                    <LuUndo2 />
+                    Discard All
+                  </Button>
+                  <Button
+                    size="sm"
+                    bg="accent.teal"
+                    color="white"
                     loading={isPublishing}
                     onClick={handlePublishAll}
                   >
                     <LuUpload />
-                    Save & Publish All
+                    Save All
                   </Button>
                   <Button variant="ghost" size="xs" onClick={onClose}>
                     Close
@@ -325,20 +343,23 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
                         <Button
                           size="xs"
                           variant="outline"
-                          colorPalette="teal"
+                          color="accent.danger"
+                          borderColor={"accent.danger"}
+                          onClick={handleDiscardSelected}
+                        >
+                          <LuUndo2 />
+                          Discard File
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          color="accent.teal"
+                          borderColor={"accent.teal"}
                           loading={isPublishingSingle}
                           onClick={handlePublishSelected}
                         >
                           <LuUpload />
-                          Save & Publish File
-                        </Button>
-                        <Button
-                          size="xs"
-                          variant="ghost"
-                          onClick={handleDiscardSelected}
-                        >
-                          <LuUndo2 />
-                          Discard
+                          Save File
                         </Button>
                       </HStack>
                     </HStack>
