@@ -1,7 +1,7 @@
 import { Box, HStack, VStack, Text, Icon } from '@chakra-ui/react'
 import { LuTrendingUp, LuTrendingDown, LuMinus } from 'react-icons/lu'
 import { CHART_COLORS } from '@/lib/chart/echarts-theme'
-import { formatNumber } from '@/lib/chart/chart-utils'
+import { formatNumber, formatDateValue, applyPrefixSuffix } from '@/lib/chart/chart-utils'
 import { useRef, useState, useEffect } from 'react'
 import type { ColumnFormatConfig } from '@/lib/types'
 
@@ -9,6 +9,7 @@ interface TrendPlotProps {
   series: Array<{ name: string; data: number[] }>
   columnFormats?: Record<string, ColumnFormatConfig>
   yAxisColumns?: string[]
+  xAxisColumns?: string[]
 }
 
 type SizeMode = 'lg' | 'sm'
@@ -28,7 +29,7 @@ function useSizeMode(ref: React.RefObject<HTMLDivElement | null>): SizeMode {
   return mode
 }
 
-export const TrendPlot = ({ series, columnFormats, yAxisColumns }: TrendPlotProps) => {
+export const TrendPlot = ({ series, columnFormats, yAxisColumns, xAxisColumns }: TrendPlotProps) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const mode = useSizeMode(containerRef)
 
@@ -52,6 +53,16 @@ export const TrendPlot = ({ series, columnFormats, yAxisColumns }: TrendPlotProp
 
   const isSmall = mode === 'sm'
 
+  // Resolve x-axis date format
+  const xDateFormat = xAxisColumns
+    ?.map(col => columnFormats?.[col]?.dateFormat)
+    .find(Boolean)
+  const fmtLabel = (name: string) => {
+    if (xDateFormat) return formatDateValue(name, xDateFormat)
+    if (/^\d{4}-\d{2}-\d{2}/.test(name)) return formatDateValue(name, 'short')
+    return name
+  }
+
   return (
     <Box
       ref={containerRef}
@@ -63,10 +74,11 @@ export const TrendPlot = ({ series, columnFormats, yAxisColumns }: TrendPlotProp
     >
       <HStack gap={isSmall ? 4 : 8} flexWrap="wrap" justify="center" overflow="hidden">
         {series.map((s, index) => {
-          // Resolve decimal points for this series
-          const colName = yAxisColumns?.[index]
-          const dp = colName ? (columnFormats?.[colName]?.decimalPoints ?? undefined) : undefined
-          const fmtVal = (v: number) => formatNumber(v, dp)
+          // Resolve format for this series — fall back to first Y column when only one exists
+          const colName = yAxisColumns?.[index] ?? yAxisColumns?.[0]
+          const cfg = colName ? columnFormats?.[colName] : undefined
+          const dp = cfg?.decimalPoints ?? undefined
+          const fmtVal = (v: number) => applyPrefixSuffix(formatNumber(v, dp), cfg?.prefix, cfg?.suffix)
 
           // Get the last (most recent) value and the second-to-last (previous) value
           const currentValue = s.data[s.data.length - 1] || 0
@@ -103,7 +115,7 @@ export const TrendPlot = ({ series, columnFormats, yAxisColumns }: TrendPlotProp
                 fontFamily="mono"
                 truncate
               >
-                {s.name}
+                {fmtLabel(s.name)}
               </Text>
 
               {/* Current Value */}

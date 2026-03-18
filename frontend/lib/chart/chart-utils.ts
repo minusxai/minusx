@@ -105,6 +105,11 @@ export const formatNumber = (value: number, decimalPoints?: number): string => {
   })
 }
 
+// Wrap a formatted string with prefix/suffix
+export const applyPrefixSuffix = (formatted: string, prefix?: string | null, suffix?: string | null): string => {
+  return `${prefix ?? ''}${formatted}${suffix ?? ''}`
+}
+
 // Format date string according to named format
 export const DATE_FORMAT_OPTIONS = [
   { value: 'iso', label: '2024-01-15' },
@@ -142,12 +147,19 @@ export const resolveChartFormats = (
   const yDecimalPoints = yAxisColumns
     ?.map(col => columnFormats?.[col]?.decimalPoints)
     .find((dp): dp is number => dp != null)
+  // Only use prefix/suffix on shared axis if ALL Y columns agree
+  const yPrefixes = yAxisColumns?.map(col => columnFormats?.[col]?.prefix || '') ?? []
+  const ySuffixes = yAxisColumns?.map(col => columnFormats?.[col]?.suffix || '') ?? []
+  const allSamePrefix = yPrefixes.length > 0 && yPrefixes.every(p => p === yPrefixes[0])
+  const allSameSuffix = ySuffixes.length > 0 && ySuffixes.every(s => s === ySuffixes[0])
+  const yPrefix = allSamePrefix ? yPrefixes[0] || undefined : undefined
+  const ySuffix = allSameSuffix ? ySuffixes[0] || undefined : undefined
   const xDateFormat = xAxisColumns
     ?.map(col => columnFormats?.[col]?.dateFormat)
     .find(Boolean)
   const fmtName = (name: string) => xDateFormat ? formatDateValue(name, xDateFormat) : name
-  const fmtValue = (value: number) => formatNumber(value, yDecimalPoints)
-  return { yDecimalPoints, xDateFormat, fmtName, fmtValue }
+  const fmtValue = (value: number) => applyPrefixSuffix(formatLargeNumber(value), yPrefix, ySuffix)
+  return { yDecimalPoints, xDateFormat, fmtName, fmtValue, yPrefix, ySuffix, columnFormats }
 }
 
 // Validate chart data
@@ -346,7 +358,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette } = config
 
   // Resolve format configs for axes
-  const { yDecimalPoints, xDateFormat } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
+  const { xDateFormat, yPrefix, ySuffix } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
 
   // Determine consistent Y-axis scale across all series
   const yScale = getNumberScale(series)
@@ -491,7 +503,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           name: getAxisName(0), // Left axis shows names of series on left
           position: 'left' as const,
           axisLabel: {
-            formatter: (value: number) => formatWithScale(value, yScale),
+            formatter: (value: number) => applyPrefixSuffix(formatWithScale(value, yScale), yPrefix, ySuffix),
           },
         },
         {
@@ -499,7 +511,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           name: getAxisName(1), // Right axis shows names of series on right
           position: 'right' as const,
           axisLabel: {
-            formatter: (value: number) => formatWithScale(value, yScale),
+            formatter: (value: number) => applyPrefixSuffix(formatWithScale(value, yScale), yPrefix, ySuffix),
           },
         },
       ]
@@ -507,7 +519,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         type: 'value' as const,
         name: wrapAxisName(yAxisLabel, maxAxisNameLength),
         axisLabel: {
-          formatter: (value: number) => formatWithScale(value, yScale),
+          formatter: (value: number) => applyPrefixSuffix(formatWithScale(value, yScale), yPrefix, ySuffix),
         },
       }
 
@@ -534,7 +546,8 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
 
   // Step 2: Calculate label interval and max label length together
   // These are interdependent: interval affects visible label count, which affects space per label
-  const gridLeftPadding = 80
+  const prefixSuffixExtra = ((yPrefix?.length ?? 0) + (ySuffix?.length ?? 0)) * 7
+  const gridLeftPadding = 80 + prefixSuffixExtra
   const gridRightPadding = useDualYAxis ? 80 : 20
   const availableWidth = containerWidth ? containerWidth - gridLeftPadding - gridRightPadding : 500
   const avgCharWidth = 7
@@ -609,7 +622,10 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           formatter: (params: any) => {
             const [x, y] = params.data
             const formattedX = x
-            const formattedY = typeof y === 'number' ? formatNumber(y, yDecimalPoints) : y
+            const scatterCfg = columnFormats?.[params.seriesName]
+            const scatterPrefix = scatterCfg?.prefix || yPrefix
+            const scatterSuffix = scatterCfg?.suffix || ySuffix
+            const formattedY = typeof y === 'number' ? applyPrefixSuffix(formatWithScale(y, yScale), scatterPrefix, scatterSuffix) : y
             return `${params.seriesName}<br/>${xAxisLabel || 'X'}: ${formattedX}<br/>${yAxisLabel || 'Y'}: ${formattedY}`
           },
         }
@@ -622,8 +638,21 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           hideDelay: 100,
           transitionDuration: 0.2,
           ...(chartType === 'bar' && { axisPointer: { type: 'shadow' } }),
-          valueFormatter: (value: any) => {
-            return typeof value === 'number' ? formatNumber(value, yDecimalPoints) : String(value)
+          formatter: (params: any) => {
+            const items = Array.isArray(params) ? params : [params]
+            if (items.length === 0) return ''
+            const raw = items[0].axisValueLabel
+            const isDate = /^\d{4}-\d{2}-\d{2}/.test(raw)
+            const header = xDateFormat ? formatDateValue(raw, xDateFormat) : isDate ? formatDateValue(raw, 'short') : raw
+            const rows = items.map((p: any) => {
+              // Resolve per-series prefix/suffix: try matching series name to a Y column
+              const colCfg = columnFormats?.[p.seriesName]
+              const seriesPrefix = colCfg?.prefix || yPrefix
+              const seriesSuffix = colCfg?.suffix || ySuffix
+              const val = typeof p.value === 'number' ? applyPrefixSuffix(formatWithScale(p.value, yScale), seriesPrefix, seriesSuffix) : String(p.value)
+              return `<tr><td>${p.marker} ${p.seriesName}</td><td style="text-align:right;padding-left:12px;font-weight:600">${val}</td></tr>`
+            })
+            return `${header}<table style="width:100%">${rows.join('')}</table>`
           },
         },
     legend: {
@@ -647,7 +676,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
       type: 'category',
       data: xAxisData,
       name: xAxisLabel,
-      ...(chartType !== 'bar' && { boundaryGap: false }),
+      ...(chartType !== 'bar' && chartType !== 'combo' && { boundaryGap: false }),
       axisLabel: {
         interval: labelInterval, // Use pre-calculated interval based on truncated label length
         rotate: 0, // Keep labels horizontal by default

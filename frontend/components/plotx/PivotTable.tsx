@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import { Box, Table as ChakraTable, Icon } from '@chakra-ui/react'
 import { LuChevronDown, LuChevronRight, LuSquareFunction } from 'react-icons/lu'
-import { formatLargeNumber, formatNumber, formatDateValue } from '@/lib/chart/chart-utils'
+import { formatLargeNumber, formatNumber, formatDateValue, applyPrefixSuffix } from '@/lib/chart/chart-utils'
 import type { PivotData, FormulaResults } from '@/lib/chart/pivot-utils'
 import type { ColumnFormatConfig } from '@/lib/types'
 
@@ -54,12 +54,16 @@ export const PivotTable = ({
 }: PivotTableProps) => {
   const { rowHeaders, columnHeaders, cells, rowTotals, columnTotals, grandTotal, valueLabels } = pivotData
 
-  // Format a numeric cell value using per-value-column decimal config
+  // Format a numeric cell value using per-value-column decimal/prefix/suffix config
+  // When valueIndex is omitted (totals), fall back to first value column's format
   const fmt = useCallback((value: number, valueIndex?: number): string => {
-    if (columnFormats && valueColumns && valueIndex !== undefined) {
-      const colName = valueColumns[valueIndex % (valueColumns.length || 1)]
-      const dp = colName ? columnFormats[colName]?.decimalPoints : undefined
-      if (dp != null) return formatNumber(value, dp)
+    if (columnFormats && valueColumns) {
+      const idx = valueIndex !== undefined ? valueIndex % (valueColumns.length || 1) : 0
+      const colName = valueColumns[idx]
+      const cfg = colName ? columnFormats[colName] : undefined
+      const dp = cfg?.decimalPoints
+      const formatted = dp != null ? formatNumber(value, dp) : formatLargeNumber(value)
+      return applyPrefixSuffix(formatted, cfg?.prefix, cfg?.suffix)
     }
     return formatLargeNumber(value)
   }, [columnFormats, valueColumns])
