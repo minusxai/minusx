@@ -4,7 +4,7 @@ import { useAppSelector } from '@/store/hooks'
 import { EChart } from './EChart'
 import { useChartContainer } from './useChartContainer'
 import { ChartError } from './ChartError'
-import { isValidChartData, resolveChartFormats, buildToolbox, getTimestamp, type ChartProps } from '@/lib/chart/chart-utils'
+import { isValidChartData, resolveChartFormats, buildToolbox, getTimestamp, getNumberScale, formatWithScale, applyPrefixSuffix, type ChartProps } from '@/lib/chart/chart-utils'
 import { withMinusXTheme } from '@/lib/chart/echarts-theme'
 import type { EChartsOption } from 'echarts'
 
@@ -20,7 +20,8 @@ export const WaterfallPlot = (props: WaterfallPlotProps) => {
   const xColCount = xAxisColumns?.length ?? 0
   const yColCount = yAxisColumns?.length ?? 0
 
-  const { fmtName, fmtValue } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
+  const { fmtName, fmtValue, yPrefix, ySuffix } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
+  const yScale = getNumberScale(series)
 
   const option: EChartsOption = useMemo(() => {
     if (!isValidChartData(xAxisData, series)) {
@@ -124,6 +125,9 @@ export const WaterfallPlot = (props: WaterfallPlotProps) => {
       },
       yAxis: {
         type: 'value',
+        axisLabel: {
+          formatter: (value: number) => applyPrefixSuffix(formatWithScale(value, yScale), yPrefix, ySuffix),
+        },
       },
       series: [
         {
