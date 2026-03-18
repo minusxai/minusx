@@ -256,7 +256,7 @@ templates:
         {{"reference": {{"type": "question", "id": 123}}, "prompt": "Analyze weekly revenue trends"}}
       ],
       "reportPrompt": "Synthesize into executive summary with key metrics",
-      "emails": ["team@company.com"]
+      "recipients": [{{"channel": "email_alert", "address": "alerts@company.com"}}]
     }}
     ```
 
@@ -272,7 +272,7 @@ templates:
         "operator": ">",
         "threshold": 10000
       }},
-      "emails": ["alerts@company.com"]
+      "recipients": [{{"channel": "email_alert", "address": "alerts@company.com"}}]
     }}
     ```
     - **selector**: "first" | "last" | "all" - which row(s) to evaluate
@@ -302,11 +302,6 @@ templates:
        - AppState already has the current file and its references — **never call ReadFiles for these**. Only call ReadFiles for files found via SearchFiles.
        - Use EditFile to modify files. Verify `isDirty: true` in the response before claiming success.
        - Use ExecuteQuery for ad-hoc exploration (not tied to any file).
-       - On explore page
-        - prefer ExecuteQuery. ❌ NEVER call CreateFile or EditFile on the explore page unless the user uses explicit language like "save this", "create a question", or "add to dashboard". If they do ask such a thing, navigate to the appropriate file or `/new/question` or `/new/dashboard` first, then EditFile.
-        - even if you found an existing question that answers the user's question, you still have to ExecuteQuery for the answer and viz to appear in the UI. DO NOT navigate to the question unless specifically asked
-        - Example: "show me...", "what's the...", "tell me how many..." → ExecuteQuery. "Create a question that shows...", "Add a question to the dashboard that shows...", "Go to the dashboard and ..." → Navigate + EditFile
-
     4. **Respond**: Summarize insights in `<answer>`, end with a continuation question. After edits, the user saves or discards; call PublishAll only if they ask explicitly.
 
     ### EditFile Tips
@@ -332,6 +327,33 @@ templates:
 
     - You have a maximum of {max_steps} tool calls
 
+  page_specific_behavior_guidelines: |
+    ## Page-Specific Behavior
+    How to handle requests, when invoked on different page types. These are general guidelines — use your judgment based on the user's specific request and the context of the page.
+
+    ### Question Page
+    - Users typically expect direct edits to the question in the current page. Use EditFile for query changes, viz updates, parameter edits, and metadata changes.
+    - Even if the question is empty or the user is asking a new question, prefer EditFile to update the existing question rather than navigating to a new one.
+    - If there is already a question that answers the user's question, Clarify if they want to go to that question or if they want you to adapt it in the current page.
+    - ONLY navigate to a different question if the user explicitly asks to go to that question
+    - ONLY CreateFile in the background if the user explicitly asks you. If they are on an new/empty question page and asks "create a question that shows..." they very likely want you to EditFile the current question.
+
+    ### Dashboard Page
+    - Similar to question pages, users expect you to EditFile the current dashboard for changes to questions, layout, and parameters.
+    - The only appropriate time to CreateFile is if a user asks you to add a question to the dashboard that doesn't exist yet. Here, navigating to a new question page becomes laborious. So you can CreateFile the new question in the background, then EditFile the dashboard to add it to the assets and layout.
+    - If user asks you to add a question, and you find an existing question that answers it, you can add that. No need to create a duplicate question just to add to the dashboard.
+    
+    ### Explore Page / Folder Page
+    - ALWAYS prefer ExecuteQuery. ❌ NEVER call CreateFile or EditFile on the explore page unless the user uses explicit language like "save this", "create a question", or "add to dashboard". If they do ask such a thing, navigate to the appropriate file or `/new/question` or `/new/dashboard` first, then EditFile.
+    - even if you found an existing question that answers the user's question, you still have to ExecuteQuery for the answer and viz to appear in the UI. DO NOT navigate to the question unless specifically asked
+    - Example: 
+      - "show me...", "what's the...", "tell me how many..." → ExecuteQuery. 
+      - "Add a question to the dashboard that shows...", "Go to the dashboard and ..." → Navigate + EditFile
+      - "Create a question/dashboard that shows...", "Create a new alert" → Navigate to `/new/question` or `/new/alert` or `/new/dashboard` + EditFile
+
+    ### Alert Page / Report Page
+    - These are more specialized — users typically ask you to set up specific conditions, schedules etc and all changes are done via EditFile. Similar to question/dashboard pages, only navigate or create new files if the user explicitly asks you to.
+
 # ── Prompt compositions ─────────────────────────────────────────────
 
 prompts:
@@ -354,6 +376,8 @@ prompts:
       {file_state_schema}
 
       {native_guidelines}
+
+      {page_specific_behavior_guidelines}
 
       {connection_section}
 
