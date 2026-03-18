@@ -157,7 +157,7 @@ export const resolveChartFormats = (
     ?.map(col => columnFormats?.[col]?.dateFormat)
     .find(Boolean)
   const fmtName = (name: string) => xDateFormat ? formatDateValue(name, xDateFormat) : name
-  const fmtValue = (value: number) => applyPrefixSuffix(formatNumber(value, yDecimalPoints), yPrefix, ySuffix)
+  const fmtValue = (value: number) => applyPrefixSuffix(formatLargeNumber(value), yPrefix, ySuffix)
   return { yDecimalPoints, xDateFormat, fmtName, fmtValue, yPrefix, ySuffix }
 }
 
@@ -357,7 +357,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette } = config
 
   // Resolve format configs for axes
-  const { yDecimalPoints, xDateFormat, yPrefix, ySuffix } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
+  const { xDateFormat, yPrefix, ySuffix } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
 
   // Determine consistent Y-axis scale across all series
   const yScale = getNumberScale(series)
