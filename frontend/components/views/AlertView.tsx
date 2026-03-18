@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Text, VStack, HStack, Input, Button, Flex, Badge, Portal, Switch } from '@chakra-ui/react';
+import { Box, Text, VStack, HStack, Input, Button, Flex, Badge, Portal, Switch, Combobox } from '@chakra-ui/react';
 import type { CheckedChangeDetails } from '@zag-js/switch';
 import { AlertContent, AlertRecipient, AlertSelector, AlertFunction, ComparisonOperator, JobRun } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -135,6 +135,56 @@ const operatorCollection = createListCollection({
 });
 
 
+function QuestionSearchSelect({ questions, selectedId, onSelect }: {
+  questions: { id: number; name: string }[];
+  selectedId: number | null;
+  onSelect: (id: number) => void;
+}) {
+  const [inputValue, setInputValue] = useState('');
+
+  const filteredCollection = useMemo(() => {
+    const lower = inputValue.toLowerCase();
+    const filtered = lower
+      ? questions.filter(q => q.name.toLowerCase().includes(lower))
+      : questions;
+    return createListCollection({
+      items: filtered.map(q => ({ value: q.id.toString(), label: q.name }))
+    });
+  }, [questions, inputValue]);
+
+  return (
+    <Combobox.Root
+      collection={filteredCollection}
+      value={selectedId ? [selectedId.toString()] : []}
+      onValueChange={(e) => {
+        if (e.value[0]) onSelect(parseInt(e.value[0], 10));
+      }}
+      onInputValueChange={(details) => setInputValue(details.inputValue)}
+      inputBehavior="autohighlight"
+      openOnClick
+      positioning={{ gutter: 2 }}
+      size="sm"
+    >
+      <Combobox.Control>
+        <Combobox.Input placeholder="Search questions..." bg="bg.surface" fontSize="xs" />
+      </Combobox.Control>
+      <Portal>
+        <Combobox.Positioner>
+          <Combobox.Content>
+            <Combobox.Empty>No questions found</Combobox.Empty>
+            {filteredCollection.items.map((item) => (
+              <Combobox.Item key={item.value} item={item}>
+                <Combobox.ItemText>{item.label}</Combobox.ItemText>
+                <Combobox.ItemIndicator />
+              </Combobox.Item>
+            ))}
+          </Combobox.Content>
+        </Combobox.Positioner>
+      </Portal>
+    </Combobox.Root>
+  );
+}
+
 export default function AlertView({
   alert,
   alertName,
@@ -221,10 +271,6 @@ export default function AlertView({
     Object.values(files).filter(f => f.type === 'question' && f.id > 0),
     [files]
   );
-
-  const questionCollection = useMemo(() => createListCollection({
-    items: questions.map(q => ({ value: q.id.toString(), label: q.name }))
-  }), [questions]);
 
   // Runs dropdown collection
   const runsCollection = useMemo(() => createListCollection({
@@ -318,7 +364,9 @@ export default function AlertView({
                 borderRadius="md"
                 border="1px solid"
                 borderColor="border.muted"
-                p={3}
+                pt={3}
+                pb={2}
+                pr={3}
                 pl={5}
                 overflow="hidden"
               >
@@ -329,27 +377,11 @@ export default function AlertView({
                 </HStack>
 
                 {editMode ? (
-                  <SelectRoot
-                    collection={questionCollection}
-                    value={alert.questionId ? [alert.questionId.toString()] : []}
-                    onValueChange={(e) => onChange({ questionId: parseInt(e.value[0], 10) })}
-                    size="sm"
-                  >
-                    <SelectTrigger bg="bg.surface">
-                      <SelectValueText placeholder="Select a question..." />
-                    </SelectTrigger>
-                    <Portal>
-                      <SelectPositioner>
-                        <SelectContent>
-                          {questionCollection.items.map((item) => (
-                            <SelectItem key={item.value} item={item}>
-                              {item.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </SelectPositioner>
-                    </Portal>
-                  </SelectRoot>
+                  <QuestionSearchSelect
+                    questions={questions}
+                    selectedId={alert.questionId ?? null}
+                    onSelect={(id) => onChange({ questionId: id })}
+                  />
                 ) : (
                   <Text fontSize="sm" fontWeight="600" color="fg.default">
                     {referencedQuestion?.name || (alert.questionId ? `Question #${alert.questionId}` : 'No question selected')}
