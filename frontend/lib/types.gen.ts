@@ -112,6 +112,14 @@ export type Decimalpoints = number | null;
  */
 export type Dateformat = string | null;
 /**
+ * string to prepend to displayed values (e.g. '$', '€')
+ */
+export type Prefix = string | null;
+/**
+ * string to append to displayed values (e.g. '%', ' units', 'k')
+ */
+export type Suffix = string | null;
+/**
  * color overrides mapping series index to color key (e.g. {'0': 'danger', '2': 'warning'}). Only overridden indices are stored.
  */
 export type Colors = {
@@ -231,6 +239,8 @@ export interface ColumnFormatConfig {
   alias?: Alias;
   decimalPoints?: Decimalpoints;
   dateFormat?: Dateformat;
+  prefix?: Prefix;
+  suffix?: Suffix;
 }
 export interface QuestionParameter {
   name: Name2;

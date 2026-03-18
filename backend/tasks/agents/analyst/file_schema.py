@@ -68,6 +68,8 @@ class ColumnFormatConfig(BaseModel):
     alias: Optional[str] = Field(None, description="display name override for the column header")
     decimalPoints: Optional[int] = Field(None, description="number of decimal places (0-4) for numeric columns")
     dateFormat: Optional[str] = Field(None, description="date display format: 'iso', 'us', 'eu', 'short', 'month-year', or 'year'")
+    prefix: Optional[str] = Field(None, description="string to prepend to displayed values (e.g. '$', '€')")
+    suffix: Optional[str] = Field(None, description="string to append to displayed values (e.g. '%', ' units', 'k')")
 
 class VisualizationSettings(BaseModel):
     """visualization settings"""

@@ -120,7 +120,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   const columnFormats = useMemo<Record<string, ColumnFormatConfig>>(() => initialColumnFormats ?? {}, [initialColumnFormats])
 
   const handleColumnFormatChange = useCallback((column: string, config: ColumnFormatConfig) => {
-    const isEmpty = !config.alias && config.decimalPoints === undefined && !config.dateFormat
+    const isEmpty = !config.alias && config.decimalPoints === undefined && !config.dateFormat && !config.prefix && !config.suffix
     const next = { ...(initialColumnFormats ?? {}) }
     if (isEmpty) {
       delete next[column]

@@ -161,6 +161,26 @@ const FormatPopover = ({ type, column, formatConfig, onChange }: FormatPopoverPr
     onChange({ ...config, alias: e.target.value || undefined })
   }, [config, onChange])
 
+  const handlePrefixChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    onChange({ ...config, prefix: e.target.value })
+  }, [config, onChange])
+
+  const handleSuffixChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    onChange({ ...config, suffix: e.target.value })
+  }, [config, onChange])
+
+  const inputStyle = {
+    fontSize: '12px',
+    fontFamily: 'var(--fonts-mono, monospace)',
+    padding: '4px 8px',
+    width: '100%',
+    border: '1px solid var(--colors-border-muted, #333)',
+    borderRadius: '4px',
+    background: 'var(--colors-bg-surface, transparent)',
+    color: 'var(--colors-fg-default, inherit)',
+    outline: 'none',
+  }
+
   return (
     <VStack align="stretch" gap={2.5} p={2.5} minW="180px">
       {/* Alias */}
@@ -174,19 +194,41 @@ const FormatPopover = ({ type, column, formatConfig, onChange }: FormatPopoverPr
           value={config.alias || ''}
           onChange={handleAliasChange}
           onClick={(e) => e.stopPropagation()}
-          style={{
-            fontSize: '12px',
-            fontFamily: 'var(--fonts-mono, monospace)',
-            padding: '4px 8px',
-            width: '100%',
-            border: '1px solid var(--colors-border-muted, #333)',
-            borderRadius: '4px',
-            background: 'var(--colors-bg-surface, transparent)',
-            color: 'var(--colors-fg-default, inherit)',
-            outline: 'none',
-          }}
+          style={inputStyle}
         />
       </Box>
+
+      {/* Prefix & Suffix - shown for number type */}
+      {type === 'number' && (
+        <HStack gap={2}>
+          <Box flex={1}>
+            <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+              Prefix
+            </Text>
+            <input
+              type="text"
+              placeholder="e.g. $"
+              value={config.prefix || ''}
+              onChange={handlePrefixChange}
+              onClick={(e) => e.stopPropagation()}
+              style={inputStyle}
+            />
+          </Box>
+          <Box flex={1}>
+            <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+              Suffix
+            </Text>
+            <input
+              type="text"
+              placeholder="e.g. %"
+              value={config.suffix || ''}
+              onChange={handleSuffixChange}
+              onClick={(e) => e.stopPropagation()}
+              style={inputStyle}
+            />
+          </Box>
+        </HStack>
+      )}
 
       {/* Decimal points - shown for number type */}
       {type === 'number' && (
