@@ -481,7 +481,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       showChartTitle,
                       colorPalette,
                     }
-                    if (chartType === 'trend') return <TrendPlot series={aggregatedData.series} columnFormats={columnFormats} yAxisColumns={yAxisColumns} />
+                    if (chartType === 'trend') return <TrendPlot series={aggregatedData.series} columnFormats={columnFormats} yAxisColumns={yAxisColumns} xAxisColumns={xAxisColumns} />
                     const plotMap = { line: LinePlot, bar: BarPlot, combo: ComboPlot, area: AreaPlot, scatter: ScatterPlot, funnel: FunnelPlot, pie: PiePlot, waterfall: WaterfallPlot } as const
                     const Plot = plotMap[chartType as keyof typeof plotMap]
                     if (Plot) return <Plot {...sharedProps} />
