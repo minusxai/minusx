@@ -545,7 +545,8 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
 
   // Step 2: Calculate label interval and max label length together
   // These are interdependent: interval affects visible label count, which affects space per label
-  const gridLeftPadding = 80
+  const prefixSuffixExtra = ((yPrefix?.length ?? 0) + (ySuffix?.length ?? 0)) * 7
+  const gridLeftPadding = 80 + prefixSuffixExtra
   const gridRightPadding = useDualYAxis ? 80 : 20
   const availableWidth = containerWidth ? containerWidth - gridLeftPadding - gridRightPadding : 500
   const avgCharWidth = 7
@@ -667,7 +668,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
       type: 'category',
       data: xAxisData,
       name: xAxisLabel,
-      ...(chartType !== 'bar' && { boundaryGap: false }),
+      ...(chartType !== 'bar' && chartType !== 'combo' && { boundaryGap: false }),
       axisLabel: {
         interval: labelInterval, // Use pre-calculated interval based on truncated label length
         rotate: 0, // Keep labels horizontal by default
