@@ -57,7 +57,7 @@ export default function StylesContainerV2({
 
       // If this was a create operation, redirect to the new file
       if (result && isVirtualFileId(fileId)) {
-        router.push(`/f/${result.id}`);
+        router.replace(`/f/${result.id}`);
       }
     } catch (err) {
       console.error('Save failed:', err);

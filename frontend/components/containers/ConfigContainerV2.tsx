@@ -77,7 +77,7 @@ export default function ConfigContainerV2({
         });
         dispatch(addFile(result.data));
         dispatch(clearEdits(result.data.id));
-        router.push(`/f/${result.data.id}`);
+        router.replace(`/f/${result.data.id}`);
       } else {
         // Update existing file - save currentContent directly (full replace)
         const result = await FilesAPI.saveFile(fileId, effectiveName, newPath, currentContent, []);

@@ -31,6 +31,6 @@ export function redirectAfterSave(
   const isVirtual = isVirtualFileId(fileId);
 
   if (isVirtual || currentUrl !== newUrl) {
-    router.push(newUrl);
+    router.replace(newUrl);
   }
 }
