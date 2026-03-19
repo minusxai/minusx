@@ -336,7 +336,7 @@ registerFrontendTool('ReadFiles', async (args, _context) => {
  * - queryResults: {queryResultId, unchanged: true} for results with same hash; full for new/changed
  */
 registerFrontendTool('EditFile', async (args, _context) => {
-  const { fileId, oldMatch, newMatch, replaceAll } = args;
+  const { fileId, changes } = args;
 
   // Snapshot state before edit to compute delta
   const stateBefore = getStore().getState();
@@ -347,11 +347,22 @@ registerFrontendTool('EditFile', async (args, _context) => {
   );
   const prevRefIds = new Set<number>(fileState?.references ?? []);
 
-  // Edit (stages changes in Redux as draft)
-  const result = await editFileStr({ fileId, oldMatch, newMatch, replaceAll });
-  if (!result.success) {
-    const err = result.error || 'Edit failed';
-    return { content: { success: false, error: err }, details: { success: false, error: err } };
+  // Apply each change sequentially; fail-fast on error
+  const diffs: string[] = [];
+  for (let i = 0; i < changes.length; i++) {
+    const { oldMatch, newMatch, replaceAll } = changes[i];
+    const result = await editFileStr({ fileId, oldMatch, newMatch, replaceAll });
+    if (!result.success) {
+      const err = result.error || 'Edit failed';
+      const failureContent = {
+        success: false,
+        error: `Change ${i + 1}/${changes.length} failed: ${err}`,
+        succeededCount: i,
+        failedIndex: i,
+      };
+      return { content: failureContent, details: { success: false, error: failureContent.error } };
+    }
+    if (result.diff) diffs.push(result.diff);
   }
 
   // Auto-execute query for questions (agent sees results immediately)
@@ -408,7 +419,7 @@ registerFrontendTool('EditFile', async (args, _context) => {
     return qr;
   });
 
-  const diff = result.diff ?? '';
+  const diff = diffs.join('\n');
   const content = {
     success: true,
     fileState: compressed.fileState,

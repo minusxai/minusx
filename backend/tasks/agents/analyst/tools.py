@@ -1,7 +1,7 @@
 """Analyst Tools - executed by Next.js backend."""
 from typing import Optional, List, Any, Dict
 from tasks import Tool, UserInputException, register_agent
-from pydantic import Field
+from pydantic import BaseModel, Field
 import json
 
 from tasks.agents.analyst.file_schema import (
@@ -275,33 +275,43 @@ class ReadFiles(Tool):
         raise UserInputException(self._unique_id)
 
 
+class EditChange(BaseModel):
+    oldMatch: str = Field(..., description="String to search for in full file JSON")
+    newMatch: str = Field(..., description="String to replace with")
+    replaceAll: bool = Field(True, description="Replace ALL occurrences (true) or error if not unique (false)")
+
+
 @register_agent
 class EditFile(Tool):
-    """Edit a file using string find-and-replace.
+    """Edit a file using an ordered list of string find-and-replace changes.
 
-    Search for oldMatch in the FULL file JSON and replace with newMatch.
+    Search for each oldMatch in the FULL file JSON and replace with newMatch.
     The file JSON includes: {"id": 123, "name": "...", "path": "...", "type": "question", "content": {...}}
 
     You can edit ANY field (name, path, or content) using this tool.
-    Examples:
-    - Change name: oldMatch='"name":"Old Name"', newMatch='"name":"New Name"'
-    - Change query: oldMatch='"query":"SELECT 1"', newMatch='"query":"SELECT * FROM users"'
-    - Change description: oldMatch='"description":"Old"', newMatch='"description":"Updated"'
-    - Add a parameter: oldMatch='"query":"SELECT * FROM t"', newMatch='"query":"SELECT * FROM t WHERE id = :user_id","parameters":[{"name":"user_id","type":"number"}]'
+
+    Changes are applied sequentially in order — later entries can depend on earlier ones.
+    All changes succeed or the batch fails: on failure the response includes `succeededCount`
+    and `failedIndex` so you know exactly where to retry.
+
+    Example — update query and viz in one call:
+    EditFile(fileId=123, changes=[
+        {"oldMatch": '"query":"SELECT 1"', "newMatch": '"query":"SELECT id, name FROM users"'},
+        {"oldMatch": '"type":"table"', "newMatch": '"type":"bar"'}
+    ])
 
     CRITICAL — query + parameters must stay in sync:
-    If your newMatch adds or removes :paramName tokens in the query, you MUST update the
-    parameters array in the same newMatch. The frontend auto-syncs on user edit, but EditFile
-    bypasses that — orphaned or missing parameters will cause query execution to fail.
+    If a change adds or removes :paramName tokens in the query, you MUST include a corresponding
+    change to the parameters array in the same call. The frontend auto-syncs on user edit, but
+    EditFile bypasses that — orphaned or missing parameters will cause query execution to fail.
 
-    replaceAll behaviour:
+    replaceAll behaviour (per change):
     - replaceAll=true (default): replace EVERY occurrence of oldMatch in the file JSON.
       Use this when renaming a column/table that appears in multiple places (SELECT, WHERE, GROUP BY, etc.).
     - replaceAll=false: replace only if oldMatch is unique. If it appears more than once the
       tool returns an error — add more surrounding context to oldMatch to make it unique, or
       switch back to replaceAll=true if you really want all occurrences replaced.
 
-    The tool validates changes and returns a diff.
     Changes are staged as drafts in Redux. The user reviews and publishes all pending changes
     via the Publish All button. You do not need to call Navigate or PublishFile.
 
@@ -311,16 +321,12 @@ class EditFile(Tool):
     def __init__(
         self,
         fileId: int = Field(..., description="File ID to edit"),
-        oldMatch: str = Field(..., description="String to search for in full file JSON (including name, path, content)"),
-        newMatch: str = Field(..., description=f"String to replace with. File JSON schema: {ATLAS_FILE_SCHEMA_JSON}"),
-        replaceAll: bool = Field(True, description="If true (default), replace ALL occurrences of oldMatch — good for renaming a column/table that appears many times. If false, the tool errors when oldMatch is not unique so you can widen the match and be precise."),
+        changes: List[EditChange] = Field(..., description=f"Ordered list of find-and-replace changes to apply sequentially. Schema for newMatch values: {ATLAS_FILE_SCHEMA_JSON}"),
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
         self.fileId = fileId
-        self.oldMatch = oldMatch
-        self.newMatch = newMatch
-        self.replaceAll = replaceAll
+        self.changes = changes
 
     async def reduce(self, child_batches):
         pass

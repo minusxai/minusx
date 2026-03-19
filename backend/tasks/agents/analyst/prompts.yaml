@@ -89,8 +89,8 @@ templates:
     - **Where to edit `parameterValues`**: on a dashboard page → edit the **dashboard's** values. On a standalone question page → edit the **question's** values. Dashboard values override question-level values at runtime.
 
     ### EditFile Ordering for Parameters
-    - **Adding a parameter**: two separate EditFile calls — (1) update `parameters` array first, (2) then update `query` with the new `:paramName`.
-    - **Removing a parameter**: reverse order — (1) update `query` first, (2) then update `parameters`.
+    - **Adding a parameter**: use two entries in one EditFile call — (1) update `parameters` array, (2) update `query` with the new `:paramName`.
+    - **Removing a parameter**: reverse order in the array — (1) update `query`, (2) update `parameters`.
     - **Never** match query + parameters in one oldMatch — JSON key order is not guaranteed.
 
   composed_questions_guidelines: |
@@ -181,7 +181,7 @@ templates:
 
     ### File Reading & Editing
     - **ReadFiles(fileIds: int[])**: Load one or more files. Returns `CompressedAugmentedFile` objects (see File State Schema). Only needed for files not already in AppState.
-    - **EditFile(fileId: int, oldMatch: string, newMatch: string)**: Find `oldMatch` in the file's JSON and replace with `newMatch`. Changes are staged as drafts — not saved until published. Returns updated `CompressedAugmentedFile` so you can verify `isDirty: true`.
+    - **EditFile(fileId: int, changes: [{{oldMatch, newMatch, replaceAll?}}])**: Apply each find-and-replace in order on the file's JSON. Changes are staged as drafts — not saved until published. Returns updated `CompressedAugmentedFile` so you can verify `isDirty: true`.
     - **PublishAll**: Call this if the user requests you to save changes. Opens a review modal showing all dirty files. Returns immediately if nothing is dirty.
 
     ### Query Execution
@@ -307,11 +307,13 @@ templates:
     ### EditFile Tips
     - Copy the `oldMatch` snippet verbatim from AppState content. **Shortest unique match wins** — longer matches fail more often.
     - Match exact JSON strings including quotes: `"query":"SELECT ..."` not `SELECT ...`
-    - **One field per edit**. Never span multiple content keys (e.g. `"query":"...","parameters":[...]`) — JSON key order is not guaranteed.
+    - **One field per change entry**. Never span multiple content keys in a single oldMatch (e.g. `"query":"...","parameters":[...]`) — JSON key order is not guaranteed. Use separate entries in `changes` instead.
+    - Group related changes (e.g. updating both a query and its viz settings) into a single EditFile call with multiple entries in `changes` — this is more efficient and atomic than multiple tool calls.
     - For SQL edits: match the minimum unique clause (a single line/condition), not the full query.
     - AppState is pretty-printed, stored format is compact — EditFile normalizes this, but shorter matches are safer.
     - File content in app state and tool outputs, use **literal newlines** (not `\n` escape sequences so no double backslash needed when trying to match)
     - Verify `isDirty: true` after each edit. If false or change is absent, retry with shorter `oldMatch`.
+    - On failure, `succeededCount` and `failedIndex` tell you which change failed — only retry from that index.
 
     ### SQL
     - ONLY use tables from the Available Database Schema — never reference tables or columns you haven't seen.
