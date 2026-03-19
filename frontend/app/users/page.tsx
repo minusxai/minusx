@@ -72,8 +72,8 @@ export default function UsersPage() {
 
   // Fetch users
   const fetchUsers = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
       const data = await fetchWithCache('/api/users', {
         method: 'GET',
         cacheStrategy: API.users.list.cache,
@@ -85,9 +85,12 @@ export default function UsersPage() {
       } else {
         setMessage({ type: 'error', text: data.error?.message || 'Failed to fetch users' });
       }
+      setLoading(false);
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return; // Another request is already in flight — leave loading=true, show no error
+      }
       setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Failed to fetch users' });
-    } finally {
       setLoading(false);
     }
   };
@@ -285,7 +288,7 @@ export default function UsersPage() {
 
           <HStack justify="space-between" mb={6} mt={4}>
             <Text fontSize="lg" color="fg.muted" fontFamily="mono">
-              {users.length} {users.length === 1 ? 'user' : 'users'}
+              {loading ? '' : `${users.length} ${users.length === 1 ? 'user' : 'users'}`}
             </Text>
             <Button
               onClick={() => {
