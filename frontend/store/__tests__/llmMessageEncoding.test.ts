@@ -356,8 +356,7 @@ describe('LLM Message Encoding', () => {
                 // {id,name,path,type,content} so the fragment is guaranteed to appear in fullFileStr.
                 arguments: JSON.stringify({
                   fileId: TUTORIAL_DASHBOARD_ID,
-                  oldMatch: '"name":"User Engagement Dashboard","path":"/tutorial/user-engagement-dashboard"',
-                  newMatch: '"name":"User Engagement Dashboard Edited","path":"/tutorial/user-engagement-dashboard"'
+                  changes: [{ oldMatch: '"name":"User Engagement Dashboard","path":"/tutorial/user-engagement-dashboard"', newMatch: '"name":"User Engagement Dashboard Edited","path":"/tutorial/user-engagement-dashboard"' }]
                 })
               }
             }

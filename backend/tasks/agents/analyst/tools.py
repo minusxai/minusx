@@ -1,7 +1,7 @@
 """Analyst Tools - executed by Next.js backend."""
 from typing import Optional, List, Any, Dict
 from tasks import Tool, UserInputException, register_agent
-from pydantic import Field
+from pydantic import BaseModel, Field
 import json
 
 from tasks.agents.analyst.file_schema import (

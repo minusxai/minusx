@@ -1472,8 +1472,7 @@ describe('Phase 1: Unified File System API E2E', () => {
           name: 'EditFile',
           arguments: {
             fileId: paramQuestionId,
-            oldMatch: '"description":"Sales with limit param"',
-            newMatch: '"description":"Updated description"'
+            changes: [{ oldMatch: '"description":"Sales with limit param"', newMatch: '"description":"Updated description"' }]
           }
         }
       };
@@ -1513,8 +1512,7 @@ describe('Phase 1: Unified File System API E2E', () => {
           name: 'EditFile',
           arguments: {
             fileId: paramQuestionId,
-            oldMatch: '"description":"Sales with limit param"',
-            newMatch: '"description":"Ephemeral override test"'
+            changes: [{ oldMatch: '"description":"Sales with limit param"', newMatch: '"description":"Ephemeral override test"' }]
           }
         }
       };
@@ -1548,8 +1546,7 @@ describe('Phase 1: Unified File System API E2E', () => {
           name: 'EditFile',
           arguments: {
             fileId: paramQuestionId,
-            oldMatch: '"description":"Sales with limit param"',
-            newMatch: '"description":"Response structure test"'
+            changes: [{ oldMatch: '"description":"Sales with limit param"', newMatch: '"description":"Response structure test"' }]
           }
         }
       };
@@ -1608,8 +1605,7 @@ describe('Phase 1: Unified File System API E2E', () => {
           name: 'EditFile',
           arguments: {
             fileId: brokenQuestionId,
-            oldMatch: '"description":"Query has :limit but parameters is empty"',
-            newMatch: '"description":"Step 1: parameters updated next"'
+            changes: [{ oldMatch: '"description":"Query has :limit but parameters is empty"', newMatch: '"description":"Step 1: parameters updated next"' }]
           }
         }
       };

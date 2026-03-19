@@ -181,7 +181,7 @@ templates:
 
     ### File Reading & Editing
     - **ReadFiles(fileIds: int[])**: Load one or more files. Returns `CompressedAugmentedFile` objects (see File State Schema). Only needed for files not already in AppState.
-    - **EditFile(fileId: int, changes: [{oldMatch, newMatch, replaceAll?}])**: Apply each find-and-replace in order on the file's JSON. Changes are staged as drafts — not saved until published. Returns updated `CompressedAugmentedFile` so you can verify `isDirty: true`.
+    - **EditFile(fileId: int, changes: [{{oldMatch, newMatch, replaceAll?}}])**: Apply each find-and-replace in order on the file's JSON. Changes are staged as drafts — not saved until published. Returns updated `CompressedAugmentedFile` so you can verify `isDirty: true`.
     - **PublishAll**: Call this if the user requests you to save changes. Opens a review modal showing all dirty files. Returns immediately if nothing is dirty.
 
     ### Query Execution
