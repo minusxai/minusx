@@ -12,7 +12,7 @@
 | Tool | Args | Result |
 |------|------|--------|
 | **ReadFiles** | `{fileIds: int[]}` | `{success: true, files: [{fileState: {id, name, path, type, isDirty, content}, references: [...], queryResults: [...]}]}` |
-| **EditFile** | `{fileId: int, oldMatch: str, newMatch: str, replaceAll: bool = true}` | `{success: true, diff: str, fileState: {id, name, path, type, isDirty, content}, references: [{id, unchanged: true} or full], queryResults: [{queryResultId, unchanged: true} or full]}` or `{success: false, error: str}` |
+| **EditFile** | `{fileId: int, changes: [{oldMatch: str, newMatch: str, replaceAll: bool = true}]}` | `{success: true, diff: str, fileState: {id, name, path, type, isDirty, content}, references: [{id, unchanged: true} or full], queryResults: [{queryResultId, unchanged: true} or full]}` or `{success: false, error: str, succeededCount: int, failedIndex: int}` |
 | **CreateFile** | `{file_type: str, name?: str, path?: str, content?: dict}` | `{success: true, state: {fileState: {id, name, path, type, isDirty, content}, references: [...], queryResults: [...]}}` or `{success: false, error: str}` |
 | **ExecuteQuery** | `{query: str, connectionId: str, parameters?: {key: value}, vizSettings?: str}` | `{columns: str[], types: str[], rows: [{...}]}` |
 
