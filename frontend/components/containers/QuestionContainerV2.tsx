@@ -103,6 +103,23 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
     handleExecute();
   }, [file, mergedContent, handleExecute]);
 
+  // Restore lastExecuted when cleared (e.g., after Cancel) so queryToExecute
+  // doesn't become reactive to mergedContent, which would auto-execute on every edit.
+  useEffect(() => {
+    if (!mergedContent || !hasAutoExecutedRef.current || lastExecuted) return;
+    dispatch(setEphemeral({
+      fileId,
+      changes: {
+        lastExecuted: {
+          query: mergedContent.query,
+          params: mergedContent.parameterValues || {},
+          database: mergedContent.database_name,
+          references: mergedContent.references || []
+        }
+      }
+    }));
+  }, [lastExecuted, mergedContent, fileId, dispatch]);
+
   // Handle parameter value change — persisted into file content (marks file dirty)
   const handleParameterValueChange = useCallback((paramName: string, value: string | number) => {
     const currentValues = mergedContent?.parameterValues || {};
