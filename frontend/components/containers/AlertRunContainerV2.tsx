@@ -102,17 +102,33 @@ function MessageRow({ msg }: { msg: RunMessageRecord }) {
             )}
             <Box>
               <Text fontSize="xs" color="fg.muted" fontWeight="600" mb={1}>Body</Text>
-              <Box
-                p={2}
-                bg="bg.surface"
-                borderRadius="sm"
-                border="1px solid"
-                borderColor="border.muted"
-                maxH="200px"
-                overflow="auto"
-              >
-                <Text fontSize="xs" whiteSpace="pre-wrap">{msg.content}</Text>
-              </Box>
+              {msg.content.trimStart().startsWith('<!DOCTYPE') || msg.content.trimStart().startsWith('<html') ? (
+                <Box
+                  borderRadius="sm"
+                  border="1px solid"
+                  borderColor="border.muted"
+                  overflow="hidden"
+                >
+                  <iframe
+                    srcDoc={msg.content}
+                    style={{ width: '100%', height: '500px', border: 'none', background: '#fff' }}
+                    sandbox=""
+                    title="Email preview"
+                  />
+                </Box>
+              ) : (
+                <Box
+                  p={2}
+                  bg="bg.surface"
+                  borderRadius="sm"
+                  border="1px solid"
+                  borderColor="border.muted"
+                  maxH="200px"
+                  overflow="auto"
+                >
+                  <Text fontSize="xs" whiteSpace="pre-wrap">{msg.content}</Text>
+                </Box>
+              )}
             </Box>
             {msg.deliveryError && (
               <HStack gap={2}>

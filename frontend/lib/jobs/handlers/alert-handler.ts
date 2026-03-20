@@ -4,6 +4,8 @@ import { evaluateCondition, extractMetricValue } from '@/lib/alert/evaluate-aler
 import { AUTH_URL } from '@/lib/config';
 import { CompanyDB } from '@/lib/database/company-db';
 import { isSubdomainRoutingEnabled } from '@/lib/utils/subdomain';
+import { buildAlertEmailHtml } from '@/lib/messaging/alert-email-html';
+import { getConfigsByCompanyId } from '@/lib/data/configs.server';
 import type { AlertContent, AlertOutput, JobHandlerResult, JobRunnerInput, QuestionContent } from '@/lib/types';
 import type { JobHandler } from '../job-registry';
 
@@ -55,24 +57,40 @@ export const alertJobHandler: JobHandler = {
 
     const messages: JobHandlerResult['messages'] = [];
     if (triggered && alert.recipients && alert.recipients.length > 0) {
-      const body = `Alert "${alertName}" triggered.\nValue: ${actualValue} ${alert.condition.operator} ${alert.condition.threshold}`;
-      const bodySingleLine = body.replace(/\n/g, ' ');
       const subject = `[Alert Triggered] ${alertName}`;
       const baseUrl = await resolveBaseUrl(user.companyId);
       const alertLink = `${baseUrl}/f/${runFileId}`;
+
+      // Resolve company display name for email branding
+      const { config } = await getConfigsByCompanyId(user.companyId, user.mode);
+      const agentName = config.branding.agentName;
+
+      const emailHtml = buildAlertEmailHtml({
+        alertName,
+        actualValue,
+        operator: alert.condition.operator,
+        threshold: alert.condition.threshold,
+        column: alert.condition.column,
+        questionName: questionResult.data?.name,
+        alertLink,
+        agentName,
+      });
+
+      const plainText = `Alert "${alertName}" triggered. Value: ${actualValue} ${alert.condition.operator} ${alert.condition.threshold}`;
+
       for (const recipient of alert.recipients) {
         if (recipient.channel === 'email_alert') {
-          messages.push({ type: 'email_alert', content: body, metadata: { to: recipient.address, subject } });
+          messages.push({ type: 'email_alert', content: emailHtml, metadata: { to: recipient.address, subject } });
         } else if (recipient.channel === 'phone_alert') {
           messages.push({
             type: 'phone_alert',
-            content: bodySingleLine,
+            content: plainText,
             metadata: {
               to:      recipient.address,
               title:   alertName,
-              desc:    alert.description ?? bodySingleLine,
+              desc:    alert.description ?? plainText,
               link:    alertLink,
-              summary: bodySingleLine,
+              summary: plainText,
             },
           });
         }
