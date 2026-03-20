@@ -465,3 +465,24 @@ class SubmitNumber(Tool):
 
     async def run(self) -> str:
         return json.dumps({'submitted': True, 'answer': float(self.answer)})
+
+
+@register_agent
+class CannotAnswer(Tool):
+    """Signal that the question cannot be answered with the available data.
+    Call this if the data is insufficient or the question is unanswerable.
+    """
+
+    def __init__(
+        self,
+        reason: str = Field(..., description="Why the question cannot be answered"),
+        **kwargs
+    ):
+        super().__init__(**kwargs)  # type: ignore
+        self.reason = reason
+
+    async def reduce(self, child_batches):
+        pass
+
+    async def run(self) -> str:
+        return json.dumps({'submitted': True, 'cannot_answer': True, 'reason': str(self.reason)})
