@@ -16,6 +16,7 @@ import { getRouter } from '@/lib/navigation/use-navigation';
 import { readFiles, editFileStr, getQueryResult, createVirtualFile, editFile as editFileOp, compressAugmentedFile, selectAugmentedFiles } from '@/lib/api/file-state';
 import { validateFileState } from '@/lib/validation/content-validators';
 import { canCreateFileType } from '@/lib/auth/access-rules.client';
+import { selectAppState } from '@/store/appStateSelector';
 
 // ============================================================================
 // Frontend Tool Registry
@@ -439,9 +440,31 @@ registerFrontendTool('EditFile', async (args, _context) => {
  *
  * Returns: {success: true, state: CompressedAugmentedFile}
  */
-registerFrontendTool('CreateFile', async (args, _context) => {
+registerFrontendTool('CreateFile', async (args, context) => {
   const { file_type, name, content } = args;
   let { path } = args;
+
+  // --- Page-context guards for background file creation ---
+  const state = context.state ?? getStore().getState();
+  const { appState } = selectAppState(state);
+
+  // Dashboards can never be created in the background
+  if (file_type === 'dashboard') {
+    const msg = 'Cannot create a dashboard in the background. Navigate to /new/dashboard instead.';
+    return { content: { success: false, error: msg }, details: { success: false, error: msg } };
+  }
+
+  // On a question page, don't allow creating another question in the background
+  if (appState?.type === 'file' && appState.state.fileState.type === 'question' && file_type === 'question') {
+    const msg = 'Cannot create a background question when on a question page. Navigate to /new/question instead.';
+    return { content: { success: false, error: msg }, details: { success: false, error: msg } };
+  }
+
+  // On the explore page, only allow question and folder creation in the background
+  if (appState?.type === 'explore' && file_type !== 'question' && file_type !== 'folder') {
+    const msg = `Cannot create a ${file_type} in the background from the explore page. Navigate to /new/${file_type} instead.`;
+    return { content: { success: false, error: msg }, details: { success: false, error: msg } };
+  }
 
   // Default empty/root path to the current mode root (e.g. /org, /tutorial)
   if (!path || path === '/') {
