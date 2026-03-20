@@ -419,3 +419,49 @@ class ExecuteQuery(Tool):
     async def run(self) -> str:
         # Backend tool - executes in Next.js API routes
         raise UserInputException(self._unique_id)
+
+
+@register_agent
+class SubmitBinary(Tool):
+    """Submit a binary (yes/no) answer for an eval assertion.
+
+    Use this tool when asked to answer a binary question during evaluation.
+    Call this exactly once with your final answer.
+    """
+
+    def __init__(
+        self,
+        answer: bool = Field(..., description="True for yes/correct, False for no/incorrect"),
+        **kwargs
+    ):
+        super().__init__(**kwargs)  # type: ignore
+        self.answer = answer
+
+    async def reduce(self, child_batches):
+        pass
+
+    async def run(self) -> str:
+        return json.dumps({'submitted': True, 'answer': bool(self.answer)})
+
+
+@register_agent
+class SubmitNumber(Tool):
+    """Submit a numeric answer for a number_match eval assertion.
+
+    Use this tool when asked to compute and submit a numeric value during evaluation.
+    Call this exactly once with your final computed answer.
+    """
+
+    def __init__(
+        self,
+        answer: float = Field(..., description="Numeric answer to the eval question"),
+        **kwargs
+    ):
+        super().__init__(**kwargs)  # type: ignore
+        self.answer = answer
+
+    async def reduce(self, child_batches):
+        pass
+
+    async def run(self) -> str:
+        return json.dumps({'submitted': True, 'answer': float(self.answer)})

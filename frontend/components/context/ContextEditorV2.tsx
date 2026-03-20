@@ -9,7 +9,8 @@
 import { Box, VStack, Heading, HStack, Button, Text, SimpleGrid, Badge, Menu, Input, Dialog, Field, Portal, Collapsible, Icon, Switch } from '@chakra-ui/react';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { LuCircleAlert, LuCircleCheck, LuPlus, LuTrash2, LuChevronDown, LuGlobe, LuChevronRight } from 'react-icons/lu';
-import { ContextContent, DatabaseContext, WhitelistItem, ContextVersion, PublishedVersions, DocEntry } from '@/lib/types';
+import { ContextContent, DatabaseContext, WhitelistItem, ContextVersion, PublishedVersions, DocEntry, EvalItem } from '@/lib/types';
+import EvalsEditor from './EvalsEditor';
 import { serializeDatabases, parseDatabasesYaml, canDeleteVersion } from '@/lib/context/context-utils';
 import SchemaTreeView from '../SchemaTreeView';
 import ChildPathSelector from '../ChildPathSelector';
@@ -834,6 +835,24 @@ export default function ContextEditorV2({
                 Add Documentation Entry
               </Button>
             </VStack>
+          </Box>
+
+          {/* Evals */}
+          <Box>
+            <Heading size="md" mb={1}>Evals</Heading>
+            <Text fontSize="sm" color="fg.muted" mb={3}>
+              Test questions with expected answers to validate context quality
+            </Text>
+            <EvalsEditor
+              evals={content.evals || []}
+              onChange={(evals: EvalItem[]) => onChange({ evals })}
+              contextInfo={{
+                schema: availableDatabases,
+                documentation: (content.docs || []).map(d => d.content).join('\n\n'),
+                connection_id: availableDatabases[0]?.databaseName || '',
+              }}
+              fileId={file?.id}
+            />
           </Box>
         </VStack>
       ) : (
