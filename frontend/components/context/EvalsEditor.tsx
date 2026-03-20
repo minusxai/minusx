@@ -2,15 +2,18 @@
 
 import {
   Box, VStack, HStack, Button, Text, Badge, Input, Textarea,
-  Collapsible, Field, NativeSelect
+  Collapsible, Field, NativeSelect, Table, IconButton, Combobox, Portal, createListCollection
 } from '@chakra-ui/react';
-import { useState } from 'react';
+import { useState, useEffect, useRef, useMemo, Fragment } from 'react';
 import { LuPlus, LuTrash2, LuChevronDown, LuChevronRight, LuPlay, LuCircleCheck, LuCircleX } from 'react-icons/lu';
 import { EvalItem, EvalAssertion, EvalAppState, DatabaseWithSchema } from '@/lib/types';
 import type { CompletedToolCallFromPython } from '@/lib/chat-orchestration';
 import DatabaseSelector from '@/components/DatabaseSelector';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
+import { useAppSelector } from '@/store/hooks';
+import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import SimpleChatMessage from '@/components/explore/SimpleChatMessage';
+import Editor from '@monaco-editor/react';
 
 interface ContextInfo {
   schema: DatabaseWithSchema[];
@@ -40,33 +43,205 @@ function makeDefaultEval(): EvalItem {
   };
 }
 
+function formatExpected(assertion: EvalAssertion): string {
+  if (assertion.type === 'binary') {
+    return (assertion as { type: 'binary'; answer: boolean }).answer ? 'True' : 'False';
+  }
+  if (assertion.type === 'number_match') {
+    const a = assertion as { type: 'number_match'; answer: number; question_id?: number };
+    if (a.question_id !== undefined) return `Q#${a.question_id}`;
+    return String(a.answer);
+  }
+  return '—';
+}
+
+/** Textarea that buffers keystrokes locally and flushes to parent on blur. */
+function BufferedTextarea({ value, onCommit, ...props }: { value: string; onCommit: (v: string) => void } & Omit<React.ComponentProps<typeof Textarea>, 'value' | 'onChange' | 'onBlur'>) {
+  const [local, setLocal] = useState(value);
+  const localRef = useRef(local);
+
+  useEffect(() => { localRef.current = local; }, [local]);
+
+  // Sync from parent when the external value changes (e.g. undo, reset)
+  useEffect(() => { setLocal(value); }, [value]);
+
+  return (
+    <Textarea
+      {...props}
+      value={local}
+      onChange={e => setLocal(e.target.value)}
+      onBlur={() => { if (localRef.current !== value) onCommit(localRef.current); }}
+    />
+  );
+}
+
+/** Searchable file selector (reused for questions and dashboards) */
+function FileSearchSelect({ files, selectedId, onSelect, placeholder }: {
+  files: { id: number; name: string }[];
+  selectedId: number | null;
+  onSelect: (id: number) => void;
+  placeholder?: string;
+}) {
+  const [inputValue, setInputValue] = useState('');
+
+  const filteredCollection = useMemo(() => {
+    const lower = inputValue.toLowerCase();
+    const filtered = lower
+      ? files.filter(f => f.name.toLowerCase().includes(lower))
+      : files;
+    return createListCollection({
+      items: filtered.map(f => ({ value: f.id.toString(), label: f.name }))
+    });
+  }, [files, inputValue]);
+
+  return (
+    <Combobox.Root
+      collection={filteredCollection}
+      value={selectedId ? [selectedId.toString()] : []}
+      onValueChange={(e) => {
+        if (e.value[0]) onSelect(parseInt(e.value[0], 10));
+      }}
+      onInputValueChange={(details) => setInputValue(details.inputValue)}
+      inputBehavior="autohighlight"
+      openOnClick
+      positioning={{ gutter: 2 }}
+      size="sm"
+    >
+      <Combobox.Control>
+        <Combobox.Input placeholder={placeholder || 'Search...'} bg="bg.surface" fontSize="xs" onClick={e => e.stopPropagation()} />
+      </Combobox.Control>
+      <Portal>
+        <Combobox.Positioner>
+          <Combobox.Content>
+            <Combobox.Empty>No results found</Combobox.Empty>
+            {filteredCollection.items.map((item) => (
+              <Combobox.Item key={item.value} item={item}>
+                <Combobox.ItemText>{item.label}</Combobox.ItemText>
+                <Combobox.ItemIndicator />
+              </Combobox.Item>
+            ))}
+          </Combobox.Content>
+        </Combobox.Positioner>
+      </Portal>
+    </Combobox.Root>
+  );
+}
+
 function EvalTrace({ log }: { log: CompletedToolCallFromPython[] }) {
   const [open, setOpen] = useState(false);
   const [showThinking, setShowThinking] = useState(false);
+  const colorMode = useAppSelector((state) => state.ui.colorMode);
+
+  const stepsJson = useMemo(() => {
+    const steps = log.map((tc) => ({
+      tool: tc.function.name,
+      args: tc.function.arguments,
+      result: tc.content,
+    }));
+    return JSON.stringify(steps, null, 2);
+  }, [log]);
 
   return (
     <Collapsible.Root open={open} onOpenChange={({ open }) => setOpen(open)}>
-      <Collapsible.Trigger asChild>
-        <HStack gap={1} cursor="pointer" color="fg.muted" _hover={{ color: 'fg.default' }} w="fit-content">
-          {open ? <LuChevronDown size={12} /> : <LuChevronRight size={12} />}
-          <Text fontSize="xs">Agent trace ({log.length} steps)</Text>
-        </HStack>
-      </Collapsible.Trigger>
+      <HStack gap={3} onClick={e => e.stopPropagation()}>
+        <Collapsible.Trigger asChild>
+          <HStack gap={1} cursor="pointer" color="fg.muted" _hover={{ color: 'fg.default' }} w="fit-content">
+            {open ? <LuChevronDown size={12} /> : <LuChevronRight size={12} />}
+            <Text fontSize="xs">Agent trace ({log.length} steps)</Text>
+          </HStack>
+        </Collapsible.Trigger>
+        {open && (
+          <Button
+            size="2xs"
+            variant={showThinking ? 'subtle' : 'outline'}
+            colorPalette="gray"
+            onClick={() => setShowThinking(v => !v)}
+            fontSize="2xs"
+          >
+            {showThinking ? 'Hide Thinking' : 'Show Thinking'}
+          </Button>
+        )}
+      </HStack>
       <Collapsible.Content>
-        <VStack gap={1} align="stretch" pt={2} pl={2} borderLeft="2px solid" borderColor="border.muted">
-          {log.map((tc) => (
-            <SimpleChatMessage
-              key={tc.tool_call_id}
-              message={tc as any}
-              databaseName=""
-              isCompact
-              showThinking={showThinking}
-              toggleShowThinking={() => setShowThinking(v => !v)}
+        <HStack
+          gap={0}
+          align="stretch"
+          mt={2}
+          border="1px solid"
+          borderColor="border.muted"
+          borderRadius="sm"
+          overflow="hidden"
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Left: rendered tool calls */}
+          <Box flex={1} maxH="400px" overflowY="auto" p={2} borderRight="1px solid" borderColor="border.muted" minW="300px">
+            <VStack gap={1} align="stretch">
+              {log.map((tc, idx) => (
+                <SimpleChatMessage
+                  key={`${tc.role}-${idx}-${(tc as any).tool_call_id || ''}`}
+                  message={tc as any}
+                  databaseName=""
+                  isCompact
+                  showThinking={showThinking}
+                  toggleShowThinking={() => setShowThinking(v => !v)}
+                />
+              ))}
+            </VStack>
+          </Box>
+          {/* Right: JSON in Monaco */}
+          <Box flex={1} minH="200px" maxH="400px">
+            <Editor
+              height="400px"
+              language="json"
+              value={stepsJson}
+              theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
+              options={{
+                readOnly: true,
+                minimap: { enabled: false },
+                wordWrap: 'on',
+                lineNumbers: 'off',
+                fontSize: 12,
+                fontFamily: 'JetBrains Mono, monospace',
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                folding: true,
+                tabSize: 2,
+              }}
             />
-          ))}
-        </VStack>
+          </Box>
+        </HStack>
       </Collapsible.Content>
     </Collapsible.Root>
+  );
+}
+
+function AppStateBadge({ appState }: { appState: EvalAppState }) {
+  const filesState = useAppSelector(state => state.files.files);
+
+  const isExplore = appState.type === 'explore';
+  const fileId = isExplore ? undefined : (appState as { type: 'file'; file_id: number }).file_id;
+  const file = fileId !== undefined ? filesState[fileId] : undefined;
+  const fileType = (isExplore ? 'explore' : file?.type || 'question') as any;
+  const metadata = getFileTypeMetadata(fileType);
+  const TypeIcon = metadata?.icon;
+  const displayName = isExplore ? 'Explore' : (file?.name || `#${fileId}`);
+
+  return (
+    <HStack
+      gap={1}
+      fontFamily="mono"
+      fontSize="2xs"
+      fontWeight="600"
+      color="white"
+      px={1.5}
+      py={0.5}
+      bg={metadata?.color || 'accent.primary'}
+      borderRadius="sm"
+      w="fit-content"
+    >
+      {TypeIcon && <TypeIcon size={10} />}
+      <Text truncate maxW="120px">{displayName}</Text>
+    </HStack>
   );
 }
 
@@ -76,7 +251,9 @@ export default function EvalsEditor({ evals, onChange, contextInfo, fileId: _fil
   const [results, setResults] = useState<Record<number, EvalResult>>({});
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
 
+  const filesState = useAppSelector(state => state.files.files);
   const { files: questionFiles } = useFilesByCriteria({ criteria: { type: 'question' }, partial: true });
+  const { files: dashboardFiles } = useFilesByCriteria({ criteria: { type: 'dashboard' }, partial: true });
 
   function handleAdd() {
     const newEvals = [...evals, makeDefaultEval()];
@@ -107,9 +284,23 @@ export default function EvalsEditor({ evals, onChange, contextInfo, fileId: _fil
     handleChange(index, { assertion });
   }
 
-  function handleAppStateTypeChange(index: number, type: string) {
+  // Track the UI-level app state type per eval (explore/question/dashboard)
+  // Initialized from the actual file type in Redux
+  const [appStateUiTypes, setAppStateUiTypes] = useState<Record<number, 'explore' | 'question' | 'dashboard'>>({});
+
+  function getAppStateUiType(index: number, appState: EvalAppState): 'explore' | 'question' | 'dashboard' {
+    if (appStateUiTypes[index]) return appStateUiTypes[index];
+    if (appState.type === 'explore') return 'explore';
+    const fileId = (appState as { type: 'file'; file_id: number }).file_id;
+    const file = filesState[fileId];
+    if (file?.type === 'dashboard') return 'dashboard';
+    return 'question';
+  }
+
+  function handleAppStateTypeChange(index: number, uiType: string) {
+    setAppStateUiTypes(prev => ({ ...prev, [index]: uiType as 'explore' | 'question' | 'dashboard' }));
     const app_state: EvalAppState =
-      type === 'explore'
+      uiType === 'explore'
         ? { type: 'explore' }
         : { type: 'file', file_id: 0 };
     handleChange(index, { app_state });
@@ -175,20 +366,23 @@ export default function EvalsEditor({ evals, onChange, contextInfo, fileId: _fil
 
   return (
     <VStack gap={3} align="stretch">
-      {/* Run All bar */}
-      {evals.length > 0 && (
-        <HStack justify="space-between">
-          <HStack gap={2}>
-            {totalRan > 0 && (
-              <Badge colorPalette={totalPassed === totalRan ? 'green' : 'red'} variant="subtle">
-                {totalPassed}/{totalRan} passed
-              </Badge>
-            )}
-          </HStack>
+      {/* Header bar */}
+      <HStack justify="space-between">
+        <HStack gap={2}>
+          <Text fontSize="sm" color="fg.muted">
+            Test questions with expected answers to validate context quality
+          </Text>
+          {totalRan > 0 && (
+            <Badge colorPalette={totalPassed === totalRan ? 'green' : 'red'} variant="subtle">
+              {totalPassed}/{totalRan} passed
+            </Badge>
+          )}
+        </HStack>
+        {evals.length > 0 && (
           <Button
             size="sm"
             variant="outline"
-            colorPalette="blue"
+            colorPalette="teal"
             onClick={handleRunAll}
             loading={runningAll}
             disabled={runningAll || evals.length === 0}
@@ -196,271 +390,312 @@ export default function EvalsEditor({ evals, onChange, contextInfo, fileId: _fil
             <LuPlay />
             Run All
           </Button>
-        </HStack>
-      )}
+        )}
+      </HStack>
 
-      {/* Eval list */}
-      <VStack gap={2} align="stretch">
-        {evals.map((item, index) => {
-          const isExpanded = expandedItems.has(index);
-          const result = results[index];
-          const isRunning = runningIndex === index;
+      {/* Eval table */}
+      {evals.length > 0 && (
+        <Box overflowX="auto" border="1px solid" borderColor="border.default" borderRadius="md">
+          <Table.Root size="sm" tableLayout="fixed">
+            <Table.Header>
+              <Table.Row bg="bg.muted">
+                <Table.ColumnHeader w="36px" textAlign="center" fontFamily="mono" fontSize="2xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="wider">#</Table.ColumnHeader>
+                <Table.ColumnHeader w="300px" fontSize="2xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="wider">Question</Table.ColumnHeader>
+                <Table.ColumnHeader w="110px" fontSize="2xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="wider">Type</Table.ColumnHeader>
+                <Table.ColumnHeader w="90px" fontSize="2xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="wider">Expected</Table.ColumnHeader>
+                <Table.ColumnHeader w="110px" fontSize="2xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="wider">App State</Table.ColumnHeader>
+                <Table.ColumnHeader w="50px" textAlign="center" fontSize="2xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="wider">Status</Table.ColumnHeader>
+                <Table.ColumnHeader w="70px" textAlign="center" fontSize="2xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="wider">Actions</Table.ColumnHeader>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {evals.map((item, index) => {
+                const isExpanded = expandedItems.has(index);
+                const result = results[index];
+                const isRunning = runningIndex === index;
 
-          return (
-            <Box
-              key={index}
-              border="1px solid"
-              borderColor={result ? (result.passed ? 'green.500' : 'red.500') : 'border.default'}
-              borderRadius="md"
-              overflow="hidden"
-            >
-              {/* Header */}
-              <HStack
-                px={3}
-                py={2}
-                bg="bg.muted"
-                cursor="pointer"
-                onClick={() => toggleExpand(index)}
-                justify="space-between"
-              >
-                <HStack gap={2} flex={1} minW={0}>
-                  {isExpanded ? <LuChevronDown size={14} /> : <LuChevronRight size={14} />}
-                  <Text fontSize="sm" fontWeight="600" truncate>
-                    {item.question || `Eval ${index + 1}`}
-                  </Text>
-                </HStack>
-                <HStack gap={2} onClick={e => e.stopPropagation()}>
-                  <Badge size="sm" variant="outline" colorPalette="gray">
-                    {item.assertion.type}
-                  </Badge>
-                  <Badge size="sm" variant="outline" colorPalette="gray">
-                    {item.app_state.type}
-                  </Badge>
-                  {result && (
-                    result.passed
-                      ? <LuCircleCheck size={16} color="var(--chakra-colors-green-500)" />
-                      : <LuCircleX size={16} color="var(--chakra-colors-red-500)" />
-                  )}
-                  <Button
-                    size="xs"
-                    variant="ghost"
-                    colorPalette="blue"
-                    onClick={() => handleRunOne(index)}
-                    loading={isRunning}
-                    disabled={isRunning || runningAll}
-                  >
-                    <LuPlay />
-                  </Button>
-                  <Button
-                    size="xs"
-                    variant="ghost"
-                    colorPalette="red"
-                    onClick={() => handleDelete(index)}
-                    disabled={runningAll || isRunning}
-                  >
-                    <LuTrash2 />
-                  </Button>
-                </HStack>
-              </HStack>
-
-              {/* Expanded editor */}
-              <Collapsible.Root open={isExpanded}>
-                <Collapsible.Content>
-                  <VStack gap={3} p={3} align="stretch">
-                    {/* Question */}
-                    <Field.Root>
-                      <Field.Label fontSize="xs" fontWeight="600">Question</Field.Label>
-                      <Textarea
-                        size="sm"
-                        value={item.question}
-                        onChange={e => handleChange(index, { question: e.target.value })}
-                        placeholder="Natural language question for the agent..."
-                        rows={2}
-                      />
-                    </Field.Root>
-
-                    {/* App State */}
-                    <HStack gap={3} align="flex-start">
-                      <Field.Root flex="0 0 140px">
-                        <Field.Label fontSize="xs" fontWeight="600">App State</Field.Label>
-                        <NativeSelect.Root size="sm">
-                          <NativeSelect.Field
-                            value={item.app_state.type}
-                            onChange={e => handleAppStateTypeChange(index, e.target.value)}
-                          >
-                            <option value="explore">Explore</option>
-                            <option value="file">File</option>
-                          </NativeSelect.Field>
-                          <NativeSelect.Indicator />
-                        </NativeSelect.Root>
-                      </Field.Root>
-                      {item.app_state.type === 'file' && (
-                        <Field.Root flex={1}>
-                          <Field.Label fontSize="xs" fontWeight="600">Question</Field.Label>
-                          <NativeSelect.Root size="sm">
-                            <NativeSelect.Field
-                              value={(item.app_state as { type: 'file'; file_id: number }).file_id || ''}
-                              onChange={e => handleChange(index, {
-                                app_state: { type: 'file', file_id: parseInt(e.target.value) || 0 }
-                              })}
-                            >
-                              <option value="">— select a question —</option>
-                              {questionFiles.map(f => (
-                                <option key={f.id} value={f.id}>
-                                  {f.name || f.path}
-                                </option>
-                              ))}
-                            </NativeSelect.Field>
-                            <NativeSelect.Indicator />
-                          </NativeSelect.Root>
-                        </Field.Root>
-                      )}
-                    </HStack>
-
-                    {/* Assertion */}
-                    <Field.Root>
-                      <Field.Label fontSize="xs" fontWeight="600">Assertion Type</Field.Label>
-                      <NativeSelect.Root size="sm">
-                        <NativeSelect.Field
-                          value={item.assertion.type}
-                          onChange={e => handleAssertionTypeChange(index, e.target.value)}
+                return (
+                  <Fragment key={index}>
+                    <Table.Row
+                      cursor="pointer"
+                      onClick={() => toggleExpand(index)}
+                      _hover={{ bg: 'bg.muted' }}
+                      {...(result ? { borderLeftWidth: '3px', borderLeftColor: result.passed ? 'green.500' : 'red.500' } : {})}
+                    >
+                      <Table.Cell textAlign="center" fontFamily="mono" fontSize="xs" color="fg.muted" py={2}>
+                        {index + 1}
+                      </Table.Cell>
+                      <Table.Cell py={2} maxW="300px">
+                        <HStack gap={1.5}>
+                          {isExpanded ? <LuChevronDown size={12} /> : <LuChevronRight size={12} />}
+                          <Text fontSize="sm" truncate>
+                            {item.question || <Text as="span" color="fg.muted" fontStyle="italic">Untitled eval</Text>}
+                          </Text>
+                        </HStack>
+                      </Table.Cell>
+                      <Table.Cell py={2}>
+                        <Badge
+                          size="xs"
+                          variant="subtle"
+                          colorPalette={item.assertion.type === 'binary' ? 'purple' : 'blue'}
+                          fontFamily="mono"
                         >
-                          <option value="binary">Binary (yes/no)</option>
-                          <option value="number_match">Number match</option>
-                        </NativeSelect.Field>
-                        <NativeSelect.Indicator />
-                      </NativeSelect.Root>
-                    </Field.Root>
-
-                    {item.assertion.type === 'binary' && (
-                      <Field.Root>
-                        <Field.Label fontSize="xs" fontWeight="600">Expected Answer</Field.Label>
-                        <NativeSelect.Root size="sm">
-                          <NativeSelect.Field
-                            value={String((item.assertion as { type: 'binary'; answer: boolean }).answer)}
-                            onChange={e => handleChange(index, {
-                              assertion: { type: 'binary', answer: e.target.value === 'true' }
-                            })}
+                          {item.assertion.type === 'binary' ? 'binary' : 'number'}
+                        </Badge>
+                      </Table.Cell>
+                      <Table.Cell py={2}>
+                        <Text fontSize="xs" fontFamily="mono" fontWeight="600">{formatExpected(item.assertion)}</Text>
+                      </Table.Cell>
+                      <Table.Cell py={2}>
+                        <AppStateBadge appState={item.app_state} />
+                      </Table.Cell>
+                      <Table.Cell textAlign="center" py={2}>
+                        {result ? (
+                          result.passed
+                            ? <LuCircleCheck size={16} color="var(--chakra-colors-green-500)" />
+                            : <LuCircleX size={16} color="var(--chakra-colors-red-500)" />
+                        ) : (
+                          <Text fontSize="xs" color="fg.subtle">—</Text>
+                        )}
+                      </Table.Cell>
+                      <Table.Cell textAlign="center" py={2} onClick={e => e.stopPropagation()}>
+                        <HStack gap={0.5} justify="center">
+                          <IconButton
+                            aria-label="Run eval"
+                            size="2xs"
+                            variant="ghost"
+                            colorPalette="teal"
+                            onClick={() => handleRunOne(index)}
+                            loading={isRunning}
+                            disabled={isRunning || runningAll}
                           >
-                            <option value="true">True (yes)</option>
-                            <option value="false">False (no)</option>
-                          </NativeSelect.Field>
-                          <NativeSelect.Indicator />
-                        </NativeSelect.Root>
-                      </Field.Root>
-                    )}
+                            <LuPlay />
+                          </IconButton>
+                          <IconButton
+                            aria-label="Delete eval"
+                            size="2xs"
+                            variant="ghost"
+                            colorPalette="red"
+                            onClick={() => handleDelete(index)}
+                            disabled={runningAll || isRunning}
+                          >
+                            <LuTrash2 />
+                          </IconButton>
+                        </HStack>
+                      </Table.Cell>
+                    </Table.Row>
 
-                    {item.assertion.type === 'number_match' && (() => {
-                      const a = item.assertion as { type: 'number_match'; answer: number; question_id?: number };
-                      const useQuestion = a.question_id !== undefined;
-                      return (
-                        <VStack gap={2} align="stretch">
-                          <HStack gap={3} align="flex-start">
-                            <Field.Root flex="0 0 140px">
-                              <Field.Label fontSize="xs" fontWeight="600">Expected Source</Field.Label>
-                              <NativeSelect.Root size="sm">
-                                <NativeSelect.Field
-                                  value={useQuestion ? 'question' : 'static'}
-                                  onChange={e => {
-                                    if (e.target.value === 'question') {
-                                      handleChange(index, { assertion: { ...a, question_id: 0 } });
-                                    } else {
-                                      const { question_id: _, ...rest } = a;
-                                      handleChange(index, { assertion: rest });
-                                    }
-                                  }}
-                                >
-                                  <option value="static">Static number</option>
-                                  <option value="question">From question</option>
-                                </NativeSelect.Field>
-                                <NativeSelect.Indicator />
-                              </NativeSelect.Root>
-                            </Field.Root>
-                            {useQuestion ? (
-                              <Field.Root flex={1}>
-                                <Field.Label fontSize="xs" fontWeight="600">Question (first cell = expected)</Field.Label>
-                                <NativeSelect.Root size="sm">
-                                  <NativeSelect.Field
-                                    value={a.question_id ?? ''}
-                                    onChange={e => handleChange(index, {
-                                      assertion: { ...a, question_id: parseInt(e.target.value) || 0 }
-                                    })}
-                                  >
-                                    <option value="">— select a question —</option>
-                                    {questionFiles.map(f => (
-                                      <option key={f.id} value={f.id}>
-                                        {f.name || f.path}
-                                      </option>
-                                    ))}
-                                  </NativeSelect.Field>
-                                  <NativeSelect.Indicator />
-                                </NativeSelect.Root>
-                              </Field.Root>
-                            ) : (
-                              <Field.Root flex={1}>
-                                <Field.Label fontSize="xs" fontWeight="600">Expected Number</Field.Label>
-                                <Input
-                                  size="sm"
-                                  type="number"
-                                  value={a.answer ?? ''}
-                                  onChange={e => handleChange(index, {
-                                    assertion: { ...a, answer: parseFloat(e.target.value) || 0 }
-                                  })}
-                                  placeholder="0"
+                    {/* Expanded detail row */}
+                    {isExpanded && (
+                      <Table.Row>
+                        <Table.Cell colSpan={7} p={0}>
+                          <Box px={3} py={2} bg="bg.subtle" borderTop="1px solid" borderColor="border.muted">
+                            <VStack gap={2} align="stretch">
+                              {/* Row 1: Question textarea */}
+                              <Field.Root>
+                                <Field.Label fontSize="2xs" fontWeight="600">Question</Field.Label>
+                                <BufferedTextarea
+                                  size="xs"
+                                  value={item.question}
+                                  onCommit={v => handleChange(index, { question: v })}
+                                  placeholder="Natural language question for the agent..."
+                                  rows={1}
+                                  onClick={e => e.stopPropagation()}
                                 />
                               </Field.Root>
-                            )}
-                          </HStack>
-                          <Field.Root>
-                            <Field.Label fontSize="xs" fontWeight="600">Connection (optional override)</Field.Label>
-                            <DatabaseSelector
-                              value={item.connection_id || ''}
-                              onChange={val => handleChange(index, { connection_id: val || undefined })}
-                            />
-                          </Field.Root>
-                        </VStack>
-                      );
-                    })()}
 
-                    {/* Result */}
-                    {result && (
-                      <VStack gap={2} align="stretch">
-                        <Box
-                          p={2}
-                          bg={result.passed ? 'green.500/10' : 'red.500/10'}
-                          borderRadius="sm"
-                          border="1px solid"
-                          borderColor={result.passed ? 'green.500/30' : 'red.500/30'}
-                        >
-                          <HStack gap={2} mb={result.error || Object.keys(result.details).length > 0 ? 1 : 0}>
-                            {result.passed
-                              ? <LuCircleCheck size={14} color="var(--chakra-colors-green-500)" />
-                              : <LuCircleX size={14} color="var(--chakra-colors-red-500)" />}
-                            <Text fontSize="xs" fontWeight="600" color={result.passed ? 'green.600' : 'red.600'}>
-                              {result.passed ? 'Passed' : 'Failed'}
-                            </Text>
-                          </HStack>
-                          {(result.error || Object.keys(result.details).length > 0) && (
-                            <Text fontSize="xs" fontFamily="mono" color="fg.muted" whiteSpace="pre-wrap">
-                              {result.error || JSON.stringify(result.details, null, 2)}
-                            </Text>
-                          )}
-                        </Box>
-                        {result.log && result.log.length > 0 && (
-                          <EvalTrace log={result.log} />
-                        )}
-                      </VStack>
+                              {/* Row 2: App State + file selector + Connection */}
+                              <HStack gap={3} align="flex-end">
+                                <Field.Root flex="0 0 120px">
+                                  <Field.Label fontSize="2xs" fontWeight="600">App State</Field.Label>
+                                  <NativeSelect.Root size="xs">
+                                    <NativeSelect.Field
+                                      value={getAppStateUiType(index, item.app_state)}
+                                      onChange={e => handleAppStateTypeChange(index, e.target.value)}
+                                      onClick={e => e.stopPropagation()}
+                                    >
+                                      <option value="explore">Explore</option>
+                                      <option value="question">Question</option>
+                                      <option value="dashboard">Dashboard</option>
+                                    </NativeSelect.Field>
+                                    <NativeSelect.Indicator />
+                                  </NativeSelect.Root>
+                                </Field.Root>
+                                {item.app_state.type === 'file' && getAppStateUiType(index, item.app_state) === 'question' && (
+                                  <Field.Root flex={1}>
+                                    <Field.Label fontSize="2xs" fontWeight="600">Question</Field.Label>
+                                    <FileSearchSelect
+                                      files={questionFiles}
+                                      selectedId={(item.app_state as { type: 'file'; file_id: number }).file_id || null}
+                                      onSelect={(id) => handleChange(index, { app_state: { type: 'file', file_id: id } })}
+                                      placeholder="Search questions..."
+                                    />
+                                  </Field.Root>
+                                )}
+                                {item.app_state.type === 'file' && getAppStateUiType(index, item.app_state) === 'dashboard' && (
+                                  <Field.Root flex={1}>
+                                    <Field.Label fontSize="2xs" fontWeight="600">Dashboard</Field.Label>
+                                    <FileSearchSelect
+                                      files={dashboardFiles}
+                                      selectedId={(item.app_state as { type: 'file'; file_id: number }).file_id || null}
+                                      onSelect={(id) => handleChange(index, { app_state: { type: 'file', file_id: id } })}
+                                      placeholder="Search dashboards..."
+                                    />
+                                  </Field.Root>
+                                )}
+                                <Field.Root flex="0 0 160px">
+                                  <Field.Label fontSize="2xs" fontWeight="600">Connection (optional)</Field.Label>
+                                  <DatabaseSelector
+                                    value={item.connection_id || ''}
+                                    onChange={val => handleChange(index, { connection_id: val || undefined })}
+                                  />
+                                </Field.Root>
+                              </HStack>
+
+                              {/* Row 3: Assertion type + expected value */}
+                              <HStack gap={3} align="flex-end">
+                                <Field.Root flex="0 0 140px">
+                                  <Field.Label fontSize="2xs" fontWeight="600">Assertion</Field.Label>
+                                  <NativeSelect.Root size="xs">
+                                    <NativeSelect.Field
+                                      value={item.assertion.type}
+                                      onChange={e => handleAssertionTypeChange(index, e.target.value)}
+                                      onClick={e => e.stopPropagation()}
+                                    >
+                                      <option value="binary">Binary (yes/no)</option>
+                                      <option value="number_match">Number match</option>
+                                    </NativeSelect.Field>
+                                    <NativeSelect.Indicator />
+                                  </NativeSelect.Root>
+                                </Field.Root>
+                                {item.assertion.type === 'binary' && (
+                                  <Field.Root flex="0 0 120px">
+                                    <Field.Label fontSize="2xs" fontWeight="600">Expected</Field.Label>
+                                    <NativeSelect.Root size="xs">
+                                      <NativeSelect.Field
+                                        value={String((item.assertion as { type: 'binary'; answer: boolean }).answer)}
+                                        onChange={e => handleChange(index, {
+                                          assertion: { type: 'binary', answer: e.target.value === 'true' }
+                                        })}
+                                        onClick={e => e.stopPropagation()}
+                                      >
+                                        <option value="true">True (yes)</option>
+                                        <option value="false">False (no)</option>
+                                      </NativeSelect.Field>
+                                      <NativeSelect.Indicator />
+                                    </NativeSelect.Root>
+                                  </Field.Root>
+                                )}
+                                {item.assertion.type === 'number_match' && (() => {
+                                  const a = item.assertion as { type: 'number_match'; answer: number; question_id?: number };
+                                  const useQuestion = a.question_id !== undefined;
+                                  return (
+                                    <>
+                                      <Field.Root flex="0 0 120px">
+                                        <Field.Label fontSize="2xs" fontWeight="600">Source</Field.Label>
+                                        <NativeSelect.Root size="xs">
+                                          <NativeSelect.Field
+                                            value={useQuestion ? 'question' : 'static'}
+                                            onChange={e => {
+                                              if (e.target.value === 'question') {
+                                                handleChange(index, { assertion: { ...a, question_id: 0 } });
+                                              } else {
+                                                const { question_id: _, ...rest } = a;
+                                                handleChange(index, { assertion: rest });
+                                              }
+                                            }}
+                                            onClick={e => e.stopPropagation()}
+                                          >
+                                            <option value="static">Static number</option>
+                                            <option value="question">From question</option>
+                                          </NativeSelect.Field>
+                                          <NativeSelect.Indicator />
+                                        </NativeSelect.Root>
+                                      </Field.Root>
+                                      {useQuestion ? (
+                                        <Field.Root flex={1}>
+                                          <Field.Label fontSize="2xs" fontWeight="600">Question (first cell = expected)</Field.Label>
+                                          <NativeSelect.Root size="xs">
+                                            <NativeSelect.Field
+                                              value={a.question_id ?? ''}
+                                              onChange={e => handleChange(index, {
+                                                assertion: { ...a, question_id: parseInt(e.target.value) || 0 }
+                                              })}
+                                              onClick={e => e.stopPropagation()}
+                                            >
+                                              <option value="">— select —</option>
+                                              {questionFiles.map(f => (
+                                                <option key={f.id} value={f.id}>{f.name || f.path}</option>
+                                              ))}
+                                            </NativeSelect.Field>
+                                            <NativeSelect.Indicator />
+                                          </NativeSelect.Root>
+                                        </Field.Root>
+                                      ) : (
+                                        <Field.Root flex="0 0 100px">
+                                          <Field.Label fontSize="2xs" fontWeight="600">Expected</Field.Label>
+                                          <Input
+                                            size="xs"
+                                            type="number"
+                                            value={a.answer ?? ''}
+                                            onChange={e => handleChange(index, {
+                                              assertion: { ...a, answer: parseFloat(e.target.value) || 0 }
+                                            })}
+                                            onClick={e => e.stopPropagation()}
+                                            placeholder="0"
+                                          />
+                                        </Field.Root>
+                                      )}
+                                    </>
+                                  );
+                                })()}
+                              </HStack>
+
+                              {/* Result */}
+                              {result && (
+                                <VStack gap={1} align="stretch">
+                                  <Box
+                                    px={2}
+                                    py={1.5}
+                                    bg={result.passed ? 'green.500/10' : 'red.500/10'}
+                                    borderRadius="sm"
+                                    border="1px solid"
+                                    borderColor={result.passed ? 'green.500/30' : 'red.500/30'}
+                                  >
+                                    <HStack gap={2}>
+                                      {result.passed
+                                        ? <LuCircleCheck size={12} color="var(--chakra-colors-green-500)" />
+                                        : <LuCircleX size={12} color="var(--chakra-colors-red-500)" />}
+                                      <Text fontSize="xs" fontWeight="600" color={result.passed ? 'green.600' : 'red.600'}>
+                                        {result.passed ? 'Passed' : 'Failed'}
+                                      </Text>
+                                      {(result.error || Object.keys(result.details).length > 0) && (
+                                        <Text fontSize="2xs" fontFamily="mono" color="fg.muted" truncate>
+                                          {result.error || JSON.stringify(result.details)}
+                                        </Text>
+                                      )}
+                                    </HStack>
+                                  </Box>
+                                  {result.log && result.log.length > 0 && (
+                                    <EvalTrace log={result.log} />
+                                  )}
+                                </VStack>
+                              )}
+                            </VStack>
+                          </Box>
+                        </Table.Cell>
+                      </Table.Row>
                     )}
-                  </VStack>
-                </Collapsible.Content>
-              </Collapsible.Root>
-            </Box>
-          );
-        })}
-      </VStack>
+                  </Fragment>
+                );
+              })}
+            </Table.Body>
+          </Table.Root>
+        </Box>
+      )}
 
       {/* Add eval button */}
-      <Button size="sm" variant="outline" onClick={handleAdd}>
+      <Button size="sm" variant="outline" colorPalette="teal" onClick={handleAdd}>
         <LuPlus />
         Add Eval
       </Button>

@@ -6,7 +6,7 @@
  * All changes go through onChange immediately
  */
 
-import { Box, VStack, Heading, HStack, Button, Text, SimpleGrid, Badge, Menu, Input, Dialog, Field, Portal, Collapsible, Icon, Switch } from '@chakra-ui/react';
+import { Box, VStack, Heading, HStack, Button, Text, SimpleGrid, Badge, Menu, Input, Dialog, Field, Portal, Collapsible, Icon, Switch, Tabs } from '@chakra-ui/react';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { LuCircleAlert, LuCircleCheck, LuPlus, LuTrash2, LuChevronDown, LuGlobe, LuChevronRight } from 'react-icons/lu';
 import { ContextContent, DatabaseContext, WhitelistItem, ContextVersion, PublishedVersions, DocEntry, EvalItem } from '@/lib/types';
@@ -71,10 +71,12 @@ export default function ContextEditorV2({
   onDeleteVersion,
   onUpdateDescription
 }: ContextEditorV2Props) {
+  const [topTab, setTopTab] = useState<'context' | 'evals'>('context');
   const [activeTab, setActiveTab] = useState<'picker' | 'yaml'>('picker');
   const [yamlText, setYamlText] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const colorMode = useAppSelector((state) => state.ui.colorMode);
+  const showDebug = useAppSelector((state) => state.ui.showDebug);
   const user = useAppSelector(state => state.auth.user);
   const filesState = useAppSelector(state => state.files.files); // Moved here for consistent hooks order
 
@@ -341,8 +343,8 @@ export default function ContextEditorV2({
         />
       </Box>
 
-      {/* Version Management (Admin Only) */}
-      {isAdmin && allVersions.length > 0 && (
+      {/* Version Management (Admin Only, behind debug toggle) */}
+      {showDebug && isAdmin && allVersions.length > 0 && (
         <HStack justify="space-between" px={3} py={2} bg="bg.muted" borderRadius="md">
           <HStack gap={3}>
             <Text fontSize="sm" fontWeight="600" color="fg.muted">
@@ -549,358 +551,412 @@ export default function ContextEditorV2({
         </Box>
       )}
 
-      {/* Content Area */}
-      {activeTab === 'picker' ? (
-        <VStack gap={6} align="stretch">
-          {/* Database Sections */}
-          <Box>
-            <HStack gap={2} mb={0}>
-              <Heading size="md">
-                Database Connections
-              </Heading>
-            </HStack>
-            <Text fontSize="sm" color="fg.muted" mb={3}>
-              Whitelist schemas and tables from the available database connections
-            </Text>
-            {!isLoading && availableDatabases.length > 0 && totalWhitelisted === 0 && (
-              <Box
-                p={3}
-                mb={3}
-                bg="accent.warning/10"
-                borderLeft="3px solid"
-                borderColor="accent.warning"
-                borderRadius="md"
-              >
-                <HStack gap={2}>
-                  <LuCircleAlert color="var(--chakra-colors-accent-warning)" />
-                  <Text color="accent.warning" fontSize="sm">
-                    No schemas or tables whitelisted. Select at least one schema or table below to make data available for this context.
-                  </Text>
-                </HStack>
-              </Box>
+      {/* Top-level Tabs */}
+      <Tabs.Root
+        value={topTab}
+        onValueChange={(e) => setTopTab(e.value as 'context' | 'evals')}
+        variant="line"
+        colorPalette="teal"
+      >
+        <Tabs.List>
+          <Tabs.Trigger value="context" fontFamily="mono" fontSize="sm">
+            Context
+          </Tabs.Trigger>
+          <Tabs.Trigger value="evals" fontFamily="mono" fontSize="sm">
+            Evals
+            {(content.evals?.length ?? 0) > 0 && (
+              <Badge size="xs" colorPalette="gray" variant="subtle" ml={1.5}>
+                {content.evals!.length}
+              </Badge>
             )}
-            {isLoading ? (
-              <Box p={8} textAlign="center">
-                <Text color="fg.muted">Loading context...</Text>
-              </Box>
-            ) : availableDatabases.length === 0 ? (
-              <Box p={8} textAlign="center">
-                <Text color="fg.muted">No schemas available from parent context</Text>
-              </Box>
-            ) : (
-              <VStack gap={4} align="stretch">
-                {availableDatabases.map((database) => {
-                  const databases = content.databases || [];
-                  const dbContext = databases.find(db => db.databaseName === database.databaseName);
-                  const whitelist = dbContext?.whitelist || [];
+          </Tabs.Trigger>
+        </Tabs.List>
 
-                  const isExpanded = expandedDatabases.has(database.databaseName);
-                  const whitelistedSchemas = whitelist.filter(w => w.type === 'schema');
-                  const whitelistedTables = whitelist.filter(w => w.type === 'table');
-                  const totalTables = database.schemas.reduce((sum, s) => sum + s.tables.length, 0);
-                  // Tables covered by schema-level whitelists + individually whitelisted tables
-                  const tablesFromSchemas = database.schemas
-                    .filter(s => whitelistedSchemas.some(ws => ws.name === s.schema))
-                    .reduce((sum, s) => sum + s.tables.length, 0);
-                  const effectiveTableCount = tablesFromSchemas + whitelistedTables.length;
-                  const hasAny = effectiveTableCount > 0;
+        {/* Context Tab */}
+        <Tabs.Content value="context">
+          {activeTab === 'picker' ? (
+            <VStack gap={6} align="stretch">
+              {/* Database Sections */}
+              <Box>
+                <HStack gap={2} mb={0}>
+                  <Heading size="md">
+                    Database Connections
+                  </Heading>
+                </HStack>
+                <Text fontSize="sm" color="fg.muted" mb={3}>
+                  Whitelist schemas and tables from the available database connections
+                </Text>
+                {!isLoading && availableDatabases.length > 0 && totalWhitelisted === 0 && (
+                  <Box
+                    p={3}
+                    mb={3}
+                    bg="accent.warning/10"
+                    borderLeft="3px solid"
+                    borderColor="accent.warning"
+                    borderRadius="md"
+                  >
+                    <HStack gap={2}>
+                      <LuCircleAlert color="var(--chakra-colors-accent-warning)" />
+                      <Text color="accent.warning" fontSize="sm">
+                        No schemas or tables whitelisted. Select at least one schema or table below to make data available for this context.
+                      </Text>
+                    </HStack>
+                  </Box>
+                )}
+                {isLoading ? (
+                  <Box p={8} textAlign="center">
+                    <Text color="fg.muted">Loading context...</Text>
+                  </Box>
+                ) : availableDatabases.length === 0 ? (
+                  <Box p={8} textAlign="center">
+                    <Text color="fg.muted">No schemas available from parent context</Text>
+                  </Box>
+                ) : (
+                  <VStack gap={4} align="stretch">
+                    {availableDatabases.map((database) => {
+                      const databases = content.databases || [];
+                      const dbContext = databases.find(db => db.databaseName === database.databaseName);
+                      const whitelist = dbContext?.whitelist || [];
 
-                  return (
+                      const isExpanded = expandedDatabases.has(database.databaseName);
+                      const whitelistedSchemas = whitelist.filter(w => w.type === 'schema');
+                      const whitelistedTables = whitelist.filter(w => w.type === 'table');
+                      const totalTables = database.schemas.reduce((sum, s) => sum + s.tables.length, 0);
+                      // Tables covered by schema-level whitelists + individually whitelisted tables
+                      const tablesFromSchemas = database.schemas
+                        .filter(s => whitelistedSchemas.some(ws => ws.name === s.schema))
+                        .reduce((sum, s) => sum + s.tables.length, 0);
+                      const effectiveTableCount = tablesFromSchemas + whitelistedTables.length;
+                      const hasAny = effectiveTableCount > 0;
+
+                      return (
+                        <Box
+                          key={database.databaseName}
+                          border="1px solid"
+                          borderColor="border.default"
+                          borderRadius="md"
+                          overflow="hidden"
+                          bg="bg.surface"
+                        >
+                          <Collapsible.Root open={isExpanded} onOpenChange={() => toggleDatabase(database.databaseName)}>
+                            <Collapsible.Trigger asChild>
+                              <Box
+                                px={4}
+                                py={3}
+                                bg="bg.muted"
+                                cursor="pointer"
+                                _hover={{ bg: 'bg.emphasized' }}
+                                {...(isExpanded ? { borderBottom: '1px solid', borderColor: 'border.default' } : {})}
+                              >
+                                <HStack gap={2}>
+                                  <Icon
+                                    as={isExpanded ? LuChevronDown : LuChevronRight}
+                                    boxSize={4}
+                                    color="fg.muted"
+                                  />
+                                  <Text
+                                    fontSize="md"
+                                    fontWeight="700"
+                                    color="fg.default"
+                                    fontFamily="mono"
+                                  >
+                                    {database.databaseName}
+                                  </Text>
+                                  <Box
+                                    px={2}
+                                    py={0.5}
+                                    bg={hasAny ? 'accent.cyan/15' : 'bg.canvas'}
+                                    borderRadius="sm"
+                                    border="1px solid"
+                                    borderColor={hasAny ? 'accent.cyan/30' : 'border.muted'}
+                                  >
+                                    <Text
+                                      fontSize="2xs"
+                                      fontWeight="700"
+                                      color={hasAny ? 'accent.cyan' : 'fg.subtle'}
+                                      fontFamily="mono"
+                                    >
+                                      {effectiveTableCount}/{totalTables} {totalTables === 1 ? 'table' : 'tables'}
+                                    </Text>
+                                  </Box>
+                                </HStack>
+                              </Box>
+                            </Collapsible.Trigger>
+                            <Collapsible.Content>
+                              <Box p={4}>
+                                <SchemaTreeView
+                                  schemas={database.schemas}
+                                  selectable={true}
+                                  whitelist={whitelist}
+                                  onWhitelistChange={(newWhitelist) =>
+                                    handleWhitelistChange(database.databaseName, newWhitelist)
+                                  }
+                                  showColumns={true}
+                                  showStats={true}
+                                  showPathFilter={true}
+                                  availableChildPaths={availableChildPaths}
+                                />
+                              </Box>
+                            </Collapsible.Content>
+                          </Collapsible.Root>
+                        </Box>
+                      );
+                    })}
+                  </VStack>
+                )}
+              </Box>
+
+              {/* Markdown Documentation */}
+              <Box>
+                <HStack gap={2} mb={0}>
+                  <Heading size="md">
+                    Documentation (Markdown)
+                  </Heading>
+                  {(!content.docs || content.docs.length === 0) && (
+                    <HStack gap={1} color="accent.warning">
+                      <LuCircleAlert size={16} />
+                      <Text fontSize="sm" fontWeight="500">No documentation added</Text>
+                    </HStack>
+                  )}
+                </HStack>
+                <Text fontSize="sm" color="fg.muted" mb={3}>
+                  Add notes and documentation about the databases
+                </Text>
+
+                {/* Inherited docs (read-only) */}
+                {content.fullDocs && content.fullDocs.length > 0 && (
+                  <Box mb={4}>
+                    <Text fontSize="sm" fontWeight="600" color="fg.muted" mb={2}>
+                      Inherited Documentation (from parent contexts)
+                    </Text>
+                    <VStack gap={2} align="stretch">
+                      {content.fullDocs.map((docEntry, idx) => (
+                        <Box
+                          key={`inherited-${idx}`}
+                          p={3}
+                          border="1px solid"
+                          borderColor="border.default"
+                          borderRadius="md"
+                          bg="bg.muted"
+                          opacity={0.7}
+                        >
+                          <Markdown context="mainpage">{docEntry.content}</Markdown>
+                        </Box>
+                      ))}
+                    </VStack>
+                  </Box>
+                )}
+
+                {/* Own docs (editable) */}
+                <VStack gap={4} align="stretch">
+                  {(content.docs || []).map((docEntry, index) => (
                     <Box
-                      key={database.databaseName}
+                      key={index}
                       border="1px solid"
-                      borderColor="border.default"
+                      borderColor={docEntry.draft ? 'border.muted' : 'border.default'}
                       borderRadius="md"
                       overflow="hidden"
-                      bg="bg.surface"
+                      opacity={docEntry.draft ? 0.6 : 1}
                     >
-                      <Collapsible.Root open={isExpanded} onOpenChange={() => toggleDatabase(database.databaseName)}>
-                        <Collapsible.Trigger asChild>
-                          <Box
-                            px={4}
-                            py={3}
-                            bg="bg.muted"
-                            cursor="pointer"
-                            _hover={{ bg: 'bg.emphasized' }}
-                            {...(isExpanded ? { borderBottom: '1px solid', borderColor: 'border.default' } : {})}
+                      {/* Header with draft toggle and remove button */}
+                      <HStack
+                        justify="space-between"
+                        px={3}
+                        py={2}
+                        bg="bg.muted"
+                        borderBottom="1px solid"
+                        borderColor="border.default"
+                      >
+                        <Text fontSize="sm" fontWeight="600">
+                          Documentation Entry {index + 1}
+                        </Text>
+                        <HStack gap={3}>
+                          <HStack gap={1.5}>
+                            <Badge size="sm" colorPalette={docEntry.draft ? 'yellow' : 'green'} variant="subtle">
+                              {docEntry.draft ? 'Draft — hidden from agent' : 'Active — visible to agent'}
+                            </Badge>
+                            <Switch.Root
+                              size="sm"
+                              checked={!docEntry.draft}
+                              onCheckedChange={() => handleToggleDraft(index)}
+                              colorPalette="green"
+                            >
+                              <Switch.HiddenInput />
+                              <Switch.Control>
+                                <Switch.Thumb />
+                              </Switch.Control>
+                            </Switch.Root>
+                          </HStack>
+                          <Button
+                            size="xs"
+                            variant="ghost"
+                            colorPalette="red"
+                            onClick={() => handleRemoveDoc(index)}
                           >
-                            <HStack gap={2}>
-                              <Icon
-                                as={isExpanded ? LuChevronDown : LuChevronRight}
-                                boxSize={4}
-                                color="fg.muted"
-                              />
-                              <Text
-                                fontSize="md"
-                                fontWeight="700"
-                                color="fg.default"
-                                fontFamily="mono"
-                              >
-                                {database.databaseName}
-                              </Text>
-                              <Box
-                                px={2}
-                                py={0.5}
-                                bg={hasAny ? 'accent.cyan/15' : 'bg.canvas'}
-                                borderRadius="sm"
-                                border="1px solid"
-                                borderColor={hasAny ? 'accent.cyan/30' : 'border.muted'}
-                              >
-                                <Text
-                                  fontSize="2xs"
-                                  fontWeight="700"
-                                  color={hasAny ? 'accent.cyan' : 'fg.subtle'}
-                                  fontFamily="mono"
-                                >
-                                  {effectiveTableCount}/{totalTables} {totalTables === 1 ? 'table' : 'tables'}
-                                </Text>
-                              </Box>
-                            </HStack>
-                          </Box>
-                        </Collapsible.Trigger>
-                        <Collapsible.Content>
-                          <Box p={4}>
-                            <SchemaTreeView
-                              schemas={database.schemas}
-                              selectable={true}
-                              whitelist={whitelist}
-                              onWhitelistChange={(newWhitelist) =>
-                                handleWhitelistChange(database.databaseName, newWhitelist)
-                              }
-                              showColumns={true}
-                              showStats={true}
-                              showPathFilter={true}
-                              availableChildPaths={availableChildPaths}
-                            />
-                          </Box>
-                        </Collapsible.Content>
-                      </Collapsible.Root>
-                    </Box>
-                  );
-                })}
-              </VStack>
-            )}
-          </Box>
+                            <LuTrash2 />
+                          </Button>
+                        </HStack>
+                      </HStack>
 
-          {/* Markdown Documentation */}
-          <Box>
-            <HStack gap={2} mb={0}>
-              <Heading size="md">
-                Documentation (Markdown)
-              </Heading>
-              {(!content.docs || content.docs.length === 0) && (
-                <HStack gap={1} color="accent.warning">
-                  <LuCircleAlert size={16} />
-                  <Text fontSize="sm" fontWeight="500">No documentation added</Text>
-                </HStack>
-              )}
-            </HStack>
-            <Text fontSize="sm" color="fg.muted" mb={3}>
-              Add notes and documentation about the databases
-            </Text>
+                      {/* childPaths selector */}
+                      <Box px={3} py={2} bg="bg.muted" borderBottom="1px solid" borderColor="border.default">
+                        <ChildPathSelector
+                          availablePaths={availableChildPaths}
+                          selectedPaths={docEntry.childPaths}
+                          onChange={(paths) => handleChildPathsChange(index, paths)}
+                        />
+                      </Box>
 
-            {/* Inherited docs (read-only) */}
-            {content.fullDocs && content.fullDocs.length > 0 && (
-              <Box mb={4}>
-                <Text fontSize="sm" fontWeight="600" color="fg.muted" mb={2}>
-                  Inherited Documentation (from parent contexts)
-                </Text>
-                <VStack gap={2} align="stretch">
-                  {content.fullDocs.map((docEntry, idx) => (
-                    <Box
-                      key={`inherited-${idx}`}
-                      p={3}
-                      border="1px solid"
-                      borderColor="border.default"
-                      borderRadius="md"
-                      bg="bg.muted"
-                      opacity={0.7}
-                    >
-                      <Markdown context="mainpage">{docEntry.content}</Markdown>
+                      {/* Editor and preview */}
+                      <SimpleGrid columns={{ base: 1, lg: 2 }} gap={0}>
+                        <Box minH="300px">
+                          <Editor
+                            height="300px"
+                            language="markdown"
+                            value={docEntry.content}
+                            onChange={(value) => handleMarkdownChange(index, value || '')}
+                            theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
+                            options={{
+                              minimap: { enabled: false },
+                              wordWrap: 'on',
+                              lineNumbers: 'on',
+                              fontSize: 14,
+                              fontFamily: 'JetBrains Mono, monospace',
+                              scrollBeyondLastLine: false,
+                              automaticLayout: true,
+                              tabSize: 2,
+                            }}
+                          />
+                        </Box>
+                        <Box
+                          p={3}
+                          bg="bg.muted"
+                          minH="300px"
+                          maxH="300px"
+                          overflowY="auto"
+                          borderLeft="1px solid"
+                          borderColor="border.default"
+                        >
+                          {docEntry.content.trim() ? (
+                            <Markdown context="mainpage">{docEntry.content}</Markdown>
+                          ) : (
+                            <Text color="fg.muted" fontSize="sm">
+                              Preview will appear here...
+                            </Text>
+                          )}
+                        </Box>
+                      </SimpleGrid>
                     </Box>
                   ))}
+
+                  {/* Add doc button */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleAddDoc}
+                  >
+                    <LuPlus />
+                    Add Documentation Entry
+                  </Button>
                 </VStack>
               </Box>
-            )}
-
-            {/* Own docs (editable) */}
-            <VStack gap={4} align="stretch">
-              {(content.docs || []).map((docEntry, index) => (
-                <Box
-                  key={index}
-                  border="1px solid"
-                  borderColor={docEntry.draft ? 'border.muted' : 'border.default'}
-                  borderRadius="md"
-                  overflow="hidden"
-                  opacity={docEntry.draft ? 0.6 : 1}
-                >
-                  {/* Header with draft toggle and remove button */}
-                  <HStack
-                    justify="space-between"
-                    px={3}
-                    py={2}
-                    bg="bg.muted"
-                    borderBottom="1px solid"
-                    borderColor="border.default"
-                  >
-                    <Text fontSize="sm" fontWeight="600">
-                      Documentation Entry {index + 1}
-                    </Text>
-                    <HStack gap={3}>
-                      <HStack gap={1.5}>
-                        <Badge size="sm" colorPalette={docEntry.draft ? 'yellow' : 'green'} variant="subtle">
-                          {docEntry.draft ? 'Draft — hidden from agent' : 'Active — visible to agent'}
-                        </Badge>
-                        <Switch.Root
-                          size="sm"
-                          checked={!docEntry.draft}
-                          onCheckedChange={() => handleToggleDraft(index)}
-                          colorPalette="green"
-                        >
-                          <Switch.HiddenInput />
-                          <Switch.Control>
-                            <Switch.Thumb />
-                          </Switch.Control>
-                        </Switch.Root>
-                      </HStack>
-                      <Button
-                        size="xs"
-                        variant="ghost"
-                        colorPalette="red"
-                        onClick={() => handleRemoveDoc(index)}
-                      >
-                        <LuTrash2 />
-                      </Button>
-                    </HStack>
-                  </HStack>
-
-                  {/* childPaths selector */}
-                  <Box px={3} py={2} bg="bg.muted" borderBottom="1px solid" borderColor="border.default">
-                    <ChildPathSelector
-                      availablePaths={availableChildPaths}
-                      selectedPaths={docEntry.childPaths}
-                      onChange={(paths) => handleChildPathsChange(index, paths)}
-                    />
-                  </Box>
-
-                  {/* Editor and preview */}
-                  <SimpleGrid columns={{ base: 1, lg: 2 }} gap={0}>
-                    <Box minH="300px">
-                      <Editor
-                        height="300px"
-                        language="markdown"
-                        value={docEntry.content}
-                        onChange={(value) => handleMarkdownChange(index, value || '')}
-                        theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
-                        options={{
-                          minimap: { enabled: false },
-                          wordWrap: 'on',
-                          lineNumbers: 'on',
-                          fontSize: 14,
-                          fontFamily: 'JetBrains Mono, monospace',
-                          scrollBeyondLastLine: false,
-                          automaticLayout: true,
-                          tabSize: 2,
-                        }}
-                      />
-                    </Box>
-                    <Box
-                      p={3}
-                      bg="bg.muted"
-                      minH="300px"
-                      maxH="300px"
-                      overflowY="auto"
-                      borderLeft="1px solid"
-                      borderColor="border.default"
-                    >
-                      {docEntry.content.trim() ? (
-                        <Markdown context="mainpage">{docEntry.content}</Markdown>
-                      ) : (
-                        <Text color="fg.muted" fontSize="sm">
-                          Preview will appear here...
-                        </Text>
-                      )}
-                    </Box>
-                  </SimpleGrid>
-                </Box>
-              ))}
-
-              {/* Add doc button */}
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleAddDoc}
-              >
-                <LuPlus />
-                Add Documentation Entry
-              </Button>
             </VStack>
-          </Box>
+          ) : (
+            <Box
+              border="1px solid"
+              borderColor="border.default"
+              borderRadius="md"
+              overflow="hidden"
+              minH="600px"
+            >
+              <Editor
+                height="600px"
+                language="yaml"
+                value={yamlText}
+                onChange={(value) => handleYamlChange(value || '')}
+                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
+                options={{
+                  minimap: { enabled: false },
+                  wordWrap: 'on',
+                  lineNumbers: 'on',
+                  fontSize: 14,
+                  fontFamily: 'JetBrains Mono, monospace',
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                  tabSize: 2,
+                }}
+              />
+            </Box>
+          )}
+          {/* Stats Footer */}
+          {!isLoading && totalWhitelisted > 0 && (
+            <Box
+              p={3}
+              bg="bg.surface"
+              borderRadius="md"
+              border="1px solid"
+              borderColor="border.default"
+            >
+              <HStack gap={2} fontSize="sm" color="fg.muted">
+                <LuCircleCheck color="var(--chakra-colors-accent-success)" />
+                <Text>
+                  <strong>{content.databases?.length || 0}</strong> databases configured with{' '}
+                  <strong>{totalWhitelisted}</strong> total whitelisted items
+                </Text>
+              </HStack>
+            </Box>
+          )}
+        </Tabs.Content>
 
-          {/* Evals */}
-          <Box>
-            <Heading size="md" mb={1}>Evals</Heading>
-            <Text fontSize="sm" color="fg.muted" mb={3}>
-              Test questions with expected answers to validate context quality
-            </Text>
-            <EvalsEditor
-              evals={content.evals || []}
-              onChange={(evals: EvalItem[]) => onChange({ evals })}
-              contextInfo={{
-                schema: availableDatabases,
-                documentation: (content.docs || []).map(d => d.content).join('\n\n'),
-                connection_id: availableDatabases[0]?.databaseName || '',
-              }}
-              fileId={file?.id}
-            />
-          </Box>
-        </VStack>
-      ) : (
-        <Box
-          border="1px solid"
-          borderColor="border.default"
-          borderRadius="md"
-          overflow="hidden"
-          minH="600px"
-        >
-          <Editor
-            height="600px"
-            language="yaml"
-            value={yamlText}
-            onChange={(value) => handleYamlChange(value || '')}
-            theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
-            options={{
-              minimap: { enabled: false },
-              wordWrap: 'on',
-              lineNumbers: 'on',
-              fontSize: 14,
-              fontFamily: 'JetBrains Mono, monospace',
-              scrollBeyondLastLine: false,
-              automaticLayout: true,
-              tabSize: 2,
-            }}
-          />
-        </Box>
-      )}
-
-      {/* Stats Footer */}
-      {!isLoading && totalWhitelisted > 0 && (
-        <Box
-          p={3}
-          bg="bg.surface"
-          borderRadius="md"
-          border="1px solid"
-          borderColor="border.default"
-        >
-          <HStack gap={2} fontSize="sm" color="fg.muted">
-            <LuCircleCheck color="var(--chakra-colors-accent-success)" />
-            <Text>
-              <strong>{content.databases?.length || 0}</strong> databases configured with{' '}
-              <strong>{totalWhitelisted}</strong> total whitelisted items
-            </Text>
-          </HStack>
-        </Box>
-      )}
+        {/* Evals Tab */}
+        <Tabs.Content value="evals">
+          {activeTab === 'picker' ? (
+            <Box>
+              <EvalsEditor
+                evals={content.evals || []}
+                onChange={(evals: EvalItem[]) => onChange({ evals })}
+                contextInfo={{
+                  schema: availableDatabases,
+                  documentation: (content.docs || []).map(d => d.content).join('\n\n'),
+                  connection_id: availableDatabases[0]?.databaseName || '',
+                }}
+                fileId={file?.id}
+              />
+            </Box>
+          ) : (
+            <Box
+              border="1px solid"
+              borderColor="border.default"
+              borderRadius="md"
+              overflow="hidden"
+              minH="600px"
+            >
+              <Editor
+                height="600px"
+                language="json"
+                value={JSON.stringify(content.evals || [], null, 2)}
+                onChange={(value) => {
+                  try {
+                    const parsed = JSON.parse(value || '[]');
+                    if (Array.isArray(parsed)) onChange({ evals: parsed });
+                  } catch { /* ignore parse errors while typing */ }
+                }}
+                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
+                options={{
+                  minimap: { enabled: false },
+                  wordWrap: 'on',
+                  lineNumbers: 'on',
+                  fontSize: 14,
+                  fontFamily: 'JetBrains Mono, monospace',
+                  scrollBeyondLastLine: false,
+                  automaticLayout: true,
+                  tabSize: 2,
+                }}
+              />
+            </Box>
+          )}
+        </Tabs.Content>
+      </Tabs.Root>
     </VStack>
   );
 }

@@ -40,6 +40,9 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
   [ToolNames.ATLAS_ANALYST_AGENT]: {
     displayComponent: ContentDisplay,
   },
+  [ToolNames.TEST_AGENT]: {
+    displayComponent: ContentDisplay,
+  },
   'Navigate': {
     displayComponent: NavigateDisplay
   },
