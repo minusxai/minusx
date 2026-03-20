@@ -175,8 +175,10 @@ export default function DashboardView({
   );
 
   // Merge parameters from all questions (memoized to prevent re-renders)
-  const mergedParameters = useMemo(() => {
+  // Also collect default values from questions' own parameterValues
+  const { mergedParameters, questionParamDefaults } = useMemo(() => {
     const paramMap = new Map<string, QuestionParameter>();
+    const defaults = new Map<string, any>();
 
     questionContents.forEach(content => {
       if (content?.query) {
@@ -189,11 +191,15 @@ export default function DashboardView({
           if (!paramMap.has(key)) {
             paramMap.set(key, param);
           }
+          // Pick up the first non-empty value from any question's saved parameterValues
+          if (!defaults.has(param.name) && content.parameterValues?.[param.name] != null && content.parameterValues[param.name] !== '') {
+            defaults.set(param.name, content.parameterValues[param.name]);
+          }
         });
       }
     });
 
-    return Array.from(paramMap.values());
+    return { mergedParameters: Array.from(paramMap.values()), questionParamDefaults: defaults };
   }, [questionContents]);
 
   // Map each param key to the question IDs that use it (for hover highlighting)
@@ -222,13 +228,14 @@ export default function DashboardView({
   // Effective submitted values: only these flow to query execution.
   // lastExecutedParams gates stale detection; paramValues is the persisted fallback
   // (used on initial load and after publish clears ephemeral state).
+  // Falls back to the first non-empty value from the underlying questions' saved parameterValues.
   const effectiveSubmittedValues = useMemo(() => {
     const values: Record<string, any> = {};
     for (const p of mergedParameters) {
-      values[p.name] = lastExecutedParams[p.name] ?? paramValues[p.name] ?? '';
+      values[p.name] = lastExecutedParams[p.name] ?? paramValues[p.name] ?? questionParamDefaults.get(p.name) ?? '';
     }
     return values;
-  }, [mergedParameters, lastExecutedParams, paramValues]);
+  }, [mergedParameters, lastExecutedParams, paramValues, questionParamDefaults]);
 
   // Handler for removing questions (needs to be defined before questionGridItems)
   const handleRemoveQuestion = useCallback((questionIdStr: string) => {
@@ -402,7 +409,7 @@ export default function DashboardView({
             <Box mb={4}>
               <ParameterRow
                 parameters={parameterValuesForDisplay}
-                parameterValues={paramValues}
+                parameterValues={effectiveSubmittedValues}
                 lastSubmittedValues={effectiveSubmittedValues}
                 onValueChange={(paramName, value) => {
                   editFile({ fileId, changes: { content: { parameterValues: { ...paramValues, [paramName]: value } } } });
