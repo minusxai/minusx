@@ -30,21 +30,22 @@ class TestAgent(AnalystAgent):
         """Extend system message to instruct the agent to submit its answer."""
         base = super()._get_system_message()
 
+        preamble = (
+            "\n\n## Eval Mode\n"
+            "Once you have your answer, "
+            "call the Submit tool and the conversation. "
+            "Do NOT edit or create any files.\n\n"
+        )
+
         assertion_type = self.assertion.get('type', 'binary')
         if assertion_type == 'binary':
-            submit_instruction = (
-                "\n\n## Eval Mode\n"
-                "You are running in evaluation mode. After researching the question, "
-                "you MUST call SubmitBinary(answer=True) if the answer is yes/correct, "
-                "or SubmitBinary(answer=False) if the answer is no/incorrect. "
-                "Do NOT use TalkToUser — call SubmitBinary directly."
+            submit_instruction = preamble + (
+                "Submit tool: call SubmitBinary(answer=True) if the answer is yes/correct, "
+                "or SubmitBinary(answer=False) if the answer is no/incorrect."
             )
         else:
-            submit_instruction = (
-                "\n\n## Eval Mode\n"
-                "You are running in evaluation mode. After researching the question, "
-                "you MUST call SubmitNumber(answer=<float>) with your computed numeric answer. "
-                "Do NOT use TalkToUser — call SubmitNumber directly."
+            submit_instruction = preamble + (
+                "Submit tool: call SubmitNumber(answer=<float>) with your computed numeric answer."
             )
 
         return {
