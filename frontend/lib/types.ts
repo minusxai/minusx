@@ -190,6 +190,29 @@ export interface PublishedVersions {
   all: number;  // Single published version for all users (REQUIRED)
 }
 
+// Eval types for context quality testing
+export type EvalAppState = { type: 'explore' } | { type: 'file'; file_id: number };
+
+export interface BinaryAssertion {
+  type: 'binary';
+  answer: boolean;
+}
+
+export interface NumberAssertion {
+  type: 'number_match';
+  answer: number;          // static expected value (used when question_id not set)
+  question_id?: number;    // if set, run this question at eval time and use first cell as expected
+}
+
+export type EvalAssertion = BinaryAssertion | NumberAssertion;
+
+export interface EvalItem {
+  question: string;
+  assertion: EvalAssertion;
+  app_state: EvalAppState;
+  connection_id?: string;  // per-eval connection override (falls back to context default)
+}
+
 export interface ContextContent extends BaseFileContent {
   // Versioning (NEW - replaces legacy top-level storage)
   versions?: ContextVersion[];
@@ -202,6 +225,9 @@ export interface ContextContent extends BaseFileContent {
   // Working fields (exposed by container for editing current version)
   databases?: DatabaseContext[];      // Current version's whitelist (container only)
   docs?: DocEntry[];                  // Current version's docs (container only)
+
+  // Evals (stored at content level, independent of versions)
+  evals?: EvalItem[];
 }
 
 export type UserRole = 'admin' | 'editor' | 'viewer';

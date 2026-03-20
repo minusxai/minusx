@@ -333,6 +333,8 @@ registerTool('Clarify', async (args, _user, childResults) => {
 // Phase 1: Unified File System API - Backend Tools
 // ============================================================================
 
+
+
 /**
  * ExecuteQuery - Standalone query execution (backend tool)
  * Executes SQL without modifying any files.
