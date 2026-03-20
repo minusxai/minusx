@@ -440,7 +440,14 @@ registerFrontendTool('EditFile', async (args, _context) => {
  * Returns: {success: true, state: CompressedAugmentedFile}
  */
 registerFrontendTool('CreateFile', async (args, _context) => {
-  const { file_type, name, path, content } = args;
+  const { file_type, name, content } = args;
+  let { path } = args;
+
+  // Default empty/root path to the current mode root (e.g. /org, /tutorial)
+  if (!path || path === '/') {
+    const mode = getStore().getState().auth.user?.mode ?? 'org';
+    path = `/${mode}`;
+  }
 
   // Create virtual file (draft) for any type — no navigation
   const virtualId = await createVirtualFile(file_type, { folder: path });
