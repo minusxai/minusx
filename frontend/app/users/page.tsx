@@ -97,6 +97,7 @@ export default function UsersPage() {
 
   useEffect(() => {
     if (effectiveUser?.role && isAdmin(effectiveUser.role)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchUsers();
     }
   }, [effectiveUser]);
