@@ -817,6 +817,7 @@ export const ToolNames = {
   TALK_TO_USER: 'TalkToUser',
   ANALYST_AGENT: 'AnalystAgent',
   ATLAS_ANALYST_AGENT: 'AtlasAnalystAgent',
+  TEST_AGENT: 'TestAgent',
   EXECUTE_QUERY: 'ExecuteQuery',
 } as const;
 

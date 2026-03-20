@@ -11,8 +11,9 @@ import type { CompletedToolCallFromPython } from '@/lib/chat-orchestration';
 import DatabaseSelector from '@/components/DatabaseSelector';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { useAppSelector } from '@/store/hooks';
-import SimpleChatMessage from '@/components/explore/SimpleChatMessage';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
+import SimpleChatMessage from '@/components/explore/SimpleChatMessage';
+import Editor from '@monaco-editor/react';
 
 interface ContextInfo {
   schema: DatabaseWithSchema[];
@@ -129,28 +130,73 @@ function FileSearchSelect({ files, selectedId, onSelect, placeholder }: {
 function EvalTrace({ log }: { log: CompletedToolCallFromPython[] }) {
   const [open, setOpen] = useState(false);
   const [showThinking, setShowThinking] = useState(false);
+  const colorMode = useAppSelector((state) => state.ui.colorMode);
+  console.log('Eval trace log:', log);
+  const stepsJson = useMemo(() => {
+    const steps = log.map((tc) => ({
+      tool: tc.function.name,
+      args: tc.function.arguments,
+      result: tc.content,
+    }));
+    return JSON.stringify(steps, null, 2);
+  }, [log]);
 
   return (
     <Collapsible.Root open={open} onOpenChange={({ open }) => setOpen(open)}>
       <Collapsible.Trigger asChild>
-        <HStack gap={1} cursor="pointer" color="fg.muted" _hover={{ color: 'fg.default' }} w="fit-content">
+        <HStack gap={1} cursor="pointer" color="fg.muted" _hover={{ color: 'fg.default' }} w="fit-content" onClick={e => e.stopPropagation()}>
           {open ? <LuChevronDown size={12} /> : <LuChevronRight size={12} />}
           <Text fontSize="xs">Agent trace ({log.length} steps)</Text>
         </HStack>
       </Collapsible.Trigger>
       <Collapsible.Content>
-        <VStack gap={1} align="stretch" pt={2} pl={2} borderLeft="2px solid" borderColor="border.muted">
-          {log.map((tc) => (
-            <SimpleChatMessage
-              key={tc.tool_call_id}
-              message={tc as any}
-              databaseName=""
-              isCompact
-              showThinking={showThinking}
-              toggleShowThinking={() => setShowThinking(v => !v)}
+        <HStack
+          gap={0}
+          align="stretch"
+          mt={2}
+          border="1px solid"
+          borderColor="border.muted"
+          borderRadius="sm"
+          overflow="hidden"
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Left: rendered tool calls */}
+          <Box flex={1} maxH="400px" overflowY="auto" p={2} borderRight="1px solid" borderColor="border.muted" minW="300px">
+            <VStack gap={1} align="stretch">
+              {log.map((tc, idx) => (
+                <SimpleChatMessage
+                  key={`${tc.role}-${idx}-${(tc as any).tool_call_id || ''}`}
+                  message={tc as any}
+                  databaseName=""
+                  isCompact
+                  showThinking={showThinking}
+                  toggleShowThinking={() => setShowThinking(v => !v)}
+                />
+              ))}
+            </VStack>
+          </Box>
+          {/* Right: JSON in Monaco */}
+          <Box flex={1} minH="200px" maxH="400px">
+            <Editor
+              height="400px"
+              language="json"
+              value={stepsJson}
+              theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
+              options={{
+                readOnly: true,
+                minimap: { enabled: false },
+                wordWrap: 'on',
+                lineNumbers: 'off',
+                fontSize: 12,
+                fontFamily: 'JetBrains Mono, monospace',
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                folding: true,
+                tabSize: 2,
+              }}
             />
-          ))}
-        </VStack>
+          </Box>
+        </HStack>
       </Collapsible.Content>
     </Collapsible.Root>
   );
