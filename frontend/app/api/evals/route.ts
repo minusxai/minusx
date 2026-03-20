@@ -126,13 +126,15 @@ export async function POST(request: NextRequest) {
     // SubmitBinary/SubmitNumber execute in Python (no UserInputException), so they appear in
     // allCompletedFromPython with their function.name and the answer as the return value.
     const submitCall = allCompletedFromPython.find(
-      tc => tc.function?.name === 'SubmitBinary' || tc.function?.name === 'SubmitNumber'
+      tc => tc.function?.name === 'SubmitBinary' ||
+            tc.function?.name === 'SubmitNumber' ||
+            tc.function?.name === 'CannotAnswer'
     );
 
     if (!submitCall) {
       return NextResponse.json({
         passed: false,
-        details: { error: 'Agent did not call SubmitBinary or SubmitNumber' },
+        details: { error: 'Agent did not call SubmitBinary, SubmitNumber, or CannotAnswer' },
         log: allCompletedFromPython,
       } as EvalRunResponse);
     }
@@ -145,6 +147,31 @@ export async function POST(request: NextRequest) {
         : (submitCall.content as Record<string, unknown>) || {};
     } catch {
       submitContent = {};
+    }
+
+    // cannot_answer expected value: passes iff agent called CannotAnswer, fails if it submitted a value
+    if (eval_item.assertion.cannot_answer) {
+      const agentCalledCannotAnswer = submitCall.function?.name === 'CannotAnswer';
+      const reason = agentCalledCannotAnswer
+        ? ((submitContent.reason as string) ?? 'No reason given')
+        : undefined;
+      return NextResponse.json({
+        passed: agentCalledCannotAnswer,
+        details: agentCalledCannotAnswer
+          ? { cannot_answer: true, reason }
+          : { cannot_answer: false, submitted_tool: submitCall.function?.name },
+        log: allCompletedFromPython,
+      } as EvalRunResponse);
+    }
+
+    // CannotAnswer: agent signalled it cannot determine an answer (unexpected for binary/number evals)
+    if (submitCall.function?.name === 'CannotAnswer') {
+      const reason = (submitContent.reason as string) ?? 'No reason given';
+      return NextResponse.json({
+        passed: false,
+        details: { cannot_answer: true, reason },
+        log: allCompletedFromPython,
+      } as EvalRunResponse);
     }
 
     // Run assertion comparison
@@ -183,7 +210,10 @@ export async function POST(request: NextRequest) {
           log: allCompletedFromPython,
         } as EvalRunResponse);
       }
-      expected = parseFloat(String(qResult.rows[0][qResult.columns[0]]));
+      const col = assertion.column && qResult.columns.includes(assertion.column)
+        ? assertion.column
+        : qResult.columns[0];
+      expected = parseFloat(String(qResult.rows[0][col]));
     }
 
     const passed = Math.abs(submitted - expected) < 0.0001;
