@@ -78,6 +78,10 @@ jest.mock('@/lib/messaging/webhook-executor', () => ({
 jest.mock('@/lib/data/configs.server', () => ({
   getConfigsByCompanyId: jest.fn().mockResolvedValue({
     config: {
+      branding: {
+        agentName: 'TestAgent',
+        displayName: 'Test Company',
+      },
       messaging: {
         webhooks: [
           {
