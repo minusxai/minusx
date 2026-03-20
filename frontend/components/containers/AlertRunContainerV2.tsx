@@ -1,27 +1,25 @@
 'use client';
 
 /**
- * AlertRunContainerV2
- * Viewer for alert_run files.
- * Supports both the new RunFileContent shape (Phase 2+) and the legacy AlertRunContent shape.
+ * AlertRunContainerV2 + AlertRunView
+ *
+ * AlertRunView is the reusable presentation component for alert run data.
+ * AlertRunContainerV2 is the smart container that loads file data and delegates to AlertRunView.
  */
-import { Box, Text, VStack, HStack, Badge } from '@chakra-ui/react';
+import { Box, Text, VStack, HStack, Badge, Separator } from '@chakra-ui/react';
 import { useState } from 'react';
-import { LuChevronDown, LuChevronRight } from 'react-icons/lu';
+import { LuChevronDown, LuChevronRight, LuClock, LuTimer } from 'react-icons/lu';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import type { AlertOutput, AlertRunContent, MessageAttemptLog, RunFileContent, RunMessageRecord } from '@/lib/types';
 import type { FileId } from '@/store/filesSlice';
 import type { FileViewMode } from '@/lib/ui/fileComponents';
-import { LuArrowLeft, LuBell, LuExternalLink, LuMail, LuMessageCircle } from 'react-icons/lu';
+import { LuBell, LuExternalLink, LuMail, LuMessageCircle, LuSettings } from 'react-icons/lu';
 import Link from 'next/link';
 import { preserveParams } from '@/lib/navigation/url-utils';
 
-interface AlertRunContainerV2Props {
-  fileId: FileId;
-  mode?: FileViewMode;
-  /** When true: hides the back-link and removes full-page centering (for inline use). */
-  inline?: boolean;
-}
+/* ------------------------------------------------------------------ */
+/*  Shared sub-components                                              */
+/* ------------------------------------------------------------------ */
 
 type ExecutionStatus = 'running' | 'success' | 'failure' | 'triggered' | 'not_triggered' | 'failed';
 
@@ -29,12 +27,12 @@ function StatusBadge({ status }: { status: ExecutionStatus }) {
   const colorPalette =
     status === 'triggered' || status === 'failure' || status === 'failed' ? 'red' :
     status === 'not_triggered' || status === 'success' ? 'green' :
-    'yellow'; // running
+    'yellow';
   const label =
     status === 'triggered' ? 'TRIGGERED' :
     status === 'not_triggered' ? 'OK' :
     status.toUpperCase();
-  return <Badge colorPalette={colorPalette}>{label}</Badge>;
+  return <Badge colorPalette={colorPalette} size="lg" fontWeight="700">{label}</Badge>;
 }
 
 function MessageStatusBadge({ status }: { status: RunMessageRecord['status'] }) {
@@ -48,7 +46,7 @@ function AttemptLogRow({ log }: { log: MessageAttemptLog }) {
     <VStack align="stretch" gap={0.5}>
       <HStack gap={2}>
         <Text fontSize="xs" color="fg.muted" minW="55px">{time}</Text>
-        <Text fontSize="xs" color={log.success ? 'green.fg' : 'red.fg'}>{log.success ? '✓' : '✗'}</Text>
+        <Text fontSize="xs" color={log.success ? 'green.fg' : 'red.fg'}>{log.success ? 'OK' : 'FAILED'}</Text>
         {log.statusCode !== undefined && <Text fontSize="xs">{log.statusCode}</Text>}
         {log.error && <Text fontSize="xs" color="red.fg">{log.error}</Text>}
       </HStack>
@@ -149,6 +147,233 @@ function MessageRow({ msg }: { msg: RunMessageRecord }) {
   );
 }
 
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <HStack justify="space-between" py={2}>
+      <Text fontSize="sm" color="fg.muted">{label}</Text>
+      {typeof value === 'string' ? <Text fontSize="sm" fontWeight="500">{value}</Text> : value}
+    </HStack>
+  );
+}
+
+function TimingChip({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: string; color: string }) {
+  return (
+    <HStack
+      gap={1.5}
+      px={2.5}
+      py={1.5}
+      bg={`${color}/8`}
+      borderRadius="md"
+      border="1px solid"
+      borderColor={`${color}/20`}
+      fontSize="xs"
+    >
+      <Box color={color}>{icon}</Box>
+      <Text fontWeight="700" color={color}>{label}</Text>
+      <Text color="fg.default" fontWeight="500">{value}</Text>
+    </HStack>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  AlertRunView — reusable presentation component                     */
+/* ------------------------------------------------------------------ */
+
+export interface AlertRunViewProps {
+  status: ExecutionStatus;
+  alertId?: number;
+  alertName?: string;
+  actualValue?: number | string | null;
+  condition: string;
+  startedAt: string;
+  completedAt?: string | null;
+  error?: string | null;
+  messages?: RunMessageRecord[];
+  fileId: FileId;
+  inline?: boolean;
+}
+
+export function AlertRunView({
+  status,
+  alertId,
+  alertName,
+  actualValue,
+  condition,
+  startedAt,
+  completedAt,
+  error,
+  messages,
+  fileId,
+  inline,
+}: AlertRunViewProps) {
+  const durationMs = completedAt
+    ? new Date(completedAt).getTime() - new Date(startedAt).getTime()
+    : null;
+
+  const isTriggered = status === 'triggered' || status === 'failure' || status === 'failed';
+
+  return (
+    <Box
+      p={inline ? 0 : 8}
+      maxW={inline ? undefined : '560px'}
+      mx={inline ? undefined : 'auto'}
+      mt={inline ? 0 : 6}
+    >
+      <VStack align="stretch" gap={5}>
+        {/* Header: icon + title + badge */}
+        <HStack gap={3} align="center">
+          <Box
+            p={2}
+            borderRadius="lg"
+            bg={isTriggered ? 'red.subtle' : status === 'not_triggered' || status === 'success' ? 'green.subtle' : 'yellow.subtle'}
+          >
+            <LuBell size={22} />
+          </Box>
+          <VStack align="start" gap={0}>
+            <Text fontWeight="800" fontSize="xl" fontFamily="mono" letterSpacing="-0.02em">Alert Run</Text>
+          </VStack>
+          <Box ml="auto">
+            <StatusBadge status={status} />
+          </Box>
+          {inline && (
+            <Link href={preserveParams(`/f/${fileId}`)} style={{ opacity: 0.5 }}>
+              <LuExternalLink size={14} />
+            </Link>
+          )}
+        </HStack>
+
+        {/* Alert config link button */}
+        {!inline && alertId && (
+          <Link href={preserveParams(`/f/${alertId}`)} style={{ textDecoration: 'none' }}>
+            <HStack
+              gap={2}
+              px={3}
+              py={2.5}
+              borderRadius="lg"
+              bg="accent.secondary/10"
+              border="1px solid"
+              borderColor="accent.secondary/25"
+              cursor="pointer"
+              _hover={{ bg: 'accent.secondary/15', borderColor: 'accent.secondary/40' }}
+              transition="all 0.15s"
+            >
+              <LuSettings size={14} color="var(--chakra-colors-accent-secondary)" />
+              <Text fontSize="sm" fontWeight="600" color="accent.secondary">View Alert Config</Text>
+              <Text fontSize="sm" color="fg.muted">{alertName || `Alert #${alertId}`}</Text>
+            </HStack>
+          </Link>
+        )}
+
+        {/* Run details card */}
+        <Box
+          p={5}
+          bg="bg.muted"
+          borderRadius="lg"
+          border="1px solid"
+          borderColor="border.muted"
+        >
+          <Text fontSize="xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" mb={3}>
+            Result
+          </Text>
+          <VStack align="stretch" gap={0} separator={<Separator />}>
+            {actualValue !== null && actualValue !== undefined && (
+              <DetailRow label="Actual value" value={
+                <Badge
+                  colorPalette={isTriggered ? 'red' : 'green'}
+                  variant="subtle"
+                  fontFamily="mono"
+                  fontSize="sm"
+                  fontWeight="700"
+                >
+                  {String(actualValue)}
+                </Badge>
+              } />
+            )}
+            <DetailRow label="Condition" value={
+              <Text fontSize="sm" fontWeight="600" fontFamily="mono">{condition}</Text>
+            } />
+            <DetailRow label="Status" value={
+              <Badge
+                colorPalette={isTriggered ? 'red' : status === 'not_triggered' || status === 'success' ? 'green' : 'yellow'}
+                variant="subtle"
+                fontWeight="700"
+              >
+                {status === 'triggered' ? 'Triggered' :
+                 status === 'not_triggered' ? 'Not Triggered' :
+                 status.charAt(0).toUpperCase() + status.slice(1)}
+              </Badge>
+            } />
+          </VStack>
+        </Box>
+
+        {/* Error */}
+        {error && (
+          <Box p={4} bg="red.subtle" borderRadius="lg" color="red.fg" border="1px solid" borderColor="red.muted">
+            <Text fontSize="sm" fontWeight="700" mb={1}>Error</Text>
+            <Text fontSize="sm">{error}</Text>
+          </Box>
+        )}
+
+        {/* Notifications */}
+        {messages && messages.length > 0 && (
+          <Box
+            p={5}
+            bg="bg.muted"
+            borderRadius="lg"
+            border="1px solid"
+            borderColor="border.muted"
+          >
+            <Text fontSize="xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" mb={3}>
+              Notifications
+            </Text>
+            <VStack align="stretch" gap={2}>
+              {messages.map((msg, i) => (
+                <MessageRow key={i} msg={msg} />
+              ))}
+            </VStack>
+          </Box>
+        )}
+
+        {/* Timing chips */}
+        <HStack gap={2} flexWrap="wrap">
+          <TimingChip
+            icon={<LuClock size={12} />}
+            label="Started"
+            value={new Date(startedAt).toLocaleString()}
+            color="accent.primary"
+          />
+          {completedAt && (
+            <TimingChip
+              icon={<LuClock size={12} />}
+              label="Completed"
+              value={new Date(completedAt).toLocaleString()}
+              color="accent.teal"
+            />
+          )}
+          {durationMs !== null && (
+            <TimingChip
+              icon={<LuTimer size={12} />}
+              label="Duration"
+              value={`${Math.round(durationMs / 1000)}s`}
+              color="accent.warning"
+            />
+          )}
+        </HStack>
+      </VStack>
+    </Box>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  AlertRunContainerV2 — smart container                              */
+/* ------------------------------------------------------------------ */
+
+interface AlertRunContainerV2Props {
+  fileId: FileId;
+  mode?: FileViewMode;
+  inline?: boolean;
+}
+
 export default function AlertRunContainerV2({ fileId, inline }: AlertRunContainerV2Props) {
   const { fileState: file } = useFile(fileId) ?? {};
 
@@ -166,166 +391,39 @@ export default function AlertRunContainerV2({ fileId, inline }: AlertRunContaine
   if (isNewFormat) {
     const run = file.content as RunFileContent;
     const output = run.output as AlertOutput | undefined;
-    const durationMs = run.completedAt
-      ? new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime()
-      : null;
 
     return (
-      <Box p={inline ? 0 : 6} maxW={inline ? undefined : '600px'} mx={inline ? undefined : 'auto'} fontFamily="mono">
-        <VStack align="stretch" gap={4}>
-          {/* Back link */}
-          {!inline && output?.alertId && (
-            <HStack gap={1.5}>
-              <LuArrowLeft size={14} />
-              <Link href={preserveParams(`/f/${output.alertId}`)} style={{ fontSize: '12px', color: 'inherit', opacity: 0.7 }}>
-                {output.alertName || `Alert #${output.alertId}`}
-              </Link>
-            </HStack>
-          )}
-
-          {/* Header */}
-          <HStack gap={2} align="center">
-            <LuBell size={20} />
-            <Text fontWeight="700" fontSize="lg">Alert Run</Text>
-            <StatusBadge status={run.status === 'success' && output ? output.status : run.status} />
-            {inline && (
-              <Link href={preserveParams(`/f/${fileId}`)} style={{ marginLeft: 'auto', opacity: 0.5 }}>
-                <LuExternalLink size={14} />
-              </Link>
-            )}
-          </HStack>
-
-          {/* Details */}
-          <Box p={4} bg="bg.muted" borderRadius="md" border="1px solid" borderColor="border.muted">
-            <VStack align="stretch" gap={2.5}>
-              {output && (
-                <>
-                  {output.actualValue !== null && output.actualValue !== undefined && (
-                    <HStack justify="space-between">
-                      <Text fontSize="sm" color="fg.muted">Actual value</Text>
-                      <Text fontSize="sm" fontWeight="600">{output.actualValue}</Text>
-                    </HStack>
-                  )}
-                  <HStack justify="space-between">
-                    <Text fontSize="sm" color="fg.muted">Condition</Text>
-                    <Text fontSize="sm" fontWeight="600">
-                      {output.selector} / {output.function} {output.column ? `(${output.column})` : ''} {output.operator} {output.threshold}
-                    </Text>
-                  </HStack>
-                </>
-              )}
-              <HStack justify="space-between">
-                <Text fontSize="sm" color="fg.muted">Started</Text>
-                <Text fontSize="sm">{new Date(run.startedAt).toLocaleString()}</Text>
-              </HStack>
-              {run.completedAt && (
-                <HStack justify="space-between">
-                  <Text fontSize="sm" color="fg.muted">Completed</Text>
-                  <Text fontSize="sm">{new Date(run.completedAt).toLocaleString()}</Text>
-                </HStack>
-              )}
-              {durationMs !== null && (
-                <HStack justify="space-between">
-                  <Text fontSize="sm" color="fg.muted">Duration</Text>
-                  <Text fontSize="sm">{Math.round(durationMs / 1000)}s</Text>
-                </HStack>
-              )}
-            </VStack>
-          </Box>
-
-          {/* Error */}
-          {run.error && (
-            <Box p={4} bg="red.subtle" borderRadius="md" color="red.fg">
-              <Text fontSize="sm" fontWeight="600" mb={1}>Error</Text>
-              <Text fontSize="sm">{run.error}</Text>
-            </Box>
-          )}
-
-          {/* Message delivery records */}
-          {run.messages && run.messages.length > 0 && (
-            <Box p={4} bg="bg.muted" borderRadius="md" border="1px solid" borderColor="border.muted">
-              <Text fontSize="sm" fontWeight="600" mb={2}>Notifications</Text>
-              <VStack align="stretch" gap={2}>
-                {run.messages.map((msg, i) => (
-                  <MessageRow key={i} msg={msg} />
-                ))}
-              </VStack>
-            </Box>
-          )}
-        </VStack>
-      </Box>
+      <AlertRunView
+        status={run.status === 'success' && output ? output.status : run.status}
+        alertId={output?.alertId}
+        alertName={output?.alertName}
+        actualValue={output?.actualValue}
+        condition={output ? `${output.selector} / ${output.function} ${output.column ? `(${output.column})` : ''} ${output.operator} ${output.threshold}` : ''}
+        startedAt={run.startedAt}
+        completedAt={run.completedAt}
+        error={run.error}
+        messages={run.messages}
+        fileId={fileId}
+        inline={inline}
+      />
     );
   }
 
   // Legacy AlertRunContent
   const run = file.content as AlertRunContent;
-  const durationMs = run.completedAt
-    ? new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime()
-    : null;
 
   return (
-    <Box p={inline ? 0 : 6} maxW={inline ? undefined : '600px'} mx={inline ? undefined : 'auto'} fontFamily="mono">
-      <VStack align="stretch" gap={4}>
-        {!inline && run.alertId && (
-          <HStack gap={1.5}>
-            <LuArrowLeft size={14} />
-            <Link href={preserveParams(`/f/${run.alertId}`)} style={{ fontSize: '12px', color: 'inherit', opacity: 0.7 }}>
-              {run.alertName || `Alert #${run.alertId}`}
-            </Link>
-          </HStack>
-        )}
-
-        <HStack gap={2} align="center">
-          <LuBell size={20} />
-          <Text fontWeight="700" fontSize="lg">Alert Run</Text>
-          <StatusBadge status={run.status} />
-          {inline && (
-            <Link href={preserveParams(`/f/${fileId}`)} style={{ marginLeft: 'auto', opacity: 0.5 }}>
-              <LuExternalLink size={14} />
-            </Link>
-          )}
-        </HStack>
-
-        <Box p={4} bg="bg.muted" borderRadius="md" border="1px solid" borderColor="border.muted">
-          <VStack align="stretch" gap={2.5}>
-            {run.actualValue !== null && run.actualValue !== undefined && (
-              <HStack justify="space-between">
-                <Text fontSize="sm" color="fg.muted">Actual value</Text>
-                <Text fontSize="sm" fontWeight="600">{run.actualValue}</Text>
-              </HStack>
-            )}
-            <HStack justify="space-between">
-              <Text fontSize="sm" color="fg.muted">Condition</Text>
-              <Text fontSize="sm" fontWeight="600">
-                {run.selector} / {run.function} {run.column ? `(${run.column})` : ''} {run.operator} {run.threshold}
-              </Text>
-            </HStack>
-            <HStack justify="space-between">
-              <Text fontSize="sm" color="fg.muted">Started</Text>
-              <Text fontSize="sm">{new Date(run.startedAt).toLocaleString()}</Text>
-            </HStack>
-            {run.completedAt && (
-              <HStack justify="space-between">
-                <Text fontSize="sm" color="fg.muted">Completed</Text>
-                <Text fontSize="sm">{new Date(run.completedAt).toLocaleString()}</Text>
-              </HStack>
-            )}
-            {durationMs !== null && (
-              <HStack justify="space-between">
-                <Text fontSize="sm" color="fg.muted">Duration</Text>
-                <Text fontSize="sm">{Math.round(durationMs / 1000)}s</Text>
-              </HStack>
-            )}
-          </VStack>
-        </Box>
-
-        {run.error && (
-          <Box p={4} bg="red.subtle" borderRadius="md" color="red.fg">
-            <Text fontSize="sm" fontWeight="600" mb={1}>Error</Text>
-            <Text fontSize="sm">{run.error}</Text>
-          </Box>
-        )}
-      </VStack>
-    </Box>
+    <AlertRunView
+      status={run.status}
+      alertId={run.alertId}
+      alertName={run.alertName}
+      actualValue={run.actualValue}
+      condition={`${run.selector} / ${run.function} ${run.column ? `(${run.column})` : ''} ${run.operator} ${run.threshold}`}
+      startedAt={run.startedAt}
+      completedAt={run.completedAt}
+      error={run.error}
+      fileId={fileId}
+      inline={inline}
+    />
   );
 }
