@@ -210,7 +210,10 @@ export async function POST(request: NextRequest) {
           log: allCompletedFromPython,
         } as EvalRunResponse);
       }
-      expected = parseFloat(String(qResult.rows[0][qResult.columns[0]]));
+      const col = assertion.column && qResult.columns.includes(assertion.column)
+        ? assertion.column
+        : qResult.columns[0];
+      expected = parseFloat(String(qResult.rows[0][col]));
     }
 
     const passed = Math.abs(submitted - expected) < 0.0001;

@@ -203,6 +203,7 @@ export interface NumberAssertion {
   type: 'number_match';
   answer: number;          // static expected value (used when question_id not set)
   question_id?: number;    // if set, run this question at eval time and use first cell as expected
+  column?: string;         // column name to read from question result (defaults to first column)
   cannot_answer?: true;    // if set, expected answer is CannotAnswer (overrides answer/question_id)
 }
 

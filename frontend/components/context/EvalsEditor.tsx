@@ -49,7 +49,9 @@ function formatExpected(assertion: EvalAssertion): string {
     return assertion.answer ? 'True' : 'False';
   }
   if (assertion.type === 'number_match') {
-    if (assertion.question_id !== undefined) return `Q#${assertion.question_id}`;
+    if (assertion.question_id !== undefined) {
+      return assertion.column ? `Q#${assertion.question_id}.${assertion.column}` : `Q#${assertion.question_id}`;
+    }
     return String(assertion.answer);
   }
   return '—';
@@ -250,6 +252,8 @@ export default function EvalsEditor({ evals, onChange, contextInfo, fileId: _fil
   const [runningIndex, setRunningIndex] = useState<number | null>(null);
   const [results, setResults] = useState<Record<number, EvalResult>>({});
   const [expandedItems, setExpandedItems] = useState<Set<number>>(new Set());
+  // Inferred columns per eval index (keyed by question_id to avoid redundant fetches)
+  const [inferredColumns, setInferredColumns] = useState<Record<number, { questionId: number; columns: string[] }>>({});
 
   const filesState = useAppSelector(state => state.files.files);
   const { files: questionFiles } = useFilesByCriteria({ criteria: { type: 'question' }, partial: true });
@@ -274,6 +278,22 @@ export default function EvalsEditor({ evals, onChange, contextInfo, fileId: _fil
   function handleChange(index: number, updates: Partial<EvalItem>) {
     const newEvals = evals.map((item, i) => (i === index ? { ...item, ...updates } : item));
     onChange(newEvals);
+  }
+
+  async function fetchColumnsForQuestion(evalIndex: number, questionId: number) {
+    if (inferredColumns[evalIndex]?.questionId === questionId) return; // already fetched
+    try {
+      const res = await fetch('/api/infer-columns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ questionId }),
+      });
+      const data = await res.json();
+      const cols: string[] = (data.columns ?? []).map((c: { name: string }) => c.name);
+      setInferredColumns(prev => ({ ...prev, [evalIndex]: { questionId, columns: cols } }));
+    } catch {
+      // best-effort; column picker just won't populate
+    }
   }
 
   function handleAssertionTypeChange(index: number, type: string) {
@@ -594,7 +614,7 @@ export default function EvalsEditor({ evals, onChange, contextInfo, fileId: _fil
                                   </Field.Root>
                                 )}
                                 {item.assertion.type === 'number_match' && (() => {
-                                  const a = item.assertion as { type: 'number_match'; answer: number; question_id?: number; cannot_answer?: true };
+                                  const a = item.assertion as { type: 'number_match'; answer: number; question_id?: number; column?: string; cannot_answer?: true };
                                   const useQuestion = !a.cannot_answer && a.question_id !== undefined;
                                   const sourceValue = a.cannot_answer ? 'cannot_answer' : useQuestion ? 'question' : 'static';
                                   return (
@@ -610,7 +630,7 @@ export default function EvalsEditor({ evals, onChange, contextInfo, fileId: _fil
                                               } else if (e.target.value === 'question') {
                                                 handleChange(index, { assertion: { type: 'number_match', answer: 0, question_id: 0 } });
                                               } else {
-                                                handleChange(index, { assertion: { type: 'number_match', answer: 0 } });
+                                                handleChange(index, { assertion: { type: 'number_match', answer: 0 } }); // clears question_id and column
                                               }
                                             }}
                                             onClick={e => e.stopPropagation()}
@@ -623,24 +643,49 @@ export default function EvalsEditor({ evals, onChange, contextInfo, fileId: _fil
                                         </NativeSelect.Root>
                                       </Field.Root>
                                       {!a.cannot_answer && (useQuestion ? (
-                                        <Field.Root flex={1}>
-                                          <Field.Label fontSize="2xs" fontWeight="600">Question (first cell = expected)</Field.Label>
-                                          <NativeSelect.Root size="xs">
-                                            <NativeSelect.Field
-                                              value={a.question_id ?? ''}
-                                              onChange={e => handleChange(index, {
-                                                assertion: { ...a, question_id: parseInt(e.target.value) || 0 }
-                                              })}
-                                              onClick={e => e.stopPropagation()}
-                                            >
-                                              <option value="">— select —</option>
-                                              {questionFiles.map(f => (
-                                                <option key={f.id} value={f.id}>{f.name || f.path}</option>
-                                              ))}
-                                            </NativeSelect.Field>
-                                            <NativeSelect.Indicator />
-                                          </NativeSelect.Root>
-                                        </Field.Root>
+                                        <>
+                                          <Field.Root flex={1}>
+                                            <Field.Label fontSize="2xs" fontWeight="600">Question</Field.Label>
+                                            <NativeSelect.Root size="xs">
+                                              <NativeSelect.Field
+                                                value={a.question_id ?? ''}
+                                                onChange={e => {
+                                                  const qid = parseInt(e.target.value) || 0;
+                                                  handleChange(index, { assertion: { ...a, question_id: qid, column: undefined } });
+                                                  if (qid) fetchColumnsForQuestion(index, qid);
+                                                }}
+                                                onFocus={() => { if (a.question_id) fetchColumnsForQuestion(index, a.question_id); }}
+                                                onClick={e => e.stopPropagation()}
+                                              >
+                                                <option value="">— select —</option>
+                                                {questionFiles.map(f => (
+                                                  <option key={f.id} value={f.id}>{f.name || f.path}</option>
+                                                ))}
+                                              </NativeSelect.Field>
+                                              <NativeSelect.Indicator />
+                                            </NativeSelect.Root>
+                                          </Field.Root>
+                                          <Field.Root flex="0 0 140px">
+                                            <Field.Label fontSize="2xs" fontWeight="600">Column</Field.Label>
+                                            <NativeSelect.Root size="xs">
+                                              <NativeSelect.Field
+                                                value={a.column ?? ''}
+                                                onChange={e => handleChange(index, {
+                                                  assertion: { ...a, column: e.target.value || undefined }
+                                                })}
+                                                onClick={e => e.stopPropagation()}
+                                                _disabled={{ opacity: 0.5 }}
+                                                aria-disabled={!inferredColumns[index]?.columns.length}
+                                              >
+                                                <option value="">— first column —</option>
+                                                {(inferredColumns[index]?.columns ?? []).map(col => (
+                                                  <option key={col} value={col}>{col}</option>
+                                                ))}
+                                              </NativeSelect.Field>
+                                              <NativeSelect.Indicator />
+                                            </NativeSelect.Root>
+                                          </Field.Root>
+                                        </>
                                       ) : (
                                         <Field.Root flex="0 0 100px">
                                           <Field.Label fontSize="2xs" fontWeight="600">Expected</Field.Label>
