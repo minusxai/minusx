@@ -131,7 +131,7 @@ function EvalTrace({ log }: { log: CompletedToolCallFromPython[] }) {
   const [open, setOpen] = useState(false);
   const [showThinking, setShowThinking] = useState(false);
   const colorMode = useAppSelector((state) => state.ui.colorMode);
-  console.log('Eval trace log:', log);
+
   const stepsJson = useMemo(() => {
     const steps = log.map((tc) => ({
       tool: tc.function.name,
@@ -143,12 +143,25 @@ function EvalTrace({ log }: { log: CompletedToolCallFromPython[] }) {
 
   return (
     <Collapsible.Root open={open} onOpenChange={({ open }) => setOpen(open)}>
-      <Collapsible.Trigger asChild>
-        <HStack gap={1} cursor="pointer" color="fg.muted" _hover={{ color: 'fg.default' }} w="fit-content" onClick={e => e.stopPropagation()}>
-          {open ? <LuChevronDown size={12} /> : <LuChevronRight size={12} />}
-          <Text fontSize="xs">Agent trace ({log.length} steps)</Text>
-        </HStack>
-      </Collapsible.Trigger>
+      <HStack gap={3} onClick={e => e.stopPropagation()}>
+        <Collapsible.Trigger asChild>
+          <HStack gap={1} cursor="pointer" color="fg.muted" _hover={{ color: 'fg.default' }} w="fit-content">
+            {open ? <LuChevronDown size={12} /> : <LuChevronRight size={12} />}
+            <Text fontSize="xs">Agent trace ({log.length} steps)</Text>
+          </HStack>
+        </Collapsible.Trigger>
+        {open && (
+          <Button
+            size="2xs"
+            variant={showThinking ? 'subtle' : 'outline'}
+            colorPalette="gray"
+            onClick={() => setShowThinking(v => !v)}
+            fontSize="2xs"
+          >
+            {showThinking ? 'Hide Thinking' : 'Show Thinking'}
+          </Button>
+        )}
+      </HStack>
       <Collapsible.Content>
         <HStack
           gap={0}
@@ -476,26 +489,26 @@ export default function EvalsEditor({ evals, onChange, contextInfo, fileId: _fil
                     {isExpanded && (
                       <Table.Row>
                         <Table.Cell colSpan={7} p={0}>
-                          <Box p={4} bg="bg.subtle" borderTop="1px solid" borderColor="border.muted">
-                            <VStack gap={3} align="stretch">
-                              {/* Question */}
+                          <Box px={3} py={2} bg="bg.subtle" borderTop="1px solid" borderColor="border.muted">
+                            <VStack gap={2} align="stretch">
+                              {/* Row 1: Question textarea */}
                               <Field.Root>
-                                <Field.Label fontSize="xs" fontWeight="600">Question</Field.Label>
+                                <Field.Label fontSize="2xs" fontWeight="600">Question</Field.Label>
                                 <BufferedTextarea
-                                  size="sm"
+                                  size="xs"
                                   value={item.question}
                                   onCommit={v => handleChange(index, { question: v })}
                                   placeholder="Natural language question for the agent..."
-                                  rows={2}
+                                  rows={1}
                                   onClick={e => e.stopPropagation()}
                                 />
                               </Field.Root>
 
-                              {/* App State */}
-                              <HStack gap={3} align="flex-start">
-                                <Field.Root flex="0 0 140px">
-                                  <Field.Label fontSize="xs" fontWeight="600">App State</Field.Label>
-                                  <NativeSelect.Root size="sm">
+                              {/* Row 2: App State + file selector + Connection */}
+                              <HStack gap={3} align="flex-end">
+                                <Field.Root flex="0 0 120px">
+                                  <Field.Label fontSize="2xs" fontWeight="600">App State</Field.Label>
+                                  <NativeSelect.Root size="xs">
                                     <NativeSelect.Field
                                       value={getAppStateUiType(index, item.app_state)}
                                       onChange={e => handleAppStateTypeChange(index, e.target.value)}
@@ -510,7 +523,7 @@ export default function EvalsEditor({ evals, onChange, contextInfo, fileId: _fil
                                 </Field.Root>
                                 {item.app_state.type === 'file' && getAppStateUiType(index, item.app_state) === 'question' && (
                                   <Field.Root flex={1}>
-                                    <Field.Label fontSize="xs" fontWeight="600">Question</Field.Label>
+                                    <Field.Label fontSize="2xs" fontWeight="600">Question</Field.Label>
                                     <FileSearchSelect
                                       files={questionFiles}
                                       selectedId={(item.app_state as { type: 'file'; file_id: number }).file_id || null}
@@ -521,7 +534,7 @@ export default function EvalsEditor({ evals, onChange, contextInfo, fileId: _fil
                                 )}
                                 {item.app_state.type === 'file' && getAppStateUiType(index, item.app_state) === 'dashboard' && (
                                   <Field.Root flex={1}>
-                                    <Field.Label fontSize="xs" fontWeight="600">Dashboard</Field.Label>
+                                    <Field.Label fontSize="2xs" fontWeight="600">Dashboard</Field.Label>
                                     <FileSearchSelect
                                       files={dashboardFiles}
                                       selectedId={(item.app_state as { type: 'file'; file_id: number }).file_id || null}
@@ -530,52 +543,57 @@ export default function EvalsEditor({ evals, onChange, contextInfo, fileId: _fil
                                     />
                                   </Field.Root>
                                 )}
+                                <Field.Root flex="0 0 160px">
+                                  <Field.Label fontSize="2xs" fontWeight="600">Connection (optional)</Field.Label>
+                                  <DatabaseSelector
+                                    value={item.connection_id || ''}
+                                    onChange={val => handleChange(index, { connection_id: val || undefined })}
+                                  />
+                                </Field.Root>
                               </HStack>
 
-                              {/* Assertion */}
-                              <Field.Root>
-                                <Field.Label fontSize="xs" fontWeight="600">Assertion Type</Field.Label>
-                                <NativeSelect.Root size="sm">
-                                  <NativeSelect.Field
-                                    value={item.assertion.type}
-                                    onChange={e => handleAssertionTypeChange(index, e.target.value)}
-                                    onClick={e => e.stopPropagation()}
-                                  >
-                                    <option value="binary">Binary (yes/no)</option>
-                                    <option value="number_match">Number match</option>
-                                  </NativeSelect.Field>
-                                  <NativeSelect.Indicator />
-                                </NativeSelect.Root>
-                              </Field.Root>
-
-                              {item.assertion.type === 'binary' && (
-                                <Field.Root>
-                                  <Field.Label fontSize="xs" fontWeight="600">Expected Answer</Field.Label>
-                                  <NativeSelect.Root size="sm">
+                              {/* Row 3: Assertion type + expected value */}
+                              <HStack gap={3} align="flex-end">
+                                <Field.Root flex="0 0 140px">
+                                  <Field.Label fontSize="2xs" fontWeight="600">Assertion</Field.Label>
+                                  <NativeSelect.Root size="xs">
                                     <NativeSelect.Field
-                                      value={String((item.assertion as { type: 'binary'; answer: boolean }).answer)}
-                                      onChange={e => handleChange(index, {
-                                        assertion: { type: 'binary', answer: e.target.value === 'true' }
-                                      })}
+                                      value={item.assertion.type}
+                                      onChange={e => handleAssertionTypeChange(index, e.target.value)}
                                       onClick={e => e.stopPropagation()}
                                     >
-                                      <option value="true">True (yes)</option>
-                                      <option value="false">False (no)</option>
+                                      <option value="binary">Binary (yes/no)</option>
+                                      <option value="number_match">Number match</option>
                                     </NativeSelect.Field>
                                     <NativeSelect.Indicator />
                                   </NativeSelect.Root>
                                 </Field.Root>
-                              )}
-
-                              {item.assertion.type === 'number_match' && (() => {
-                                const a = item.assertion as { type: 'number_match'; answer: number; question_id?: number };
-                                const useQuestion = a.question_id !== undefined;
-                                return (
-                                  <VStack gap={2} align="stretch">
-                                    <HStack gap={3} align="flex-start">
-                                      <Field.Root flex="0 0 140px">
-                                        <Field.Label fontSize="xs" fontWeight="600">Expected Source</Field.Label>
-                                        <NativeSelect.Root size="sm">
+                                {item.assertion.type === 'binary' && (
+                                  <Field.Root flex="0 0 120px">
+                                    <Field.Label fontSize="2xs" fontWeight="600">Expected</Field.Label>
+                                    <NativeSelect.Root size="xs">
+                                      <NativeSelect.Field
+                                        value={String((item.assertion as { type: 'binary'; answer: boolean }).answer)}
+                                        onChange={e => handleChange(index, {
+                                          assertion: { type: 'binary', answer: e.target.value === 'true' }
+                                        })}
+                                        onClick={e => e.stopPropagation()}
+                                      >
+                                        <option value="true">True (yes)</option>
+                                        <option value="false">False (no)</option>
+                                      </NativeSelect.Field>
+                                      <NativeSelect.Indicator />
+                                    </NativeSelect.Root>
+                                  </Field.Root>
+                                )}
+                                {item.assertion.type === 'number_match' && (() => {
+                                  const a = item.assertion as { type: 'number_match'; answer: number; question_id?: number };
+                                  const useQuestion = a.question_id !== undefined;
+                                  return (
+                                    <>
+                                      <Field.Root flex="0 0 120px">
+                                        <Field.Label fontSize="2xs" fontWeight="600">Source</Field.Label>
+                                        <NativeSelect.Root size="xs">
                                           <NativeSelect.Field
                                             value={useQuestion ? 'question' : 'static'}
                                             onChange={e => {
@@ -596,8 +614,8 @@ export default function EvalsEditor({ evals, onChange, contextInfo, fileId: _fil
                                       </Field.Root>
                                       {useQuestion ? (
                                         <Field.Root flex={1}>
-                                          <Field.Label fontSize="xs" fontWeight="600">Question (first cell = expected)</Field.Label>
-                                          <NativeSelect.Root size="sm">
+                                          <Field.Label fontSize="2xs" fontWeight="600">Question (first cell = expected)</Field.Label>
+                                          <NativeSelect.Root size="xs">
                                             <NativeSelect.Field
                                               value={a.question_id ?? ''}
                                               onChange={e => handleChange(index, {
@@ -605,21 +623,19 @@ export default function EvalsEditor({ evals, onChange, contextInfo, fileId: _fil
                                               })}
                                               onClick={e => e.stopPropagation()}
                                             >
-                                              <option value="">— select a question —</option>
+                                              <option value="">— select —</option>
                                               {questionFiles.map(f => (
-                                                <option key={f.id} value={f.id}>
-                                                  {f.name || f.path}
-                                                </option>
+                                                <option key={f.id} value={f.id}>{f.name || f.path}</option>
                                               ))}
                                             </NativeSelect.Field>
                                             <NativeSelect.Indicator />
                                           </NativeSelect.Root>
                                         </Field.Root>
                                       ) : (
-                                        <Field.Root flex={1}>
-                                          <Field.Label fontSize="xs" fontWeight="600">Expected Number</Field.Label>
+                                        <Field.Root flex="0 0 100px">
+                                          <Field.Label fontSize="2xs" fontWeight="600">Expected</Field.Label>
                                           <Input
-                                            size="sm"
+                                            size="xs"
                                             type="number"
                                             value={a.answer ?? ''}
                                             onChange={e => handleChange(index, {
@@ -630,41 +646,35 @@ export default function EvalsEditor({ evals, onChange, contextInfo, fileId: _fil
                                           />
                                         </Field.Root>
                                       )}
-                                    </HStack>
-                                    <Field.Root>
-                                      <Field.Label fontSize="xs" fontWeight="600">Connection (optional override)</Field.Label>
-                                      <DatabaseSelector
-                                        value={item.connection_id || ''}
-                                        onChange={val => handleChange(index, { connection_id: val || undefined })}
-                                      />
-                                    </Field.Root>
-                                  </VStack>
-                                );
-                              })()}
+                                    </>
+                                  );
+                                })()}
+                              </HStack>
 
                               {/* Result */}
                               {result && (
-                                <VStack gap={2} align="stretch">
+                                <VStack gap={1} align="stretch">
                                   <Box
-                                    p={2}
+                                    px={2}
+                                    py={1.5}
                                     bg={result.passed ? 'green.500/10' : 'red.500/10'}
                                     borderRadius="sm"
                                     border="1px solid"
                                     borderColor={result.passed ? 'green.500/30' : 'red.500/30'}
                                   >
-                                    <HStack gap={2} mb={result.error || Object.keys(result.details).length > 0 ? 1 : 0}>
+                                    <HStack gap={2}>
                                       {result.passed
-                                        ? <LuCircleCheck size={14} color="var(--chakra-colors-green-500)" />
-                                        : <LuCircleX size={14} color="var(--chakra-colors-red-500)" />}
+                                        ? <LuCircleCheck size={12} color="var(--chakra-colors-green-500)" />
+                                        : <LuCircleX size={12} color="var(--chakra-colors-red-500)" />}
                                       <Text fontSize="xs" fontWeight="600" color={result.passed ? 'green.600' : 'red.600'}>
                                         {result.passed ? 'Passed' : 'Failed'}
                                       </Text>
+                                      {(result.error || Object.keys(result.details).length > 0) && (
+                                        <Text fontSize="2xs" fontFamily="mono" color="fg.muted" truncate>
+                                          {result.error || JSON.stringify(result.details)}
+                                        </Text>
+                                      )}
                                     </HStack>
-                                    {(result.error || Object.keys(result.details).length > 0) && (
-                                      <Text fontSize="xs" fontFamily="mono" color="fg.muted" whiteSpace="pre-wrap">
-                                        {result.error || JSON.stringify(result.details, null, 2)}
-                                      </Text>
-                                    )}
                                   </Box>
                                   {result.log && result.log.length > 0 && (
                                     <EvalTrace log={result.log} />
