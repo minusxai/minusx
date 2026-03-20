@@ -446,7 +446,7 @@ registerFrontendTool('CreateFile', async (args, context) => {
 
   // --- Page-context guards for background file creation ---
   const state = context.state ?? getStore().getState();
-  const { appState } = selectAppState(state);
+  const { appState } = state.navigation ? selectAppState(state) : { appState: null };
 
   // Dashboards can never be created in the background
   if (file_type === 'dashboard') {
