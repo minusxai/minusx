@@ -889,7 +889,7 @@ describe('CreateFile tool - content validation', () => {
     expect(parsed.success).toBe(true);
   });
 
-  it('creates a dashboard with valid content override', async () => {
+  it('rejects dashboard creation in the background', async () => {
     const result = await executeToolCall(
       makeToolCall({
         file_type: 'dashboard',
@@ -899,7 +899,7 @@ describe('CreateFile tool - content validation', () => {
       {} as any
     );
     const parsed = JSON.parse(result.content as string);
-    expect(parsed.success).toBe(true);
-    expect(parsed.state.fileState.type).toBe('dashboard');
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toMatch(/Navigate to \/new\/dashboard/);
   });
 });

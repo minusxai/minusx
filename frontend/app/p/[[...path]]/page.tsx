@@ -178,7 +178,7 @@ export default function PathPage({ params }: PathPageProps) {
   return (
     <Box minH="90vh" bg="bg.canvas" display="flex">
       {/* Product tour for tutorial mode */}
-      <ProductTour />
+      {/* <ProductTour /> */}
       <VStack flex="1" minW="0" position="relative" align={"stretch"}>
         <Box w="100%" flex="1" mx="auto" px={{ base: 4, md: 8, lg: 12 }} pt={{ base: 3, md: 4, lg: 5 }} pb={{ base: 6, md: 8, lg: 10 }}>
           <Flex justify="space-between" align="center" mb={4} gap={4}>
