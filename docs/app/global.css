@@ -1,2 +1,155 @@
 @import 'fumadocs-ui/style.css';
 @import 'tailwindcss';
+
+@theme {
+  /* Use JetBrains Mono everywhere */
+  --font-sans: var(--font-mono), ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+  --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Primary: teal from MinusX brand — darker for light mode readability */
+  --color-fd-primary: #16a085;
+  --color-fd-primary-foreground: #ffffff;
+  --color-fd-ring: #16a085;
+}
+
+/* ── Light mode ── */
+:root {
+  --color-fd-background: #F5F7FA;
+  --color-fd-foreground: #0D1117;
+  --color-fd-muted: #E8ECEF;
+  --color-fd-muted-foreground: #57606A;
+  --color-fd-card: #FFFFFF;
+  --color-fd-card-foreground: #0D1117;
+  --color-fd-border: #D0D7DE;
+  --color-fd-accent: #F0F3F6;
+  --color-fd-accent-foreground: #24292F;
+  --color-fd-popover: #FFFFFF;
+  --color-fd-popover-foreground: #0D1117;
+  --color-fd-secondary: #E8ECEF;
+  --color-fd-secondary-foreground: #24292F;
+}
+
+/* ── Dark mode — matches MinusX frontend ── */
+.dark {
+  --color-fd-background: #0D1117;
+  --color-fd-foreground: #E6EDF3;
+  --color-fd-muted: #21262D;
+  --color-fd-muted-foreground: #8B949E;
+  --color-fd-card: #161B22;
+  --color-fd-card-foreground: #E6EDF3;
+  --color-fd-border: #30363D;
+  --color-fd-accent: #161B22;
+  --color-fd-accent-foreground: #F0F6FC;
+  --color-fd-popover: #1C2128;
+  --color-fd-popover-foreground: #E6EDF3;
+  --color-fd-secondary: #21262D;
+  --color-fd-secondary-foreground: #E6EDF3;
+  --color-fd-primary: #1abc9c;
+  --color-fd-primary-foreground: #0D1117;
+  --color-fd-ring: #16a085;
+}
+
+/* ── Logo switching (light/dark) ── */
+.logo-light {
+  display: block !important;
+}
+.logo-dark {
+  display: none !important;
+}
+.dark .logo-light {
+  display: none !important;
+}
+.dark .logo-dark {
+  display: block !important;
+}
+
+/* ── Typography — mono everywhere ── */
+body {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.01em;
+}
+
+/* ── Teal headings ── */
+.prose h2, .prose h3 {
+  color: var(--color-fd-primary) !important;
+}
+
+/* ── Teal links ── */
+.prose a {
+  color: var(--color-fd-primary) !important;
+}
+.prose a:hover {
+  opacity: 0.8;
+}
+
+/* ── Hacker-friendly code blocks ── */
+[data-rehype-pretty-code-figure] pre {
+  border: 1px solid var(--color-fd-border) !important;
+  border-radius: 6px !important;
+  font-size: 13px !important;
+  line-height: 1.6 !important;
+}
+
+.dark [data-rehype-pretty-code-figure] pre {
+  background: #0D1117 !important;
+  border-color: #30363D !important;
+}
+
+[data-rehype-pretty-code-figure] code {
+  font-family: var(--font-mono), ui-monospace, monospace !important;
+  font-size: 13px !important;
+}
+
+/* Inline code */
+:not(pre) > code {
+  font-family: var(--font-mono), ui-monospace, monospace !important;
+  font-size: 0.875em;
+  padding: 0.15em 0.4em;
+  border-radius: 4px;
+  background: var(--color-fd-muted);
+  color: var(--color-fd-primary);
+}
+
+/* ── Hide the clipped top sub-nav (sidebar has logo + search already) ── */
+#nd-subnav {
+  display: none !important;
+}
+
+/* ── Sidebar tweaks ── */
+.fd-sidebar {
+  font-size: 13px;
+}
+
+/* ── Tighter prose ── */
+.prose {
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.prose h1, .prose h2, .prose h3, .prose h4 {
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+/* ── HR styling ── */
+.prose hr {
+  border-color: var(--color-fd-border);
+  margin: 2rem 0;
+}
+
+/* ── Scrollbar (dark mode) ── */
+.dark ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.dark ::-webkit-scrollbar-track {
+  background: #0D1117;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #30363D;
+  border-radius: 3px;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #3D444D;
+}
