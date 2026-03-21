@@ -1,0 +1,38 @@
+---
+title: Philosophy
+description: The design principles behind MinusX
+---
+
+MinusX is built on a few core beliefs about how data teams should work.
+
+## SQL is the right abstraction
+
+SQL is the universal language of data. Rather than inventing a new query builder or abstraction layer, MinusX embraces SQL directly. Every question in MinusX is backed by a real SQL query that you can see, edit, and understand.
+
+The AI assistant writes SQL — not some intermediate representation. This means you always know exactly what's happening, and you can take over at any point.
+
+## AI should augment, not replace
+
+MinusX's AI assistant is a collaborator, not a black box. It helps you explore data faster by:
+
+- Writing SQL from natural language questions
+- Suggesting visualizations based on your data
+- Helping you iterate on queries and charts
+
+But you're always in control. Every AI action produces visible, editable artifacts — a SQL query, a chart configuration, a dashboard layout. Nothing is hidden.
+
+## File-system thinking
+
+MinusX organizes everything as documents in a file tree — questions, dashboards, contexts, conversations. This gives you:
+
+- **Familiar organization** — folders, paths, and hierarchy work the way you'd expect
+- **Clear ownership** — each team can have their own workspace
+- **Simple sharing** — share a link to any document by ID
+
+## Knowledge makes AI better
+
+The more MinusX knows about your data, the better it performs. The Knowledge Base lets you:
+
+- **Whitelist relevant tables** — so the AI focuses on what matters
+- **Add text context** — explain business logic, metric definitions, and naming conventions
+- **Evaluate quality** — use evals to measure and improve AI accuracy over time

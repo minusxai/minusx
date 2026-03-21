@@ -1,0 +1,33 @@
+---
+title: Table Context
+description: Control which tables the AI can see and use
+---
+
+Table context lets you whitelist specific database tables and schemas for the AI assistant. Instead of exposing your entire database, you select exactly which tables are relevant.
+
+## Why whitelist tables?
+
+Large databases can have hundreds of tables. Without guidance, the AI might:
+
+- Use the wrong table for a query
+- Join unrelated tables
+- Get confused by similarly named columns
+
+Whitelisting narrows the AI's focus to the tables that matter for your team.
+
+## How it works
+
+1. Navigate to the **Knowledge Base** section
+2. Select a connection to browse its schema
+3. Check the tables and columns you want the AI to use
+4. Save your context
+
+The AI assistant only sees whitelisted tables when generating queries. Everything else is invisible to it.
+
+## Schema hierarchy
+
+Contexts support hierarchical organization:
+
+- A parent context can restrict which tables child contexts can access
+- Child contexts can only whitelist tables from their parent's available set
+- This enables team-level data governance — each team sees only their relevant data

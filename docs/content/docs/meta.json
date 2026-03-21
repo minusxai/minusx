@@ -1,0 +1,16 @@
+{
+  "title": "Docs",
+  "root": true,
+  "pages": [
+    "---Getting Started---",
+    "index",
+    "installation",
+    "---Features---",
+    "concepts",
+    "questions",
+    "dashboards",
+    "knowledge-base",
+    "proactive",
+    "ai-chat"
+  ]
+}

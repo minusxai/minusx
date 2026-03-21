@@ -1,0 +1,26 @@
+---
+title: Text Context
+description: Give the AI written knowledge about your data
+---
+
+Text context lets you provide free-form documentation that the AI reads before generating queries. This is where you explain the things that aren't obvious from the schema alone.
+
+## What to include
+
+Good text context answers questions like:
+
+- **What does this metric mean?** — "Revenue = SUM of `amount` from `orders` where `status = 'completed'`"
+- **What are the naming conventions?** — "All date columns use `_at` suffix and store UTC timestamps"
+- **What are common gotchas?** — "The `users` table includes test accounts — filter by `is_test = false` for production data"
+- **What are the relationships?** — "Each `order` belongs to a `customer` via `customer_id`"
+
+## Writing effective context
+
+- Be specific and concrete — give examples
+- Focus on things the AI can't infer from column names and types
+- Update context as your data model evolves
+- Keep it concise — the AI reads this on every query, so brevity helps
+
+## Organization
+
+Text context is stored as context documents in the file tree. You can create multiple context documents for different topics or teams.

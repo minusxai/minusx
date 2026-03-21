@@ -1,0 +1,41 @@
+---
+title: Parameters
+description: Make your queries dynamic with parameters
+---
+
+Parameters let you create dynamic queries where users can change values without editing SQL. This is especially powerful when questions are used in dashboards.
+
+## Syntax
+
+Use the `:paramName` syntax in your SQL:
+
+```sql
+SELECT *
+FROM orders
+WHERE created_at >= :start_date
+  AND created_at < :end_date
+  AND status = :status
+LIMIT :limit
+```
+
+Parameters are automatically detected from your SQL query.
+
+## Parameter types
+
+Each parameter has a type that determines its input widget:
+
+| Type | Input | Example |
+|------|-------|---------|
+| `text` | Text field | `:status` → "completed" |
+| `number` | Number field | `:limit` → 100 |
+| `date` | Date picker | `:start_date` → 2024-01-01 |
+
+## Parameters in dashboards
+
+When you add a question with parameters to a dashboard, parameters with the **same name and type** are automatically merged into shared dashboard-level filters. This means changing one filter updates all questions that use that parameter.
+
+For example, if three questions all use `:start_date` (type: date), the dashboard shows a single date picker that controls all three.
+
+<Callout type="info">
+Parameter types can be changed when editing a question, but are locked when viewing in a dashboard.
+</Callout>

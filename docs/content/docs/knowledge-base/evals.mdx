@@ -1,0 +1,38 @@
+---
+title: Evals
+description: Measure and improve AI query quality
+---
+
+Evals let you systematically test how well the AI generates SQL for your data. Think of them as unit tests for your AI assistant.
+
+## How evals work
+
+An eval set is a collection of question-answer pairs:
+
+- **Question** — a natural language question (e.g., "What was total revenue last month?")
+- **Expected SQL** — the correct SQL query that answers the question
+
+MinusX runs each question through the AI and compares the generated SQL against the expected answer.
+
+## Why use evals?
+
+Evals help you:
+
+- **Measure baseline quality** — how accurate is the AI with your current context?
+- **Track improvement** — does adding more context make the AI better?
+- **Catch regressions** — did a schema change break previously working queries?
+- **Identify gaps** — which types of questions does the AI struggle with?
+
+## Creating evals
+
+1. Navigate to the **Evals** section in the Knowledge Base
+2. Add question-answer pairs that represent real queries your team asks
+3. Run the eval set to see results
+4. Use the results to improve your text context and table whitelisting
+
+## Best practices
+
+- Start with the most common questions your team asks
+- Include edge cases and tricky queries
+- Update evals as your data model changes
+- Aim for a diverse set that covers different query patterns (aggregations, joins, filters, etc.)
