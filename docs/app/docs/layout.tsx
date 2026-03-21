@@ -2,6 +2,7 @@ import { DocsLayout } from 'fumadocs-ui/layouts/docs';
 import type { ReactNode } from 'react';
 import { docsSource } from '@/lib/source';
 import { Logo } from '@/components/logo';
+import { SidebarTabs } from '@/lib/tabs';
 
 export default function Layout({ children }: { children: ReactNode }) {
   return (
@@ -11,11 +12,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         title: <Logo />,
       }}
       sidebar={{
-        tabs: {
-          transform(option) {
-            return { ...option, icon: undefined };
-          },
-        },
+        banner: <SidebarTabs />,
       }}
     >
       {children}
