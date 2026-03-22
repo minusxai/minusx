@@ -1,11 +1,11 @@
 {
   "title": "BI",
   "pages": [
+    "explore",
     "questions",
     "dashboards",
-    "explore",
     "visualization",
     "filters"
   ],
-  "defaultOpen": true
+  "defaultOpen": false
 }

@@ -1,8 +1,8 @@
 {
-  "title": "Data Models",
+  "title": "Sources & Data Models",
   "pages": [
     "connections",
     "data-modeling"
   ],
-  "defaultOpen": true
+  "defaultOpen": false
 }
