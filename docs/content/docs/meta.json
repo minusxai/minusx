@@ -4,7 +4,9 @@
   "pages": [
     "index",
     "installation",
-    "concepts",
+    "philosophy",
+    "agent",
+    "---Platform---",
     "bi",
     "data",
     "knowledge-base",
