@@ -1,0 +1,54 @@
+---
+title: Dashboards
+description: Combine questions into interactive views with shared filters
+---
+
+A **dashboard** is a collection of questions arranged in a grid layout with shared parameters for interactive filtering.
+
+---
+
+## Creating a dashboard
+
+Create a dashboard from the sidebar by clicking **New → Dashboard**. Then:
+
+1. **Add questions** — add saved questions or create new ones directly
+2. **Arrange the layout** — drag and resize cards in the grid
+3. **Save** — give it a name and save to a folder
+
+### Layout
+
+Each question appears as a card that can be:
+
+- **Moved** — drag to reposition
+- **Resized** — drag edges to change size
+
+Put key metrics at the top, detailed charts in the middle, supporting tables at the bottom.
+
+---
+
+## Dashboard parameters
+
+When questions use [parameters](/docs/questions) with the **same name and type**, they automatically merge into dashboard-level filters.
+
+For example, if three questions all use `:start_date` (type: date), the dashboard shows a single date picker that controls all three.
+
+- Parameters merge by **name + type** — both must match
+- Parameter types are **locked** in dashboard view
+- Changing a filter **re-executes** all affected questions
+
+---
+
+## AI-assisted dashboards
+
+Use the chat sidebar to build dashboards conversationally:
+
+- "Create a sales dashboard with monthly revenue, top products, and customer count"
+- "Add a line chart showing weekly signups"
+- "Add a date range filter"
+
+The agent creates questions, configures visualizations, and arranges the layout.
+
+<IconCards>
+  <IconCard icon="question" title="Questions" description="Learn about SQL queries, parameters, and visualizations" href="/docs/bi/questions" />
+  <IconCard icon="explore" title="Explore" description="Ad-hoc data exploration with the AI agent" href="/docs/bi/explore" />
+</IconCards>

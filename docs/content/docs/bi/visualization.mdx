@@ -1,0 +1,77 @@
+---
+title: Visualization
+description: Chart types, the GUI builder, and pivot tables
+---
+
+Every question in MinusX can be displayed as a table or chart. The visualization builder lets you configure how your data is presented — no code required.
+
+---
+
+## Chart types
+
+| Type | Best for |
+|------|----------|
+| **Table** | Raw data, detailed records |
+| **Line** | Trends over time |
+| **Bar** | Comparing categories |
+| **Area** | Trends with volume emphasis |
+| **Scatter** | Correlations between measures |
+| **Pie** | Part-of-whole breakdowns |
+| **Funnel** | Sequential stage drop-off |
+| **Pivot Table** | Cross-tabulation with aggregation |
+
+---
+
+## GUI Builder
+
+The chart builder uses a **drag-and-drop interface**:
+
+- **X-axis** — drag grouping dimension columns here
+- **Y-axis** — drag measure columns here (aggregated with SUM by default)
+
+Charts update in real time as you configure axes. Switch between chart types with a single click.
+
+### Multiple dimensions
+
+For charts with multiple X columns:
+- **Line / Bar / Area / Scatter** — reorders columns by cardinality automatically
+- **Pie / Funnel** — preserves your original column order
+
+---
+
+## Pivot Tables
+
+Pivot tables have a specialized three-axis configuration:
+
+| Axis | Purpose |
+|------|---------|
+| **Rows** | Dimension columns for row headers |
+| **Columns** | Dimension columns for column headers |
+| **Values** | Measures with per-value aggregation function |
+
+### Aggregation functions
+
+Each value column can use: **SUM**, **AVG**, **COUNT**, **MIN**, or **MAX**
+
+### Features
+
+- **Nested headers** — multi-level row and column grouping
+- **Subtotals** — automatic subtotal rows at group boundaries
+- **Collapsible groups** — toggle on subtotal rows to expand/collapse
+- **Heatmap** — teal gradient coloring for visual emphasis
+- **Grand totals** — row and column totals
+
+---
+
+## AI-powered visualization
+
+The agent can configure charts for you:
+
+- "Show this as a line chart by month"
+- "Make a pivot table with region as rows and quarter as columns"
+- "Switch to a bar chart"
+
+<IconCards>
+  <IconCard icon="question" title="Questions" description="SQL queries and the full question workflow" href="/docs/bi/questions" />
+  <IconCard icon="dashboard" title="Dashboards" description="Combine visualizations into interactive views" href="/docs/bi/dashboards" />
+</IconCards>

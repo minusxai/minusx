@@ -11,6 +11,9 @@ import {
   FileText,
   Database,
   Rocket,
+  Bot,
+  Workflow,
+  Cloud,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -19,14 +22,18 @@ const icons: Record<string, ReactNode> = {
   dashboard: <LayoutDashboard />,
   'knowledge-base': <BookText />,
   'ai-chat': <MessageCircle />,
+  agent: <Bot />,
   installation: <Download />,
   concepts: <Lightbulb />,
+  philosophy: <Lightbulb />,
   guides: <GraduationCap />,
   proactive: <Bell />,
   reports: <FileText />,
   alerts: <Bell />,
   connection: <Database />,
+  'data-modeling': <Workflow />,
   explore: <Rocket />,
+  cloud: <Cloud />,
 };
 
 interface IconCardProps {

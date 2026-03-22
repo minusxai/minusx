@@ -1,0 +1,92 @@
+---
+title: Questions
+description: SQL queries paired with visualizations — the core building block of MinusX
+---
+
+A **question** is the fundamental unit of analysis in MinusX. Each question combines a SQL query, a visualization, and optional parameters.
+
+---
+
+## SQL Editor
+
+The SQL editor is built on Monaco Editor (the same editor that powers VS Code):
+
+- **Syntax highlighting** — SQL keywords, strings, numbers, and comments
+- **Autocomplete** — table and column names from your connected databases
+- **Keyboard shortcuts** — `Cmd+Enter` / `Ctrl+Enter` to execute
+- **Multi-line editing** — write complex queries with proper formatting
+
+The AI chat sidebar can write queries from scratch, modify existing ones, explain what a query does, or fix errors.
+
+---
+
+## Parameters
+
+Parameters make queries dynamic. Use the `:paramName` syntax:
+
+```sql
+SELECT *
+FROM orders
+WHERE created_at >= :start_date
+  AND status = :status
+LIMIT :limit
+```
+
+Parameters are automatically detected from your SQL.
+
+### Parameter types
+
+| Type | Input | Example |
+|------|-------|---------|
+| `text` | Text field | `:status` → "completed" |
+| `number` | Number field | `:limit` → 100 |
+| `date` | Date picker | `:start_date` → 2024-01-01 |
+
+<Callout type="info">
+When questions with matching parameter names and types are added to a dashboard, they automatically merge into shared dashboard-level filters.
+</Callout>
+
+---
+
+## Visualization
+
+Every question can be displayed as a table or chart. MinusX supports:
+
+| Type | Best for |
+|------|----------|
+| **Table** | Raw data, detailed records |
+| **Line** | Trends over time |
+| **Bar** | Comparing categories |
+| **Area** | Trends with volume emphasis |
+| **Scatter** | Correlations between measures |
+| **Pie** | Part-of-whole breakdowns |
+| **Funnel** | Sequential stage drop-off |
+| **Pivot Table** | Cross-tabulation with aggregation |
+
+The chart builder uses a **drag-and-drop interface** — drag column names into X-axis and Y-axis drop zones. Charts update in real time.
+
+### Pivot tables
+
+Pivot tables have a specialized configuration:
+
+- **Rows** — dimension columns for row headers
+- **Columns** — dimension columns for column headers
+- **Values** — measures with per-value aggregation (SUM, AVG, COUNT, MIN, MAX)
+
+Supports nested headers, subtotals, collapsible groups, and heatmap coloring.
+
+---
+
+## AI-powered questions
+
+The agent can help at every step:
+
+- "What are the top 10 customers by revenue?"  → writes SQL + runs it
+- "Add a date filter" → adds a `:start_date` parameter
+- "Show this as a bar chart by month" → configures the visualization
+- "Break it down by region" → modifies the query with a GROUP BY
+
+<IconCards>
+  <IconCard icon="dashboard" title="Dashboards" description="Combine questions into interactive dashboards" href="/docs/bi/dashboards" />
+  <IconCard icon="explore" title="Explore" description="Full-page AI chat for ad-hoc analysis" href="/docs/bi/explore" />
+</IconCards>

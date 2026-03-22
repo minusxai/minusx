@@ -1,4 +1,8 @@
 {
   "title": "Knowledge Base",
-  "pages": ["index", "table-context", "text-context", "evals"]
+  "pages": [
+    "context",
+    "evals"
+  ],
+  "defaultOpen": true
 }

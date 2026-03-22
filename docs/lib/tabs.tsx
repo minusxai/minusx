@@ -28,7 +28,7 @@ export function SidebarTabs() {
           textDecoration: 'none',
           transition: 'all 0.15s',
           background: !isGuides ? 'var(--color-fd-primary)' : 'transparent',
-          color: !isGuides ? 'var(--color-fd-primary-foreground)' : 'var(--color-fd-muted-foreground)',
+          color: !isGuides ? '#ffffff' : 'var(--color-fd-muted-foreground)',
           boxShadow: !isGuides ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
         }}
       >
@@ -46,7 +46,7 @@ export function SidebarTabs() {
           textDecoration: 'none',
           transition: 'all 0.15s',
           background: isGuides ? 'var(--color-fd-primary)' : 'transparent',
-          color: isGuides ? 'var(--color-fd-primary-foreground)' : 'var(--color-fd-muted-foreground)',
+          color: isGuides ? '#ffffff' : 'var(--color-fd-muted-foreground)',
           boxShadow: isGuides ? '0 1px 2px rgba(0,0,0,0.1)' : 'none',
         }}
       >

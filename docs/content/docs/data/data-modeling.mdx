@@ -1,0 +1,41 @@
+---
+title: Data Modeling
+description: Shape and organize your data for better analytics
+---
+
+Data modeling in MinusX is about making your raw data usable for analytics. This involves organizing schemas, defining relationships, and providing context so both humans and the AI can work effectively.
+
+---
+
+## Schema organization
+
+MinusX reads your database schema directly from connections. To get the best results:
+
+- **Use clear table and column names** — `orders`, `customer_id` are better than `tbl_001`, `col_a`
+- **Maintain consistent naming conventions** — pick snake_case or camelCase and stick with it
+- **Document with text context** — explain non-obvious column meanings in the Knowledge Base
+
+---
+
+## Working with the Knowledge Base
+
+Data modeling and the Knowledge Base work hand in hand:
+
+1. **Connect your database** — MinusX reads the schema
+2. **Whitelist relevant tables** — hide internal/deprecated tables from the AI
+3. **Add text context** — explain relationships, metric definitions, and gotchas
+4. **Test with evals** — verify the AI understands your model correctly
+
+---
+
+## Best practices
+
+- **Start small** — whitelist only the tables your team needs, expand later
+- **Document joins** — tell the AI how tables relate ("orders join customers via customer_id")
+- **Define metrics** — "Revenue = SUM(amount) from orders WHERE status = 'completed'"
+- **Note gotchas** — "users table includes test accounts, filter by is_test = false"
+
+<IconCards>
+  <IconCard icon="connection" title="Connections" description="Connect MinusX to your databases" href="/docs/data/connections" />
+  <IconCard icon="knowledge-base" title="Knowledge Base" description="Whitelist tables and add context" href="/docs/knowledge-base" />
+</IconCards>

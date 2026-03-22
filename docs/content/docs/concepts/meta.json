@@ -1,4 +1,8 @@
 {
   "title": "Concepts",
-  "pages": ["philosophy"]
+  "pages": [
+    "philosophy",
+    "agent"
+  ],
+  "defaultOpen": true
 }

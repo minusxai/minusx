@@ -1,4 +1,8 @@
 {
-  "title": "Proactive Features",
-  "pages": ["reports", "alerts"]
+  "title": "Proactive",
+  "pages": [
+    "reports",
+    "alerts"
+  ],
+  "defaultOpen": true
 }

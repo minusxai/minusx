@@ -1,48 +1,56 @@
 ---
-title: What is MinusX?
-description: An overview of MinusX — the agentic, file-system based BI tool
+title: Getting Started
+description: Welcome to MinusX — the agentic BI tool
 ---
 
 MinusX is an agentic, AI-powered business intelligence tool that helps teams explore data, build dashboards, and get answers from their databases — all through natural conversation.
 
+{/* TODO: Add hero image/video here */}
+
 ---
 
-## Why MinusX?
+## Installation
 
-Traditional BI tools force you to choose between power and ease of use. SQL-based tools are flexible but require expertise. Drag-and-drop builders are accessible but limiting. MinusX bridges this gap with an AI assistant that understands your data, writes SQL, and builds visualizations — while keeping you in full control.
+<IconCards>
+  <IconCard icon="installation" title="Self-Hosted" description="Run MinusX on your own infrastructure with Docker or from source" href="/docs/installation/self-hosted" />
+  <IconCard icon="cloud" title="Cloud / Managed" description="Let the MinusX team handle hosting and infrastructure for you" href="/docs/installation/cloud" />
+</IconCards>
+
+---
+
+## Philosophy
+
+MinusX is built on a few core beliefs:
+
+- **SQL is the right abstraction** — every question is backed by a real, editable SQL query. No hidden logic.
+- **AI should augment, not replace** — the assistant is a collaborator. You're always in control.
+- **Knowledge makes AI better** — the more context you provide, the more accurate the results.
+
+<IconCards>
+  <IconCard icon="philosophy" title="Philosophy" description="Read more about the design principles behind MinusX" href="/docs/concepts/philosophy" />
+</IconCards>
+
+---
+
+## MinusX Agent
+
+The AI assistant lives on every page in MinusX. Whether you're exploring data, editing a question, or building a dashboard — the agent understands your current context and can take actions directly.
+
+- **Explore** — ask questions in natural language, get SQL + visualizations instantly
+- **Questions** — modify queries, change chart types, add parameters via chat
+- **Dashboards** — add cards, rearrange layout, create new questions conversationally
+
+<IconCards>
+  <IconCard icon="agent" title="MinusX Agent" description="Learn how the AI assistant works across the platform" href="/docs/concepts/agent" />
+</IconCards>
 
 ---
 
 ## Core Concepts
 
 <IconCards>
-  <IconCard icon="question" title="Questions" description="SQL queries paired with visualizations — tables, charts, pivot tables" href="/docs/questions" />
-  <IconCard icon="dashboard" title="Dashboards" description="Collections of questions with shared parameters for interactive filtering" href="/docs/dashboards" />
-  <IconCard icon="knowledge-base" title="Knowledge Base" description="Teach the AI about your data through schema whitelisting and text context" href="/docs/knowledge-base" />
-  <IconCard icon="ai-chat" title="AI Chat" description="Conversational assistant on every page — ask questions, modify charts, build dashboards" href="/docs/ai-chat" />
-</IconCards>
-
----
-
-## How it works
-
-MinusX uses a file-system based architecture. Every question, dashboard, and piece of context is a document stored in a structured file tree. This means:
-
-- **Everything is versioned** — documents have clear save/edit states
-- **Everything is organized** — folders and paths keep your workspace tidy
-- **Everything is shareable** — share by ID, organize by team
-
-<Callout type="info">
-MinusX's AI reads your Knowledge Base before every query — the more context you provide, the better the results.
-</Callout>
-
----
-
-## What's next?
-
-<IconCards>
-  <IconCard icon="installation" title="Installation" description="Self-host or use managed hosting" href="/docs/installation/self-hosted" />
-  <IconCard icon="concepts" title="Philosophy" description="Why MinusX works the way it does" href="/docs/concepts/philosophy" />
-  <IconCard icon="guides" title="Guides" description="Step-by-step tutorials to get started" href="/guides" />
-  <IconCard icon="explore" title="Explore" description="Try MinusX with the AI chat interface" href="/docs/ai-chat" />
+  <IconCard icon="question" title="BI: Questions & Dashboards" description="SQL queries, visualizations, and interactive dashboards" href="/docs/bi/questions" />
+  <IconCard icon="connection" title="Data Engineering & Modeling" description="Connect databases and model your data" href="/docs/data/connections" />
+  <IconCard icon="knowledge-base" title="Knowledge Base & Evals" description="Teach the AI about your data and measure accuracy" href="/docs/knowledge-base" />
+  <IconCard icon="proactive" title="Proactive Analytics" description="Scheduled reports and threshold-based alerts" href="/docs/proactive/reports" />
 </IconCards>
