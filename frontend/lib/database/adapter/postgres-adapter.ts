@@ -36,6 +36,7 @@ export class PostgresAdapter implements IDatabaseAdapter {
         idleTimeoutMillis: 30000,
         // TCP keepalives prevent firewalls/proxies from dropping long-idle connections
         keepAlive: true,
+        ssl: { rejectUnauthorized: false },
       });
 
       // Handle pool errors
