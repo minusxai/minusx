@@ -1,0 +1,70 @@
+---
+title: MinusX Documentation
+description: Welcome to MinusX — the open-source agentic BI tool
+---
+
+<ThemedImage light="/light/dashboard.png" dark="/dark/dashboard.png" alt="MinusX Dashboard" />
+
+MinusX is an open-source, AI-native business intelligence tool that helps companies organize their data and put agents to work. It is `Claude Code` / `Codex` for serious data work. MinusX combines three core components of the data stack:
+
+1. [**Data Modeling**](/docs/data) — create trusted datasets (and metrics) everyone in the org can rely on
+2. [**True (for real) Self-Service BI**](/docs/bi) — explore ad-hoc questions, build and maintain dashboards
+3. [**Proactive Analytics**](/docs/proactive) — understand what to focus on, find out what's broken
+
+A trainable, trustworthy agent lives across the entire product surface, assisting in all the above workflows.
+
+<ThemedImage light="/common/schematic.png" dark="/common/schematic.png" alt="MinusX Schematic Diagram" />
+
+---
+
+## Installation
+
+Get started in ~5 minutes with self-hosted Docker, or ~2 minutes with managed cloud. Not sure which to pick? [See our comparison guide →](/docs/installation)
+
+Already using Metabase, Grafana, or Redash? We offer **1-day migration**. [Book a demo →](https://cal.com/vivek-aithal/minusx-bi)
+
+<IconCards>
+  <IconCard icon="installation" title="Self-Hosted" description="Run MinusX on your own infrastructure with Docker or from source" href="/docs/installation/self-hosted" />
+  <IconCard icon="cloud" title="Cloud / Managed" description="Let us handle hosting and infrastructure for you" href="/docs/installation/cloud" />
+</IconCards>
+
+---
+
+## Philosophy
+
+<DataLoop />
+
+MinusX is built on a few core beliefs:
+
+- **Trust is paramount.** Text-to-SQL is solved. Business users will never trust a 200-line-vibe-SQL snippet, and it is not useful to anyone.
+- **Analytics is primarily a modeling problem.** Most serious companies recognize this. But modeling, the way it stands today, is too complex and more akin to medicine. Data modeling needs to be colocated with, and informed by the actual questions people are asking.
+- **Context is King.** Context without Evals is hopium.
+- **BI as a file system.** Agent harnesses need to get out of the way of state-of-the-art LLMs.
+
+
+<IconCards>
+  <IconCard icon="philosophy" title="Philosophy" description="Read more about the design principles behind MinusX" href="/docs/philosophy" />
+</IconCards>
+
+---
+
+## MinusX Agent
+
+The MinusX agent lives on every page in MinusX. Whether you're exploring data, editing a question, or building a dashboard — the agent understands your current context and can take actions directly.
+
+<IconCards>
+  <IconCard icon="agent" title="MinusX Agent" description="Learn how the MinusX agent works across the platform" href="/docs/agent" />
+</IconCards>
+
+---
+
+## Core Concepts
+
+<IconCards>
+  <IconCard icon="question" title="BI: Questions & Dashboards" description="SQL queries, visualizations, and interactive dashboards" href="/docs/bi" />
+  <IconCard icon="connection" title="Sources & Data Models" description="Connect databases and model your data" href="/docs/data" />
+  <IconCard icon="knowledge-base" title="Knowledge Base & Evals" description="Teach the AI about your data and measure accuracy" href="/docs/knowledge-base" />
+  <IconCard icon="proactive" title="Proactive Analytics" description="Scheduled reports and threshold-based alerts" href="/docs/proactive" />
+</IconCards>
+
+---

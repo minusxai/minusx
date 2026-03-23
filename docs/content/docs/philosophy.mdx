@@ -1,0 +1,46 @@
+---
+title: Philosophy
+description: The design principles behind MinusX
+---
+
+<DataLoop />
+
+## Trust is paramount
+
+Text-to-SQL is solved. But business users will never trust a 200-line-vibe-SQL snippet, and it's not useful to anyone.
+
+MinusX takes a different approach. The agent doesn't start from scratch — it relies on a **trust hierarchy**:
+
+1. **Verified questions** — reuse existing, trusted queries that your team has already validated
+2. **Trusted data models** — lean on curated metrics and modeled datasets
+3. **Context** — fall back to Knowledge Base documentation (metric definitions, business rules)
+4. **Raw schema** — only query the direct schema as a last resort
+
+At every step, the agent shows its **thinking** and provides a **trust score** — so you know how confident it is and why. No black boxes, no vibe SQL.
+
+---
+
+## Analytics is a modeling problem
+
+Most serious companies recognize this. But modeling, the way it stands today, is too complex — more akin to medicine than engineering. Data modeling needs to be colocated with, and informed by, the actual questions people are asking.
+
+MinusX brings modeling and querying into the same tool. Your Knowledge Base captures how data should be understood. Your questions reveal how data is actually used. The feedback loop between them is where trust gets built.
+
+
+---
+
+## Context is King
+
+An AI without context is just guessing. MinusX's Knowledge Base lets you whitelist tables, define metrics, document business rules, and explain naming conventions — all in one place.
+
+But context without measurement is hopium. That's why [Evals](/docs/knowledge-base/evals) exist: question-answer test sets that track whether the AI is actually getting it right, and where it's falling short.
+
+---
+
+## BI as a file system
+
+Every question, dashboard, and piece of context in MinusX is a document in a file tree. This is deliberate.
+
+Agent harnesses need to get out of the way of state-of-the-art LLMs. A file-system abstraction gives the AI a simple, predictable interface to read and write artifacts — no proprietary state machines, no hidden abstractions. The result is an agent that's easier to reason about, debug, and improve.
+
+---

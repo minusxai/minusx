@@ -1,0 +1,55 @@
+---
+title: Connections
+description: Connect MinusX to your databases
+---
+
+MinusX connects to your existing databases to query and analyze data. Connections are configured once and shared across your workspace.
+
+<ThemedImage light="/light/connections.png" dark="/dark/connections.png" alt="MinusX Connections" />
+
+---
+
+## Supported databases
+
+| Database | Type | Notes |
+|----------|------|-------|
+| **DuckDB** | Local file | Default for local development. Fast, embedded analytics. |
+| **PostgreSQL** | Remote | Production databases, data warehouses |
+| **BigQuery** | Cloud | Google Cloud data warehouse |
+| **CSV Files** | File upload | Upload CSV files — automatically converted to a queryable DuckDB database |
+| **Google Sheets** | Cloud | Import public Google Sheets as queryable tables |
+
+### Coming soon
+
+| Database | Type |
+|----------|------|
+| **ClickHouse** | Remote |
+| **Databricks** | Cloud |
+| **Snowflake** | Cloud |
+
+---
+
+## Configuring a connection
+
+1. Navigate to **Connections** in the sidebar
+2. Click **New Connection**
+3. Select your database type
+4. Enter connection details (host, port, database, credentials)
+5. Test the connection
+6. Save
+
+<Callout type="warn">
+Connection credentials are stored securely in the documents database. For production deployments, use environment variables for sensitive values.
+</Callout>
+
+---
+
+## How connections are used
+
+- **Questions** execute SQL against a specific connection
+- **Knowledge Base** loads schema information from connections for table whitelisting
+- **AI Agent** uses connection schemas to write accurate SQL
+
+Each question is tied to a connection. When you create a new question, it uses the default connection unless you specify otherwise.
+
+--- 

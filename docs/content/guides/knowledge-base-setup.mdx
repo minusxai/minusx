@@ -1,0 +1,52 @@
+---
+title: Setting Up the Knowledge Base
+description: Teach the AI about your data for better results
+---
+
+In this tutorial, you'll configure the Knowledge Base so the AI assistant generates more accurate queries.
+
+<Callout type="info">
+Click the **Try Demo Mode** button in the MinusX sidebar to follow along with a pre-configured sample environment.
+</Callout>
+
+## Step 1: Whitelist your tables
+
+Navigate to the Knowledge Base and select your database connection.
+
+Browse the schema and check the tables that are relevant to your team. Uncheck anything that's internal, deprecated, or irrelevant.
+
+## Step 2: Add text context
+
+Create a new text context document. Write down key information about your data:
+
+```
+## Metric Definitions
+- Revenue = SUM(TotalDue) from Sales_SalesOrderHeader where Status = 5 (completed)
+- Active customers = customers with at least one order in the last 90 days
+
+## Important Notes
+- All dates are stored in UTC
+- The Products table includes discontinued items — filter by DiscontinuedDate IS NULL for active products
+```
+
+## Step 3: Test the AI
+
+Go to the Explore page and ask the AI a question that requires the context you just added:
+
+> "What was total revenue last quarter?"
+
+Check that the AI uses the correct metric definition and table.
+
+## Step 4: Create evals (optional)
+
+For ongoing quality, create eval sets with question-answer pairs. This lets you measure how well the AI performs and track improvement over time.
+
+## What you learned
+
+- How to whitelist tables for the AI
+- How to write effective text context
+- How to verify the AI is using your context correctly
+
+## Next steps
+
+Head back to the [Guides](/guides) to explore more tutorials.

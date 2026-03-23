@@ -1,0 +1,5 @@
+{
+  "title": "Guides",
+  "root": true,
+  "pages": ["index", "getting-started", "first-question", "creating-dashboard", "knowledge-base-setup", "reports-alerts"]
+}

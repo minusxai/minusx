@@ -1,0 +1,81 @@
+---
+title: Self-Hosted Installation
+description: Get MinusX running with Docker in 5 minutes
+---
+
+<Callout type="warn">
+MinusX is currently in **alpha**. Expect rough edges, breaking changes, and incomplete features. We'd love your feedback — [open an issue](https://github.com/minusxai/minusx/issues) or reach out to the team.
+</Callout>
+
+## Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) and Docker Compose
+- An [Anthropic API key](https://console.anthropic.com/)
+
+<Callout type="info">
+For local development without Docker (running frontend and backend directly), see the [development setup guide](https://github.com/minusxai/minusx/blob/main/Docs.md).
+</Callout>
+
+---
+
+## 1. Clone the repo
+
+```bash
+git clone https://github.com/minusxai/minusx.git
+cd minusx
+```
+
+---
+
+## 2. Configure environment variables
+
+**Backend** — create `backend/.env`:
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+Edit `backend/.env` and add your Anthropic key:
+
+```bash
+ANTHROPIC_API_KEY=<your-anthropic-key>
+```
+
+**Frontend** — create `frontend/.env`:
+
+```bash
+cp frontend/.env.example frontend/.env
+```
+
+Generate a NextAuth secret and add it to `frontend/.env`:
+
+```bash
+# Generate the secret
+openssl rand -base64 32
+
+# Add to frontend/.env
+NEXTAUTH_SECRET=<generated-secret-here>
+```
+
+---
+
+## 3. Download sample data
+
+Download the **mxfood** demo dataset (~140MB) — a food delivery analytics database:
+
+```bash
+mkdir -p data
+curl -L -o data/mxfood.duckdb https://github.com/minusxai/sample_datasets/releases/download/v1.0/mxfood.duckdb
+```
+
+---
+
+## 4. Start MinusX
+
+```bash
+docker-compose up -d --build
+```
+
+MinusX will be available at [http://localhost:3000](http://localhost:3000).
+
+---

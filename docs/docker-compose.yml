@@ -1,0 +1,9 @@
+services:
+  docs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: minusx-docs
+    restart: unless-stopped
+    ports:
+      - "3001:3001"

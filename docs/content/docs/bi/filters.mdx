@@ -1,0 +1,66 @@
+---
+title: Filters & Parameters
+description: Dynamic filtering with parameters and dashboard-level controls
+---
+
+Parameters make your questions dynamic — viewers can change values without editing SQL. When added to dashboards, parameters become shared filters.
+
+---
+
+## Question-level parameters
+
+Use the `:paramName` syntax in SQL:
+
+```sql
+SELECT *
+FROM orders
+WHERE created_at >= :start_date
+  AND created_at < :end_date
+  AND region = :region
+LIMIT :limit
+```
+
+Parameters are automatically detected from your SQL. Each gets an input widget based on its type:
+
+| Type | Widget | Example |
+|------|--------|---------|
+| `text` | Text field | `:region` → "US-West" |
+| `number` | Number input | `:limit` → 100 |
+| `date` | Date picker | `:start_date` → 2024-01-01 |
+
+---
+
+## Dashboard-level filters
+
+When questions with matching parameters are added to a dashboard, they **automatically merge** into shared filters.
+
+### How merging works
+
+- Parameters merge by **name + type** — both must match
+- If three questions all use `:start_date` (type: date), the dashboard shows **one** date picker
+- Changing the filter re-executes all affected questions
+
+### Behavior
+
+- Parameter types are **editable** in question view, **locked** in dashboard view
+- Each question retains its own default parameter values
+- Dashboard filters override question defaults when set
+
+---
+
+## Adding filters to a dashboard
+
+1. Open a question and add a parameter to its SQL (e.g., `:region`)
+2. Set the parameter type (text, number, or date)
+3. Save the question
+4. Add it to a dashboard
+5. The parameter appears as a dashboard-level filter automatically
+
+<Callout type="info">
+Name your parameters consistently across questions (e.g., always use `:start_date` not `:date_start`) so they merge correctly at the dashboard level.
+</Callout>
+
+<IconCards>
+  <IconCard icon="question" title="Questions" description="SQL queries and the full question workflow" href="/docs/bi/questions" />
+  <IconCard icon="dashboard" title="Dashboards" description="Interactive dashboards with shared filters" href="/docs/bi/dashboards" />
+</IconCards>

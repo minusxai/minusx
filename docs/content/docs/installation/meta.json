@@ -1,0 +1,8 @@
+{
+  "title": "Installation",
+  "pages": [
+    "self-hosted",
+    "cloud"
+  ],
+  "defaultOpen": true
+}

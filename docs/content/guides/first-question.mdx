@@ -1,0 +1,48 @@
+---
+title: Your First Question
+description: Write a SQL query and build a visualization from scratch
+---
+
+In this tutorial, you'll create a question that shows monthly revenue as a line chart.
+
+<Callout type="info">
+Click the **Try Demo Mode** button in the MinusX sidebar to follow along with a pre-configured sample environment.
+</Callout>
+
+## Step 1: Create a new question
+
+Click **New → Question** in the sidebar. You'll see the SQL editor and an empty results area.
+
+## Step 2: Write your query
+
+In the SQL editor, write a query that groups revenue by month. For the sample AdventureWorks database:
+
+```sql
+SELECT
+  DATE_TRUNC('month', OrderDate) AS month,
+  SUM(TotalDue) AS revenue
+FROM Sales_SalesOrderHeader
+GROUP BY 1
+ORDER BY 1
+```
+
+Press `Cmd+Enter` (or `Ctrl+Enter`) to run the query.
+
+## Step 3: Switch to a line chart
+
+After the results load in a table, click the **Line** chart icon in the visualization toolbar. MinusX will automatically configure the axes.
+
+## Step 4: Save your question
+
+Click **Save**, give it a name like "Monthly Revenue", and choose a folder.
+
+## What you learned
+
+- How to create a question with a SQL query
+- How to execute queries and view results
+- How to switch between visualization types
+- How to save and organize questions
+
+## Next steps
+
+Try [creating a dashboard](/guides/creating-dashboard) that includes this question alongside other metrics.

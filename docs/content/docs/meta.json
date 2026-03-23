@@ -1,0 +1,15 @@
+{
+  "title": "Docs",
+  "root": true,
+  "pages": [
+    "index",
+    "installation",
+    "philosophy",
+    "agent",
+    "---Platform---",
+    "bi",
+    "data",
+    "knowledge-base",
+    "proactive"
+  ]
+}

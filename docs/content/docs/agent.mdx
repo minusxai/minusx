@@ -1,0 +1,53 @@
+---
+title: MinusX Agent
+description: A trainable, trustworthy agent across the entire product surface
+---
+
+The MinusX agent is not a chatbot bolted onto a BI tool. It's a first-class part of the platform — present on **every page**, aware of your current context, and capable of taking real actions. Every action produces a visible, editable artifact. Nothing is hidden.
+
+---
+
+## What it can do
+
+| Page | What the agent sees | Example actions |
+|------|-------------------|-----------------|
+| **Explore** | Full conversation context | "What are the top 10 customers by revenue?" · "Now filter to Q1" · "Show it as a bar chart" |
+| **Questions** | Current query, parameters, results, chart config | "Add a date filter" · "Change the aggregation to AVG" · "Make this a pivot table with region as rows" |
+| **Dashboards** | All cards, layout, shared parameters | "Add a revenue chart" · "Create a filter for region" · "Move the KPI cards to the top" |
+| **Reports** | Report schedule, recipients, source dashboard | "Change the schedule to weekly" · "Add the marketing team" |
+| **Alerts** | Alert condition, threshold, notification config | "Alert me when revenue drops below $10k" · "Change to daily checks" |
+
+---
+
+## Context awareness
+
+The agent reads three layers of context before every action:
+
+1. **Knowledge Base** — whitelisted tables, metric definitions, business rules
+2. **Current page** — the SQL, chart, or dashboard you're looking at right now
+3. **Conversation history** — what you've discussed in this session
+
+This is why it understands "now break that down by region" — it knows what "that" refers to.
+
+---
+
+## Trainability
+
+The agent gets better as you invest in context:
+
+- **Add table context** → the agent uses the right tables
+- **Write text context** → the agent understands your metrics and conventions
+- **Run evals** → you measure accuracy and find gaps
+- **Iterate** → improve context based on eval results
+
+This is the core loop. The agent is only as good as the context you give it.
+
+<Callout type="info">
+The agent reads your Knowledge Base before every query. Maintaining good context is the single most impactful thing you can do for accuracy.
+</Callout>
+
+<IconCards>
+  <IconCard icon="philosophy" title="Philosophy" description="Why MinusX works the way it does" href="/docs/philosophy" />
+  <IconCard icon="knowledge-base" title="Knowledge Base" description="Context and Evals — teach the agent about your data" href="/docs/knowledge-base" />
+  <IconCard icon="explore" title="Explore" description="Try the agent with ad-hoc data exploration" href="/docs/bi/explore" />
+</IconCards>
