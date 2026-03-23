@@ -3,32 +3,19 @@ title: MinusX Agent
 description: A trainable, trustworthy agent across the entire product surface
 ---
 
-The MinusX agent is not a chatbot bolted onto a BI tool. It's a first-class part of the platform — present on every page, aware of your current context, and capable of taking real actions.
-
----
-
-## Where it lives
-
-The agent is available everywhere you work in MinusX:
-
-- **Explore** — full-page chat for ad-hoc questions. Ask anything, get SQL + results instantly.
-- **Questions** — sidebar chat that sees your current query, parameters, and results. Say "add a date filter" and it modifies the SQL directly.
-- **Dashboards** — sidebar chat that understands your layout and questions. Say "add a revenue chart" and it creates the question, configures the viz, and places the card.
+The MinusX agent is not a chatbot bolted onto a BI tool. It's a first-class part of the platform — present on **every page**, aware of your current context, and capable of taking real actions. Every action produces a visible, editable artifact. Nothing is hidden.
 
 ---
 
 ## What it can do
 
-The agent operates through a defined set of tools — it doesn't have unrestricted access. Every action produces a visible, editable artifact:
-
-| Action | What happens |
-|--------|-------------|
-| Write SQL | Query appears in the editor — you can review and edit |
-| Configure chart | Visualization updates in real time |
-| Add dashboard card | Card appears in the grid — drag to reposition |
-| Search schema | Looks up tables and columns from your connections |
-
-Nothing is hidden. If the agent writes a 50-line query, you see all 50 lines.
+| Page | What the agent sees | Example actions |
+|------|-------------------|-----------------|
+| **Explore** | Full conversation context | "What are the top 10 customers by revenue?" · "Now filter to Q1" · "Show it as a bar chart" |
+| **Questions** | Current SQL, parameters, results, chart config | "Add a date filter" · "Change the aggregation to AVG" · "Make this a pivot table with region as rows" |
+| **Dashboards** | All cards, layout, shared parameters | "Add a revenue chart" · "Create a filter for region" · "Move the KPI cards to the top" |
+| **Reports** | Report schedule, recipients, source dashboard | "Change the schedule to weekly" · "Add the marketing team" |
+| **Alerts** | Alert condition, threshold, notification config | "Alert me when revenue drops below $10k" · "Change to daily checks" |
 
 ---
 

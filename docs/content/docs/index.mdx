@@ -6,6 +6,7 @@ description: Welcome to MinusX — the open-source agentic BI tool
 <ThemedImage light="/light/dashboard.png" dark="/dark/dashboard.png" alt="MinusX Dashboard" />
 
 MinusX is an open-source, AI-native business intelligence tool that helps companies organize their data and put agents to work. It is `Claude Code` / `Codex` for serious data work. MinusX combines three core components of the data stack:
+
 1. [**Data Modeling**](/docs/data) — create trusted datasets (and metrics) everyone in the org can rely on
 2. [**True (for real) Self-Service BI**](/docs/bi) — explore ad-hoc questions, build and maintain dashboards
 3. [**Proactive Analytics**](/docs/proactive) — understand what to focus on, find out what's broken
@@ -31,6 +32,8 @@ Already using Metabase, Grafana, or Redash? We offer **1-day migration**. [Book 
 
 ## Philosophy
 
+<DataLoop />
+
 MinusX is built on a few core beliefs:
 
 - **Trust is paramount.** Text-to-SQL is solved. Business users will never trust a 200-line-vibe-SQL snippet, and it is not useful to anyone.
@@ -38,8 +41,9 @@ MinusX is built on a few core beliefs:
 - **Context is King.** Context without Evals is hopium.
 - **BI as a file system.** Agent harnesses need to get out of the way of state-of-the-art LLMs.
 
+
 <IconCards>
-  <IconCard icon="philosophy" title="Philosophy" description="Read more about the design principles behind MinusX" href="/docs/concepts/philosophy" />
+  <IconCard icon="philosophy" title="Philosophy" description="Read more about the design principles behind MinusX" href="/docs/philosophy" />
 </IconCards>
 
 ---
@@ -49,7 +53,7 @@ MinusX is built on a few core beliefs:
 The MinusX agent lives on every page in MinusX. Whether you're exploring data, editing a question, or building a dashboard — the agent understands your current context and can take actions directly.
 
 <IconCards>
-  <IconCard icon="agent" title="MinusX Agent" description="Learn how the MinusX agent works across the platform" href="/docs/concepts/agent" />
+  <IconCard icon="agent" title="MinusX Agent" description="Learn how the MinusX agent works across the platform" href="/docs/agent" />
 </IconCards>
 
 ---
@@ -62,3 +66,5 @@ The MinusX agent lives on every page in MinusX. Whether you're exploring data, e
   <IconCard icon="knowledge-base" title="Knowledge Base & Evals" description="Teach the AI about your data and measure accuracy" href="/docs/knowledge-base" />
   <IconCard icon="proactive" title="Proactive Analytics" description="Scheduled reports and threshold-based alerts" href="/docs/proactive/reports" />
 </IconCards>
+
+---

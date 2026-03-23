@@ -10,6 +10,8 @@ import defaultMdxComponents from 'fumadocs-ui/mdx';
 import { IconCard, Cards as IconCards } from '@/components/icon-card';
 import { ThemedImage } from '@/components/themed-image';
 import { DemoButton } from '@/components/demo-button';
+import { Mermaid } from '@/components/mermaid-init';
+import { DataLoop } from '@/components/data-loop';
 
 export default async function Page(props: {
   params: Promise<{ slug?: string[] }>;
@@ -25,7 +27,7 @@ export default async function Page(props: {
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
       <DocsBody>
-        <MDX components={{ ...defaultMdxComponents, IconCard, IconCards, ThemedImage }} />
+        <MDX components={{ ...defaultMdxComponents, IconCard, IconCards, ThemedImage, Mermaid, DataLoop }} />
       </DocsBody>
     </DocsPage>
   );
