@@ -3,7 +3,13 @@ title: MinusX Documentation
 description: Welcome to MinusX — the open-source agentic BI tool
 ---
 
-MinusX is an open-source, agentic, AI-native business intelligence tool that helps teams explore data, build dashboards, and get answers from their databases — all through natural conversation.
+MinusX is an open-source, AI-native business intelligence tool that helps companies organize their data and put agents to work. It is `Claude Code` / `Codex` for serious data work. MinusX combines three core components of the data stack:
+1. [**Data Modeling**](/docs/data) — create trusted datasets (and metrics) everyone in the org can rely on
+2. [**True (for real) Self-Service BI**](/docs/bi) — explore ad-hoc questions, build and maintain dashboards
+3. [**Proactive Analytics**](/docs/proactive) — understand what to focus on, find out what's broken
+
+A trainable, trustworthy agent lives across the entire product surface, assisting in all the above workflows.
+
 
 {/* TODO: Add hero image/video here */}
 
@@ -13,7 +19,7 @@ MinusX is an open-source, agentic, AI-native business intelligence tool that hel
 
 <IconCards>
   <IconCard icon="installation" title="Self-Hosted" description="Run MinusX on your own infrastructure with Docker or from source" href="/docs/installation/self-hosted" />
-  <IconCard icon="cloud" title="Cloud / Managed" description="Let the MinusX team handle hosting and infrastructure for you" href="/docs/installation/cloud" />
+  <IconCard icon="cloud" title="Cloud / Managed" description="Let us handle hosting and infrastructure for you" href="/docs/installation/cloud" />
 </IconCards>
 
 ---
@@ -22,9 +28,10 @@ MinusX is an open-source, agentic, AI-native business intelligence tool that hel
 
 MinusX is built on a few core beliefs:
 
-- **SQL is the right abstraction** — every question is backed by a real, editable SQL query. No hidden logic.
-- **AI should augment, not replace** — the assistant is a collaborator. You're always in control.
-- **Knowledge makes AI better** — the more context you provide, the more accurate the results.
+- **Trust is paramount.** Text-to-SQL is solved. Business users will never trust a 200-line-vibe-SQL snippet, and it is not useful to anyone.
+- **Analytics is primarily a modeling problem.** Most serious companies recognize this. But modeling, the way it stands today, is too complex and more akin to medicine. Data modeling needs to be colocated with, and informed by the actual questions people are asking.
+- **Context is King.** Context without Evals is hopium.
+- **BI as a file system.** Agent harnesses need to get out of the way of state-of-the-art LLMs.
 
 <IconCards>
   <IconCard icon="philosophy" title="Philosophy" description="Read more about the design principles behind MinusX" href="/docs/concepts/philosophy" />
@@ -34,14 +41,10 @@ MinusX is built on a few core beliefs:
 
 ## MinusX Agent
 
-The AI assistant lives on every page in MinusX. Whether you're exploring data, editing a question, or building a dashboard — the agent understands your current context and can take actions directly.
-
-- **Explore** — ask questions in natural language, get SQL + visualizations instantly
-- **Questions** — modify queries, change chart types, add parameters via chat
-- **Dashboards** — add cards, rearrange layout, create new questions conversationally
+The MinusX agent lives on every page in MinusX. Whether you're exploring data, editing a question, or building a dashboard — the agent understands your current context and can take actions directly.
 
 <IconCards>
-  <IconCard icon="agent" title="MinusX Agent" description="Learn how the AI assistant works across the platform" href="/docs/concepts/agent" />
+  <IconCard icon="agent" title="MinusX Agent" description="Learn how the MinusX agent works across the platform" href="/docs/concepts/agent" />
 </IconCards>
 
 ---
