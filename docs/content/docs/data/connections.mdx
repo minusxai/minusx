@@ -5,6 +5,8 @@ description: Connect MinusX to your databases
 
 MinusX connects to your existing databases to query and analyze data. Connections are configured once and shared across your workspace.
 
+<ThemedImage light="/light/connections.png" dark="/dark/connections.png" alt="MinusX Connections" />
+
 ---
 
 ## Supported databases
@@ -14,6 +16,16 @@ MinusX connects to your existing databases to query and analyze data. Connection
 | **DuckDB** | Local file | Default for local development. Fast, embedded analytics. |
 | **PostgreSQL** | Remote | Production databases, data warehouses |
 | **BigQuery** | Cloud | Google Cloud data warehouse |
+| **CSV Files** | File upload | Upload CSV files — automatically converted to a queryable DuckDB database |
+| **Google Sheets** | Cloud | Import public Google Sheets as queryable tables |
+
+### Coming soon
+
+| Database | Type |
+|----------|------|
+| **ClickHouse** | Remote |
+| **Databricks** | Cloud |
+| **Snowflake** | Cloud |
 
 ---
 
@@ -40,7 +52,4 @@ Connection credentials are stored securely in the documents database. For produc
 
 Each question is tied to a connection. When you create a new question, it uses the default connection unless you specify otherwise.
 
-<IconCards>
-  <IconCard icon="data-modeling" title="Data Modeling" description="Shape and organize your data for better analytics" href="/docs/data/data-modeling" />
-  <IconCard icon="knowledge-base" title="Knowledge Base" description="Whitelist tables and add context for the AI" href="/docs/knowledge-base" />
-</IconCards>
+--- 

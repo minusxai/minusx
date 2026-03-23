@@ -1,41 +1,38 @@
 ---
 title: Data Modeling
-description: Shape and organize your data for better analytics
+description: Trusted datasets with clear grain and business logic baked in
 ---
 
-Data modeling in MinusX is about making your raw data usable for analytics. This involves organizing schemas, defining relationships, and providing context so both humans and the AI can work effectively.
-
----
-
-## Schema organization
-
-MinusX reads your database schema directly from connections. To get the best results:
-
-- **Use clear table and column names** — `orders`, `customer_id` are better than `tbl_001`, `col_a`
-- **Maintain consistent naming conventions** — pick snake_case or camelCase and stick with it
-- **Document with text context** — explain non-obvious column meanings in the Knowledge Base
+Data models are **trusted datasets** — curated tables where all the business logic, joins, and transformations are already baked in. Business users see them as simple tables and don't need to understand the underlying complexity.
 
 ---
 
-## Working with the Knowledge Base
+## What is a data model?
 
-Data modeling and the Knowledge Base work hand in hand:
+A data model is a query that materializes into a table in your warehouse. It sits between raw data and the questions your team asks. Instead of every analyst re-deriving the same joins and filters, the logic lives in one place.
 
-1. **Connect your database** — MinusX reads the schema
-2. **Whitelist relevant tables** — hide internal/deprecated tables from the AI
-3. **Add text context** — explain relationships, metric definitions, and gotchas
-4. **Test with evals** — verify the AI understands your model correctly
+**Two key properties:**
+
+1. **Clear, consistent grain** — every row represents the same thing (one order, one user-day, one transaction). No ambiguity about what a row means.
+2. **Fact / dimension form** — models follow the classic pattern:
+   - **Fact tables** — events and measurements (orders, page views, transactions)
+   - **Dimension tables** — descriptive attributes (customers, products, regions)
+
+---
+
+## Data models in MinusX
+
+With MinusX, you can create data models directly from the UI. When you save a model, it is **materialized into your warehouse / database** as a real table.
+
+Only data models can be whitelisted in a [Knowledge Base](/docs/knowledge-base) for org-wide use. This ensures that all users across the organization query from the same trusted, governed datasets — not from raw tables with inconsistent logic.
 
 ---
 
 ## Best practices
 
-- **Start small** — whitelist only the tables your team needs, expand later
-- **Document joins** — tell the AI how tables relate ("orders join customers via customer_id")
-- **Define metrics** — "Revenue = SUM(amount) from orders WHERE status = 'completed'"
-- **Note gotchas** — "users table includes test accounts, filter by is_test = false"
+- **Define grain first** — before writing a model, decide what one row represents
+- **Keep models self-contained** — a business user should be able to query the model without joining other tables
+- **Name clearly** — `fact_orders`, `dim_customers` communicate intent immediately
+- **Document in context** — add metric definitions and gotchas in the Knowledge Base so the AI writes correct queries
 
-<IconCards>
-  <IconCard icon="connection" title="Connections" description="Connect MinusX to your databases" href="/docs/data/connections" />
-  <IconCard icon="knowledge-base" title="Knowledge Base" description="Whitelist tables and add context" href="/docs/knowledge-base" />
-</IconCards>
+--- 
