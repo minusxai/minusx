@@ -4,14 +4,14 @@ export function Logo() {
   return (
     <div className="flex items-center gap-2">
       <Image
-        src="/logo_dark.svg"
+        src="/light/logo.svg"
         alt="MinusX"
         width={22}
         height={22}
         className="logo-light"
       />
       <Image
-        src="/logo.svg"
+        src="/dark/logo.svg"
         alt="MinusX"
         width={22}
         height={22}

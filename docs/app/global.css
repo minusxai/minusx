@@ -57,11 +57,11 @@
   --color-fd-ring: #16a085;
 }
 
-/* ── Logo switching ── */
-.logo-light { display: block !important; }
-.logo-dark { display: none !important; }
-.dark .logo-light { display: none !important; }
-.dark .logo-dark { display: block !important; }
+/* ── Light/dark switching (logos + themed images) ── */
+.logo-light, .themed-img-light { display: block !important; }
+.logo-dark, .themed-img-dark { display: none !important; }
+.dark .logo-light, .dark .themed-img-light { display: none !important; }
+.dark .logo-dark, .dark .themed-img-dark { display: block !important; }
 
 /* ── Typography ── */
 body {

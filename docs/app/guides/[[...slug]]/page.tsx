@@ -8,6 +8,7 @@ import {
 import { notFound } from 'next/navigation';
 import defaultMdxComponents from 'fumadocs-ui/mdx';
 import { IconCard, Cards as IconCards } from '@/components/icon-card';
+import { ThemedImage } from '@/components/themed-image';
 
 export default async function Page(props: {
   params: Promise<{ slug?: string[] }>;
@@ -23,7 +24,7 @@ export default async function Page(props: {
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
       <DocsBody>
-        <MDX components={{ ...defaultMdxComponents, IconCard, IconCards }} />
+        <MDX components={{ ...defaultMdxComponents, IconCard, IconCards, ThemedImage }} />
       </DocsBody>
     </DocsPage>
   );

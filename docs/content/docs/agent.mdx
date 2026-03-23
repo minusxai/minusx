@@ -1,54 +1,66 @@
 ---
 title: MinusX Agent
-description: The AI assistant that lives on every page
+description: A trainable, trustworthy agent across the entire product surface
 ---
 
-Every page in MinusX has an AI chat sidebar. The agent understands your current context — what query you're editing, what dashboard you're viewing — and can take actions directly.
+The MinusX agent is not a chatbot bolted onto a BI tool. It's a first-class part of the platform — present on every page, aware of your current context, and capable of taking real actions.
 
 ---
 
-## Where you can use it
+## Where it lives
 
-<IconCards>
-  <IconCard icon="explore" title="Explore" description="Full-page chat for ad-hoc data exploration. Ask anything." href="/docs/bi/explore" />
-  <IconCard icon="question" title="Questions" description="Sidebar chat with context of your current SQL, parameters, and results" href="/docs/bi/questions" />
-  <IconCard icon="dashboard" title="Dashboards" description="Sidebar chat with context of your dashboard layout and questions" href="/docs/bi/dashboards" />
-</IconCards>
+The agent is available everywhere you work in MinusX:
+
+- **Explore** — full-page chat for ad-hoc questions. Ask anything, get SQL + results instantly.
+- **Questions** — sidebar chat that sees your current query, parameters, and results. Say "add a date filter" and it modifies the SQL directly.
+- **Dashboards** — sidebar chat that understands your layout and questions. Say "add a revenue chart" and it creates the question, configures the viz, and places the card.
 
 ---
 
 ## What it can do
 
-- **Write SQL** from natural language descriptions
-- **Edit queries** — add filters, change aggregations, join tables
-- **Configure charts** — choose chart types, set axes, customize appearance
-- **Build dashboards** — add cards, arrange layout, create new questions
-- **Explain** — describe what a query does or why results look a certain way
+The agent operates through a defined set of tools — it doesn't have unrestricted access. Every action produces a visible, editable artifact:
+
+| Action | What happens |
+|--------|-------------|
+| Write SQL | Query appears in the editor — you can review and edit |
+| Configure chart | Visualization updates in real time |
+| Add dashboard card | Card appears in the grid — drag to reposition |
+| Search schema | Looks up tables and columns from your connections |
+
+Nothing is hidden. If the agent writes a 50-line query, you see all 50 lines.
 
 ---
 
 ## Context awareness
 
-The agent always knows about:
+The agent reads three layers of context before every action:
 
-- Your **Knowledge Base** — whitelisted tables and text context
-- The **current page** — what query, chart, or dashboard you're looking at
-- The **conversation history** — previous messages in the current session
+1. **Knowledge Base** — whitelisted tables, metric definitions, business rules
+2. **Current page** — the SQL, chart, or dashboard you're looking at right now
+3. **Conversation history** — what you've discussed in this session
 
-This means you can have natural follow-up conversations: "now break that down by region" or "make it a bar chart instead."
+This is why it understands "now break that down by region" — it knows what "that" refers to.
 
 ---
 
-## How it works
+## Trainability
 
-1. **You send a message** — a question, request, or instruction
-2. **The agent plans** — decides what tools to use (write SQL, modify chart, etc.)
-3. **Tools execute** — actions happen across the stack (query data, update UI)
-4. **Results return** — you see the outcome directly in the page
-5. **You iterate** — follow up with refinements or new questions
+The agent gets better as you invest in context:
 
-Every action produces visible, editable artifacts. The agent shows you what it did, and you can undo or modify the result.
+- **Add table context** → the agent uses the right tables
+- **Write text context** → the agent understands your metrics and conventions
+- **Run evals** → you measure accuracy and find gaps
+- **Iterate** → improve context based on eval results
+
+This is the core loop. The agent is only as good as the context you give it.
 
 <Callout type="info">
-The agent reads your Knowledge Base before every query — maintaining good context is the single most impactful thing you can do to improve AI quality.
+The agent reads your Knowledge Base before every query. Maintaining good context is the single most impactful thing you can do for accuracy.
 </Callout>
+
+<IconCards>
+  <IconCard icon="philosophy" title="Philosophy" description="Why MinusX works the way it does" href="/docs/philosophy" />
+  <IconCard icon="knowledge-base" title="Knowledge Base" description="Context and Evals — teach the agent about your data" href="/docs/knowledge-base" />
+  <IconCard icon="explore" title="Explore" description="Try the agent with ad-hoc data exploration" href="/docs/bi/explore" />
+</IconCards>
