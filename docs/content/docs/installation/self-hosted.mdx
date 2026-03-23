@@ -1,98 +1,81 @@
 ---
 title: Self-Hosted Installation
-description: Set up MinusX locally or on your own infrastructure
+description: Get MinusX running with Docker in 5 minutes
 ---
+
+<Callout type="warn">
+MinusX is currently in **alpha**. Expect rough edges, breaking changes, and incomplete features. We'd love your feedback — [open an issue](https://github.com/minusxai/minusx/issues) or reach out to the team.
+</Callout>
 
 ## Prerequisites
 
-- Node.js 18+
-- Python 3.11+ with [uv](https://docs.astral.sh/uv/)
-- Git
+- [Docker](https://docs.docker.com/get-docker/) and Docker Compose
+- An [Anthropic API key](https://console.anthropic.com/)
 
-## 1. Install Dependencies
+<Callout type="info">
+For local development without Docker (running frontend and backend directly), see the [development setup guide](https://github.com/minusxai/minusx/blob/main/Docs.md).
+</Callout>
 
-**Backend:**
+---
 
-```bash
-cd backend
-uv sync
-```
-
-**Frontend:**
+## 1. Clone the repo
 
 ```bash
-cd frontend
-npm install
+git clone https://github.com/minusxai/minusx.git
+cd minusx
 ```
 
-## 2. Configure Environment Variables
+---
 
-The frontend and backend require env configuration. This is a one-time setup.
+## 2. Configure environment variables
+
+**Backend** — create `backend/.env`:
 
 ```bash
-cd frontend
-cp .env.example .env
-
-cd backend
-cp .env.example .env
+cp backend/.env.example backend/.env
 ```
 
-Edit `backend/.env` and add your key:
+Edit `backend/.env` and add your Anthropic key:
 
 ```bash
 ANTHROPIC_API_KEY=<your-anthropic-key>
 ```
 
-Generate the required secret:
+**Frontend** — create `frontend/.env`:
 
 ```bash
-# NEXTAUTH_SECRET (required by NextAuth v5)
-openssl rand -base64 32
+cp frontend/.env.example frontend/.env
 ```
 
-Edit `frontend/.env` and add the generated secret:
+Generate a NextAuth secret and add it to `frontend/.env`:
 
 ```bash
+# Generate the secret
+openssl rand -base64 32
+
+# Add to frontend/.env
 NEXTAUTH_SECRET=<generated-secret-here>
 ```
 
-The backend requires no additional configuration for local development — all defaults work out of the box.
+---
 
-## 3. Download Sample Database
+## 3. Download sample data
 
-The application uses DuckDB for analytics. Download the sample database:
+Download the **mxfood** demo dataset (~140MB) — a food delivery analytics database:
 
 ```bash
-# From project root
 mkdir -p data
-cd data
-curl -L -o default_db.duckdb https://raw.githubusercontent.com/minusxai/sample_datasets/refs/heads/master/adventureworks/adventureworks.duckdb
+curl -L -o data/mxfood.duckdb https://github.com/minusxai/sample_datasets/releases/download/v1.0/mxfood.duckdb
 ```
 
-This downloads the AdventureWorks sample database (~5MB) used in the default connection.
+---
 
-## 4. Start the Services
-
-**Terminal 1 — Backend:**
-
-```bash
-cd backend
-uv run uvicorn main:app --reload --reload-include='*.yaml' --port 8001
-```
-
-**Terminal 2 — Frontend:**
-
-```bash
-cd frontend
-npm run dev
-```
-
-The application will be available at [http://localhost:3000](http://localhost:3000).
-
-## 5. Production Deployment
-
-After adding your `.env` files, use Docker Compose from the project root:
+## 4. Start MinusX
 
 ```bash
 docker-compose up -d --build
 ```
+
+MinusX will be available at [http://localhost:3000](http://localhost:3000).
+
+---

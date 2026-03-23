@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { guidesSource } from '@/lib/source';
 import { Logo } from '@/components/logo';
 import { SidebarTabs } from '@/lib/tabs';
+import { DemoButton } from '@/components/demo-button';
 
 export default function Layout({ children }: { children: ReactNode }) {
   return (
