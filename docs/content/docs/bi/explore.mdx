@@ -3,15 +3,16 @@ title: Explore
 description: Full-page AI chat for ad-hoc data exploration
 ---
 
-**Explore** is the fastest way to get answers from your data. It's a full-page AI chat interface — ask a question in natural language, and MinusX writes SQL, executes it, and shows the results.
 
----
+**Explore** is the fastest way to get answers from your data. Access it from the sidebar or navigate directly to `/explore`. Ask a question in natural language, and the agent builds and runs the query for you.
+<ThemedImage light="/light/explore.png" dark="/dark/explore.png" alt="MinusX Explore" />
+
 
 ## How it works
 
-1. Open **Explore** from the sidebar
+1. Open **Explore** from the sidebar or go to `/explore`
 2. Type a question: "What was total revenue last month?"
-3. The agent writes SQL, runs it, and displays results
+3. The agent builds the query, runs it, and displays results
 4. Follow up: "Break that down by region" or "Show it as a bar chart"
 
 Each conversation builds on previous context, so you can iterate naturally.
@@ -27,20 +28,17 @@ Each conversation builds on previous context, so you can iterate naturally.
 
 ---
 
-## When to use Explore vs Questions
+## Explore vs Questions
 
 | | Explore | Questions |
 |---|---|---|
 | **Best for** | Ad-hoc exploration, quick answers | Saved analyses, dashboard building |
-| **Interface** | Full-page chat | SQL editor + visualization |
-| **Starting point** | Natural language | SQL (or AI-generated SQL) |
+| **Interface** | Full-page chat | Query editor + visualization |
+| **Starting point** | Natural language | Query (or AI-generated) |
 | **Persistence** | Conversation-based | Saved as documents |
 
 <Callout type="info">
 Anything you build in Explore can be saved as a question and added to a dashboard.
 </Callout>
 
-<IconCards>
-  <IconCard icon="question" title="Questions" description="SQL queries with visualizations and parameters" href="/docs/bi/questions" />
-  <IconCard icon="agent" title="MinusX Agent" description="How the AI assistant works under the hood" href="/docs/concepts/agent" />
-</IconCards>
+---
