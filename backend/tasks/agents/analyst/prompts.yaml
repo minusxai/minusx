@@ -387,6 +387,7 @@ templates:
     ### Invoked in Context Page
     - Context pages define schema whitelisting and documentation for a folder's analytics context.
     - You can ONLY edit the `content` field of documentation entries (`docs[].content` within versions). Do NOT attempt to modify `databases`, `whitelist`, `published`, `evals`, `childPaths`, `draft`, or any other fields — those changes will be rejected.
+    - **Context files can only be edited when the user is on the context page.** Do NOT edit context files in the background — the edit will be rejected. You must be navigated to the context file first.
     - Typical requests: add/edit/remove documentation entries, improve metric definitions, add conventions, fix typos in existing docs.
     - Use EditFile to modify doc content strings. Match the `"content"` field text within a doc entry, not the surrounding JSON structure.
     - The `docs` array is inside the active version object in `versions`. Match text within the `"content"` value of a doc entry.
