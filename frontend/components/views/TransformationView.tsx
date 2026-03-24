@@ -1,15 +1,15 @@
 'use client';
 
-import { Box, Text, VStack, HStack, Input, Button, Flex, Portal, Combobox } from '@chakra-ui/react';
+import { Box, Text, VStack, HStack, Input, Button, Flex, Portal, Combobox, Badge } from '@chakra-ui/react';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { LuPlay, LuHistory, LuArrowRightLeft, LuPlus, LuTrash2, LuGripVertical } from 'react-icons/lu';
-import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
+import { LuPlay, LuHistory, LuArrowRightLeft, LuPlus, LuTrash2, LuGripVertical, LuExternalLink } from 'react-icons/lu';
 import { useAppSelector } from '@/store/hooks';
 import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { selectIsDirty } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
-import type { JobRun, Transform, TransformationContent } from '@/lib/types';
-import TransformationRunContainerV2 from '@/components/containers/TransformationRunContainerV2';
+import type { ConnectionContent, JobRun, JobRunStatus, QuestionContent, Transform, TransformationContent } from '@/lib/types';
+import Link from 'next/link';
+import { preserveParams } from '@/lib/navigation/url-utils';
 
 interface TransformationViewProps {
   transformation: TransformationContent;
@@ -17,15 +17,12 @@ interface TransformationViewProps {
   fileId: number;
   isRunning: boolean;
   runs?: JobRun[];
-  selectedRunId?: number | null;
-
   onChange: (updates: Partial<TransformationContent>) => void;
   onRunNow: () => Promise<void>;
-  onSelectRun?: (runId: number | null) => void;
 }
 
 /* ------------------------------------------------------------------ */
-/*  Question picker (searchable combobox, reused from AlertView)        */
+/*  Question picker (searchable combobox)                               */
 /* ------------------------------------------------------------------ */
 
 function QuestionSearchSelect({ questions, selectedId, onSelect, disabled }: {
@@ -81,13 +78,107 @@ function QuestionSearchSelect({ questions, selectedId, onSelect, disabled }: {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Schema picker — dropdown from connection if available, else input   */
+/* ------------------------------------------------------------------ */
+
+function SchemaSelect({ value, schemas, onChange, disabled }: {
+  value: string;
+  schemas: string[];
+  onChange: (schema: string) => void;
+  disabled?: boolean;
+}) {
+  const [inputValue, setInputValue] = useState(value);
+
+  // Keep local input in sync when value changes externally (e.g. after question change)
+  useEffect(() => {
+    setInputValue(value);
+  }, [value]);
+
+  const filteredCollection = useMemo(() => {
+    const lower = inputValue.toLowerCase();
+    const filtered = lower
+      ? schemas.filter(s => s.toLowerCase().includes(lower))
+      : schemas;
+    return createListCollection({
+      items: filtered.map(s => ({ value: s, label: s }))
+    });
+  }, [schemas, inputValue]);
+
+  if (schemas.length === 0) {
+    return (
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="target_schema"
+        disabled={disabled}
+        size="sm"
+        fontFamily="mono"
+        fontSize="xs"
+        bg="bg.surface"
+      />
+    );
+  }
+
+  return (
+    <Combobox.Root
+      collection={filteredCollection}
+      value={value ? [value] : []}
+      onValueChange={(e) => {
+        if (e.value[0]) {
+          onChange(e.value[0]);
+          setInputValue(e.value[0]);
+        }
+      }}
+      onInputValueChange={(details) => {
+        setInputValue(details.inputValue);
+        // Allow free-text entry
+        onChange(details.inputValue);
+      }}
+      inputBehavior="autohighlight"
+      openOnClick
+      positioning={{ gutter: 2 }}
+      size="sm"
+      disabled={disabled}
+    >
+      <Combobox.Control>
+        <Combobox.Input
+          placeholder="Select or type schema..."
+          bg="bg.surface"
+          fontSize="xs"
+          fontFamily="mono"
+          value={inputValue}
+          onChange={(e) => {
+            setInputValue(e.target.value);
+            onChange(e.target.value);
+          }}
+        />
+      </Combobox.Control>
+      <Portal>
+        <Combobox.Positioner>
+          <Combobox.Content>
+            <Combobox.Empty>No schemas found</Combobox.Empty>
+            {filteredCollection.items.map((item) => (
+              <Combobox.Item key={item.value} item={item}>
+                <Combobox.ItemText>{item.label}</Combobox.ItemText>
+                <Combobox.ItemIndicator />
+              </Combobox.Item>
+            ))}
+          </Combobox.Content>
+        </Combobox.Positioner>
+      </Portal>
+    </Combobox.Root>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Single transform row                                                */
 /* ------------------------------------------------------------------ */
 
-function TransformRow({ transform, index, questions, editMode, onChange, onDelete }: {
+function TransformRow({ transform, index, questions, schemas, editMode, onChange, onDelete }: {
   transform: Transform;
   index: number;
   questions: { id: number; name: string }[];
+  schemas: string[];
   editMode: boolean;
   onChange: (updates: Partial<Transform>) => void;
   onDelete: () => void;
@@ -143,20 +234,21 @@ function TransformRow({ transform, index, questions, editMode, onChange, onDelet
           </Box>
         </HStack>
 
-        {/* Output schema */}
+        {/* Output schema — dropdown if connection schema available, else plain input */}
         <HStack gap={2}>
           <Text fontSize="xs" color="fg.muted" minW="65px" fontWeight="600">Schema</Text>
           <Box flex={1}>
-            <Input
-              value={transform.output?.schema_name ?? ''}
-              onChange={(e) => onChange({ output: { ...transform.output, schema_name: e.target.value } })}
-              placeholder="target_schema"
-              disabled={!editMode}
-              size="sm"
-              fontFamily="mono"
-              fontSize="xs"
-              bg="bg.surface"
-            />
+            {editMode ? (
+              <SchemaSelect
+                value={transform.output?.schema_name ?? ''}
+                schemas={schemas}
+                onChange={(schema) => onChange({ output: { ...transform.output, schema_name: schema } })}
+              />
+            ) : (
+              <Text fontSize="xs" color="fg.default" fontFamily="mono" fontWeight="500">
+                {transform.output?.schema_name || <Text as="span" color="fg.muted">—</Text>}
+              </Text>
+            )}
           </Box>
         </HStack>
 
@@ -191,6 +283,49 @@ function TransformRow({ transform, index, questions, editMode, onChange, onDelet
 }
 
 /* ------------------------------------------------------------------ */
+/*  Run list row                                                        */
+/* ------------------------------------------------------------------ */
+
+function runStatusColor(status: JobRunStatus) {
+  if (status === 'SUCCESS') return 'green';
+  if (status === 'FAILURE') return 'red';
+  if (status === 'RUNNING') return 'yellow';
+  return 'gray';
+}
+
+function RunRow({ run }: { run: JobRun }) {
+  const href = run.output_file_id ? preserveParams(`/f/${run.output_file_id}`) : null;
+
+  return (
+    <HStack
+      px={3}
+      py={2}
+      borderRadius="md"
+      border="1px solid"
+      borderColor="border.muted"
+      bg="bg.muted"
+      justify="space-between"
+      gap={3}
+    >
+      <Badge colorPalette={runStatusColor(run.status)} size="sm" fontWeight="700" flexShrink={0}>
+        {run.status}
+      </Badge>
+      <Text fontSize="xs" color="fg.muted" flex={1}>
+        {new Date(run.created_at).toLocaleString()}
+      </Text>
+      {href && (
+        <Link href={href}>
+          <HStack gap={1} color="accent.primary" _hover={{ color: 'accent.primary', opacity: 0.8 }}>
+            <Text fontSize="xs" fontWeight="600">View</Text>
+            <LuExternalLink size={12} />
+          </HStack>
+        </Link>
+      )}
+    </HStack>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  TransformationView                                                  */
 /* ------------------------------------------------------------------ */
 
@@ -200,16 +335,14 @@ export default function TransformationView({
   fileId,
   isRunning,
   runs = [],
-  selectedRunId,
   onChange,
   onRunNow,
-  onSelectRun,
 }: TransformationViewProps) {
   const editMode = useAppSelector(state => selectFileEditMode(state, fileId));
   const activeTab = useAppSelector(state => selectFileViewMode(state, fileId));
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
 
-  // Resizable panel state (mirrors AlertView)
+  // Resizable panel state
   const [leftPanelWidth, setLeftPanelWidth] = useState(50);
   const [isResizing, setIsResizing] = useState(false);
   const resizeStartX = useRef<number>(0);
@@ -272,19 +405,34 @@ export default function TransformationView({
   }, [isResizing, handleResizeMove, handleResizeEnd]);
 
   const files = useAppSelector(state => state.files.files);
+
   const questions = useMemo(() =>
     Object.values(files).filter(f => f.type === 'question' && f.id > 0),
     [files]
   );
 
-  const runsCollection = useMemo(() => createListCollection({
-    items: runs.map(r => ({
-      value: r.id.toString(),
-      label: new Date(r.created_at).toLocaleString()
-    }))
-  }), [runs]);
+  // Build a lookup: connection name → schema names
+  const connectionSchemas = useMemo(() => {
+    const result: Record<string, string[]> = {};
+    for (const file of Object.values(files)) {
+      if (file.type === 'connection' && file.content) {
+        const content = file.content as ConnectionContent;
+        const schemas = content.schema?.schemas?.map(s => s.schema) ?? [];
+        result[file.name] = schemas;
+      }
+    }
+    return result;
+  }, [files]);
 
-  const selectedRun = runs.find(r => r.id === selectedRunId);
+  // For each transform, derive available schemas from its question's connection
+  const getSchemasForTransform = useCallback((transform: Transform): string[] => {
+    if (!transform.question) return [];
+    const questionFile = files[transform.question];
+    if (!questionFile) return [];
+    const dbName = (questionFile.content as QuestionContent)?.database_name;
+    if (!dbName) return [];
+    return connectionSchemas[dbName] ?? [];
+  }, [files, connectionSchemas]);
 
   const transforms = transformation.transforms ?? [];
 
@@ -360,6 +508,7 @@ export default function TransformationView({
                     transform={transform}
                     index={index}
                     questions={questions}
+                    schemas={getSchemasForTransform(transform)}
                     editMode={!!editMode}
                     onChange={(updates) => handleUpdateTransform(index, updates)}
                     onDelete={() => handleDeleteTransform(index)}
