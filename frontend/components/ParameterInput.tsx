@@ -262,21 +262,20 @@ function SourceConfigPopover({ parameter, onParameterChange }: SourceConfigPopov
 
   return (
     <Popover.Root open={open} onOpenChange={(d) => setOpen(d.open)} positioning={{ placement: 'bottom-end' }}>
-      <Tooltip content="Configure parameter source">
-        <Popover.Trigger asChild>
-          <IconButton
-            aria-label="Configure source"
-            variant="ghost"
-            h={ROW_H}
-            w={ROW_H}
-            minW={ROW_H}
-            color={isFromQuestion ? 'accent.teal' : 'fg.subtle'}
-            _hover={{ color: 'accent.teal', bg: 'bg.emphasized' }}
-          >
-            <LuSettings2 style={{ width: 13, height: 13 }} />
-          </IconButton>
-        </Popover.Trigger>
-      </Tooltip>
+      <Popover.Trigger asChild>
+        <IconButton
+          aria-label="Configure source"
+          title="Configure parameter source"
+          variant="ghost"
+          h={ROW_H}
+          w={ROW_H}
+          minW={ROW_H}
+          color={isFromQuestion ? 'accent.teal' : 'fg.subtle'}
+          _hover={{ color: 'accent.teal', bg: 'bg.emphasized' }}
+        >
+          <LuSettings2 style={{ width: 13, height: 13 }} />
+        </IconButton>
+      </Popover.Trigger>
       <Portal>
         <Popover.Positioner>
           <Popover.Content width="280px" bg="bg.elevated" p={0} overflow="visible" borderRadius="lg">
