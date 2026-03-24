@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Input, HStack, Text, MenuRoot, MenuTrigger, MenuContent, MenuItem,
   Portal, MenuPositioner, Box, IconButton, VStack, Popover, NativeSelect, Spinner, Field,
@@ -93,12 +93,24 @@ function SourceDropdownWidget({ source, paramType, currentValue, paramName, onCh
     return createListCollection({ items: [...prefix, ...rest].map(v => ({ value: v, label: v })) });
   }, [values, filterText]);
 
-  // What to show in the input by default — formatted current value
+  // What to show in the input — formatted current committed value
   const defaultDisplayValue = currentValue !== undefined && currentValue !== null
     ? (paramType === 'number' ? formatNumStr(String(currentValue)) : String(currentValue))
     : '';
 
+  // Controlled input display — we own it so Ark UI can't clear it on close.
+  // SourceDropdownWidget is keyed on `value` from the parent, so this state
+  // (and committedRef) automatically reinitializes whenever the committed value
+  // changes externally (cancel, save, dashboard sync, etc.).
+  const [inputDisplay, setInputDisplay] = useState(defaultDisplayValue);
+
+  // Track last committed value so onOpenChange can restore the display on blur-without-select.
+  const committedRef = useRef(defaultDisplayValue);
+
   const commit = (raw: string) => {
+    committedRef.current = raw;
+    setInputDisplay(raw);
+    setFilterText('');
     const final: string | number = paramType === 'number' ? (parseFloat(raw) || 0) : raw;
     onChange(final);
   };
@@ -115,19 +127,27 @@ function SourceDropdownWidget({ source, paramType, currentValue, paramName, onCh
       {loading && values === null && <Spinner size="xs" color="accent.teal" />}
 
       {/*
-        key={defaultDisplayValue}: remounts the Combobox whenever the committed value changes,
-        so defaultInputValue always reflects the latest currentValue — no effect/sync needed.
-        filterText resets to '' on remount, which is correct (start fresh after commit).
+        inputValue is controlled so Ark UI cannot clear the input on close.
+        onOpenChange restores the display to the last committed value when the user
+        closes the dropdown without selecting (blur).
+        External value changes (cancel, save) are handled by key={value} on the
+        parent <SourceDropdownWidget>, which remounts the entire widget.
       */}
       <Combobox.Root
-        key={defaultDisplayValue}
         collection={filteredCollection}
-        defaultInputValue={defaultDisplayValue}
+        inputValue={inputDisplay}
         onValueChange={(e) => {
           if (e.value[0] !== undefined) commit(e.value[0]);
         }}
         onInputValueChange={(details) => {
+          setInputDisplay(details.inputValue);
           setFilterText(details.inputValue);
+        }}
+        onOpenChange={({ open }) => {
+          if (!open) {
+            setInputDisplay(committedRef.current);
+            setFilterText('');
+          }
         }}
         openOnClick
         inputBehavior="none"
@@ -438,6 +458,7 @@ export default function ParameterInput({
         {/* Input field — dropdown when source is configured, otherwise standard input */}
         {hasSource && parameter.type !== 'date' ? (
           <SourceDropdownWidget
+            key={String(value ?? '')}
             source={parameter.source!}
             paramType={parameter.type as 'text' | 'number'}
             currentValue={value}
