@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Table as ChakraTable, Box, HStack, Button, Text, VStack, Menu, Portal, Icon, Spinner } from '@chakra-ui/react'
-import { LuChevronLeft, LuChevronRight, LuChevronDown, LuType, LuHash, LuCalendar, LuBraces, LuColumns3, LuCheck } from 'react-icons/lu'
+import { LuChevronLeft, LuChevronRight, LuChevronDown, LuType, LuHash, LuCalendar, LuBraces, LuColumns3, LuCheck, LuDownload } from 'react-icons/lu'
 import { calculateColumnStats, ColumnStats, getColumnType, loadDataIntoTable, generateRandomTableName } from '@/lib/database/duckdb'
 import { calculateHistogram } from '@/lib/chart/histogram'
 import { MiniHistogram } from './MiniHistogram'
@@ -104,6 +104,24 @@ export const Table = ({ columns, types, rows, pageSize: fixedPageSize, sql, data
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setColumnWidths({})
   }, [columns])
+
+  const downloadCsv = useCallback(() => {
+    const visibleCols = columns.filter(c => visibleColumns.has(c))
+    const escape = (v: string) => (v.includes(',') || v.includes('"') || v.includes('\n')) ? `"${v.replace(/"/g, '""')}"` : v
+    const header = visibleCols.map(escape).join(',')
+    const dataRows = rows.map(row =>
+      visibleCols.map(c => escape(String(row[c] ?? ''))).join(',')
+    )
+    const csv = [header, ...dataRows].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+    link.download = `table-${ts}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }, [columns, rows, visibleColumns])
 
   const toggleColumn = (column: string) => {
     setVisibleColumns(prev => {
@@ -463,6 +481,17 @@ export const Table = ({ columns, types, rows, pageSize: fixedPageSize, sql, data
           <Text fontSize="xs" color="fg.muted" fontFamily="mono">
             Showing {startIndex + 1}-{Math.min(endIndex, rows.length)} of {rows.length} rows
           </Text>
+          <Button
+            size="xs"
+            variant="outline"
+            bg="bg.muted"
+            borderColor="border.default"
+            _hover={{ bg: 'bg.subtle', borderColor: 'border.emphasized' }}
+            onClick={downloadCsv}
+          >
+            <Icon as={LuDownload} boxSize={3.5} />
+            CSV
+          </Button>
           <Menu.Root closeOnSelect={false}>
             <Menu.Trigger asChild>
               <Button
