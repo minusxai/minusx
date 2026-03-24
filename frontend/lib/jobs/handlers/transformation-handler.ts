@@ -52,7 +52,13 @@ export const transformationJobHandler: JobHandler = {
         }
 
         // Build DDL using CREATE OR REPLACE VIEW for idempotent execution
-        sql = `CREATE OR REPLACE VIEW "${schema}"."${view}" AS\n${question.query}`;
+        // BigQuery requires backtick quoting; all others use ANSI double-quotes
+        const connectionType = connFile?.content ? (connFile.content as ConnectionContent).type : null;
+        if (connectionType === 'bigquery') {
+          sql = `CREATE OR REPLACE VIEW \`${schema}\`.\`${view}\` AS\n${question.query}`;
+        } else {
+          sql = `CREATE OR REPLACE VIEW "${schema}"."${view}" AS\n${question.query}`;
+        }
 
         // Execute DDL via Python backend (Postgres/BigQuery support DDL natively)
         try {

@@ -1,17 +1,17 @@
 'use client';
 
-import { Box, Text, VStack, HStack, Input, Button, Flex, Portal, Combobox, Badge } from '@chakra-ui/react';
+import { Box, Text, VStack, HStack, Input, Button, Flex, Portal, Combobox } from '@chakra-ui/react';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { LuPlay, LuHistory, LuArrowRightLeft, LuPlus, LuTrash2, LuGripVertical, LuExternalLink } from 'react-icons/lu';
+import { LuPlay, LuHistory, LuArrowRightLeft, LuPlus, LuTrash2, LuGripVertical } from 'react-icons/lu';
 import { useAppSelector } from '@/store/hooks';
 import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { selectIsDirty } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
-import type { JobRun, JobRunStatus, QuestionContent, Transform, TransformationContent } from '@/lib/types';
-import Link from 'next/link';
-import { preserveParams } from '@/lib/navigation/url-utils';
+import type { JobRun, QuestionContent, Transform, TransformationContent } from '@/lib/types';
+import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { useContext } from '@/lib/hooks/useContext';
 import { useFile } from '@/lib/hooks/file-state-hooks';
+import TransformationRunContainerV2 from '@/components/containers/TransformationRunContainerV2';
 
 interface TransformationViewProps {
   transformation: TransformationContent;
@@ -19,8 +19,10 @@ interface TransformationViewProps {
   fileId: number;
   isRunning: boolean;
   runs?: JobRun[];
+  selectedRunId?: number | null;
   onChange: (updates: Partial<TransformationContent>) => void;
   onRunNow: () => Promise<void>;
+  onSelectRun?: (runId: number | null) => void;
 }
 
 /* ------------------------------------------------------------------ */
@@ -290,49 +292,6 @@ function TransformRow({ transform, index, questions, dbSchemaMap, editMode, onCh
 }
 
 /* ------------------------------------------------------------------ */
-/*  Run list row                                                        */
-/* ------------------------------------------------------------------ */
-
-function runStatusColor(status: JobRunStatus) {
-  if (status === 'SUCCESS') return 'green';
-  if (status === 'FAILURE') return 'red';
-  if (status === 'RUNNING') return 'yellow';
-  return 'gray';
-}
-
-function RunRow({ run }: { run: JobRun }) {
-  const href = run.output_file_id ? preserveParams(`/f/${run.output_file_id}`) : null;
-
-  return (
-    <HStack
-      px={3}
-      py={2}
-      borderRadius="md"
-      border="1px solid"
-      borderColor="border.muted"
-      bg="bg.muted"
-      justify="space-between"
-      gap={3}
-    >
-      <Badge colorPalette={runStatusColor(run.status)} size="sm" fontWeight="700" flexShrink={0}>
-        {run.status}
-      </Badge>
-      <Text fontSize="xs" color="fg.muted" flex={1}>
-        {new Date(run.created_at).toLocaleString()}
-      </Text>
-      {href && (
-        <Link href={href}>
-          <HStack gap={1} color="accent.primary" _hover={{ color: 'accent.primary', opacity: 0.8 }}>
-            <Text fontSize="xs" fontWeight="600">View</Text>
-            <LuExternalLink size={12} />
-          </HStack>
-        </Link>
-      )}
-    </HStack>
-  );
-}
-
-/* ------------------------------------------------------------------ */
 /*  TransformationView                                                  */
 /* ------------------------------------------------------------------ */
 
@@ -342,8 +301,10 @@ export default function TransformationView({
   fileId,
   isRunning,
   runs = [],
+  selectedRunId,
   onChange,
   onRunNow,
+  onSelectRun,
 }: TransformationViewProps) {
   const editMode = useAppSelector(state => selectFileEditMode(state, fileId));
   const activeTab = useAppSelector(state => selectFileViewMode(state, fileId));
@@ -450,6 +411,15 @@ export default function TransformationView({
   const handleDeleteTransform = useCallback((index: number) => {
     onChange({ transforms: transforms.filter((_, i) => i !== index) });
   }, [transforms, onChange]);
+
+  const runsCollection = useMemo(() => createListCollection({
+    items: runs.map(r => ({
+      value: r.id.toString(),
+      label: new Date(r.created_at).toLocaleString(),
+    })),
+  }), [runs]);
+
+  const selectedRun = runs.find(r => r.id === selectedRunId);
 
   const canRun = !isDirty && !isRunning && transforms.length > 0;
 
@@ -600,9 +570,34 @@ export default function TransformationView({
               borderColor="border.muted"
               gap={2}
             >
-              <HStack gap={2}>
+              <HStack flex={1} gap={2}>
                 <LuHistory size={16} />
                 <Text fontWeight="600" fontSize="sm">Run History</Text>
+                {runs.length > 0 && (
+                  <Box flex={1} maxW="200px">
+                    <SelectRoot
+                      collection={runsCollection}
+                      value={selectedRunId ? [selectedRunId.toString()] : []}
+                      onValueChange={(e) => onSelectRun?.(e.value[0] ? parseInt(e.value[0], 10) : null)}
+                      size="sm"
+                    >
+                      <SelectTrigger>
+                        <SelectValueText placeholder="Select run..." />
+                      </SelectTrigger>
+                      <Portal>
+                        <SelectPositioner>
+                          <SelectContent>
+                            {runsCollection.items.map((item) => (
+                              <SelectItem key={item.value} item={item}>
+                                {item.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </SelectPositioner>
+                      </Portal>
+                    </SelectRoot>
+                  </Box>
+                )}
               </HStack>
               <Button
                 onClick={onRunNow}
@@ -617,7 +612,19 @@ export default function TransformationView({
 
             {/* Run Content */}
             <Box flex={1} overflow="auto" p={4}>
-              {runs.length === 0 ? (
+              {isRunning ? (
+                <VStack gap={4} align="center" justify="center" h="100%">
+                  <Text color="fg.muted">Running transformations...</Text>
+                </VStack>
+              ) : selectedRun ? (
+                selectedRun.output_file_id ? (
+                  <TransformationRunContainerV2 fileId={selectedRun.output_file_id} inline />
+                ) : (
+                  <VStack gap={2} align="center" justify="center" h="100%" color="fg.muted">
+                    <Text fontSize="sm">Run in progress...</Text>
+                  </VStack>
+                )
+              ) : runs.length === 0 ? (
                 <VStack gap={4} align="center" justify="center" h="100%" color="fg.muted">
                   <LuArrowRightLeft size={48} opacity={0.3} />
                   <Text fontSize="sm">
@@ -629,10 +636,8 @@ export default function TransformationView({
                   </Text>
                 </VStack>
               ) : (
-                <VStack gap={2} align="stretch">
-                  {runs.map((run) => (
-                    <RunRow key={run.id} run={run} />
-                  ))}
+                <VStack gap={4} align="center" justify="center" h="100%" color="fg.muted">
+                  <Text fontSize="sm">Select a run to view details</Text>
                 </VStack>
               )}
             </Box>
