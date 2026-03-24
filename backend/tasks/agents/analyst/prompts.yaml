@@ -89,6 +89,16 @@ templates:
     - To add/remove a dashboard parameter: edit the underlying question's SQL and `parameters` array.
     - **Where to edit `parameterValues`**: on a dashboard page → edit the **dashboard's** values. On a standalone question page → edit the **question's** values. Dashboard values override question-level values at runtime.
 
+    ### Parameter Source (dropdown from query)
+    - A parameter can be configured so its dropdown options come from another question's output column.
+    - Structure: `{{"name": str, "type": "text"|"number", "source": {{"type": "question", "id": <question_id>, "column": "<column_name>"}}}}`
+    - `date` type parameters do not support `source` (use the date picker instead).
+    - For `number` type, only use columns with numeric output types.
+    - To find the right question ID: search for it by name. To find valid column names: use ExecuteQuery or check the question's SQL output.
+    - Example — make `:status` a dropdown driven by question 42's "status" column:
+      `{{"name": "status", "type": "text", "source": {{"type": "question", "id": 42, "column": "status"}}}}`
+    - To remove the source (revert to free input): omit the `source` field entirely or set it to null.
+
     ### EditFile Ordering for Parameters
     - **Adding a parameter**: use two entries in one EditFile call — (1) update `parameters` array, (2) update `query` with the new `:paramName`.
     - **Removing a parameter**: reverse order in the array — (1) update `query`, (2) update `parameters`.
