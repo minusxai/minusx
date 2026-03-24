@@ -27,7 +27,7 @@ export default function TransformationContainerV2({ fileId }: TransformationCont
   const mergedContent = useAppSelector(state => selectMergedContent(state, fileId)) as TransformationContent | undefined;
 
   const numericId = typeof fileId === 'number' && fileId > 0 ? fileId : null;
-  const { runs, selectedRunId, isRunning, trigger, selectRun } = useJobRuns(numericId, 'transformation');
+  const { runs, isRunning, trigger } = useJobRuns(numericId, 'transformation');
 
   const handleChange = useCallback((updates: Partial<TransformationContent>) => {
     editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes: { content: updates } });
@@ -46,10 +46,8 @@ export default function TransformationContainerV2({ fileId }: TransformationCont
       fileId={fileId}
       isRunning={isRunning}
       runs={runs}
-      selectedRunId={selectedRunId}
       onChange={handleChange}
       onRunNow={() => trigger()}
-      onSelectRun={selectRun}
     />
   );
 }

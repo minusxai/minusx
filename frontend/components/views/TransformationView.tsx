@@ -7,9 +7,11 @@ import { useAppSelector } from '@/store/hooks';
 import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { selectIsDirty } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
-import type { ConnectionContent, JobRun, JobRunStatus, QuestionContent, Transform, TransformationContent } from '@/lib/types';
+import type { JobRun, JobRunStatus, QuestionContent, Transform, TransformationContent } from '@/lib/types';
 import Link from 'next/link';
 import { preserveParams } from '@/lib/navigation/url-utils';
+import { useContext } from '@/lib/hooks/useContext';
+import { useFile } from '@/lib/hooks/file-state-hooks';
 
 interface TransformationViewProps {
   transformation: TransformationContent;
@@ -174,16 +176,21 @@ function SchemaSelect({ value, schemas, onChange, disabled }: {
 /*  Single transform row                                                */
 /* ------------------------------------------------------------------ */
 
-function TransformRow({ transform, index, questions, schemas, editMode, onChange, onDelete }: {
+function TransformRow({ transform, index, questions, dbSchemaMap, editMode, onChange, onDelete }: {
   transform: Transform;
   index: number;
   questions: { id: number; name: string }[];
-  schemas: string[];
+  dbSchemaMap: Record<string, string[]>;
   editMode: boolean;
   onChange: (updates: Partial<Transform>) => void;
   onDelete: () => void;
 }) {
   const selectedQuestion = questions.find(q => q.id === transform.question);
+
+  // Load the selected question's full content to get database_name
+  const { fileState: questionFile } = useFile(transform.question > 0 ? transform.question : undefined) ?? {};
+  const dbName = (questionFile?.content as QuestionContent | null)?.database_name;
+  const schemas = dbName ? (dbSchemaMap[dbName] ?? []) : [];
 
   return (
     <Box
@@ -405,34 +412,22 @@ export default function TransformationView({
   }, [isResizing, handleResizeMove, handleResizeEnd]);
 
   const files = useAppSelector(state => state.files.files);
+  const filePath = useAppSelector(state => state.files.files[fileId]?.path) ?? '';
 
   const questions = useMemo(() =>
     Object.values(files).filter(f => f.type === 'question' && f.id > 0),
     [files]
   );
 
-  // Build a lookup: connection name → schema names
-  const connectionSchemas = useMemo(() => {
+  // Use context (same source as RightSidebar) to get schemas per database
+  const { databases } = useContext(filePath);
+  const dbSchemaMap = useMemo(() => {
     const result: Record<string, string[]> = {};
-    for (const file of Object.values(files)) {
-      if (file.type === 'connection' && file.content) {
-        const content = file.content as ConnectionContent;
-        const schemas = content.schema?.schemas?.map(s => s.schema) ?? [];
-        result[file.name] = schemas;
-      }
+    for (const db of databases ?? []) {
+      result[db.databaseName] = db.schemas.map((s: { schema: string }) => s.schema);
     }
     return result;
-  }, [files]);
-
-  // For each transform, derive available schemas from its question's connection
-  const getSchemasForTransform = useCallback((transform: Transform): string[] => {
-    if (!transform.question) return [];
-    const questionFile = files[transform.question];
-    if (!questionFile) return [];
-    const dbName = (questionFile.content as QuestionContent)?.database_name;
-    if (!dbName) return [];
-    return connectionSchemas[dbName] ?? [];
-  }, [files, connectionSchemas]);
+  }, [databases]);
 
   const transforms = transformation.transforms ?? [];
 
@@ -508,7 +503,7 @@ export default function TransformationView({
                     transform={transform}
                     index={index}
                     questions={questions}
-                    schemas={getSchemasForTransform(transform)}
+                    dbSchemaMap={dbSchemaMap}
                     editMode={!!editMode}
                     onChange={(updates) => handleUpdateTransform(index, updates)}
                     onDelete={() => handleDeleteTransform(index)}
@@ -605,34 +600,9 @@ export default function TransformationView({
               borderColor="border.muted"
               gap={2}
             >
-              <HStack flex={1} gap={2}>
+              <HStack gap={2}>
                 <LuHistory size={16} />
                 <Text fontWeight="600" fontSize="sm">Run History</Text>
-                {runs.length > 0 && (
-                  <Box flex={1} maxW="200px">
-                    <SelectRoot
-                      collection={runsCollection}
-                      value={selectedRunId ? [selectedRunId.toString()] : []}
-                      onValueChange={(e) => onSelectRun?.(e.value[0] ? parseInt(e.value[0], 10) : null)}
-                      size="sm"
-                    >
-                      <SelectTrigger>
-                        <SelectValueText placeholder="Select run..." />
-                      </SelectTrigger>
-                      <Portal>
-                        <SelectPositioner>
-                          <SelectContent>
-                            {runsCollection.items.map((item) => (
-                              <SelectItem key={item.value} item={item}>
-                                {item.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </SelectPositioner>
-                      </Portal>
-                    </SelectRoot>
-                  </Box>
-                )}
               </HStack>
               <Button
                 onClick={onRunNow}
@@ -647,19 +617,7 @@ export default function TransformationView({
 
             {/* Run Content */}
             <Box flex={1} overflow="auto" p={4}>
-              {isRunning ? (
-                <VStack gap={4} align="center" justify="center" h="100%">
-                  <Text color="fg.muted">Running transformations...</Text>
-                </VStack>
-              ) : selectedRun ? (
-                selectedRun.output_file_id ? (
-                  <TransformationRunContainerV2 fileId={selectedRun.output_file_id} inline />
-                ) : (
-                  <VStack gap={2} align="center" justify="center" h="100%" color="fg.muted">
-                    <Text fontSize="sm">Run in progress...</Text>
-                  </VStack>
-                )
-              ) : runs.length === 0 ? (
+              {runs.length === 0 ? (
                 <VStack gap={4} align="center" justify="center" h="100%" color="fg.muted">
                   <LuArrowRightLeft size={48} opacity={0.3} />
                   <Text fontSize="sm">
@@ -671,8 +629,10 @@ export default function TransformationView({
                   </Text>
                 </VStack>
               ) : (
-                <VStack gap={4} align="center" justify="center" h="100%" color="fg.muted">
-                  <Text fontSize="sm">Select a run to view details</Text>
+                <VStack gap={2} align="stretch">
+                  {runs.map((run) => (
+                    <RunRow key={run.id} run={run} />
+                  ))}
                 </VStack>
               )}
             </Box>
