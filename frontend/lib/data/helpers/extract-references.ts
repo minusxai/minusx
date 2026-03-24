@@ -41,5 +41,13 @@ export function extractReferencesFromContent(content: BaseFileContent, type: Fil
     return typeof questionId === 'number' && questionId > 0 ? [questionId] : [];
   }
 
+  // Transformations reference questions via transforms[].question
+  if (type === 'transformation') {
+    const transforms = (content as any)?.transforms || [];
+    return transforms
+      .filter((t: any) => typeof t.question === 'number' && t.question > 0)
+      .map((t: any) => t.question as number);
+  }
+
   return [];
 }

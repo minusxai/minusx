@@ -20,6 +20,8 @@ import StylesContainerV2 from '@/components/containers/StylesContainerV2';
 import ReportContainerV2 from '@/components/containers/ReportContainerV2';
 import AlertContainerV2 from '@/components/containers/AlertContainerV2';
 import AlertRunContainerV2 from '@/components/containers/AlertRunContainerV2';
+import TransformationContainerV2 from '@/components/containers/TransformationContainerV2';
+import TransformationRunContainerV2 from '@/components/containers/TransformationRunContainerV2';
 
 /**
  * Props interface for all file component containers
@@ -53,6 +55,8 @@ export const FILE_COMPONENTS: Partial<Record<FileType, ComponentType<FileCompone
   report: ReportContainerV2,
   alert: AlertContainerV2,
   alert_run: AlertRunContainerV2,
+  transformation: TransformationContainerV2,
+  transformation_run: TransformationRunContainerV2,
   // Phase 2B: Add remaining file types
   // users: UserEditor,
 };

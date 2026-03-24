@@ -185,3 +185,20 @@ AtlasFile = Annotated[
 ]
 _atlas_file_adapter = TypeAdapter(AtlasFile)
 ATLAS_FILE_SCHEMA_JSON = json.dumps(_atlas_file_adapter.json_schema())
+
+
+# ============================================================================
+# Transformation Content
+# ============================================================================
+
+class TransformOutput(BaseModel):
+    schema_name: str = Field(..., description="target schema name in the warehouse")
+    view: str = Field(..., description="view name to create or replace")
+
+class Transform(BaseModel):
+    question: int = Field(..., description="file ID of the source question")
+    output: TransformOutput
+
+class TransformationContent(BaseModel):
+    description: Optional[str] = None
+    transforms: List[Transform] = Field(default_factory=list, description="list of transforms to execute")

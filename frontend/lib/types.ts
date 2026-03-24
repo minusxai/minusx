@@ -559,6 +559,37 @@ export interface JobHandlerResult {
   messages: RunMessage[];
 }
 
+// Transformation types
+export interface TransformOutput {
+  schema_name: string;
+  view: string;
+}
+
+export interface Transform {
+  question: number;      // file ID of the source question
+  output: TransformOutput;
+}
+
+export interface TransformationContent extends BaseFileContent {
+  description?: string;
+  transforms: Transform[];
+}
+
+// Per-transform execution result (stored inside RunFileContent.output)
+export interface TransformResult {
+  questionId: number;
+  questionName: string;
+  schema: string;
+  view: string;
+  sql: string;
+  status: 'success' | 'error';
+  error?: string;
+}
+
+export interface TransformationOutput {
+  results: TransformResult[];
+}
+
 // What handlers receive
 export interface JobRunnerInput {
   runFileId: number;
@@ -574,7 +605,7 @@ export interface JobRunnerInput {
  * content can be null for metadata-only loads (Phase 2: Partial Loading)
  */
 export interface DbFile extends BaseFileMetadata {
-  content: QuestionContent | DocumentContent | ContextContent | ConnectionContent | ConnectorContent | UsersContent | FolderContent | ConfigContent | SessionRecordingFileContent | StylesContent | ReportContent | ReportRunContent | AlertContent | AlertRunContent | RunFileContent | null;
+  content: QuestionContent | DocumentContent | ContextContent | ConnectionContent | ConnectorContent | UsersContent | FolderContent | ConfigContent | SessionRecordingFileContent | StylesContent | ReportContent | ReportRunContent | AlertContent | AlertRunContent | RunFileContent | TransformationContent | null;
   company_id: number;     // NOT NULL column in DB
 }
 

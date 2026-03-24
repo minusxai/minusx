@@ -120,7 +120,7 @@ export default function FileView({ fileId, mode = 'view', defaultFolder, hideHea
 
   // Render common header for user files (non-system types with a numeric fileId)
   // Read-only run types have their own inline header, so skip the shared FileHeader.
-  const READ_ONLY_FILE_TYPES: FileType[] = ['alert_run', 'report_run', 'conversation'];
+  const READ_ONLY_FILE_TYPES: FileType[] = ['alert_run', 'report_run', 'transformation_run', 'conversation'];
   const showFileHeader = !hideHeader && typeof fileId === 'number' && !isSystemFileType(file.type as FileType) && !READ_ONLY_FILE_TYPES.includes(file.type as FileType);
 
   // Render file-specific component

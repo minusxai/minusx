@@ -83,11 +83,12 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       status: 'running',
       startedAt,
     };
+    const runFileType = `${job_type}_run` as import('@/lib/ui/file-metadata').FileType;
     const createResult = await FilesAPI.createFile(
       {
         name: `run-${job_id}-${job_type}`,
         path: runPath,
-        type: 'alert_run',
+        type: runFileType,
         content: initialContent,
         references: [jobFileId],
         options: { createPath: true },
@@ -103,7 +104,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       job_type,
       company_id: user.companyId,
       output_file_id: runFileId,
-      output_file_type: 'alert_run',
+      output_file_type: runFileType,
       source: 'manual',
     });
 

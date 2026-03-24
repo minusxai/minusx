@@ -5,20 +5,20 @@
       "type": "fileTypeAccess",
       "role": "admin",
       "allowedTypes": "*",
-      "createTypes": ["question", "dashboard", "folder", "context", "connection", "alert", "report"],
+      "createTypes": ["question", "dashboard", "folder", "context", "connection", "alert", "report", "transformation"],
       "viewTypes": "*"
     },
     {
       "type": "fileTypeAccess",
       "role": "editor",
-      "allowedTypes": ["question", "dashboard", "folder", "context", "connection", "conversation", "session", "report", "alert", "alert_run", "report_run"],
-      "createTypes": ["question", "dashboard", "folder", "context", "alert", "report"],
-      "viewTypes": ["question", "dashboard", "folder", "context", "conversation", "session", "report", "alert", "alert_run", "report_run"]
+      "allowedTypes": ["question", "dashboard", "folder", "context", "connection", "conversation", "session", "report", "alert", "alert_run", "report_run", "transformation", "transformation_run"],
+      "createTypes": ["question", "dashboard", "folder", "context", "alert", "report", "transformation"],
+      "viewTypes": ["question", "dashboard", "folder", "context", "conversation", "session", "report", "alert", "alert_run", "report_run", "transformation", "transformation_run"]
     },
     {
       "type": "fileTypeAccess",
       "role": "viewer",
-      "allowedTypes": ["question", "dashboard", "folder", "context", "connection", "conversation", "session", "alert", "alert_run", "report_run", "report"],
+      "allowedTypes": ["question", "dashboard", "folder", "context", "connection", "conversation", "session", "alert", "alert_run", "report_run", "report", "transformation", "transformation_run"],
       "createTypes": [],
       "viewTypes": ["dashboard", "folder", "conversation", "session", "report", "alert", "alert_run", "report_run"]
     },
