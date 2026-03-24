@@ -11,14 +11,17 @@
  * - Delegate to FilesList for rendering
  * - Show progressive onboarding via GettingStartedV2
  */
-import { Box, Heading, Text, Spinner, HStack } from '@chakra-ui/react';
+import { Box, Heading, Text, Spinner, HStack, IconButton } from '@chakra-ui/react';
 import {
   LuDatabase,
   LuSettings,
   LuFileText,
   LuMessageSquare,
   LuVideo,
+  LuRefreshCw,
 } from 'react-icons/lu';
+import { Tooltip } from '@/components/ui/tooltip';
+import { readFolder } from '@/lib/api/file-state';
 import type { IconType } from 'react-icons';
 import { useFolder } from '@/lib/hooks/file-state-hooks';
 import FilesList from './FilesList';
@@ -118,20 +121,29 @@ export default function FolderView({ path, title, type, headerRight }: FolderVie
         {headerRight}
       </HStack>
 
-      {/* Stats */}
-      <Text
-        fontSize="lg"
-        color="fg.muted"
-        mb={6}
-        mt={4}
-        fontFamily="mono"
-      >
-        {fileCount} {fileCount === 1 ? 'file' : 'files'}
-        <Box as="span" mx={3} display="inline-flex" alignItems="center" justifyContent="center" aria-hidden>
-          <Box as="span" w="5px" h="5px" bg="accent.teal" borderRadius="50%" />
-        </Box>
-        {folderCount} {folderCount === 1 ? 'folder' : 'folders'}
-      </Text>
+      {/* Stats + Reload */}
+      <HStack mb={6} mt={4} gap={2} align="center">
+        <Text fontSize="lg" color="fg.muted" fontFamily="mono">
+          {fileCount} {fileCount === 1 ? 'file' : 'files'}
+          <Box as="span" mx={3} display="inline-flex" alignItems="center" justifyContent="center" aria-hidden>
+            <Box as="span" w="5px" h="5px" bg="accent.teal" borderRadius="50%" />
+          </Box>
+          {folderCount} {folderCount === 1 ? 'folder' : 'folders'}
+        </Text>
+        <Tooltip content="Reload folder" positioning={{ placement: 'bottom' }}>
+          <IconButton
+            variant="ghost"
+            size="xs"
+            aria-label="Reload folder"
+            onClick={() => readFolder(path, { forceLoad: true }).catch(() => {})}
+            color="fg.muted"
+            _hover={{ bg: 'bg.muted', color: 'fg.default' }}
+            borderRadius="md"
+          >
+            <LuRefreshCw />
+          </IconButton>
+        </Tooltip>
+      </HStack>
 
       {/* Getting Started Section - only show in tutorial/demo mode */}
       {!isThisSystemFolder && mode === 'tutorial' && <GettingStartedSection />}
