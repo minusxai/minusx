@@ -66,12 +66,12 @@ export const SingleValue = ({ series }: SingleValueProps) => {
             <VStack
               key={s.name}
               gap={isSmall ? 1 : 2}
-              p={isSmall ? 3 : 6}
-              bg="bg.surface"
-              borderRadius="md"
-              border="2px solid"
-              borderColor="border.default"
-              minWidth={'200px'}
+            //   p={isSmall ? 3 : 6}
+            //   bg="bg.surface"
+            //   borderRadius="md"
+            //   border="2px solid"
+            //   borderColor="border.default"
+            //   minWidth={'200px'}
               _hover={{
                 borderColor: color,
                 shadow: `0 0 20px ${color}40`,
