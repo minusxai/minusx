@@ -118,9 +118,10 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       const messages: RunMessageRecord[] = result.messages.map((m) => ({ ...m, status: 'pending' }));
 
       // Save run file with output + pending messages
+      const runStatus = result.status === 'failure' ? 'failure' : 'success';
       const successContent: RunFileContent = {
         job_type,
-        status: 'success',
+        status: runStatus,
         startedAt,
         completedAt: new Date().toISOString(),
         output: result.output,
@@ -193,8 +194,9 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         );
       }
 
-      await JobRunsDB.complete(runId, 'SUCCESS');
-      return successResponse({ runId, fileId: runFileId, status: 'SUCCESS' });
+      const jobRunStatus = result.status === 'failure' ? 'FAILURE' : 'SUCCESS';
+      await JobRunsDB.complete(runId, jobRunStatus);
+      return successResponse({ runId, fileId: runFileId, status: jobRunStatus });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       const failureContent: RunFileContent = {

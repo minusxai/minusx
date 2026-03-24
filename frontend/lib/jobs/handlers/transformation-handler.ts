@@ -55,7 +55,16 @@ export const transformationJobHandler: JobHandler = {
         sql = `CREATE OR REPLACE VIEW "${schema}"."${view}" AS\n${question.query}`;
 
         // Execute DDL via Python backend (Postgres/BigQuery support DDL natively)
-        await runQuery(question.database_name, sql, {}, user);
+        try {
+          await runQuery(question.database_name, sql, {}, user);
+        } catch (err) {
+          const raw = err instanceof Error ? err.message : String(err);
+          const error = raw === 'fetch failed'
+            ? `Could not reach Python backend (fetch failed). Is the backend running at ${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8001'}?`
+            : raw;
+          results.push({ questionId, questionName, schema, view, sql, status: 'error', error });
+          continue;
+        }
 
         results.push({ questionId, questionName, schema, view, sql, status: 'success' });
       } catch (err) {
@@ -64,7 +73,8 @@ export const transformationJobHandler: JobHandler = {
       }
     }
 
+    const hasErrors = results.some(r => r.status === 'error');
     const output: TransformationOutput = { results };
-    return { output, messages: [] };
+    return { output, messages: [], status: hasErrors ? 'failure' : 'success' };
   },
 };

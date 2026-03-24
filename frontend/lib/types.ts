@@ -557,6 +557,8 @@ export interface RunFileContent extends BaseFileContent {
 export interface JobHandlerResult {
   output: Record<string, any>;
   messages: RunMessage[];
+  /** Optional override: if 'failure', route marks the run as FAILURE even though handler didn't throw */
+  status?: 'success' | 'failure';
 }
 
 // Transformation types
