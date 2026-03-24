@@ -20,6 +20,7 @@ interface TransformationViewProps {
   transformationName: string;
   fileId: number;
   isRunning: boolean;
+  schemaRefreshing?: boolean;
   runs?: JobRun[];
   selectedRunId?: number | null;
   onChange: (updates: Partial<TransformationContent>) => void;
@@ -302,6 +303,7 @@ export default function TransformationView({
   transformationName: _transformationName,
   fileId,
   isRunning,
+  schemaRefreshing = false,
   runs = [],
   selectedRunId,
   onChange,
@@ -602,6 +604,9 @@ export default function TransformationView({
                 )}
               </HStack>
               <HStack gap={2}>
+                {schemaRefreshing && (
+                  <Text fontSize="xs" color="fg.muted" fontStyle="italic">Refreshing schema...</Text>
+                )}
                 {selectedRun?.output_file_id && (
                   <Link href={preserveParams(`/f/${selectedRun.output_file_id}`)}>
                     <Button size="sm" variant="ghost" colorPalette="gray">
