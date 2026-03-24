@@ -7,7 +7,7 @@
  */
 
 import { Box, VStack, Heading, HStack, Button, Text, Badge, Menu, Input, Dialog, Field, Portal, Collapsible, Icon, Switch, Tabs } from '@chakra-ui/react';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { LuCircleAlert, LuCircleCheck, LuPlus, LuTrash2, LuChevronDown, LuGlobe, LuChevronRight } from 'react-icons/lu';
 import { ContextContent, DatabaseContext, WhitelistItem, ContextVersion, PublishedVersions, DocEntry, EvalItem } from '@/lib/types';
 import EvalsEditor from './EvalsEditor';
@@ -212,16 +212,26 @@ export default function ContextEditorV2({
     // Don't parse immediately, wait for tab switch or save
   };
 
-  // Handle docs changes - immediate (Monaco manages its own internal state)
-  const handleMarkdownChange = (index: number, newMarkdown: string) => {
-    const currentDocs = content.docs || [];
-    const newDocs = [...currentDocs];
-    newDocs[index] = {
-      ...newDocs[index],
-      content: newMarkdown
-    };
-    onChange({ docs: newDocs });
-  };
+  // Handle docs changes - debounced to avoid re-rendering preview on every keystroke.
+  // Monaco manages its own buffer so typing stays responsive.
+  const markdownTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const contentDocsRef = useRef(content.docs);
+  contentDocsRef.current = content.docs;
+
+  const handleMarkdownChange = useCallback((index: number, newMarkdown: string) => {
+    if (markdownTimerRef.current) clearTimeout(markdownTimerRef.current);
+    markdownTimerRef.current = setTimeout(() => {
+      const currentDocs = contentDocsRef.current || [];
+      const newDocs = [...currentDocs];
+      newDocs[index] = {
+        ...newDocs[index],
+        content: newMarkdown
+      };
+      onChangeRef.current({ docs: newDocs });
+    }, 300);
+  }, []);
 
   const handleAddDoc = () => {
     const currentDocs = content.docs || [];
@@ -775,7 +785,10 @@ export default function ContextEditorV2({
                 <VStack gap={4} align="stretch">
                   {(content.docs || []).map((docEntry, index) => {
                     const isDocExpanded = expandedDocs.has(index);
-                    const docView = docViewModes[index] ?? null;
+                    const hasDiff = originalDocs?.[index] != null && originalDocs[index].content !== docEntry.content;
+                    const rawDocView = docViewModes[index] ?? null;
+                    // Auto-fallback: if on diff but no diff exists, show default
+                    const docView = rawDocView === 'diff' && !hasDiff ? null : rawDocView;
                     const previewLine = docEntry.content.trim().split('\n')[0]?.slice(0, 80) || 'Empty';
 
                     return (
@@ -869,11 +882,12 @@ export default function ContextEditorV2({
                             >
                               Preview
                             </Button>
-                            {originalDocs?.[index] && (
+                            {originalDocs?.[index] != null && (
                               <Button
                                 size="xs"
                                 variant={docView === 'diff' ? 'solid' : 'ghost'}
                                 onClick={() => setDocViewMode(index, docView === 'diff' ? null : 'diff')}
+                                disabled={!hasDiff}
                               >
                                 Diff
                               </Button>
