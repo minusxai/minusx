@@ -1,7 +1,7 @@
 import 'server-only';
 import { DocumentDB, AccessTokenDB } from '@/lib/database/documents-db';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { DbFile, BaseFileContent, FileType, QuestionContent, DocumentContent, ConnectionContent, ContextContent, ReportContent, AlertContent } from '@/lib/types';
+import { DbFile, BaseFileContent, FileType, QuestionContent, DocumentContent, ConnectionContent, ContextContent, ReportContent, AlertContent, TransformationContent } from '@/lib/types';
 import { IFilesDataLayer } from './files.interface';
 import {
   LoadFileResult,
@@ -686,6 +686,18 @@ class FilesDataLayerServer implements IFilesDataLayer {
           references: [],
           reportPrompt: '',
           recipients: []
+        };
+
+        return {
+          content,
+          fileName: ''
+        };
+      }
+
+      case 'transformation': {
+        const content: TransformationContent = {
+          description: '',
+          transforms: [],
         };
 
         return {
