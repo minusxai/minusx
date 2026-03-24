@@ -111,11 +111,24 @@ export const PivotTable = ({
     if (!showHeatmap) return undefined
     if (maxValue === minValue) return 'accent.teal/75'
     const normalized = (value - minValue) / (maxValue - minValue)
-    // Blend from danger (low) to teal (high)
-    const dangerOpacity = Math.round(10 + (1 - normalized) * 65)
-    const tealOpacity = Math.round(10 + normalized * 65)
-    if (normalized < 0.5) return `accent.danger/${dangerOpacity}`
-    return `accent.teal/${tealOpacity}`
+    // Smooth gradient: red (low) → yellow (mid) → teal (high)
+    // Using RGB interpolation with two stops
+    const alpha = 0.55
+    let r: number, g: number, b: number
+    if (normalized < 0.5) {
+      const t = normalized / 0.5
+      // Red (200, 60, 60) → Yellow (210, 180, 60)
+      r = Math.round(200 + t * 10)
+      g = Math.round(60 + t * 120)
+      b = 60
+    } else {
+      const t = (normalized - 0.5) / 0.5
+      // Yellow (210, 180, 60) → Teal (45, 160, 140)
+      r = Math.round(210 - t * 165)
+      g = Math.round(180 - t * 20)
+      b = Math.round(60 + t * 80)
+    }
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`
   }
 
   // Column entries: interleave regular data columns with formula columns
