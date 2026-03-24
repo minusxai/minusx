@@ -38,6 +38,7 @@ templates:
       - Report Page: Schedule (cron, timezone), references (questions/dashboards with prompts), reportPrompt (synthesis instructions), emails (delivery list)
       - Alert Page: Schedule (cron, timezone), questionId (monitored question), condition (selector, function, operator, threshold, column)
       - Explore Page: No specific state (it is null)
+      - Context Page: Versions (with docs and database whitelists), published version info. Only docs are editable via EditFile.
       - Folder Page: Folder path of the page, list of files/folders in current folder
       - Note: For all queryresults, results are truncated to 20 rows (you'll need to execute appropriate queries for more data)
     - CurrentTime
@@ -279,6 +280,29 @@ templates:
     - **function**: For first/last: "value", "diff", "pct_change", "months_ago", "days_ago", "years_ago". For all: "count", "sum", "avg", "min", "max"
     - **operator**: ">" | "<" | "=" | ">=" | "<=" | "!="
 
+    ### Context
+    ```json
+    {{
+      "versions": [
+        {{
+          "version": 1,
+          "databases": [...],
+          "docs": [
+            {{"content": "# Metric Definitions\n\nRevenue = ...", "childPaths": ["/org/sales"], "draft": false}},
+            {{"content": "# Conventions\n\nAll dates in UTC"}}
+          ],
+          "createdAt": "2024-01-15T10:30:00Z",
+          "createdBy": 1
+        }}
+      ],
+      "published": {{"all": 1}}
+    }}
+    ```
+    - Context files define schema whitelisting (`databases`) and documentation (`docs`) for a folder
+    - **You can ONLY edit the `content` field of doc entries within versions** — do NOT modify `databases`, `whitelist`, `published`, `evals`, `fullSchema`, `childPaths`, or `draft`
+    - Each doc entry has: `content` (markdown text), optional `childPaths` (which child folders inherit this doc), optional `draft` (if true, excluded from agent-facing output). Only `content` is editable.
+    - To edit docs, use EditFile with oldMatch/newMatch targeting the `"content"` string value within a doc entry
+
   native_guidelines: |
     ## Guidelines
 
@@ -359,6 +383,13 @@ templates:
 
     ### Invoked in Alert Page / Report Page
     - These are more specialized — users typically ask you to set up specific conditions, schedules etc and all changes are done via EditFile. Similar to question/dashboard pages, only navigate or create new files if the user explicitly asks you to.
+
+    ### Invoked in Context Page
+    - Context pages define schema whitelisting and documentation for a folder's analytics context.
+    - You can ONLY edit the `content` field of documentation entries (`docs[].content` within versions). Do NOT attempt to modify `databases`, `whitelist`, `published`, `evals`, `childPaths`, `draft`, or any other fields — those changes will be rejected.
+    - Typical requests: add/edit/remove documentation entries, improve metric definitions, add conventions, fix typos in existing docs.
+    - Use EditFile to modify doc content strings. Match the `"content"` field text within a doc entry, not the surrounding JSON structure.
+    - The `docs` array is inside the active version object in `versions`. Match text within the `"content"` value of a doc entry.
 
 # ── Prompt compositions ─────────────────────────────────────────────
 

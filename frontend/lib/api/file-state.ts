@@ -316,6 +316,20 @@ export function compressAugmentedFile(augmented: AugmentedFile): CompressedAugme
         queryResultId = getQueryHash(qc.query, qc.parameterValues || {}, qc.database_name);
       }
     }
+    // For context files, strip columns from fullSchema to reduce AppState payload size
+    if (fs.type === 'context' && mergedContent && 'fullSchema' in mergedContent) {
+      const ctx = mergedContent as any;
+      if (Array.isArray(ctx.fullSchema)) {
+        (ctx as any).fullSchema = (ctx.fullSchema as any[]).map((db: any) => ({
+          ...db,
+          schemas: db.schemas?.map((s: any) => ({
+            ...s,
+            tables: s.tables?.map((t: any) => ({ table: t.table })),
+          })),
+        }));
+      }
+    }
+
     return {
       id: fs.id,
       name: fs.metadataChanges?.name ?? fs.name,

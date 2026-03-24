@@ -366,6 +366,36 @@ registerFrontendTool('EditFile', async (args, _context) => {
     if (result.diff) diffs.push(result.diff);
   }
 
+  // Guard: context files — only docs[].content within versions can be edited
+  if (fileState?.type === 'context') {
+    const before = selectMergedContent(stateBefore, fileId) as any;
+    const after = selectMergedContent(getStore().getState(), fileId) as any;
+
+    // Strip only doc content strings from each version, keep everything else for comparison
+    const stripDocContent = (content: any) => {
+      if (!content) return content;
+      const { versions, ...rest } = content;
+      return {
+        ...rest,
+        versions: versions?.map((v: any) => ({
+          ...v,
+          docs: v.docs?.map((d: any) => {
+            const { content: _content, ...dRest } = d;
+            return dRest;
+          }),
+        })),
+      };
+    };
+
+    if (JSON.stringify(stripDocContent(before)) !== JSON.stringify(stripDocContent(after))) {
+      const errorContent = {
+        success: false,
+        error: 'EditFile on context files can only modify doc content text (docs[].content within versions). Other fields (databases, published, evals, childPaths, draft, etc.) cannot be changed via EditFile.',
+      };
+      return { content: errorContent, details: { success: false, error: errorContent.error } };
+    }
+  }
+
   // Auto-execute query for questions (agent sees results immediately)
   if (fileState?.type === 'question') {
     const updatedState = getStore().getState();
