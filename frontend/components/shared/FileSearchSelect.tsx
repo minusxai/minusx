@@ -1,8 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { createListCollection, Portal } from '@chakra-ui/react';
-import { Combobox } from '@chakra-ui/react';
+import { createListCollection, Combobox } from '@chakra-ui/react';
 
 interface FileSearchSelectProps {
   files: { id: number; name: string }[];
@@ -46,19 +45,17 @@ export default function FileSearchSelect({ files, selectedId, onSelect, placehol
           onClick={e => e.stopPropagation()}
         />
       </Combobox.Control>
-      <Portal>
-        <Combobox.Positioner>
-          <Combobox.Content>
-            <Combobox.Empty>No results found</Combobox.Empty>
-            {filteredCollection.items.map((item) => (
-              <Combobox.Item key={item.value} item={item}>
-                <Combobox.ItemText>{item.label}</Combobox.ItemText>
-                <Combobox.ItemIndicator />
-              </Combobox.Item>
-            ))}
-          </Combobox.Content>
-        </Combobox.Positioner>
-      </Portal>
+      <Combobox.Positioner>
+        <Combobox.Content>
+          <Combobox.Empty>No results found</Combobox.Empty>
+          {filteredCollection.items.map((item) => (
+            <Combobox.Item key={item.value} item={item}>
+              <Combobox.ItemText>{item.label}</Combobox.ItemText>
+              <Combobox.ItemIndicator />
+            </Combobox.Item>
+          ))}
+        </Combobox.Content>
+      </Combobox.Positioner>
     </Combobox.Root>
   );
 }

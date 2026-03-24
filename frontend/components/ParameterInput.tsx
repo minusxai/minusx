@@ -4,6 +4,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
   Input, HStack, Text, MenuRoot, MenuTrigger, MenuContent, MenuItem,
   Portal, MenuPositioner, Box, IconButton, VStack, Popover, NativeSelect, Spinner, Field,
+  Combobox, createListCollection,
 } from '@chakra-ui/react';
 import { LuChevronDown, LuX, LuSettings2, LuTriangleAlert } from 'react-icons/lu';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -35,6 +36,13 @@ interface SourceDropdownWidgetProps {
   onSubmit?: (paramName?: string, value?: string | number) => void;
 }
 
+// Format a number string to max 2 decimal places, removing trailing zeros
+function formatNumStr(v: string): string {
+  const n = parseFloat(v);
+  if (isNaN(n)) return v;
+  return String(parseFloat(n.toFixed(2)));
+}
+
 function SourceDropdownWidget({ source, paramType, currentValue, paramName, onChange, onSubmit }: SourceDropdownWidgetProps) {
   const augmented = useFile(source.id);
   const content = augmented?.fileState.content as QuestionContent | undefined | null;
@@ -47,7 +55,7 @@ function SourceDropdownWidget({ source, paramType, currentValue, paramName, onCh
     { skip: !content?.query }
   );
 
-  // Extract distinct sorted values from source.column (rows are Record<string, any>)
+  // Extract distinct values from source.column, formatted for display
   const values = useMemo<string[] | null>(() => {
     if (!data?.rows) return null;
     if (!source.column) return [];
@@ -56,86 +64,125 @@ function SourceDropdownWidget({ source, paramType, currentValue, paramName, onCh
     for (const row of data.rows) {
       const v = row[source.column];
       if (v !== null && v !== undefined) {
-        const str = String(v);
+        const str = paramType === 'number' ? formatNumStr(String(v)) : String(v);
         if (!seen.has(str)) {
           seen.add(str);
           result.push(str);
         }
       }
     }
-    return result.sort();
-  }, [data, source.column]);
+    // Sort: numeric order for numbers, lexicographic for text
+    return paramType === 'number'
+      ? result.sort((a, b) => parseFloat(a) - parseFloat(b))
+      : result.sort();
+  }, [data, source.column, paramType]);
 
-  const handleSelectChange = (raw: string) => {
+  // Local filter text — only used while the combobox is open/focused
+  const [filterText, setFilterText] = useState('');
+
+  const filteredCollection = useMemo(() => {
+    const lower = filterText.toLowerCase();
+    const all = values ?? [];
+    if (!lower) return createListCollection({ items: all.map(v => ({ value: v, label: v })) });
+    const prefix: string[] = [];
+    const rest: string[] = [];
+    for (const v of all) {
+      if (v.toLowerCase().startsWith(lower)) prefix.push(v);
+      else if (v.toLowerCase().includes(lower)) rest.push(v);
+    }
+    return createListCollection({ items: [...prefix, ...rest].map(v => ({ value: v, label: v })) });
+  }, [values, filterText]);
+
+  // What to show in the input by default — formatted current value
+  const defaultDisplayValue = currentValue !== undefined && currentValue !== null
+    ? (paramType === 'number' ? formatNumStr(String(currentValue)) : String(currentValue))
+    : '';
+
+  const commit = (raw: string) => {
     const final: string | number = paramType === 'number' ? (parseFloat(raw) || 0) : raw;
     onChange(final);
-    onSubmit?.(paramName, final);
   };
 
-  // Loading with no data yet
-  if (loading && values === null) {
-    return (
-      <HStack h={ROW_H} px={2} gap={1.5}>
-        <Spinner size="xs" color="accent.teal" />
-        <Text fontSize="xs" color="fg.subtle">Loading…</Text>
-      </HStack>
-    );
-  }
-
-  // Error or no values — fall back to free text input with warning icon
-  if (error || (values !== null && values.length === 0)) {
-    const tooltipMsg = error
-      ? 'Could not load values — enter manually'
-      : 'No values found — enter manually';
-    return (
-      <HStack gap={1}>
-        <Tooltip content={tooltipMsg}>
+  return (
+    <HStack gap={1}>
+      {(error || (values !== null && values.length === 0 && !loading)) && (
+        <Tooltip content={error ? 'Could not load suggestions' : 'No suggestions found'}>
           <Box color="orange.400" display="flex" alignItems="center">
             <LuTriangleAlert size={14} />
           </Box>
         </Tooltip>
-        <Input
-          value={currentValue ?? ''}
-          onChange={(e) => {
-            const v = paramType === 'number' ? parseFloat(e.target.value) || 0 : e.target.value;
-            onChange(v);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && onSubmit) {
-              const v = paramType === 'number' ? parseFloat(e.currentTarget.value) || 0 : e.currentTarget.value;
-              onSubmit(paramName, v);
-            }
-          }}
-          type={paramType === 'number' ? 'number' : 'text'}
-          minW="100px"
-          bg="bg.canvas"
-          borderColor="border.muted"
-          fontSize="sm"
-          px={3}
-          h={ROW_H}
-          placeholder={paramType === 'number' ? '0' : 'value'}
-        />
-      </HStack>
-    );
-  }
+      )}
+      {loading && values === null && <Spinner size="xs" color="accent.teal" />}
 
-  return (
-    <NativeSelect.Root size="sm" minW="120px">
-      <NativeSelect.Field
-        value={currentValue !== undefined && currentValue !== null ? String(currentValue) : ''}
-        onChange={(e) => handleSelectChange(e.target.value)}
-        h={ROW_H}
-        fontSize="sm"
-        bg="bg.canvas"
-        borderColor="border.muted"
+      {/*
+        key={defaultDisplayValue}: remounts the Combobox whenever the committed value changes,
+        so defaultInputValue always reflects the latest currentValue — no effect/sync needed.
+        filterText resets to '' on remount, which is correct (start fresh after commit).
+      */}
+      <Combobox.Root
+        key={defaultDisplayValue}
+        collection={filteredCollection}
+        defaultInputValue={defaultDisplayValue}
+        onValueChange={(e) => {
+          if (e.value[0] !== undefined) commit(e.value[0]);
+        }}
+        onInputValueChange={(details) => {
+          setFilterText(details.inputValue);
+        }}
+        openOnClick
+        inputBehavior="none"
+        positioning={{ placement: 'bottom-start', gutter: 4 }}
+        size="sm"
       >
-        <option value="">— select —</option>
-        {(values ?? []).map(v => (
-          <option key={v} value={v}>{v}</option>
-        ))}
-      </NativeSelect.Field>
-      <NativeSelect.Indicator />
-    </NativeSelect.Root>
+        <Combobox.Control>
+          <Combobox.Input
+            placeholder={paramType === 'number' ? '0 or select…' : 'type or select…'}
+            bg="bg.canvas"
+            borderColor="border.muted"
+            fontSize="sm"
+            h={ROW_H}
+            minW="120px"
+            fontFamily={paramType === 'number' ? 'mono' : 'inherit'}
+            _focus={{
+              borderColor: 'accent.teal',
+              boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)',
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || ((e.metaKey || e.ctrlKey) && e.key === 'Enter')) {
+                e.preventDefault();
+                e.stopPropagation();
+                const raw = e.currentTarget.value;
+                commit(raw);
+                if (onSubmit) {
+                  const final: string | number = paramType === 'number'
+                    ? (parseFloat(raw) || 0)
+                    : raw;
+                  onSubmit(paramName, final);
+                }
+              }
+            }}
+          />
+        </Combobox.Control>
+        <Portal>
+          <Combobox.Positioner>
+            <Combobox.Content minW="160px">
+              {loading && values === null ? (
+                <Combobox.Empty>Loading…</Combobox.Empty>
+              ) : filteredCollection.items.length === 0 ? (
+                <Combobox.Empty>No matches</Combobox.Empty>
+              ) : (
+                filteredCollection.items.map(item => (
+                  <Combobox.Item key={item.value} item={item}>
+                    <Combobox.ItemText>{item.label}</Combobox.ItemText>
+                    <Combobox.ItemIndicator />
+                  </Combobox.Item>
+                ))
+              )}
+            </Combobox.Content>
+          </Combobox.Positioner>
+        </Portal>
+      </Combobox.Root>
+    </HStack>
   );
 }
 
@@ -215,8 +262,8 @@ function SourceConfigPopover({ parameter, onParameterChange }: SourceConfigPopov
 
   return (
     <Popover.Root open={open} onOpenChange={(d) => setOpen(d.open)} positioning={{ placement: 'bottom-end' }}>
-      <Popover.Trigger asChild>
-        <Tooltip content="Configure parameter source">
+      <Tooltip content="Configure parameter source">
+        <Popover.Trigger asChild>
           <IconButton
             aria-label="Configure source"
             variant="ghost"
@@ -228,12 +275,12 @@ function SourceConfigPopover({ parameter, onParameterChange }: SourceConfigPopov
           >
             <LuSettings2 style={{ width: 13, height: 13 }} />
           </IconButton>
-        </Tooltip>
-      </Popover.Trigger>
+        </Popover.Trigger>
+      </Tooltip>
       <Portal>
         <Popover.Positioner>
-          <Popover.Content width="280px" bg="bg.elevated" p={0} overflow="hidden" borderRadius="lg">
-            <Popover.Body p={3} bg="bg.elevated">
+          <Popover.Content width="280px" bg="bg.elevated" p={0} overflow="visible" borderRadius="lg">
+            <Popover.Body p={3} bg="bg.elevated" overflow="visible">
               <VStack gap={3} align="stretch">
                 <Field.Root>
                   <Field.Label fontSize="xs" fontWeight="600">Source</Field.Label>
