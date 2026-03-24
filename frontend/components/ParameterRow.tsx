@@ -74,6 +74,13 @@ export default function ParameterRow({
     }
   };
 
+  const handleParameterUpdate = (updated: QuestionParameter) => {
+    const updatedParams = parameters.map((p) =>
+      p.name === updated.name ? updated : p
+    );
+    onParametersChange?.(updatedParams);
+  };
+
   return (
     <HStack gap={3} flexWrap="wrap" align="center" mt={4} mb={2}>
       {parameters.map((param) => (
@@ -83,8 +90,10 @@ export default function ParameterRow({
           value={getEffectiveValue(param)}
           onChange={(value) => handleValueChange(param.name, value)}
           onTypeChange={(type) => handleTypeChange(param.name, type)}
+          onParameterChange={handleParameterUpdate}
           onSubmit={handleSubmit}
           disableTypeChange={disableTypeChange}
+          disableSourceConfig={disableTypeChange}
           onHoverParam={onHoverParam}
         />
       ))}

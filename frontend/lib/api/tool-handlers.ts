@@ -336,6 +336,45 @@ registerFrontendTool('ReadFiles', async (args, _context) => {
  * - references: {id, unchanged: true} for pre-existing refs; full for new ones
  * - queryResults: {queryResultId, unchanged: true} for results with same hash; full for new/changed
  */
+/**
+ * Checks whether any parameter's source changed and, if so, verifies the referenced
+ * column exists in the source question's inferred output. Best-effort: returns an
+ * empty array on any inference failure.
+ */
+async function validateParameterSources(
+  paramsBefore: any[] | undefined,
+  paramsAfter: any[] | undefined,
+): Promise<string[]> {
+  const warnings: string[] = [];
+  for (const param of paramsAfter ?? []) {
+    if (!param.source || param.source.type !== 'question' || !param.source.column) continue;
+    const prev = (paramsBefore ?? []).find((p: any) => p.name === param.name);
+    const changed = !prev?.source
+      || prev.source.id !== param.source.id
+      || prev.source.column !== param.source.column;
+    if (!changed) continue;
+
+    try {
+      const res = await fetch('/api/infer-columns', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ questionId: param.source.id }),
+      });
+      const data = await res.json();
+      const cols: string[] = (data.columns ?? []).map((c: any) => c.name);
+      if (cols.length > 0 && !cols.includes(param.source.column)) {
+        warnings.push(
+          `Parameter "${param.name}" source column "${param.source.column}" was not found in question ${param.source.id}. ` +
+          `Available columns: ${cols.join(', ')}`
+        );
+      }
+    } catch {
+      // Inference failure is non-fatal — skip warning
+    }
+  }
+  return warnings;
+}
+
 registerFrontendTool('EditFile', async (args, _context) => {
   const { fileId, changes } = args;
 
@@ -445,6 +484,14 @@ registerFrontendTool('EditFile', async (args, _context) => {
     }
   }
 
+  // Validate parameter source changes (best-effort — never blocks the edit)
+  const sourceWarnings = fileState?.type === 'question'
+    ? await validateParameterSources(
+        (selectMergedContent(stateBefore, fileId) as any)?.parameters,
+        (selectMergedContent(getStore().getState(), fileId) as any)?.parameters,
+      )
+    : [];
+
   // Build delta response
   const [augmented] = await readFiles([fileId], {});
   const compressed = compressAugmentedFile(augmented);
@@ -465,11 +512,12 @@ registerFrontendTool('EditFile', async (args, _context) => {
   });
 
   const diff = diffs.join('\n');
-  const content = {
+  const content: Record<string, any> = {
     success: true,
     fileState: compressed.fileState,
     references: deltaReferences,
     queryResults: deltaQueryResults,
+    ...(sourceWarnings.length > 0 ? { sourceWarnings } : {}),
   };
   return { content, details: { success: true, diff } as EditFileDetails };
 });
