@@ -6,15 +6,15 @@
  * All changes go through onChange immediately
  */
 
-import { Box, VStack, Heading, HStack, Button, Text, SimpleGrid, Badge, Menu, Input, Dialog, Field, Portal, Collapsible, Icon, Switch, Tabs } from '@chakra-ui/react';
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { Box, VStack, Heading, HStack, Button, Text, Badge, Menu, Input, Dialog, Field, Portal, Collapsible, Icon, Switch, Tabs } from '@chakra-ui/react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { LuCircleAlert, LuCircleCheck, LuPlus, LuTrash2, LuChevronDown, LuGlobe, LuChevronRight } from 'react-icons/lu';
 import { ContextContent, DatabaseContext, WhitelistItem, ContextVersion, PublishedVersions, DocEntry, EvalItem } from '@/lib/types';
 import EvalsEditor from './EvalsEditor';
 import { serializeDatabases, parseDatabasesYaml, canDeleteVersion } from '@/lib/context/context-utils';
 import SchemaTreeView from '../SchemaTreeView';
 import ChildPathSelector from '../ChildPathSelector';
-import Editor from '@monaco-editor/react';
+import Editor, { DiffEditor } from '@monaco-editor/react';
 import Markdown from '../Markdown';
 import DocumentHeader from '../DocumentHeader';
 import { useAppSelector } from '@/store/hooks';
@@ -34,6 +34,8 @@ interface ContextEditorV2Props {
   onEditModeChange: (mode: boolean) => void;
   // File info (for path filtering)
   file?: { id: number; path: string; type: string };
+  // Original (saved) docs for diff view
+  originalDocs?: DocEntry[];
   // Version management (admin only)
   isAdmin?: boolean;
   userId?: number;
@@ -60,6 +62,7 @@ export default function ContextEditorV2({
   onCancel,
   onEditModeChange,
   file,
+  originalDocs,
   isAdmin = false,
   userId,
   currentVersion = 1,
@@ -90,6 +93,11 @@ export default function ContextEditorV2({
   // Collapsible database state
   const [expandedDatabases, setExpandedDatabases] = useState<Set<string>>(new Set());
   const hasInitializedExpanded = useRef(false);
+
+  // Collapsible doc entries state
+  const [expandedDocs, setExpandedDocs] = useState<Set<number>>(() => new Set([0])); // First entry expanded by default
+  // null = default (editor + preview side by side), 'editor' = editor only, 'preview' = preview only, 'diff' = diff side by side
+  const [docViewModes, setDocViewModes] = useState<Record<number, 'editor' | 'preview' | 'diff' | null>>({});
 
   // Get connections loading state from Redux (for loading indicator)
   const isLoading = useAppSelector(state =>
@@ -135,6 +143,22 @@ export default function ContextEditorV2({
       setExpandedDatabases(new Set());
     }
   }, [availableDatabases]);
+
+  const toggleDoc = (index: number) => {
+    setExpandedDocs(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  };
+
+  const setDocViewMode = (index: number, mode: 'editor' | 'preview' | 'diff' | null) => {
+    setDocViewModes(prev => ({ ...prev, [index]: mode }));
+  };
 
   const toggleDatabase = (name: string) => {
     setExpandedDatabases(prev => {
@@ -188,16 +212,26 @@ export default function ContextEditorV2({
     // Don't parse immediately, wait for tab switch or save
   };
 
-  // Handle docs changes - pure controlled
-  const handleMarkdownChange = (index: number, newMarkdown: string) => {
-    const currentDocs = content.docs || [];
-    const newDocs = [...currentDocs];
-    newDocs[index] = {
-      ...newDocs[index],
-      content: newMarkdown
-    };
-    onChange({ docs: newDocs });
-  };
+  // Handle docs changes - debounced to avoid re-rendering preview on every keystroke.
+  // Monaco manages its own buffer so typing stays responsive.
+  const markdownTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const contentDocsRef = useRef(content.docs);
+  contentDocsRef.current = content.docs;
+
+  const handleMarkdownChange = useCallback((index: number, newMarkdown: string) => {
+    if (markdownTimerRef.current) clearTimeout(markdownTimerRef.current);
+    markdownTimerRef.current = setTimeout(() => {
+      const currentDocs = contentDocsRef.current || [];
+      const newDocs = [...currentDocs];
+      newDocs[index] = {
+        ...newDocs[index],
+        content: newMarkdown
+      };
+      onChangeRef.current({ docs: newDocs });
+    }, 300);
+  }, []);
 
   const handleAddDoc = () => {
     const currentDocs = content.docs || [];
@@ -749,7 +783,15 @@ export default function ContextEditorV2({
 
                 {/* Own docs (editable) */}
                 <VStack gap={4} align="stretch">
-                  {(content.docs || []).map((docEntry, index) => (
+                  {(content.docs || []).map((docEntry, index) => {
+                    const isDocExpanded = expandedDocs.has(index);
+                    const hasDiff = originalDocs?.[index] != null && originalDocs[index].content !== docEntry.content;
+                    const rawDocView = docViewModes[index] ?? null;
+                    // Auto-fallback: if on diff but no diff exists, show default
+                    const docView = rawDocView === 'diff' && !hasDiff ? null : rawDocView;
+                    const previewLine = docEntry.content.trim().split('\n')[0]?.slice(0, 80) || 'Empty';
+
+                    return (
                     <Box
                       key={index}
                       border="1px solid"
@@ -758,96 +800,192 @@ export default function ContextEditorV2({
                       overflow="hidden"
                       opacity={docEntry.draft ? 0.6 : 1}
                     >
-                      {/* Header with draft toggle and remove button */}
-                      <HStack
-                        justify="space-between"
-                        px={3}
-                        py={2}
-                        bg="bg.muted"
-                        borderBottom="1px solid"
-                        borderColor="border.default"
-                      >
-                        <Text fontSize="sm" fontWeight="600">
-                          Documentation Entry {index + 1}
-                        </Text>
-                        <HStack gap={3}>
-                          <HStack gap={1.5}>
-                            <Badge size="sm" colorPalette={docEntry.draft ? 'yellow' : 'green'} variant="subtle">
-                              {docEntry.draft ? 'Draft — hidden from agent' : 'Active — visible to agent'}
-                            </Badge>
-                            <Switch.Root
-                              size="sm"
-                              checked={!docEntry.draft}
-                              onCheckedChange={() => handleToggleDraft(index)}
-                              colorPalette="green"
-                            >
-                              <Switch.HiddenInput />
-                              <Switch.Control>
-                                <Switch.Thumb />
-                              </Switch.Control>
-                            </Switch.Root>
-                          </HStack>
-                          <Button
-                            size="xs"
-                            variant="ghost"
-                            colorPalette="red"
-                            onClick={() => handleRemoveDoc(index)}
+                      {/* Collapsible header */}
+                      <Collapsible.Root open={isDocExpanded} onOpenChange={() => toggleDoc(index)}>
+                        <Collapsible.Trigger asChild>
+                          <Box
+                            px={3}
+                            py={2}
+                            bg="bg.muted"
+                            cursor="pointer"
+                            _hover={{ bg: 'bg.emphasized' }}
+                            {...(isDocExpanded ? { borderBottom: '1px solid', borderColor: 'border.default' } : {})}
                           >
-                            <LuTrash2 />
-                          </Button>
-                        </HStack>
-                      </HStack>
+                            <HStack justify="space-between">
+                              <HStack gap={2}>
+                                <Icon
+                                  as={isDocExpanded ? LuChevronDown : LuChevronRight}
+                                  boxSize={4}
+                                  color="fg.muted"
+                                />
+                                <Text fontSize="sm" fontWeight="600">
+                                  Documentation Entry {index + 1}
+                                </Text>
+                                {!isDocExpanded && (
+                                  <Text fontSize="xs" color="fg.muted" truncate maxW="400px">
+                                    {previewLine}
+                                  </Text>
+                                )}
+                              </HStack>
+                              <HStack gap={3} onClick={(e) => e.stopPropagation()}>
+                                <HStack gap={1.5}>
+                                  <Badge size="sm" colorPalette={docEntry.draft ? 'yellow' : 'green'} variant="subtle">
+                                    {docEntry.draft ? 'Draft' : 'Active'}
+                                  </Badge>
+                                  <Switch.Root
+                                    size="sm"
+                                    checked={!docEntry.draft}
+                                    onCheckedChange={() => handleToggleDraft(index)}
+                                    colorPalette="green"
+                                  >
+                                    <Switch.HiddenInput />
+                                    <Switch.Control>
+                                      <Switch.Thumb />
+                                    </Switch.Control>
+                                  </Switch.Root>
+                                </HStack>
+                                <Button
+                                  size="xs"
+                                  variant="ghost"
+                                  colorPalette="red"
+                                  onClick={() => handleRemoveDoc(index)}
+                                >
+                                  <LuTrash2 />
+                                </Button>
+                              </HStack>
+                            </HStack>
+                          </Box>
+                        </Collapsible.Trigger>
+                        <Collapsible.Content>
+                          {/* childPaths selector */}
+                          <Box px={3} py={2} bg="bg.muted" borderBottom="1px solid" borderColor="border.default">
+                            <ChildPathSelector
+                              availablePaths={availableChildPaths}
+                              selectedPaths={docEntry.childPaths}
+                              onChange={(paths) => handleChildPathsChange(index, paths)}
+                            />
+                          </Box>
 
-                      {/* childPaths selector */}
-                      <Box px={3} py={2} bg="bg.muted" borderBottom="1px solid" borderColor="border.default">
-                        <ChildPathSelector
-                          availablePaths={availableChildPaths}
-                          selectedPaths={docEntry.childPaths}
-                          onChange={(paths) => handleChildPathsChange(index, paths)}
-                        />
-                      </Box>
+                          {/* Toolbar: view mode */}
+                          <HStack px={3} py={1.5} bg="bg.muted" borderBottom="1px solid" borderColor="border.default" gap={1}>
+                            <Button
+                              size="xs"
+                              variant={docView === 'editor' ? 'solid' : 'ghost'}
+                              onClick={() => setDocViewMode(index, docView === 'editor' ? null : 'editor')}
+                            >
+                              Editor
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant={docView === 'preview' ? 'solid' : 'ghost'}
+                              onClick={() => setDocViewMode(index, docView === 'preview' ? null : 'preview')}
+                            >
+                              Preview
+                            </Button>
+                            {originalDocs?.[index] != null && (
+                              <Button
+                                size="xs"
+                                variant={docView === 'diff' ? 'solid' : 'ghost'}
+                                onClick={() => setDocViewMode(index, docView === 'diff' ? null : 'diff')}
+                                disabled={!hasDiff}
+                              >
+                                Diff
+                              </Button>
+                            )}
+                          </HStack>
 
-                      {/* Editor and preview */}
-                      <SimpleGrid columns={{ base: 1, lg: 2 }} gap={0}>
-                        <Box minH="300px">
-                          <Editor
-                            height="300px"
-                            language="markdown"
-                            value={docEntry.content}
-                            onChange={(value) => handleMarkdownChange(index, value || '')}
-                            theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
-                            options={{
-                              minimap: { enabled: false },
-                              wordWrap: 'on',
-                              lineNumbers: 'on',
-                              fontSize: 14,
-                              fontFamily: 'JetBrains Mono, monospace',
-                              scrollBeyondLastLine: false,
-                              automaticLayout: true,
-                              tabSize: 2,
-                            }}
-                          />
-                        </Box>
-                        <Box
-                          p={3}
-                          bg="bg.muted"
-                          minH="300px"
-                          maxH="300px"
-                          overflowY="auto"
-                          borderLeft="1px solid"
-                          borderColor="border.default"
-                        >
-                          {docEntry.content.trim() ? (
-                            <Markdown context="mainpage">{docEntry.content}</Markdown>
-                          ) : (
-                            <Text color="fg.muted" fontSize="sm">
-                              Preview will appear here...
-                            </Text>
+                          {/* Preview-only mode */}
+                          {docView === 'preview' && (
+                            <Box
+                              p={4}
+                              minH="500px"
+                              maxH="500px"
+                              overflowY="auto"
+                            >
+                              {docEntry.content.trim() ? (
+                                <Markdown context="mainpage">{docEntry.content}</Markdown>
+                              ) : (
+                                <Text color="fg.muted" fontSize="sm">No content to preview.</Text>
+                              )}
+                            </Box>
                           )}
-                        </Box>
-                      </SimpleGrid>
+
+                          {/* Editor (always mounted, hidden in preview-only mode) + optional side panel */}
+                          <HStack gap={0} align="stretch" display={docView === 'preview' ? 'none' : 'flex'}>
+                            <Box flex={1} minW={0}>
+                              <Editor
+                                height="500px"
+                                language="markdown"
+                                value={docEntry.content}
+                                onChange={(value) => handleMarkdownChange(index, value || '')}
+                                theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
+                                options={{
+                                  minimap: { enabled: false },
+                                  wordWrap: 'on',
+                                  lineNumbers: 'on',
+                                  fontSize: 14,
+                                  fontFamily: 'JetBrains Mono, monospace',
+                                  scrollBeyondLastLine: false,
+                                  automaticLayout: true,
+                                  tabSize: 2,
+                                }}
+                              />
+                            </Box>
+                            {/* Default (null) mode: editor + preview side by side */}
+                            {docView === null && (
+                              <Box
+                                flex={1}
+                                p={3}
+                                bg="bg.muted"
+                                maxH="500px"
+                                overflowY="auto"
+                                borderLeft="1px solid"
+                                borderColor="border.default"
+                                minW={0}
+                              >
+                                {docEntry.content.trim() ? (
+                                  <Markdown context="mainpage">{docEntry.content}</Markdown>
+                                ) : (
+                                  <Text color="fg.muted" fontSize="sm">Preview will appear here...</Text>
+                                )}
+                              </Box>
+                            )}
+                            {/* Diff mode: editor + diff side by side */}
+                            {originalDocs?.[index] && (
+                              <Box
+                                flex={1}
+                                borderLeft="1px solid"
+                                borderColor="border.default"
+                                minW={0}
+                                display={docView === 'diff' ? 'block' : 'none'}
+                              >
+                                <DiffEditor
+                                  height="500px"
+                                  language="markdown"
+                                  original={originalDocs[index].content}
+                                  modified={docEntry.content}
+                                  theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
+                                  keepCurrentOriginalModel
+                                  keepCurrentModifiedModel
+                                  options={{
+                                    minimap: { enabled: false },
+                                    wordWrap: 'on',
+                                    fontSize: 14,
+                                    fontFamily: 'JetBrains Mono, monospace',
+                                    scrollBeyondLastLine: false,
+                                    automaticLayout: true,
+                                    readOnly: true,
+                                    renderSideBySide: false,
+                                  }}
+                                />
+                              </Box>
+                            )}
+                          </HStack>
+                        </Collapsible.Content>
+                      </Collapsible.Root>
                     </Box>
-                  ))}
+                    );
+                  })}
 
                   {/* Add doc button */}
                   <Button

@@ -342,6 +342,21 @@ registerFrontendTool('EditFile', async (args, _context) => {
   // Snapshot state before edit to compute delta
   const stateBefore = getStore().getState();
   const fileState = stateBefore.files.files[fileId];
+
+  // Guard: context files — must be on the context page, and only docs[].content can change
+  if (fileState?.type === 'context') {
+    const state = _context.state ?? stateBefore;
+    const { appState } = state.navigation ? selectAppState(state) : { appState: null };
+    const currentFileId = appState?.type === 'file' ? appState.state.fileState.id : null;
+    if (currentFileId != fileId) { // eslint-disable-line eqeqeq -- fileId may be string from tool args
+      const errorContent = {
+        success: false,
+        error: 'Context files can only be edited when the user is on the context page. Navigate to the context file first.',
+      };
+      return { content: errorContent, details: { success: false, error: errorContent.error } };
+    }
+  }
+
   const [augmentedBefore] = selectAugmentedFiles(stateBefore, [fileId]) ?? [];
   const prevQueryResultIds = new Set<string>(
     (augmentedBefore?.queryResults ?? []).map((qr: any) => qr.id).filter(Boolean)
@@ -364,6 +379,35 @@ registerFrontendTool('EditFile', async (args, _context) => {
       return { content: failureContent, details: { success: false, error: failureContent.error } };
     }
     if (result.diff) diffs.push(result.diff);
+  }
+
+  // Post-edit guard: context files — only docs[].content within versions can change
+  if (fileState?.type === 'context') {
+    const before = selectMergedContent(stateBefore, fileId) as any;
+    const after = selectMergedContent(getStore().getState(), fileId) as any;
+
+    const stripDocContent = (c: any) => {
+      if (!c) return c;
+      const { versions, ...rest } = c;
+      return {
+        ...rest,
+        versions: versions?.map((v: any) => ({
+          ...v,
+          docs: v.docs?.map((d: any) => {
+            const { content: _content, ...dRest } = d;
+            return dRest;
+          }),
+        })),
+      };
+    };
+
+    if (JSON.stringify(stripDocContent(before)) !== JSON.stringify(stripDocContent(after))) {
+      const errorContent = {
+        success: false,
+        error: 'EditFile on context files can only modify doc content text (docs[].content within versions). Other fields (databases, published, evals, childPaths, draft, etc.) cannot be changed via EditFile.',
+      };
+      return { content: errorContent, details: { success: false, error: errorContent.error } };
+    }
   }
 
   // Auto-execute query for questions (agent sees results immediately)

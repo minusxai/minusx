@@ -328,6 +328,14 @@ export default function ContextContainerV2({
     }
   }, [currentContent, currentVersionContent, selectedVersion, user?.id, fileId]);
 
+  // Original (saved) docs for the selected version — used for diff view
+  const originalDocs = useMemo(() => {
+    const savedContent = file?.content as ContextContent | undefined;
+    if (!savedContent?.versions) return undefined;
+    const savedVersion = savedContent.versions.find(v => v.version === selectedVersion);
+    return savedVersion?.docs;
+  }, [file?.content, selectedVersion]);
+
   // Build content for editor (includes selected version's data)
   const editorContent = useMemo((): ContextContent => {
     if (!currentContent || !currentVersionContent) {
@@ -368,6 +376,7 @@ export default function ContextContainerV2({
         onCancel={handleCancel}
         onEditModeChange={handleEditModeChange}
         file={file ? { id: file.id, path: file.path, type: file.type } : undefined}
+        originalDocs={originalDocs}
         // Version management props (admin only)
         isAdmin={user?.role === 'admin'}
         userId={user?.id}

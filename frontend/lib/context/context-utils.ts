@@ -143,12 +143,12 @@ export function getNextVersionNumber(content: ContextContent): number {
  * Note: userId parameter kept for backward compatibility but not used
  */
 export function getPublishedVersionForUser(content: ContextContent, _userId: number): number {
-  return content.published.all;
+  return content.published?.all ?? 1;
 }
 
 /**
  * Get published version (new cleaner name)
  */
 export function getPublishedVersion(content: ContextContent): number {
-  return content.published.all;
+  return content.published?.all ?? 1;
 }
