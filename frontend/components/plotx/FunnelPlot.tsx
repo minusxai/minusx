@@ -43,25 +43,20 @@ export const FunnelPlot = (props: FunnelPlotProps) => {
       return { name: fmtName(name), value }
     })
 
-    // Sort by value descending for proper funnel display
-    rawData.sort((a, b) => b.value - a.value)
-
     // Use single base color with decreasing opacity
     const baseColor = customPalette[0]
-    const funnelData = rawData.map((item, index) => {
-      // Opacity decreases from 1.0 to 0.3 based on position
-      const opacity = 1.0 - (index * 0.6) / Math.max(rawData.length - 1, 1)
+    const funnelData = rawData.map((item) => {
       return {
         ...item,
         itemStyle: {
           color: baseColor,
-          opacity: Math.max(0.4, opacity),
         },
       }
     })
 
-    // Top value for calculating percentage (first item after sorting is largest)
-    const topValue = funnelData.length > 0 ? funnelData[0].value : 1
+    // Top value for calculating percentage (first item is the baseline stage)
+    const maxValue = Math.max(...funnelData.map(d => d.value))
+    const topValue = maxValue > 0 ? maxValue : 1
 
     // CSV download for funnel chart
     const downloadCsv = () => {
@@ -130,15 +125,19 @@ export const FunnelPlot = (props: FunnelPlotProps) => {
           max: Math.max(...funnelData.map(d => d.value)),
           minSize: '0%',
           maxSize: '100%',
-          sort: 'descending',
+          sort: 'none',
           gap: 2,
           label: {
             show: true,
             position: 'inside',
             color: LABEL_COLORS[colorMode],
             fontWeight: 'bold',
+            backgroundColor: colorMode === 'dark' ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)',
+            borderRadius: 4,
+            padding: [4, 8],
             formatter: (params: any) => {
-              return `${params.name}\n${fmtValue(params.value)}`
+              const pct = ((params.value / topValue) * 100).toFixed(1)
+              return `${params.name}\n${fmtValue(params.value)} (${pct}%)`
             },
           },
           labelLine: {
