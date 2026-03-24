@@ -96,10 +96,17 @@ class ParameterType(str, Enum):
     NUMBER = "number"
     DATE = "date"
 
+class ParameterSource(BaseModel):
+    """Reference to another question whose output drives a parameter's dropdown values."""
+    type: Literal["question"]
+    id: int
+    column: str
+
 class QuestionParameter(BaseModel):
     name: str
     type: ParameterType
     label: Optional[str] = None
+    source: Optional[ParameterSource] = None  # None = free text/number/date input (default)
 
 class QuestionReference(BaseModel):
     """Composed question reference — lets this query use @alias as a CTE."""

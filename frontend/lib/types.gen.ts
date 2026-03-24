@@ -129,6 +129,9 @@ export type Parameters = QuestionParameter[] | null;
 export type Name2 = string;
 export type ParameterType = "text" | "number" | "date";
 export type Label = string | null;
+export type Type1 = "question";
+export type Id1 = number;
+export type Column1 = string;
 export type Parametervalues = {
   [k: string]: unknown;
 } | null;
@@ -137,18 +140,18 @@ export type Parametervalues = {
  */
 export type DatabaseName = string;
 export type References = QuestionReference[] | null;
-export type Id1 = number;
+export type Id2 = number;
 export type Alias1 = string;
 export type References1 = number[] | null;
-export type Id2 = number | null;
+export type Id3 = number | null;
 export type Name3 = string;
 export type Path1 = string;
-export type Type1 = "dashboard";
+export type Type2 = "dashboard";
 export type Description1 = string | null;
-export type Type2 = "question";
-export type Id3 = number;
-export type Type3 = "text" | "image" | "divider";
-export type Id4 = string | null;
+export type Type3 = "question";
+export type Id4 = number;
+export type Type4 = "text" | "image" | "divider";
+export type Id5 = string | null;
 export type Content = string | null;
 /**
  * ordered list of questions in the dashboard
@@ -156,7 +159,7 @@ export type Content = string | null;
 export type Assets = (FileReference | InlineAsset)[];
 export type Columns1 = number | null;
 export type Items = DashboardLayoutItem[] | null;
-export type Id5 = number;
+export type Id6 = number;
 export type X = number;
 export type Y = number;
 /**
@@ -246,19 +249,28 @@ export interface QuestionParameter {
   name: Name2;
   type: ParameterType;
   label?: Label;
+  source?: ParameterSource | null;
+}
+/**
+ * Reference to another question whose output drives a parameter's dropdown values.
+ */
+export interface ParameterSource {
+  type: Type1;
+  id: Id1;
+  column: Column1;
 }
 /**
  * Composed question reference — lets this query use @alias as a CTE.
  */
 export interface QuestionReference {
-  id: Id1;
+  id: Id2;
   alias: Alias1;
 }
 export interface AtlasDashboardFile {
-  id?: Id2;
+  id?: Id3;
   name: Name3;
   path: Path1;
-  type: Type1;
+  type: Type2;
   content: DashboardContent;
   references?: References2;
 }
@@ -272,15 +284,15 @@ export interface DashboardContent {
  * A reference to another question embedded in the dashboard.
  */
 export interface FileReference {
-  type: Type2;
-  id: Id3;
+  type: Type3;
+  id: Id4;
 }
 /**
  * Inline content block (text, image, divider) — no external file.
  */
 export interface InlineAsset {
-  type: Type3;
-  id?: Id4;
+  type: Type4;
+  id?: Id5;
   content?: Content;
 }
 export interface DashboardLayout {
@@ -288,7 +300,7 @@ export interface DashboardLayout {
   items?: Items;
 }
 export interface DashboardLayoutItem {
-  id: Id5;
+  id: Id6;
   x: X;
   y: Y;
   w: W;
