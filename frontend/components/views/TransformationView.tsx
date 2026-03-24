@@ -2,7 +2,9 @@
 
 import { Box, Text, VStack, HStack, Input, Button, Flex, Portal, Combobox } from '@chakra-ui/react';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { LuPlay, LuHistory, LuArrowRightLeft, LuPlus, LuTrash2, LuGripVertical } from 'react-icons/lu';
+import { LuPlay, LuHistory, LuArrowRightLeft, LuPlus, LuTrash2, LuGripVertical, LuExternalLink } from 'react-icons/lu';
+import Link from 'next/link';
+import { preserveParams } from '@/lib/navigation/url-utils';
 import { useAppSelector } from '@/store/hooks';
 import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { selectIsDirty } from '@/store/filesSlice';
@@ -599,15 +601,24 @@ export default function TransformationView({
                   </Box>
                 )}
               </HStack>
-              <Button
-                onClick={onRunNow}
-                disabled={!canRun}
-                size="sm"
-                colorPalette="teal"
-              >
-                <LuPlay size={14} />
-                {isRunning ? 'Running...' : 'Run Now'}
-              </Button>
+              <HStack gap={2}>
+                {selectedRun?.output_file_id && (
+                  <Link href={preserveParams(`/f/${selectedRun.output_file_id}`)}>
+                    <Button size="sm" variant="ghost" colorPalette="gray">
+                      <LuExternalLink size={14} />
+                    </Button>
+                  </Link>
+                )}
+                <Button
+                  onClick={onRunNow}
+                  disabled={!canRun}
+                  size="sm"
+                  colorPalette="teal"
+                >
+                  <LuPlay size={14} />
+                  {isRunning ? 'Running...' : 'Run Now'}
+                </Button>
+              </HStack>
             </Flex>
 
             {/* Run Content */}
