@@ -279,6 +279,20 @@ export function selectAugmentedFiles(state: RootState, fileIds: number[]): Augme
  * - runtimeParameterValues = ephemeralChanges.parameterValues (clearly labeled, never saved)
  * - loading/saving/ephemeralChanges.lastExecuted are dropped (noise for the model)
  */
+/**
+ * Sanitize a cell value for use in a GFM markdown table.
+ * Order matters: escape backslashes first, then pipes, then collapse newlines.
+ *   - `\`  → `\\`  (must be first, otherwise later escapes get double-escaped)
+ *   - `|`  → `\|`  (pipe is the column delimiter)
+ *   - `\r\n` / `\r` / `\n` → ` ` (newlines inside a cell break the row)
+ */
+function mdTableCell(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/\|/g, '\\|')
+    .replace(/\r?\n|\r/g, ' ');
+}
+
 export function compressQueryResult(qr: QueryResult & { error?: string }, maxChars = LIMIT_CHARS): CompressedQueryResult {
   if ((qr as any).error) {
     return { columns: [], types: [], data: '', totalRows: 0, truncated: false, id: qr.id, error: (qr as any).error };
@@ -286,13 +300,13 @@ export function compressQueryResult(qr: QueryResult & { error?: string }, maxCha
   const { columns, types, rows } = qr;
   const totalRows = rows.length;
 
-  const header = `| ${columns.join(' | ')} |`;
+  const header = `| ${columns.map(mdTableCell).join(' | ')} |`;
   const sep    = `| ${columns.map(() => '---').join(' | ')} |`;
   let md = `${header}\n${sep}\n`;
 
   let truncated = false;
   for (const row of rows) {
-    const line = `| ${columns.map(c => String(row[c] ?? '')).join(' | ')} |\n`;
+    const line = `| ${columns.map(c => mdTableCell(String(row[c] ?? ''))).join(' | ')} |\n`;
     if (md.length + line.length > maxChars) { truncated = true; break; }
     md += line;
   }
