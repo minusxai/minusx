@@ -4,13 +4,15 @@ import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { runQuery } from '@/lib/connections/run-query';
-import { EvalItem, BinaryAssertion, NumberAssertion, DatabaseWithSchema, QuestionContent, ConversationLogEntry } from '@/lib/types';
+import { createServerRunner } from '@/lib/tests/server';
+import { EvalItem, BinaryAssertion, NumberAssertion, DatabaseWithSchema, QuestionContent, ConversationLogEntry, Test } from '@/lib/types';
 import { orchestratePendingTools } from '@/app/api/chat/orchestrator';
 import '@/app/api/chat/tool-handlers.server';
 import type { PythonChatResponse, CompletedToolCallPayload, CompletedToolCallFromPython } from '@/lib/chat-orchestration';
 
 export interface EvalRunRequest {
-  eval_item: EvalItem;
+  eval_item?: EvalItem;
+  test?: Test;                // new: accepts a unified Test directly
   schema: DatabaseWithSchema[];
   documentation: string;
   connection_id: string;
@@ -25,8 +27,12 @@ export interface EvalRunResponse {
 
 
 /**
- * POST /api/evals/run
- * Run a single eval item against the agent and return pass/fail.
+ * POST /api/evals
+ * Run a single eval item OR a unified Test against the agent and return pass/fail.
+ *
+ * Accepts two body formats:
+ *   - { eval_item, schema, documentation, connection_id } — legacy EvalItem format
+ *   - { test, connection_id }                             — new unified Test format
  */
 export async function POST(request: NextRequest) {
   try {
@@ -36,7 +42,19 @@ export async function POST(request: NextRequest) {
     }
 
     const body: EvalRunRequest = await request.json();
-    const { eval_item, schema, documentation, connection_id } = body;
+    const { eval_item, test, schema, documentation, connection_id } = body;
+
+    // New path: unified Test type — delegate to server runner
+    if (test) {
+      const runner = createServerRunner(user, connection_id || '');
+      const result = await runner.execute(test);
+      // Return as TestRunResult directly (client runner expects this shape)
+      return NextResponse.json(result);
+    }
+
+    if (!eval_item) {
+      return NextResponse.json({ passed: false, error: 'eval_item or test is required' } as EvalRunResponse, { status: 400 });
+    }
 
     // Build app_state from eval_item.app_state
     let app_state: Record<string, unknown> | null = null;

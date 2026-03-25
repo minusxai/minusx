@@ -9,7 +9,8 @@ import { useAppSelector } from '@/store/hooks';
 import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { selectIsDirty } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
-import type { JobRun, QuestionContent, Transform, TransformationContent } from '@/lib/types';
+import type { JobRun, QuestionContent, Test, Transform, TransformationContent } from '@/lib/types';
+import TestList from '@/components/test/TestList';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { useContext } from '@/lib/hooks/useContext';
 import { useFile } from '@/lib/hooks/file-state-hooks';
@@ -24,7 +25,7 @@ interface TransformationViewProps {
   runs?: JobRun[];
   selectedRunId?: number | null;
   onChange: (updates: Partial<TransformationContent>) => void;
-  onRunNow: () => Promise<void>;
+  onRunNow: (runMode?: 'full' | 'test_only') => Promise<void>;
   onSelectRun?: (runId: number | null) => void;
 }
 
@@ -287,6 +288,21 @@ function TransformRow({ transform, index, questions, dbSchemaMap, editMode, onCh
             <Text fontSize="xs" fontFamily="mono" color="fg.muted" lineClamp={2}>
               CREATE OR REPLACE VIEW &quot;{transform.output.schema_name}&quot;.&quot;{transform.output.view}&quot; AS ...
             </Text>
+          </Box>
+        )}
+
+        {/* Tests */}
+        {(editMode || (transform.tests && transform.tests.length > 0)) && (
+          <Box pt={2} borderTopWidth="1px" borderColor="border.muted">
+            <Text fontSize="xs" fontWeight="600" color="fg.muted" mb={2} textTransform="uppercase" letterSpacing="wider">
+              Tests
+            </Text>
+            <TestList
+              tests={transform.tests ?? []}
+              onChange={(tests: Test[]) => onChange({ tests })}
+              editMode={!!editMode}
+              forcedType="query"
+            />
           </Box>
         )}
       </VStack>
@@ -615,7 +631,17 @@ export default function TransformationView({
                   </Link>
                 )}
                 <Button
-                  onClick={onRunNow}
+                  onClick={() => onRunNow('test_only')}
+                  disabled={!canRun}
+                  size="sm"
+                  variant="outline"
+                  colorPalette="gray"
+                >
+                  <LuPlay size={14} />
+                  {isRunning ? 'Running...' : 'Test Only'}
+                </Button>
+                <Button
+                  onClick={() => onRunNow('full')}
                   disabled={!canRun}
                   size="sm"
                   colorPalette="teal"

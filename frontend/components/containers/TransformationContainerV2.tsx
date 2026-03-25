@@ -43,8 +43,8 @@ export default function TransformationContainerV2({ fileId }: TransformationCont
       .map(f => f.id as number)
   );
 
-  const handleRunNow = useCallback(async () => {
-    await trigger();
+  const handleRunNow = useCallback(async (runMode?: 'full' | 'test_only') => {
+    await trigger({ run_mode: runMode });
     // Refresh connection schemas client-side after run completes
     setSchemaRefreshing(true);
     try {

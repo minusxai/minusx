@@ -29,11 +29,12 @@ export const runtime = 'nodejs';
 export const POST = withAuth(async (request: NextRequest, user) => {
   try {
     const body = await request.json();
-    const { job_id, job_type, force = false, send = true } = body as {
+    const { job_id, job_type, force = false, send = true, run_mode } = body as {
       job_id: string;
       job_type: string;
       force?: boolean;
       send?: boolean;
+      run_mode?: import('@/lib/types').TransformRunMode;
     };
 
     if (!job_id || !job_type) {
@@ -110,7 +111,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
     try {
       const result = await handler.execute(
-        { runFileId, jobId: job_id, jobType: job_type, file: jobFile.content, previousRuns },
+        { runFileId, jobId: job_id, jobType: job_type, file: jobFile.content, previousRuns, runMode: run_mode },
         user
       );
 

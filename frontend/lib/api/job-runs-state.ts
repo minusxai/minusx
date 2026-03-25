@@ -53,7 +53,7 @@ export async function loadJobRuns(
 export async function triggerJobRun(
   jobId: number,
   jobType: string,
-  options: { force?: boolean; send?: boolean } = {}
+  options: { force?: boolean; send?: boolean; run_mode?: 'full' | 'test_only' } = {}
 ): Promise<void> {
   if (jobId <= 0) return;
 

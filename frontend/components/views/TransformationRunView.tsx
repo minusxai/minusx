@@ -2,24 +2,51 @@
 
 import { Box, Text, VStack, HStack, Badge } from '@chakra-ui/react';
 import { useState } from 'react';
-import { LuChevronDown, LuChevronRight, LuClock, LuTimer } from 'react-icons/lu';
-import type { RunFileContent, TransformationOutput, TransformResult } from '@/lib/types';
+import { LuChevronDown, LuChevronRight, LuClock, LuTimer, LuFlaskConical } from 'react-icons/lu';
+import type { RunFileContent, TestRunResult, TransformationOutput, TransformResult } from '@/lib/types';
+import TestResultBadge from '@/components/test/TestResultBadge';
 
 /* ------------------------------------------------------------------ */
 /*  Sub-components                                                      */
 /* ------------------------------------------------------------------ */
 
-function StatusBadge({ status }: { status: 'success' | 'error' | 'running' | 'failure' }) {
+function StatusBadge({ status }: { status: 'success' | 'error' | 'running' | 'failure' | 'skipped' }) {
   const colorPalette =
     status === 'success' ? 'green' :
     status === 'error' || status === 'failure' ? 'red' :
+    status === 'skipped' ? 'gray' :
     'yellow';
   const label = status.toUpperCase();
   return <Badge colorPalette={colorPalette} size="sm" fontWeight="700">{label}</Badge>;
 }
 
+function TestResultsList({ testResults }: { testResults: TestRunResult[] }) {
+  if (!testResults.length) return null;
+  const passed = testResults.filter(r => r.passed).length;
+  return (
+    <Box px={3} py={2} bg="bg.surface" borderTopWidth="1px" borderColor="border.muted">
+      <Text fontSize="xs" color="fg.muted" fontWeight="600" mb={1}>
+        Tests: {passed}/{testResults.length} passed
+      </Text>
+      <VStack align="stretch" gap={1}>
+        {testResults.map((r, i) => (
+          <HStack key={i} gap={2}>
+            <TestResultBadge result={r} showDetails />
+            {r.test.label && (
+              <Text fontSize="xs" color="fg.muted" truncate>{r.test.label}</Text>
+            )}
+          </HStack>
+        ))}
+      </VStack>
+    </Box>
+  );
+}
+
 function TransformResultCard({ result }: { result: TransformResult }) {
   const [sqlOpen, setSqlOpen] = useState(false);
+  const hasTests = result.testResults && result.testResults.length > 0;
+  const allTestsPassed = hasTests && result.testResults!.every(r => r.passed);
+  const someTestsFailed = hasTests && !allTestsPassed;
 
   return (
     <Box borderRadius="md" border="1px solid" borderColor="border.muted" overflow="hidden">
@@ -42,6 +69,11 @@ function TransformResultCard({ result }: { result: TransformResult }) {
           {result.schema}.{result.view}
         </Text>
         <Text fontSize="xs" color="fg.muted" flexShrink={0}>{result.questionName}</Text>
+        {hasTests && (
+          <Box color={someTestsFailed ? 'red.fg' : 'green.fg'} flexShrink={0} title={`${result.testResults!.filter(r => r.passed).length}/${result.testResults!.length} tests passed`}>
+            <LuFlaskConical size={12} />
+          </Box>
+        )}
         <StatusBadge status={result.status} />
       </HStack>
 
@@ -56,6 +88,8 @@ function TransformResultCard({ result }: { result: TransformResult }) {
           <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap" color="fg.muted">{result.sql}</Text>
         </Box>
       )}
+
+      {hasTests && <TestResultsList testResults={result.testResults!} />}
     </Box>
   );
 }
@@ -72,9 +106,14 @@ export interface TransformationRunViewProps {
 export default function TransformationRunView({ run, inline }: TransformationRunViewProps) {
   const output = run.output as TransformationOutput | undefined;
   const results = output?.results ?? [];
+  const runMode = output?.runMode;
 
   const successCount = results.filter(r => r.status === 'success').length;
   const errorCount = results.filter(r => r.status === 'error').length;
+  const skippedCount = results.filter(r => r.status === 'skipped').length;
+
+  const allTestResults = results.flatMap(r => r.testResults ?? []);
+  const testPassCount = allTestResults.filter(r => r.passed).length;
 
   const startTime = run.startedAt ? new Date(run.startedAt).toLocaleString() : null;
   const endTime = run.completedAt ? new Date(run.completedAt).toLocaleString() : null;
@@ -84,13 +123,20 @@ export default function TransformationRunView({ run, inline }: TransformationRun
 
   return (
     <Box p={inline ? 0 : 4}>
-      {/* Header: overall status + timing */}
       <VStack align="stretch" gap={3}>
         <HStack gap={3} wrap="wrap">
           <StatusBadge status={run.status === 'success' ? 'success' : run.status === 'failure' ? 'failure' : 'running'} />
+          {runMode === 'test_only' && (
+            <Badge colorPalette="purple" size="sm" fontWeight="700">
+              <HStack gap={1}><LuFlaskConical size={10} /><span>TEST ONLY</span></HStack>
+            </Badge>
+          )}
           {results.length > 0 && (
             <Text fontSize="xs" color="fg.muted">
-              {successCount} succeeded · {errorCount} failed · {results.length} total
+              {runMode === 'test_only'
+                ? `${skippedCount} skipped`
+                : `${successCount} succeeded · ${errorCount} failed · ${results.length} total`}
+              {allTestResults.length > 0 && ` · ${testPassCount}/${allTestResults.length} tests passed`}
             </Text>
           )}
         </HStack>
@@ -101,7 +147,6 @@ export default function TransformationRunView({ run, inline }: TransformationRun
           </Box>
         )}
 
-        {/* Timing chips */}
         <HStack gap={4} wrap="wrap">
           {startTime && (
             <HStack gap={1} color="fg.muted">
@@ -125,7 +170,6 @@ export default function TransformationRunView({ run, inline }: TransformationRun
           )}
         </HStack>
 
-        {/* Per-transform result cards */}
         {results.length > 0 && (
           <VStack align="stretch" gap={2}>
             {results.map((result, i) => (

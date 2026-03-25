@@ -4,7 +4,7 @@ from typing import Optional, List
 from tasks import register_agent
 from tasks.llm.config import MAX_STEPS_LOWER_LEVEL
 from .agent import AnalystAgent
-from .tools import SearchDBSchema, ExecuteQuery, SubmitBinary, SubmitNumber, CannotAnswer
+from .tools import SearchDBSchema, ExecuteQuery, SubmitBinary, SubmitNumber, SubmitString, CannotAnswer
 
 
 @register_agent
@@ -44,6 +44,11 @@ class TestAgent(AnalystAgent):
                 "or SubmitBinary(answer=False) if the answer is no/incorrect. "
                 "If the data is insufficient to answer, call CannotAnswer(reason=...) instead."
             )
+        elif assertion_type == 'string_match':
+            submit_instruction = preamble + (
+                "Submit tool: call SubmitString(answer=<string>) with your computed string answer. "
+                "If the data is insufficient to answer, call CannotAnswer(reason=...) instead."
+            )
         else:
             submit_instruction = preamble + (
                 "Submit tool: call SubmitNumber(answer=<float>) with your computed numeric answer. "
@@ -66,6 +71,8 @@ class TestAgent(AnalystAgent):
             tools.append(SubmitBinary)
         elif assertion_type == 'number_match':
             tools.append(SubmitNumber)
+        elif assertion_type == 'string_match':
+            tools.append(SubmitString)
         tools.append(CannotAnswer)
         return tools
 
@@ -78,7 +85,7 @@ class TestAgent(AnalystAgent):
             if entry.get('role') == 'assistant':
                 for tc in entry.get('tool_calls', []):
                     fn_name = tc.get('function', {}).get('name', '')
-                    if fn_name in ('SubmitBinary', 'SubmitNumber', 'CannotAnswer'):
+                    if fn_name in ('SubmitBinary', 'SubmitNumber', 'SubmitString', 'CannotAnswer'):
                         self.submit_called = True
 
     async def run(self) -> dict:
