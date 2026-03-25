@@ -9,14 +9,14 @@ import type { Test, TestRunResult } from '@/lib/types';
 import { createClientRunner } from '@/lib/tests/client';
 import TestEditor, { makeDefaultTest } from './TestEditor';
 import TestResultBadge from './TestResultBadge';
+import TestRunResultsList from './TestRunResultsList';
 
 function testLabel(test: Test, index: number): string {
-  if (test.label) return test.label;
   if (test.type === 'llm' && test.subject.type === 'llm' && test.subject.prompt) {
     const p = test.subject.prompt;
     return p.length > 50 ? p.slice(0, 47) + '…' : p;
   }
-  return `Test ${index + 1}`;
+  return `Eval ${index + 1}`;
 }
 
 interface TestRowProps {
@@ -101,9 +101,14 @@ function TestRow({ test, index, editMode, forcedType, defaultQuestionId, onChang
         <Collapsible.Content>
           <Box px={3} py={3} borderTopWidth="1px" borderColor="border.muted">
             {/* Inline result details when expanded */}
-            {(result || running) && (
+            {running && !result && (
               <Box mb={3}>
                 <TestResultBadge result={result} running={running} showDetails />
+              </Box>
+            )}
+            {result && (
+              <Box mb={3}>
+                <TestRunResultsList results={[result]} showTrace />
               </Box>
             )}
             {editMode ? (

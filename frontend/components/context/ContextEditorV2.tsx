@@ -363,6 +363,8 @@ export default function ContextEditorV2({
     setVersionToDelete(null);
   };
 
+  const evalsSelectedRun = runs.find(r => r.id === selectedRunId) ?? runs[0] ?? null;
+
   return (
     <VStack gap={6} align="stretch" p={3}>
       {/* Document Header */}
@@ -1063,45 +1065,19 @@ export default function ContextEditorV2({
         {/* Evals Tab */}
         <Tabs.Content value="evals">
           {activeTab === 'picker' ? (
-            <Box>
-              <HStack mb={3} justify="flex-end">
-                {runs.length > 0 && (
-                  <NativeSelect.Root size="xs" width="200px">
-                    <NativeSelect.Field
-                      value={selectedRunId ? selectedRunId.toString() : ''}
-                      onChange={(e) => onSelectRun?.(e.target.value ? parseInt(e.target.value, 10) : null)}
-                    >
-                      <option value="">Run history</option>
-                      {runs.map(r => (
-                        <option key={r.id} value={r.id.toString()}>
-                          {new Date(r.created_at).toLocaleString()}
-                        </option>
-                      ))}
-                    </NativeSelect.Field>
-                    <NativeSelect.Indicator />
-                  </NativeSelect.Root>
-                )}
-                {onRunAll && (
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    onClick={onRunAll}
-                    loading={isRunning}
-                    loadingText="Running…"
-                    disabled={!content.evals?.length}
-                  >
-                    Run all
-                  </Button>
-                )}
-              </HStack>
-              {selectedRunId ? (
-                (() => {
-                  const selectedRun = runs.find(r => r.id === selectedRunId);
-                  return selectedRun?.output_file_id ? (
-                    <ContextRunView fileId={selectedRun.output_file_id} />
-                  ) : null;
-                })()
-              ) : (
+            <Box display="flex" flexDirection="row" gap={4} alignItems="stretch" minH="400px">
+              {/* Left Panel: Evals list */}
+              <Box
+                flex={1}
+                overflow="auto"
+                border="1px solid"
+                borderColor="border.muted"
+                borderRadius="md"
+                p={3}
+              >
+                <HStack mb={3} justify="space-between">
+                  <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Evals</Text>
+                </HStack>
                 <TestList
                   tests={content.evals || []}
                   onChange={(evals: Test[]) => onChange({ evals })}
@@ -1110,7 +1086,58 @@ export default function ContextEditorV2({
                   alwaysShowAdd
                   addLabel="Add eval"
                 />
-              )}
+              </Box>
+
+              {/* Right Panel: Run history */}
+              <Box
+                flex={1}
+                overflow="auto"
+                border="1px solid"
+                borderColor="border.muted"
+                borderRadius="md"
+                p={3}
+              >
+                <HStack mb={3} justify="space-between">
+                  <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Run History</Text>
+                  <HStack gap={2}>
+                    {runs.length > 0 && (
+                      <NativeSelect.Root size="xs" width="200px">
+                        <NativeSelect.Field
+                          value={selectedRunId ? selectedRunId.toString() : ''}
+                          onChange={(e) => onSelectRun?.(e.target.value ? parseInt(e.target.value, 10) : null)}
+                        >
+                          <option value="">Latest run</option>
+                          {runs.map(r => (
+                            <option key={r.id} value={r.id.toString()}>
+                              {new Date(r.created_at).toLocaleString()}
+                            </option>
+                          ))}
+                        </NativeSelect.Field>
+                        <NativeSelect.Indicator />
+                      </NativeSelect.Root>
+                    )}
+                    {onRunAll && (
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        onClick={onRunAll}
+                        loading={isRunning}
+                        loadingText="Running…"
+                        disabled={!content.evals?.length}
+                      >
+                        Run all
+                      </Button>
+                    )}
+                  </HStack>
+                </HStack>
+                {evalsSelectedRun?.output_file_id ? (
+                  <ContextRunView fileId={evalsSelectedRun.output_file_id} />
+                ) : runs.length === 0 ? (
+                  <Text fontSize="sm" color="fg.muted">No runs yet. Click &quot;Run all&quot; to evaluate.</Text>
+                ) : (
+                  <Text fontSize="sm" color="fg.muted">Run in progress...</Text>
+                )}
+              </Box>
             </Box>
           ) : (
             <Box

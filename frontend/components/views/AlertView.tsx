@@ -145,7 +145,7 @@ export default function AlertView({
     }))
   }), [runs]);
 
-  const selectedRun = runs.find(r => r.id === selectedRunId);
+  const selectedRun = runs.find(r => r.id === selectedRunId) ?? runs[0] ?? null;
 
   return (
     <Box display="flex" flexDirection="column" overflow="hidden" flex="1" minH="0" fontFamily="mono">
