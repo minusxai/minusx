@@ -76,14 +76,10 @@ def _check_unsupported_features(ast: exp.Expression) -> Set[str]:
     for node in ast.walk():
         if isinstance(node, exp.Subquery):
             unsupported.add("Subqueries")
-        elif isinstance(node, exp.CTE):
-            unsupported.add("WITH clauses (CTEs)")
         elif isinstance(node, exp.Union):
             unsupported.add("UNION")
         elif isinstance(node, exp.Window):
             unsupported.add("Window functions")
-        elif isinstance(node, exp.Case):
-            unsupported.add("CASE expressions")
         elif isinstance(node, exp.Intersect):
             unsupported.add("INTERSECT")
         elif isinstance(node, exp.Except):
@@ -96,39 +92,11 @@ def _check_unsupported_features(ast: exp.Expression) -> Set[str]:
         if from_clause and not isinstance(from_clause.this, exp.Table):
             unsupported.add("Multiple tables in FROM (use JOINs)")
 
-    # Check for RIGHT/FULL OUTER joins
+    # Check for RIGHT OUTER joins (FULL is now supported via passthrough)
     for join_node in ast.find_all(exp.Join):
         join_side = join_node.args.get("side", "").upper()
-        if join_side in ("RIGHT", "FULL"):
-            unsupported.add(f"{join_side} JOIN")
-
-    # Check for unsupported function expressions in SELECT columns.
-    # Supported: plain columns, aggregates (COUNT/SUM/etc.), DATE_TRUNC / TIMESTAMP_TRUNC.
-    # Everything else (REPLACE, UPPER, COALESCE, CAST, arithmetic, etc.) is lossy.
-    _SUPPORTED_SELECT_FUNCS = (
-        exp.Count, exp.Sum, exp.Avg, exp.Min, exp.Max,
-        exp.DateTrunc, exp.TimestampTrunc,
-        exp.Round, exp.Date, exp.SplitPart,
-    )
-    if select_node:
-        for sel_expr in select_node.expressions:
-            # Unwrap alias
-            actual = sel_expr.this if isinstance(sel_expr, exp.Alias) else sel_expr
-            if isinstance(actual, (exp.Column, exp.Star)):
-                continue
-            if isinstance(actual, _SUPPORTED_SELECT_FUNCS):
-                continue
-            # COUNT(DISTINCT ...) wraps Count with a Distinct inner node — already handled above
-            if isinstance(actual, exp.Func) and not isinstance(actual, _SUPPORTED_SELECT_FUNCS):
-                func_name = type(actual).__name__
-                unsupported.add(
-                    f"Function expressions in SELECT (e.g., {func_name}()) — only DATE_TRUNC and aggregates are supported"
-                )
-            elif not isinstance(actual, (exp.Column, exp.Star, exp.Literal)):
-                # Arithmetic expressions, CAST, etc. in SELECT
-                unsupported.add(
-                    "Complex expressions in SELECT columns (only columns, aggregates, and DATE_TRUNC are supported)"
-                )
+        if join_side == "RIGHT":
+            unsupported.add("RIGHT JOIN")
 
     return unsupported
 
@@ -165,18 +133,9 @@ def _check_complex_aggregates(ast: exp.Expression) -> Set[str]:
         if isinstance(agg_arg, exp.Column):
             continue
 
-        # Anything else is a complex expression (unsupported)
-        if isinstance(agg_arg, (exp.Mul, exp.Add, exp.Sub, exp.Div, exp.Mod)):
-            unsupported.add("Complex aggregate expressions (e.g., SUM(col1 * col2))")
-        elif isinstance(agg_arg, exp.Case):
-            unsupported.add("CASE in aggregates (e.g., COUNT(CASE WHEN ...))")
-        elif isinstance(agg_arg, exp.Cast):
-            unsupported.add("Type casting in aggregates")
-        elif isinstance(agg_arg, exp.Func):
-            unsupported.add("Nested functions in aggregates")
-        elif agg_arg is not None:
-            # Some other complex expression
-            unsupported.add("Complex expressions in aggregates")
+        # Anything else is a complex expression handled via raw passthrough
+        # (arithmetic, CASE, casts, etc. are stored verbatim in the IR)
+        pass
 
     return unsupported
 
