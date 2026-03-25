@@ -7,7 +7,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Box, VStack, Spinner, Text, HStack, Button } from '@chakra-ui/react';
-import { LuPlay, LuSparkles, LuCode, LuChevronDown, LuChevronRight } from 'react-icons/lu';
+import { LuPlay, LuSparkles, LuCode, LuChevronDown, LuChevronRight, LuDatabase } from 'react-icons/lu';
+import { QueryChip } from './QueryChip';
 import { QueryIR, SelectColumn, TableReference } from '@/lib/types';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { useAppSelector } from '@/store/hooks';
@@ -123,6 +124,7 @@ export function QueryBuilder({
   const [showHavingSection, setShowHavingSection] = useState(false);
   const [showJoinPanel, setShowJoinPanel] = useState(false);
   const [showSortPanel, setShowSortPanel] = useState(false);
+  const [showCteSection, setShowCteSection] = useState(false);
 
   // Load IR from SQL when it changes externally
   useEffect(() => {
@@ -166,7 +168,9 @@ export function QueryBuilder({
           if (result.ir.where && result.ir.where.conditions.length > 0) {
             setShowFilterSection(true);
           }
-          if (result.ir.select.some((c) => c.type === 'aggregate')) {
+          const hasAggregates = result.ir.select.some((c) => c.type === 'aggregate');
+          const hasRawWithGroupBy = result.ir.select.some((c) => c.type === 'raw') && !!result.ir.group_by;
+          if (hasAggregates || hasRawWithGroupBy) {
             setShowSummarizeSection(true);
           }
           if (result.ir.having && result.ir.having.conditions.length > 0) {
@@ -177,6 +181,9 @@ export function QueryBuilder({
           }
           if (result.ir.order_by && result.ir.order_by.length > 0) {
             setShowSortPanel(true);
+          }
+          if (result.ir.ctes && result.ir.ctes.length > 0) {
+            setShowCteSection(true);
           }
         } else {
           setError(result.error || 'Failed to parse SQL');
@@ -302,12 +309,12 @@ export function QueryBuilder({
 
   const handleSummarizeClose = useCallback(() => {
     setShowSummarizeSection(false);
-    // Remove all aggregate columns and group by
+    // Remove all aggregate and raw metric columns and group by
     setIr((prev) => {
       if (!prev) return null;
       return {
         ...prev,
-        select: prev.select.filter((c) => c.type !== 'aggregate'),
+        select: prev.select.filter((c) => c.type !== 'aggregate' && c.type !== 'raw'),
         group_by: undefined,
       };
     });
@@ -392,7 +399,8 @@ export function QueryBuilder({
   ];
 
   const hasFilter = !!ir.where && ir.where.conditions.length > 0;
-  const hasSummarize = ir.select.some((c) => c.type === 'aggregate');
+  const hasSummarize = ir.select.some((c) => c.type === 'aggregate') ||
+    (ir.select.some((c) => c.type === 'raw') && !!ir.group_by);
   const hasHaving = !!ir.having && ir.having.conditions.length > 0;
   const hasJoin = !!ir.joins && ir.joins.length > 0;
   const hasSort = !!ir.order_by && ir.order_by.length > 0;
@@ -400,6 +408,38 @@ export function QueryBuilder({
   return (
     <Box>
       <VStack align="stretch" gap={3} p={4}>
+        {/* CTE Section - WITH clauses (read-only, shown when query has CTEs) */}
+        {showCteSection && ir.ctes && ir.ctes.length > 0 && (
+          <Box
+            bg="bg.subtle"
+            borderRadius="lg"
+            border="1px solid"
+            borderColor="border.muted"
+            p={3}
+          >
+            <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" mb={2.5}>
+              WITH (CTEs)
+            </Text>
+            <HStack gap={2} flexWrap="wrap">
+              {ir.ctes.map((cte, idx) => (
+                <QueryChip
+                  key={idx}
+                  variant="neutral"
+                  icon={<LuDatabase size={11} />}
+                  isLocked
+                  onRemove={() => {
+                    const newCtes = ir!.ctes!.filter((_, i) => i !== idx);
+                    setIr((prev) => prev ? { ...prev, ctes: newCtes.length > 0 ? newCtes : undefined } : null);
+                    if (newCtes.length === 0) setShowCteSection(false);
+                  }}
+                >
+                  {cte.name}
+                </QueryChip>
+              ))}
+            </HStack>
+          </Box>
+        )}
+
         {/* Data Section - Table selection */}
         <DataSection
           databaseName={databaseName}

@@ -6,14 +6,20 @@ from typing import List, Optional, Literal, Union
 
 class SelectColumn(BaseModel):
     """Represents a column in the SELECT clause."""
-    type: Literal['column', 'aggregate', 'expression']
+    type: Literal['column', 'aggregate', 'expression', 'raw']
     column: Optional[str] = None  # None for COUNT(*), required for regular columns
     table: Optional[str] = None
     aggregate: Optional[Literal['COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'COUNT_DISTINCT']] = None
     alias: Optional[str] = None
     # Expression fields (for type='expression')
-    function: Optional[Literal['DATE_TRUNC']] = None
+    function: Optional[Literal['DATE_TRUNC', 'DATE', 'SPLIT_PART']] = None
     unit: Optional[Literal['DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR', 'HOUR', 'MINUTE']] = None
+    function_args: Optional[List[Union[str, int, float]]] = None  # extra args (e.g. delimiter + index for SPLIT_PART)
+    # Wrapper function applied around an aggregate (e.g. ROUND(SUM(col), 2))
+    wrapper_function: Optional[Literal['ROUND']] = None
+    wrapper_args: Optional[List[Union[int, float]]] = None
+    # Raw SQL passthrough for complex expressions (CASE, arithmetic, COALESCE, etc.)
+    raw_sql: Optional[str] = None
 
     @property
     def model_validator(self):
@@ -49,9 +55,10 @@ class JoinCondition(BaseModel):
 
 class JoinClause(BaseModel):
     """Represents a JOIN clause."""
-    type: Literal['INNER', 'LEFT']
+    type: Literal['INNER', 'LEFT', 'FULL']
     table: TableReference
-    on: List[JoinCondition]
+    on: Optional[List[JoinCondition]] = None
+    raw_on_sql: Optional[str] = None  # verbatim ON SQL for complex conditions
 
 
 class FilterCondition(BaseModel):
@@ -81,8 +88,9 @@ class GroupByItem(BaseModel):
     column: str
     table: Optional[str] = None
     # Expression fields (for type='expression')
-    function: Optional[Literal['DATE_TRUNC']] = None
+    function: Optional[Literal['DATE_TRUNC', 'DATE', 'SPLIT_PART']] = None
     unit: Optional[Literal['DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR', 'HOUR', 'MINUTE']] = None
+    function_args: Optional[List[Union[str, int, float]]] = None
 
 
 class GroupByClause(BaseModel):
@@ -92,13 +100,21 @@ class GroupByClause(BaseModel):
 
 class OrderByClause(BaseModel):
     """Represents an ORDER BY clause."""
-    type: Literal['column', 'expression'] = 'column'
-    column: str
+    type: Literal['column', 'expression', 'raw'] = 'column'
+    column: Optional[str] = None
     table: Optional[str] = None
     direction: Literal['ASC', 'DESC'] = 'ASC'
     # Expression fields (for type='expression')
-    function: Optional[Literal['DATE_TRUNC']] = None
+    function: Optional[Literal['DATE_TRUNC', 'DATE']] = None
     unit: Optional[Literal['DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR', 'HOUR', 'MINUTE']] = None
+    # Raw SQL passthrough for complex ORDER BY expressions (e.g. CASE)
+    raw_sql: Optional[str] = None
+
+
+class CTE(BaseModel):
+    """Represents a Common Table Expression (WITH clause)."""
+    name: str
+    raw_sql: str  # CTE body stored as verbatim SQL for lossless round-trip
 
 
 class QueryIR(BaseModel):
@@ -107,6 +123,7 @@ class QueryIR(BaseModel):
 
     version: int = 1  # Schema version for future migrations
     distinct: bool = False  # SELECT DISTINCT support
+    ctes: Optional[List[CTE]] = None  # WITH clause CTEs
     select: List[SelectColumn]
     from_: TableReference = Field(..., alias='from')
     joins: Optional[List[JoinClause]] = None

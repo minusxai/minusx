@@ -187,7 +187,7 @@ describe('Completions SQL IR - E2E Tests', () => {
       expect(result.hint).toBeDefined();
     });
 
-    it('should reject query with CTE', async () => {
+    it('should parse query with CTE as raw passthrough', async () => {
       const sql = `
         WITH active_users AS (
           SELECT * FROM users WHERE active = true
@@ -197,8 +197,9 @@ describe('Completions SQL IR - E2E Tests', () => {
 
       const result = await CompletionsAPI.sqlToIR({ sql });
 
-      expect(result.success).toBe(false);
-      expect(result.unsupportedFeatures).toContain('WITH clauses (CTEs)');
+      expect(result.success).toBe(true);
+      expect(result.ir?.ctes).toBeDefined();
+      expect(result.ir?.ctes?.length).toBeGreaterThan(0);
     });
 
     it('should reject query with UNION', async () => {
@@ -210,13 +211,13 @@ describe('Completions SQL IR - E2E Tests', () => {
       expect(result.unsupportedFeatures).toContain('UNION');
     });
 
-    it('should reject query with CASE expression', async () => {
+    it('should parse query with CASE expression as raw passthrough', async () => {
       const sql = "SELECT CASE WHEN age > 18 THEN 'adult' ELSE 'minor' END FROM users";
 
       const result = await CompletionsAPI.sqlToIR({ sql });
 
-      expect(result.success).toBe(false);
-      expect(result.unsupportedFeatures).toContain('CASE expressions');
+      expect(result.success).toBe(true);
+      expect(result.ir?.select.some((c) => c.type === 'raw')).toBe(true);
     });
 
     it('should reject query with window function', async () => {
@@ -648,32 +649,30 @@ describe('Completions SQL IR - E2E Tests', () => {
   });
 
   describe('Losslessness: Binary Support Boundary (Reject Unsupported)', () => {
-    describe('Complex aggregate expressions (MUST reject)', () => {
-      it('should reject SUM(col1 * col2)', async () => {
+    describe('Complex aggregate expressions (raw passthrough)', () => {
+      it('should parse SUM(col1 * col2) as raw passthrough', async () => {
         const sql = 'SELECT SUM(price * quantity) AS total FROM orders';
 
         const result = await CompletionsAPI.sqlToIR({ sql });
-        expect(result.success).toBe(false);
-        expect(result.unsupportedFeatures).toContain('Complex aggregate expressions (e.g., SUM(col1 * col2))');
-        expect(result.hint).toBeDefined();
+        expect(result.success).toBe(true);
+        expect(result.ir?.select.some((c) => c.type === 'raw')).toBe(true);
       });
 
-      it('should reject COUNT(CASE WHEN ...)', async () => {
+      it('should parse COUNT(CASE WHEN ...) as raw passthrough', async () => {
         const sql = "SELECT COUNT(CASE WHEN status = 'active' THEN 1 END) FROM users";
 
         const result = await CompletionsAPI.sqlToIR({ sql });
 
-        // Should be rejected (contains CASE in aggregate)
-        expect(result.success).toBe(false);
-        expect(result.unsupportedFeatures).toContain('CASE in aggregates (e.g., COUNT(CASE WHEN ...))');
+        expect(result.success).toBe(true);
+        expect(result.ir?.select.some((c) => c.type === 'raw')).toBe(true);
       });
 
-      it('should reject AVG(col1 + col2)', async () => {
+      it('should parse AVG(col1 + col2) as raw passthrough', async () => {
         const sql = 'SELECT AVG(price + tax) AS avg_total FROM products';
 
         const result = await CompletionsAPI.sqlToIR({ sql });
-        expect(result.success).toBe(false);
-        expect(result.unsupportedFeatures).toContain('Complex aggregate expressions (e.g., SUM(col1 * col2))');
+        expect(result.success).toBe(true);
+        expect(result.ir?.select.some((c) => c.type === 'raw')).toBe(true);
       });
     });
 

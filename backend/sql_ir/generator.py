@@ -65,6 +65,11 @@ def ir_to_sql(ir: QueryIR) -> str:
     if ir.limit is not None:
         parts.append(f"LIMIT {ir.limit}")
 
+    # Prepend CTE block if present
+    if ir.ctes:
+        cte_sqls = [f"{c.name} AS (\n{c.raw_sql}\n)" for c in ir.ctes]
+        parts.insert(0, "WITH " + ",\n".join(cte_sqls))
+
     # Join clauses with newlines for readable formatting
     return "\n".join(parts)
 
@@ -90,7 +95,10 @@ def generate_select_column(col: SelectColumn) -> str:
     """Generate a single SELECT column expression."""
     result = ""
 
-    if col.type == "aggregate":
+    if col.type == "raw":
+        result = col.raw_sql or "*"
+
+    elif col.type == "aggregate":
         # Aggregate function
         agg = col.aggregate
         if col.column is None or col.column == "*":
@@ -105,14 +113,24 @@ def generate_select_column(col: SelectColumn) -> str:
         else:
             result = f"{agg}({col_ref})"
 
+        # Apply wrapper function (e.g. ROUND(SUM(col), 2))
+        if col.wrapper_function == "ROUND":
+            args = col.wrapper_args or []
+            args_str = ", ".join(str(a) for a in args)
+            result = f"ROUND({result}, {args_str})" if args_str else f"ROUND({result})"
+
     elif col.type == "expression":
-        # Expression (e.g., DATE_TRUNC)
+        col_ref = f"{col.table}.{col.column}" if col.table else col.column
         if col.function == "DATE_TRUNC":
-            col_ref = f"{col.table}.{col.column}" if col.table else col.column
             result = f"DATE_TRUNC('{col.unit}', {col_ref})"
+        elif col.function == "DATE":
+            result = f"DATE({col_ref})"
+        elif col.function == "SPLIT_PART":
+            args = col.function_args or []
+            result = f"SPLIT_PART({col_ref}, '{args[0]}', {args[1]})"
         else:
             # Unknown expression type, fall back to column
-            result = f"{col.table}.{col.column}" if col.table else (col.column or "*")
+            result = col_ref or "*"
 
     else:
         # Regular column
@@ -132,7 +150,12 @@ def generate_select_column(col: SelectColumn) -> str:
 
 def generate_join_clause(join) -> str:
     """Generate a JOIN clause."""
-    join_type = "LEFT JOIN" if join.type == "LEFT" else "INNER JOIN"
+    if join.type == "LEFT":
+        join_type = "LEFT JOIN"
+    elif join.type == "FULL":
+        join_type = "FULL OUTER JOIN"
+    else:
+        join_type = "INNER JOIN"
 
     table = join.table.table
     if join.table.schema:
@@ -140,13 +163,18 @@ def generate_join_clause(join) -> str:
     if join.table.alias:
         table += f" {join.table.alias}"  # No AS keyword for table aliases
 
+    if join.raw_on_sql:
+        return f"{join_type} {table} ON {join.raw_on_sql}"
+
     conditions = []
-    for cond in join.on:
+    for cond in (join.on or []):
         conditions.append(
             f"{cond.left_table}.{cond.left_column} = {cond.right_table}.{cond.right_column}"
         )
 
-    return f"{join_type} {table} ON {' AND '.join(conditions)}"
+    if conditions:
+        return f"{join_type} {table} ON {' AND '.join(conditions)}"
+    return f"{join_type} {table}"
 
 
 def generate_filter_group(group: FilterGroup) -> str:
@@ -216,21 +244,32 @@ def generate_group_by_clause(columns) -> str:
     """Generate GROUP BY column list."""
     parts = []
     for col in columns:
+        col_ref = f"{col.table}.{col.column}" if col.table else col.column
         if col.type == "expression" and col.function == "DATE_TRUNC":
-            col_ref = f"{col.table}.{col.column}" if col.table else col.column
             parts.append(f"DATE_TRUNC('{col.unit}', {col_ref})")
+        elif col.type == "expression" and col.function == "DATE":
+            parts.append(f"DATE({col_ref})")
+        elif col.type == "expression" and col.function == "SPLIT_PART":
+            args = col.function_args or []
+            parts.append(f"SPLIT_PART({col_ref}, '{args[0]}', {args[1]})")
         else:
-            parts.append(f"{col.table}.{col.column}" if col.table else col.column)
+            parts.append(col_ref)
     return ", ".join(parts)
 
 
 def generate_order_by_expression(col) -> str:
     """Generate ORDER BY column expression."""
-    # Handle expression type (DATE_TRUNC)
     col_type = getattr(col, "type", "column")
+
+    # Raw passthrough
+    if col_type == "raw":
+        return col.raw_sql or ""
+
+    col_ref = f"{col.table}.{col.column}" if col.table else col.column
     if col_type == "expression" and getattr(col, "function", None) == "DATE_TRUNC":
-        col_ref = f"{col.table}.{col.column}" if col.table else col.column
         return f"DATE_TRUNC('{col.unit}', {col_ref})"
+    if col_type == "expression" and getattr(col, "function", None) == "DATE":
+        return f"DATE({col_ref})"
 
     # Regular column
     if col.table:

@@ -6,7 +6,7 @@
 'use client';
 
 import { Box, HStack, Text } from '@chakra-ui/react';
-import { LuX, LuTable, LuHash, LuCalendar, LuType } from 'react-icons/lu';
+import { LuX, LuTable, LuHash, LuCalendar, LuType, LuLock } from 'react-icons/lu';
 import { ReactNode } from 'react';
 import { useAppSelector } from '@/store/hooks';
 
@@ -19,6 +19,7 @@ interface QueryChipProps {
   onRemove?: () => void;
   onClick?: () => void;
   isActive?: boolean;
+  isLocked?: boolean;
   size?: 'sm' | 'md';
 }
 
@@ -114,24 +115,27 @@ export function QueryChip({
   onRemove,
   onClick,
   isActive = false,
+  isLocked = false,
   size = 'sm',
 }: QueryChipProps) {
   const styles = useChipVariantStyles(variant);
-  const isClickable = !!onClick;
+  const isClickable = !!onClick && !isLocked;
 
   return (
     <HStack
       bg={isActive ? styles.hoverBg : styles.bg}
-      border="1px solid"
+      border="1px"
+      borderStyle={isLocked ? 'dashed' : 'solid'}
       borderColor={styles.border}
       borderRadius="md"
       px={size === 'sm' ? 2 : 2.5}
       py={size === 'sm' ? 1 : 1.5}
       gap={1.5}
       cursor={isClickable ? 'pointer' : 'default'}
+      opacity={isLocked ? 0.65 : 1}
       transition="all 0.15s ease"
       _hover={isClickable ? { bg: styles.hoverBg, borderColor: styles.color } : undefined}
-      onClick={onClick}
+      onClick={isClickable ? onClick : undefined}
       flexShrink={0}
     >
       {icon && (
@@ -148,6 +152,11 @@ export function QueryChip({
       >
         {children}
       </Text>
+      {isLocked && (
+        <Box color={styles.color} opacity={0.6} display="flex" alignItems="center">
+          <LuLock size={10} />
+        </Box>
+      )}
       {onRemove && (
         <Box
           as="button"

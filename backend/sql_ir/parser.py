@@ -14,6 +14,7 @@ from .ir_types import (
     GroupByClause,
     GroupByItem,
     OrderByClause,
+    CTE,
 )
 from .validator import UnsupportedSQLError, validate_sql_features
 from .enhanced_validator import validate_sql_for_gui, compare_sql_ast
@@ -50,6 +51,14 @@ def parse_sql_to_ir(sql: str, _skip_validation: bool = False) -> QueryIR:
     except Exception as e:
         raise UnsupportedSQLError(f"Failed to parse SQL: {str(e)}", ["PARSE_ERROR"])
 
+    # Extract CTEs — sqlglot stores them in select.args['with_'], not as a separate With node
+    ctes = []
+    with_clause = ast.args.get('with_') if isinstance(ast, exp.Select) else None
+    if with_clause:
+        for cte_node in with_clause.expressions:
+            cte_body_sql = cte_node.this.sql(dialect='postgres')
+            ctes.append(CTE(name=cte_node.alias, raw_sql=cte_body_sql))
+
     # Extract SELECT node
     select_node = ast if isinstance(ast, exp.Select) else ast.find(exp.Select)
     if not select_node:
@@ -73,6 +82,7 @@ def parse_sql_to_ir(sql: str, _skip_validation: bool = False) -> QueryIR:
     ir = QueryIR(
         version=1,
         distinct=distinct,
+        ctes=ctes if ctes else None,
         select=select_columns,
         **{"from": from_table},  # Use dict unpacking for 'from' keyword
         joins=joins,
@@ -115,6 +125,18 @@ def parse_select(select_node: exp.Select) -> List[SelectColumn]:
         alias = expr.alias if isinstance(expr, exp.Alias) else None
         actual = expr.this if isinstance(expr, exp.Alias) else expr
 
+        # Unwrap ROUND(simple_aggregate) — only when inner is a simple aggregate
+        wrapper_function = None
+        wrapper_args = None
+        if isinstance(actual, exp.Round):
+            inner = actual.this
+            if isinstance(inner, (exp.Count, exp.Sum, exp.Avg, exp.Min, exp.Max)):
+                wrapper_function = 'ROUND'
+                decimals = actual.args.get('decimals')
+                wrapper_args = [int(decimals.this)] if decimals is not None else []
+                actual = inner
+            # else: actual stays as Round, falls through to raw passthrough below
+
         if isinstance(actual, (exp.Count, exp.Sum, exp.Avg, exp.Min, exp.Max)):
             agg_type = type(actual).__name__.upper()
             agg_column = actual.this
@@ -125,23 +147,29 @@ def parse_select(select_node: exp.Select) -> List[SelectColumn]:
                 if agg_column.expressions:
                     agg_column = agg_column.expressions[0]
 
-            if isinstance(agg_column, exp.Star):
-                col_name = None if isinstance(actual, exp.Count) else '*'
-                table_name = None
-            elif isinstance(agg_column, exp.Column):
-                col_name = agg_column.name
-                table_name = agg_column.table if hasattr(agg_column, 'table') and agg_column.table else None
+            if isinstance(agg_column, (exp.Column, exp.Star)):
+                if isinstance(agg_column, exp.Star):
+                    col_name = None if isinstance(actual, exp.Count) else '*'
+                    table_name = None
+                else:
+                    col_name = agg_column.name
+                    table_name = agg_column.table if hasattr(agg_column, 'table') and agg_column.table else None
+                columns.append(SelectColumn(
+                    type='aggregate',
+                    column=col_name,
+                    table=table_name,
+                    aggregate=agg_type,
+                    alias=alias,
+                    wrapper_function=wrapper_function,
+                    wrapper_args=wrapper_args,
+                ))
             else:
-                col_name = agg_column.sql() if agg_column else None
-                table_name = None
-
-            columns.append(SelectColumn(
-                type='aggregate',
-                column=col_name,
-                table=table_name,
-                aggregate=agg_type,
-                alias=alias,
-            ))
+                # Complex aggregate (CASE WHEN, arithmetic, etc.) → raw passthrough
+                columns.append(SelectColumn(
+                    type='raw',
+                    raw_sql=actual.sql(dialect='postgres'),
+                    alias=alias,
+                ))
 
         elif isinstance(actual, exp.Column):
             columns.append(SelectColumn(
@@ -164,6 +192,39 @@ def parse_select(select_node: exp.Select) -> List[SelectColumn]:
             if col:
                 col.alias = alias
                 columns.append(col)
+
+        elif isinstance(actual, exp.Date):
+            inner = actual.this
+            col_name = inner.name if isinstance(inner, exp.Column) else inner.sql()
+            table_name = inner.table if isinstance(inner, exp.Column) and inner.table else None
+            columns.append(SelectColumn(
+                type='expression',
+                function='DATE',
+                column=col_name,
+                table=table_name,
+                alias=alias,
+            ))
+
+        elif isinstance(actual, exp.SplitPart):
+            col_expr = actual.this
+            delimiter = actual.args['delimiter'].this  # e.g. '/'
+            part_index = int(actual.args['part_index'].this)  # e.g. 2
+            columns.append(SelectColumn(
+                type='expression',
+                function='SPLIT_PART',
+                column=col_expr.name if isinstance(col_expr, exp.Column) else col_expr.sql(),
+                table=col_expr.table if isinstance(col_expr, exp.Column) and col_expr.table else None,
+                function_args=[delimiter, part_index],
+                alias=alias,
+            ))
+
+        else:
+            # Raw passthrough for unrecognized expressions (CASE, COALESCE, arithmetic, etc.)
+            columns.append(SelectColumn(
+                type='raw',
+                raw_sql=actual.sql(dialect='postgres'),
+                alias=alias,
+            ))
 
     return columns
 
@@ -243,16 +304,27 @@ def parse_from(select_node: exp.Select) -> TableReference:
     )
 
 
+def _is_simple_join_on(on_expr: exp.Expression) -> bool:
+    """Return True if ON clause consists only of col=col equi-join conditions."""
+    nodes = list(on_expr.flatten()) if isinstance(on_expr, exp.And) else [on_expr]
+    return all(
+        isinstance(n, exp.EQ)
+        and isinstance(n.left, exp.Column)
+        and isinstance(n.right, exp.Column)
+        for n in nodes
+    )
+
+
 def parse_joins(select_node: exp.Select) -> Optional[List[JoinClause]]:
     """Parse JOIN clauses into list of JoinClause objects."""
     joins = []
 
-    for join_node in select_node.find_all(exp.Join):
+    for join_node in (select_node.args.get('joins') or []):
         # Get join type (stored in 'side' for LEFT/RIGHT/FULL, 'kind' for INNER)
         join_kind = join_node.args.get("side", "").upper() or join_node.args.get("kind", "").upper() or "INNER"
 
-        if join_kind not in ("INNER", "LEFT"):
-            continue  # Skip unsupported join types (caught by validator)
+        if join_kind not in ("INNER", "LEFT", "FULL"):
+            continue  # Skip unsupported join types (e.g. RIGHT)
 
         # Get table
         table_expr = join_node.this
@@ -265,16 +337,21 @@ def parse_joins(select_node: exp.Select) -> Optional[List[JoinClause]]:
             alias=table_expr.alias if hasattr(table_expr, 'alias') and table_expr.alias else None,
         )
 
-        # Parse ON conditions
-        on_conditions = []
+        # Parse ON conditions — use raw SQL for complex (non-equi) conditions
+        on_conditions = None
+        raw_on_sql = None
         on_clause = join_node.args.get("on")
         if on_clause:
-            on_conditions = parse_join_conditions(on_clause)
+            if _is_simple_join_on(on_clause):
+                on_conditions = parse_join_conditions(on_clause)
+            else:
+                raw_on_sql = on_clause.sql(dialect='postgres')
 
         joins.append(JoinClause(
             type=join_kind,
             table=table,
             on=on_conditions,
+            raw_on_sql=raw_on_sql,
         ))
 
     return joins if joins else None
@@ -525,6 +602,25 @@ def parse_group_by(select_node: exp.Select) -> Optional[GroupByClause]:
             item = parse_group_by_date_trunc(expr)
             if item:
                 columns.append(item)
+        elif isinstance(expr, exp.Date):
+            inner = expr.this
+            columns.append(GroupByItem(
+                type='expression',
+                function='DATE',
+                column=inner.name if isinstance(inner, exp.Column) else inner.sql(),
+                table=inner.table if isinstance(inner, exp.Column) and inner.table else None,
+            ))
+        elif isinstance(expr, exp.SplitPart):
+            col_expr = expr.this
+            delimiter = expr.args['delimiter'].this
+            part_index = int(expr.args['part_index'].this)
+            columns.append(GroupByItem(
+                type='expression',
+                function='SPLIT_PART',
+                column=col_expr.name if isinstance(col_expr, exp.Column) else col_expr.sql(),
+                table=col_expr.table if isinstance(col_expr, exp.Column) and col_expr.table else None,
+                function_args=[delimiter, part_index],
+            ))
         elif isinstance(expr, exp.Literal) and not expr.is_string:
             # Positional reference like GROUP BY 1 — resolve to actual SELECT column
             try:
@@ -617,6 +713,13 @@ def parse_order_by(select_node: exp.Select) -> Optional[List[OrderByClause]]:
                             column=ref_expr.alias,
                             direction=direction,
                         ))
+            else:
+                # Raw passthrough for CASE and other unrecognized ORDER BY expressions
+                order_by.append(OrderByClause(
+                    type='raw',
+                    raw_sql=column_expr.sql(dialect='postgres'),
+                    direction=direction,
+                ))
 
     return order_by if order_by else None
 
