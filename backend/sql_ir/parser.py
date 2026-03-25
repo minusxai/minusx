@@ -226,13 +226,7 @@ def parse_joins(select_node: exp.Select) -> Optional[List[JoinClause]]:
 
     for join_node in select_node.find_all(exp.Join):
         # Get join type (stored in 'side' for LEFT/RIGHT/FULL, 'kind' for INNER)
-        join_kind = join_node.args.get("kind", "").upper()
-        join_side = join_node.args.get("side", "").upper()
-
-        if join_side:
-            join_kind = join_side  # LEFT, RIGHT, FULL
-        elif not join_kind:
-            join_kind = "INNER"  # Default to INNER
+        join_kind = join_node.args.get("side", "").upper() or join_node.args.get("kind", "").upper() or "INNER"
 
         if join_kind not in ("INNER", "LEFT"):
             continue  # Skip unsupported join types (caught by validator)
@@ -266,35 +260,17 @@ def parse_joins(select_node: exp.Select) -> Optional[List[JoinClause]]:
 def parse_join_conditions(on_expr: exp.Expression) -> List[JoinCondition]:
     """Parse ON clause into list of JoinCondition objects."""
     conditions = []
-
-    # Handle AND of multiple conditions
-    if isinstance(on_expr, exp.And):
-        for condition in on_expr.flatten():
-            if isinstance(condition, exp.EQ):
-                left = condition.left
-                right = condition.right
-
-                if isinstance(left, exp.Column) and isinstance(right, exp.Column):
-                    conditions.append(JoinCondition(
-                        left_table=left.table if hasattr(left, 'table') and left.table else "",
-                        left_column=left.name,
-                        right_table=right.table if hasattr(right, 'table') and right.table else "",
-                        right_column=right.name,
-                    ))
-
-    # Single condition
-    elif isinstance(on_expr, exp.EQ):
-        left = on_expr.left
-        right = on_expr.right
-
-        if isinstance(left, exp.Column) and isinstance(right, exp.Column):
-            conditions.append(JoinCondition(
-                left_table=left.table if hasattr(left, 'table') and left.table else "",
-                left_column=left.name,
-                right_table=right.table if hasattr(right, 'table') and right.table else "",
-                right_column=right.name,
-            ))
-
+    nodes = list(on_expr.flatten()) if isinstance(on_expr, exp.And) else [on_expr]
+    for condition in nodes:
+        if isinstance(condition, exp.EQ):
+            left, right = condition.left, condition.right
+            if isinstance(left, exp.Column) and isinstance(right, exp.Column):
+                conditions.append(JoinCondition(
+                    left_table=left.table if hasattr(left, 'table') and left.table else "",
+                    left_column=left.name,
+                    right_table=right.table if hasattr(right, 'table') and right.table else "",
+                    right_column=right.name,
+                ))
     return conditions
 
 
