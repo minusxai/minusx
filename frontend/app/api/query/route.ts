@@ -5,6 +5,56 @@ import { NextRequest } from 'next/server';
 import { CTEfyQuery, ResolvedReference } from '@/lib/sql/query-composer';
 import { FilesAPI } from '@/lib/data/files.server';
 import { runQuery } from '@/lib/connections/run-query';
+import { removeNoneParamConditions } from '@/lib/sql/ir-transforms';
+import { pythonBackendFetch } from '@/lib/api/python-backend-client';
+
+/**
+ * Transform a query+params pair so that None (null) parameter values are handled:
+ * 1. Try to remove filter conditions (WHERE/HAVING) for None params via IR round-trip.
+ * 2. Substitute any remaining :param_name occurrences with NULL.
+ * 3. Strip None params from the returned params dict.
+ */
+async function applyNoneParams(
+  query: string,
+  params: Record<string, string | number | null>
+): Promise<{ sql: string; params: Record<string, string | number> }> {
+  const noneSet = new Set(Object.keys(params).filter((k) => params[k] === null));
+  const effectiveParams = Object.fromEntries(
+    Object.entries(params).filter(([, v]) => v !== null)
+  ) as Record<string, string | number>;
+
+  if (noneSet.size === 0) return { sql: query, params: effectiveParams };
+
+  // Try IR-based filter removal via Python backend
+  try {
+    const irRes = await pythonBackendFetch('/api/sql-to-ir', {
+      method: 'POST',
+      body: JSON.stringify({ sql: query }),
+    });
+    if (irRes.ok) {
+      const irData = await irRes.json();
+      if (irData.success && irData.ir) {
+        const transformed = removeNoneParamConditions(irData.ir, noneSet);
+        const sqlRes = await pythonBackendFetch('/api/ir-to-sql', {
+          method: 'POST',
+          body: JSON.stringify({ ir: transformed }),
+        });
+        if (sqlRes.ok) {
+          const sqlData = await sqlRes.json();
+          if (sqlData.success && sqlData.sql) {
+            query = sqlData.sql;
+          }
+        }
+      }
+    }
+  } catch { /* fall through to NULL substitution */ }
+
+  // Substitute any remaining :param_name references with NULL (non-filter uses, fallback)
+  for (const p of noneSet) {
+    query = query.replace(new RegExp(`:${p}\\b`, 'g'), 'NULL');
+  }
+  return { sql: query, params: effectiveParams };
+}
 
 // Route segment config: optimize for API routes
 export const dynamic = 'force-dynamic';
@@ -19,13 +69,14 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     console.log(`[QUERY API] JSON parse took ${Date.now() - parseStart}ms`);
     const { database_name, query, parameters, references } = body;
 
-    // Convert parameters to Record<string, string | number> for backend
+    // Convert parameters to Record<string, string | number | null> for backend
     // Handle both array format (QuestionParameter[]) and object format (Record<string, any>)
-    const paramValues: Record<string, string | number> = {};
+    // null values represent "None" — the param is explicitly skipped
+    const paramValues: Record<string, string | number | null> = {};
     if (Array.isArray(parameters)) {
       // Array format: legacy, no-op (parameters are now just schema definitions)
     } else if (typeof parameters === 'object' && parameters !== null) {
-      // Object format: {param1: 'val1', param2: 'val2'}
+      // Object format: {param1: 'val1', param2: null, ...}
       Object.assign(paramValues, parameters);
     }
 
@@ -52,7 +103,10 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       console.log(`[QUERY API] CTE construction took ${Date.now() - cteStart}ms`);
     }
 
-    const result = await runQuery(database_name, finalQuery, paramValues, user);
+    // Apply None params: remove filter conditions or substitute with NULL
+    const { sql: resolvedQuery, params: resolvedParams } = await applyNoneParams(finalQuery, paramValues);
+
+    const result = await runQuery(database_name, resolvedQuery, resolvedParams, user);
     console.log(`[QUERY API] Total request time: ${Date.now() - startTime}ms`);
     return successResponse(result);
   } catch (error) {
