@@ -24,11 +24,12 @@ interface TestRowProps {
   index: number;
   editMode: boolean;
   forcedType?: 'llm' | 'query';
+  defaultQuestionId?: number;
   onChange: (test: Test) => void;
   onDelete: () => void;
 }
 
-function TestRow({ test, index, editMode, forcedType, onChange, onDelete }: TestRowProps) {
+function TestRow({ test, index, editMode, forcedType, defaultQuestionId, onChange, onDelete }: TestRowProps) {
   const [open, setOpen] = useState(false);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<TestRunResult | null>(null);
@@ -110,6 +111,7 @@ function TestRow({ test, index, editMode, forcedType, onChange, onDelete }: Test
                 test={test}
                 onChange={onChange}
                 forcedType={forcedType}
+                defaultQuestionId={defaultQuestionId}
               />
             ) : (
               <TestReadOnly test={test} />
@@ -147,11 +149,13 @@ interface TestListProps {
   editMode?: boolean;
   /** If provided, only allow this test type */
   forcedType?: 'llm' | 'query';
+  /** Pre-fill subject question_id when adding a new query test */
+  defaultQuestionId?: number;
 }
 
-export default function TestList({ tests, onChange, editMode = false, forcedType }: TestListProps) {
+export default function TestList({ tests, onChange, editMode = false, forcedType, defaultQuestionId }: TestListProps) {
   function handleAdd() {
-    onChange([...tests, makeDefaultTest(forcedType ?? 'query')]);
+    onChange([...tests, makeDefaultTest(forcedType ?? 'query', defaultQuestionId)]);
   }
 
   function handleChange(index: number, updated: Test) {
@@ -175,6 +179,7 @@ export default function TestList({ tests, onChange, editMode = false, forcedType
           index={i}
           editMode={editMode}
           forcedType={forcedType}
+          defaultQuestionId={defaultQuestionId}
           onChange={updated => handleChange(i, updated)}
           onDelete={() => handleDelete(i)}
         />

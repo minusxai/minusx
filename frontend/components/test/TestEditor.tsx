@@ -6,7 +6,7 @@ import TestSubjectEditor from './TestSubjectEditor';
 import TestOperatorSelect from './TestOperatorSelect';
 import TestValueEditor from './TestValueEditor';
 
-function makeDefaultTest(type: 'llm' | 'query'): Test {
+function makeDefaultTest(type: 'llm' | 'query', defaultQuestionId?: number): Test {
   if (type === 'llm') {
     return {
       type: 'llm',
@@ -18,7 +18,7 @@ function makeDefaultTest(type: 'llm' | 'query'): Test {
   }
   return {
     type: 'query',
-    subject: { type: 'query', question_id: 0 },
+    subject: { type: 'query', question_id: defaultQuestionId ?? 0 },
     answerType: 'number',
     operator: '=',
     value: { type: 'constant', value: 0 },
@@ -31,9 +31,11 @@ interface TestEditorProps {
   /** If provided, only allow this test type (e.g. evals are llm-only) */
   forcedType?: 'llm' | 'query';
   disabled?: boolean;
+  /** Pre-fill subject question_id for new query tests */
+  defaultQuestionId?: number;
 }
 
-export default function TestEditor({ test, onChange, forcedType, disabled }: TestEditorProps) {
+export default function TestEditor({ test, onChange, forcedType, disabled, defaultQuestionId }: TestEditorProps) {
   function handleTypeChange(newType: 'llm' | 'query') {
     if (newType === test.type) return;
     onChange(makeDefaultTest(newType));
@@ -96,6 +98,7 @@ export default function TestEditor({ test, onChange, forcedType, disabled }: Tes
           testType={test.type}
           onChange={subject => onChange({ ...test, subject })}
           disabled={disabled}
+          defaultQuestionId={defaultQuestionId}
         />
       </Box>
 

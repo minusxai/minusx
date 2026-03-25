@@ -4,7 +4,7 @@ import {
   VStack, HStack, Text, Input, Textarea, NativeSelect,
   Box, Combobox, Portal, createListCollection
 } from '@chakra-ui/react';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import type { TestSubject } from '@/lib/types';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 
@@ -13,6 +13,8 @@ interface TestSubjectEditorProps {
   testType: 'llm' | 'query';
   onChange: (subject: TestSubject) => void;
   disabled?: boolean;
+  /** Pre-select this question ID when a new query subject is created */
+  defaultQuestionId?: number;
 }
 
 function QuestionPicker({
@@ -74,7 +76,39 @@ function QuestionPicker({
   );
 }
 
-export default function TestSubjectEditor({ subject, testType, onChange, disabled }: TestSubjectEditorProps) {
+/**
+ * Fetch inferred column names for a question via /api/infer-columns.
+ * Returns [] while loading or on error.
+ */
+function useQuestionColumns(questionId: number | undefined): string[] {
+  const [columns, setColumns] = useState<string[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetcher = questionId && questionId > 0
+      ? fetch('/api/infer-columns', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ questionId }),
+        }).then(r => r.ok ? r.json() : { columns: [] })
+      : Promise.resolve({ columns: [] });
+
+    fetcher
+      .then(data => { if (!cancelled) setColumns((data?.columns ?? []).map((c: { name: string }) => c.name)); })
+      .catch(() => { if (!cancelled) setColumns([]); });
+    return () => { cancelled = true; };
+  }, [questionId]);
+
+  return columns;
+}
+
+export default function TestSubjectEditor({ subject, testType, onChange, disabled, defaultQuestionId }: TestSubjectEditorProps) {
+  // Query type derived state — always computed so hook order is stable
+  const query = subject.type === 'query'
+    ? subject
+    : { type: 'query' as const, question_id: defaultQuestionId ?? 0, column: undefined, row: undefined };
+  const inferredColumns = useQuestionColumns(query.question_id || undefined);
+
   if (testType === 'llm') {
     const llm = subject.type === 'llm' ? subject : { type: 'llm' as const, prompt: '', context: { type: 'explore' as const } };
 
@@ -115,34 +149,47 @@ export default function TestSubjectEditor({ subject, testType, onChange, disable
     );
   }
 
-  // Query type
-  const query = subject.type === 'query'
-    ? subject
-    : { type: 'query' as const, question_id: 0, column: undefined, row: undefined };
-
   return (
     <VStack align="stretch" gap={2}>
       <Box>
         <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Question</Text>
         <QuestionPicker
           selectedId={query.question_id || null}
-          onSelect={id => onChange({ ...query, question_id: id })}
+          onSelect={id => onChange({ ...query, question_id: id, column: undefined })}
           disabled={disabled}
         />
       </Box>
       <HStack gap={2}>
         <Box flex={1}>
           <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Column</Text>
-          <Input
-            value={query.column ?? ''}
-            onChange={e => onChange({ ...query, column: e.target.value || undefined })}
-            placeholder="(first column)"
-            size="sm"
-            bg="bg.surface"
-            fontSize="xs"
-            fontFamily="mono"
-            disabled={disabled}
-          />
+          {inferredColumns.length > 0 ? (
+            <NativeSelect.Root size="sm" disabled={disabled}>
+              <NativeSelect.Field
+                value={query.column ?? ''}
+                onChange={e => onChange({ ...query, column: e.target.value || undefined })}
+                bg="bg.surface"
+                fontSize="xs"
+                fontFamily="mono"
+              >
+                <option value="">— first column —</option>
+                {inferredColumns.map(col => (
+                  <option key={col} value={col}>{col}</option>
+                ))}
+              </NativeSelect.Field>
+              <NativeSelect.Indicator />
+            </NativeSelect.Root>
+          ) : (
+            <Input
+              value={query.column ?? ''}
+              onChange={e => onChange({ ...query, column: e.target.value || undefined })}
+              placeholder="(first column)"
+              size="sm"
+              bg="bg.surface"
+              fontSize="xs"
+              fontFamily="mono"
+              disabled={disabled}
+            />
+          )}
         </Box>
         <Box w="80px">
           <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Row</Text>

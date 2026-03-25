@@ -302,6 +302,7 @@ function TransformRow({ transform, index, questions, dbSchemaMap, editMode, onCh
               onChange={(tests: Test[]) => onChange({ tests })}
               editMode={!!editMode}
               forcedType="query"
+              defaultQuestionId={transform.question > 0 ? transform.question : undefined}
             />
           </Box>
         )}
