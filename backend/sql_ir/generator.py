@@ -181,6 +181,10 @@ def generate_filter_condition(cond: FilterCondition) -> str:
             column = f"COUNT(DISTINCT {col_ref})"
         else:
             column = f"{cond.aggregate}({col_ref})"
+    elif cond.function == "DATE_TRUNC":
+        # DATE_TRUNC expression on the left side
+        col_ref = f"{cond.table}.{cond.column}" if cond.table else cond.column
+        column = f"DATE_TRUNC('{cond.unit}', {col_ref})"
     else:
         # Regular column
         column = f"{cond.table}.{cond.column}" if cond.table else cond.column
@@ -199,6 +203,10 @@ def generate_filter_condition(cond: FilterCondition) -> str:
     # Handle parameter
     if cond.param_name:
         return f"{column} {cond.operator} :{cond.param_name}"
+
+    # Raw verbatim expression (e.g. CURRENT_TIMESTAMP, TIMESTAMP_TRUNC(...))
+    if cond.raw_value is not None:
+        return f"{column} {cond.operator} {cond.raw_value}"
 
     # Regular comparison
     return f"{column} {cond.operator} {format_value(cond.value)}"

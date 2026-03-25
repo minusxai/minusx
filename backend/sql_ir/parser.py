@@ -206,48 +206,66 @@ def parse_select(select_node: exp.Select) -> List[SelectColumn]:
     return columns
 
 
-def parse_date_trunc_expression(expr: exp.Expression) -> Optional[SelectColumn]:
-    """Parse DATE_TRUNC / TimestampTrunc expression into SelectColumn."""
-    # Extract the column being truncated
-    column_expr = expr.this
-    if not isinstance(column_expr, exp.Column):
-        return None
+_DATE_TRUNC_UNIT_MAPPING = {
+    'DAY': 'DAY',
+    'WEEK': 'WEEK',
+    'MONTH': 'MONTH',
+    'QUARTER': 'QUARTER',
+    'YEAR': 'YEAR',
+    'HOUR': 'HOUR',
+    'MINUTE': 'MINUTE',
+}
 
-    # Extract the unit (e.g., 'WEEK', 'MONTH', 'DAY')
+
+def parse_date_trunc_expression(expr: exp.Expression) -> Optional[SelectColumn]:
+    """Parse DATE_TRUNC / TimestampTrunc expression into SelectColumn.
+
+    Handles both standard SQL arg order (unit, col) and BigQuery arg order
+    (col, unit) which sqlglot may invert when parsing in postgres dialect.
+    """
+    column_expr = expr.this
     unit_expr = expr.args.get('unit')
     if not unit_expr:
         return None
 
     # Unit can be a Var (e.g., Var(this=WEEK)) or a Literal
     if isinstance(unit_expr, exp.Var):
-        unit = unit_expr.name.upper()
+        unit_str = unit_expr.name.upper()
     elif isinstance(unit_expr, exp.Literal):
-        unit = str(unit_expr.this).upper()
+        unit_str = str(unit_expr.this).upper()
     else:
-        unit = str(unit_expr).upper()
+        unit_str = str(unit_expr).upper()
 
-    # Normalize unit names
-    unit_mapping = {
-        'DAY': 'DAY',
-        'WEEK': 'WEEK',
-        'MONTH': 'MONTH',
-        'QUARTER': 'QUARTER',
-        'YEAR': 'YEAR',
-        'HOUR': 'HOUR',
-        'MINUTE': 'MINUTE',
-    }
+    normalized_unit = _DATE_TRUNC_UNIT_MAPPING.get(unit_str)
 
-    normalized_unit = unit_mapping.get(unit)
-    if not normalized_unit:
-        return None
+    if normalized_unit and isinstance(column_expr, exp.Column):
+        # Standard/BigQuery (parsed correctly): DateTrunc(this=col, unit=UNIT)
+        return SelectColumn(
+            type='expression',
+            column=column_expr.name,
+            table=column_expr.table if hasattr(column_expr, 'table') and column_expr.table else None,
+            function='DATE_TRUNC',
+            unit=normalized_unit,
+        )
 
-    return SelectColumn(
-        type='expression',
-        column=column_expr.name,
-        table=column_expr.table if hasattr(column_expr, 'table') and column_expr.table else None,
-        function='DATE_TRUNC',
-        unit=normalized_unit,
-    )
+    # BigQuery SQL parsed in postgres dialect swaps args:
+    # DATE_TRUNC(col, UNIT) → postgres parses as DateTrunc(this=UNIT_as_col, unit=col_as_var)
+    # Detect: "this" is a Column whose name is a recognized unit, "unit" is a Var/Column
+    if (isinstance(column_expr, exp.Column)
+            and column_expr.name.upper() in _DATE_TRUNC_UNIT_MAPPING
+            and isinstance(unit_expr, (exp.Var, exp.Column))):
+        swapped_unit = _DATE_TRUNC_UNIT_MAPPING[column_expr.name.upper()]
+        actual_col_name = unit_expr.name
+        actual_col_table = unit_expr.table if hasattr(unit_expr, 'table') and unit_expr.table else None
+        return SelectColumn(
+            type='expression',
+            column=actual_col_name,
+            table=actual_col_table,
+            function='DATE_TRUNC',
+            unit=swapped_unit,
+        )
+
+    return None
 
 
 def parse_from(select_node: exp.Select) -> TableReference:
@@ -476,6 +494,17 @@ def parse_comparison(expr: exp.Expression, operator: str) -> Optional[FilterCond
     if column_expr is None and aggregate == 'COUNT':
         column_name = None  # COUNT(*) uses None
         table_name = None
+        date_trunc_function = None
+        date_trunc_unit = None
+    # Handle DATE_TRUNC / TIMESTAMP_TRUNC on the left side (e.g. WHERE DATE_TRUNC(col, MONTH) < ...)
+    elif isinstance(column_expr, (exp.DateTrunc, exp.TimestampTrunc)):
+        parsed = parse_date_trunc_expression(column_expr)
+        if parsed is None:
+            return None
+        column_name = parsed.column
+        table_name = parsed.table
+        date_trunc_function = 'DATE_TRUNC'
+        date_trunc_unit = parsed.unit
     # If it's not a column/star and not an aggregate, skip it
     elif not isinstance(column_expr, (exp.Column, exp.Star)):
         return None
@@ -484,13 +513,18 @@ def parse_comparison(expr: exp.Expression, operator: str) -> Optional[FilterCond
         # For aggregates other than COUNT, * doesn't make sense
         column_name = None if aggregate == 'COUNT' else '*'
         table_name = None
+        date_trunc_function = None
+        date_trunc_unit = None
     else:
         column_name = column_expr.name
         table_name = column_expr.table if hasattr(column_expr, 'table') and column_expr.table else None
+        date_trunc_function = None
+        date_trunc_unit = None
 
     # Extract value or parameter
     value = None
     param_name = None
+    raw_value = None
 
     if isinstance(right, exp.Placeholder):
         # Parameter like :param_name
@@ -513,9 +547,13 @@ def parse_comparison(expr: exp.Expression, operator: str) -> Optional[FilterCond
     elif isinstance(right, exp.Null):
         # NULL literal
         value = None
+    elif isinstance(right, (exp.CurrentTimestamp, exp.CurrentDate, exp.CurrentTime,
+                             exp.DateTrunc, exp.TimestampTrunc)):
+        # Raw SQL expression — store in postgres dialect so it matches generator output
+        raw_value = right.sql(dialect='postgres')
     else:
-        # Use sql() to get expression as string
-        value = right.sql()
+        # Use postgres dialect sql() to avoid quoting and match generator output
+        raw_value = right.sql(dialect='postgres')
 
     return FilterCondition(
         column=column_name,
@@ -524,6 +562,9 @@ def parse_comparison(expr: exp.Expression, operator: str) -> Optional[FilterCond
         operator=operator,
         value=value,
         param_name=param_name,
+        function=date_trunc_function,
+        unit=date_trunc_unit,
+        raw_value=raw_value,
     )
 
 
@@ -571,6 +612,7 @@ def parse_group_by(select_node: exp.Select) -> Optional[GroupByClause]:
     if not group_clause:
         return None
 
+    select_exprs = select_node.expressions
     columns = []
     for expr in group_clause.expressions:
         if isinstance(expr, exp.Column):
@@ -584,50 +626,43 @@ def parse_group_by(select_node: exp.Select) -> Optional[GroupByClause]:
             item = parse_group_by_date_trunc(expr)
             if item:
                 columns.append(item)
+        elif isinstance(expr, exp.Literal) and not expr.is_string:
+            # Positional reference like GROUP BY 1 — resolve to actual SELECT column
+            try:
+                position = int(expr.this)
+            except (ValueError, TypeError):
+                continue
+            if 1 <= position <= len(select_exprs):
+                ref_expr = select_exprs[position - 1]
+                actual = ref_expr.this if isinstance(ref_expr, exp.Alias) else ref_expr
+                if isinstance(actual, exp.Column):
+                    columns.append(GroupByItem(
+                        type='column',
+                        column=actual.name,
+                        table=actual.table if hasattr(actual, 'table') and actual.table else None,
+                    ))
+                elif isinstance(actual, (exp.TimestampTrunc, exp.DateTrunc)):
+                    item = parse_group_by_date_trunc(actual)
+                    if item:
+                        columns.append(item)
 
     return GroupByClause(columns=columns) if columns else None
 
 
 def parse_group_by_date_trunc(expr: exp.Expression) -> Optional[GroupByItem]:
-    """Parse DATE_TRUNC expression in GROUP BY clause."""
-    # Extract the column being truncated
-    column_expr = expr.this
-    if not isinstance(column_expr, exp.Column):
+    """Parse DATE_TRUNC expression in GROUP BY clause.
+
+    Handles both standard arg order and BigQuery arg order swapped by postgres parser.
+    """
+    sel_col = parse_date_trunc_expression(expr)
+    if sel_col is None:
         return None
-
-    # Extract the unit
-    unit_expr = expr.args.get('unit')
-    if not unit_expr:
-        return None
-
-    if isinstance(unit_expr, exp.Var):
-        unit = unit_expr.name.upper()
-    elif isinstance(unit_expr, exp.Literal):
-        unit = str(unit_expr.this).upper()
-    else:
-        unit = str(unit_expr).upper()
-
-    # Normalize unit names
-    unit_mapping = {
-        'DAY': 'DAY',
-        'WEEK': 'WEEK',
-        'MONTH': 'MONTH',
-        'QUARTER': 'QUARTER',
-        'YEAR': 'YEAR',
-        'HOUR': 'HOUR',
-        'MINUTE': 'MINUTE',
-    }
-
-    normalized_unit = unit_mapping.get(unit)
-    if not normalized_unit:
-        return None
-
     return GroupByItem(
         type='expression',
-        column=column_expr.name,
-        table=column_expr.table if hasattr(column_expr, 'table') and column_expr.table else None,
+        column=sel_col.column,
+        table=sel_col.table,
         function='DATE_TRUNC',
-        unit=normalized_unit,
+        unit=sel_col.unit,
     )
 
 
@@ -637,6 +672,7 @@ def parse_order_by(select_node: exp.Select) -> Optional[List[OrderByClause]]:
     if not order_clause:
         return None
 
+    select_exprs = select_node.expressions
     order_by = []
     for ordered in order_clause.expressions:
         if isinstance(ordered, exp.Ordered):
@@ -655,51 +691,52 @@ def parse_order_by(select_node: exp.Select) -> Optional[List[OrderByClause]]:
                 item = parse_order_by_date_trunc(column_expr, direction)
                 if item:
                     order_by.append(item)
+            elif isinstance(column_expr, exp.Literal) and not column_expr.is_string:
+                # Positional reference like ORDER BY 1 — resolve to actual SELECT column
+                try:
+                    position = int(column_expr.this)
+                except (ValueError, TypeError):
+                    continue
+                if 1 <= position <= len(select_exprs):
+                    ref_expr = select_exprs[position - 1]
+                    actual = ref_expr.this if isinstance(ref_expr, exp.Alias) else ref_expr
+                    if isinstance(actual, exp.Column):
+                        order_by.append(OrderByClause(
+                            type='column',
+                            column=actual.name,
+                            table=actual.table if hasattr(actual, 'table') and actual.table else None,
+                            direction=direction,
+                        ))
+                    elif isinstance(actual, (exp.TimestampTrunc, exp.DateTrunc)):
+                        item = parse_order_by_date_trunc(actual, direction)
+                        if item:
+                            order_by.append(item)
+                    elif isinstance(ref_expr, exp.Alias) and ref_expr.alias:
+                        # For aggregates or other complex expressions, use alias as column ref
+                        order_by.append(OrderByClause(
+                            type='column',
+                            column=ref_expr.alias,
+                            direction=direction,
+                        ))
 
     return order_by if order_by else None
 
 
 def parse_order_by_date_trunc(expr: exp.Expression, direction: str) -> Optional[OrderByClause]:
-    """Parse DATE_TRUNC expression in ORDER BY clause."""
-    # Extract the column being truncated
-    column_expr = expr.this
-    if not isinstance(column_expr, exp.Column):
+    """Parse DATE_TRUNC expression in ORDER BY clause.
+
+    Handles both standard arg order and BigQuery arg order swapped by postgres parser.
+    """
+    sel_col = parse_date_trunc_expression(expr)
+    if sel_col is None:
         return None
-
-    # Extract the unit
-    unit_expr = expr.args.get('unit')
-    if not unit_expr:
-        return None
-
-    if isinstance(unit_expr, exp.Var):
-        unit = unit_expr.name.upper()
-    elif isinstance(unit_expr, exp.Literal):
-        unit = str(unit_expr.this).upper()
-    else:
-        unit = str(unit_expr).upper()
-
-    # Normalize unit names
-    unit_mapping = {
-        'DAY': 'DAY',
-        'WEEK': 'WEEK',
-        'MONTH': 'MONTH',
-        'QUARTER': 'QUARTER',
-        'YEAR': 'YEAR',
-        'HOUR': 'HOUR',
-        'MINUTE': 'MINUTE',
-    }
-
-    normalized_unit = unit_mapping.get(unit)
-    if not normalized_unit:
-        return None
-
     return OrderByClause(
         type='expression',
-        column=column_expr.name,
-        table=column_expr.table if hasattr(column_expr, 'table') and column_expr.table else None,
+        column=sel_col.column,
+        table=sel_col.table,
         direction=direction,
         function='DATE_TRUNC',
-        unit=normalized_unit,
+        unit=sel_col.unit,
     )
 
 
