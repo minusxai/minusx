@@ -6,15 +6,15 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Box, HStack, Text, VStack, Spinner, Button } from '@chakra-ui/react';
+import { useState, useEffect, useCallback } from 'react';
+import { Box, HStack, Text, VStack, Spinner, Button, Textarea } from '@chakra-ui/react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { SelectColumn } from '@/lib/sql/ir-types';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { QueryChip, AddChipButton, getColumnIcon } from './QueryChip';
 import { PickerPopover, PickerHeader, PickerList, PickerItem } from './PickerPopover';
 import { AliasInput } from './AliasInput';
-import { LuX, LuBraces } from 'react-icons/lu';
+import { LuX, LuCode } from 'react-icons/lu';
 
 interface ColumnsSectionProps {
   databaseName: string;
@@ -38,6 +38,9 @@ export function ColumnsSection({
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editAlias, setEditAlias] = useState('');
+  const [editingRawIndex, setEditingRawIndex] = useState<number | null>(null);
+  const [editRawSql, setEditRawSql] = useState('');
+  const [editRawAlias, setEditRawAlias] = useState('');
 
   // Check if using SELECT *
   const isSelectStar = columns.length === 1 && columns[0].column === '*';
@@ -96,6 +99,17 @@ export function ColumnsSection({
       onChange([]);
     }
   };
+
+  const handleSaveRawColumn = useCallback((index: number) => {
+    const newColumns = [...columns];
+    newColumns[index] = {
+      ...newColumns[index],
+      raw_sql: editRawSql.trim(),
+      alias: editRawAlias.trim() || undefined,
+    };
+    onChange(newColumns);
+    setEditingRawIndex(null);
+  }, [columns, onChange, editRawSql, editRawAlias]);
 
   const formatExpressionLabel = (col: SelectColumn): string => {
     if (col.type === 'raw') {
@@ -161,13 +175,70 @@ export function ColumnsSection({
             // SELECT * is handled by the checkbox above
             if (col.type === 'column' && col.column === '*') return null;
 
-            // Non-simple columns: render as locked chips (visible but not editable)
-            if (col.type === 'raw' || col.type === 'expression') {
+            // Raw SQL columns: editable via SQL expression editor
+            if (col.type === 'raw') {
+              return (
+                <PickerPopover
+                  key={index}
+                  open={editingRawIndex === index}
+                  onOpenChange={(details) => {
+                    if (!details.open) setEditingRawIndex(null);
+                  }}
+                  trigger={
+                    <Box>
+                      <QueryChip
+                        variant="neutral"
+                        icon={<LuCode size={11} />}
+                        onRemove={() => handleRemoveColumn(index)}
+                        onClick={() => {
+                          setEditRawSql(col.raw_sql || '');
+                          setEditRawAlias(col.alias || '');
+                          setEditingRawIndex(index);
+                        }}
+                        isActive={editingRawIndex === index}
+                      >
+                        {formatExpressionLabel(col)}
+                      </QueryChip>
+                    </Box>
+                  }
+                  padding={3}
+                  width="340px"
+                >
+                  <VStack gap={2.5} align="stretch">
+                    <HStack justify="space-between" align="center">
+                      <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
+                        SQL Expression
+                      </Text>
+                      <AliasInput
+                        value={editRawAlias}
+                        onChange={(a) => setEditRawAlias(a || '')}
+                        placeholder="alias"
+                      />
+                    </HStack>
+                    <Textarea
+                      value={editRawSql}
+                      onChange={(e) => setEditRawSql(e.target.value)}
+                      rows={4}
+                      fontFamily="mono"
+                      fontSize="xs"
+                      placeholder="e.g. CASE WHEN status = 'active' THEN 1 ELSE 0 END"
+                      resize="vertical"
+                    />
+                    <Button size="sm" colorPalette="blue" onClick={() => handleSaveRawColumn(index)}>
+                      Apply
+                    </Button>
+                  </VStack>
+                </PickerPopover>
+              );
+            }
+
+            // Expression columns (DATE_TRUNC, DATE, SPLIT_PART): locked, no GUI editor
+            if (col.type === 'expression') {
               return (
                 <QueryChip
                   key={index}
                   variant="neutral"
-                  icon={<LuBraces size={11} />}
+                  icon={<LuCode size={11} />}
                   isLocked
                   onRemove={() => handleRemoveColumn(index)}
                 >

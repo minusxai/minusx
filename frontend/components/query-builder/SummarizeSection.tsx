@@ -6,13 +6,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Box, HStack, Text, VStack, SimpleGrid, Input } from '@chakra-ui/react';
+import { Box, HStack, Text, VStack, SimpleGrid, Input, Button, Textarea } from '@chakra-ui/react';
 import { SelectColumn, GroupByClause, GroupByItem } from '@/lib/types';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { QueryChip, AddChipButton, getColumnIcon } from './QueryChip';
 import { PickerPopover, PickerHeader, PickerList, PickerItem } from './PickerPopover';
 import { AliasInput } from './AliasInput';
-import { LuSigma, LuX, LuCalendar, LuBraces } from 'react-icons/lu';
+import { LuSigma, LuX, LuCalendar, LuCode } from 'react-icons/lu';
 import { Checkbox } from '@/components/ui/checkbox';
 
 const DATE_TRUNC_UNITS = [
@@ -73,6 +73,10 @@ export function SummarizeSection({
   const [editAlias, setEditAlias] = useState('');
   const [wrapWithRound, setWrapWithRound] = useState(false);
   const [roundDecimals, setRoundDecimals] = useState(2);
+  // Raw expression editing
+  const [editingRawMetricIndex, setEditingRawMetricIndex] = useState<number | null>(null);
+  const [editRawSql, setEditRawSql] = useState('');
+  const [editRawAlias, setEditRawAlias] = useState('');
   // For date column truncation selection
   const [selectedDateColumn, setSelectedDateColumn] = useState<{ name: string; type?: string } | null>(null);
   // For editing dimensions
@@ -209,6 +213,30 @@ export function SummarizeSection({
     },
     [columns, onColumnsChange]
   );
+
+  const handleOpenRawMetricEdit = useCallback((idx: number) => {
+    const metric = rawMetrics[idx];
+    if (!metric) return;
+    setEditRawSql(metric.raw_sql || '');
+    setEditRawAlias(metric.alias || '');
+    setEditingRawMetricIndex(idx);
+  }, [rawMetrics]);
+
+  const handleSaveRawMetric = useCallback(() => {
+    if (editingRawMetricIndex === null) return;
+    const rawIndices = columns
+      .map((c, i) => (c.type === 'raw' ? i : -1))
+      .filter((i) => i !== -1);
+    const actualIndex = rawIndices[editingRawMetricIndex];
+    const newColumns = [...columns];
+    newColumns[actualIndex] = {
+      ...newColumns[actualIndex],
+      raw_sql: editRawSql.trim(),
+      alias: editRawAlias.trim() || undefined,
+    };
+    onColumnsChange(newColumns);
+    setEditingRawMetricIndex(null);
+  }, [editingRawMetricIndex, editRawSql, editRawAlias, columns, onColumnsChange]);
 
   const handleEditMetric = useCallback((index: number) => {
     const metric = metrics[index];
@@ -407,17 +435,55 @@ export function SummarizeSection({
       </HStack>
 
       <HStack gap={2} flexWrap="wrap" align="center">
-        {/* Locked raw metric chips (complex expressions: CASE, arithmetic, etc.) */}
+        {/* Raw expression metric chips (complex SQL: CASE, arithmetic, etc.) — editable via SQL editor */}
         {rawMetrics.map((metric, idx) => (
-          <QueryChip
+          <PickerPopover
             key={`raw-metric-${idx}`}
-            variant="metric"
-            icon={<LuBraces size={11} />}
-            isLocked
-            onRemove={() => handleRemoveRawMetric(idx)}
+            open={editingRawMetricIndex === idx}
+            onOpenChange={(details) => {
+              if (!details.open) setEditingRawMetricIndex(null);
+            }}
+            trigger={
+              <Box>
+                <QueryChip
+                  variant="metric"
+                  icon={<LuCode size={11} />}
+                  onRemove={() => handleRemoveRawMetric(idx)}
+                  onClick={() => handleOpenRawMetricEdit(idx)}
+                  isActive={editingRawMetricIndex === idx}
+                >
+                  {metric.alias || metric.raw_sql?.slice(0, 40) || 'expression'}
+                </QueryChip>
+              </Box>
+            }
+            padding={3}
+            width="340px"
           >
-            {metric.alias || metric.raw_sql?.slice(0, 40) || 'expression'}
-          </QueryChip>
+            <VStack gap={2.5} align="stretch">
+              <HStack justify="space-between" align="center">
+                <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
+                  SQL Expression
+                </Text>
+                <AliasInput
+                  value={editRawAlias}
+                  onChange={(a) => setEditRawAlias(a || '')}
+                  placeholder="alias"
+                />
+              </HStack>
+              <Textarea
+                value={editRawSql}
+                onChange={(e) => setEditRawSql(e.target.value)}
+                rows={4}
+                fontFamily="mono"
+                fontSize="xs"
+                placeholder="e.g. ROUND(COUNT(*) * 1.0 / COUNT(DISTINCT user_id), 2)"
+                resize="vertical"
+              />
+              <Button size="sm" colorPalette="blue" onClick={handleSaveRawMetric}>
+                Apply
+              </Button>
+            </VStack>
+          </PickerPopover>
         ))}
 
         {/* Metrics */}
