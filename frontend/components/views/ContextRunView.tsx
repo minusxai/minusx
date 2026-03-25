@@ -2,23 +2,10 @@
 
 import { Box, Text, VStack, HStack, Badge } from '@chakra-ui/react';
 import { LuClock } from 'react-icons/lu';
-import type { ContextOutput, RunFileContent, TestRunResult } from '@/lib/types';
-import TestResultBadge from '@/components/test/TestResultBadge';
+import type { ContextOutput, RunFileContent } from '@/lib/types';
+import TestRunResultsList from '@/components/test/TestRunResultsList';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import type { FileId } from '@/store/filesSlice';
-
-function TestResultRow({ result }: { result: TestRunResult }) {
-  const label = result.test.label
-    ?? (result.test.type === 'llm' && result.test.subject.type === 'llm'
-        ? result.test.subject.prompt.slice(0, 60) + (result.test.subject.prompt.length > 60 ? '…' : '')
-        : `Test`);
-  return (
-    <HStack gap={2} px={3} py={2} borderBottomWidth="1px" borderColor="border.muted" _last={{ borderBottom: 'none' }}>
-      <TestResultBadge result={result} showDetails />
-      <Text fontSize="xs" color="fg.muted" truncate flex={1}>{label}</Text>
-    </HStack>
-  );
-}
 
 interface ContextRunViewProps {
   fileId: FileId;
@@ -28,8 +15,9 @@ export default function ContextRunView({ fileId }: ContextRunViewProps) {
   const { fileState } = useFile(fileId) ?? {};
   const runFile = fileState?.content as RunFileContent | undefined;
   if (!runFile) return null;
+
   const output = runFile.output as ContextOutput | undefined;
-  const results: TestRunResult[] = output?.results ?? [];
+  const results = output?.results ?? [];
   const passed = results.filter(r => r.passed).length;
   const total = results.length;
 
@@ -39,7 +27,6 @@ export default function ContextRunView({ fileId }: ContextRunViewProps) {
 
   return (
     <VStack align="stretch" gap={4}>
-      {/* Run summary */}
       <HStack gap={3} flexWrap="wrap">
         {runFile.status === 'success' ? (
           <Badge colorPalette={passed === total ? 'green' : 'red'} size="sm" fontWeight="700">
@@ -71,18 +58,7 @@ export default function ContextRunView({ fileId }: ContextRunViewProps) {
         </Box>
       )}
 
-      {/* Test results */}
-      {results.length > 0 && (
-        <Box borderRadius="md" border="1px solid" borderColor="border.muted" overflow="hidden">
-          {results.map((r, i) => (
-            <TestResultRow key={i} result={r} />
-          ))}
-        </Box>
-      )}
-
-      {results.length === 0 && runFile.status !== 'running' && (
-        <Text fontSize="sm" color="fg.muted">No tests were run.</Text>
-      )}
+      <TestRunResultsList results={results} />
     </VStack>
   );
 }

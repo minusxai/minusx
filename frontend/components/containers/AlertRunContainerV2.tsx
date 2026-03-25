@@ -11,7 +11,7 @@ import { useState } from 'react';
 import { LuChevronDown, LuChevronRight, LuClock, LuTimer } from 'react-icons/lu';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import type { AlertOutput, AlertRunContent, MessageAttemptLog, RunFileContent, RunMessageRecord, TestRunResult } from '@/lib/types';
-import TestResultBadge from '@/components/test/TestResultBadge';
+import TestRunResultsList from '@/components/test/TestRunResultsList';
 import type { FileId } from '@/store/filesSlice';
 import type { FileViewMode } from '@/lib/ui/fileComponents';
 import { LuBell, LuExternalLink, LuMail, LuMessageCircle, LuSettings } from 'react-icons/lu';
@@ -302,21 +302,7 @@ export function AlertRunView({
           </Text>
 
           {testResults && testResults.length > 0 ? (
-            <VStack align="stretch" gap={2}>
-              {testResults.map((r, i) => {
-                const label = r.test.label
-                  ?? (r.test.type === 'llm' && r.test.subject.type === 'llm'
-                    ? r.test.subject.prompt.slice(0, 60) + (r.test.subject.prompt.length > 60 ? '…' : '')
-                    : `Test ${i + 1}`);
-                const isFailed = triggeredBy?.some(t => t === r) || (!r.passed);
-                return (
-                  <HStack key={i} gap={2} p={2} borderRadius="md" bg={isFailed ? 'red.subtle' : 'green.subtle'}>
-                    <TestResultBadge result={r} showDetails />
-                    <Text fontSize="xs" color="fg.muted" truncate flex={1}>{label}</Text>
-                  </HStack>
-                );
-              })}
-            </VStack>
+            <TestRunResultsList results={testResults} variant="colored" />
           ) : (
             <VStack align="stretch" gap={0} separator={<Separator />}>
               {actualValue !== null && actualValue !== undefined && (

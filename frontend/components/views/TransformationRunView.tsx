@@ -3,8 +3,8 @@
 import { Box, Text, VStack, HStack, Badge } from '@chakra-ui/react';
 import { useState } from 'react';
 import { LuChevronDown, LuChevronRight, LuClock, LuTimer, LuFlaskConical } from 'react-icons/lu';
-import type { RunFileContent, TestRunResult, TransformationOutput, TransformResult } from '@/lib/types';
-import TestResultBadge from '@/components/test/TestResultBadge';
+import type { RunFileContent, TransformationOutput, TransformResult } from '@/lib/types';
+import TestRunResultsList from '@/components/test/TestRunResultsList';
 
 /* ------------------------------------------------------------------ */
 /*  Sub-components                                                      */
@@ -20,27 +20,6 @@ function StatusBadge({ status }: { status: 'success' | 'error' | 'running' | 'fa
   return <Badge colorPalette={colorPalette} size="sm" fontWeight="700">{label}</Badge>;
 }
 
-function TestResultsList({ testResults }: { testResults: TestRunResult[] }) {
-  if (!testResults.length) return null;
-  const passed = testResults.filter(r => r.passed).length;
-  return (
-    <Box px={3} py={2} bg="bg.surface" borderTopWidth="1px" borderColor="border.muted">
-      <Text fontSize="xs" color="fg.muted" fontWeight="600" mb={1}>
-        Tests: {passed}/{testResults.length} passed
-      </Text>
-      <VStack align="stretch" gap={1}>
-        {testResults.map((r, i) => (
-          <HStack key={i} gap={2}>
-            <TestResultBadge result={r} showDetails />
-            {r.test.label && (
-              <Text fontSize="xs" color="fg.muted" truncate>{r.test.label}</Text>
-            )}
-          </HStack>
-        ))}
-      </VStack>
-    </Box>
-  );
-}
 
 function TransformResultCard({ result }: { result: TransformResult }) {
   const [sqlOpen, setSqlOpen] = useState(false);
@@ -89,7 +68,7 @@ function TransformResultCard({ result }: { result: TransformResult }) {
         </Box>
       )}
 
-      {hasTests && <TestResultsList testResults={result.testResults!} />}
+      {hasTests && <TestRunResultsList results={result.testResults!} variant="compact" />}
     </Box>
   );
 }
