@@ -51,13 +51,13 @@ def parse_sql_to_ir(sql: str, _skip_validation: bool = False) -> QueryIR:
     except Exception as e:
         raise UnsupportedSQLError(f"Failed to parse SQL: {str(e)}", ["PARSE_ERROR"])
 
-    # Extract CTEs from WITH clause
+    # Extract CTEs — sqlglot stores them in select.args['with_'], not as a separate With node
     ctes = []
-    if isinstance(ast, exp.With):
-        for cte_node in ast.expressions:
+    with_clause = ast.args.get('with_') if isinstance(ast, exp.Select) else None
+    if with_clause:
+        for cte_node in with_clause.expressions:
             cte_body_sql = cte_node.this.sql(dialect='postgres')
             ctes.append(CTE(name=cte_node.alias, raw_sql=cte_body_sql))
-        ast = ast.this  # Main SELECT statement after WITH
 
     # Extract SELECT node
     select_node = ast if isinstance(ast, exp.Select) else ast.find(exp.Select)
@@ -319,7 +319,7 @@ def parse_joins(select_node: exp.Select) -> Optional[List[JoinClause]]:
     """Parse JOIN clauses into list of JoinClause objects."""
     joins = []
 
-    for join_node in select_node.find_all(exp.Join):
+    for join_node in (select_node.args.get('joins') or []):
         # Get join type (stored in 'side' for LEFT/RIGHT/FULL, 'kind' for INNER)
         join_kind = join_node.args.get("side", "").upper() or join_node.args.get("kind", "").upper() or "INNER"
 

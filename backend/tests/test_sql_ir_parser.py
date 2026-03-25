@@ -294,12 +294,14 @@ class TestUnsupportedFeatures:
             parse_sql_to_ir(sql)
         assert "Subqueries" in exc_info.value.features
 
-    def test_cte_rejected(self):
-        """Test that CTEs are rejected"""
-        sql = "WITH active_users AS (SELECT * FROM users WHERE active = true) SELECT * FROM active_users"
-        with pytest.raises(UnsupportedSQLError) as exc_info:
-            parse_sql_to_ir(sql)
-        assert "WITH clauses (CTEs)" in exc_info.value.features
+    def test_cte_supported(self):
+        """Test that CTEs are now supported (stored as raw SQL in IR)"""
+        sql = "WITH active_users AS (SELECT * FROM users WHERE active = TRUE) SELECT * FROM active_users"
+        ir = parse_sql_to_ir(sql)
+        assert ir is not None
+        assert ir.ctes is not None
+        assert len(ir.ctes) == 1
+        assert ir.ctes[0].name == "active_users"
 
     def test_union_rejected(self):
         """Test that UNION is rejected"""
@@ -308,12 +310,13 @@ class TestUnsupportedFeatures:
             parse_sql_to_ir(sql)
         assert "UNION" in exc_info.value.features
 
-    def test_case_rejected(self):
-        """Test that CASE expressions are rejected"""
-        sql = "SELECT CASE WHEN age > 18 THEN 'adult' ELSE 'minor' END FROM users"
-        with pytest.raises(UnsupportedSQLError) as exc_info:
-            parse_sql_to_ir(sql)
-        assert "CASE expressions" in exc_info.value.features
+    def test_case_supported(self):
+        """Test that CASE expressions are now supported (stored as raw SQL in IR)"""
+        sql = "SELECT CASE WHEN age > 18 THEN 'adult' ELSE 'minor' END AS age_group FROM users"
+        ir = parse_sql_to_ir(sql)
+        assert ir is not None
+        assert ir.select[0].type == 'raw'
+        assert 'CASE' in ir.select[0].raw_sql.upper()
 
 
 class TestEdgeCases:
