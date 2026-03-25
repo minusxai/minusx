@@ -188,6 +188,45 @@ ATLAS_FILE_SCHEMA_JSON = json.dumps(_atlas_file_adapter.json_schema())
 
 
 # ============================================================================
+# Unified Test types
+# ============================================================================
+
+class LLMSubject(BaseModel):
+    type: Literal["llm"]
+    prompt: str = Field(..., description="natural language question to ask the AI agent")
+    context: Dict[str, Any] = Field(..., description="where to run the prompt: {type: 'explore'} or {type: 'file', file_id: N}")
+    connection_id: Optional[str] = None
+
+class QuerySubject(BaseModel):
+    type: Literal["query"]
+    question_id: int = Field(..., description="file ID of the question to execute")
+    column: Optional[str] = Field(None, description="column to read (defaults to first column)")
+    row: Optional[int] = Field(None, description="row index: 0=first (default), -1=last, etc.")
+
+TestSubject = Annotated[Union[LLMSubject, QuerySubject], Field(discriminator="type")]
+
+class ConstantValue(BaseModel):
+    type: Literal["constant"]
+    value: Union[str, float, bool]
+
+class QueryValue(BaseModel):
+    type: Literal["query"]
+    question_id: int = Field(..., description="file ID of the question whose result is the expected value")
+    column: Optional[str] = Field(None, description="column to read (defaults to first column)")
+    row: Optional[int] = Field(None, description="row index: 0=first (default), -1=last, etc.")
+
+TestValue = Annotated[Union[ConstantValue, QueryValue], Field(discriminator="type")]
+
+class Test(BaseModel):
+    type: Literal["llm", "query"]
+    subject: TestSubject
+    answerType: Literal["binary", "string", "number"]
+    operator: Literal["~", "=", "<", ">", "<=", ">="]
+    value: TestValue
+    label: Optional[str] = Field(None, description="optional display name shown in run results")
+
+
+# ============================================================================
 # Transformation Content
 # ============================================================================
 
@@ -198,6 +237,7 @@ class TransformOutput(BaseModel):
 class Transform(BaseModel):
     question: int = Field(..., description="file ID of the source question")
     output: TransformOutput
+    tests: Optional[List[Test]] = Field(None, description="tests to run after this transform executes")
 
 class TransformationContent(BaseModel):
     description: Optional[str] = None

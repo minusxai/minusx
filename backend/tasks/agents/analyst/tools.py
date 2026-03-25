@@ -468,6 +468,29 @@ class SubmitNumber(Tool):
 
 
 @register_agent
+class SubmitString(Tool):
+    """Submit a string answer for a string_match eval assertion.
+
+    Use this tool when asked to compute and submit a string value during evaluation.
+    Call this exactly once with your final string answer.
+    """
+
+    def __init__(
+        self,
+        answer: str = Field(..., description="String answer to the eval question"),
+        **kwargs
+    ):
+        super().__init__(**kwargs)  # type: ignore
+        self.answer = answer
+
+    async def reduce(self, child_batches):
+        pass
+
+    async def run(self) -> str:
+        return json.dumps({'submitted': True, 'answer': str(self.answer)})
+
+
+@register_agent
 class CannotAnswer(Tool):
     """Signal that the question cannot be answered with the available data.
     Call this if the data is insufficient or the question is unanswerable.

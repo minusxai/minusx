@@ -561,7 +561,65 @@ export interface JobHandlerResult {
   status?: 'success' | 'failure';
 }
 
+// ============================================================================
+// Unified Test types (reused by transforms, and in future by alerts + evals)
+// ============================================================================
+
+/**
+ * Python-style row index: 0 = first, -1 = last, -2 = second-from-last, etc.
+ * undefined defaults to 0 (first row).
+ */
+export type RowIndex = number;
+
+/** What is being tested */
+export type TestSubject =
+  | {
+      type: 'llm';
+      prompt: string;
+      /** Where to run the prompt — explore workspace or a specific file context */
+      context: { type: 'explore' } | { type: 'file'; file_id: number };
+      connection_id?: string;
+    }
+  | {
+      type: 'query';
+      question_id: number;
+      column?: string;   // which column to extract (defaults to first column)
+      row?: RowIndex;    // which row to read (default: 0 = first)
+    };
+
+/** binary only supports '='; string supports '~' (regex) and '='; number supports all */
+export type TestAnswerType = 'binary' | 'string' | 'number';
+export type TestOperator = '~' | '=' | '<' | '>' | '<=' | '>=';
+
+/** The expected value to compare against */
+export type TestValue =
+  | { type: 'constant'; value: string | number | boolean }
+  | { type: 'query'; question_id: number; column?: string; row?: RowIndex };
+
+export interface Test {
+  type: 'llm' | 'query';
+  subject: TestSubject;
+  answerType: TestAnswerType;
+  operator: TestOperator;
+  value: TestValue;
+  label?: string;  // optional display name shown in run results
+}
+
+/** Result of executing a single Test */
+export interface TestRunResult {
+  test: Test;
+  passed: boolean;
+  actualValue?: string | number | boolean | null;
+  expectedValue?: string | number | boolean | null;
+  error?: string;
+  /** Agent tool-call trace, present for LLM tests. Typed as unknown[] to avoid circular import. */
+  log?: unknown[];
+}
+
+// ============================================================================
 // Transformation types
+// ============================================================================
+
 export interface TransformOutput {
   schema_name: string;
   view: string;
@@ -570,6 +628,7 @@ export interface TransformOutput {
 export interface Transform {
   question: number;      // file ID of the source question
   output: TransformOutput;
+  tests?: Test[];        // tests to run after this transform executes
 }
 
 export interface TransformationContent extends BaseFileContent {
@@ -584,12 +643,16 @@ export interface TransformResult {
   schema: string;
   view: string;
   sql: string;
-  status: 'success' | 'error';
+  status: 'success' | 'error' | 'skipped';  // 'skipped' in test_only run mode
   error?: string;
+  testResults?: TestRunResult[];  // results of any tests attached to this transform step
 }
+
+export type TransformRunMode = 'full' | 'test_only';
 
 export interface TransformationOutput {
   results: TransformResult[];
+  runMode?: TransformRunMode;  // defaults to 'full' if absent
 }
 
 // What handlers receive
@@ -599,6 +662,7 @@ export interface JobRunnerInput {
   jobType: string;
   file: any;
   previousRuns: JobRun[];
+  runMode?: TransformRunMode;  // for transformation jobs: 'full' (default) or 'test_only'
 }
 
 /**

@@ -3,6 +3,7 @@ import { FilesAPI } from '@/lib/data/files.server';
 import { runQuery } from '@/lib/connections/run-query';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { resolvePath } from '@/lib/mode/path-resolver';
+import { createServerRunner } from '@/lib/tests/server';
 import type { JobHandler } from '../job-registry';
 import type {
   ConnectionContent,
@@ -15,14 +16,22 @@ import type {
 } from '@/lib/types';
 
 export const transformationJobHandler: JobHandler = {
-  async execute({ file }: JobRunnerInput, user): Promise<JobHandlerResult> {
+  async execute({ file, runMode = 'full' }: JobRunnerInput, user): Promise<JobHandlerResult> {
     const transformation = file as TransformationContent;
     const results: TransformResult[] = [];
+    const testRunner = createServerRunner(user, '');
 
     for (const transform of transformation.transforms ?? []) {
-      const { question: questionId, output: { schema_name: schema, view } } = transform;
+      const { question: questionId, output: { schema_name: schema, view }, tests = [] } = transform;
       let questionName = `Question #${questionId}`;
       let sql = '';
+
+      if (runMode === 'test_only') {
+        // Skip transform execution — run tests only
+        const testResults = await Promise.all(tests.map(t => testRunner.execute(t)));
+        results.push({ questionId, questionName, schema, view, sql, status: 'skipped', testResults });
+        continue;
+      }
 
       try {
         // Load the referenced question
@@ -52,7 +61,6 @@ export const transformationJobHandler: JobHandler = {
         }
 
         // Build DDL using CREATE OR REPLACE VIEW for idempotent execution
-        // BigQuery requires backtick quoting; all others use ANSI double-quotes
         const connectionType = connFile?.content ? (connFile.content as ConnectionContent).type : null;
         if (connectionType === 'bigquery') {
           sql = `CREATE OR REPLACE VIEW \`${schema}\`.\`${view}\` AS\n${question.query}`;
@@ -60,7 +68,7 @@ export const transformationJobHandler: JobHandler = {
           sql = `CREATE OR REPLACE VIEW "${schema}"."${view}" AS\n${question.query}`;
         }
 
-        // Execute DDL via Python backend (Postgres/BigQuery support DDL natively)
+        // Execute DDL via Python backend
         try {
           await runQuery(question.database_name, sql, {}, user);
         } catch (err) {
@@ -72,7 +80,12 @@ export const transformationJobHandler: JobHandler = {
           continue;
         }
 
-        results.push({ questionId, questionName, schema, view, sql, status: 'success' });
+        // Run tests attached to this transform step
+        const testResults = tests.length > 0
+          ? await Promise.all(tests.map(t => testRunner.execute(t)))
+          : undefined;
+
+        results.push({ questionId, questionName, schema, view, sql, status: 'success', testResults });
       } catch (err) {
         const error = err instanceof Error ? err.message : 'Unknown error';
         results.push({ questionId, questionName, schema, view, sql, status: 'error', error });
@@ -80,7 +93,9 @@ export const transformationJobHandler: JobHandler = {
     }
 
     const hasErrors = results.some(r => r.status === 'error');
-    const output: TransformationOutput = { results };
-    return { output, messages: [], status: hasErrors ? 'failure' : 'success' };
+    const hasFailedTests = results.some(r => r.testResults?.some(tr => !tr.passed));
+    const output: TransformationOutput = { results, runMode };
+    const overallStatus = hasErrors || hasFailedTests ? 'failure' : 'success';
+    return { output, messages: [], status: overallStatus };
   },
 };
