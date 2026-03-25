@@ -77,6 +77,10 @@ export function SummarizeSection({
   const [editingRawMetricIndex, setEditingRawMetricIndex] = useState<number | null>(null);
   const [editRawSql, setEditRawSql] = useState('');
   const [editRawAlias, setEditRawAlias] = useState('');
+  // Add new custom expression metric
+  const [addExprOpen, setAddExprOpen] = useState(false);
+  const [newExprSql, setNewExprSql] = useState('');
+  const [newExprAlias, setNewExprAlias] = useState('');
   // For date column truncation selection
   const [selectedDateColumn, setSelectedDateColumn] = useState<{ name: string; type?: string } | null>(null);
   // For editing dimensions
@@ -213,6 +217,19 @@ export function SummarizeSection({
     },
     [columns, onColumnsChange]
   );
+
+  const handleAddExprMetric = useCallback(() => {
+    if (!newExprSql.trim()) return;
+    const newCol: SelectColumn = {
+      type: 'raw',
+      raw_sql: newExprSql.trim(),
+      alias: newExprAlias.trim() || undefined,
+    };
+    onColumnsChange([...columns, newCol]);
+    setNewExprSql('');
+    setNewExprAlias('');
+    setAddExprOpen(false);
+  }, [newExprSql, newExprAlias, columns, onColumnsChange]);
 
   const handleOpenRawMetricEdit = useCallback((idx: number) => {
     const metric = rawMetrics[idx];
@@ -661,6 +678,63 @@ export function SummarizeSection({
               ]}
             </PickerList>
           </Box>
+        </PickerPopover>
+
+        {/* Add custom expression metric */}
+        <PickerPopover
+          open={addExprOpen}
+          onOpenChange={(details) => {
+            setAddExprOpen(details.open);
+            if (!details.open) { setNewExprSql(''); setNewExprAlias(''); }
+          }}
+          trigger={
+            <Box
+              as="button"
+              display="inline-flex"
+              alignItems="center"
+              gap={1}
+              bg="transparent"
+              border="1px dashed"
+              borderColor="rgba(134, 239, 172, 0.3)"
+              borderRadius="md"
+              px={2}
+              py={1}
+              cursor="pointer"
+              transition="all 0.15s ease"
+              _hover={{ bg: 'rgba(134, 239, 172, 0.08)', borderStyle: 'solid' }}
+              onClick={() => setAddExprOpen(true)}
+            >
+              <LuCode size={11} color="var(--chakra-colors-fg-muted)" />
+              <Text fontSize="xs" color="fg.muted" fontWeight="500">expr</Text>
+            </Box>
+          }
+          padding={3}
+          width="340px"
+        >
+          <VStack gap={2.5} align="stretch">
+            <HStack justify="space-between" align="center">
+              <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
+                SQL Expression
+              </Text>
+              <AliasInput
+                value={newExprAlias}
+                onChange={(a) => setNewExprAlias(a || '')}
+                placeholder="alias"
+              />
+            </HStack>
+            <Textarea
+              value={newExprSql}
+              onChange={(e) => setNewExprSql(e.target.value)}
+              rows={4}
+              fontFamily="mono"
+              fontSize="xs"
+              placeholder="e.g. ROUND(COUNT(*) * 1.0 / COUNT(DISTINCT user_id), 2)"
+              resize="vertical"
+            />
+            <Button size="sm" colorPalette="blue" onClick={handleAddExprMetric} disabled={!newExprSql.trim()}>
+              Add
+            </Button>
+          </VStack>
         </PickerPopover>
 
         {/* "by" separator - only show if we have metrics */}

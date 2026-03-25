@@ -41,6 +41,9 @@ export function ColumnsSection({
   const [editingRawIndex, setEditingRawIndex] = useState<number | null>(null);
   const [editRawSql, setEditRawSql] = useState('');
   const [editRawAlias, setEditRawAlias] = useState('');
+  const [addExprOpen, setAddExprOpen] = useState(false);
+  const [newExprSql, setNewExprSql] = useState('');
+  const [newExprAlias, setNewExprAlias] = useState('');
 
   // Check if using SELECT *
   const isSelectStar = columns.length === 1 && columns[0].column === '*';
@@ -99,6 +102,19 @@ export function ColumnsSection({
       onChange([]);
     }
   };
+
+  const handleAddExpression = useCallback(() => {
+    if (!newExprSql.trim()) return;
+    const newCol: SelectColumn = {
+      type: 'raw',
+      raw_sql: newExprSql.trim(),
+      alias: newExprAlias.trim() || undefined,
+    };
+    onChange(isSelectStar ? [newCol] : [...columns, newCol]);
+    setNewExprSql('');
+    setNewExprAlias('');
+    setAddExprOpen(false);
+  }, [newExprSql, newExprAlias, columns, onChange, isSelectStar]);
 
   const handleSaveRawColumn = useCallback((index: number) => {
     const newColumns = [...columns];
@@ -348,6 +364,63 @@ export function ColumnsSection({
                 )
               }
             </PickerList>
+          </PickerPopover>
+
+          {/* Add custom expression button */}
+          <PickerPopover
+            open={addExprOpen}
+            onOpenChange={(details) => {
+              setAddExprOpen(details.open);
+              if (!details.open) { setNewExprSql(''); setNewExprAlias(''); }
+            }}
+            trigger={
+              <Box
+                as="button"
+                display="inline-flex"
+                alignItems="center"
+                gap={1}
+                bg="transparent"
+                border="1px dashed"
+                borderColor="border.default"
+                borderRadius="md"
+                px={2}
+                py={1}
+                cursor="pointer"
+                transition="all 0.15s ease"
+                _hover={{ bg: 'bg.muted', borderStyle: 'solid' }}
+                onClick={() => setAddExprOpen(true)}
+              >
+                <LuCode size={11} color="var(--chakra-colors-fg-muted)" />
+                <Text fontSize="xs" color="fg.muted" fontWeight="500">expr</Text>
+              </Box>
+            }
+            padding={3}
+            width="340px"
+          >
+            <VStack gap={2.5} align="stretch">
+              <HStack justify="space-between" align="center">
+                <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
+                  SQL Expression
+                </Text>
+                <AliasInput
+                  value={newExprAlias}
+                  onChange={(a) => setNewExprAlias(a || '')}
+                  placeholder="alias"
+                />
+              </HStack>
+              <Textarea
+                value={newExprSql}
+                onChange={(e) => setNewExprSql(e.target.value)}
+                rows={4}
+                fontFamily="mono"
+                fontSize="xs"
+                placeholder="e.g. CASE WHEN status = 'active' THEN 1 ELSE 0 END"
+                resize="vertical"
+              />
+              <Button size="sm" colorPalette="blue" onClick={handleAddExpression} disabled={!newExprSql.trim()}>
+                Add
+              </Button>
+            </VStack>
           </PickerPopover>
         </HStack>
       )}
