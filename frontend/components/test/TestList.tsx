@@ -132,12 +132,16 @@ function TestRow({ test, index, editMode, forcedType, defaultQuestionId, onChang
 function TestReadOnly({ test }: { test: Test }) {
   const subjectDesc = test.subject.type === 'llm'
     ? `LLM: "${test.subject.prompt}"`
+    : test.subject.source === 'inline'
+    ? `SQL: ${test.subject.sql.slice(0, 40)}${test.subject.sql.length > 40 ? '…' : ''}${test.subject.column ? `.${test.subject.column}` : ''}`
     : `Query #${test.subject.question_id}${test.subject.column ? `.${test.subject.column}` : ''}${test.subject.row !== undefined ? `[${test.subject.row}]` : ''}`;
 
   const valueDesc = test.value.type === 'constant'
     ? String(test.value.value)
     : test.value.type === 'cannot_answer'
     ? 'cannot answer'
+    : test.value.source === 'inline'
+    ? `SQL: ${test.value.sql.slice(0, 30)}…`
     : `Q#${test.value.question_id}${test.value.column ? `.${test.value.column}` : ''}`;
 
   return (

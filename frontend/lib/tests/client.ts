@@ -27,16 +27,20 @@ async function resolveExpectedValueOnClient(
     return null; // handled separately before this is called
   }
 
-  const [qFile] = await readFiles([value.question_id]);
-  const question = qFile?.fileState?.content as QuestionContent | undefined;
-  if (!question?.query || !question.database_name) return null;
+  let sql: string;
+  let database: string;
+  if (value.source === 'inline') {
+    sql = value.sql;
+    database = value.database_name;
+  } else {
+    const [qFile] = await readFiles([value.question_id]);
+    const question = qFile?.fileState?.content as QuestionContent | undefined;
+    if (!question?.query || !question.database_name) return null;
+    sql = question.query;
+    database = question.database_name;
+  }
 
-  const result = await getQueryResult({
-    query: question.query,
-    params: {},
-    database: question.database_name,
-  }, { forceLoad: true });
-
+  const result = await getQueryResult({ query: sql, params: {}, database }, { forceLoad: true });
   return extractCellValue(result.rows, result.columns, value.column, value.row);
 }
 
@@ -48,24 +52,29 @@ async function executeQueryTestOnClient(
 ): Promise<TestRunResult> {
   const subject = test.subject as Extract<typeof test.subject, { type: 'query' }>;
 
-  const [qFile] = await readFiles([subject.question_id]);
-  const question = qFile?.fileState?.content as QuestionContent | undefined;
-  if (!question?.query || !question.database_name) {
-    return {
-      test,
-      passed: false,
-      error: `Question #${subject.question_id} not found or has no query/connection`,
-    };
+  let subjectSql: string;
+  let subjectDb: string;
+  if (subject.source === 'inline') {
+    subjectSql = subject.sql;
+    subjectDb = subject.database_name;
+  } else {
+    const [qFile] = await readFiles([subject.question_id]);
+    const question = qFile?.fileState?.content as QuestionContent | undefined;
+    if (!question?.query || !question.database_name) {
+      return {
+        test,
+        passed: false,
+        error: `Question #${subject.question_id} not found or has no query/connection`,
+      };
+    }
+    subjectSql = question.query;
+    subjectDb = question.database_name;
   }
 
   let rows: Record<string, unknown>[];
   let columns: string[];
   try {
-    const result = await getQueryResult({
-      query: question.query,
-      params: {},
-      database: question.database_name,
-    }, { forceLoad: true });
+    const result = await getQueryResult({ query: subjectSql, params: {}, database: subjectDb }, { forceLoad: true });
     rows = result.rows;
     columns = result.columns;
   } catch (err) {

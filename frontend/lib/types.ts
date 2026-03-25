@@ -580,9 +580,18 @@ export type TestSubject =
     }
   | {
       type: 'query';
+      source?: 'question';  // default when omitted (backward compat)
       question_id: number;
       column?: string;   // which column to extract (defaults to first column)
       row?: RowIndex;    // which row to read (default: 0 = first)
+    }
+  | {
+      type: 'query';
+      source: 'inline';
+      sql: string;
+      database_name: string;
+      column?: string;
+      row?: RowIndex;
     };
 
 /** binary only supports '='; string supports '~' (regex) and '='; number supports all */
@@ -592,7 +601,8 @@ export type TestOperator = '~' | '=' | '<' | '>' | '<=' | '>=';
 /** The expected value to compare against */
 export type TestValue =
   | { type: 'constant'; value: string | number | boolean }
-  | { type: 'query'; question_id: number; column?: string; row?: RowIndex }
+  | { type: 'query'; source?: 'question'; question_id: number; column?: string; row?: RowIndex }
+  | { type: 'query'; source: 'inline'; sql: string; database_name: string; column?: string; row?: RowIndex }
   /** LLM tests only: test passes iff the agent calls CannotAnswer */
   | { type: 'cannot_answer' };
 
