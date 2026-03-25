@@ -15,11 +15,15 @@ RUN pip install --no-cache-dir uv
 # Copy dependency files
 COPY pyproject.toml uv.lock ./
 
-# Install Python dependencies using uv
-RUN uv sync --system
+# Install Python dependencies using uv (without the project itself, since source isn't copied yet)
+RUN uv sync --frozen --no-install-project
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Copy application code
 COPY . .
+
+# Now install the project itself (editable)
+RUN uv sync --frozen
 
 # Create data directory for database files
 RUN mkdir -p /app/data
