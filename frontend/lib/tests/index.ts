@@ -93,6 +93,7 @@ export function compareValues(
     const a = String(actual);
     const e = String(expected);
     if (operator === '~') {
+      if (e.length > 100) return false;
       try {
         return new RegExp(e).test(a);
       } catch {

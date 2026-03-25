@@ -141,6 +141,7 @@ export default function TestValueEditor({ value, answerType, onChange, disabled 
               size="sm"
               bg="bg.surface"
               fontSize="xs"
+              maxLength={100}
               disabled={disabled}
             />
           )}
