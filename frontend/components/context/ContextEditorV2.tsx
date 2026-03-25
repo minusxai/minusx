@@ -11,7 +11,9 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { LuCircleAlert, LuCircleCheck, LuPlus, LuTrash2, LuChevronDown, LuGlobe, LuChevronRight } from 'react-icons/lu';
 import { ContextContent, DatabaseContext, WhitelistItem, ContextVersion, PublishedVersions, DocEntry, Test } from '@/lib/types';
 import TestList from '../test/TestList';
+import ContextRunView from '../views/ContextRunView';
 import type { JobRun } from '@/lib/types';
+import { NativeSelect } from '@chakra-ui/react';
 import { serializeDatabases, parseDatabasesYaml, canDeleteVersion } from '@/lib/context/context-utils';
 import SchemaTreeView from '../SchemaTreeView';
 import ChildPathSelector from '../ChildPathSelector';
@@ -1062,8 +1064,24 @@ export default function ContextEditorV2({
         <Tabs.Content value="evals">
           {activeTab === 'picker' ? (
             <Box>
-              {onRunAll && (
-                <HStack mb={3} justify="flex-end">
+              <HStack mb={3} justify="flex-end">
+                {runs.length > 0 && (
+                  <NativeSelect.Root size="xs" width="200px">
+                    <NativeSelect.Field
+                      value={selectedRunId ? selectedRunId.toString() : ''}
+                      onChange={(e) => onSelectRun?.(e.target.value ? parseInt(e.target.value, 10) : null)}
+                    >
+                      <option value="">Run history</option>
+                      {runs.map(r => (
+                        <option key={r.id} value={r.id.toString()}>
+                          {new Date(r.created_at).toLocaleString()}
+                        </option>
+                      ))}
+                    </NativeSelect.Field>
+                    <NativeSelect.Indicator />
+                  </NativeSelect.Root>
+                )}
+                {onRunAll && (
                   <Button
                     size="xs"
                     variant="outline"
@@ -1074,13 +1092,22 @@ export default function ContextEditorV2({
                   >
                     Run all
                   </Button>
-                </HStack>
+                )}
+              </HStack>
+              {selectedRunId ? (
+                (() => {
+                  const selectedRun = runs.find(r => r.id === selectedRunId);
+                  return selectedRun?.output_file_id ? (
+                    <ContextRunView fileId={selectedRun.output_file_id} />
+                  ) : null;
+                })()
+              ) : (
+                <TestList
+                  tests={content.evals || []}
+                  onChange={(evals: Test[]) => onChange({ evals })}
+                  editMode={editMode}
+                />
               )}
-              <TestList
-                tests={content.evals || []}
-                onChange={(evals: Test[]) => onChange({ evals })}
-                editMode={editMode}
-              />
             </Box>
           ) : (
             <Box

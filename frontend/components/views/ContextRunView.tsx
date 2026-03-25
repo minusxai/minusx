@@ -4,6 +4,8 @@ import { Box, Text, VStack, HStack, Badge } from '@chakra-ui/react';
 import { LuClock } from 'react-icons/lu';
 import type { ContextOutput, RunFileContent, TestRunResult } from '@/lib/types';
 import TestResultBadge from '@/components/test/TestResultBadge';
+import { useFile } from '@/lib/hooks/file-state-hooks';
+import type { FileId } from '@/store/filesSlice';
 
 function TestResultRow({ result }: { result: TestRunResult }) {
   const label = result.test.label
@@ -19,10 +21,13 @@ function TestResultRow({ result }: { result: TestRunResult }) {
 }
 
 interface ContextRunViewProps {
-  runFile: RunFileContent;
+  fileId: FileId;
 }
 
-export default function ContextRunView({ runFile }: ContextRunViewProps) {
+export default function ContextRunView({ fileId }: ContextRunViewProps) {
+  const { fileState } = useFile(fileId) ?? {};
+  const runFile = fileState?.content as RunFileContent | undefined;
+  if (!runFile) return null;
   const output = runFile.output as ContextOutput | undefined;
   const results: TestRunResult[] = output?.results ?? [];
   const passed = results.filter(r => r.passed).length;
