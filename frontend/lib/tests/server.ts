@@ -52,12 +52,21 @@ async function resolveExpectedValue(
     return null; // handled separately before this is called
   }
 
-  // type: 'query' — run the question, extract column/row cell
-  const fileResult = await FilesAPI.loadFile(value.question_id, user);
-  const question = fileResult.data?.content as QuestionContent | undefined;
-  if (!question?.query || !question.database_name) return null;
+  // type: 'query' — run the question or inline SQL, extract column/row cell
+  let sql: string;
+  let database_name: string;
+  if (value.source === 'inline') {
+    sql = value.sql;
+    database_name = value.database_name;
+  } else {
+    const fileResult = await FilesAPI.loadFile(value.question_id, user);
+    const question = fileResult.data?.content as QuestionContent | undefined;
+    if (!question?.query || !question.database_name) return null;
+    sql = question.query;
+    database_name = question.database_name;
+  }
 
-  const result = await runQuery(question.database_name, question.query, {}, user);
+  const result = await runQuery(database_name, sql, {}, user);
   if (!result.rows.length) return null;
   return extractCellValue(result.rows, result.columns, value.column, value.row);
 }
@@ -71,21 +80,30 @@ async function executeQueryTest(
 ): Promise<TestRunResult> {
   const subject = test.subject as Extract<typeof test.subject, { type: 'query' }>;
 
-  // Load and run the subject question
-  const fileResult = await FilesAPI.loadFile(subject.question_id, user);
-  const question = fileResult.data?.content as QuestionContent | undefined;
-  if (!question?.query || !question.database_name) {
-    return {
-      test,
-      passed: false,
-      error: `Question #${subject.question_id} not found or has no query/connection`,
-    };
+  // Load and run the subject question or inline SQL
+  let subjectSql: string;
+  let subjectDb: string;
+  if (subject.source === 'inline') {
+    subjectSql = subject.sql;
+    subjectDb = subject.database_name;
+  } else {
+    const fileResult = await FilesAPI.loadFile(subject.question_id, user);
+    const question = fileResult.data?.content as QuestionContent | undefined;
+    if (!question?.query || !question.database_name) {
+      return {
+        test,
+        passed: false,
+        error: `Question #${subject.question_id} not found or has no query/connection`,
+      };
+    }
+    subjectSql = question.query;
+    subjectDb = question.database_name;
   }
 
   let rows: Record<string, unknown>[];
   let columns: string[];
   try {
-    const result = await runQuery(question.database_name, question.query, {}, user);
+    const result = await runQuery(subjectDb, subjectSql, {}, user);
     rows = result.rows;
     columns = result.columns;
   } catch (err) {

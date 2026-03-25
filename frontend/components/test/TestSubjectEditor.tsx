@@ -9,6 +9,8 @@ import type { TestSubject } from '@/lib/types';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { useConnections } from '@/lib/hooks/useConnections';
 import DatabaseSelector from '@/components/DatabaseSelector';
+import { QueryModeSelector, QueryBuilder } from '@/components/query-builder';
+import SqlEditor from '@/components/SqlEditor';
 
 interface TestSubjectEditorProps {
   subject: TestSubject;
@@ -104,11 +106,105 @@ function useQuestionColumns(questionId: number | undefined): string[] {
   return columns;
 }
 
+/** Inline SQL subject: DatabaseSelector + GUI/SQL toggle + editor + Column + Row */
+function InlineSubjectEditor({
+  subject,
+  onChange,
+  disabled,
+}: {
+  subject: Extract<TestSubject, { source: 'inline' }>;
+  onChange: (subject: TestSubject) => void;
+  disabled?: boolean;
+}) {
+  const [queryMode, setQueryMode] = useState<'gui' | 'sql'>('gui');
+  const { connections } = useConnections({ skip: true });
+
+  // Auto-select first connection if none set
+  useEffect(() => {
+    if (subject.database_name) return;
+    const first = Object.keys(connections)[0];
+    if (!first) return;
+    onChange({ ...subject, database_name: first });
+  }, [connections]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <VStack align="stretch" gap={2}>
+      <Box>
+        <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Connection</Text>
+        <DatabaseSelector
+          value={subject.database_name}
+          onChange={db => onChange({ ...subject, database_name: db })}
+          size="sm"
+        />
+      </Box>
+      <Box>
+        <HStack justify="space-between" mb={1}>
+          <Text fontSize="xs" color="fg.muted" fontWeight="500">Query</Text>
+          {subject.database_name && (
+            <QueryModeSelector
+              mode={queryMode}
+              onModeChange={setQueryMode}
+              canUseGUI
+            />
+          )}
+        </HStack>
+        {subject.database_name && queryMode === 'gui' ? (
+          <Box border="1px solid" borderColor="border.muted" borderRadius="md" overflow="hidden">
+            <QueryBuilder
+              databaseName={subject.database_name}
+              sql={subject.sql}
+              onSqlChange={sql => onChange({ ...subject, sql })}
+            />
+          </Box>
+        ) : (
+          <Box border="1px solid" borderColor="border.muted" borderRadius="md" overflow="hidden">
+            <SqlEditor
+              value={subject.sql}
+              onChange={sql => onChange({ ...subject, sql })}
+            />
+          </Box>
+        )}
+      </Box>
+      <HStack gap={2}>
+        <Box flex={1}>
+          <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Column</Text>
+          <Input
+            value={subject.column ?? ''}
+            onChange={e => onChange({ ...subject, column: e.target.value || undefined })}
+            placeholder="(first column)"
+            size="sm"
+            bg="bg.surface"
+            fontSize="xs"
+            fontFamily="mono"
+            disabled={disabled}
+          />
+        </Box>
+        <Box w="80px">
+          <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Row</Text>
+          <Input
+            type="number"
+            value={subject.row ?? ''}
+            onChange={e => {
+              const v = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+              onChange({ ...subject, row: v });
+            }}
+            placeholder="0"
+            size="sm"
+            bg="bg.surface"
+            fontSize="xs"
+            disabled={disabled}
+          />
+        </Box>
+      </HStack>
+    </VStack>
+  );
+}
+
 export default function TestSubjectEditor({ subject, testType, onChange, disabled, defaultQuestionId }: TestSubjectEditorProps) {
   // Query type derived state — always computed so hook order is stable
-  const query = subject.type === 'query'
+  const query = subject.type === 'query' && subject.source !== 'inline'
     ? subject
-    : { type: 'query' as const, question_id: defaultQuestionId ?? 0, column: undefined, row: undefined };
+    : { type: 'query' as const, source: 'question' as const, question_id: defaultQuestionId ?? 0, column: undefined, row: undefined };
   const inferredColumns = useQuestionColumns(query.question_id || undefined);
 
   // Auto-select first available connection for LLM tests when none is set
@@ -170,65 +266,102 @@ export default function TestSubjectEditor({ subject, testType, onChange, disable
     );
   }
 
+  // Query type — determine current source
+  const currentSource = (subject.type === 'query' && subject.source === 'inline') ? 'inline' : 'question';
+
+  function handleSourceChange(newSource: 'question' | 'inline') {
+    if (newSource === currentSource) return;
+    if (newSource === 'inline') {
+      onChange({ type: 'query', source: 'inline', sql: '', database_name: '', column: undefined, row: undefined });
+    } else {
+      onChange({ type: 'query', source: 'question', question_id: defaultQuestionId ?? 0, column: undefined, row: undefined });
+    }
+  }
+
   return (
     <VStack align="stretch" gap={2}>
+      {/* Source toggle */}
       <Box>
-        <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Question</Text>
-        <QuestionPicker
-          selectedId={query.question_id || null}
-          onSelect={id => onChange({ ...query, question_id: id, column: undefined })}
+        <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Source</Text>
+        <NativeSelect.Root size="sm" disabled={disabled}>
+          <NativeSelect.Field
+            value={currentSource}
+            onChange={e => handleSourceChange(e.target.value as 'question' | 'inline')}
+          >
+            <option value="question">Question</option>
+            <option value="inline">Inline SQL</option>
+          </NativeSelect.Field>
+          <NativeSelect.Indicator />
+        </NativeSelect.Root>
+      </Box>
+
+      {currentSource === 'inline' ? (
+        <InlineSubjectEditor
+          subject={subject as Extract<TestSubject, { source: 'inline' }>}
+          onChange={onChange}
           disabled={disabled}
         />
-      </Box>
-      <HStack gap={2}>
-        <Box flex={1}>
-          <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Column</Text>
-          {inferredColumns.length > 0 ? (
-            <NativeSelect.Root size="sm" disabled={disabled}>
-              <NativeSelect.Field
-                value={query.column ?? ''}
-                onChange={e => onChange({ ...query, column: e.target.value || undefined })}
-                bg="bg.surface"
-                fontSize="xs"
-                fontFamily="mono"
-              >
-                <option value="">— first column —</option>
-                {inferredColumns.map(col => (
-                  <option key={col} value={col}>{col}</option>
-                ))}
-              </NativeSelect.Field>
-              <NativeSelect.Indicator />
-            </NativeSelect.Root>
-          ) : (
-            <Input
-              value={query.column ?? ''}
-              onChange={e => onChange({ ...query, column: e.target.value || undefined })}
-              placeholder="(first column)"
-              size="sm"
-              bg="bg.surface"
-              fontSize="xs"
-              fontFamily="mono"
+      ) : (
+        <>
+          <Box>
+            <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Question</Text>
+            <QuestionPicker
+              selectedId={query.question_id || null}
+              onSelect={id => onChange({ ...query, question_id: id, column: undefined })}
               disabled={disabled}
             />
-          )}
-        </Box>
-        <Box w="80px">
-          <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Row</Text>
-          <Input
-            type="number"
-            value={query.row ?? ''}
-            onChange={e => {
-              const v = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
-              onChange({ ...query, row: v });
-            }}
-            placeholder="0"
-            size="sm"
-            bg="bg.surface"
-            fontSize="xs"
-            disabled={disabled}
-          />
-        </Box>
-      </HStack>
+          </Box>
+          <HStack gap={2}>
+            <Box flex={1}>
+              <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Column</Text>
+              {inferredColumns.length > 0 ? (
+                <NativeSelect.Root size="sm" disabled={disabled}>
+                  <NativeSelect.Field
+                    value={query.column ?? ''}
+                    onChange={e => onChange({ ...query, column: e.target.value || undefined })}
+                    bg="bg.surface"
+                    fontSize="xs"
+                    fontFamily="mono"
+                  >
+                    <option value="">— first column —</option>
+                    {inferredColumns.map(col => (
+                      <option key={col} value={col}>{col}</option>
+                    ))}
+                  </NativeSelect.Field>
+                  <NativeSelect.Indicator />
+                </NativeSelect.Root>
+              ) : (
+                <Input
+                  value={query.column ?? ''}
+                  onChange={e => onChange({ ...query, column: e.target.value || undefined })}
+                  placeholder="(first column)"
+                  size="sm"
+                  bg="bg.surface"
+                  fontSize="xs"
+                  fontFamily="mono"
+                  disabled={disabled}
+                />
+              )}
+            </Box>
+            <Box w="80px">
+              <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Row</Text>
+              <Input
+                type="number"
+                value={query.row ?? ''}
+                onChange={e => {
+                  const v = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+                  onChange({ ...query, row: v });
+                }}
+                placeholder="0"
+                size="sm"
+                bg="bg.surface"
+                fontSize="xs"
+                disabled={disabled}
+              />
+            </Box>
+          </HStack>
+        </>
+      )}
     </VStack>
   );
 }
