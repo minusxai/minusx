@@ -466,24 +466,8 @@ export default function ParameterInput({
             px={2}
             h={ROW_H}
             minW="100px"
-            gap={1.5}
           >
             <Text fontSize="xs" color="fg.subtle" fontStyle="italic">None</Text>
-            <Tooltip content="Clear — restore to empty input">
-              <IconButton
-                aria-label="Clear None"
-                variant="ghost"
-                size="xs"
-                onClick={() => onChange(undefined as unknown as string)}
-                color="fg.subtle"
-                h="20px"
-                w="20px"
-                minW="20px"
-                _hover={{ color: 'fg', bg: 'bg.emphasized' }}
-              >
-                <LuX style={{ width: 10, height: 10 }} />
-              </IconButton>
-            </Tooltip>
           </HStack>
         ) : (
         /* Input field — dropdown when source is configured, otherwise standard input */
@@ -525,18 +509,18 @@ export default function ParameterInput({
         )
         )}
 
-        {/* X button: sets param to None (explicit skip) when value is set */}
-        {hasValue && !hasSource && (
-          <Tooltip content="Set to None — skip this filter">
+        {/* X button — toggles None on/off; always visible when param has a value or is None */}
+        {(isNone || hasValue) && (
+          <Tooltip content={isNone ? 'Clear — restore to empty' : 'Set to None (skip this filter)'}>
             <IconButton
-              aria-label="Set to None"
+              aria-label={isNone ? 'Clear None' : 'Set to None'}
               variant="ghost"
-              onClick={() => onChange(null)}
+              onClick={() => onChange(isNone ? '' : null)}
               color="fg.subtle"
               h={ROW_H}
               w={ROW_H}
               minW={ROW_H}
-              _hover={{ color: 'accent.danger', bg: 'bg.emphasized' }}
+              _hover={{ color: isNone ? 'fg' : 'accent.danger', bg: 'bg.emphasized' }}
             >
               <LuX style={{ width: 10, height: 10 }} />
             </IconButton>

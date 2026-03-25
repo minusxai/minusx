@@ -18,7 +18,7 @@ async function applyNoneParams(
   query: string,
   params: Record<string, string | number | null>
 ): Promise<{ sql: string; params: Record<string, string | number> }> {
-  const noneSet = new Set(Object.keys(params).filter((k) => params[k] === null));
+  const noneSet = new Set(Object.keys(params).filter((k) => params[k] === null || params[k] === ''));
   const effectiveParams = Object.fromEntries(
     Object.entries(params).filter(([, v]) => v !== null)
   ) as Record<string, string | number>;

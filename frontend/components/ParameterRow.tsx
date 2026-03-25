@@ -29,7 +29,9 @@ export default function ParameterRow({
 }: ParameterRowProps) {
   // Compute effective value per param: prefer local edit value, fall back to last submitted value
   const getEffectiveValue = (param: QuestionParameter): string | number | null | undefined => {
-    return parameterValues?.[param.name] ?? lastSubmittedValues?.[param.name];
+    // Use 'in' check so that an explicit null (None state) is not skipped by ??
+    if (parameterValues && param.name in parameterValues) return parameterValues[param.name];
+    return lastSubmittedValues?.[param.name];
   };
 
   const handleValueChange = (paramName: string, value: string | number | null) => {
@@ -51,7 +53,8 @@ export default function ParameterRow({
           onValueChange(paramName, value);
         }
       } else {
-        valuesDict[p.name] = getEffectiveValue(p) ?? '';
+        const v = getEffectiveValue(p);
+        valuesDict[p.name] = v !== undefined ? v : '';  // preserve null (None state)
       }
     }
 
