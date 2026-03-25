@@ -66,39 +66,6 @@ def validate_sql_for_gui(sql: str) -> ValidationResult:
             hint=hint
         )
 
-    # Final check: Round-trip validation (SQL → IR → SQL)
-    # This ensures the conversion is truly lossless
-    # Import here to avoid circular imports
-    from .parser import parse_sql_to_ir, UnsupportedSQLError
-    from .generator import ir_to_sql
-
-    try:
-        # Use _skip_validation=True to avoid infinite recursion
-        ir = parse_sql_to_ir(sql, _skip_validation=True)
-        regenerated_sql = ir_to_sql(ir)
-
-        comparison = compare_sql_ast(sql, regenerated_sql)
-        if not comparison.equivalent:
-            return ValidationResult(
-                supported=False,
-                errors=["Round-trip validation failed: regenerated SQL differs from original"],
-                unsupportedFeatures=comparison.differences,
-                hint="This query structure is not fully supported in GUI mode. Use SQL mode."
-            )
-    except UnsupportedSQLError as e:
-        return ValidationResult(
-            supported=False,
-            errors=[f"SQL parsing failed: {str(e)}"],
-            hint="This query cannot be parsed for GUI mode. Use SQL mode."
-        )
-    except Exception as e:
-        return ValidationResult(
-            supported=False,
-            errors=[f"Validation error: {str(e)}"],
-            hint="An error occurred validating this query. Use SQL mode."
-        )
-
-    # If we get here, SQL is fully supported (lossless)
     return ValidationResult(supported=True)
 
 

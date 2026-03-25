@@ -16,7 +16,8 @@ from .ir_types import (
     OrderByClause,
 )
 from .validator import UnsupportedSQLError, validate_sql_features
-from .enhanced_validator import validate_sql_for_gui
+from .enhanced_validator import validate_sql_for_gui, compare_sql_ast
+from .generator import ir_to_sql
 
 
 def parse_sql_to_ir(sql: str, _skip_validation: bool = False) -> QueryIR:
@@ -69,7 +70,7 @@ def parse_sql_to_ir(sql: str, _skip_validation: bool = False) -> QueryIR:
     order_by = parse_order_by(select_node)
     limit = parse_limit(select_node)
 
-    return QueryIR(
+    ir = QueryIR(
         version=1,
         distinct=distinct,
         select=select_columns,
@@ -81,6 +82,28 @@ def parse_sql_to_ir(sql: str, _skip_validation: bool = False) -> QueryIR:
         order_by=order_by,
         limit=limit,
     )
+
+    # Round-trip validation: SQL → IR → SQL must be lossless
+    if not _skip_validation:
+        try:
+            regenerated_sql = ir_to_sql(ir)
+            comparison = compare_sql_ast(sql, regenerated_sql)
+            if not comparison.equivalent:
+                raise UnsupportedSQLError(
+                    "Round-trip validation failed: regenerated SQL differs from original",
+                    comparison.differences or ["SQL statements differ"],
+                    hint="This query structure is not fully supported in GUI mode. Use SQL mode."
+                )
+        except UnsupportedSQLError:
+            raise
+        except Exception as e:
+            raise UnsupportedSQLError(
+                f"Validation error: {str(e)}",
+                ["VALIDATION_ERROR"],
+                hint="An error occurred validating this query. Use SQL mode."
+            )
+
+    return ir
 
 
 def parse_select(select_node: exp.Select) -> List[SelectColumn]:
