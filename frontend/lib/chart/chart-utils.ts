@@ -644,7 +644,8 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
             const raw = items[0].axisValueLabel
             const isDate = /^\d{4}-\d{2}-\d{2}/.test(raw)
             const header = xDateFormat ? formatDateValue(raw, xDateFormat) : isDate ? formatDateValue(raw, 'short') : raw
-            const rows = items.map((p: any) => {
+            const nonZeroItems = items.filter((p: any) => typeof p.value === 'number' ? p.value !== 0 : true)
+            const rows = nonZeroItems.map((p: any) => {
               // Resolve per-series prefix/suffix: try matching series name to a Y column
               const colCfg = columnFormats?.[p.seriesName]
               const seriesPrefix = colCfg?.prefix || yPrefix
