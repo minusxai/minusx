@@ -131,6 +131,8 @@ function TestReadOnly({ test }: { test: Test }) {
 
   const valueDesc = test.value.type === 'constant'
     ? String(test.value.value)
+    : test.value.type === 'cannot_answer'
+    ? 'cannot answer'
     : `Q#${test.value.question_id}${test.value.column ? `.${test.value.column}` : ''}`;
 
   return (

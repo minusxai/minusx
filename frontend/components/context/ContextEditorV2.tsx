@@ -9,8 +9,9 @@
 import { Box, VStack, Heading, HStack, Button, Text, Badge, Menu, Input, Dialog, Field, Portal, Collapsible, Icon, Switch, Tabs } from '@chakra-ui/react';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { LuCircleAlert, LuCircleCheck, LuPlus, LuTrash2, LuChevronDown, LuGlobe, LuChevronRight } from 'react-icons/lu';
-import { ContextContent, DatabaseContext, WhitelistItem, ContextVersion, PublishedVersions, DocEntry, EvalItem } from '@/lib/types';
-import EvalsEditor from './EvalsEditor';
+import { ContextContent, DatabaseContext, WhitelistItem, ContextVersion, PublishedVersions, DocEntry, Test } from '@/lib/types';
+import TestList from '../test/TestList';
+import type { JobRun } from '@/lib/types';
 import { serializeDatabases, parseDatabasesYaml, canDeleteVersion } from '@/lib/context/context-utils';
 import SchemaTreeView from '../SchemaTreeView';
 import ChildPathSelector from '../ChildPathSelector';
@@ -47,6 +48,12 @@ interface ContextEditorV2Props {
   onPublishVersion?: () => void;
   onDeleteVersion?: (version: number) => void;
   onUpdateDescription?: (version: number, description: string) => void;
+  // Run history (context job runs)
+  runs?: JobRun[];
+  isRunning?: boolean;
+  selectedRunId?: number | null;
+  onRunAll?: () => void;
+  onSelectRun?: (runId: number | null) => void;
 }
 
 export default function ContextEditorV2({
@@ -72,7 +79,12 @@ export default function ContextEditorV2({
   onCreateVersion,
   onPublishVersion,
   onDeleteVersion,
-  onUpdateDescription
+  onUpdateDescription,
+  runs = [],
+  isRunning = false,
+  selectedRunId,
+  onRunAll,
+  onSelectRun,
 }: ContextEditorV2Props) {
   const [topTab, setTopTab] = useState<'context' | 'evals'>('context');
   const [activeTab, setActiveTab] = useState<'picker' | 'yaml'>('picker');
@@ -1050,15 +1062,24 @@ export default function ContextEditorV2({
         <Tabs.Content value="evals">
           {activeTab === 'picker' ? (
             <Box>
-              <EvalsEditor
-                evals={content.evals || []}
-                onChange={(evals: EvalItem[]) => onChange({ evals })}
-                contextInfo={{
-                  schema: availableDatabases,
-                  documentation: (content.docs || []).map(d => d.content).join('\n\n'),
-                  connection_id: availableDatabases[0]?.databaseName || '',
-                }}
-                fileId={file?.id}
+              {onRunAll && (
+                <HStack mb={3} justify="flex-end">
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    onClick={onRunAll}
+                    loading={isRunning}
+                    loadingText="Running…"
+                    disabled={!content.evals?.length}
+                  >
+                    Run all
+                  </Button>
+                </HStack>
+              )}
+              <TestList
+                tests={content.evals || []}
+                onChange={(evals: Test[]) => onChange({ evals })}
+                editMode={editMode}
               />
             </Box>
           ) : (

@@ -24,7 +24,7 @@ import { GET as runsGetHandler } from '@/app/api/jobs/runs/route';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from '@/store/__tests__/test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { JobRunsDB } from '@/lib/database/job-runs-db';
-import type { AlertContent, AlertOutput, JobRun, RunFileContent } from '@/lib/types';
+import type { AlertContent, AlertOutput, JobRun, RunFileContent, Test } from '@/lib/types';
 import { NextRequest } from 'next/server';
 
 // ─── DB mock ──────────────────────────────────────────────────────────────────
@@ -155,17 +155,18 @@ describe('Job Runs E2E', () => {
       companyId
     );
 
+    // NEW: test passes when revenue <= 100, fails (triggers alert) when revenue > 100
+    const liveAlertTest: Test = {
+      type: 'query',
+      subject: { type: 'query', question_id: questionId, column: 'revenue', row: 0 },
+      answerType: 'number',
+      operator: '<=',
+      value: { type: 'constant', value: 100 },
+    };
     const liveAlertContent: AlertContent = {
-      questionId,
       status: 'live',
       schedule: { cron: '* * * * *', timezone: 'UTC' },
-      condition: {
-        selector: 'first',
-        function: 'value',
-        column: 'revenue',
-        operator: '>',
-        threshold: 100,
-      },
+      tests: [liveAlertTest],
       recipients: [],
     };
 
@@ -246,10 +247,10 @@ describe('Job Runs E2E', () => {
       // Alert-specific data is in output
       const output = content.output as AlertOutput;
       expect(output.alertId).toBe(alertId);
-      expect(output.status).toBe('triggered');   // 150 > 100 = triggered
-      expect(output.actualValue).toBe(150);
-      expect(output.operator).toBe('>');
-      expect(output.threshold).toBe(100);
+      expect(output.status).toBe('triggered');   // revenue 150 > 100 → test fails → triggered
+      expect(output.testResults).toHaveLength(1);
+      expect(output.testResults[0].passed).toBe(false);   // 150 <= 100 is false → test fails
+      expect(output.triggeredBy).toHaveLength(1);
 
       // Path should be under /org/logs/runs/
       expect(runFile!.path).toMatch(/^\/org\/logs\/runs\//);
@@ -288,7 +289,7 @@ describe('Job Runs E2E', () => {
       }
     });
 
-    it('returns FAILURE and saves a failed RunFileContent when execution errors', async () => {
+    it('captures query error as failed test result (run status stays SUCCESS)', async () => {
       const { pythonBackendFetch } = require('@/lib/api/python-backend-client');
       pythonBackendFetch.mockRejectedValueOnce(new Error('DB connection refused'));
 
@@ -297,19 +298,23 @@ describe('Job Runs E2E', () => {
       const body = await parseResponse(res);
 
       expect(res.status).toBe(200);
-      expect(body.data.status).toBe('FAILURE');
+      // In the new runner, query errors are captured as test failures — the job itself succeeds
+      expect(body.data.status).toBe('SUCCESS');
       expect(body.data.fileId).toBeGreaterThan(0);
 
       const runs = await JobRunsDB.getByJobId(String(alertId), 'alert', 1);
-      expect(runs[0].status).toBe('FAILURE');
-      expect(runs[0].error).toContain('DB connection refused');
+      expect(runs[0].status).toBe('SUCCESS');
       expect(runs[0].output_file_id).toBe(body.data.fileId);
-      expect(runs[0].output_file_type).toBe('alert_run');
 
       const runFile = await DocumentDB.getById(body.data.fileId, 1);
       const content = runFile!.content as RunFileContent;
-      expect(content.status).toBe('failure');
-      expect(content.error).toContain('DB connection refused');
+      expect(content.status).toBe('success');
+
+      // The alert output records the error in the test result
+      const output = content.output as AlertOutput;
+      expect(output.testResults).toHaveLength(1);
+      expect(output.testResults[0].passed).toBe(false);
+      expect(output.testResults[0].error).toContain('DB connection refused');
     });
 
     it('deduplicates: returns already_running if job is in-flight (within timeout)', async () => {
@@ -375,10 +380,9 @@ describe('Job Runs E2E', () => {
       const { sendEmailViaWebhook } = require('@/lib/messaging/webhook-executor');
 
       const alertWithRecipients: AlertContent = {
-        questionId,
         status: 'live',
         schedule: { cron: '* * * * *', timezone: 'UTC' },
-        condition: { selector: 'first', function: 'value', column: 'revenue', operator: '>', threshold: 100 },
+        tests: [{ type: 'query', subject: { type: 'query', question_id: questionId, column: 'revenue', row: 0 }, answerType: 'number', operator: '<=', value: { type: 'constant', value: 100 } }],
         recipients: [
           { channel: 'email_alert', address: 'alice@example.com' },
           { channel: 'email_alert', address: 'bob@example.com' },
@@ -416,10 +420,9 @@ describe('Job Runs E2E', () => {
       sendEmailViaWebhook.mockResolvedValueOnce({ success: false, statusCode: 401, error: 'Unauthorized' });
 
       const alertWithRecipients: AlertContent = {
-        questionId,
         status: 'live',
         schedule: { cron: '* * * * *', timezone: 'UTC' },
-        condition: { selector: 'first', function: 'value', column: 'revenue', operator: '>', threshold: 100 },
+        tests: [{ type: 'query', subject: { type: 'query', question_id: questionId, column: 'revenue', row: 0 }, answerType: 'number', operator: '<=', value: { type: 'constant', value: 100 } }],
         recipients: [{ channel: 'email_alert', address: 'alice@example.com' }],
       };
       await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', alertWithRecipients, [questionId], 1);
@@ -440,12 +443,11 @@ describe('Job Runs E2E', () => {
     it('does not send notifications when alert is not triggered', async () => {
       const { sendEmailViaWebhook } = require('@/lib/messaging/webhook-executor');
 
-      // Set threshold above returned value (150) so it doesn't trigger
+      // Revenue 150 <= 200 = true → test passes → NOT triggered
       const alertWithRecipients: AlertContent = {
-        questionId,
         status: 'live',
         schedule: { cron: '* * * * *', timezone: 'UTC' },
-        condition: { selector: 'first', function: 'value', column: 'revenue', operator: '>', threshold: 200 },
+        tests: [{ type: 'query', subject: { type: 'query', question_id: questionId, column: 'revenue', row: 0 }, answerType: 'number', operator: '<=', value: { type: 'constant', value: 200 } }],
         recipients: [{ channel: 'email_alert', address: 'alice@example.com' }],
       };
       await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', alertWithRecipients, [questionId], 1);
@@ -521,10 +523,9 @@ describe('Job Runs E2E', () => {
     it('skips alert with non-matching cron (daily at 3am)', async () => {
       // Update alert to a cron that will never match now (0 3 * * * = 3am daily)
       const updatedContent: AlertContent = {
-        questionId,
         status: 'live',
         schedule: { cron: '0 3 * * *', timezone: 'UTC' },
-        condition: { selector: 'first', function: 'value', column: 'revenue', operator: '>', threshold: 100 },
+        tests: [{ type: 'query', subject: { type: 'query', question_id: questionId, column: 'revenue', row: 0 }, answerType: 'number', operator: '<=', value: { type: 'constant', value: 100 } }],
         recipients: [],
       };
       await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', updatedContent, [questionId], 1);

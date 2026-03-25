@@ -72,16 +72,19 @@ interface TestValueEditorProps {
   answerType: TestAnswerType;
   onChange: (value: TestValue) => void;
   disabled?: boolean;
+  /** When true, show the "Cannot answer" value option */
+  allowCannotAnswer?: boolean;
 }
 
-export default function TestValueEditor({ value, answerType, onChange, disabled }: TestValueEditorProps) {
+export default function TestValueEditor({ value, answerType, onChange, disabled, allowCannotAnswer }: TestValueEditorProps) {
   const valueSourceOptions = [
     { value: 'constant', label: 'Constant' },
     { value: 'query', label: 'From question' },
+    ...(allowCannotAnswer ? [{ value: 'cannot_answer', label: 'Cannot answer' }] : []),
   ];
 
-  // binary only supports constant (yes/no)
-  const showSourcePicker = answerType !== 'binary';
+  // binary only supports constant (yes/no), and cannot_answer has no sub-fields
+  const showSourcePicker = answerType !== 'binary' || allowCannotAnswer;
 
   return (
     <VStack align="stretch" gap={2}>
@@ -93,7 +96,9 @@ export default function TestValueEditor({ value, answerType, onChange, disabled 
               value={value.type}
               onChange={e => {
                 if (e.target.value === 'constant') {
-                  onChange({ type: 'constant', value: answerType === 'number' ? 0 : '' });
+                  onChange({ type: 'constant', value: answerType === 'number' ? 0 : answerType === 'binary' ? true : '' });
+                } else if (e.target.value === 'cannot_answer') {
+                  onChange({ type: 'cannot_answer' });
                 } else {
                   onChange({ type: 'query', question_id: 0 });
                 }

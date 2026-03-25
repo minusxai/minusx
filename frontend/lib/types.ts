@@ -230,7 +230,9 @@ export interface ContextContent extends BaseFileContent {
   docs?: DocEntry[];                  // Current version's docs (container only)
 
   // Evals (stored at content level, independent of versions)
-  evals?: EvalItem[];
+  evals?: Test[];
+  /** Optional cron schedule for automatic eval runs */
+  schedule?: AlertSchedule;
 }
 
 export type UserRole = 'admin' | 'editor' | 'viewer';
@@ -468,10 +470,10 @@ export type AlertRecipient =
 export interface AlertContent extends BaseFileContent {
   description?: string;
   schedule: AlertSchedule;
-  questionId: number;        // Reference to a saved question
-  condition: AlertCondition;
-  recipients?: AlertRecipient[]; // Delivery recipients (email or phone 2FA, one entry per channel per person)
-  status?: 'live' | 'draft'; // Whether scheduled cron runs are active (default: 'draft')
+  tests: Test[];                         // replaces: questionId + condition
+  notifyOn?: 'any_fail' | 'all_fail';   // when to fire notification (default: 'any_fail')
+  recipients?: AlertRecipient[];
+  status?: 'live' | 'draft';
 }
 
 // Job run types (from job_runs table)
@@ -513,13 +515,9 @@ export interface AlertRunContent extends BaseFileContent {
 export interface AlertOutput {
   alertId: number;
   alertName: string;
-  status: 'triggered' | 'not_triggered';
-  actualValue: number | null;
-  threshold: number;
-  operator: ComparisonOperator;
-  selector: AlertSelector;
-  function: AlertFunction;
-  column?: string;
+  status: 'triggered' | 'not_triggered' | 'error';
+  testResults: TestRunResult[];
+  triggeredBy: TestRunResult[];  // subset that failed (caused trigger)
 }
 
 export type RunMessage =
@@ -594,7 +592,9 @@ export type TestOperator = '~' | '=' | '<' | '>' | '<=' | '>=';
 /** The expected value to compare against */
 export type TestValue =
   | { type: 'constant'; value: string | number | boolean }
-  | { type: 'query'; question_id: number; column?: string; row?: RowIndex };
+  | { type: 'query'; question_id: number; column?: string; row?: RowIndex }
+  /** LLM tests only: test passes iff the agent calls CannotAnswer */
+  | { type: 'cannot_answer' };
 
 export interface Test {
   type: 'llm' | 'query';
@@ -653,6 +653,11 @@ export type TransformRunMode = 'full' | 'test_only';
 export interface TransformationOutput {
   results: TransformResult[];
   runMode?: TransformRunMode;  // defaults to 'full' if absent
+}
+
+// Context eval run output stored inside RunFileContent.output
+export interface ContextOutput {
+  results: TestRunResult[];
 }
 
 // What handlers receive

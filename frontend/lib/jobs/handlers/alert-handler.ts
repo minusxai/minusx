@@ -1,12 +1,12 @@
+import 'server-only';
 import { FilesAPI } from '@/lib/data/files.server';
-import { runQuery } from '@/lib/connections/run-query';
-import { evaluateCondition, extractMetricValue } from '@/lib/alert/evaluate-alert';
 import { AUTH_URL } from '@/lib/config';
 import { CompanyDB } from '@/lib/database/company-db';
 import { isSubdomainRoutingEnabled } from '@/lib/utils/subdomain';
 import { buildAlertEmailHtml } from '@/lib/messaging/alert-email-html';
 import { getConfigsByCompanyId } from '@/lib/data/configs.server';
-import type { AlertContent, AlertOutput, JobHandlerResult, JobRunnerInput, QuestionContent } from '@/lib/types';
+import { createServerRunner } from '@/lib/tests/server';
+import type { AlertContent, AlertOutput, JobHandlerResult, JobRunnerInput, TestRunResult } from '@/lib/types';
 import type { JobHandler } from '../job-registry';
 
 async function resolveBaseUrl(companyId: number): Promise<string> {
@@ -18,65 +18,73 @@ async function resolveBaseUrl(companyId: number): Promise<string> {
 }
 
 export const alertJobHandler: JobHandler = {
-  async execute({ runFileId, jobId, file, previousRuns: _previousRuns }, user): Promise<JobHandlerResult> {
+  async execute({ runFileId, jobId, file }: JobRunnerInput, user): Promise<JobHandlerResult> {
     const alert = file as AlertContent;
     const alertId = parseInt(jobId, 10);
 
     const alertResult = await FilesAPI.loadFile(alertId, user);
     const alertName = alertResult.data?.name ?? `Alert ${alertId}`;
 
-    if (!alert.questionId || alert.questionId <= 0) {
-      throw new Error('Alert has no referenced question');
+    const tests = alert.tests ?? [];
+    if (tests.length === 0) {
+      const output: AlertOutput = {
+        alertId,
+        alertName,
+        status: 'not_triggered',
+        testResults: [],
+        triggeredBy: [],
+      };
+      return { output, messages: [] };
     }
 
-    const questionResult = await FilesAPI.loadFile(alert.questionId, user);
-    const question = questionResult.data?.content as QuestionContent | undefined;
-    if (!question) throw new Error('Referenced question not found');
+    // Run all tests
+    const runner = createServerRunner(user, '');
+    const testResults: TestRunResult[] = await Promise.all(tests.map(t => runner.execute(t)));
 
-    const params: Record<string, string | number> = {};
-    if (question.parameterValues && typeof question.parameterValues === 'object') {
-      Object.assign(params, question.parameterValues);
-    }
-
-    const queryResult = await runQuery(question.database_name, question.query, params, user);
-
-    const actualValue = extractMetricValue(queryResult.rows, alert.condition);
-    const triggered = evaluateCondition(actualValue, alert.condition.operator, alert.condition.threshold);
+    // Determine trigger condition
+    const notifyOn = alert.notifyOn ?? 'any_fail';
+    const failedTests = testResults.filter(r => !r.passed);
+    const triggered = notifyOn === 'all_fail'
+      ? failedTests.length === testResults.length && testResults.length > 0
+      : failedTests.length > 0;
 
     const output: AlertOutput = {
       alertId,
       alertName,
       status: triggered ? 'triggered' : 'not_triggered',
-      actualValue,
-      threshold: alert.condition.threshold,
-      operator: alert.condition.operator,
-      selector: alert.condition.selector,
-      function: alert.condition.function,
-      column: alert.condition.column,
+      testResults,
+      triggeredBy: triggered ? failedTests : [],
     };
 
     const messages: JobHandlerResult['messages'] = [];
+
     if (triggered && alert.recipients && alert.recipients.length > 0) {
       const subject = `[Alert Triggered] ${alertName}`;
       const baseUrl = await resolveBaseUrl(user.companyId);
       const alertLink = `${baseUrl}/f/${runFileId}`;
 
-      // Resolve company display name for email branding
       const { config } = await getConfigsByCompanyId(user.companyId, user.mode);
       const agentName = config.branding.agentName;
 
+      // Build summary from failed tests
+      const failSummary = failedTests.map(r => {
+        const label = r.test.label ?? (r.test.type === 'llm' && r.test.subject.type === 'llm' ? r.test.subject.prompt : 'Test');
+        return r.error ? `${label}: ${r.error}` : `${label}: ${r.actualValue} (expected ${r.expectedValue})`;
+      }).join('; ');
+
+      const plainText = `Alert "${alertName}" triggered. ${failedTests.length}/${testResults.length} test(s) failed. ${failSummary}`;
+
+      // Build email HTML — pass a summary value for display
       const emailHtml = buildAlertEmailHtml({
         alertName,
-        actualValue,
-        operator: alert.condition.operator,
-        threshold: alert.condition.threshold,
-        column: alert.condition.column,
-        questionName: questionResult.data?.name,
+        actualValue: failedTests.length,
+        operator: '>',
+        threshold: 0,
+        column: undefined,
+        questionName: `${failedTests.length}/${testResults.length} tests failed`,
         alertLink,
         agentName,
       });
-
-      const plainText = `Alert "${alertName}" triggered. Value: ${actualValue} ${alert.condition.operator} ${alert.condition.threshold}`;
 
       for (const recipient of alert.recipients) {
         if (recipient.channel === 'email_alert') {
@@ -86,10 +94,10 @@ export const alertJobHandler: JobHandler = {
             type: 'phone_alert',
             content: plainText,
             metadata: {
-              to:      recipient.address,
-              title:   alertName,
-              desc:    alert.description ?? plainText,
-              link:    alertLink,
+              to: recipient.address,
+              title: alertName,
+              desc: alert.description ?? plainText,
+              link: alertLink,
               summary: plainText,
             },
           });

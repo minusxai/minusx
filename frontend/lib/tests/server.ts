@@ -48,6 +48,9 @@ async function resolveExpectedValue(
   if (value.type === 'constant') {
     return value.value;
   }
+  if (value.type === 'cannot_answer') {
+    return null; // handled separately before this is called
+  }
 
   // type: 'query' — run the question, extract column/row cell
   const fileResult = await FilesAPI.loadFile(value.question_id, user);
@@ -207,6 +210,17 @@ async function executeLLMTest(
       : (submitCall.content as Record<string, unknown>) || {};
   } catch {
     submitContent = {};
+  }
+
+  // cannot_answer: test passes iff agent called CannotAnswer
+  if (test.value.type === 'cannot_answer') {
+    const passed = submitCall.function?.name === 'CannotAnswer';
+    return {
+      test,
+      passed,
+      error: passed ? undefined : 'Agent submitted an answer instead of saying cannot answer',
+      log: allCompletedFromPython,
+    };
   }
 
   if (submitCall.function?.name === 'CannotAnswer') {
