@@ -146,6 +146,7 @@ def parse_select(select_node: exp.Select) -> List[SelectColumn]:
 
 
 _DATE_TRUNC_UNITS = frozenset({'DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR', 'HOUR', 'MINUTE'})
+_SIMPLE_AGGS = {exp.Sum: 'SUM', exp.Avg: 'AVG', exp.Min: 'MIN', exp.Max: 'MAX'}
 
 
 def parse_date_trunc_expression(expr: exp.Expression) -> Optional[SelectColumn]:
@@ -318,7 +319,8 @@ def parse_having(select_node: exp.Select) -> Optional[FilterGroup]:
 def parse_filter_expression(expr: exp.Expression) -> Union[FilterGroup, FilterCondition]:
     """Parse filter expression into FilterGroup or FilterCondition."""
     # Handle AND/OR groups
-    if isinstance(expr, exp.And):
+    if isinstance(expr, (exp.And, exp.Or)):
+        operator = 'AND' if isinstance(expr, exp.And) else 'OR'
         conditions = []
         for child in expr.flatten():
             if isinstance(child, (exp.And, exp.Or)):
@@ -327,18 +329,7 @@ def parse_filter_expression(expr: exp.Expression) -> Union[FilterGroup, FilterCo
                 condition = parse_single_condition(child)
                 if condition:
                     conditions.append(condition)
-        return FilterGroup(operator='AND', conditions=conditions)
-
-    elif isinstance(expr, exp.Or):
-        conditions = []
-        for child in expr.flatten():
-            if isinstance(child, (exp.And, exp.Or)):
-                conditions.append(parse_filter_expression(child))
-            else:
-                condition = parse_single_condition(child)
-                if condition:
-                    conditions.append(condition)
-        return FilterGroup(operator='OR', conditions=conditions)
+        return FilterGroup(operator=operator, conditions=conditions)
 
     # Single condition
     else:
@@ -365,20 +356,11 @@ def parse_single_condition(expr: exp.Expression) -> Optional[FilterCondition]:
                 )
 
     # Comparison operators
-    if isinstance(expr, exp.EQ):
-        return parse_comparison(expr, '=')
-    elif isinstance(expr, exp.NEQ):
-        return parse_comparison(expr, '!=')
-    elif isinstance(expr, exp.GT):
-        return parse_comparison(expr, '>')
-    elif isinstance(expr, exp.LT):
-        return parse_comparison(expr, '<')
-    elif isinstance(expr, exp.GTE):
-        return parse_comparison(expr, '>=')
-    elif isinstance(expr, exp.LTE):
-        return parse_comparison(expr, '<=')
-    elif isinstance(expr, exp.Like):
-        return parse_comparison(expr, 'LIKE')
+    _CMP_OPS = {exp.EQ: '=', exp.NEQ: '!=', exp.GT: '>', exp.LT: '<',
+                exp.GTE: '>=', exp.LTE: '<=', exp.Like: 'LIKE'}
+    op = _CMP_OPS.get(type(expr))
+    if op:
+        return parse_comparison(expr, op)
     elif isinstance(expr, exp.In):
         return parse_in_condition(expr)
     elif isinstance(expr, exp.Is):
@@ -408,17 +390,8 @@ def parse_comparison(expr: exp.Expression, operator: str) -> Optional[FilterCond
             column_expr = agg_column.expressions[0] if agg_column.expressions else agg_column
         else:
             column_expr = agg_column
-    elif isinstance(left, exp.Sum):
-        aggregate = 'SUM'
-        column_expr = left.this
-    elif isinstance(left, exp.Avg):
-        aggregate = 'AVG'
-        column_expr = left.this
-    elif isinstance(left, exp.Min):
-        aggregate = 'MIN'
-        column_expr = left.this
-    elif isinstance(left, exp.Max):
-        aggregate = 'MAX'
+    elif type(left) in _SIMPLE_AGGS:
+        aggregate = _SIMPLE_AGGS[type(left)]
         column_expr = left.this
 
     # Handle COUNT(*) special case
