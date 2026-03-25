@@ -6,13 +6,14 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Box, HStack, Text, VStack, SimpleGrid } from '@chakra-ui/react';
+import { Box, HStack, Text, VStack, SimpleGrid, Input } from '@chakra-ui/react';
 import { SelectColumn, GroupByClause, GroupByItem } from '@/lib/types';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { QueryChip, AddChipButton, getColumnIcon } from './QueryChip';
 import { PickerPopover, PickerHeader, PickerList, PickerItem } from './PickerPopover';
 import { AliasInput } from './AliasInput';
-import { LuSigma, LuX, LuCalendar } from 'react-icons/lu';
+import { LuSigma, LuX, LuCalendar, LuBraces } from 'react-icons/lu';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const DATE_TRUNC_UNITS = [
   { label: 'Day', value: 'DAY' },
@@ -70,6 +71,8 @@ export function SummarizeSection({
   const [editingMetricIndex, setEditingMetricIndex] = useState<number | null>(null);
   const [selectedAgg, setSelectedAgg] = useState<string>('COUNT');
   const [editAlias, setEditAlias] = useState('');
+  const [wrapWithRound, setWrapWithRound] = useState(false);
+  const [roundDecimals, setRoundDecimals] = useState(2);
   // For date column truncation selection
   const [selectedDateColumn, setSelectedDateColumn] = useState<{ name: string; type?: string } | null>(null);
   // For editing dimensions
@@ -99,6 +102,7 @@ export function SummarizeSection({
 
   // Separate metrics (aggregates) from regular columns
   const metrics = columns.filter((c) => c.type === 'aggregate');
+  const rawMetrics = columns.filter((c) => c.type === 'raw');
   const dimensions = groupBy?.columns || [];
 
   const handleAddMetric = useCallback(
@@ -136,13 +140,15 @@ export function SummarizeSection({
         column: columnName === '*' ? '*' : columnName,
         table: columnName === '*' ? undefined : tableAlias,
         alias: finalAlias,
+        wrapper_function: wrapWithRound ? 'ROUND' : undefined,
+        wrapper_args: wrapWithRound ? [roundDecimals] : undefined,
       };
 
       onColumnsChange(newColumns);
       setEditingMetricIndex(null);
       setEditAlias('');
     },
-    [editingMetricIndex, selectedAgg, editAlias, columns, onColumnsChange, tableAlias]
+    [editingMetricIndex, selectedAgg, editAlias, wrapWithRound, roundDecimals, columns, onColumnsChange, tableAlias]
   );
 
   // Update metric aggregate immediately (when changing function dropdown)
@@ -193,12 +199,25 @@ export function SummarizeSection({
     [columns, onColumnsChange]
   );
 
+  const handleRemoveRawMetric = useCallback(
+    (rawIndex: number) => {
+      const rawIndices = columns
+        .map((c, i) => (c.type === 'raw' ? i : -1))
+        .filter((i) => i !== -1);
+      const actualIndex = rawIndices[rawIndex];
+      onColumnsChange(columns.filter((_, i) => i !== actualIndex));
+    },
+    [columns, onColumnsChange]
+  );
+
   const handleEditMetric = useCallback((index: number) => {
     const metric = metrics[index];
     if (!metric) return;
 
     setSelectedAgg(metric.aggregate || 'COUNT');
     setEditAlias(metric.alias || '');
+    setWrapWithRound(metric.wrapper_function === 'ROUND');
+    setRoundDecimals((metric.wrapper_args?.[0] as number) ?? 2);
     setEditingMetricIndex(index);
   }, [metrics]);
 
@@ -344,15 +363,20 @@ export function SummarizeSection({
   const formatMetricLabel = (col: SelectColumn) => {
     const aggLabel = AGGREGATES.find((a) => a.value === col.aggregate)?.shortLabel || col.aggregate;
     const alias = col.alias || `${col.aggregate?.toLowerCase()}_${col.column === '*' ? 'all' : col.column}`;
-    const baseLabel = col.column === '*' ? aggLabel : `${aggLabel}(${col.column})`;
-    return `${baseLabel} as ${alias}`;
+    const inner = col.column === '*' ? aggLabel : `${aggLabel}(${col.column})`;
+    const withWrapper = col.wrapper_function === 'ROUND'
+      ? `ROUND(${inner}${col.wrapper_args?.length ? `, ${col.wrapper_args[0]}` : ''})`
+      : inner;
+    return `${withWrapper} as ${alias}`;
   };
 
   const formatDimensionLabel = (dim: GroupByItem) => {
-    if (dim.type === 'expression' && dim.function === 'DATE_TRUNC') {
+    if (dim.function === 'DATE_TRUNC') {
       const unitLabel = DATE_TRUNC_UNITS.find(u => u.value === dim.unit)?.label || dim.unit;
       return `${dim.column} by ${unitLabel}`;
     }
+    if (dim.function === 'DATE') return `DATE(${dim.column})`;
+    if (dim.function === 'SPLIT_PART') return `SPLIT_PART(${dim.column})`;
     return dim.table ? `${dim.table}.${dim.column}` : dim.column;
   };
 
@@ -383,6 +407,19 @@ export function SummarizeSection({
       </HStack>
 
       <HStack gap={2} flexWrap="wrap" align="center">
+        {/* Locked raw metric chips (complex expressions: CASE, arithmetic, etc.) */}
+        {rawMetrics.map((metric, idx) => (
+          <QueryChip
+            key={`raw-metric-${idx}`}
+            variant="metric"
+            icon={<LuBraces size={11} />}
+            isLocked
+            onRemove={() => handleRemoveRawMetric(idx)}
+          >
+            {metric.alias || metric.raw_sql?.slice(0, 40) || 'expression'}
+          </QueryChip>
+        ))}
+
         {/* Metrics */}
         {metrics.map((metric, idx) => (
           <PickerPopover
@@ -443,6 +480,31 @@ export function SummarizeSection({
                 </Box>
               ))}
             </SimpleGrid>
+            {/* ROUND wrapper toggle */}
+            <HStack mt={1.5} gap={2} align="center">
+              <Checkbox
+                checked={wrapWithRound}
+                onCheckedChange={(e) => setWrapWithRound(e.checked === true)}
+                size="sm"
+              >
+                <Text fontSize="xs" color="fg">ROUND</Text>
+              </Checkbox>
+              {wrapWithRound && (
+                <HStack gap={1} align="center">
+                  <Text fontSize="xs" color="fg.muted">decimals:</Text>
+                  <Input
+                    size="xs"
+                    type="number"
+                    value={roundDecimals}
+                    min={0}
+                    max={10}
+                    w="48px"
+                    onChange={(e) => setRoundDecimals(parseInt(e.target.value) || 0)}
+                  />
+                </HStack>
+              )}
+            </HStack>
+
             <Box borderTop="1px solid" borderColor="border.muted" mt={1} mx={-3} px={3} pt={2}>
               <PickerList maxH="200px" searchable searchPlaceholder="Search columns...">
                 {(query) => [
@@ -544,6 +606,21 @@ export function SummarizeSection({
         {dimensions.map((dim, idx) => {
           const colInfo = availableColumns.find(c => c.name === dim.column);
           const isDate = isDateColumn(colInfo?.type);
+
+          // DATE() and SPLIT_PART() dimensions: show as locked chips (no GUI editor)
+          if (dim.function === 'DATE' || dim.function === 'SPLIT_PART') {
+            return (
+              <QueryChip
+                key={`dim-${idx}`}
+                variant="dimension"
+                icon={<LuCalendar size={11} />}
+                isLocked
+                onRemove={() => handleRemoveDimension(idx)}
+              >
+                {formatDimensionLabel(dim)}
+              </QueryChip>
+            );
+          }
 
           return (
             <PickerPopover

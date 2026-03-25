@@ -146,7 +146,7 @@ export function JoinBuilder({
     onChange(joins.filter((_, i) => i !== index));
   };
 
-  const handleChangeJoinType = (index: number, type: 'INNER' | 'LEFT') => {
+  const handleChangeJoinType = (index: number, type: 'INNER' | 'LEFT' | 'FULL') => {
     const newJoins = [...joins];
     newJoins[index] = { ...newJoins[index], type };
     onChange(newJoins);
@@ -249,13 +249,13 @@ export function JoinBuilder({
                 {/* Join type */}
                 <PickerHeader>Join Type</PickerHeader>
                 <PickerList>
-                  {(['INNER', 'LEFT'] as const).map((type) => (
+                  {(['INNER', 'LEFT', 'FULL'] as const).map((type) => (
                     <PickerItem
                       key={type}
                       selected={join.type === type}
                       onClick={() => handleChangeJoinType(joinIndex, type)}
                     >
-                      {`${type} JOIN`}
+                      {type === 'FULL' ? 'FULL OUTER JOIN' : `${type} JOIN`}
                     </PickerItem>
                   ))}
                 </PickerList>
@@ -288,19 +288,26 @@ export function JoinBuilder({
                 on
               </Text>
 
-              {/* Condition chips */}
-              {(join.on ?? []).map((condition, condIndex) => (
-                <QueryChip
-                  key={condIndex}
-                  variant="filter"
-                  onRemove={() => handleRemoveCondition(joinIndex, condIndex)}
-                >
-                  {formatConditionLabel(condition)}
+              {/* Raw ON condition (complex, non-equi join) */}
+              {join.raw_on_sql ? (
+                <QueryChip variant="filter" isLocked>
+                  {join.raw_on_sql.length > 55 ? join.raw_on_sql.slice(0, 55) + '…' : join.raw_on_sql}
                 </QueryChip>
-              ))}
+              ) : (
+                <>
+                  {/* Condition chips */}
+                  {(join.on ?? []).map((condition, condIndex) => (
+                    <QueryChip
+                      key={condIndex}
+                      variant="filter"
+                      onRemove={() => handleRemoveCondition(joinIndex, condIndex)}
+                    >
+                      {formatConditionLabel(condition)}
+                    </QueryChip>
+                  ))}
 
-              {/* Add condition */}
-              <PickerPopover
+                  {/* Add condition */}
+                  <PickerPopover
                 open={addConditionForJoin === joinIndex}
                 onOpenChange={(details) => {
                   if (!details.open) setAddConditionForJoin(null);
@@ -338,6 +345,8 @@ export function JoinBuilder({
                   }}
                 />
               </PickerPopover>
+                </>
+              )}
             </HStack>
           </Box>
         ))}

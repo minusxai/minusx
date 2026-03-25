@@ -127,7 +127,23 @@ export function OrderByBuilder({
 
       <HStack gap={2} flexWrap="wrap" align="center">
         {/* Sort chips */}
-        {clauses.map((clause, idx) => (
+        {clauses.map((clause, idx) => {
+          // Raw ORDER BY expression (CASE, complex expression): show as locked chip
+          if (clause.type === 'raw' || clause.raw_sql) {
+            return (
+              <QueryChip
+                key={`sort-${idx}`}
+                variant="sort"
+                icon={getDirectionIcon(clause.direction)}
+                isLocked
+                onRemove={() => handleRemoveSort(idx)}
+              >
+                {clause.raw_sql?.slice(0, 40) || 'expression'}
+              </QueryChip>
+            );
+          }
+
+          return (
           <PickerPopover
             key={`sort-${idx}`}
             open={editingIndex === idx}
@@ -171,7 +187,8 @@ export function OrderByBuilder({
               </PickerItem>
             </PickerList>
           </PickerPopover>
-        ))}
+          );
+        })}
 
         {/* Add sort popover */}
         <PickerPopover

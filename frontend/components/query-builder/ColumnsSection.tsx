@@ -14,7 +14,7 @@ import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { QueryChip, AddChipButton, getColumnIcon } from './QueryChip';
 import { PickerPopover, PickerHeader, PickerList, PickerItem } from './PickerPopover';
 import { AliasInput } from './AliasInput';
-import { LuX } from 'react-icons/lu';
+import { LuX, LuBraces } from 'react-icons/lu';
 
 interface ColumnsSectionProps {
   databaseName: string;
@@ -97,6 +97,17 @@ export function ColumnsSection({
     }
   };
 
+  const formatExpressionLabel = (col: SelectColumn): string => {
+    if (col.type === 'raw') {
+      const preview = col.raw_sql?.slice(0, 35) || 'expression';
+      return col.alias ? `${preview}… as ${col.alias}` : preview;
+    }
+    if (col.function === 'DATE') return col.alias || `DATE(${col.column})`;
+    if (col.function === 'SPLIT_PART') return col.alias || `SPLIT_PART(${col.column})`;
+    if (col.function === 'DATE_TRUNC') return col.alias || `${col.column} by ${col.unit}`;
+    return col.alias || col.column || 'expression';
+  };
+
   // Filter out columns already selected
   const selectableColumns = availableColumns.filter(
     (col) => !columns.find((c) => c.column === col.name && c.type === 'column')
@@ -145,7 +156,25 @@ export function ColumnsSection({
       {!isSelectStar && (
         <HStack gap={2} flexWrap="wrap">
           {columns.map((col, index) => {
-            if (col.type !== 'column' || col.column === '*') return null;
+            // Aggregates are managed by SummarizeSection
+            if (col.type === 'aggregate') return null;
+            // SELECT * is handled by the checkbox above
+            if (col.type === 'column' && col.column === '*') return null;
+
+            // Non-simple columns: render as locked chips (visible but not editable)
+            if (col.type === 'raw' || col.type === 'expression') {
+              return (
+                <QueryChip
+                  key={index}
+                  variant="neutral"
+                  icon={<LuBraces size={11} />}
+                  isLocked
+                  onRemove={() => handleRemoveColumn(index)}
+                >
+                  {formatExpressionLabel(col)}
+                </QueryChip>
+              );
+            }
 
             return (
               <PickerPopover
