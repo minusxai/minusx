@@ -105,14 +105,24 @@ def generate_select_column(col: SelectColumn) -> str:
         else:
             result = f"{agg}({col_ref})"
 
+        # Apply wrapper function (e.g. ROUND(SUM(col), 2))
+        if col.wrapper_function == "ROUND":
+            args = col.wrapper_args or []
+            args_str = ", ".join(str(a) for a in args)
+            result = f"ROUND({result}, {args_str})" if args_str else f"ROUND({result})"
+
     elif col.type == "expression":
-        # Expression (e.g., DATE_TRUNC)
+        col_ref = f"{col.table}.{col.column}" if col.table else col.column
         if col.function == "DATE_TRUNC":
-            col_ref = f"{col.table}.{col.column}" if col.table else col.column
             result = f"DATE_TRUNC('{col.unit}', {col_ref})"
+        elif col.function == "DATE":
+            result = f"DATE({col_ref})"
+        elif col.function == "SPLIT_PART":
+            args = col.function_args or []
+            result = f"SPLIT_PART({col_ref}, '{args[0]}', {args[1]})"
         else:
             # Unknown expression type, fall back to column
-            result = f"{col.table}.{col.column}" if col.table else (col.column or "*")
+            result = col_ref or "*"
 
     else:
         # Regular column
@@ -216,11 +226,16 @@ def generate_group_by_clause(columns) -> str:
     """Generate GROUP BY column list."""
     parts = []
     for col in columns:
+        col_ref = f"{col.table}.{col.column}" if col.table else col.column
         if col.type == "expression" and col.function == "DATE_TRUNC":
-            col_ref = f"{col.table}.{col.column}" if col.table else col.column
             parts.append(f"DATE_TRUNC('{col.unit}', {col_ref})")
+        elif col.type == "expression" and col.function == "DATE":
+            parts.append(f"DATE({col_ref})")
+        elif col.type == "expression" and col.function == "SPLIT_PART":
+            args = col.function_args or []
+            parts.append(f"SPLIT_PART({col_ref}, '{args[0]}', {args[1]})")
         else:
-            parts.append(f"{col.table}.{col.column}" if col.table else col.column)
+            parts.append(col_ref)
     return ", ".join(parts)
 
 
@@ -228,9 +243,11 @@ def generate_order_by_expression(col) -> str:
     """Generate ORDER BY column expression."""
     # Handle expression type (DATE_TRUNC)
     col_type = getattr(col, "type", "column")
+    col_ref = f"{col.table}.{col.column}" if col.table else col.column
     if col_type == "expression" and getattr(col, "function", None) == "DATE_TRUNC":
-        col_ref = f"{col.table}.{col.column}" if col.table else col.column
         return f"DATE_TRUNC('{col.unit}', {col_ref})"
+    if col_type == "expression" and getattr(col, "function", None) == "DATE":
+        return f"DATE({col_ref})"
 
     # Regular column
     if col.table:

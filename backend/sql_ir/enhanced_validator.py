@@ -108,6 +108,7 @@ def _check_unsupported_features(ast: exp.Expression) -> Set[str]:
     _SUPPORTED_SELECT_FUNCS = (
         exp.Count, exp.Sum, exp.Avg, exp.Min, exp.Max,
         exp.DateTrunc, exp.TimestampTrunc,
+        exp.Round, exp.Date, exp.SplitPart,
     )
     if select_node:
         for sel_expr in select_node.expressions:
@@ -281,11 +282,14 @@ def _is_complex_expression(node: exp.Expression, allow_aggregates: bool = False)
 
     # Functions indicate complex expression
     if isinstance(node, exp.Func):
-        # Exception: Date truncation functions are OK
-        if isinstance(node, (exp.TimestampTrunc, exp.DateTrunc)):
+        # Exception: Date truncation and simple date functions are OK
+        if isinstance(node, (exp.TimestampTrunc, exp.DateTrunc, exp.Date)):
             return False
         # Exception: Zero-argument current datetime functions are simple (like literals)
         if isinstance(node, (exp.CurrentTimestamp, exp.CurrentDate, exp.CurrentTime)):
+            return False
+        # Exception: ROUND and SPLIT_PART are OK
+        if isinstance(node, (exp.Round, exp.SplitPart)):
             return False
         return True
 

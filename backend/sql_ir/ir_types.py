@@ -6,14 +6,18 @@ from typing import List, Optional, Literal, Union
 
 class SelectColumn(BaseModel):
     """Represents a column in the SELECT clause."""
-    type: Literal['column', 'aggregate', 'expression']
+    type: Literal['column', 'aggregate', 'expression', 'raw']
     column: Optional[str] = None  # None for COUNT(*), required for regular columns
     table: Optional[str] = None
     aggregate: Optional[Literal['COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'COUNT_DISTINCT']] = None
     alias: Optional[str] = None
     # Expression fields (for type='expression')
-    function: Optional[Literal['DATE_TRUNC']] = None
+    function: Optional[Literal['DATE_TRUNC', 'DATE', 'SPLIT_PART']] = None
     unit: Optional[Literal['DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR', 'HOUR', 'MINUTE']] = None
+    function_args: Optional[List[Union[str, int, float]]] = None  # extra args (e.g. delimiter + index for SPLIT_PART)
+    # Wrapper function applied around an aggregate (e.g. ROUND(SUM(col), 2))
+    wrapper_function: Optional[Literal['ROUND']] = None
+    wrapper_args: Optional[List[Union[int, float]]] = None
 
     @property
     def model_validator(self):
@@ -81,8 +85,9 @@ class GroupByItem(BaseModel):
     column: str
     table: Optional[str] = None
     # Expression fields (for type='expression')
-    function: Optional[Literal['DATE_TRUNC']] = None
+    function: Optional[Literal['DATE_TRUNC', 'DATE', 'SPLIT_PART']] = None
     unit: Optional[Literal['DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR', 'HOUR', 'MINUTE']] = None
+    function_args: Optional[List[Union[str, int, float]]] = None
 
 
 class GroupByClause(BaseModel):
@@ -97,7 +102,7 @@ class OrderByClause(BaseModel):
     table: Optional[str] = None
     direction: Literal['ASC', 'DESC'] = 'ASC'
     # Expression fields (for type='expression')
-    function: Optional[Literal['DATE_TRUNC']] = None
+    function: Optional[Literal['DATE_TRUNC', 'DATE']] = None
     unit: Optional[Literal['DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR', 'HOUR', 'MINUTE']] = None
 
 

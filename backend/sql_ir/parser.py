@@ -115,6 +115,15 @@ def parse_select(select_node: exp.Select) -> List[SelectColumn]:
         alias = expr.alias if isinstance(expr, exp.Alias) else None
         actual = expr.this if isinstance(expr, exp.Alias) else expr
 
+        # Unwrap ROUND(aggregate, decimals) — store wrapper and work on inner aggregate
+        wrapper_function = None
+        wrapper_args = None
+        if isinstance(actual, exp.Round):
+            wrapper_function = 'ROUND'
+            decimals = actual.args.get('decimals')
+            wrapper_args = [int(decimals.this)] if decimals is not None else []
+            actual = actual.this
+
         if isinstance(actual, (exp.Count, exp.Sum, exp.Avg, exp.Min, exp.Max)):
             agg_type = type(actual).__name__.upper()
             agg_column = actual.this
@@ -141,6 +150,8 @@ def parse_select(select_node: exp.Select) -> List[SelectColumn]:
                 table=table_name,
                 aggregate=agg_type,
                 alias=alias,
+                wrapper_function=wrapper_function,
+                wrapper_args=wrapper_args,
             ))
 
         elif isinstance(actual, exp.Column):
@@ -164,6 +175,31 @@ def parse_select(select_node: exp.Select) -> List[SelectColumn]:
             if col:
                 col.alias = alias
                 columns.append(col)
+
+        elif isinstance(actual, exp.Date):
+            inner = actual.this
+            col_name = inner.name if isinstance(inner, exp.Column) else inner.sql()
+            table_name = inner.table if isinstance(inner, exp.Column) and inner.table else None
+            columns.append(SelectColumn(
+                type='expression',
+                function='DATE',
+                column=col_name,
+                table=table_name,
+                alias=alias,
+            ))
+
+        elif isinstance(actual, exp.SplitPart):
+            col_expr = actual.this
+            delimiter = actual.args['delimiter'].this  # e.g. '/'
+            part_index = int(actual.args['part_index'].this)  # e.g. 2
+            columns.append(SelectColumn(
+                type='expression',
+                function='SPLIT_PART',
+                column=col_expr.name if isinstance(col_expr, exp.Column) else col_expr.sql(),
+                table=col_expr.table if isinstance(col_expr, exp.Column) and col_expr.table else None,
+                function_args=[delimiter, part_index],
+                alias=alias,
+            ))
 
     return columns
 
@@ -525,6 +561,25 @@ def parse_group_by(select_node: exp.Select) -> Optional[GroupByClause]:
             item = parse_group_by_date_trunc(expr)
             if item:
                 columns.append(item)
+        elif isinstance(expr, exp.Date):
+            inner = expr.this
+            columns.append(GroupByItem(
+                type='expression',
+                function='DATE',
+                column=inner.name if isinstance(inner, exp.Column) else inner.sql(),
+                table=inner.table if isinstance(inner, exp.Column) and inner.table else None,
+            ))
+        elif isinstance(expr, exp.SplitPart):
+            col_expr = expr.this
+            delimiter = expr.args['delimiter'].this
+            part_index = int(expr.args['part_index'].this)
+            columns.append(GroupByItem(
+                type='expression',
+                function='SPLIT_PART',
+                column=col_expr.name if isinstance(col_expr, exp.Column) else col_expr.sql(),
+                table=col_expr.table if isinstance(col_expr, exp.Column) and col_expr.table else None,
+                function_args=[delimiter, part_index],
+            ))
         elif isinstance(expr, exp.Literal) and not expr.is_string:
             # Positional reference like GROUP BY 1 — resolve to actual SELECT column
             try:
