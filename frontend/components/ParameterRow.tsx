@@ -10,7 +10,7 @@ interface ParameterRowProps {
   parameters: QuestionParameter[];
   parameterValues?: Record<string, any>;        // current values (from file content)
   lastSubmittedValues?: Record<string, any>;     // values last used for execution
-  onValueChange?: (paramName: string, value: string | number) => void;
+  onValueChange?: (paramName: string, value: string | number | null) => void;
   onSubmit: (paramValues: Record<string, any>) => void;  // submit for execution
   onParametersChange?: (parameters: QuestionParameter[]) => void;  // structural
   disableTypeChange?: boolean;
@@ -28,11 +28,13 @@ export default function ParameterRow({
   onHoverParam,
 }: ParameterRowProps) {
   // Compute effective value per param: prefer local edit value, fall back to last submitted value
-  const getEffectiveValue = (param: QuestionParameter): string | number | undefined => {
-    return parameterValues?.[param.name] ?? lastSubmittedValues?.[param.name];
+  const getEffectiveValue = (param: QuestionParameter): string | number | null | undefined => {
+    // Use 'in' check so that an explicit null (None state) is not skipped by ??
+    if (parameterValues && param.name in parameterValues) return parameterValues[param.name];
+    return lastSubmittedValues?.[param.name];
   };
 
-  const handleValueChange = (paramName: string, value: string | number) => {
+  const handleValueChange = (paramName: string, value: string | number | null) => {
     if (onValueChange) {
       onValueChange(paramName, value);
     }
@@ -51,7 +53,8 @@ export default function ParameterRow({
           onValueChange(paramName, value);
         }
       } else {
-        valuesDict[p.name] = getEffectiveValue(p) ?? '';
+        const v = getEffectiveValue(p);
+        valuesDict[p.name] = v !== undefined ? v : '';  // preserve null (None state)
       }
     }
 
@@ -60,9 +63,12 @@ export default function ParameterRow({
 
   // Dirty detection: any param's effective value differs from lastSubmittedValues
   const isDirty = lastSubmittedValues !== undefined && parameters.some(p => {
-    const effective = String(getEffectiveValue(p) ?? '');
-    const submitted = String(lastSubmittedValues[p.name] ?? '');
-    return effective !== submitted;
+    const effective = getEffectiveValue(p);
+    const submitted = lastSubmittedValues[p.name];
+    // null (None) vs undefined/empty: treat both undefined and '' as "no value"
+    const normalizeForDirty = (v: string | number | null | undefined) =>
+      v === null ? '__none__' : String(v ?? '');
+    return normalizeForDirty(effective) !== normalizeForDirty(submitted);
   });
 
   const handleTypeChange = (paramName: string, type: 'text' | 'number' | 'date') => {
@@ -88,7 +94,7 @@ export default function ParameterRow({
           key={param.name}
           parameter={param}
           value={getEffectiveValue(param)}
-          onChange={(value) => handleValueChange(param.name, value)}
+          onChange={(value) => handleValueChange(param.name, value as string | number | null)}
           onTypeChange={(type) => handleTypeChange(param.name, type)}
           onParameterChange={handleParameterUpdate}
           onSubmit={handleSubmit}

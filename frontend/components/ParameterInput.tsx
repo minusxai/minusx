@@ -367,8 +367,8 @@ function SourceConfigPopover({ parameter, onParameterChange }: SourceConfigPopov
 
 interface ParameterInputProps {
   parameter: QuestionParameter;
-  value: string | number | undefined;
-  onChange: (value: string | number) => void;
+  value: string | number | null | undefined;
+  onChange: (value: string | number | null) => void;
   onTypeChange: (type: 'text' | 'number' | 'date') => void;
   onParameterChange?: (updated: QuestionParameter) => void;
   onSubmit?: (paramName?: string, value?: string | number) => void;
@@ -414,6 +414,7 @@ export default function ParameterInput({
     }
   };
 
+  const isNone = value === null;
   const hasValue = value !== undefined && value !== '' && value !== null;
 
   const typeOptions: Array<{ type: 'text' | 'number' | 'date'; label: string }> = [
@@ -455,13 +456,27 @@ export default function ParameterInput({
 
       <HStack gap={1.5} align="center">
 
-        {/* Input field — dropdown when source is configured, otherwise standard input */}
-        {hasSource && parameter.type !== 'date' ? (
+        {/* None state indicator — replaces the input when param is explicitly None */}
+        {isNone ? (
+          <HStack
+            bg="bg.muted"
+            borderRadius="md"
+            border="1px dashed"
+            borderColor="border.muted"
+            px={2}
+            h={ROW_H}
+            minW="100px"
+          >
+            <Text fontSize="xs" color="fg.subtle" fontStyle="italic">None</Text>
+          </HStack>
+        ) : (
+        /* Input field — dropdown when source is configured, otherwise standard input */
+        hasSource && parameter.type !== 'date' ? (
           <SourceDropdownWidget
             key={String(value ?? '')}
             source={parameter.source!}
             paramType={parameter.type as 'text' | 'number'}
-            currentValue={value}
+            currentValue={value ?? undefined}
             paramName={parameter.name}
             onChange={onChange}
             onSubmit={onSubmit}
@@ -491,20 +506,21 @@ export default function ParameterInput({
             }}
             placeholder={parameter.type === 'number' ? '0' : 'value'}
           />
+        )
         )}
 
-        {/* Clear button: visible when value is non-empty and not using dropdown */}
-        {hasValue && !hasSource && (
-          <Tooltip content="Clear value">
+        {/* X button — toggles None on/off; always visible when param has a value or is None */}
+        {(isNone || hasValue) && (
+          <Tooltip content={isNone ? 'Clear — restore to empty' : 'Set to None (skip this filter)'}>
             <IconButton
-              aria-label="Clear value"
+              aria-label={isNone ? 'Clear None' : 'Set to None'}
               variant="ghost"
-              onClick={() => onChange('')}
+              onClick={() => onChange(isNone ? '' : null)}
               color="fg.subtle"
               h={ROW_H}
               w={ROW_H}
               minW={ROW_H}
-              _hover={{ color: 'accent.danger', bg: 'bg.emphasized' }}
+              _hover={{ color: isNone ? 'fg' : 'accent.danger', bg: 'bg.emphasized' }}
             >
               <LuX style={{ width: 10, height: 10 }} />
             </IconButton>

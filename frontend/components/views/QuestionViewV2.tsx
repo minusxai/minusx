@@ -78,7 +78,7 @@ interface QuestionViewV2Props {
 
   // Handlers
   onChange: (updates: Partial<QuestionContent>) => void;
-  onParameterValueChange?: (paramName: string, value: string | number) => void;  // Ephemeral
+  onParameterValueChange?: (paramName: string, value: string | number | null) => void;  // Ephemeral
   onExecute: (overrideParamValues?: Record<string, any>) => void;  // Phase 3: Explicit execute
 }
 
@@ -291,7 +291,7 @@ export default function QuestionViewV2({
   };
 
   // Handle parameter value change — persisted into file content (marks file dirty)
-  const handleParameterValueChange = (paramName: string, value: string | number) => {
+  const handleParameterValueChange = (paramName: string, value: string | number | null) => {
     if (onParameterValueChange) {
       onParameterValueChange(paramName, value);
     }

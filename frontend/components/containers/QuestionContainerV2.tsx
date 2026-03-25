@@ -121,7 +121,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
   }, [lastExecuted, mergedContent, fileId, dispatch]);
 
   // Handle parameter value change — persisted into file content (marks file dirty)
-  const handleParameterValueChange = useCallback((paramName: string, value: string | number) => {
+  const handleParameterValueChange = useCallback((paramName: string, value: string | number | null) => {
     const currentValues = mergedContent?.parameterValues || {};
     editFile({ fileId, changes: { content: { parameterValues: { ...currentValues, [paramName]: value } } } });
   }, [fileId, mergedContent]);
