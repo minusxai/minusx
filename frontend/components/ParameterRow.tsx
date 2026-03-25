@@ -27,9 +27,9 @@ export default function ParameterRow({
   disableTypeChange = false,
   onHoverParam,
 }: ParameterRowProps) {
-  // Compute effective value per param: parameterValues → undefined
+  // Compute effective value per param: prefer local edit value, fall back to last submitted value
   const getEffectiveValue = (param: QuestionParameter): string | number | undefined => {
-    return parameterValues?.[param.name];
+    return parameterValues?.[param.name] ?? lastSubmittedValues?.[param.name];
   };
 
   const handleValueChange = (paramName: string, value: string | number) => {

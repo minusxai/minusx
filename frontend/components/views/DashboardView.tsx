@@ -4,7 +4,7 @@ import { Box, Text } from '@chakra-ui/react';
 import { AssetReference, DashboardLayoutItem, DocumentContent, QuestionContent, QuestionParameter } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
 import ParameterRow from '../ParameterRow';
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { Layout, WidthProvider, Responsive } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
@@ -107,6 +107,16 @@ export default function DashboardView({
   // Read current parameter values from merged content (persisted in file)
   const mergedDashboardContent = useAppSelector(state => selectMergedContent(state, fileId)) as any;
   const paramValues = mergedDashboardContent?.parameterValues || EMPTY_PARAMS;
+
+  // Local state for in-progress edits (not submitted yet, does not trigger execution)
+  // Syncs from paramValues when it changes externally (e.g. agent update, publish, initial load)
+  const [localParamValues, setLocalParamValues] = useState<Record<string, any>>(paramValues);
+  const prevParamValuesRef = useRef(paramValues);
+  if (prevParamValuesRef.current !== paramValues) {
+    prevParamValuesRef.current = paramValues;
+    // Overwrite local edits when paramValues changes externally (agent or publish)
+    setLocalParamValues(paramValues);
+  }
 
   // Last-submitted param values from lastExecuted (gates execution)
   // NOTE: ?? EMPTY_PARAMS (not ?? {}) — a new {} each render makes effectiveSubmittedValues unstable
@@ -409,13 +419,13 @@ export default function DashboardView({
             <Box mb={4}>
               <ParameterRow
                 parameters={parameterValuesForDisplay}
-                parameterValues={effectiveSubmittedValues}
+                parameterValues={localParamValues}
                 lastSubmittedValues={effectiveSubmittedValues}
                 onValueChange={(paramName, value) => {
-                  editFile({ fileId, changes: { content: { parameterValues: { ...paramValues, [paramName]: value } } } });
+                  setLocalParamValues(prev => ({ ...prev, [paramName]: value }));
                 }}
                 onSubmit={(newParamValues) => {
-                  // Persist new values + update lastExecuted.params to trigger execution
+                  // Persist submitted values + update lastExecuted.params to trigger execution
                   editFile({ fileId, changes: { content: { parameterValues: newParamValues } } });
                   dispatch(setEphemeral({
                     fileId,
