@@ -40,6 +40,11 @@ export interface FilterCondition {
   operator: '=' | '!=' | '>' | '<' | '>=' | '<=' | 'LIKE' | 'IN' | 'IS NULL' | 'IS NOT NULL';
   value?: string | number | string[];
   param_name?: string;
+  // For DATE_TRUNC on the left (column) side of a filter
+  function?: 'DATE_TRUNC';
+  unit?: 'DAY' | 'WEEK' | 'MONTH' | 'QUARTER' | 'YEAR' | 'HOUR' | 'MINUTE';
+  // For verbatim SQL expressions on the right side (e.g. CURRENT_TIMESTAMP, TIMESTAMP_TRUNC(...))
+  raw_value?: string;
 }
 
 export interface FilterGroup {

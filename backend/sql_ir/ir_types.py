@@ -62,6 +62,11 @@ class FilterCondition(BaseModel):
     operator: Literal['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'IN', 'IS NULL', 'IS NOT NULL']
     value: Optional[Union[bool, str, int, float, List[str]]] = None  # bool must come before int to prevent coercion
     param_name: Optional[str] = None  # If value is :paramName
+    # Expression fields (for DATE_TRUNC on the left/column side of a filter)
+    function: Optional[Literal['DATE_TRUNC']] = None
+    unit: Optional[Literal['DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR', 'HOUR', 'MINUTE']] = None
+    # For verbatim SQL expressions on the right side (e.g. CURRENT_TIMESTAMP, TIMESTAMP_TRUNC(...))
+    raw_value: Optional[str] = None
 
 
 class FilterGroup(BaseModel):

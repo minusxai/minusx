@@ -1111,4 +1111,93 @@ HAVING AVG(avg_order_value) > '75'`;
       expect(generateResult.sql).not.toContain('WHERE');
     });
   });
+
+  describe('BigQuery-style DATE_TRUNC / TIMESTAMP_TRUNC / CURRENT_TIMESTAMP support', () => {
+    it('should parse DATE_TRUNC(col, MONTH) filter + COUNT(DISTINCT) + positional GROUP BY / ORDER BY', async () => {
+      const sql = `
+        SELECT
+          DATE_TRUNC(created_at, MONTH) AS month,
+          COUNT(DISTINCT conv_id) AS unique_conversations
+        FROM analytics.processed_requests_with_sub
+        WHERE DATE_TRUNC(created_at, MONTH) < TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(), MONTH)
+        GROUP BY 1
+        ORDER BY 1
+      `;
+
+      const parseResult = await CompletionsAPI.sqlToIR({ sql });
+      expect(parseResult.success).toBe(true);
+      expect(parseResult.ir).toBeDefined();
+
+      const ir = parseResult.ir!;
+      expect(ir.select).toHaveLength(2);
+      expect(ir.select[0].type).toBe('expression');
+      expect(ir.select[0].function).toBe('DATE_TRUNC');
+      expect(ir.select[0].unit).toBe('MONTH');
+      expect(ir.where).toBeDefined();
+      expect(ir.group_by).toBeDefined();
+      expect(ir.order_by).toBeDefined();
+
+      const generateResult = await CompletionsAPI.irToSql({ ir });
+      expect(generateResult.success).toBe(true);
+      expect(generateResult.sql).toContain('DATE_TRUNC');
+      expect(generateResult.sql).toContain('WHERE');
+      expect(generateResult.sql).toContain('GROUP BY');
+      expect(generateResult.sql).toContain('ORDER BY');
+    });
+
+    it('should parse DATE_TRUNC filter combined with string equality filter', async () => {
+      const sql = `
+        SELECT
+          DATE_TRUNC(created_at, MONTH) AS month,
+          COUNT(*) AS user_questions
+        FROM analytics.processed_requests_with_sub
+        WHERE last_message_role = 'user'
+          AND DATE_TRUNC(created_at, MONTH) < TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(), MONTH)
+        GROUP BY 1
+        ORDER BY 1
+      `;
+
+      const parseResult = await CompletionsAPI.sqlToIR({ sql });
+      expect(parseResult.success).toBe(true);
+
+      const ir = parseResult.ir!;
+      expect(ir.where).toBeDefined();
+      expect(ir.where!.operator).toBe('AND');
+      expect(ir.where!.conditions).toHaveLength(2);
+      expect(ir.group_by).toBeDefined();
+      expect(ir.order_by).toBeDefined();
+
+      const generateResult = await CompletionsAPI.irToSql({ ir });
+      expect(generateResult.success).toBe(true);
+      expect(generateResult.sql).toContain('last_message_role');
+      expect(generateResult.sql).toContain('DATE_TRUNC');
+    });
+
+    it('should parse CURRENT_TIMESTAMP (no parens) in OR filter', async () => {
+      const sql = `
+        SELECT
+          plan_type,
+          COUNT(DISTINCT email_id) AS users
+        FROM analytics.all_subscriptions
+        WHERE subscription_end IS NULL OR subscription_end > CURRENT_TIMESTAMP
+        GROUP BY 1
+        ORDER BY 2 DESC
+      `;
+
+      const parseResult = await CompletionsAPI.sqlToIR({ sql });
+      expect(parseResult.success).toBe(true);
+
+      const ir = parseResult.ir!;
+      expect(ir.where).toBeDefined();
+      expect(ir.where!.operator).toBe('OR');
+      expect(ir.group_by).toBeDefined();
+      expect(ir.order_by).toBeDefined();
+      expect(ir.order_by![0].direction).toBe('DESC');
+
+      const generateResult = await CompletionsAPI.irToSql({ ir });
+      expect(generateResult.success).toBe(true);
+      expect(generateResult.sql).toContain('IS NULL');
+      expect(generateResult.sql?.toUpperCase()).toContain('CURRENT_TIMESTAMP');
+    });
+  });
 });

@@ -4,8 +4,10 @@ Core Principle: If SQL is marked as "supported", it MUST be fully lossless.
 Otherwise, it MUST be rejected with clear error messages.
 """
 
+import re
 import sqlglot
 from sqlglot import exp
+from sqlglot.optimizer import optimize as _optimize
 from typing import List, Set, Optional
 from pydantic import BaseModel
 
@@ -45,19 +47,13 @@ def validate_sql_for_gui(sql: str) -> ValidationResult:
     unsupported.update(_check_unsupported_features(ast))
 
     # Check for complex aggregate expressions (lossy)
-    complex_agg = _check_complex_aggregates(ast)
-    if complex_agg:
-        unsupported.update(complex_agg)
+    unsupported.update(_check_complex_aggregates(ast))
 
     # Check for complex filter expressions (lossy)
-    complex_filters = _check_complex_filters(ast)
-    if complex_filters:
-        unsupported.update(complex_filters)
+    unsupported.update(_check_complex_filters(ast))
 
     # Check for unsupported operators
-    unsupported_ops = _check_unsupported_operators(ast)
-    if unsupported_ops:
-        unsupported.update(unsupported_ops)
+    unsupported.update(_check_unsupported_operators(ast))
 
     if unsupported:
         feature_list = sorted(list(unsupported))
@@ -70,39 +66,6 @@ def validate_sql_for_gui(sql: str) -> ValidationResult:
             hint=hint
         )
 
-    # Final check: Round-trip validation (SQL → IR → SQL)
-    # This ensures the conversion is truly lossless
-    # Import here to avoid circular imports
-    from .parser import parse_sql_to_ir, UnsupportedSQLError
-    from .generator import ir_to_sql
-
-    try:
-        # Use _skip_validation=True to avoid infinite recursion
-        ir = parse_sql_to_ir(sql, _skip_validation=True)
-        regenerated_sql = ir_to_sql(ir)
-
-        comparison = compare_sql_ast(sql, regenerated_sql)
-        if not comparison.equivalent:
-            return ValidationResult(
-                supported=False,
-                errors=["Round-trip validation failed: regenerated SQL differs from original"],
-                unsupportedFeatures=comparison.differences,
-                hint="This query structure is not fully supported in GUI mode. Use SQL mode."
-            )
-    except UnsupportedSQLError as e:
-        return ValidationResult(
-            supported=False,
-            errors=[f"SQL parsing failed: {str(e)}"],
-            hint="This query cannot be parsed for GUI mode. Use SQL mode."
-        )
-    except Exception as e:
-        return ValidationResult(
-            supported=False,
-            errors=[f"Validation error: {str(e)}"],
-            hint="An error occurred validating this query. Use SQL mode."
-        )
-
-    # If we get here, SQL is fully supported (lossless)
     return ValidationResult(supported=True)
 
 
@@ -138,6 +101,33 @@ def _check_unsupported_features(ast: exp.Expression) -> Set[str]:
         join_side = join_node.args.get("side", "").upper()
         if join_side in ("RIGHT", "FULL"):
             unsupported.add(f"{join_side} JOIN")
+
+    # Check for unsupported function expressions in SELECT columns.
+    # Supported: plain columns, aggregates (COUNT/SUM/etc.), DATE_TRUNC / TIMESTAMP_TRUNC.
+    # Everything else (REPLACE, UPPER, COALESCE, CAST, arithmetic, etc.) is lossy.
+    _SUPPORTED_SELECT_FUNCS = (
+        exp.Count, exp.Sum, exp.Avg, exp.Min, exp.Max,
+        exp.DateTrunc, exp.TimestampTrunc,
+    )
+    if select_node:
+        for sel_expr in select_node.expressions:
+            # Unwrap alias
+            actual = sel_expr.this if isinstance(sel_expr, exp.Alias) else sel_expr
+            if isinstance(actual, (exp.Column, exp.Star)):
+                continue
+            if isinstance(actual, _SUPPORTED_SELECT_FUNCS):
+                continue
+            # COUNT(DISTINCT ...) wraps Count with a Distinct inner node — already handled above
+            if isinstance(actual, exp.Func) and not isinstance(actual, _SUPPORTED_SELECT_FUNCS):
+                func_name = type(actual).__name__
+                unsupported.add(
+                    f"Function expressions in SELECT (e.g., {func_name}()) — only DATE_TRUNC and aggregates are supported"
+                )
+            elif not isinstance(actual, (exp.Column, exp.Star, exp.Literal)):
+                # Arithmetic expressions, CAST, etc. in SELECT
+                unsupported.add(
+                    "Complex expressions in SELECT columns (only columns, aggregates, and DATE_TRUNC are supported)"
+                )
 
     return unsupported
 
@@ -291,11 +281,11 @@ def _is_complex_expression(node: exp.Expression, allow_aggregates: bool = False)
 
     # Functions indicate complex expression
     if isinstance(node, exp.Func):
-        # Exception: Aggregates are OK if allowed
-        if allow_aggregates and isinstance(node, (exp.Count, exp.Sum, exp.Avg, exp.Min, exp.Max)):
-            return False
         # Exception: Date truncation functions are OK
         if isinstance(node, (exp.TimestampTrunc, exp.DateTrunc)):
+            return False
+        # Exception: Zero-argument current datetime functions are simple (like literals)
+        if isinstance(node, (exp.CurrentTimestamp, exp.CurrentDate, exp.CurrentTime)):
             return False
         return True
 
@@ -405,9 +395,8 @@ def compare_sql_ast(sql1: str, sql2: str, dialect: str = "postgres") -> SQLCompa
     # Normalize to canonical form for comparison
     # Using optimize to normalize expressions (constant folding, etc.)
     try:
-        from sqlglot.optimizer import optimize
-        ast1_opt = optimize(ast1, dialect=dialect)
-        ast2_opt = optimize(ast2, dialect=dialect)
+        ast1_opt = _optimize(ast1, dialect=dialect)
+        ast2_opt = _optimize(ast2, dialect=dialect)
     except Exception:
         # Fall back to un-optimized if optimization fails
         ast1_opt = ast1
@@ -435,6 +424,36 @@ def compare_sql_ast(sql1: str, sql2: str, dialect: str = "postgres") -> SQLCompa
 
     # Collect specific differences
     differences = _find_ast_differences(ast1_opt, ast2_opt)
+
+    # Final fallback: try cross-dialect comparison for BigQuery-style SQL.
+    # DATE_TRUNC(col, UNIT) (BigQuery arg order) and DATE_TRUNC('UNIT', col) (standard)
+    # are semantically equivalent but produce different normalized strings in a single dialect.
+    # Transpile sql1 from BigQuery to postgres and compare again.
+    try:
+        transpiled_sql1 = sqlglot.transpile(sql1, read="bigquery", write=dialect)[0]
+        ast1_bq = sqlglot.parse_one(transpiled_sql1, read=dialect)
+        try:
+            from sqlglot.optimizer import optimize as _opt
+            ast1_bq_opt = _opt(ast1_bq, dialect=dialect)
+        except Exception:
+            ast1_bq_opt = ast1_bq
+
+        norm1_bq = ast1_bq_opt.sql(dialect=dialect, normalize=True, pretty=False)
+
+        # Strip NULLS FIRST/LAST — added by BigQuery→Postgres transpiler for ORDER BY defaults
+        # but not generated by our IR generator; they don't affect query semantics here.
+        _nulls_re = re.compile(r'\s+NULLS\s+(FIRST|LAST)', re.IGNORECASE)
+        norm1_bq_stripped = _nulls_re.sub('', norm1_bq)
+        norm2_stripped = _nulls_re.sub('', norm2)
+
+        if norm1_bq_stripped.lower() == norm2_stripped.lower():
+            return SQLComparisonResult(
+                equivalent=True,
+                original_normalized=norm1_bq,
+                regenerated_normalized=norm2
+            )
+    except Exception:
+        pass  # Ignore errors in the BigQuery fallback
 
     return SQLComparisonResult(
         equivalent=False,

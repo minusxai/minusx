@@ -46,6 +46,9 @@ def ir_to_sql_python(ir) -> str:
                 result = f"COUNT(DISTINCT {col_name})"
             else:
                 result = f"{agg}({col_name})"
+        elif col.type == 'expression' and getattr(col, 'function', None) == 'DATE_TRUNC':
+            col_ref = f"{col.table}.{col.column}" if col.table else col.column
+            result = f"DATE_TRUNC('{col.unit}', {col_ref})"
         else:
             result = f"{col.table}.{col.column}" if col.table else col.column
 
@@ -90,7 +93,11 @@ def ir_to_sql_python(ir) -> str:
     if ir.group_by and ir.group_by.columns:
         cols = []
         for col in ir.group_by.columns:
-            cols.append(f"{col.table}.{col.column}" if col.table else col.column)
+            if getattr(col, 'type', 'column') == 'expression' and getattr(col, 'function', None) == 'DATE_TRUNC':
+                col_ref = f"{col.table}.{col.column}" if col.table else col.column
+                cols.append(f"DATE_TRUNC('{col.unit}', {col_ref})")
+            else:
+                cols.append(f"{col.table}.{col.column}" if col.table else col.column)
         parts.append("GROUP BY " + ", ".join(cols))
 
     # HAVING
@@ -101,7 +108,11 @@ def ir_to_sql_python(ir) -> str:
     if ir.order_by:
         order_cols = []
         for col in ir.order_by:
-            col_name = f"{col.table}.{col.column}" if col.table else col.column
+            if getattr(col, 'type', 'column') == 'expression' and getattr(col, 'function', None) == 'DATE_TRUNC':
+                col_ref = f"{col.table}.{col.column}" if col.table else col.column
+                col_name = f"DATE_TRUNC('{col.unit}', {col_ref})"
+            else:
+                col_name = f"{col.table}.{col.column}" if col.table else col.column
             order_cols.append(f"{col_name} {col.direction}")
         parts.append("ORDER BY " + ", ".join(order_cols))
 
@@ -149,6 +160,10 @@ def filter_condition_to_sql(cond) -> str:
             column = f"COUNT(DISTINCT {col_expr})"
         else:
             column = f"{cond.aggregate}({col_expr})"
+    elif getattr(cond, 'function', None) == 'DATE_TRUNC':
+        # DATE_TRUNC expression on the left side
+        col_ref = f"{cond.table}.{cond.column}" if cond.table else cond.column
+        column = f"DATE_TRUNC('{cond.unit}', {col_ref})"
     else:
         # Regular column filter (WHERE clause)
         column = f"{cond.table}.{cond.column}" if cond.table else cond.column
@@ -165,6 +180,10 @@ def filter_condition_to_sql(cond) -> str:
 
     if cond.param_name:
         return f"{column} {cond.operator} :{cond.param_name}"
+
+    # Raw verbatim expression (e.g. CURRENT_TIMESTAMP, TIMESTAMP_TRUNC(...))
+    if getattr(cond, 'raw_value', None) is not None:
+        return f"{column} {cond.operator} {cond.raw_value}"
 
     # Format value
     if cond.value is None:
@@ -366,3 +385,144 @@ class TestEdgeCases:
         generated = ir_to_sql_python(ir)
 
         assert "public.users" in generated
+
+
+class TestDateTruncFilters:
+    """Test DATE_TRUNC / TIMESTAMP_TRUNC in WHERE, GROUP BY, ORDER BY"""
+
+    def test_date_trunc_in_where_and_positional_group_order_by(self):
+        """Query 1: DATE_TRUNC filter + COUNT(DISTINCT) + positional GROUP BY 1, ORDER BY 1"""
+        sql = """
+        SELECT
+          DATE_TRUNC(created_at, MONTH) AS month,
+          COUNT(DISTINCT conv_id) AS unique_conversations
+        FROM analytics.processed_requests_with_sub
+        WHERE DATE_TRUNC(created_at, MONTH) < TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(), MONTH)
+        GROUP BY 1
+        ORDER BY 1
+        """
+
+        ir = parse_sql_to_ir(sql)
+
+        # SELECT: DATE_TRUNC expression + COUNT(DISTINCT)
+        assert len(ir.select) == 2
+        assert ir.select[0].type == 'expression'
+        assert ir.select[0].function == 'DATE_TRUNC'
+        assert ir.select[0].unit == 'MONTH'
+        assert ir.select[0].column.lower() == 'created_at'
+        assert ir.select[1].type == 'aggregate'
+        assert ir.select[1].aggregate == 'COUNT_DISTINCT'
+
+        # WHERE: DATE_TRUNC filter preserved
+        assert ir.where is not None
+        conditions = ir.where.conditions
+        assert len(conditions) >= 1
+        date_trunc_conds = [c for c in conditions if hasattr(c, 'function') and c.function == 'DATE_TRUNC']
+        assert len(date_trunc_conds) == 1
+        assert date_trunc_conds[0].operator == '<'
+        assert date_trunc_conds[0].raw_value is not None
+
+        # GROUP BY: resolved from positional reference
+        assert ir.group_by is not None
+        assert len(ir.group_by.columns) == 1
+        assert ir.group_by.columns[0].type == 'expression'
+        assert ir.group_by.columns[0].function == 'DATE_TRUNC'
+
+        # ORDER BY: resolved from positional reference
+        assert ir.order_by is not None
+        assert len(ir.order_by) == 1
+        assert ir.order_by[0].type == 'expression'
+        assert ir.order_by[0].function == 'DATE_TRUNC'
+
+        # Generate SQL
+        generated = ir_to_sql_python(ir)
+        norm = normalize_sql(generated)
+        assert "DATE_TRUNC(" in norm
+        assert "COUNT(DISTINCT conv_id)" in norm
+        assert "WHERE" in norm
+        assert "GROUP BY" in norm
+        assert "ORDER BY" in norm
+
+    def test_date_trunc_filter_with_string_filter(self):
+        """Query 2: DATE_TRUNC filter combined with a string equality filter"""
+        sql = """
+        SELECT
+          DATE_TRUNC(created_at, MONTH) AS month,
+          COUNT(*) AS user_questions
+        FROM analytics.processed_requests_with_sub
+        WHERE last_message_role = 'user'
+          AND DATE_TRUNC(created_at, MONTH) < TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(), MONTH)
+        GROUP BY 1
+        ORDER BY 1
+        """
+
+        ir = parse_sql_to_ir(sql)
+
+        # WHERE: both conditions present
+        assert ir.where is not None
+        assert ir.where.operator == 'AND'
+        conditions = ir.where.conditions
+        assert len(conditions) >= 2
+
+        string_conds = [c for c in conditions if hasattr(c, 'column') and c.column == 'last_message_role']
+        assert len(string_conds) == 1
+        assert string_conds[0].value == 'user'
+
+        date_trunc_conds = [c for c in conditions if hasattr(c, 'function') and c.function == 'DATE_TRUNC']
+        assert len(date_trunc_conds) == 1
+        assert date_trunc_conds[0].operator == '<'
+        assert date_trunc_conds[0].raw_value is not None
+
+        # GROUP BY and ORDER BY resolved from positional references
+        assert ir.group_by is not None
+        assert ir.order_by is not None
+
+        generated = ir_to_sql_python(ir)
+        norm = normalize_sql(generated)
+        assert "last_message_role" in norm
+        assert "DATE_TRUNC(" in norm
+        assert "WHERE" in norm
+        assert "GROUP BY" in norm
+
+    def test_current_timestamp_in_or_filter(self):
+        """Query 3: CURRENT_TIMESTAMP (no parens) in OR filter"""
+        sql = """
+        SELECT
+          plan_type,
+          COUNT(DISTINCT email_id) AS users
+        FROM analytics.all_subscriptions
+        WHERE subscription_end IS NULL OR subscription_end > CURRENT_TIMESTAMP
+        GROUP BY 1
+        ORDER BY 2 DESC
+        """
+
+        ir = parse_sql_to_ir(sql)
+
+        # WHERE: OR group with IS NULL and > CURRENT_TIMESTAMP
+        assert ir.where is not None
+        assert ir.where.operator == 'OR'
+        conditions = ir.where.conditions
+        assert len(conditions) == 2
+
+        null_conds = [c for c in conditions if hasattr(c, 'operator') and c.operator == 'IS NULL']
+        assert len(null_conds) == 1
+
+        gt_conds = [c for c in conditions if hasattr(c, 'operator') and c.operator == '>']
+        assert len(gt_conds) == 1
+        assert gt_conds[0].raw_value is not None
+        assert 'CURRENT_TIMESTAMP' in gt_conds[0].raw_value.upper()
+
+        # GROUP BY resolved from positional reference (plan_type)
+        assert ir.group_by is not None
+        assert len(ir.group_by.columns) == 1
+        assert ir.group_by.columns[0].column == 'plan_type'
+
+        # ORDER BY positional reference (2nd column = COUNT(DISTINCT email_id))
+        assert ir.order_by is not None
+        assert ir.order_by[0].direction == 'DESC'
+
+        generated = ir_to_sql_python(ir)
+        norm = normalize_sql(generated)
+        assert "subscription_end IS NULL" in norm
+        assert "CURRENT_TIMESTAMP" in norm
+        assert "GROUP BY plan_type" in norm
