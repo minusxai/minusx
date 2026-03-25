@@ -88,31 +88,27 @@ def parse_select(select_node: exp.Select) -> List[SelectColumn]:
     columns = []
 
     for expr in select_node.expressions:
-        alias = expr.alias if hasattr(expr, 'alias') and expr.alias else None
+        # Unwrap alias first so all expression types are handled once
+        alias = expr.alias if isinstance(expr, exp.Alias) else None
+        actual = expr.this if isinstance(expr, exp.Alias) else expr
 
-        # Check if it's an aggregate function
-        if isinstance(expr, (exp.Count, exp.Sum, exp.Avg, exp.Min, exp.Max)):
-            agg_type = type(expr).__name__.upper()
+        if isinstance(actual, (exp.Count, exp.Sum, exp.Avg, exp.Min, exp.Max)):
+            agg_type = type(actual).__name__.upper()
+            agg_column = actual.this
 
-            # Extract column from aggregate
-            agg_column = expr.this
-
-            # Handle COUNT(DISTINCT col) - DISTINCT wraps the column
-            if isinstance(expr, exp.Count) and isinstance(agg_column, exp.Distinct):
+            # Handle COUNT(DISTINCT col) — DISTINCT wraps the column
+            if isinstance(actual, exp.Count) and isinstance(agg_column, exp.Distinct):
                 agg_type = 'COUNT_DISTINCT'
-                # Distinct node has expressions list, not this
                 if agg_column.expressions:
                     agg_column = agg_column.expressions[0]
 
             if isinstance(agg_column, exp.Star):
-                # COUNT(*) - use None to distinguish from COUNT(column)
-                col_name = None if isinstance(expr, exp.Count) else '*'
+                col_name = None if isinstance(actual, exp.Count) else '*'
                 table_name = None
             elif isinstance(agg_column, exp.Column):
                 col_name = agg_column.name
                 table_name = agg_column.table if hasattr(agg_column, 'table') and agg_column.table else None
             else:
-                # Complex expression in aggregate - will be caught by validator
                 col_name = agg_column.sql() if agg_column else None
                 table_name = None
 
@@ -124,97 +120,32 @@ def parse_select(select_node: exp.Select) -> List[SelectColumn]:
                 alias=alias,
             ))
 
-        # Regular column
-        elif isinstance(expr, exp.Column):
+        elif isinstance(actual, exp.Column):
             columns.append(SelectColumn(
                 type='column',
-                column=expr.name,
-                table=expr.table if hasattr(expr, 'table') and expr.table else None,
+                column=actual.name,
+                table=actual.table if hasattr(actual, 'table') and actual.table else None,
                 alias=alias,
             ))
 
-        # Star (SELECT *)
-        elif isinstance(expr, exp.Star):
-            table = expr.table if hasattr(expr, 'table') and expr.table else None
+        elif isinstance(actual, exp.Star):
             columns.append(SelectColumn(
                 type='column',
                 column='*',
-                table=table,
+                table=actual.table if hasattr(actual, 'table') and actual.table else None,
                 alias=alias,
             ))
 
-        # Alias node wrapping a column
-        elif isinstance(expr, exp.Alias):
-            actual_expr = expr.this
-            if isinstance(actual_expr, (exp.Count, exp.Sum, exp.Avg, exp.Min, exp.Max)):
-                agg_type = type(actual_expr).__name__.upper()
-
-                agg_column = actual_expr.this
-
-                # Handle COUNT(DISTINCT col)
-                if isinstance(actual_expr, exp.Count) and isinstance(agg_column, exp.Distinct):
-                    agg_type = 'COUNT_DISTINCT'
-                    if agg_column.expressions:
-                        agg_column = agg_column.expressions[0]
-
-                if isinstance(agg_column, exp.Star):
-                    # COUNT(*) - use None to distinguish from COUNT(column)
-                    col_name = None if isinstance(actual_expr, exp.Count) else '*'
-                    table_name = None
-                elif isinstance(agg_column, exp.Column):
-                    col_name = agg_column.name
-                    table_name = agg_column.table if hasattr(agg_column, 'table') and agg_column.table else None
-                else:
-                    # Complex expression in aggregate - will be caught by validator
-                    col_name = agg_column.sql() if agg_column else None
-                    table_name = None
-
-                columns.append(SelectColumn(
-                    type='aggregate',
-                    column=col_name,
-                    table=table_name,
-                    aggregate=agg_type,
-                    alias=expr.alias,
-                ))
-            elif isinstance(actual_expr, exp.Column):
-                columns.append(SelectColumn(
-                    type='column',
-                    column=actual_expr.name,
-                    table=actual_expr.table if hasattr(actual_expr, 'table') and actual_expr.table else None,
-                    alias=expr.alias,
-                ))
-            elif isinstance(actual_expr, exp.Star):
-                columns.append(SelectColumn(
-                    type='column',
-                    column='*',
-                    table=actual_expr.table if hasattr(actual_expr, 'table') and actual_expr.table else None,
-                    alias=expr.alias,
-                ))
-            # Date truncation functions (DATE_TRUNC)
-            elif isinstance(actual_expr, (exp.TimestampTrunc, exp.DateTrunc)):
-                col = parse_date_trunc_expression(actual_expr)
-                if col:
-                    col.alias = expr.alias
-                    columns.append(col)
-
-        # Date truncation functions without alias
-        elif isinstance(expr, (exp.TimestampTrunc, exp.DateTrunc)):
-            col = parse_date_trunc_expression(expr)
+        elif isinstance(actual, (exp.TimestampTrunc, exp.DateTrunc)):
+            col = parse_date_trunc_expression(actual)
             if col:
+                col.alias = alias
                 columns.append(col)
 
     return columns
 
 
-_DATE_TRUNC_UNIT_MAPPING = {
-    'DAY': 'DAY',
-    'WEEK': 'WEEK',
-    'MONTH': 'MONTH',
-    'QUARTER': 'QUARTER',
-    'YEAR': 'YEAR',
-    'HOUR': 'HOUR',
-    'MINUTE': 'MINUTE',
-}
+_DATE_TRUNC_UNITS = frozenset({'DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR', 'HOUR', 'MINUTE'})
 
 
 def parse_date_trunc_expression(expr: exp.Expression) -> Optional[SelectColumn]:
@@ -236,7 +167,7 @@ def parse_date_trunc_expression(expr: exp.Expression) -> Optional[SelectColumn]:
     else:
         unit_str = str(unit_expr).upper()
 
-    normalized_unit = _DATE_TRUNC_UNIT_MAPPING.get(unit_str)
+    normalized_unit = unit_str if unit_str in _DATE_TRUNC_UNITS else None
 
     if normalized_unit and isinstance(column_expr, exp.Column):
         # Standard/BigQuery (parsed correctly): DateTrunc(this=col, unit=UNIT)
@@ -252,9 +183,9 @@ def parse_date_trunc_expression(expr: exp.Expression) -> Optional[SelectColumn]:
     # DATE_TRUNC(col, UNIT) → postgres parses as DateTrunc(this=UNIT_as_col, unit=col_as_var)
     # Detect: "this" is a Column whose name is a recognized unit, "unit" is a Var/Column
     if (isinstance(column_expr, exp.Column)
-            and column_expr.name.upper() in _DATE_TRUNC_UNIT_MAPPING
+            and column_expr.name.upper() in _DATE_TRUNC_UNITS
             and isinstance(unit_expr, (exp.Var, exp.Column))):
-        swapped_unit = _DATE_TRUNC_UNIT_MAPPING[column_expr.name.upper()]
+        swapped_unit = column_expr.name.upper()
         actual_col_name = unit_expr.name
         actual_col_table = unit_expr.table if hasattr(unit_expr, 'table') and unit_expr.table else None
         return SelectColumn(
@@ -547,12 +478,8 @@ def parse_comparison(expr: exp.Expression, operator: str) -> Optional[FilterCond
     elif isinstance(right, exp.Null):
         # NULL literal
         value = None
-    elif isinstance(right, (exp.CurrentTimestamp, exp.CurrentDate, exp.CurrentTime,
-                             exp.DateTrunc, exp.TimestampTrunc)):
-        # Raw SQL expression — store in postgres dialect so it matches generator output
-        raw_value = right.sql(dialect='postgres')
     else:
-        # Use postgres dialect sql() to avoid quoting and match generator output
+        # Any unrecognized expression: store verbatim postgres SQL (no quoting)
         raw_value = right.sql(dialect='postgres')
 
     return FilterCondition(

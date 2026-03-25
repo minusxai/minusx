@@ -216,26 +216,11 @@ def generate_group_by_clause(columns) -> str:
     """Generate GROUP BY column list."""
     parts = []
     for col in columns:
-        # Handle both dict and GroupByItem
-        if isinstance(col, dict):
-            col_type = col.get("type", "column")
-            col_name = col.get("column", "")
-            col_table = col.get("table")
-            col_function = col.get("function")
-            col_unit = col.get("unit")
+        if col.type == "expression" and col.function == "DATE_TRUNC":
+            col_ref = f"{col.table}.{col.column}" if col.table else col.column
+            parts.append(f"DATE_TRUNC('{col.unit}', {col_ref})")
         else:
-            col_type = getattr(col, "type", "column")
-            col_name = getattr(col, "column", "")
-            col_table = getattr(col, "table", None)
-            col_function = getattr(col, "function", None)
-            col_unit = getattr(col, "unit", None)
-
-        if col_type == "expression" and col_function == "DATE_TRUNC":
-            col_ref = f"{col_table}.{col_name}" if col_table else col_name
-            parts.append(f"DATE_TRUNC('{col_unit}', {col_ref})")
-        else:
-            parts.append(f"{col_table}.{col_name}" if col_table else col_name)
-
+            parts.append(f"{col.table}.{col.column}" if col.table else col.column)
     return ", ".join(parts)
 
 
