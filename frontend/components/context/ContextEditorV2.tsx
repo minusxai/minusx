@@ -1106,6 +1106,9 @@ export default function ContextEditorV2({
                   tests={content.evals || []}
                   onChange={(evals: Test[]) => onChange({ evals })}
                   editMode={editMode}
+                  forcedType="llm"
+                  alwaysShowAdd
+                  addLabel="Add eval"
                 />
               )}
             </Box>

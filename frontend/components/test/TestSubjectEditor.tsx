@@ -7,6 +7,7 @@ import {
 import { useState, useMemo, useEffect } from 'react';
 import type { TestSubject } from '@/lib/types';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
+import DatabaseSelector from '@/components/DatabaseSelector';
 
 interface TestSubjectEditorProps {
   subject: TestSubject;
@@ -144,6 +145,14 @@ export default function TestSubjectEditor({ subject, testType, onChange, disable
             </NativeSelect.Field>
             <NativeSelect.Indicator />
           </NativeSelect.Root>
+        </Box>
+        <Box>
+          <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Connection</Text>
+          <DatabaseSelector
+            value={llm.connection_id ?? ''}
+            onChange={connection_id => onChange({ ...llm, connection_id: connection_id || undefined })}
+            size="sm"
+          />
         </Box>
       </VStack>
     );

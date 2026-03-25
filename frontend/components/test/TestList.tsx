@@ -153,9 +153,13 @@ interface TestListProps {
   forcedType?: 'llm' | 'query';
   /** Pre-fill subject question_id when adding a new query test */
   defaultQuestionId?: number;
+  /** Show the Add button even when not in editMode */
+  alwaysShowAdd?: boolean;
+  /** Custom label for the Add button (default: 'Add test') */
+  addLabel?: string;
 }
 
-export default function TestList({ tests, onChange, editMode = false, forcedType, defaultQuestionId }: TestListProps) {
+export default function TestList({ tests, onChange, editMode = false, forcedType, defaultQuestionId, alwaysShowAdd, addLabel = 'Add test' }: TestListProps) {
   function handleAdd() {
     onChange([...tests, makeDefaultTest(forcedType ?? 'query', defaultQuestionId)]);
   }
@@ -170,7 +174,9 @@ export default function TestList({ tests, onChange, editMode = false, forcedType
     onChange(tests.filter((_, i) => i !== index));
   }
 
-  if (tests.length === 0 && !editMode) return null;
+  const showAdd = editMode || alwaysShowAdd;
+
+  if (tests.length === 0 && !showAdd) return null;
 
   return (
     <VStack align="stretch" gap={2}>
@@ -186,10 +192,10 @@ export default function TestList({ tests, onChange, editMode = false, forcedType
           onDelete={() => handleDelete(i)}
         />
       ))}
-      {editMode && (
+      {showAdd && (
         <Button size="xs" variant="ghost" onClick={handleAdd} alignSelf="flex-start" color="fg.muted">
           <LuPlus size={12} />
-          Add test
+          {addLabel}
         </Button>
       )}
     </VStack>

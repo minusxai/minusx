@@ -1,6 +1,6 @@
 'use client';
 
-import { VStack, HStack, Text, Input, NativeSelect, Box, Separator } from '@chakra-ui/react';
+import { VStack, HStack, Text, NativeSelect, Box, Separator } from '@chakra-ui/react';
 import type { Test, TestAnswerType } from '@/lib/types';
 import TestSubjectEditor from './TestSubjectEditor';
 import TestOperatorSelect from './TestOperatorSelect';
@@ -70,21 +70,6 @@ export default function TestEditor({ test, onChange, forcedType, disabled, defau
           </NativeSelect.Root>
         </HStack>
       )}
-
-      {/* Label (optional) */}
-      <HStack gap={2} align="center">
-        <Text fontSize="xs" color="fg.muted" fontWeight="500" flexShrink={0} w="60px">Label</Text>
-        <Input
-          value={test.label ?? ''}
-          onChange={e => onChange({ ...test, label: e.target.value || undefined })}
-          placeholder="Optional description"
-          size="sm"
-          bg="bg.surface"
-          fontSize="xs"
-          disabled={disabled}
-          flex={1}
-        />
-      </HStack>
 
       <Separator />
 
