@@ -22,6 +22,7 @@ import {
 } from '@/store/uiSlice';
 import { editFile, publishFile, clearFileChanges } from '@/lib/api/file-state';
 import { isUserFacingError } from '@/lib/errors';
+import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { isSystemFileType, type FileType } from '@/lib/ui/file-metadata';
@@ -68,6 +69,12 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
   const isSystemFile = isSystemFileType(fileType as FileType);
   const dirtyFiles = useAppSelector(selectDirtyFiles);
   const anyDirtyFiles = dirtyFiles.length > 0;
+
+  // If this file's content references any virtual (unsaved) file IDs, we must
+  // use publishAll (via PublishModal) instead of publishFile, which cannot resolve them.
+  const hasVirtualRefs = !!mergedContent &&
+    extractReferencesFromContent(mergedContent as any, fileType as FileType)
+      .some((id: number) => id < 0);
 
   // Set initial edit mode for create mode (once on mount only)
   const initializedRef = useRef(false);
@@ -135,7 +142,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
         }}
         onSave={handleSave}
         onPublish={!isSystemFile ? () => {
-          if (dirtyFiles.length === 0 || (dirtyFiles.length === 1 && dirtyFiles[0].id === fileId)) {
+          if (!hasVirtualRefs && (dirtyFiles.length === 0 || (dirtyFiles.length === 1 && dirtyFiles[0].id === fileId))) {
             handleSave();
           } else {
             setIsPublishModalOpen(true);
