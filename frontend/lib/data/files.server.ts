@@ -713,13 +713,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
             cron: '0 9 * * 1',  // Default: Monday 9am
             timezone: 'America/New_York'
           },
-          questionId: 0,
-          condition: {
-            selector: 'all',
-            function: 'count',
-            operator: '>',
-            threshold: 0
-          },
+          tests: [],
           recipients: [],
           status: 'draft',
         };

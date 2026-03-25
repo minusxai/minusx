@@ -10,7 +10,8 @@ import { Box, Text, VStack, HStack, Badge, Separator } from '@chakra-ui/react';
 import { useState } from 'react';
 import { LuChevronDown, LuChevronRight, LuClock, LuTimer } from 'react-icons/lu';
 import { useFile } from '@/lib/hooks/file-state-hooks';
-import type { AlertOutput, AlertRunContent, MessageAttemptLog, RunFileContent, RunMessageRecord } from '@/lib/types';
+import type { AlertOutput, AlertRunContent, MessageAttemptLog, RunFileContent, RunMessageRecord, TestRunResult } from '@/lib/types';
+import TestRunResultsList from '@/components/test/TestRunResultsList';
 import type { FileId } from '@/store/filesSlice';
 import type { FileViewMode } from '@/lib/ui/fileComponents';
 import { LuBell, LuExternalLink, LuMail, LuMessageCircle, LuSettings } from 'react-icons/lu';
@@ -21,7 +22,7 @@ import { preserveParams } from '@/lib/navigation/url-utils';
 /*  Shared sub-components                                              */
 /* ------------------------------------------------------------------ */
 
-type ExecutionStatus = 'running' | 'success' | 'failure' | 'triggered' | 'not_triggered' | 'failed';
+type ExecutionStatus = 'running' | 'success' | 'failure' | 'triggered' | 'not_triggered' | 'failed' | 'error';
 
 function StatusBadge({ status }: { status: ExecutionStatus }) {
   const colorPalette =
@@ -199,8 +200,14 @@ export interface AlertRunViewProps {
   status: ExecutionStatus;
   alertId?: number;
   alertName?: string;
+  /** Legacy: numeric actual value (old format) */
   actualValue?: number | string | null;
-  condition: string;
+  /** Legacy: condition summary string (old format) */
+  condition?: string;
+  /** New format: all test results */
+  testResults?: TestRunResult[];
+  /** New format: tests that failed/triggered the alert */
+  triggeredBy?: TestRunResult[];
   startedAt: string;
   completedAt?: string | null;
   error?: string | null;
@@ -215,6 +222,8 @@ export function AlertRunView({
   alertName,
   actualValue,
   condition,
+  testResults,
+  triggeredBy,
   startedAt,
   completedAt,
   error,
@@ -291,35 +300,42 @@ export function AlertRunView({
           <Text fontSize="xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" mb={3}>
             Result
           </Text>
-          <VStack align="stretch" gap={0} separator={<Separator />}>
-            {actualValue !== null && actualValue !== undefined && (
-              <DetailRow label="Actual value" value={
+
+          {testResults && testResults.length > 0 ? (
+            <TestRunResultsList results={testResults} variant="colored" />
+          ) : (
+            <VStack align="stretch" gap={0} separator={<Separator />}>
+              {actualValue !== null && actualValue !== undefined && (
+                <DetailRow label="Actual value" value={
+                  <Badge
+                    colorPalette={isTriggered ? 'red' : 'green'}
+                    variant="subtle"
+                    fontFamily="mono"
+                    fontSize="sm"
+                    fontWeight="700"
+                  >
+                    {String(actualValue)}
+                  </Badge>
+                } />
+              )}
+              {condition && (
+                <DetailRow label="Condition" value={
+                  <Text fontSize="sm" fontWeight="600" fontFamily="mono">{condition}</Text>
+                } />
+              )}
+              <DetailRow label="Status" value={
                 <Badge
-                  colorPalette={isTriggered ? 'red' : 'green'}
+                  colorPalette={isTriggered ? 'red' : status === 'not_triggered' || status === 'success' ? 'green' : 'yellow'}
                   variant="subtle"
-                  fontFamily="mono"
-                  fontSize="sm"
                   fontWeight="700"
                 >
-                  {String(actualValue)}
+                  {status === 'triggered' ? 'Triggered' :
+                   status === 'not_triggered' ? 'Not Triggered' :
+                   status.charAt(0).toUpperCase() + status.slice(1)}
                 </Badge>
               } />
-            )}
-            <DetailRow label="Condition" value={
-              <Text fontSize="sm" fontWeight="600" fontFamily="mono">{condition}</Text>
-            } />
-            <DetailRow label="Status" value={
-              <Badge
-                colorPalette={isTriggered ? 'red' : status === 'not_triggered' || status === 'success' ? 'green' : 'yellow'}
-                variant="subtle"
-                fontWeight="700"
-              >
-                {status === 'triggered' ? 'Triggered' :
-                 status === 'not_triggered' ? 'Not Triggered' :
-                 status.charAt(0).toUpperCase() + status.slice(1)}
-              </Badge>
-            } />
-          </VStack>
+            </VStack>
+          )}
         </Box>
 
         {/* Error */}
@@ -410,11 +426,11 @@ export default function AlertRunContainerV2({ fileId, inline }: AlertRunContaine
 
     return (
       <AlertRunView
-        status={run.status === 'success' && output ? output.status : run.status}
+        status={run.status === 'success' && output ? output.status : run.status as ExecutionStatus}
         alertId={output?.alertId}
         alertName={output?.alertName}
-        actualValue={output?.actualValue}
-        condition={output ? `${output.selector} / ${output.function} ${output.column ? `(${output.column})` : ''} ${output.operator} ${output.threshold}` : ''}
+        testResults={output?.testResults}
+        triggeredBy={output?.triggeredBy}
         startedAt={run.startedAt}
         completedAt={run.completedAt}
         error={run.error}

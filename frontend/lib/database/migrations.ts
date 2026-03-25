@@ -896,6 +896,128 @@ export const MIGRATIONS: MigrationEntry[] = [
     },
     description: 'Rename webhook type discriminators and identifiers: whatsapp→phone_otp/phone_alert, email→email_alert; {{WHATSAPP_TO/BODY}}→{{PHONE_ALERT_TO/BODY}}; twofa_whatsapp_enabled→twofa_phone_otp_enabled',
   },
+  {
+    dataVersion: 22,
+    schemaVersion: undefined,
+    dataMigration: (data: InitData) => {
+      // Migrate context evals: EvalItem[] → Test[]
+      // Old EvalItem: { question, assertion: BinaryAssertion|NumberAssertion, app_state, connection_id? }
+      // New Test: { type: 'llm', subject: { type: 'llm', prompt, context, connection_id? }, answerType, operator, value }
+
+      for (const companyData of data.companies as CompanyData[]) {
+        for (const doc of companyData.documents) {
+          if (doc.type !== 'context') continue;
+
+          const content = doc.content as any;
+          if (!content?.evals || !Array.isArray(content.evals) || content.evals.length === 0) continue;
+
+          // Skip if already migrated — Tests have a 'type' field ('llm'|'query'), EvalItems have 'question'
+          if (content.evals[0].type !== undefined) continue;
+
+          const tests: any[] = content.evals.map((item: any) => {
+            const assertion = item.assertion;
+            let answerType: string;
+            let value: any;
+
+            if (assertion?.cannot_answer) {
+              answerType = assertion.type === 'binary' ? 'binary' : 'number';
+              value = { type: 'cannot_answer' };
+            } else if (assertion?.type === 'binary') {
+              answerType = 'binary';
+              value = { type: 'constant', value: assertion.answer ?? true };
+            } else {
+              // number_match
+              answerType = 'number';
+              if (assertion?.question_id) {
+                value = { type: 'query', question_id: assertion.question_id, column: assertion.column };
+              } else {
+                value = { type: 'constant', value: assertion?.answer ?? 0 };
+              }
+            }
+
+            const subject: any = {
+              type: 'llm',
+              prompt: item.question ?? '',
+              context: item.app_state ?? { type: 'explore' },
+            };
+            if (item.connection_id) subject.connection_id = item.connection_id;
+
+            return { type: 'llm', subject, answerType, operator: '=', value };
+          });
+
+          content.evals = tests;
+          console.log(`  [V22] ${doc.path}: Migrated ${tests.length} eval(s) EvalItem → Test`);
+        }
+      }
+
+      return data;
+    },
+    description: 'Migrate context evals from EvalItem[] to unified Test[] format',
+  },
+  {
+    dataVersion: 23,
+    schemaVersion: undefined,
+    dataMigration: (data: InitData) => {
+      // Migrate alert files: questionId + AlertCondition → tests: Test[]
+      // Old: { questionId: number, condition: { selector, column, function, operator, threshold } }
+      // New: { tests: Test[] }
+
+      const validOperators = new Set(['>', '<', '=', '>=', '<=']);
+
+      for (const companyData of data.companies as CompanyData[]) {
+        for (const doc of companyData.documents) {
+          if (doc.type !== 'alert') continue;
+
+          const content = doc.content as any;
+          if (!content) continue;
+
+          // Skip if already migrated
+          if (content.tests !== undefined || content.questionId === undefined) continue;
+
+          const questionId: number = content.questionId;
+          const condition: any = content.condition;
+
+          if (!questionId || !condition) {
+            content.tests = [];
+            delete content.questionId;
+            delete content.condition;
+            continue;
+          }
+
+          const row = condition.selector === 'last' ? -1 : 0;
+          const operator = validOperators.has(condition.operator) ? condition.operator : '=';
+
+          const test: any = {
+            type: 'query',
+            subject: {
+              type: 'query',
+              question_id: questionId,
+              ...(condition.column ? { column: condition.column } : {}),
+              row,
+            },
+            answerType: 'number',
+            operator,
+            value: { type: 'constant', value: condition.threshold ?? 0 },
+          };
+
+          // Flag unsupported operator or complex function in label
+          if (!validOperators.has(condition.operator)) {
+            test.label = `TODO: '${condition.operator}' operator not supported — rewrite this test`;
+          } else if (condition.function && condition.function !== 'value' && condition.function !== 'count') {
+            test.label = `TODO: rewrite query for '${condition.function}' function`;
+          }
+
+          content.tests = [test];
+          delete content.questionId;
+          delete content.condition;
+          console.log(`  [V23] ${doc.path}: Migrated alert condition to tests[]`);
+        }
+      }
+
+      return data;
+    },
+    description: 'Migrate alert files: questionId + AlertCondition → tests: Test[]',
+  },
 ];
 
 /**

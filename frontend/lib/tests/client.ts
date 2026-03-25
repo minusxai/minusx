@@ -23,6 +23,9 @@ async function resolveExpectedValueOnClient(
   if (value.type === 'constant') {
     return value.value;
   }
+  if (value.type === 'cannot_answer') {
+    return null; // handled separately before this is called
+  }
 
   const [qFile] = await readFiles([value.question_id]);
   const question = qFile?.fileState?.content as QuestionContent | undefined;

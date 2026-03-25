@@ -7,6 +7,8 @@ import {
 import { useState, useMemo, useEffect } from 'react';
 import type { TestSubject } from '@/lib/types';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
+import { useConnections } from '@/lib/hooks/useConnections';
+import DatabaseSelector from '@/components/DatabaseSelector';
 
 interface TestSubjectEditorProps {
   subject: TestSubject;
@@ -109,6 +111,17 @@ export default function TestSubjectEditor({ subject, testType, onChange, disable
     : { type: 'query' as const, question_id: defaultQuestionId ?? 0, column: undefined, row: undefined };
   const inferredColumns = useQuestionColumns(query.question_id || undefined);
 
+  // Auto-select first available connection for LLM tests when none is set
+  const { connections } = useConnections({ skip: true });
+  useEffect(() => {
+    if (testType !== 'llm') return;
+    if (subject.type === 'llm' && subject.connection_id) return;
+    const firstConnection = Object.keys(connections)[0];
+    if (!firstConnection) return;
+    const llm = subject.type === 'llm' ? subject : { type: 'llm' as const, prompt: '', context: { type: 'explore' as const } };
+    onChange({ ...llm, connection_id: firstConnection });
+  }, [testType, connections]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (testType === 'llm') {
     const llm = subject.type === 'llm' ? subject : { type: 'llm' as const, prompt: '', context: { type: 'explore' as const } };
 
@@ -144,6 +157,14 @@ export default function TestSubjectEditor({ subject, testType, onChange, disable
             </NativeSelect.Field>
             <NativeSelect.Indicator />
           </NativeSelect.Root>
+        </Box>
+        <Box>
+          <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Connection</Text>
+          <DatabaseSelector
+            value={llm.connection_id ?? ''}
+            onChange={connection_id => onChange({ ...llm, connection_id: connection_id || undefined })}
+            size="sm"
+          />
         </Box>
       </VStack>
     );

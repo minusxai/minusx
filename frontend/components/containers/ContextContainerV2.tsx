@@ -11,6 +11,7 @@ import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile, publishFile, clearFileChanges, reloadFile } from '@/lib/api/file-state';
 import ContextEditorV2 from '@/components/context/ContextEditorV2';
 import { ContextContent, ContextVersion, DocEntry } from '@/lib/types';
+import { useJobRuns } from '@/lib/hooks/job-runs-hooks';
 import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
@@ -328,6 +329,10 @@ export default function ContextContainerV2({
     }
   }, [currentContent, currentVersionContent, selectedVersion, user?.id, fileId]);
 
+  // Job runs for context evals
+  const numericFileId = typeof fileId === 'number' ? fileId : null;
+  const { runs, isRunning, selectedRunId, trigger: triggerRun, selectRun } = useJobRuns(numericFileId, 'context');
+
   // Original (saved) docs for the selected version — used for diff view
   const originalDocs = useMemo(() => {
     const savedContent = file?.content as ContextContent | undefined;
@@ -388,6 +393,11 @@ export default function ContextContainerV2({
         onPublishVersion={handlePublishVersion}
         onDeleteVersion={handleDeleteVersion}
         onUpdateDescription={handleUpdateDescription}
+        runs={runs}
+        isRunning={isRunning}
+        selectedRunId={selectedRunId}
+        onRunAll={() => triggerRun()}
+        onSelectRun={selectRun}
       />
 
       {/* Unsaved Changes Confirmation Dialog */}

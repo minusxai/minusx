@@ -9,8 +9,11 @@
 import { Box, VStack, Heading, HStack, Button, Text, Badge, Menu, Input, Dialog, Field, Portal, Collapsible, Icon, Switch, Tabs } from '@chakra-ui/react';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { LuCircleAlert, LuCircleCheck, LuPlus, LuTrash2, LuChevronDown, LuGlobe, LuChevronRight } from 'react-icons/lu';
-import { ContextContent, DatabaseContext, WhitelistItem, ContextVersion, PublishedVersions, DocEntry, EvalItem } from '@/lib/types';
-import EvalsEditor from './EvalsEditor';
+import { ContextContent, DatabaseContext, WhitelistItem, ContextVersion, PublishedVersions, DocEntry, Test } from '@/lib/types';
+import TestList from '../test/TestList';
+import ContextRunView from '../views/ContextRunView';
+import type { JobRun } from '@/lib/types';
+import { NativeSelect } from '@chakra-ui/react';
 import { serializeDatabases, parseDatabasesYaml, canDeleteVersion } from '@/lib/context/context-utils';
 import SchemaTreeView from '../SchemaTreeView';
 import ChildPathSelector from '../ChildPathSelector';
@@ -47,6 +50,12 @@ interface ContextEditorV2Props {
   onPublishVersion?: () => void;
   onDeleteVersion?: (version: number) => void;
   onUpdateDescription?: (version: number, description: string) => void;
+  // Run history (context job runs)
+  runs?: JobRun[];
+  isRunning?: boolean;
+  selectedRunId?: number | null;
+  onRunAll?: () => void;
+  onSelectRun?: (runId: number | null) => void;
 }
 
 export default function ContextEditorV2({
@@ -72,7 +81,12 @@ export default function ContextEditorV2({
   onCreateVersion,
   onPublishVersion,
   onDeleteVersion,
-  onUpdateDescription
+  onUpdateDescription,
+  runs = [],
+  isRunning = false,
+  selectedRunId,
+  onRunAll,
+  onSelectRun,
 }: ContextEditorV2Props) {
   const [topTab, setTopTab] = useState<'context' | 'evals'>('context');
   const [activeTab, setActiveTab] = useState<'picker' | 'yaml'>('picker');
@@ -348,6 +362,8 @@ export default function ContextEditorV2({
     setIsDeleteVersionOpen(false);
     setVersionToDelete(null);
   };
+
+  const evalsSelectedRun = runs.find(r => r.id === selectedRunId) ?? runs[0] ?? null;
 
   return (
     <VStack gap={6} align="stretch" p={3}>
@@ -1049,17 +1065,79 @@ export default function ContextEditorV2({
         {/* Evals Tab */}
         <Tabs.Content value="evals">
           {activeTab === 'picker' ? (
-            <Box>
-              <EvalsEditor
-                evals={content.evals || []}
-                onChange={(evals: EvalItem[]) => onChange({ evals })}
-                contextInfo={{
-                  schema: availableDatabases,
-                  documentation: (content.docs || []).map(d => d.content).join('\n\n'),
-                  connection_id: availableDatabases[0]?.databaseName || '',
-                }}
-                fileId={file?.id}
-              />
+            <Box display="flex" flexDirection="row" gap={4} alignItems="stretch" minH="400px">
+              {/* Left Panel: Evals list */}
+              <Box
+                flex={1}
+                overflow="auto"
+                border="1px solid"
+                borderColor="border.muted"
+                borderRadius="md"
+                p={3}
+              >
+                <HStack mb={3} justify="space-between">
+                  <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Evals</Text>
+                </HStack>
+                <TestList
+                  tests={content.evals || []}
+                  onChange={(evals: Test[]) => onChange({ evals })}
+                  editMode={editMode}
+                  forcedType="llm"
+                  alwaysShowAdd
+                  addLabel="Add eval"
+                />
+              </Box>
+
+              {/* Right Panel: Run history */}
+              <Box
+                flex={1}
+                overflow="auto"
+                border="1px solid"
+                borderColor="border.muted"
+                borderRadius="md"
+                p={3}
+              >
+                <HStack mb={3} justify="space-between">
+                  <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Run History</Text>
+                  <HStack gap={2}>
+                    {runs.length > 0 && (
+                      <NativeSelect.Root size="xs" width="200px">
+                        <NativeSelect.Field
+                          value={selectedRunId ? selectedRunId.toString() : ''}
+                          onChange={(e) => onSelectRun?.(e.target.value ? parseInt(e.target.value, 10) : null)}
+                        >
+                          <option value="">Latest run</option>
+                          {runs.map(r => (
+                            <option key={r.id} value={r.id.toString()}>
+                              {new Date(r.created_at).toLocaleString()}
+                            </option>
+                          ))}
+                        </NativeSelect.Field>
+                        <NativeSelect.Indicator />
+                      </NativeSelect.Root>
+                    )}
+                    {onRunAll && (
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        onClick={onRunAll}
+                        loading={isRunning}
+                        loadingText="Running…"
+                        disabled={!content.evals?.length}
+                      >
+                        Run all
+                      </Button>
+                    )}
+                  </HStack>
+                </HStack>
+                {evalsSelectedRun?.output_file_id ? (
+                  <ContextRunView fileId={evalsSelectedRun.output_file_id} />
+                ) : runs.length === 0 ? (
+                  <Text fontSize="sm" color="fg.muted">No runs yet. Click &quot;Run all&quot; to evaluate.</Text>
+                ) : (
+                  <Text fontSize="sm" color="fg.muted">Run in progress...</Text>
+                )}
+              </Box>
             </Box>
           ) : (
             <Box

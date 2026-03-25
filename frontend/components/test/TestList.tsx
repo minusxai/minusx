@@ -9,14 +9,14 @@ import type { Test, TestRunResult } from '@/lib/types';
 import { createClientRunner } from '@/lib/tests/client';
 import TestEditor, { makeDefaultTest } from './TestEditor';
 import TestResultBadge from './TestResultBadge';
+import TestRunResultsList from './TestRunResultsList';
 
 function testLabel(test: Test, index: number): string {
-  if (test.label) return test.label;
   if (test.type === 'llm' && test.subject.type === 'llm' && test.subject.prompt) {
     const p = test.subject.prompt;
     return p.length > 50 ? p.slice(0, 47) + '…' : p;
   }
-  return `Test ${index + 1}`;
+  return `Eval ${index + 1}`;
 }
 
 interface TestRowProps {
@@ -101,9 +101,14 @@ function TestRow({ test, index, editMode, forcedType, defaultQuestionId, onChang
         <Collapsible.Content>
           <Box px={3} py={3} borderTopWidth="1px" borderColor="border.muted">
             {/* Inline result details when expanded */}
-            {(result || running) && (
+            {running && !result && (
               <Box mb={3}>
                 <TestResultBadge result={result} running={running} showDetails />
+              </Box>
+            )}
+            {result && (
+              <Box mb={3}>
+                <TestRunResultsList results={[result]} showTrace />
               </Box>
             )}
             {editMode ? (
@@ -131,6 +136,8 @@ function TestReadOnly({ test }: { test: Test }) {
 
   const valueDesc = test.value.type === 'constant'
     ? String(test.value.value)
+    : test.value.type === 'cannot_answer'
+    ? 'cannot answer'
     : `Q#${test.value.question_id}${test.value.column ? `.${test.value.column}` : ''}`;
 
   return (
@@ -151,9 +158,13 @@ interface TestListProps {
   forcedType?: 'llm' | 'query';
   /** Pre-fill subject question_id when adding a new query test */
   defaultQuestionId?: number;
+  /** Show the Add button even when not in editMode */
+  alwaysShowAdd?: boolean;
+  /** Custom label for the Add button (default: 'Add test') */
+  addLabel?: string;
 }
 
-export default function TestList({ tests, onChange, editMode = false, forcedType, defaultQuestionId }: TestListProps) {
+export default function TestList({ tests, onChange, editMode = false, forcedType, defaultQuestionId, alwaysShowAdd, addLabel = 'Add test' }: TestListProps) {
   function handleAdd() {
     onChange([...tests, makeDefaultTest(forcedType ?? 'query', defaultQuestionId)]);
   }
@@ -168,7 +179,9 @@ export default function TestList({ tests, onChange, editMode = false, forcedType
     onChange(tests.filter((_, i) => i !== index));
   }
 
-  if (tests.length === 0 && !editMode) return null;
+  const showAdd = editMode || alwaysShowAdd;
+
+  if (tests.length === 0 && !showAdd) return null;
 
   return (
     <VStack align="stretch" gap={2}>
@@ -184,10 +197,10 @@ export default function TestList({ tests, onChange, editMode = false, forcedType
           onDelete={() => handleDelete(i)}
         />
       ))}
-      {editMode && (
+      {showAdd && (
         <Button size="xs" variant="ghost" onClick={handleAdd} alignSelf="flex-start" color="fg.muted">
           <LuPlus size={12} />
-          Add test
+          {addLabel}
         </Button>
       )}
     </VStack>

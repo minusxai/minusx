@@ -121,7 +121,7 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
         if (jobDef.job_type === 'alert') {
           const alert = content as AlertContent;
           if (!alert.schedule?.cron || !isCronDue(alert.schedule.cron, now)) { skipped++; continue; }
-          if (!alert.questionId || alert.questionId <= 0) { skipped++; continue; }
+          if (!alert.tests || alert.tests.length === 0) { skipped++; continue; }
         }
 
         const jobId = String(jobFile.id);

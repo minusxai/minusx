@@ -137,7 +137,7 @@ const SYSTEM_FOLDER_ALLOWED_TYPES = {
   '/database': ['connection'] as const,
   '/configs': ['config'] as const,
   '/config': ['config'] as const,
-  '/logs': ['conversation', 'session', 'report_run', 'alert_run', 'transformation_run'] as const,
+  '/logs': ['conversation', 'session', 'report_run', 'alert_run', 'transformation_run', 'context_run'] as const,
   '/recordings': ['connector'] as const,
 } as const;
 

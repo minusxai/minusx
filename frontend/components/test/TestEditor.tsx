@@ -1,6 +1,6 @@
 'use client';
 
-import { VStack, HStack, Text, Input, NativeSelect, Box, Separator } from '@chakra-ui/react';
+import { VStack, HStack, Text, NativeSelect, Box, Separator } from '@chakra-ui/react';
 import type { Test, TestAnswerType } from '@/lib/types';
 import TestSubjectEditor from './TestSubjectEditor';
 import TestOperatorSelect from './TestOperatorSelect';
@@ -71,21 +71,6 @@ export default function TestEditor({ test, onChange, forcedType, disabled, defau
         </HStack>
       )}
 
-      {/* Label (optional) */}
-      <HStack gap={2} align="center">
-        <Text fontSize="xs" color="fg.muted" fontWeight="500" flexShrink={0} w="60px">Label</Text>
-        <Input
-          value={test.label ?? ''}
-          onChange={e => onChange({ ...test, label: e.target.value || undefined })}
-          placeholder="Optional description"
-          size="sm"
-          bg="bg.surface"
-          fontSize="xs"
-          disabled={disabled}
-          flex={1}
-        />
-      </HStack>
-
       <Separator />
 
       {/* Subject */}
@@ -104,32 +89,34 @@ export default function TestEditor({ test, onChange, forcedType, disabled, defau
 
       <Separator />
 
-      {/* Answer type + operator */}
-      <HStack gap={2} align="flex-start">
-        <Box flex={1}>
-          <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Answer type</Text>
-          <NativeSelect.Root size="sm" disabled={disabled}>
-            <NativeSelect.Field
-              value={test.answerType}
-              onChange={e => handleAnswerTypeChange(e.target.value as TestAnswerType)}
-            >
-              {test.type !== 'query' && <option value="binary">Binary (yes/no)</option>}
-              <option value="number">Number</option>
-              <option value="string">String</option>
-            </NativeSelect.Field>
-            <NativeSelect.Indicator />
-          </NativeSelect.Root>
-        </Box>
-        <Box flex={1}>
-          <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Operator</Text>
-          <TestOperatorSelect
-            answerType={test.answerType}
-            value={test.operator}
-            onChange={operator => onChange({ ...test, operator })}
-            disabled={disabled}
-          />
-        </Box>
-      </HStack>
+      {/* Answer type + operator — hidden for cannot_answer tests */}
+      {test.value.type !== 'cannot_answer' && (
+        <HStack gap={2} align="flex-start">
+          <Box flex={1}>
+            <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Answer type</Text>
+            <NativeSelect.Root size="sm" disabled={disabled}>
+              <NativeSelect.Field
+                value={test.answerType}
+                onChange={e => handleAnswerTypeChange(e.target.value as TestAnswerType)}
+              >
+                {test.type !== 'query' && <option value="binary">Binary (yes/no)</option>}
+                <option value="number">Number</option>
+                <option value="string">String</option>
+              </NativeSelect.Field>
+              <NativeSelect.Indicator />
+            </NativeSelect.Root>
+          </Box>
+          <Box flex={1}>
+            <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Operator</Text>
+            <TestOperatorSelect
+              answerType={test.answerType}
+              value={test.operator}
+              onChange={operator => onChange({ ...test, operator })}
+              disabled={disabled}
+            />
+          </Box>
+        </HStack>
+      )}
 
       {/* Expected value */}
       <Box>
@@ -139,6 +126,7 @@ export default function TestEditor({ test, onChange, forcedType, disabled, defau
           answerType={test.answerType}
           onChange={value => onChange({ ...test, value })}
           disabled={disabled}
+          allowCannotAnswer={test.type === 'llm'}
         />
       </Box>
     </VStack>

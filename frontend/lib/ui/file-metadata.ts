@@ -120,6 +120,14 @@ export const FILE_TYPE_METADATA = {
     supported: true,
     h: 'none',
   },
+  context_run: {
+    label: 'Eval Run',
+    icon: LuNotebookText,
+    color: 'accent.warning',
+    category: 'engineering',
+    supported: true,
+    h: 'none',
+  },
   alert_run: {
     label: 'Alert Run',
     icon: LuBell,
