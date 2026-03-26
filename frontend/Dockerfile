@@ -16,12 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy package files
 COPY package*.json ./
 
-# Remove package-lock.json if exists and do fresh install (workaround for npm optional deps bug)
-RUN rm -f package-lock.json && \
-    npm install && \
-    npm install --save-optional \
-      lightningcss-linux-x64-gnu \
-      @tailwindcss/oxide-linux-x64-gnu
+RUN npm ci
 
 # Copy application source
 COPY . .
