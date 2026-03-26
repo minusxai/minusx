@@ -447,7 +447,7 @@ export default function QuestionViewV2({
           display="flex"
           flexDirection={!useCompactLayout ? 'row' : 'column'}
           alignItems={!useCompactLayout ? 'stretch' : undefined}
-          gap={0}
+          gap={2}
           h="100%"
           flex={1}
           overflow="hidden"
@@ -482,7 +482,6 @@ export default function QuestionViewV2({
               onClick={() => toggleCollapsedPanel('none')}
               _hover={{ bg: 'accent.teal/50' }}
               my={2}
-              ml={2}
               borderRadius="lg"
               gap={2}
             >
@@ -663,7 +662,7 @@ export default function QuestionViewV2({
               display="flex"
               alignItems="center"
               justifyContent="center"
-              width="16px"
+              width="8px"
               cursor="col-resize"
               onMouseDown={handleResizeStart}
               userSelect="none"
@@ -757,7 +756,6 @@ export default function QuestionViewV2({
               onClick={() => toggleCollapsedPanel('none')}
               _hover={{ bg: 'accent.teal/50' }}
               my={2}
-              mr={2}
               borderRadius="lg"
               gap={2}
             >

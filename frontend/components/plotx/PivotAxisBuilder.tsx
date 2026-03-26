@@ -6,7 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { LuChevronDown } from 'react-icons/lu'
 import { resolveColumnType } from './AxisComponents'
 import { AxisBuilder, type AxisZone } from './AxisBuilder'
-import { FormulaBuilder } from './FormulaBuilder'
+import { FormulaBuilder, type DimensionInfo } from './FormulaBuilder'
 import type { PivotConfig, PivotValueConfig, PivotFormula, AggregationFunction, ColumnFormatConfig } from '@/lib/types'
 
 const AGG_FUNCTIONS: AggregationFunction[] = ['SUM', 'AVG', 'COUNT', 'MIN', 'MAX']
@@ -21,6 +21,8 @@ interface PivotAxisBuilderProps {
   availableColumnValues?: string[]
   columnFormats?: Record<string, ColumnFormatConfig>
   onColumnFormatChange?: (column: string, config: ColumnFormatConfig) => void
+  rowDimensions?: DimensionInfo[]
+  getRowValuesAtLevel?: (level: number, parentValues?: string[]) => string[]
 }
 
 export const PivotAxisBuilder = ({
@@ -32,6 +34,8 @@ export const PivotAxisBuilder = ({
   availableColumnValues,
   columnFormats,
   onColumnFormatChange,
+  rowDimensions,
+  getRowValuesAtLevel,
 }: PivotAxisBuilderProps) => {
   // Classify columns for auto-init
   const groupedColumns = useMemo(() => {
@@ -73,7 +77,7 @@ export const PivotAxisBuilder = ({
       vals.push({ column: groupedColumns.numbers[0], aggFunction: 'SUM' })
     }
 
-    return { rows: rowCols, columns: colCols, values: vals, showRowTotals: true, showColumnTotals: true, showHeatmap: true }
+    return { rows: rowCols, columns: colCols, values: vals, showRowTotals: false, showColumnTotals: false, showHeatmap: true }
   }, [pivotConfig, groupedColumns])
 
   // Fire initial config if auto-initialized
@@ -230,20 +234,24 @@ export const PivotAxisBuilder = ({
       <AxisBuilder columns={columns} types={types} zones={zones} columnFormats={columnFormats} onColumnFormatChange={onColumnFormatChange} />
       <Box px={3} pt={2} pb={3} bg="bg.canvas" borderBottom="1px solid" borderColor="border.muted" display="flex" flexDirection="column" gap={3}>
         <HStack gap={4}>
-          <Checkbox
-            checked={config.showRowTotals !== false}
-            onCheckedChange={(e) => onPivotConfigChange({ ...config, showRowTotals: e.checked })}
-            size="sm"
-          >
-            <Text fontSize="xs" color="fg.muted">Row Totals</Text>
-          </Checkbox>
-          <Checkbox
-            checked={config.showColumnTotals !== false}
-            onCheckedChange={(e) => onPivotConfigChange({ ...config, showColumnTotals: e.checked })}
-            size="sm"
-          >
-            <Text fontSize="xs" color="fg.muted">Column Totals</Text>
-          </Checkbox>
+          {config.columns.length >= 2 && (
+            <Checkbox
+              checked={config.showRowTotals !== false}
+              onCheckedChange={(e) => onPivotConfigChange({ ...config, showRowTotals: e.checked })}
+              size="sm"
+            >
+              <Text fontSize="xs" color="fg.muted">Row Totals</Text>
+            </Checkbox>
+          )}
+          {config.rows.length >= 2 && (
+            <Checkbox
+              checked={config.showColumnTotals !== false}
+              onCheckedChange={(e) => onPivotConfigChange({ ...config, showColumnTotals: e.checked })}
+              size="sm"
+            >
+              <Text fontSize="xs" color="fg.muted">Column Totals</Text>
+            </Checkbox>
+          )}
           <Checkbox
             checked={config.showHeatmap !== false}
             onCheckedChange={(e) => onPivotConfigChange({ ...config, showHeatmap: e.checked })}
@@ -269,6 +277,8 @@ export const PivotAxisBuilder = ({
                   availableValues={availableRowValues!}
                   dimensionName={config.rows[0]}
                   onChange={(formulas: PivotFormula[]) => onPivotConfigChange({ ...config, rowFormulas: formulas })}
+                  dimensions={rowDimensions}
+                  getValuesAtLevel={getRowValuesAtLevel}
                 />
               ) : (
                 <VStack align="start" gap={0}>

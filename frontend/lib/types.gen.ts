@@ -78,17 +78,25 @@ export type Rowformulas = PivotFormula[] | null;
  */
 export type Name1 = string;
 /**
- * top-level dimension value, e.g. '2024'
+ * dimension value, e.g. '2024'
  */
 export type Operanda = string;
 /**
- * top-level dimension value, e.g. '2023'
+ * dimension value, e.g. '2023'
  */
 export type Operandb = string;
 /**
  * arithmetic operator: +, -, *, /
  */
 export type FormulaOperator = "+" | "-" | "*" | "/";
+/**
+ * which dimension level to match (0=top-level, 1=second level, etc.). Defaults to 0.
+ */
+export type Dimensionlevel = number | null;
+/**
+ * parent dimension values to scope the formula when dimensionLevel > 0, e.g. ['PnL'] means only match within the PnL group
+ */
+export type Parentvalues = string[] | null;
 /**
  * formulas combining top-level column dimension values
  */
@@ -227,13 +235,15 @@ export interface PivotValueConfig {
   aggFunction?: AggregationFunction;
 }
 /**
- * A derived row/column computed from two top-level dimension values.
+ * A derived row/column computed from two dimension values at a given level.
  */
 export interface PivotFormula {
   name: Name1;
   operandA: Operanda;
   operandB: Operandb;
   operator: FormulaOperator;
+  dimensionLevel?: Dimensionlevel;
+  parentValues?: Parentvalues;
 }
 /**
  * Per-column display formatting. Only set when the user explicitly asks to change formatting.
