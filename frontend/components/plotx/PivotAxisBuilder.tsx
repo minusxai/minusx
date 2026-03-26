@@ -6,7 +6,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { LuChevronDown } from 'react-icons/lu'
 import { resolveColumnType } from './AxisComponents'
 import { AxisBuilder, type AxisZone } from './AxisBuilder'
-import { FormulaBuilder } from './FormulaBuilder'
+import { FormulaBuilder, type DimensionInfo } from './FormulaBuilder'
 import type { PivotConfig, PivotValueConfig, PivotFormula, AggregationFunction, ColumnFormatConfig } from '@/lib/types'
 
 const AGG_FUNCTIONS: AggregationFunction[] = ['SUM', 'AVG', 'COUNT', 'MIN', 'MAX']
@@ -21,6 +21,8 @@ interface PivotAxisBuilderProps {
   availableColumnValues?: string[]
   columnFormats?: Record<string, ColumnFormatConfig>
   onColumnFormatChange?: (column: string, config: ColumnFormatConfig) => void
+  rowDimensions?: DimensionInfo[]
+  getRowValuesAtLevel?: (level: number, parentValues?: string[]) => string[]
 }
 
 export const PivotAxisBuilder = ({
@@ -32,6 +34,8 @@ export const PivotAxisBuilder = ({
   availableColumnValues,
   columnFormats,
   onColumnFormatChange,
+  rowDimensions,
+  getRowValuesAtLevel,
 }: PivotAxisBuilderProps) => {
   // Classify columns for auto-init
   const groupedColumns = useMemo(() => {
@@ -269,6 +273,8 @@ export const PivotAxisBuilder = ({
                   availableValues={availableRowValues!}
                   dimensionName={config.rows[0]}
                   onChange={(formulas: PivotFormula[]) => onPivotConfigChange({ ...config, rowFormulas: formulas })}
+                  dimensions={rowDimensions}
+                  getValuesAtLevel={getRowValuesAtLevel}
                 />
               ) : (
                 <VStack align="start" gap={0}>

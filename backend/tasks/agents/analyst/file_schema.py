@@ -46,11 +46,13 @@ class PivotValueConfig(BaseModel):
     aggFunction: AggregationFunction = Field(AggregationFunction.SUM, description="aggregation function to apply (SUM, AVG, COUNT, MIN, MAX)")
 
 class PivotFormula(BaseModel):
-    """A derived row/column computed from two top-level dimension values."""
+    """A derived row/column computed from two dimension values at a given level."""
     name: str = Field(..., description="display label, e.g. 'YoY Change'")
-    operandA: str = Field(..., description="top-level dimension value, e.g. '2024'")
-    operandB: str = Field(..., description="top-level dimension value, e.g. '2023'")
+    operandA: str = Field(..., description="dimension value, e.g. '2024'")
+    operandB: str = Field(..., description="dimension value, e.g. '2023'")
     operator: FormulaOperator = Field(..., description="arithmetic operator: +, -, *, /")
+    dimensionLevel: Optional[int] = Field(None, description="which dimension level to match (0=top-level, 1=second level, etc.). Defaults to 0.")
+    parentValues: Optional[List[str]] = Field(None, description="parent dimension values to scope the formula when dimensionLevel > 0, e.g. ['PnL'] means only match within the PnL group")
 
 class PivotConfig(BaseModel):
     """Configuration for pivot table visualization."""

@@ -137,6 +137,8 @@ export interface FormulaRowResult {
   cells: number[]                // Same width as PivotData cells columns
   rowTotal: number
   insertAfterRowIndex: number    // Last row index of the last-appearing operand group
+  dimensionLevel: number         // Which dimension level the formula operates on (0=top, 1=second, etc.)
+  parentValues?: string[]        // Parent dimension values for scoping (when dimensionLevel > 0)
 }
 
 export interface FormulaColumnResult {
@@ -160,44 +162,80 @@ export function applyOperator(a: number, b: number, op: FormulaOperator): number
   }
 }
 
+/**
+ * Resolve an operand to its cell values. First tries matching row headers at the
+ * specified dimension level; if no match, checks previously computed formulas by name.
+ * Returns [summedCells, lastRowIndex] or null if unresolvable.
+ */
+function resolveOperand(
+  operand: string,
+  pivotData: PivotData,
+  level: number,
+  parentVals: string[],
+  numCols: number,
+  priorFormulas: FormulaRowResult[],
+): { cells: number[]; lastRowIndex: number } | null {
+  const { rowHeaders, cells } = pivotData
+
+  // Try matching row headers at the specified dimension level
+  const indices: number[] = []
+  for (let i = 0; i < rowHeaders.length; i++) {
+    let parentMatch = true
+    for (let p = 0; p < Math.min(level, parentVals.length); p++) {
+      if (rowHeaders[i][p] !== parentVals[p]) {
+        parentMatch = false
+        break
+      }
+    }
+    if (!parentMatch) continue
+    if (rowHeaders[i][level] === operand) indices.push(i)
+  }
+
+  if (indices.length > 0) {
+    const sum = new Array(numCols).fill(0)
+    for (const i of indices) {
+      for (let c = 0; c < numCols; c++) sum[c] += cells[i][c]
+    }
+    return { cells: sum, lastRowIndex: indices[indices.length - 1] }
+  }
+
+  // Fallback: check previously computed formulas by name
+  const prior = priorFormulas.find(f => f.name === operand)
+  if (prior) {
+    return { cells: [...prior.cells], lastRowIndex: prior.insertAfterRowIndex }
+  }
+
+  return null
+}
+
 function computeSingleRowFormula(
   pivotData: PivotData,
   formula: PivotFormula,
+  priorFormulas: FormulaRowResult[],
 ): FormulaRowResult | null {
   const { rowHeaders, cells } = pivotData
   if (rowHeaders.length === 0) return null
 
-  // Find row indices belonging to each operand (top-level dimension match)
-  const indicesA: number[] = []
-  const indicesB: number[] = []
-  for (let i = 0; i < rowHeaders.length; i++) {
-    if (rowHeaders[i][0] === formula.operandA) indicesA.push(i)
-    if (rowHeaders[i][0] === formula.operandB) indicesB.push(i)
-  }
-  if (indicesA.length === 0 || indicesB.length === 0) return null
+  const level = formula.dimensionLevel ?? 0
+  const parentVals = formula.parentValues ?? []
+
+  // Check that rows have enough dimension levels
+  if (rowHeaders[0].length <= level) return null
 
   const numCols = cells.length > 0 ? cells[0].length : 0
 
-  // Sum cells across all rows in each operand group
-  const sumA = new Array(numCols).fill(0)
-  const sumB = new Array(numCols).fill(0)
-  for (const i of indicesA) {
-    for (let c = 0; c < numCols; c++) sumA[c] += cells[i][c]
-  }
-  for (const i of indicesB) {
-    for (let c = 0; c < numCols; c++) sumB[c] += cells[i][c]
-  }
+  const resolvedA = resolveOperand(formula.operandA, pivotData, level, parentVals, numCols, priorFormulas)
+  const resolvedB = resolveOperand(formula.operandB, pivotData, level, parentVals, numCols, priorFormulas)
+  if (!resolvedA || !resolvedB) return null
 
   // Apply operator element-wise
-  const resultCells = sumA.map((a, c) => applyOperator(a, sumB[c], formula.operator))
+  const resultCells = resolvedA.cells.map((a, c) => applyOperator(a, resolvedB.cells[c], formula.operator))
   const rowTotal = resultCells.reduce((acc, v) => acc + v, 0)
 
   // Insertion point: after whichever operand group appears later
-  const lastA = indicesA[indicesA.length - 1]
-  const lastB = indicesB[indicesB.length - 1]
-  const insertAfterRowIndex = Math.max(lastA, lastB)
+  const insertAfterRowIndex = Math.max(resolvedA.lastRowIndex, resolvedB.lastRowIndex)
 
-  return { name: formula.name, cells: resultCells, rowTotal, insertAfterRowIndex }
+  return { name: formula.name, cells: resultCells, rowTotal, insertAfterRowIndex, dimensionLevel: level, parentValues: parentVals.length > 0 ? parentVals : undefined }
 }
 
 function computeSingleColumnFormula(
@@ -279,7 +317,7 @@ export function computeFormulas(
 
   if (config.rowFormulas) {
     for (const f of config.rowFormulas) {
-      const result = computeSingleRowFormula(pivotData, f)
+      const result = computeSingleRowFormula(pivotData, f, rowFormulas)
       if (result) rowFormulas.push(result)
     }
   }
@@ -315,6 +353,35 @@ export function getUniqueTopLevelColumnValues(pivotData: PivotData): string[] {
     if (!seen.has(header[0])) {
       seen.add(header[0])
       result.push(header[0])
+    }
+  }
+  return result
+}
+
+/**
+ * Get unique row values at a specific dimension level, optionally filtered by parent values.
+ * e.g., getUniqueRowValuesAtLevel(data, 1, ['PnL']) returns unique second-level values within the PnL group.
+ */
+export function getUniqueRowValuesAtLevel(pivotData: PivotData, level: number, parentValues?: string[]): string[] {
+  if (pivotData.rowHeaders.length === 0) return []
+  if (pivotData.rowHeaders[0].length <= level) return []
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const header of pivotData.rowHeaders) {
+    // Check parent values match
+    let parentMatch = true
+    if (parentValues) {
+      for (let p = 0; p < Math.min(level, parentValues.length); p++) {
+        if (header[p] !== parentValues[p]) {
+          parentMatch = false
+          break
+        }
+      }
+    }
+    if (!parentMatch) continue
+    if (!seen.has(header[level])) {
+      seen.add(header[level])
+      result.push(header[level])
     }
   }
   return result

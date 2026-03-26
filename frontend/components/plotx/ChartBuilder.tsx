@@ -19,7 +19,7 @@ import { DrillDownCard, type DrillDownState } from './DrillDownCard'
 import { AxisBuilder, type AxisZone } from './AxisBuilder'
 import { resolveColumnType } from './AxisComponents'
 import { aggregateData } from '@/lib/chart/aggregate-data'
-import { aggregatePivotData, computeFormulas, getUniqueTopLevelRowValues, getUniqueTopLevelColumnValues } from '@/lib/chart/pivot-utils'
+import { aggregatePivotData, computeFormulas, getUniqueTopLevelRowValues, getUniqueTopLevelColumnValues, getUniqueRowValuesAtLevel } from '@/lib/chart/pivot-utils'
 import type { PivotConfig, ColumnFormatConfig } from '@/lib/types'
 import { getEffectiveColorPalette } from '@/lib/chart/echarts-theme'
 import { ColorPicker } from './ColorPicker'
@@ -365,6 +365,21 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     return getUniqueTopLevelColumnValues(pivotData)
   }, [pivotData])
 
+  // Multi-level dimension info for row formula builder
+  const rowDimensions = useMemo(() => {
+    if (!pivotData || !pivotConfig || pivotConfig.rows.length < 2) return undefined
+    return pivotConfig.rows.map((col, level) => ({
+      name: col,
+      level,
+      availableValues: getUniqueRowValuesAtLevel(pivotData, level),
+    }))
+  }, [pivotData, pivotConfig])
+
+  const getRowValuesAtLevel = useCallback((level: number, parentValues?: string[]) => {
+    if (!pivotData) return []
+    return getUniqueRowValuesAtLevel(pivotData, level, parentValues)
+  }, [pivotData])
+
   // For pivot, we consider having data when pivotConfig has values
   const isPivot = chartType === 'pivot'
   const pivotHasData = isPivot && pivotData && pivotData.cells.length > 0
@@ -384,6 +399,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
             availableColumnValues={availableColumnValues}
             columnFormats={columnFormats}
             onColumnFormatChange={handleColumnFormatChange}
+            rowDimensions={rowDimensions}
+            getRowValuesAtLevel={getRowValuesAtLevel}
           />
         )}
 

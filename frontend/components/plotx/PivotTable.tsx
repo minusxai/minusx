@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from 'react'
 import { Box, Table as ChakraTable, Icon } from '@chakra-ui/react'
-import { LuChevronDown, LuChevronRight, LuSquareFunction } from 'react-icons/lu'
+import { LuChevronUp, LuChevronRight, LuSquareFunction } from 'react-icons/lu'
 import { formatLargeNumber, formatNumber, formatDateValue, applyPrefixSuffix } from '@/lib/chart/chart-utils'
 import type { PivotData, FormulaResults } from '@/lib/chart/pivot-utils'
 import type { ColumnFormatConfig } from '@/lib/types'
@@ -24,7 +24,7 @@ interface PivotTableProps {
 type DisplayRow =
   | { type: 'data'; rowIndex: number }
   | { type: 'subtotal'; level: number; label: string; cells: number[]; rowTotal: number; groupValues: string[] }
-  | { type: 'formula-row'; name: string; cells: number[]; rowTotal: number }
+  | { type: 'formula-row'; name: string; cells: number[]; rowTotal: number; dimensionLevel?: number; parentValues?: string[] }
 
 type ColEntry =
   | { type: 'data'; cellIndex: number }
@@ -42,7 +42,6 @@ const makeGroupKey = (values: string[]) => values.join('|||')
 export const PivotTable = ({
   pivotData,
   showRowTotals = true,
-  showColTotals = true,
   showHeatmap = true,
   emptyMessage,
   rowDimNames,
@@ -52,7 +51,7 @@ export const PivotTable = ({
   columnFormats,
   valueColumns,
 }: PivotTableProps) => {
-  const { rowHeaders, columnHeaders, cells, rowTotals, columnTotals, grandTotal, valueLabels } = pivotData
+  const { rowHeaders, columnHeaders, cells, rowTotals, valueLabels } = pivotData
 
   // Format a numeric cell value using per-value-column decimal/prefix/suffix config
   // When valueIndex is omitted (totals), fall back to first value column's format
@@ -366,33 +365,83 @@ export const PivotTable = ({
       // Insert in reverse order so indices don't shift
       const insertions: { position: number; formula: DisplayRow }[] = []
       for (const rf of rowFormulas) {
-        const topLevelValue = rowHeaders[rf.insertAfterRowIndex]?.[0]
-        if (!topLevelValue) continue
+        const dimLevel = rf.dimensionLevel ?? 0
 
         let insertPosition = -1
-        // Find the level-0 subtotal for this group
-        for (let d = 0; d < result.length; d++) {
-          const dr = result[d]
-          if (dr.type === 'subtotal' && dr.level === 0 && dr.groupValues[0] === topLevelValue) {
-            insertPosition = d + 1
-            break
-          }
-        }
-        // Fallback: after the last data row of this group
-        if (insertPosition === -1) {
-          for (let d = result.length - 1; d >= 0; d--) {
+
+        if (dimLevel > 0 && rf.parentValues && rf.parentValues.length > 0) {
+          // Sub-group formula: insert before the parent group's subtotal
+          // The parent subtotal is at level = dimLevel - 1 and matches parentValues
+          const parentLevel = dimLevel - 1
+
+          // Find the subtotal row for the parent group
+          for (let d = 0; d < result.length; d++) {
             const dr = result[d]
-            if (dr.type === 'data' && rowHeaders[dr.rowIndex][0] === topLevelValue) {
+            if (dr.type === 'subtotal' && dr.level === parentLevel) {
+              let matches = true
+              for (let p = 0; p <= parentLevel; p++) {
+                if (dr.groupValues[p] !== rf.parentValues[p]) {
+                  matches = false
+                  break
+                }
+              }
+              if (matches) {
+                // Insert just before this subtotal
+                insertPosition = d
+                break
+              }
+            }
+          }
+
+          // Fallback: after the last data row in the parent group
+          if (insertPosition === -1) {
+            for (let d = result.length - 1; d >= 0; d--) {
+              const dr = result[d]
+              if (dr.type === 'data') {
+                let matches = true
+                for (let p = 0; p < rf.parentValues.length; p++) {
+                  if (rowHeaders[dr.rowIndex][p] !== rf.parentValues[p]) {
+                    matches = false
+                    break
+                  }
+                }
+                if (matches) {
+                  insertPosition = d + 1
+                  break
+                }
+              }
+            }
+          }
+        } else {
+          // Top-level formula: original behavior
+          const topLevelValue = rowHeaders[rf.insertAfterRowIndex]?.[0]
+          if (!topLevelValue) continue
+
+          // Find the level-0 subtotal for this group
+          for (let d = 0; d < result.length; d++) {
+            const dr = result[d]
+            if (dr.type === 'subtotal' && dr.level === 0 && dr.groupValues[0] === topLevelValue) {
               insertPosition = d + 1
               break
             }
           }
+          // Fallback: after the last data row of this group
+          if (insertPosition === -1) {
+            for (let d = result.length - 1; d >= 0; d--) {
+              const dr = result[d]
+              if (dr.type === 'data' && rowHeaders[dr.rowIndex][0] === topLevelValue) {
+                insertPosition = d + 1
+                break
+              }
+            }
+          }
         }
+
         if (insertPosition === -1) insertPosition = result.length
 
         insertions.push({
           position: insertPosition,
-          formula: { type: 'formula-row', name: rf.name, cells: rf.cells, rowTotal: rf.rowTotal },
+          formula: { type: 'formula-row', name: rf.name, cells: rf.cells, rowTotal: rf.rowTotal, dimensionLevel: dimLevel, parentValues: rf.parentValues },
         })
       }
 
@@ -409,7 +458,16 @@ export const PivotTable = ({
   // Filter visible rows based on collapsed groups and showRowTotals (formula rows always visible)
   const visibleRows = useMemo((): DisplayRow[] => {
     return displayRows.filter(dr => {
-      if (dr.type === 'formula-row') return true
+      if (dr.type === 'formula-row') {
+        // Sub-group formula rows should be hidden when parent group is collapsed
+        if (dr.parentValues && dr.parentValues.length > 0) {
+          for (let level = 0; level < dr.parentValues.length; level++) {
+            const key = makeGroupKey(dr.parentValues.slice(0, level + 1))
+            if (collapsedGroups.has(key)) return false
+          }
+        }
+        return true
+      }
 
       if (dr.type === 'subtotal') {
         // Hide subtotals when row totals are disabled
@@ -667,44 +725,6 @@ export const PivotTable = ({
     })
   }
 
-  const renderGrandTotalCells = () => {
-    return columnEntries.map((entry, i) => {
-      if (entry.type === 'data') {
-        return (
-          <ChakraTable.Cell
-            key={`col-${i}`}
-            textAlign="right"
-            fontFamily="mono"
-            fontSize="sm"
-            fontWeight="600"
-            borderTop="2px solid"
-            borderColor="border.default"
-            bg="accent.teal/40"
-            color="fg.default"
-          >
-            {fmt(columnTotals[entry.cellIndex], entry.cellIndex % numValues)}
-          </ChakraTable.Cell>
-        )
-      }
-      // formula-col in grand total: dash
-      return (
-        <ChakraTable.Cell
-          key={`col-${i}`}
-          textAlign="center"
-          fontFamily="mono"
-          fontSize="sm"
-          fontWeight="600"
-          borderTop="2px solid"
-          borderColor="border.default"
-          bg="accent.teal/40"
-          color="fg.subtle"
-        >
-          {'\u2014'}
-        </ChakraTable.Cell>
-      )
-    })
-  }
-
   const numHeaderRows = augmentedColHeaderRows.length
 
   return (
@@ -869,10 +889,26 @@ export const PivotTable = ({
           {visibleRows.map((displayRow, displayIndex) => {
             // Formula row
             if (displayRow.type === 'formula-row') {
+              const formulaDimLevel = displayRow.dimensionLevel ?? 0
+              const headerColSpan = numRowDims ? Math.max(1, numRowDims - formulaDimLevel) : 1
+              const emptyColsBefore = numRowDims ? Math.min(formulaDimLevel, numRowDims - 1) : 0
+
               return (
                 <ChakraTable.Row key={`formula-${displayIndex}`}>
+                  {/* Empty cells for parent dimensions (sub-group formulas) */}
+                  {Array.from({ length: emptyColsBefore }).map((_, i) => (
+                    <ChakraTable.Cell
+                      key={`empty-${i}`}
+                      borderTop="1px dashed"
+                      borderColor="accent.secondary/40"
+                      bg="bg.surface"
+                      position="sticky"
+                      left={0}
+                      zIndex={2}
+                    />
+                  ))}
                   <ChakraTable.Cell
-                    colSpan={numRowDims || 1}
+                    colSpan={headerColSpan}
                     fontWeight="700"
                     fontSize="xs"
                     textTransform="uppercase"
@@ -965,7 +1001,7 @@ export const PivotTable = ({
                     _hover={{ opacity: 0.8 }}
                   >
                     <Box display="flex" alignItems="center" gap={1}>
-                      <Box as={collapsed ? LuChevronRight : LuChevronDown} fontSize="sm" flexShrink={0} />
+                      <Box as={collapsed ? LuChevronRight : LuChevronUp} fontSize="sm" flexShrink={0} />
                       {displayRow.label}
                     </Box>
                   </ChakraTable.Cell>
@@ -1056,81 +1092,21 @@ export const PivotTable = ({
                   ))
                 )}
 
-                {/* Row total */}
+                {/* Row total - only show on subtotal/formula rows, not data rows */}
                 {showRowTotals && (
                   <ChakraTable.Cell
                     textAlign="right"
                     fontFamily="mono"
                     fontSize="sm"
-                    fontWeight="600"
                     borderLeft="2px solid"
                     borderColor="border.default"
-                    bg="accent.teal/20"
-                    color="fg.default"
-                  >
-                    {fmt(rowTotals[rowIndex])}
-                  </ChakraTable.Cell>
+                    bg="accent.teal/5"
+                    color="fg.subtle"
+                  />
                 )}
               </ChakraTable.Row>
             )
           })}
-
-          {/* Column totals row */}
-          {showColTotals && (
-            <ChakraTable.Row fontWeight="600">
-              <ChakraTable.Cell
-                colSpan={numRowDims || 1}
-                fontWeight="700"
-                fontSize="xs"
-                textTransform="uppercase"
-                letterSpacing="0.05em"
-                color="fg.default"
-                borderTop="2px solid"
-                borderColor="border.default"
-
-                position="sticky"
-                left={0}
-                bg="bg.muted"
-                zIndex={2}
-              >
-                Grand Total
-              </ChakraTable.Cell>
-
-              {hasColFormulas ? renderGrandTotalCells() : (
-                columnTotals.map((total, colIndex) => (
-                  <ChakraTable.Cell
-                    key={colIndex}
-                    textAlign="right"
-                    fontFamily="mono"
-                    fontSize="sm"
-                    fontWeight="600"
-                    borderTop="2px solid"
-                    borderColor="border.default"
-                    bg="accent.teal/40"
-                    color="fg.default"
-                  >
-                    {fmt(total, colIndex % numValues)}
-                  </ChakraTable.Cell>
-                ))
-              )}
-
-              {showRowTotals && (
-                <ChakraTable.Cell
-                  textAlign="right"
-                  fontFamily="mono"
-                  fontSize="sm"
-                  fontWeight="700"
-                  color="fg.default"
-                  borderLeft="2px solid"
-                  borderTop="2px solid"
-                  borderColor="border.default"
-                  bg="accent.teal/50"
-                >
-                  {fmt(grandTotal)}
-                </ChakraTable.Cell>
-              )}
-            </ChakraTable.Row>
-          )}
         </ChakraTable.Body>
       </ChakraTable.Root>
     </Box>
