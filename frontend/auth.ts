@@ -62,12 +62,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           // Dev-only: Allow admins without password to login with email as password
           if (IS_DEV && credentials.password === user.email) {
             console.log('⚠️  Dev mode: User logged in using email as password')
+          } else if (isAdmin(user.role) && ADMIN_PWD && credentials.password === ADMIN_PWD) {
+            console.log('⚠️  Prod mode: Admin logged in using ADMIN_PWD')
           } else if (!user.password_hash) {
-            if (isAdmin(user.role) && ADMIN_PWD && credentials.password === ADMIN_PWD) {
-              console.log('⚠️  Prod mode: Admin logged in using ADMIN_PWD')
-            } else {
-              return null
-            }
+            return null
           } else {
             // Verify password
             const isValid = await verifyPassword(

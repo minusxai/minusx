@@ -50,11 +50,9 @@ export async function POST(request: NextRequest) {
 
     if (IS_DEV && password === user.email) {
       passwordValid = true;
-    } else if (!user.password_hash) {
-      if (isAdmin(user.role) && ADMIN_PWD && password === ADMIN_PWD) {
-        passwordValid = true;
-      }
-    } else {
+    } else if (isAdmin(user.role) && ADMIN_PWD && password === ADMIN_PWD) {
+      passwordValid = true;
+    } else if (user.password_hash) {
       passwordValid = await verifyPassword(password, user.password_hash);
     }
 
