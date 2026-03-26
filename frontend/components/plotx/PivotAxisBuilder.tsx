@@ -77,7 +77,7 @@ export const PivotAxisBuilder = ({
       vals.push({ column: groupedColumns.numbers[0], aggFunction: 'SUM' })
     }
 
-    return { rows: rowCols, columns: colCols, values: vals, showRowTotals: true, showColumnTotals: true, showHeatmap: true }
+    return { rows: rowCols, columns: colCols, values: vals, showRowTotals: false, showColumnTotals: false, showHeatmap: true }
   }, [pivotConfig, groupedColumns])
 
   // Fire initial config if auto-initialized
@@ -234,20 +234,24 @@ export const PivotAxisBuilder = ({
       <AxisBuilder columns={columns} types={types} zones={zones} columnFormats={columnFormats} onColumnFormatChange={onColumnFormatChange} />
       <Box px={3} pt={2} pb={3} bg="bg.canvas" borderBottom="1px solid" borderColor="border.muted" display="flex" flexDirection="column" gap={3}>
         <HStack gap={4}>
-          <Checkbox
-            checked={config.showRowTotals !== false}
-            onCheckedChange={(e) => onPivotConfigChange({ ...config, showRowTotals: e.checked })}
-            size="sm"
-          >
-            <Text fontSize="xs" color="fg.muted">Row Totals</Text>
-          </Checkbox>
-          <Checkbox
-            checked={config.showColumnTotals !== false}
-            onCheckedChange={(e) => onPivotConfigChange({ ...config, showColumnTotals: e.checked })}
-            size="sm"
-          >
-            <Text fontSize="xs" color="fg.muted">Column Totals</Text>
-          </Checkbox>
+          {config.columns.length >= 2 && (
+            <Checkbox
+              checked={config.showRowTotals !== false}
+              onCheckedChange={(e) => onPivotConfigChange({ ...config, showRowTotals: e.checked })}
+              size="sm"
+            >
+              <Text fontSize="xs" color="fg.muted">Row Totals</Text>
+            </Checkbox>
+          )}
+          {config.rows.length >= 2 && (
+            <Checkbox
+              checked={config.showColumnTotals !== false}
+              onCheckedChange={(e) => onPivotConfigChange({ ...config, showColumnTotals: e.checked })}
+              size="sm"
+            >
+              <Text fontSize="xs" color="fg.muted">Column Totals</Text>
+            </Checkbox>
+          )}
           <Checkbox
             checked={config.showHeatmap !== false}
             onCheckedChange={(e) => onPivotConfigChange({ ...config, showHeatmap: e.checked })}
