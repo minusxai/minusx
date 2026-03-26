@@ -21,6 +21,13 @@ const nextConfig: NextConfig = {
   turbopack: {},
 
   experimental: {
+    // Turbopack references next/dist/build/adapter/setup-node-env.external.js as an external
+    // module at runtime, but @vercel/nft (standalone file tracer) misses it. Explicitly include
+    // it so the standalone Docker image contains this file.
+    outputFileTracingIncludes: {
+      '/**': ['./node_modules/next/dist/build/adapter/**'],
+    },
+
     // Enable optimized package imports to reduce bundle size
     optimizePackageImports: ['@chakra-ui/react', 'react-icons', 'echarts'],
 
