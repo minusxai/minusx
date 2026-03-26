@@ -76,8 +76,7 @@ def _check_unsupported_features(ast: exp.Expression) -> Set[str]:
     for node in ast.walk():
         if isinstance(node, exp.Subquery):
             unsupported.add("Subqueries")
-        elif isinstance(node, exp.Union):
-            unsupported.add("UNION")
+        # UNION is now supported (handled by CompoundQueryIR)
         elif isinstance(node, exp.Window):
             unsupported.add("Window functions")
         elif isinstance(node, exp.Intersect):

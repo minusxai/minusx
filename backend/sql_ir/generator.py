@@ -5,7 +5,8 @@ This mirrors the frontend TypeScript implementation in ir-to-sql.ts
 and is used for round-trip validation.
 """
 
-from .ir_types import QueryIR, SelectColumn, FilterGroup, FilterCondition
+from typing import Union
+from .ir_types import QueryIR, CompoundQueryIR, SelectColumn, FilterGroup, FilterCondition
 
 
 def ir_to_sql(ir: QueryIR) -> str:
@@ -275,6 +276,54 @@ def generate_order_by_expression(col) -> str:
     if col.table:
         return f"{col.table}.{col.column}"
     return col.column
+
+
+def compound_ir_to_sql(ir: CompoundQueryIR) -> str:
+    """Convert CompoundQueryIR (UNION/UNION ALL) to SQL string."""
+    if len(ir.queries) < 2:
+        raise ValueError("Compound query must have at least 2 queries")
+    if len(ir.operators) != len(ir.queries) - 1:
+        raise ValueError("Number of operators must be len(queries) - 1")
+
+    # Generate SQL for each individual query (without order_by/limit)
+    query_sqls = []
+    for q in ir.queries:
+        # Temporarily clear order_by and limit for individual queries
+        q_copy = q.model_copy(update={'order_by': None, 'limit': None})
+        query_sqls.append(ir_to_sql(q_copy))
+
+    # Interleave queries with operators
+    parts = [query_sqls[0]]
+    for i, op in enumerate(ir.operators):
+        parts.append(op)
+        parts.append(query_sqls[i + 1])
+
+    result = "\n".join(parts)
+
+    # Append compound-level ORDER BY
+    if ir.order_by:
+        order_parts = []
+        for col in ir.order_by:
+            col_expr = generate_order_by_expression(col)
+            order_parts.append(f"{col_expr} {col.direction}")
+        result += "\nORDER BY " + ", ".join(order_parts)
+
+    # Append compound-level LIMIT
+    if ir.limit is not None:
+        result += f"\nLIMIT {ir.limit}"
+
+    return result
+
+
+def any_ir_to_sql(ir: Union[QueryIR, CompoundQueryIR, dict]) -> str:
+    """Dispatch to the correct generator based on IR type."""
+    if isinstance(ir, dict):
+        if ir.get('type') == 'compound':
+            return compound_ir_to_sql(CompoundQueryIR.model_validate(ir))
+        return ir_to_sql(QueryIR.model_validate(ir))
+    if isinstance(ir, CompoundQueryIR):
+        return compound_ir_to_sql(ir)
+    return ir_to_sql(ir)
 
 
 def format_value(value) -> str:

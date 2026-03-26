@@ -32,7 +32,7 @@ from sql_utils.limit_enforcer import enforce_query_limit
 from sql_utils.validator import validate_sql as validate_sql_syntax
 from sql_utils.column_inferrer import infer_columns
 from sql_utils.autocomplete import get_completions, AutocompleteRequest, get_mention_completions, MentionItem
-from sql_ir import parse_sql_to_ir, ir_to_sql, UnsupportedSQLError, QueryIR
+from sql_ir import parse_sql_to_ir, ir_to_sql, any_ir_to_sql, UnsupportedSQLError, QueryIR, CompoundQueryIR
 
 # Import orchestration components
 from tasks import Orchestrator, AgentCall, UserInputException
@@ -579,7 +579,7 @@ async def sql_to_ir_endpoint(req: SqlToIRRequest):
             legacy_hints = {
                 "SUBQUERY": "Try using JOINs instead of subqueries",
                 "CTE": "Common Table Expressions (WITH) are not supported in GUI mode",
-                "UNION": "UNION queries are not supported in GUI mode",
+                "UNION": "UNION queries could not be parsed for GUI mode",
                 "WINDOW_FUNCTION": "Window functions (OVER) are not supported in GUI mode",
                 "CASE": "CASE expressions are not supported in GUI mode",
             }
@@ -620,9 +620,8 @@ async def ir_to_sql_endpoint(req: IRToSqlRequest):
     used by both backend validation and frontend GUI builder.
     """
     try:
-        # Validate and parse IR
-        ir = QueryIR.model_validate(req.ir)
-        sql = ir_to_sql(ir)
+        # Dispatch based on IR type
+        sql = any_ir_to_sql(req.ir)
 
         return IRToSqlResponse(
             success=True,

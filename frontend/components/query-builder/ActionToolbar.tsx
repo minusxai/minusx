@@ -12,6 +12,7 @@ import {
   LuGitMerge,
   LuArrowUpDown,
   LuListOrdered,
+  LuCombine,
 } from 'react-icons/lu';
 import { useState } from 'react';
 
@@ -22,12 +23,15 @@ interface ActionToolbarProps {
   onJoinClick: () => void;
   onSortClick: () => void;
   onLimitChange: (limit: number | undefined) => void;
+  onUnionClick?: () => void;
   currentLimit?: number;
   hasFilter?: boolean;
   hasSummarize?: boolean;
   hasHaving?: boolean;
   hasJoin?: boolean;
   hasSort?: boolean;
+  hideSort?: boolean;
+  hideLimit?: boolean;
 }
 
 interface ActionButtonProps {
@@ -75,12 +79,15 @@ export function ActionToolbar({
   onJoinClick,
   onSortClick,
   onLimitChange,
+  onUnionClick,
   currentLimit,
   hasFilter,
   hasSummarize,
   hasHaving,
   hasJoin,
   hasSort,
+  hideSort,
+  hideLimit,
 }: ActionToolbarProps) {
   const [limitOpen, setLimitOpen] = useState(false);
   const [limitValue, setLimitValue] = useState(currentLimit?.toString() || '');
@@ -124,14 +131,25 @@ export function ActionToolbar({
         isActive={hasJoin}
       />
 
-      <ActionButton
-        icon={<LuArrowUpDown size={18} />}
-        label="Sort"
-        onClick={onSortClick}
-        isActive={hasSort}
-      />
+      {!hideSort && (
+        <ActionButton
+          icon={<LuArrowUpDown size={18} />}
+          label="Sort"
+          onClick={onSortClick}
+          isActive={hasSort}
+        />
+      )}
+
+      {onUnionClick && (
+        <ActionButton
+          icon={<LuCombine size={18} />}
+          label="Union"
+          onClick={onUnionClick}
+        />
+      )}
 
       {/* Row limit with popover */}
+      {!hideLimit && (
       <Popover.Root open={limitOpen} onOpenChange={(details) => setLimitOpen(details.open)}>
         <Popover.Trigger asChild>
           <VStack
@@ -207,6 +225,7 @@ export function ActionToolbar({
           </Popover.Positioner>
         </Portal>
       </Popover.Root>
+      )}
 
     </HStack>
   );

@@ -10,6 +10,7 @@ import { Box, VStack, Spinner, Text, HStack, Button } from '@chakra-ui/react';
 import { LuPlay, LuSparkles, LuCode, LuChevronDown, LuChevronRight, LuDatabase } from 'react-icons/lu';
 import { QueryChip } from './QueryChip';
 import { QueryIR, SelectColumn, TableReference } from '@/lib/types';
+import { isCompoundQueryIR } from '@/lib/sql/ir-types';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { useAppSelector } from '@/store/hooks';
 import { selectShowDebug } from '@/store/uiSlice';
@@ -98,6 +99,8 @@ interface QueryBuilderProps {
   onExecute?: () => void;
   isExecuting?: boolean;
   availableQuestions?: QuestionOption[];
+  isCompoundMember?: boolean;  // When true, hide ORDER BY, LIMIT, Execute, Union button
+  onConvertToCompound?: () => void;  // Called when user clicks Union button
 }
 
 export function QueryBuilder({
@@ -107,6 +110,8 @@ export function QueryBuilder({
   onExecute,
   isExecuting = false,
   availableQuestions = [],
+  isCompoundMember = false,
+  onConvertToCompound,
 }: QueryBuilderProps) {
   const [ir, setIr] = useState<QueryIR | null>(null);
   const [loading, setLoading] = useState(true);
@@ -153,36 +158,43 @@ export function QueryBuilder({
       try {
         const result = await CompletionsAPI.sqlToIR({ sql });
         console.log("[result]", result);
-        if (result.ir) {
-            setIr(result.ir);
+        // Skip compound queries — they're handled by CompoundQueryBuilder
+        if (result.ir && isCompoundQueryIR(result.ir)) {
+          setError('This is a compound query. Use CompoundQueryBuilder.');
+          setLoading(false);
+          return;
         }
-        if (result.success && result.ir) {
+        const simpleIR = result.ir as QueryIR | undefined;
+        if (simpleIR) {
+            setIr(simpleIR);
+        }
+        if (result.success && simpleIR) {
           lastSqlSent.current = sql;
 
           // Store original SQL and IR for dirty tracking
           setOriginalSql(sql);
-          setOriginalIR(JSON.parse(JSON.stringify(result.ir))); // Deep clone
+          setOriginalIR(JSON.parse(JSON.stringify(simpleIR))); // Deep clone
           setIsDirty(false);
 
           // Show sections if they have content
-          if (result.ir.where && result.ir.where.conditions.length > 0) {
+          if (simpleIR.where && simpleIR.where.conditions.length > 0) {
             setShowFilterSection(true);
           }
-          const hasAggregates = result.ir.select.some((c) => c.type === 'aggregate');
-          const hasRawWithGroupBy = result.ir.select.some((c) => c.type === 'raw') && !!result.ir.group_by;
+          const hasAggregates = simpleIR.select.some((c) => c.type === 'aggregate');
+          const hasRawWithGroupBy = simpleIR.select.some((c) => c.type === 'raw') && !!simpleIR.group_by;
           if (hasAggregates || hasRawWithGroupBy) {
             setShowSummarizeSection(true);
           }
-          if (result.ir.having && result.ir.having.conditions.length > 0) {
+          if (simpleIR.having && simpleIR.having.conditions.length > 0) {
             setShowHavingSection(true);
           }
-          if (result.ir.joins && result.ir.joins.length > 0) {
+          if (simpleIR.joins && simpleIR.joins.length > 0) {
             setShowJoinPanel(true);
           }
-          if (result.ir.order_by && result.ir.order_by.length > 0) {
+          if (simpleIR.order_by && simpleIR.order_by.length > 0) {
             setShowSortPanel(true);
           }
-          if (result.ir.ctes && result.ir.ctes.length > 0) {
+          if (simpleIR.ctes && simpleIR.ctes.length > 0) {
             setShowCteSection(true);
           }
         } else {
@@ -512,8 +524,8 @@ export function QueryBuilder({
           />
         )}
 
-        {/* Sort Section */}
-        {showSortPanel && (
+        {/* Sort Section (hidden for compound members) */}
+        {!isCompoundMember && showSortPanel && (
           <OrderByBuilder
             databaseName={databaseName}
             tableName={ir.from.table}
@@ -532,16 +544,19 @@ export function QueryBuilder({
           onJoinClick={handleJoinClick}
           onSortClick={handleSortClick}
           onLimitChange={handleLimitChange}
-          currentLimit={ir.limit}
+          onUnionClick={!isCompoundMember ? onConvertToCompound : undefined}
+          currentLimit={isCompoundMember ? undefined : ir.limit}
           hasFilter={hasFilter || showFilterSection}
           hasSummarize={hasSummarize || showSummarizeSection}
           hasHaving={hasHaving || showHavingSection}
           hasJoin={hasJoin || showJoinPanel}
           hasSort={hasSort || showSortPanel}
+          hideSort={isCompoundMember}
+          hideLimit={isCompoundMember}
         />
 
-        {/* Visualize Button */}
-        {onExecute && (
+        {/* Visualize Button (hidden for compound members) */}
+        {!isCompoundMember && onExecute && (
           <Button
             onClick={onExecute}
             size="lg"

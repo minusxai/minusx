@@ -9,7 +9,7 @@ import type { TestSubject } from '@/lib/types';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { useConnections } from '@/lib/hooks/useConnections';
 import DatabaseSelector from '@/components/DatabaseSelector';
-import { QueryModeSelector, QueryBuilder } from '@/components/query-builder';
+import { QueryModeSelector, QueryBuilderRoot } from '@/components/query-builder';
 import SqlEditor from '@/components/SqlEditor';
 
 interface TestSubjectEditorProps {
@@ -150,7 +150,7 @@ function InlineSubjectEditor({
         </HStack>
         {subject.database_name && queryMode === 'gui' ? (
           <Box border="1px solid" borderColor="border.muted" borderRadius="md" overflow="hidden">
-            <QueryBuilder
+            <QueryBuilderRoot
               databaseName={subject.database_name}
               sql={subject.sql}
               onSqlChange={sql => onChange({ ...subject, sql })}

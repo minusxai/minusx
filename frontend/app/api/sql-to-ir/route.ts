@@ -36,13 +36,23 @@ export async function POST(request: NextRequest) {
 
     // Post-process: restore @ prefixes in the returned IR
     if (data.ir) {
-      if (data.ir.from?.table && atRefs.has(data.ir.from.table)) {
-        data.ir.from.table = atRefs.get(data.ir.from.table);
-      }
-      for (const join of data.ir.joins ?? []) {
-        if (join.table?.table && atRefs.has(join.table.table)) {
-          join.table.table = atRefs.get(join.table.table);
+      const restoreRefs = (queryIR: any) => {
+        if (queryIR.from?.table && atRefs.has(queryIR.from.table)) {
+          queryIR.from.table = atRefs.get(queryIR.from.table);
         }
+        for (const join of queryIR.joins ?? []) {
+          if (join.table?.table && atRefs.has(join.table.table)) {
+            join.table.table = atRefs.get(join.table.table);
+          }
+        }
+      };
+
+      if (data.ir.type === 'compound') {
+        for (const query of data.ir.queries ?? []) {
+          restoreRefs(query);
+        }
+      } else {
+        restoreRefs(data.ir);
       }
     }
 
