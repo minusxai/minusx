@@ -38,7 +38,7 @@ export default function GenericSelector({
   color = 'accent.secondary'
 }: GenericSelectorProps) {
   // Find the selected option to display
-  const selectedOption = options.find(opt => opt.value === value) || options[0];
+  const selectedOption = options.find(opt => opt.value === value);
 
   // Size-based styles
   const sizeStyles = size === 'sm' ? {
@@ -143,33 +143,34 @@ export default function GenericSelector({
           w="100%"
         >
           <HStack gap={sizeStyles.gap} justify="space-between">
-            <HStack gap={sizeStyles.gap} flex={1}>
+            <HStack gap={sizeStyles.gap} flex={1} minW={0} overflow="hidden">
               {(selectedOption?.icon || defaultIcon) && (
-                <Icon as={selectedOption?.icon || defaultIcon} boxSize={sizeStyles.iconSize} color={color} />
+                <Icon as={selectedOption?.icon || defaultIcon} boxSize={sizeStyles.iconSize} color={color} flexShrink={0} />
               )}
               {selectedOption ? (
-                <>
-                  <Text fontSize={sizeStyles.fontSize} fontWeight="500" {...truncateStyles}>{selectedOption.label}</Text>
+                <Text fontSize={sizeStyles.fontSize} fontWeight="500" {...truncateStyles} minW={0} flex={1}>
+                  {selectedOption.label}
                   {selectedOption.subtitle && (
                     <Text
+                      as="span"
                       fontSize="2xs"
                       color="fg.muted"
                       fontFamily="mono"
                       textTransform="uppercase"
-                      {...truncateStyles}
+                      ml={1}
                     >
                       ({selectedOption.subtitle})
                     </Text>
                   )}
-                  {selectedOption.showCheckmark && (
-                    <HStack gap={1} flexShrink={0}>
-                      <Icon as={LuBadgeCheck} boxSize={sizeStyles.iconSize} color="fg.muted" />
-                      <Text fontSize="2xs" color="fg.muted" fontWeight="500" {...truncateStyles}>Published</Text>
-                    </HStack>
-                  )}
-                </>
+                </Text>
               ) : (
                 <Text fontSize={sizeStyles.fontSize} color="fg.muted" {...truncateStyles}>{placeholder}</Text>
+              )}
+              {selectedOption?.showCheckmark && (
+                <HStack gap={1} flexShrink={0}>
+                  <Icon as={LuBadgeCheck} boxSize={sizeStyles.iconSize} color="fg.muted" />
+                  <Text fontSize="2xs" color="fg.muted" fontWeight="500" {...truncateStyles}>Published</Text>
+                </HStack>
               )}
             </HStack>
             <Icon as={LuChevronDown} boxSize={sizeStyles.iconSize} color="fg.subtle" />

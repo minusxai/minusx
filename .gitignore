@@ -14,3 +14,4 @@ data/csv_connections
 *.DS_Store
 experiments
 static/
+junk/

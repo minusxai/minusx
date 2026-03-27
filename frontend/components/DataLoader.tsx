@@ -5,7 +5,7 @@ import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { useContexts } from '@/lib/hooks/useContexts';
-import { setShowDebug, setShowJson } from '@/store/uiSlice';
+import { setShowDebug, setShowJson, setShowAdvanced } from '@/store/uiSlice';
 
 /**
  * DataLoader Component
@@ -31,6 +31,8 @@ export function DataLoader() {
       if (debug !== null) dispatch(setShowDebug(debug === 'true'));
       const json = localStorage.getItem('showJson');
       if (json !== null) dispatch(setShowJson(json === 'true'));
+      const advanced = localStorage.getItem('showAdvanced');
+      if (advanced !== null) dispatch(setShowAdvanced(advanced === 'true'));
     } catch { /* ignore */ }
   }, []);
   const configsLoaded = useAppSelector(state => state.configs.loadedAt !== null);

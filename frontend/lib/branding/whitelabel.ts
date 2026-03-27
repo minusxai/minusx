@@ -62,7 +62,7 @@ export const DEFAULT_CONFIG: CompanyConfig = {
     favicon: '/favicon.ico'
   },
   links: {
-    docsUrl: 'https://docs.minusx.ai',
+    docsUrl: 'https://docsv2.minusx.ai',
     supportUrl: 'https://minusx.ai/support',
     githubIssuesUrl: 'https://github.com/minusxai/minusx/issues'
   },

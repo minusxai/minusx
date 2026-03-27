@@ -15,6 +15,7 @@ interface UIState {
   showDebug: boolean;
   showJson: boolean;
   showAllErrorToasts: boolean;
+  showAdvanced: boolean;
   gettingStartedCollapsed: boolean;
   dashboardEditMode: Record<number, boolean>;  // fileId -> editMode (dashboards)
   fileEditMode: Record<number, boolean>;       // fileId -> editMode (question, report, alert)
@@ -39,6 +40,7 @@ const initialState: UIState = {
   showDebug: false,
   showJson: false,
   showAllErrorToasts: false,
+  showAdvanced: false,
   gettingStartedCollapsed: false,
   dashboardEditMode: {},
   fileEditMode: {},
@@ -110,6 +112,12 @@ const uiSlice = createSlice({
       state.showAllErrorToasts = action.payload;
       if (typeof window !== 'undefined') {
         try { localStorage.setItem('showAllErrorToasts', String(action.payload)); } catch { /* ignore */ }
+      }
+    },
+    setShowAdvanced: (state, action: PayloadAction<boolean>) => {
+      state.showAdvanced = action.payload;
+      if (typeof window !== 'undefined') {
+        try { localStorage.setItem('showAdvanced', String(action.payload)); } catch { /* ignore */ }
       }
     },
     setGettingStartedCollapsed: (state, action: PayloadAction<boolean>) => {
@@ -201,6 +209,7 @@ export const {
   setShowDebug,
   setShowJson,
   setShowAllErrorToasts,
+  setShowAdvanced,
   setGettingStartedCollapsed,
   toggleGettingStartedCollapsed,
   setDashboardEditMode,
@@ -245,6 +254,7 @@ export const selectRightSidebarUIState = createSelector(
 
 export const selectAskForConfirmation = (state: RootState) => state.ui.askForConfirmation;
 export const selectShowDebug = (state: RootState) => state.ui.showDebug;
+export const selectShowAdvanced = (state: RootState) => state.ui.showAdvanced;
 export const selectShowJson = (state: RootState) => state.ui.showJson;
 export const selectShowAllErrorToasts = (state: RootState) => state.ui.showAllErrorToasts;
 export const selectGettingStartedCollapsed = (state: RootState) => state.ui.gettingStartedCollapsed;
