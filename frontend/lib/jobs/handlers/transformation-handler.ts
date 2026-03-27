@@ -1,4 +1,5 @@
 import 'server-only';
+import { resolveBaseUrl } from '@/lib/jobs/job-utils';
 import { FilesAPI } from '@/lib/data/files.server';
 import { runQuery } from '@/lib/connections/run-query';
 import { DocumentDB } from '@/lib/database/documents-db';
@@ -16,7 +17,7 @@ import type {
 } from '@/lib/types';
 
 export const transformationJobHandler: JobHandler = {
-  async execute({ file, runMode = 'full' }: JobRunnerInput, user): Promise<JobHandlerResult> {
+  async execute({ file, runMode = 'full', jobId, runFileId }: JobRunnerInput, user): Promise<JobHandlerResult> {
     const transformation = file as TransformationContent;
     const results: TransformResult[] = [];
     const testRunner = createServerRunner(user, '');
@@ -96,6 +97,24 @@ export const transformationJobHandler: JobHandler = {
     const hasFailedTests = results.some(r => r.testResults?.some(tr => !tr.passed));
     const output: TransformationOutput = { results, runMode };
     const overallStatus = hasErrors || hasFailedTests ? 'failure' : 'success';
-    return { output, messages: [], status: overallStatus };
+
+    const messages: JobHandlerResult['messages'] = [];
+    if (transformation.recipients && transformation.recipients.length > 0) {
+      const transformationFileResult = await FilesAPI.loadFile(parseInt(jobId, 10), user);
+      const transformationName = transformationFileResult.data?.name ?? `Transformation ${jobId}`;
+      const baseUrl = await resolveBaseUrl(user.companyId);
+      const link = `${baseUrl}/f/${runFileId}`;
+      const subject = `[Transformation] ${transformationName}`;
+      const succeeded = results.filter(r => r.status === 'success').length;
+      const body = `<h2>${transformationName}</h2><p>${succeeded}/${results.length} transforms succeeded.</p><p><a href="${link}">View results</a></p>`;
+
+      for (const recipient of transformation.recipients) {
+        if (recipient.channel === 'email_alert') {
+          messages.push({ type: 'email_alert', content: body, metadata: { to: recipient.address, subject } });
+        }
+      }
+    }
+
+    return { output, messages, status: overallStatus };
   },
 };

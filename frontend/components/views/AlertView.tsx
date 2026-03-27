@@ -4,8 +4,10 @@ import { Box, Text, VStack, HStack, Input, Button, Flex, Portal, Switch, NativeS
 import type { CheckedChangeDetails } from '@zag-js/switch';
 import { AlertContent, JobRun, Test } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { LuPlay, LuClock, LuBell, LuMail, LuInfo, LuGripVertical, LuHistory, LuFlaskConical } from 'react-icons/lu';
+import { LuPlay, LuClock, LuBell, LuMail, LuGripVertical, LuHistory, LuFlaskConical } from 'react-icons/lu';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
+import { SchedulePicker } from '@/components/shared/SchedulePicker';
+import { StatusBanner } from '@/components/shared/StatusBanner';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { useAppSelector } from '@/store/hooks';
 import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
@@ -27,33 +29,6 @@ interface AlertViewProps {
   onSelectRun?: (runId: number | null) => void;
 }
 
-// Cron presets (shared with ReportView)
-const CRON_PRESETS = [
-  { value: '0 9 * * *', label: 'Daily at 9am' },
-  { value: '0 9 * * 1', label: 'Weekly on Monday' },
-  { value: '0 9 * * 1-5', label: 'Weekdays at 9am' },
-  { value: '0 9 1 * *', label: 'Monthly on 1st' },
-  { value: '0 17 * * 5', label: 'Fridays at 5pm' },
-  { value: '__custom__', label: 'Custom Schedule' },
-];
-
-const CRON_PRESET_VALUES = new Set(CRON_PRESETS.filter(p => p.value !== '__custom__').map(p => p.value));
-
-const cronCollection = createListCollection({
-  items: CRON_PRESETS.map(p => ({ value: p.value, label: p.label }))
-});
-
-const TIMEZONES = [
-  { value: 'UTC', label: 'UTC' },
-  { value: 'America/Los_Angeles', label: 'America/Los_Angeles' },
-  { value: 'America/New_York', label: 'America/New_York' },
-  { value: 'Asia/Jakarta', label: 'Asia/Jakarta' },
-  { value: 'Asia/Kolkata', label: 'Asia/Kolkata' },
-];
-
-const timezoneCollection = createListCollection({
-  items: TIMEZONES.map(tz => ({ value: tz.value, label: tz.label }))
-});
 
 
 export default function AlertView({
@@ -70,8 +45,6 @@ export default function AlertView({
   const editMode = useAppSelector(state => selectFileEditMode(state, fileId));
   const activeTab = useAppSelector(state => selectFileViewMode(state, fileId));
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
-  const isLive = (alert.status ?? 'draft') === 'live';
-
   const [forceRun, setForceRun] = useState(false);
   const [sendNotifications, setSendNotifications] = useState(true);
 
@@ -150,31 +123,13 @@ export default function AlertView({
   return (
     <Box display="flex" flexDirection="column" overflow="hidden" flex="1" minH="0" fontFamily="mono">
       {/* Status bar: Live/Draft toggle + cron info */}
-      <HStack gap={3} px={4} py={2} bg={isLive ? 'green.subtle' : 'yellow.subtle'} borderBottomWidth="1px" borderColor={isLive ? 'green.muted' : 'yellow.muted'} borderRadius="md">
-        <LuInfo size={14} color={isLive ? 'var(--chakra-colors-green-fg)' : 'var(--chakra-colors-yellow-fg)'} />
-        <Text fontSize="xs" color={isLive ? 'green.fg' : 'yellow.fg'} flex={1}>
-          {isLive
-            ? 'This alert is live. Scheduled runs will execute when the cron endpoint is triggered.'
-            : 'Draft mode — scheduled runs are disabled. Use Check Now to test.'}
-        </Text>
-        <HStack gap={2}>
-          <Text fontSize="xs" fontWeight="600" color={isLive ? 'green.fg' : 'yellow.fg'}>
-            {isLive ? 'Live' : 'Draft'}
-          </Text>
-          <Switch.Root
-            size="sm"
-            checked={isLive}
-            disabled={!editMode}
-            onCheckedChange={(e: CheckedChangeDetails) => onChange({ status: e.checked ? 'live' : 'draft' })}
-            colorPalette="green"
-          >
-            <Switch.HiddenInput />
-            <Switch.Control>
-              <Switch.Thumb />
-            </Switch.Control>
-          </Switch.Root>
-        </HStack>
-      </HStack>
+      <StatusBanner
+        status={alert.status ?? 'draft'}
+        label="alert"
+        runLabel="Check Now"
+        editMode={editMode}
+        onChange={(s) => onChange({ status: s })}
+      />
 
       {/* JSON View */}
       {activeTab === 'json' && (
@@ -252,91 +207,11 @@ export default function AlertView({
               </Box>
 
               {/* Schedule Card */}
-              <Box
-                position="relative"
-                bg="bg.muted"
-                borderRadius="md"
-                border="1px solid"
-                borderColor="border.muted"
-                p={3}
-                pl={5}
-                overflow="hidden"
-              >
-                <Box position="absolute" left={0} top={0} bottom={0} width="3px" bg="accent.teal" borderLeftRadius="md" />
-                <HStack mb={2} gap={1.5}>
-                  <LuClock size={14} color="var(--chakra-colors-accent-teal)" />
-                  <Text fontWeight="700" fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Schedule</Text>
-                </HStack>
-
-                <HStack gap={2}>
-                  <Box flex={1}>
-                    <SelectRoot
-                      collection={cronCollection}
-                      value={[CRON_PRESET_VALUES.has(alert.schedule?.cron || '') ? (alert.schedule?.cron || '0 9 * * 1') : '__custom__']}
-                      onValueChange={(e) => {
-                        if (e.value[0] !== '__custom__') {
-                          onChange({ schedule: { ...alert.schedule, cron: e.value[0] } });
-                        }
-                      }}
-                      disabled={!editMode}
-                      size="sm"
-                    >
-                      <SelectTrigger bg="bg.surface">
-                        <SelectValueText placeholder="Select schedule" />
-                      </SelectTrigger>
-                      <Portal>
-                        <SelectPositioner>
-                          <SelectContent>
-                            {cronCollection.items.map((item) => (
-                              <SelectItem key={item.value} item={item}>
-                                {item.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </SelectPositioner>
-                      </Portal>
-                    </SelectRoot>
-                  </Box>
-
-                  <Box flex={1}>
-                    <Input
-                      value={alert.schedule?.cron || ''}
-                      onChange={(e) => onChange({ schedule: { ...alert.schedule, cron: e.target.value } })}
-                      placeholder="cron"
-                      disabled={!editMode}
-                      size="sm"
-                      fontFamily="mono"
-                      fontSize="xs"
-                      bg="bg.surface"
-                    />
-                  </Box>
-
-                  <Box flex={1}>
-                    <SelectRoot
-                      collection={timezoneCollection}
-                      value={[alert.schedule?.timezone || 'America/New_York']}
-                      onValueChange={(e) => onChange({ schedule: { ...alert.schedule, timezone: e.value[0] } })}
-                      disabled={!editMode}
-                      size="sm"
-                    >
-                      <SelectTrigger bg="bg.surface">
-                        <SelectValueText placeholder="TZ" />
-                      </SelectTrigger>
-                      <Portal>
-                        <SelectPositioner>
-                          <SelectContent>
-                            {timezoneCollection.items.map((item) => (
-                              <SelectItem key={item.value} item={item}>
-                                {item.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </SelectPositioner>
-                      </Portal>
-                    </SelectRoot>
-                  </Box>
-                </HStack>
-              </Box>
+              <SchedulePicker
+                schedule={{ cron: alert.schedule?.cron || '0 9 * * 1', timezone: alert.schedule?.timezone || 'America/New_York' }}
+                onChange={(s) => onChange({ schedule: s })}
+                editMode={editMode}
+              />
 
               {/* Delivery Card */}
               <DeliveryCard

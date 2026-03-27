@@ -34,16 +34,14 @@ import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { encodeFileStr, decodeFileStr } from '@/lib/api/file-encoding';
 import type { RootState } from '@/store/store';
-import type { AugmentedFile, CompressedAugmentedFile, CompressedFileState, CompressedQueryResult, FileState, QueryResult, QuestionContent, QuestionParameter, FileType, DocumentContent, DbFile, BaseFileContent, QuestionReference } from '@/lib/types';
+import type { AugmentedFile, FileState, QueryResult, QuestionContent, QuestionParameter, FileType, DocumentContent, DbFile, QuestionReference } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
-import type { AppState } from '@/lib/appState';
 import { validateFileState } from '@/lib/validation/content-validators';
 
 export { selectDirtyFiles } from '@/store/filesSlice';
 export { ConflictError } from '@/lib/data/files';
-
-const LIMIT_CHARS = 2_000;
+export { compressAugmentedFile, compressQueryResult } from '@/lib/api/compress-augmented';
 
 /**
  * Extracts the initial inherited params for the root file being augmented.
@@ -270,95 +268,6 @@ export function selectAugmentedFiles(state: RootState, fileIds: number[]): Augme
 
   _augmentedFilesCache.set(key, { state, result });
   return result;
-}
-
-/**
- * Compress an AugmentedFile into a single consistent view for model consumption.
- *
- * - content   = { ...content, ...persistableChanges }  (what editFileStr matches against)
- * - runtimeParameterValues = ephemeralChanges.parameterValues (clearly labeled, never saved)
- * - loading/saving/ephemeralChanges.lastExecuted are dropped (noise for the model)
- */
-/**
- * Sanitize a cell value for use in a GFM markdown table.
- * Order matters: escape backslashes first, then pipes, then collapse newlines.
- *   - `\`  → `\\`  (must be first, otherwise later escapes get double-escaped)
- *   - `|`  → `\|`  (pipe is the column delimiter)
- *   - `\r\n` / `\r` / `\n` → ` ` (newlines inside a cell break the row)
- */
-function mdTableCell(value: string): string {
-  return value
-    .replace(/\\/g, '\\\\')
-    .replace(/\|/g, '\\|')
-    .replace(/\r?\n|\r/g, ' ');
-}
-
-export function compressQueryResult(qr: QueryResult & { error?: string }, maxChars = LIMIT_CHARS): CompressedQueryResult {
-  if ((qr as any).error) {
-    return { columns: [], types: [], data: '', totalRows: 0, truncated: false, id: qr.id, error: (qr as any).error };
-  }
-  const { columns, types, rows } = qr;
-  const totalRows = rows.length;
-
-  const header = `| ${columns.map(mdTableCell).join(' | ')} |`;
-  const sep    = `| ${columns.map(() => '---').join(' | ')} |`;
-  let md = `${header}\n${sep}\n`;
-
-  let truncated = false;
-  for (const row of rows) {
-    const line = `| ${columns.map(c => mdTableCell(String(row[c] ?? ''))).join(' | ')} |\n`;
-    if (md.length + line.length > maxChars) { truncated = true; break; }
-    md += line;
-  }
-
-  return { columns, types, data: md, totalRows, truncated, id: qr.id };
-}
-
-export function compressAugmentedFile(augmented: AugmentedFile): CompressedAugmentedFile {
-  const compressFileState = (fs: FileState): CompressedFileState => {
-    const mergedContent = { ...(fs.content || {}), ...(fs.persistableChanges || {}) } as FileState['content'];
-    const isDirty = !!(
-      (fs.persistableChanges && Object.keys(fs.persistableChanges).length > 0) ||
-      fs.metadataChanges?.name !== undefined ||
-      fs.metadataChanges?.path !== undefined
-    );
-    // Recompute queryResultId from merged content (reflects edits, not just DB state)
-    let queryResultId = fs.queryResultId;
-    if (fs.type === 'question') {
-      const qc = mergedContent as QuestionContent;
-      if (qc?.query && qc?.database_name) {
-        queryResultId = getQueryHash(qc.query, qc.parameterValues || {}, qc.database_name);
-      }
-    }
-    // For context files, strip columns from fullSchema to reduce AppState payload size
-    if (fs.type === 'context' && mergedContent && 'fullSchema' in mergedContent) {
-      const ctx = mergedContent as any;
-      if (Array.isArray(ctx.fullSchema)) {
-        (ctx as any).fullSchema = (ctx.fullSchema as any[]).map((db: any) => ({
-          ...db,
-          schemas: db.schemas?.map((s: any) => ({
-            ...s,
-            tables: s.tables?.map((t: any) => ({ table: t.table })),
-          })),
-        }));
-      }
-    }
-
-    return {
-      id: fs.id,
-      name: fs.metadataChanges?.name ?? fs.name,
-      path: fs.metadataChanges?.path ?? fs.path,
-      type: fs.type as FileType,
-      content: mergedContent,
-      isDirty,
-      ...(queryResultId ? { queryResultId } : {}),
-    };
-  };
-  return {
-    fileState: compressFileState(augmented.fileState),
-    references: augmented.references.map(compressFileState),
-    queryResults: augmented.queryResults.map(qr => compressQueryResult(qr)),
-  };
 }
 
 /**

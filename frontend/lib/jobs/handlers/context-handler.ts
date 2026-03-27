@@ -1,10 +1,12 @@
 import 'server-only';
+import { resolveBaseUrl } from '@/lib/jobs/job-utils';
+import { FilesAPI } from '@/lib/data/files.server';
 import { createServerRunner } from '@/lib/tests/server';
 import type { JobHandler } from '../job-registry';
 import type { ContextContent, ContextOutput, JobHandlerResult, JobRunnerInput } from '@/lib/types';
 
 export const contextJobHandler: JobHandler = {
-  async execute({ file }: JobRunnerInput, user): Promise<JobHandlerResult> {
+  async execute({ file, jobId, runFileId }: JobRunnerInput, user): Promise<JobHandlerResult> {
     const context = file as ContextContent;
     const tests = context.evals ?? [];
 
@@ -14,6 +16,24 @@ export const contextJobHandler: JobHandler = {
     const results = await Promise.all(tests.map(t => runner.execute(t)));
 
     const output: ContextOutput = { results };
-    return { output, messages: [] };
+
+    const messages: JobHandlerResult['messages'] = [];
+    if (context.recipients && context.recipients.length > 0) {
+      const contextFileResult = await FilesAPI.loadFile(parseInt(jobId, 10), user);
+      const contextName = contextFileResult.data?.name ?? `Context ${jobId}`;
+      const baseUrl = await resolveBaseUrl(user.companyId);
+      const link = `${baseUrl}/f/${runFileId}`;
+      const subject = `[Evals] ${contextName}`;
+      const passed = results.filter(r => r.passed).length;
+      const body = `<h2>${contextName}</h2><p>${passed}/${results.length} evals passed.</p><p><a href="${link}">View results</a></p>`;
+
+      for (const recipient of context.recipients) {
+        if (recipient.channel === 'email_alert') {
+          messages.push({ type: 'email_alert', content: body, metadata: { to: recipient.address, subject } });
+        }
+      }
+    }
+
+    return { output, messages };
   },
 };

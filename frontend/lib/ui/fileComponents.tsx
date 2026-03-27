@@ -18,6 +18,7 @@ import SessionContainerV2 from '@/components/containers/SessionContainerV2';
 import ConfigContainerV2 from '@/components/containers/ConfigContainerV2';
 import StylesContainerV2 from '@/components/containers/StylesContainerV2';
 import ReportContainerV2 from '@/components/containers/ReportContainerV2';
+import ReportRunContainerV2 from '@/components/containers/ReportRunContainerV2';
 import AlertContainerV2 from '@/components/containers/AlertContainerV2';
 import AlertRunContainerV2 from '@/components/containers/AlertRunContainerV2';
 import TransformationContainerV2 from '@/components/containers/TransformationContainerV2';
@@ -53,6 +54,7 @@ export const FILE_COMPONENTS: Partial<Record<FileType, ComponentType<FileCompone
   config: ConfigContainerV2,
   styles: StylesContainerV2,
   report: ReportContainerV2,
+  report_run: ReportRunContainerV2,
   alert: AlertContainerV2,
   alert_run: AlertRunContainerV2,
   transformation: TransformationContainerV2,

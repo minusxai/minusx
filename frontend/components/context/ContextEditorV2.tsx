@@ -10,6 +10,9 @@ import { Box, VStack, Heading, HStack, Button, Text, Badge, Menu, Input, Dialog,
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { LuCircleAlert, LuCircleCheck, LuPlus, LuTrash2, LuChevronDown, LuGlobe, LuChevronRight } from 'react-icons/lu';
 import { ContextContent, DatabaseContext, WhitelistItem, ContextVersion, PublishedVersions, DocEntry, Test } from '@/lib/types';
+import { SchedulePicker } from '@/components/shared/SchedulePicker';
+import { DeliveryCard } from '@/components/shared/DeliveryPicker';
+import { StatusBanner } from '@/components/shared/StatusBanner';
 import TestList from '../test/TestList';
 import ContextRunView from '../views/ContextRunView';
 import type { JobRun } from '@/lib/types';
@@ -601,6 +604,17 @@ export default function ContextEditorV2({
         </Box>
       )}
 
+      {/* Status bar: Live/Draft toggle — shown when schedule is configured */}
+      {content.schedule && (
+        <StatusBanner
+          status={content.status ?? 'draft'}
+          label="evals"
+          runLabel="Run Now"
+          editMode={editMode}
+          onChange={(s) => onChange({ status: s })}
+        />
+      )}
+
       {/* Top-level Tabs */}
       <Tabs.Root
         value={topTab}
@@ -1085,6 +1099,18 @@ export default function ContextEditorV2({
                   forcedType="llm"
                   alwaysShowAdd
                   addLabel="Add eval"
+                />
+
+                <SchedulePicker
+                  schedule={{ cron: content.schedule?.cron || '0 9 * * 1', timezone: content.schedule?.timezone || 'America/New_York' }}
+                  onChange={(s) => onChange({ schedule: s })}
+                  editMode={editMode}
+                />
+
+                <DeliveryCard
+                  recipients={content.recipients || []}
+                  onChange={(recipients) => onChange({ recipients })}
+                  disabled={!editMode}
                 />
               </Box>
 

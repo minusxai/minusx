@@ -1,11 +1,11 @@
 import { createSlice, PayloadAction, createSelector } from '@reduxjs/toolkit';
 import type { DbFile, FileType, DocumentContent, AssetReference, QuestionContent, QuestionReference, DatabaseSchema } from '@/lib/types';
-import { getQueryHash } from '@/lib/utils/query-hash';
 import type { FileInfo } from '@/lib/data/types';
 import type { FileAnalyticsSummary, ConversationAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
 import type { RootState } from './store';
 import type { LoadError } from '@/lib/types/errors';
 import { replaceNegativeIdsInContent } from '@/lib/data/helpers/replace-references';
+import { dbFileToFileState } from '@/lib/api/compress-augmented';
 
 // System file types that save in-place and are excluded from bulk Publish.
 // Defined as a Set here (instead of importing from file-metadata) to avoid
@@ -145,22 +145,9 @@ const filesSlice = createSlice({
     }>) {
       const { file, references = [] } = action.payload;
 
-      // Extract references from content
-      const referenceIds = extractReferences(file);
-
       // Store the main file — preserve existing analytics when not explicitly provided
       state.files[file.id] = {
-        ...file,
-        content: stripQueryResultId(file),
-        references: referenceIds,
-        queryResultId: computeQueryResultId(file),
-        loading: false,
-        saving: false,
-        updatedAt: Date.now(),
-        loadError: null,
-        persistableChanges: {},
-        ephemeralChanges: {},
-        metadataChanges: {},
+        ...dbFileToFileState(file),
         analytics: 'analytics' in action.payload
           ? action.payload.analytics
           : state.files[file.id]?.analytics,
@@ -181,20 +168,7 @@ const filesSlice = createSlice({
 
       // Store all referenced files
       references.forEach(ref => {
-        const refReferenceIds = extractReferences(ref);
-        state.files[ref.id] = {
-          ...ref,
-          content: stripQueryResultId(ref),
-          references: refReferenceIds,
-          queryResultId: computeQueryResultId(ref),
-          loading: false,
-          saving: false,
-          updatedAt: Date.now(),
-          loadError: null,
-          persistableChanges: {},
-          ephemeralChanges: {},
-          metadataChanges: {}
-        };
+        state.files[ref.id] = dbFileToFileState(ref);
 
         // Update path index for references
         state.pathIndex[ref.path] = ref.id;
@@ -214,22 +188,12 @@ const filesSlice = createSlice({
 
       // Store all main files
       files.forEach(file => {
-        const referenceIds = file.type === 'folder'
-          ? (state.files[file.id]?.references ?? [])  // preserve children set by setFolderInfo
-          : extractReferences(file);
-        state.files[file.id] = {
-          ...file,
-          content: stripQueryResultId(file),
-          references: referenceIds,
-          queryResultId: computeQueryResultId(file),
-          loading: false,
-          saving: false,
-          updatedAt: Date.now(),
-          loadError: null,
-          persistableChanges: {},
-          ephemeralChanges: {},
-          metadataChanges: {}
-        };
+        const fileState = dbFileToFileState(file);
+        // Folders: preserve children already set by setFolderInfo instead of re-extracting
+        if (file.type === 'folder') {
+          fileState.references = state.files[file.id]?.references ?? [];
+        }
+        state.files[file.id] = fileState;
 
         if (analyticsMap?.[file.id] !== undefined) {
           state.files[file.id].analytics = analyticsMap[file.id];
@@ -241,21 +205,7 @@ const filesSlice = createSlice({
 
       // Store all referenced files
       references.forEach(ref => {
-        const refReferenceIds = extractReferences(ref);
-        state.files[ref.id] = {
-          ...ref,
-          content: stripQueryResultId(ref),
-          references: refReferenceIds,
-          queryResultId: computeQueryResultId(ref),
-          loading: false,
-          saving: false,
-          updatedAt: Date.now(),
-          loadError: null,
-          persistableChanges: {},
-          ephemeralChanges: {},
-          metadataChanges: {}
-        };
-
+        state.files[ref.id] = dbFileToFileState(ref);
         // Update path index for references
         state.pathIndex[ref.path] = ref.id;
       });
@@ -678,20 +628,9 @@ const filesSlice = createSlice({
      */
     addFile(state, action: PayloadAction<DbFile>) {
       const file = action.payload;
-      const referenceIds = extractReferences(file);
 
       // Add the new file
-      state.files[file.id] = {
-        ...file,
-        references: referenceIds,
-        loading: false,
-        saving: false,
-        updatedAt: Date.now(),
-        loadError: null,
-        persistableChanges: {},
-        ephemeralChanges: {},
-        metadataChanges: {}
-      };
+      state.files[file.id] = dbFileToFileState(file);
 
       // Update path index (guard against undefined path)
       if (file.path) {
@@ -884,51 +823,6 @@ const filesSlice = createSlice({
  * Helper: Compute queryResultId for a question file and strip it from content
  * Returns { queryResultId, content } where content has queryResultId removed
  */
-function computeQueryResultId(file: DbFile): string | undefined {
-  if (file.type !== 'question' || !file.content) return undefined;
-  const content = file.content as QuestionContent;
-  if (!content.query || !content.database_name) return undefined;
-  return getQueryHash(content.query, content.parameterValues || {}, content.database_name);
-}
-
-/**
- * Helper: Strip queryResultId from content if present (legacy DB records may have it)
- */
-function stripQueryResultId(file: DbFile): DbFile['content'] {
-  if (file.type !== 'question' || !file.content) return file.content;
-  const { queryResultId: _, ...rest } = file.content as any;
-  return rest as DbFile['content'];
-}
-
-/**
- * Helper: Extract reference IDs from file content
- */
-function extractReferences(file: DbFile): number[] {
-  // Dashboards, presentations, notebooks use content.assets
-  if (file.type === 'dashboard' || file.type === 'presentation' || file.type === 'notebook') {
-    const content = file.content as any;
-    return content.assets
-      ?.filter((a: any) => a.type === 'question')
-      ?.map((a: any) => a.id)
-      .filter((id: any): id is number => typeof id === 'number') || [];
-  }
-
-  // Reports use content.references with nested reference.id
-  if (file.type === 'report') {
-    const content = file.content as any;
-    return content.references
-      ?.map((r: any) => r.reference?.id)
-      .filter((id: any): id is number => typeof id === 'number') || [];
-  }
-
-  // Handle question references
-  if (file.type === 'question') {
-    const content = file.content as QuestionContent;
-    return content.references?.map((ref: QuestionReference) => ref.id) || [];
-  }
-
-  return [];
-}
 
 // Actions
 export const {

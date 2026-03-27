@@ -1,10 +1,14 @@
 'use client';
 
 import { Box, Text, VStack, HStack, Input, Button, Textarea, Flex, Badge, IconButton, Portal } from '@chakra-ui/react';
-import { ReportContent, ReportReference, ReportRunContent } from '@/lib/types';
+import { ReportContent, ReportReference, ReportOutput, RunFileContent, JobRun } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { LuPlay, LuClock, LuMail, LuInfo, LuPlus, LuTrash2, LuFileText, LuGripVertical, LuListChecks, LuHistory } from 'react-icons/lu';
+import { LuPlay, LuClock, LuMail, LuPlus, LuTrash2, LuFileText, LuGripVertical, LuListChecks, LuHistory, LuExternalLink } from 'react-icons/lu';
+import Link from 'next/link';
+import { preserveParams } from '@/lib/navigation/url-utils';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
+import { SchedulePicker } from '@/components/shared/SchedulePicker';
+import { StatusBanner } from '@/components/shared/StatusBanner';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import Markdown from '@/components/Markdown';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
@@ -13,53 +17,22 @@ import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { selectIsDirty } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
 
-interface ReportRun {
-  id: number;
-  name: string;
-  content: ReportRunContent;
-}
-
 interface ReportViewProps {
   report: ReportContent;
   fileId: number;
   isRunning: boolean;
-  runs?: ReportRun[];
+  runs?: JobRun[];
   selectedRunId?: number | null;
+  /** Run file content (RunFileContent) for the selected run, loaded by the container */
+  runFileContent?: RunFileContent | null;
+  /** File ID of the selected run file, for navigation link */
+  runFileId?: number;
 
   onChange: (updates: Partial<ReportContent>) => void;
   onRunNow: () => Promise<void>;
   onSelectRun?: (runId: number | null) => void;
 }
 
-// Common cron presets
-const CRON_PRESETS = [
-  { value: '0 9 * * *', label: 'Daily at 9am' },
-  { value: '0 9 * * 1', label: 'Weekly on Monday' },
-  { value: '0 9 * * 1-5', label: 'Weekdays at 9am' },
-  { value: '0 9 1 * *', label: 'Monthly on 1st' },
-  { value: '0 17 * * 5', label: 'Fridays at 5pm' },
-];
-
-const cronCollection = createListCollection({
-  items: CRON_PRESETS.map(p => ({ value: p.value, label: p.label }))
-});
-
-// Common timezones
-const TIMEZONES = [
-  { value: 'America/New_York', label: 'ET' },
-  { value: 'America/Chicago', label: 'CT' },
-  { value: 'America/Denver', label: 'MT' },
-  { value: 'America/Los_Angeles', label: 'PT' },
-  { value: 'UTC', label: 'UTC' },
-  { value: 'Europe/London', label: 'GMT' },
-  { value: 'Europe/Paris', label: 'CET' },
-  { value: 'Asia/Tokyo', label: 'JST' },
-  { value: 'Asia/Kolkata', label: 'IST' },
-];
-
-const timezoneCollection = createListCollection({
-  items: TIMEZONES.map(tz => ({ value: tz.value, label: tz.label }))
-});
 
 const referenceTypeCollection = createListCollection({
   items: [
@@ -74,10 +47,13 @@ export default function ReportView({
   isRunning,
   runs = [],
   selectedRunId,
+  runFileContent,
+  runFileId,
   onChange,
   onRunNow,
   onSelectRun
 }: ReportViewProps) {
+  const reportOutput = runFileContent?.output as ReportOutput | undefined;
   // editMode, viewMode, and isDirty sourced from Redux (managed by FileHeader)
   const editMode = useAppSelector(state => selectFileEditMode(state, fileId));
   const activeTab = useAppSelector(state => selectFileViewMode(state, fileId));
@@ -185,7 +161,7 @@ export default function ReportView({
   const runsCollection = useMemo(() => createListCollection({
     items: runs.map(r => ({
       value: r.id.toString(),
-      label: new Date(r.content.startedAt).toLocaleString()
+      label: new Date(r.created_at).toLocaleString()
     }))
   }), [runs]);
 
@@ -209,18 +185,17 @@ export default function ReportView({
     onChange({ references: newReferences });
   }, [onChange, report.references]);
 
-  // Get selected run
-  const selectedRun = runs.find(r => r.id === selectedRunId);
 
   return (
     <Box display="flex" flexDirection="column" overflow="hidden" flex="1" minH="0" fontFamily="mono">
-      {/* Cron not active info banner */}
-      <HStack gap={2} px={4} py={2} bg="yellow.subtle" borderBottomWidth="1px" borderColor="yellow.muted"  borderRadius={"md"}>
-        <LuInfo size={14} color="var(--chakra-colors-yellow-fg)" />
-        <Text fontSize="xs" color="yellow.fg">
-          Scheduled runs are not active yet. Use <strong>Run Now</strong> to generate a report.
-        </Text>
-      </HStack>
+      {/* Status bar: Live/Draft toggle */}
+      <StatusBanner
+        status={report.status ?? 'draft'}
+        label="report"
+        runLabel="Run Now"
+        editMode={editMode}
+        onChange={(s) => onChange({ status: s })}
+      />
 
       {/* JSON View */}
       {activeTab === 'json' && (
@@ -256,93 +231,11 @@ export default function ReportView({
           >
             <VStack gap={3} align="stretch" p={4}>
               {/* Schedule Card */}
-              <Box
-                position="relative"
-                bg="bg.muted"
-                borderRadius="md"
-                border="1px solid"
-                borderColor="border.muted"
-                p={3}
-                pl={5}
-                overflow="hidden"
-              >
-                <Box position="absolute" left={0} top={0} bottom={0} width="3px" bg="accent.teal" borderLeftRadius="md" />
-                <HStack mb={2} gap={1.5}>
-                  <LuClock size={14} color="var(--chakra-colors-accent-teal)" />
-                  <Text fontWeight="700" fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Schedule</Text>
-                </HStack>
-
-                <HStack gap={2}>
-                  <Box flex={2}>
-                    <SelectRoot
-                      collection={cronCollection}
-                      value={[report.schedule?.cron || '0 9 * * 1']}
-                      onValueChange={(e) => onChange({
-                        schedule: { ...report.schedule, cron: e.value[0] }
-                      })}
-                      disabled={!editMode}
-                      size="sm"
-                    >
-                      <SelectTrigger bg="bg.surface">
-                        <SelectValueText placeholder="Select schedule" />
-                      </SelectTrigger>
-                      <Portal>
-                        <SelectPositioner>
-                          <SelectContent>
-                            {cronCollection.items.map((item) => (
-                              <SelectItem key={item.value} item={item}>
-                                {item.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </SelectPositioner>
-                      </Portal>
-                    </SelectRoot>
-                  </Box>
-
-                  <Box flex={1}>
-                    <Input
-                      value={report.schedule?.cron || ''}
-                      onChange={(e) => onChange({
-                        schedule: { ...report.schedule, cron: e.target.value }
-                      })}
-                      placeholder="cron"
-                      disabled={!editMode}
-                      size="sm"
-                      fontFamily="mono"
-                      fontSize="xs"
-                      bg="bg.surface"
-                    />
-                  </Box>
-
-                  <Box flex={1}>
-                    <SelectRoot
-                      collection={timezoneCollection}
-                      value={[report.schedule?.timezone || 'America/New_York']}
-                      onValueChange={(e) => onChange({
-                        schedule: { ...report.schedule, timezone: e.value[0] }
-                      })}
-                      disabled={!editMode}
-                      size="sm"
-                    >
-                      <SelectTrigger bg="bg.surface">
-                        <SelectValueText placeholder="TZ" />
-                      </SelectTrigger>
-                      <Portal>
-                        <SelectPositioner>
-                          <SelectContent>
-                            {timezoneCollection.items.map((item) => (
-                              <SelectItem key={item.value} item={item}>
-                                {item.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </SelectPositioner>
-                      </Portal>
-                    </SelectRoot>
-                  </Box>
-                </HStack>
-              </Box>
+              <SchedulePicker
+                schedule={{ cron: report.schedule?.cron || '0 9 * * 1', timezone: report.schedule?.timezone || 'America/New_York' }}
+                onChange={(s) => onChange({ schedule: s })}
+                editMode={editMode}
+              />
 
               {/* Analysis Card */}
               <Box
@@ -706,19 +599,26 @@ export default function ReportView({
                 <VStack gap={4} align="center" justify="center" h="100%">
                   <Text color="fg.muted">Running report...</Text>
                 </VStack>
-              ) : selectedRun ? (
+              ) : runFileContent ? (
                 <VStack align="stretch" gap={3}>
                   <HStack justify="space-between">
-                    <Badge
-                      colorPalette={selectedRun.content.status === 'success' ? 'green' : selectedRun.content.status === 'failed' ? 'red' : 'yellow'}
-                    >
-                      {selectedRun.content.status}
-                    </Badge>
-                    <Text fontSize="xs" color="fg.muted">
-                      {new Date(selectedRun.content.startedAt).toLocaleString()}
-                    </Text>
+                    <HStack gap={2}>
+                      <Badge
+                        colorPalette={runFileContent.status === 'success' ? 'green' : runFileContent.status === 'failure' ? 'red' : 'yellow'}
+                      >
+                        {runFileContent.status}
+                      </Badge>
+                      <Text fontSize="xs" color="fg.muted">
+                        {new Date(runFileContent.startedAt).toLocaleString()}
+                      </Text>
+                    </HStack>
+                    {runFileId && (
+                      <Link href={preserveParams(`/f/${runFileId}`)} style={{ opacity: 0.5 }}>
+                        <LuExternalLink size={14} />
+                      </Link>
+                    )}
                   </HStack>
-                  {selectedRun.content.generatedReport && (
+                  {reportOutput?.generatedReport && (
                     <Box
                       p={4}
                       bg="bg.muted"
@@ -726,14 +626,14 @@ export default function ReportView({
                       overflow="auto"
                       maxH="none"
                     >
-                      <Markdown queries={selectedRun.content.queries}>
-                        {selectedRun.content.generatedReport}
+                      <Markdown queries={reportOutput.queries}>
+                        {reportOutput.generatedReport}
                       </Markdown>
                     </Box>
                   )}
-                  {selectedRun.content.error && (
+                  {runFileContent.error && (
                     <Box p={3} bg="red.subtle" borderRadius="md" color="red.fg">
-                      <Text fontSize="sm">{selectedRun.content.error}</Text>
+                      <Text fontSize="sm">{runFileContent.error}</Text>
                     </Box>
                   )}
                 </VStack>
