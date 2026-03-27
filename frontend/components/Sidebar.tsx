@@ -1,11 +1,11 @@
 'use client';
 
-import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuLifeBuoy, LuGithub, LuPlus } from 'react-icons/lu';
+import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuPlus, LuEllipsisVertical, LuSun, LuMoon } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
-import { Box, Flex, VStack, HStack, Text, IconButton, Icon } from '@chakra-ui/react';
+import { Box, Flex, VStack, HStack, Text, IconButton, Icon, Menu } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
 import { Link } from '@/components/ui/Link';
-import { ReactNode, useMemo } from 'react';
+import { Fragment, ReactNode, useMemo, useState, useEffect } from 'react';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { signOut } from 'next-auth/react';
@@ -14,7 +14,7 @@ import CreateMenu from './CreateMenu';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { selectFile } from '@/store/filesSlice';
-import { toggleLeftSidebar, selectShowDebug } from '@/store/uiSlice';
+import { toggleLeftSidebar, selectShowDebug, selectShowAdvanced, toggleColorMode } from '@/store/uiSlice';
 import { APP_VERSION } from '@/lib/constants';
 import { exitImpersonation } from '@/lib/navigation/url-utils';
 import { isAdmin } from '@/lib/auth/role-helpers';
@@ -39,8 +39,8 @@ function NavItem({ href, icon, label, isCollapsed, isActive }: NavItemProps) {
           py={2}
           borderRadius="md"
           cursor="pointer"
-          bg={isActive ? 'bg.muted' : 'transparent'}
-          borderWidth="1px"
+          bg={isActive ? 'bg.transparent' : 'transparent'}
+          borderWidth="2px"
           borderColor={isActive ? 'accent.teal' : 'transparent'}
           _hover={{ bg: 'bg.muted' }}
           transition="all 0.2s"
@@ -74,10 +74,17 @@ export default function Sidebar() {
   const dispatch = useAppDispatch();
   const isCollapsed = useAppSelector((state) => state.ui.leftSidebarCollapsed);
   const showDebug = useAppSelector(selectShowDebug);
+  const showAdvanced = useAppSelector(selectShowAdvanced);
+  const colorMode = useAppSelector((state) => state.ui.colorMode);
   const pathname = usePathname();
   const { navigate } = useNavigationGuard();
   const searchParams = useSearchParams();
   const effectiveUser = useAppSelector(selectEffectiveUser);
+
+  // Avoid hydration mismatch: showAdvanced is false on server, may be true on client after localStorage restore
+  const [mounted, setMounted] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setMounted(true); }, []);
 
   // Check for impersonation - safe for SSR
   const isImpersonating = searchParams?.has('as_user') ?? false;
@@ -297,25 +304,27 @@ export default function Sidebar() {
               ))}
               {/* Section Action Buttons (expanded only) */}
               {!isCollapsed && section.actions && section.actions.length > 0 && (
-                <Flex gap={1} px={3} py={1} flexWrap="wrap">
-                  {section.actions.map((action) => (
-                    <Box
-                      key={action.fileType}
-                      as="button"
-                      fontSize="2xs"
-                      color="fg.muted"
-                      fontFamily="mono"
-                      cursor="pointer"
-                      _hover={{ color: 'accent.teal' }}
-                      transition="color 0.2s"
-                      onClick={() => navigate(`/new/${action.fileType}?folder=${encodeURIComponent(currentPath)}`)}
-                      display="flex"
-                      alignItems="center"
-                      gap={0.5}
-                    >
-                      <LuPlus size={10} />
-                      {action.label}
-                    </Box>
+                <Flex gap={2} px={3} py={1} flexWrap="wrap" alignItems="center">
+                  {section.actions.map((action, i) => (
+                    <Fragment key={action.fileType}>
+                      {i > 0 && <Text fontSize="2xs" color="fg.muted" lineHeight={1}>&middot;</Text>}
+                      <Box
+                        as="button"
+                        fontSize="2xs"
+                        color="fg.muted"
+                        fontFamily="mono"
+                        cursor="pointer"
+                        _hover={{ color: 'accent.teal' }}
+                        transition="color 0.2s"
+                        onClick={() => navigate(`/new/${action.fileType}?folder=${encodeURIComponent(currentPath)}`)}
+                        display="flex"
+                        alignItems="center"
+                        gap={0.5}
+                      >
+                        <LuPlus size={10} />
+                        {action.label}
+                      </Box>
+                    </Fragment>
                   ))}
                 </Flex>
               )}
@@ -343,8 +352,8 @@ export default function Sidebar() {
           </Flex>
         )}
 
-        {/* Impersonation Selector (Admin only, when expanded) */}
-        {!isCollapsed && effectiveUser?.role && isAdmin(effectiveUser.role) && (
+        {/* Impersonation Selector (Admin + Advanced only, when expanded, after mount to avoid hydration mismatch) */}
+        {mounted && !isCollapsed && showAdvanced && effectiveUser?.role && isAdmin(effectiveUser.role) && (
           <Box
             px={4}
             py={3}
@@ -357,33 +366,51 @@ export default function Sidebar() {
           </Box>
         )}
 
-        {/* User Info & Logout Box */}
-        <Box
-          borderBottom="1px solid"
-          borderColor="border.default"
-        >
-          {/* User Info (when expanded) */}
-          {!isCollapsed && (
-            <Box
-              px={4}
-              pt={3}
-              pb={2}
-              opacity={isCollapsed ? 0 : 1}
-              transition="opacity 0.2s"
-            >
-              <HStack justify="space-between" align="start">
-                <Box flex={1}>
-                  <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" mb={0.5}>
-                    Signed in as
-                  </Text>
-                  <Text fontSize="xs" color="fg.default" fontFamily="mono" fontWeight="600" truncate>
-                    {effectiveUser?.email || effectiveUser?.name}
-                  </Text>
-                </Box>
-                {isImpersonating && (
+        {/* User Menu */}
+        <Box borderTop="1px solid" borderColor="border.default">
+          <Menu.Root positioning={{ placement: isCollapsed ? 'right-end' : 'top-start' }}>
+            <Menu.Trigger asChild>
+              <Flex
+                align="center"
+                gap={3}
+                px={isCollapsed ? 0 : 4}
+                py={3}
+                justify={isCollapsed ? 'center' : 'flex-start'}
+                cursor="pointer"
+                _hover={{ bg: 'bg.muted' }}
+                transition="background 0.2s"
+              >
+                <Flex
+                  align="center"
+                  justify="center"
+                  w={8}
+                  h={8}
+                  borderRadius="full"
+                  bg="accent.teal"
+                  color="white"
+                  flexShrink={0}
+                  fontSize="sm"
+                  fontWeight="700"
+                >
+                  {(effectiveUser?.name || effectiveUser?.email || '?').charAt(0).toUpperCase()}
+                </Flex>
+                {!isCollapsed && (
+                  <Box flex={1} minW={0}>
+                    <Text fontSize="sm" color="fg.default" fontFamily="mono" fontWeight="600" truncate>
+                      {effectiveUser?.name || effectiveUser?.email}
+                    </Text>
+                    <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" truncate>
+                      {effectiveUser?.email}
+                    </Text>
+                  </Box>
+                )}
+                {!isCollapsed && (
+                  <Icon as={LuEllipsisVertical} boxSize={4} color="fg.muted" flexShrink={0} />
+                )}
+                {isImpersonating && !isCollapsed && (
                   <Tooltip content="Exit impersonation">
                     <IconButton
-                      onClick={exitImpersonation}
+                      onClick={(e) => { e.stopPropagation(); exitImpersonation(); }}
                       size="xs"
                       variant="ghost"
                       colorPalette="orange"
@@ -393,149 +420,133 @@ export default function Sidebar() {
                     </IconButton>
                   </Tooltip>
                 )}
-              </HStack>
-            </Box>
-          )}
+              </Flex>
+            </Menu.Trigger>
+            <Menu.Positioner zIndex={200}>
+              <Menu.Content minW="220px" p={2} bg="bg.surface" shadow="lg" borderRadius="lg" fontFamily="mono">
+                {/* User info header */}
+                <Box px={3} py={2} mb={1}>
+                  <Text fontSize="xs" color="fg.subtle" fontFamily="mono">Signed in as</Text>
+                  <Text fontSize="sm" fontWeight="600" fontFamily="mono" truncate>
+                    {effectiveUser?.email || effectiveUser?.name}
+                  </Text>
+                </Box>
+                <Box h="1px" bg="border.muted" my={1} />
 
-          {/* Settings Button */}
-          <Flex
-            align="center"
-            gap={3}
-            px={isCollapsed ? 0 : 4}
-            py={4}
-            justify={isCollapsed ? 'center' : 'space-between'}
-            _hover={{ bg: 'bg.muted' }}
-            transition="background 0.2s"
-            cursor="pointer"
-            onClick={() => navigate('/settings')}
-            >
-            {!isCollapsed && (
-                <Text
-                  fontSize="sm"
-                  color="fg.default"
-                  fontFamily="mono"
-                  opacity={isCollapsed ? 0 : 1}
-                  transition="opacity 0.2s"
+                {/* Settings */}
+                <Menu.Item
+                  value="settings"
+                  cursor="pointer"
+                  borderRadius="md"
+                  px={3}
+                  py={2}
+                  _hover={{ bg: 'bg.muted' }}
+                  onClick={() => navigate('/settings')}
                 >
-                Settings
-                </Text>
-            )}
-            <Icon as={LuSettings} boxSize={4} color={"accent.teal"} />
-          </Flex>
+                  <HStack gap={3}>
+                    <Icon as={LuSettings} boxSize={4} color="accent.teal" />
+                    <Text fontWeight="500" fontSize="sm">Settings</Text>
+                  </HStack>
+                </Menu.Item>
 
-          {/* Logout Button */}
-          <Flex
-            align="center"
-            gap={3}
-            px={isCollapsed ? 0 : 4}
-            py={3}
-            justify={isCollapsed ? 'center' : 'space-between'}
-            cursor="pointer"
-            _hover={{ bg: 'bg.muted' }}
-            transition="background 0.2s"
-            onClick={() => {
-              const redirectUrl = `${window.location.origin}/login`;
-              console.log('[Sidebar] Signing out, redirectTo:', redirectUrl);
-              analytics.captureEvent(AnalyticsEvents.USER_SIGNED_OUT);
-              analytics.reset();
-              signOut({ callbackUrl: redirectUrl, redirect:false, redirectTo: redirectUrl }).then(() => {
-                window.location.href = redirectUrl; // Ensure redirect after sign out
-              });
-            }}
-          >
-            {!isCollapsed && (
-              <Text
-                fontSize="sm"
-                color="fg.default"
-                fontFamily="mono"
-                opacity={isCollapsed ? 0 : 1}
-                transition="opacity 0.2s"
-              >
-                Logout
-              </Text>
-            )}
-            <Icon as={LuLogOut} boxSize={4} color="accent.danger" />
-          </Flex>
+                {/* Dark/Light Mode Toggle */}
+                <Menu.Item
+                  value="theme"
+                  cursor="pointer"
+                  borderRadius="md"
+                  px={3}
+                  py={2}
+                  _hover={{ bg: 'bg.muted' }}
+                  onClick={() => dispatch(toggleColorMode())}
+                  closeOnSelect={false}
+                >
+                  <HStack gap={3}>
+                    <Icon as={colorMode === 'dark' ? LuSun : LuMoon} boxSize={4} color="accent.teal" />
+                    <Text fontWeight="500" fontSize="sm">{colorMode === 'dark' ? 'Light Mode' : 'Dark Mode'}</Text>
+                  </HStack>
+                </Menu.Item>
+
+                <Box h="1px" bg="border.muted" my={1} />
+
+                {/* External links */}
+                <Menu.Item
+                  value="docs"
+                  cursor="pointer"
+                  borderRadius="md"
+                  px={3}
+                  py={2}
+                  _hover={{ bg: 'bg.muted' }}
+                  onClick={() => window.open(config.links.docsUrl, '_blank')}
+                >
+                  <HStack gap={3}>
+                    <Icon as={LuFileText} boxSize={4} color="accent.teal" />
+                    <Text fontWeight="500" fontSize="sm">Docs</Text>
+                  </HStack>
+                </Menu.Item>
+                <Menu.Item
+                  value="support"
+                  cursor="pointer"
+                  borderRadius="md"
+                  px={3}
+                  py={2}
+                  _hover={{ bg: 'bg.muted' }}
+                  onClick={() => window.open(config.links.supportUrl, '_blank')}
+                >
+                  <HStack gap={3}>
+                    <Icon as={LuHeadset} boxSize={4} color="accent.teal" />
+                    <Text fontWeight="500" fontSize="sm">Support</Text>
+                  </HStack>
+                </Menu.Item>
+                <Menu.Item
+                  value="github"
+                  cursor="pointer"
+                  borderRadius="md"
+                  px={3}
+                  py={2}
+                  _hover={{ bg: 'bg.muted' }}
+                  onClick={() => window.open(config.links.githubIssuesUrl, '_blank')}
+                >
+                  <HStack gap={3}>
+                    <Icon as={LuGithub} boxSize={4} color="accent.teal" />
+                    <Text fontWeight="500" fontSize="sm">GitHub Issues</Text>
+                  </HStack>
+                </Menu.Item>
+
+                <Box h="1px" bg="border.muted" my={1} />
+
+                {/* Logout */}
+                <Menu.Item
+                  value="logout"
+                  cursor="pointer"
+                  borderRadius="md"
+                  px={3}
+                  py={2}
+                  _hover={{ bg: 'bg.muted' }}
+                  onClick={() => {
+                    const redirectUrl = `${window.location.origin}/login`;
+                    analytics.captureEvent(AnalyticsEvents.USER_SIGNED_OUT);
+                    analytics.reset();
+                    signOut({ callbackUrl: redirectUrl, redirect: false, redirectTo: redirectUrl }).then(() => {
+                      window.location.href = redirectUrl;
+                    });
+                  }}
+                >
+                  <HStack gap={3}>
+                    <Icon as={LuLogOut} boxSize={4} color="accent.danger" />
+                    <Text fontWeight="500" fontSize="sm" color="accent.danger">Logout</Text>
+                  </HStack>
+                </Menu.Item>
+
+                {/* Version */}
+                <Box px={3} py={2} mt={1}>
+                  <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">
+                    {displayName} v{APP_VERSION}
+                  </Text>
+                </Box>
+              </Menu.Content>
+            </Menu.Positioner>
+          </Menu.Root>
         </Box>
-
-
-        {/* External Links */}
-        <HStack
-          justify={isCollapsed ? 'center' : 'space-around'}
-          py={3}
-          borderTop="1px solid"
-          borderColor="border.muted"
-        >
-          <Tooltip content="Docs" positioning={{ placement: 'top' }}>
-            <a href={config.links.docsUrl} target="_blank" rel="noopener noreferrer">
-              <IconButton
-                variant="ghost"
-                size="sm"
-                color="fg.muted"
-                _hover={{ color: 'accent.teal' }}
-                aria-label="Docs"
-              >
-                <LuFileText />
-              </IconButton>
-            </a>
-          </Tooltip>
-          <Tooltip content="Support" positioning={{ placement: 'top' }}>
-            <a href={config.links.supportUrl} target="_blank" rel="noopener noreferrer">
-              <IconButton
-                variant="ghost"
-                size="sm"
-                color="fg.muted"
-                _hover={{ color: 'accent.teal' }}
-                aria-label="Support"
-              >
-                <LuLifeBuoy />
-              </IconButton>
-            </a>
-          </Tooltip>
-          <Tooltip content="GitHub Issues" positioning={{ placement: 'top' }}>
-            <a href={config.links.githubIssuesUrl} target="_blank" rel="noopener noreferrer">
-              <IconButton
-                variant="ghost"
-                size="sm"
-                color="fg.muted"
-                _hover={{ color: 'accent.teal' }}
-                aria-label="GitHub Issues"
-              >
-                <LuGithub />
-              </IconButton>
-            </a>
-          </Tooltip>
-        </HStack>
-
-        {/* Version */}
-        {!isCollapsed && (
-          <Box
-            px={4}
-            py={3}
-            borderTop="1px solid"
-            borderColor="border.muted"
-            opacity={isCollapsed ? 0 : 1}
-            transition="opacity 0.2s"
-          >
-            <Text fontSize="xs" color="fg.subtle" fontFamily="mono">
-              {displayName} v{APP_VERSION}
-            </Text>
-          </Box>
-        )}
-        {isCollapsed && (
-          <Box
-            px={4}
-            py={3}
-            borderTop="1px solid"
-            borderColor="border.muted"
-            opacity={isCollapsed ? 0 : 1}
-            transition="opacity 0.2s"
-          >
-            <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">
-              v{APP_VERSION}
-            </Text>
-          </Box>
-        )}
       </Box>
 
     </Box>

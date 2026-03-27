@@ -5,7 +5,7 @@ import { Box, VStack, Text, Flex, Switch, Button, Heading, Container, Tabs } fro
 import { LuRefreshCw } from 'react-icons/lu';
 import { ColorModeButton } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { setAskForConfirmation, setShowDebug, setShowJson, setShowAllErrorToasts } from '@/store/uiSlice';
+import { setAskForConfirmation, setShowDebug, setShowJson, setShowAllErrorToasts, setShowAdvanced } from '@/store/uiSlice';
 import RecordingControl from '@/components/RecordingControl';
 import DataManagementSection from '@/components/DataManagementSection';
 import { ChannelsSection } from '@/components/settings/ChannelsSection';
@@ -126,7 +126,7 @@ export default function SettingsPage() {
   const showAllErrorToasts = useAppSelector((state) => state.ui.showAllErrorToasts);
   const user = useAppSelector((state) => state.auth.user);
   const [isClearing, setIsClearing] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const showAdvanced = useAppSelector((state) => state.ui.showAdvanced);
 
   const searchParams = useSearchParams();
   const initialTab = (searchParams?.get('tab') as TabId) || 'general';
@@ -195,7 +195,7 @@ export default function SettingsPage() {
       control: (
         <SwitchControl
           checked={showAdvanced}
-          onChange={setShowAdvanced}
+          onChange={(checked) => dispatch(setShowAdvanced(checked))}
         />
       ),
       visible: isAdmin,
