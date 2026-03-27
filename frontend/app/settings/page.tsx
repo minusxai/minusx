@@ -9,13 +9,19 @@ import { setAskForConfirmation, setShowDebug, setShowJson, setShowAllErrorToasts
 import RecordingControl from '@/components/RecordingControl';
 import DataManagementSection from '@/components/DataManagementSection';
 import { ChannelsSection } from '@/components/settings/ChannelsSection';
+import UsersContent from '@/components/UsersContent';
+import ConfigContainerV2 from '@/components/containers/ConfigContainerV2';
+import StylesContainerV2 from '@/components/containers/StylesContainerV2';
 import { toaster } from '@/components/ui/toaster';
 import { switchMode } from '@/lib/mode/mode-utils';
 import Breadcrumb from '@/components/Breadcrumb';
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import { API } from '@/lib/api/declarations';
+import { useSearchParams } from 'next/navigation';
+import { useFileByPath } from '@/lib/hooks/file-state-hooks';
+import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 
-type TabId = 'general' | 'dev' | 'data' | 'messaging';
+type TabId = 'general' | 'dev' | 'data' | 'users' | 'configs' | 'styles' | 'messaging';
 
 interface SettingEntry {
   tab: TabId;
@@ -71,6 +77,47 @@ function SwitchControl({ checked, onChange }: { checked: boolean; onChange: (che
   );
 }
 
+/** Loads a file by path and renders the given container component inline */
+function FileTabContent({ path, Container, createFolder, createType }: {
+  path: string;
+  Container: React.ComponentType<{ fileId: number }>;
+  createFolder: string;
+  createType: string;
+}) {
+  const { file, loading } = useFileByPath(path);
+  const { navigate } = useNavigationGuard();
+
+  if (loading) {
+    return (
+      <Box p={8} textAlign="center">
+        <Text color="fg.muted">Loading...</Text>
+      </Box>
+    );
+  }
+
+  if (!file) {
+    return (
+      <Box p={8} textAlign="center">
+        <Text color="fg.muted" mb={4}>No file found at {path}.</Text>
+        <Button
+          bg="accent.teal"
+          color="white"
+          size="sm"
+          onClick={() => navigate(`/new/${createType}?folder=${encodeURIComponent(createFolder)}`)}
+        >
+          Create {createType.charAt(0).toUpperCase() + createType.slice(1)}
+        </Button>
+      </Box>
+    );
+  }
+
+  return (
+    <Box h="70vh">
+      <Container fileId={file.fileState.id} />
+    </Box>
+  );
+}
+
 export default function SettingsPage() {
   const dispatch = useAppDispatch();
   const askForConfirmation = useAppSelector((state) => state.ui.askForConfirmation);
@@ -79,9 +126,17 @@ export default function SettingsPage() {
   const showAllErrorToasts = useAppSelector((state) => state.ui.showAllErrorToasts);
   const user = useAppSelector((state) => state.auth.user);
   const [isClearing, setIsClearing] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const searchParams = useSearchParams();
+  const initialTab = (searchParams?.get('tab') as TabId) || 'general';
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab);
+
+  const mode = user?.mode || 'org';
 
   const isAdmin = user?.role === 'admin';
-  const showDebugOption = isAdmin;
+  const isAdvancedAdmin = isAdmin && showAdvanced;
+  const showDebugOption = isAdvancedAdmin;
 
   const handleClearCache = async () => {
     setIsClearing(true);
@@ -135,18 +190,15 @@ export default function SettingsPage() {
     },
     {
       tab: 'general',
-      title: 'Mode',
-      description: `Current: ${user?.mode || 'org'}`,
+      title: 'Advanced',
+      description: 'Show advanced tabs: Configs, Styles, Dev, and Data Management',
       control: (
-        <Flex gap={2}>
-          <Button size="sm" variant={user?.mode === 'org' ? 'solid' : 'outline'} onClick={() => switchMode('org')}>
-            Org
-          </Button>
-          <Button size="sm" variant={user?.mode === 'tutorial' ? 'solid' : 'outline'} onClick={() => switchMode('tutorial')}>
-            Tutorial
-          </Button>
-        </Flex>
+        <SwitchControl
+          checked={showAdvanced}
+          onChange={setShowAdvanced}
+        />
       ),
+      visible: isAdmin,
     },
     {
       tab: 'dev',
@@ -186,6 +238,21 @@ export default function SettingsPage() {
     },
     {
       tab: 'dev',
+      title: 'Mode',
+      description: `Current: ${user?.mode || 'org'}`,
+      control: (
+        <Flex gap={2}>
+          <Button size="sm" variant={user?.mode === 'org' ? 'solid' : 'outline'} onClick={() => switchMode('org')}>
+            Org
+          </Button>
+          <Button size="sm" variant={user?.mode === 'tutorial' ? 'solid' : 'outline'} onClick={() => switchMode('tutorial')}>
+            Tutorial
+          </Button>
+        </Flex>
+      ),
+    },
+    {
+      tab: 'dev',
       title: 'Session Recording',
       description: 'Record your session for debugging and support',
       control: <RecordingControl />,
@@ -201,12 +268,39 @@ export default function SettingsPage() {
         </Button>
       ),
     },
-  ], [askForConfirmation, showDebug, showJson, showAllErrorToasts, showDebugOption, isClearing, user?.mode, dispatch, handleClearCache]);
+  ], [askForConfirmation, showDebug, showJson, showAllErrorToasts, showDebugOption, isClearing, user?.mode, dispatch, handleClearCache, showAdvanced, isAdmin]);
 
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [
     { id: 'general', label: 'General' },
-    { id: 'dev', label: 'Dev', visible: isAdmin },
+    { id: 'users', label: 'Users', visible: isAdmin, custom: <UsersContent /> },
+    {
+      id: 'configs',
+      label: 'Configs',
+      visible: isAdvancedAdmin,
+      custom: (
+        <FileTabContent
+          path={`/${mode}/configs/config`}
+          Container={ConfigContainerV2}
+          createFolder={`/${mode}/configs`}
+          createType="config"
+        />
+      ),
+    },
+    {
+      id: 'styles',
+      label: 'Styles',
+      visible: isAdvancedAdmin,
+      custom: (
+        <FileTabContent
+          path={`/${mode}/configs/styles`}
+          Container={StylesContainerV2}
+          createFolder={`/${mode}/configs`}
+          createType="styles"
+        />
+      ),
+    },
+    { id: 'dev', label: 'Dev', visible: isAdvancedAdmin },
     {
       id: 'messaging',
       label: 'Messaging',
@@ -220,14 +314,14 @@ export default function SettingsPage() {
     {
       id: 'data',
       label: 'Data Management',
-      visible: isAdmin,
+      visible: isAdvancedAdmin,
       custom: (
         <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
           <DataManagementSection />
         </Box>
       ),
     },
-  ], [isAdmin]);
+  ], [isAdmin, isAdvancedAdmin, mode]);
 
   const breadcrumbItems = [
     { label: 'Home', href: '/' },
@@ -239,6 +333,7 @@ export default function SettingsPage() {
   }
 
   const visibleTabs = tabs.filter((t) => t.visible !== false);
+  const needsWideLayout = activeTab === 'users';
 
   const renderTabContent = (tab: TabEntry) => {
     if (tab.custom) return tab.custom;
@@ -257,7 +352,7 @@ export default function SettingsPage() {
 
   return (
     <Box minH="100vh" bg="bg.canvas">
-      <Container maxW="container.md" py={{ base: 4, md: 8 }} px={{ base: 4, md: 8 }}>
+      <Container maxW={needsWideLayout ? 'container.xl' : 'container.md'} py={{ base: 4, md: 8 }} px={{ base: 4, md: 8 }} transition="max-width 0.2s">
         <Breadcrumb items={breadcrumbItems} />
 
         <Heading
@@ -271,7 +366,12 @@ export default function SettingsPage() {
           Settings
         </Heading>
 
-        <Tabs.Root defaultValue="general" variant="line" colorPalette="teal">
+        <Tabs.Root
+          value={activeTab}
+          onValueChange={(details) => setActiveTab(details.value as TabId)}
+          variant="line"
+          colorPalette="teal"
+        >
           <Tabs.List mb={6}>
             {visibleTabs.map((tab) => (
               <Tabs.Trigger key={tab.id} value={tab.id} fontFamily="mono" fontSize="sm">

@@ -1,6 +1,6 @@
 'use client';
 
-import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuLifeBuoy, LuGithub } from 'react-icons/lu';
+import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuLifeBuoy, LuGithub, LuPlus } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { Box, Flex, VStack, HStack, Text, IconButton, Icon } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -118,7 +118,8 @@ export default function Sidebar() {
   const homeItem = { href: '/', icon: <LuHouse />, label: 'Home' };
 
   type NavItem = { href: string; icon: React.ReactElement; label: string; adminOnly?: boolean };
-  type NavSection = { category: string; items: NavItem[] };
+  type NavAction = { label: string; fileType: string; adminOnly?: boolean };
+  type NavSection = { category: string; items: NavItem[]; actions?: NavAction[] };
 
   // Get user mode for mode-aware navigation
   const mode = effectiveUser?.mode || 'org';
@@ -128,19 +129,19 @@ export default function Sidebar() {
       category: 'Analytics',
       items: [
         { href: '/explore', icon: <FILE_TYPE_METADATA.explore.icon />, label: FILE_TYPE_METADATA.explore.label },
+      ],
+      actions: [
+        { label: 'New Question', fileType: 'question' },
+        { label: 'New Dashboard', fileType: 'dashboard' },
       ]
     },
     {
       category: 'Engineering',
       items: [
         { href: `/p/${mode}/database`, icon: <FILE_TYPE_METADATA.connection.icon />, label: FILE_TYPE_METADATA.connection.label, adminOnly: true },
-      ]
-    },
-    {
-      category: 'Management',
-      items: [
-        { href: '/users', icon: <FILE_TYPE_METADATA.users.icon />, label: FILE_TYPE_METADATA.users.label, adminOnly: true },
-        { href: `/p/${mode}/configs`, icon: <FILE_TYPE_METADATA.config.icon />, label: FILE_TYPE_METADATA.config.label, adminOnly: true },
+      ],
+      actions: [
+        { label: 'New Connection', fileType: 'connection', adminOnly: true },
       ]
     },
     {
@@ -152,6 +153,7 @@ export default function Sidebar() {
     }
   ];
 
+  const userIsAdmin = effectiveUser?.role && isAdmin(effectiveUser.role);
   const navSections = rawNavSections
     .filter(section => {
       // Hide Debug category if showDebug is false
@@ -162,7 +164,8 @@ export default function Sidebar() {
     })
     .map(section => ({
       ...section,
-      items: section.items.filter((item: NavItem) => !item.adminOnly || (effectiveUser?.role && isAdmin(effectiveUser.role)))
+      items: section.items.filter((item: NavItem) => !item.adminOnly || userIsAdmin),
+      actions: section.actions?.filter((action: NavAction) => !action.adminOnly || userIsAdmin),
     }))
     .filter(section => section.items.length > 0);
 
@@ -292,6 +295,30 @@ export default function Sidebar() {
                   isActive={pathname === item.href}
                 />
               ))}
+              {/* Section Action Buttons (expanded only) */}
+              {!isCollapsed && section.actions && section.actions.length > 0 && (
+                <Flex gap={1} px={3} py={1} flexWrap="wrap">
+                  {section.actions.map((action) => (
+                    <Box
+                      key={action.fileType}
+                      as="button"
+                      fontSize="2xs"
+                      color="fg.muted"
+                      fontFamily="mono"
+                      cursor="pointer"
+                      _hover={{ color: 'accent.teal' }}
+                      transition="color 0.2s"
+                      onClick={() => navigate(`/new/${action.fileType}?folder=${encodeURIComponent(currentPath)}`)}
+                      display="flex"
+                      alignItems="center"
+                      gap={0.5}
+                    >
+                      <LuPlus size={10} />
+                      {action.label}
+                    </Box>
+                  ))}
+                </Flex>
+              )}
             </Box>
           ))}
         </VStack>

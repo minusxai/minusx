@@ -143,7 +143,7 @@ export default function GenericSelector({
           w="100%"
         >
           <HStack gap={sizeStyles.gap} justify="space-between">
-            <HStack gap={sizeStyles.gap} flex={1}>
+            <HStack gap={sizeStyles.gap} flex={1} minW={0} overflow="hidden">
               {(selectedOption?.icon || defaultIcon) && (
                 <Icon as={selectedOption?.icon || defaultIcon} boxSize={sizeStyles.iconSize} color={color} />
               )}
