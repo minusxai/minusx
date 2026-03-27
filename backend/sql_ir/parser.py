@@ -318,6 +318,13 @@ def parse_select(select_node: exp.Select) -> List[SelectColumn]:
             if col:
                 col.alias = alias
                 columns.append(col)
+            else:
+                # Complex DATE_TRUNC (e.g. DATE_TRUNC('month', STRPTIME(...))) → raw passthrough
+                columns.append(SelectColumn(
+                    type='raw',
+                    raw_sql=actual.sql(dialect='postgres'),
+                    alias=alias,
+                ))
 
         elif isinstance(actual, exp.Date):
             inner = actual.this
@@ -728,6 +735,12 @@ def parse_group_by(select_node: exp.Select) -> Optional[GroupByClause]:
             item = parse_group_by_date_trunc(expr)
             if item:
                 columns.append(item)
+            else:
+                # Complex DATE_TRUNC (e.g. DATE_TRUNC('month', STRPTIME(...))) → raw passthrough
+                columns.append(GroupByItem(
+                    type='column',
+                    column=expr.sql(dialect='postgres'),
+                ))
         elif isinstance(expr, exp.Date):
             inner = expr.this
             columns.append(GroupByItem(
@@ -766,6 +779,18 @@ def parse_group_by(select_node: exp.Select) -> Optional[GroupByClause]:
                     item = parse_group_by_date_trunc(actual)
                     if item:
                         columns.append(item)
+                    else:
+                        # Complex DATE_TRUNC → use full SQL as column reference
+                        columns.append(GroupByItem(
+                            type='column',
+                            column=actual.sql(dialect='postgres'),
+                        ))
+                else:
+                    # Unrecognized expression → use full SQL as column reference
+                    columns.append(GroupByItem(
+                        type='column',
+                        column=actual.sql(dialect='postgres'),
+                    ))
 
     return GroupByClause(columns=columns) if columns else None
 
@@ -812,6 +837,13 @@ def parse_order_by(select_node: exp.Select) -> Optional[List[OrderByClause]]:
                 item = parse_order_by_date_trunc(column_expr, direction)
                 if item:
                     order_by.append(item)
+                else:
+                    # Complex DATE_TRUNC → raw passthrough
+                    order_by.append(OrderByClause(
+                        type='raw',
+                        raw_sql=column_expr.sql(dialect='postgres'),
+                        direction=direction,
+                    ))
             elif isinstance(column_expr, exp.Literal) and not column_expr.is_string:
                 # Positional reference like ORDER BY 1 — resolve to actual SELECT column
                 try:
@@ -832,6 +864,18 @@ def parse_order_by(select_node: exp.Select) -> Optional[List[OrderByClause]]:
                         item = parse_order_by_date_trunc(actual, direction)
                         if item:
                             order_by.append(item)
+                        elif isinstance(ref_expr, exp.Alias) and ref_expr.alias:
+                            order_by.append(OrderByClause(
+                                type='column',
+                                column=ref_expr.alias,
+                                direction=direction,
+                            ))
+                        else:
+                            order_by.append(OrderByClause(
+                                type='raw',
+                                raw_sql=actual.sql(dialect='postgres'),
+                                direction=direction,
+                            ))
                     elif isinstance(ref_expr, exp.Alias) and ref_expr.alias:
                         # For aggregates or other complex expressions, use alias as column ref
                         order_by.append(OrderByClause(

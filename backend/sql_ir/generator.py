@@ -20,13 +20,14 @@ def ir_to_sql(ir: QueryIR) -> str:
 
     # SELECT clause with optional DISTINCT
     select_keyword = "SELECT DISTINCT" if ir.distinct else "SELECT"
-    select_cols = generate_select_clause(ir)
+    select_col_list = generate_select_column_list(ir)
     # Format SELECT columns with indentation if multiple columns
-    if "," in select_cols:
-        cols_list = [c.strip() for c in select_cols.split(",")]
-        parts.append(f"{select_keyword}\n  " + ",\n  ".join(cols_list))
+    if len(select_col_list) > 1:
+        parts.append(f"{select_keyword}\n  " + ",\n  ".join(select_col_list))
+    elif select_col_list:
+        parts.append(f"{select_keyword} {select_col_list[0]}")
     else:
-        parts.append(f"{select_keyword} {select_cols}")
+        parts.append(f"{select_keyword} *")
 
     # FROM clause
     from_clause = ir.from_.table
@@ -75,21 +76,21 @@ def ir_to_sql(ir: QueryIR) -> str:
     return "\n".join(parts)
 
 
-def generate_select_clause(ir: QueryIR) -> str:
-    """Generate SELECT column list."""
+def generate_select_column_list(ir: QueryIR) -> list:
+    """Generate SELECT columns as a list of individual SQL strings."""
     if not ir.select:
-        return "*"
+        return ["*"]
 
     # Check for SELECT *
     if len(ir.select) == 1 and ir.select[0].column == "*" and ir.select[0].type == "column":
-        return "*"
+        return ["*"]
 
-    cols = []
-    for col in ir.select:
-        col_sql = generate_select_column(col)
-        cols.append(col_sql)
+    return [generate_select_column(col) for col in ir.select]
 
-    return ", ".join(cols)
+
+def generate_select_clause(ir: QueryIR) -> str:
+    """Generate SELECT column list as a single string."""
+    return ", ".join(generate_select_column_list(ir))
 
 
 def generate_select_column(col: SelectColumn) -> str:

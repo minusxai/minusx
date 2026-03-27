@@ -85,6 +85,9 @@ export function SummarizeSection({
   const [selectedDateColumn, setSelectedDateColumn] = useState<{ name: string; type?: string } | null>(null);
   // For editing dimensions
   const [editingDimensionIndex, setEditingDimensionIndex] = useState<number | null>(null);
+  // For editing raw expression dimensions
+  const [editingRawDimIndex, setEditingRawDimIndex] = useState<number | null>(null);
+  const [editRawDimSql, setEditRawDimSql] = useState('');
 
   useEffect(() => {
     async function loadColumns() {
@@ -404,6 +407,48 @@ export function SummarizeSection({
     },
     [groupBy, onGroupByChange, columns, onColumnsChange, tableAlias]
   );
+
+  const handleOpenRawDimEdit = useCallback((idx: number) => {
+    const dim = dimensions[idx];
+    if (!dim) return;
+    setEditRawDimSql(dim.column);
+    setEditingRawDimIndex(idx);
+  }, [dimensions]);
+
+  const handleSaveRawDim = useCallback(() => {
+    if (editingRawDimIndex === null || !groupBy) return;
+    const newSql = editRawDimSql.trim();
+    if (!newSql) return;
+
+    const oldDim = groupBy.columns[editingRawDimIndex];
+
+    // Update GROUP BY
+    const newGroupByColumns = [...groupBy.columns];
+    newGroupByColumns[editingRawDimIndex] = {
+      type: 'column',
+      column: newSql,
+    };
+    onGroupByChange({ columns: newGroupByColumns });
+
+    // Update the matching SELECT column (raw type with the old SQL)
+    const newSelectColumns = columns.map(c => {
+      if (c.type === 'raw' && c.raw_sql === oldDim.column) {
+        return { ...c, raw_sql: newSql };
+      }
+      return c;
+    });
+    onColumnsChange(newSelectColumns);
+
+    setEditingRawDimIndex(null);
+  }, [editingRawDimIndex, editRawDimSql, groupBy, onGroupByChange, columns, onColumnsChange]);
+
+  // Helper to detect if a dimension is a raw SQL expression (not a simple column name)
+  const isRawDimension = useCallback((dim: GroupByItem) => {
+    // If it matches no available column and contains parens or spaces, it's raw SQL
+    if (dim.function) return false; // DATE_TRUNC, DATE, SPLIT_PART are handled separately
+    const isKnownColumn = availableColumns.some(c => c.name === dim.column);
+    return !isKnownColumn && (dim.column.includes('(') || dim.column.includes(' '));
+  }, [availableColumns]);
 
   const formatMetricLabel = (col: SelectColumn) => {
     const aggLabel = AGGREGATES.find((a) => a.value === col.aggregate)?.shortLabel || col.aggregate;
@@ -759,6 +804,52 @@ export function SummarizeSection({
               >
                 {formatDimensionLabel(dim)}
               </QueryChip>
+            );
+          }
+
+          // Raw SQL expression dimensions: editable via SQL text area
+          if (isRawDimension(dim)) {
+            return (
+              <PickerPopover
+                key={`dim-raw-${idx}`}
+                open={editingRawDimIndex === idx}
+                onOpenChange={(details) => {
+                  if (!details.open) setEditingRawDimIndex(null);
+                }}
+                trigger={
+                  <Box>
+                    <QueryChip
+                      variant="dimension"
+                      icon={<LuCode size={11} />}
+                      onRemove={() => handleRemoveDimension(idx)}
+                      onClick={() => handleOpenRawDimEdit(idx)}
+                      isActive={editingRawDimIndex === idx}
+                    >
+                      {dim.column.length > 40 ? dim.column.slice(0, 40) + '...' : dim.column}
+                    </QueryChip>
+                  </Box>
+                }
+                padding={3}
+                width="340px"
+              >
+                <VStack gap={2.5} align="stretch">
+                  <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
+                    Group By Expression
+                  </Text>
+                  <Textarea
+                    value={editRawDimSql}
+                    onChange={(e) => setEditRawDimSql(e.target.value)}
+                    rows={4}
+                    fontFamily="mono"
+                    fontSize="xs"
+                    placeholder="e.g. DATE_TRUNC('month', created_at)"
+                    resize="vertical"
+                  />
+                  <Button size="sm" colorPalette="blue" onClick={handleSaveRawDim} disabled={!editRawDimSql.trim()}>
+                    Apply
+                  </Button>
+                </VStack>
+              </PickerPopover>
             );
           }
 

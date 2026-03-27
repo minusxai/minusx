@@ -528,6 +528,77 @@ class TestDateTruncFilters:
         assert "GROUP BY plan_type" in norm
 
 
+class TestComplexExpressions:
+    """Test complex expressions that fall through to raw passthrough."""
+
+    def test_date_trunc_with_strptime_and_literals(self):
+        """DATE_TRUNC wrapping STRPTIME + string/NULL literals + GROUP BY 1."""
+        sql = """SELECT
+    DATE_TRUNC('month', STRPTIME(acquisition_date, '%B %-d, %Y')) AS month,
+    COUNT(*) AS value,
+    'New Customers' AS label,
+    NULL AS category
+  FROM new_customers
+  GROUP BY 1"""
+
+        ir = parse_sql_to_ir(sql)
+
+        # All 4 columns present
+        assert len(ir.select) == 4
+
+        # DATE_TRUNC(STRPTIME(...)) → raw passthrough
+        assert ir.select[0].type == 'raw'
+        assert 'STRPTIME' in ir.select[0].raw_sql
+        assert ir.select[0].alias == 'month'
+
+        # COUNT(*)
+        assert ir.select[1].type == 'aggregate'
+        assert ir.select[1].aggregate == 'COUNT'
+
+        # String literal
+        assert ir.select[2].type == 'raw'
+        assert ir.select[2].alias == 'label'
+
+        # NULL literal
+        assert ir.select[3].type == 'raw'
+        assert ir.select[3].alias == 'category'
+
+        # GROUP BY resolved from positional reference
+        assert ir.group_by is not None
+        assert len(ir.group_by.columns) == 1
+
+        # Round-trip: generate SQL and verify it parses back
+        regenerated = any_ir_to_sql(ir)
+        assert 'STRPTIME' in regenerated
+        assert 'GROUP BY' in regenerated
+        assert 'COUNT(*)' in regenerated
+        assert "'New Customers'" in regenerated
+        assert 'NULL' in regenerated
+
+
+    def test_date_trunc_strptime_with_explicit_group_by(self):
+        """DATE_TRUNC(STRPTIME(...)) with explicit (non-positional) GROUP BY expression."""
+        sql = """SELECT
+  DATE_TRUNC('MONTH', STRPTIME(acquisition_date, '%B %-d, %Y')) AS month,
+  COUNT(*) AS value,
+  'New Customers' AS label,
+  NULL AS category,
+  DATE_TRUNC('MONTH', STRPTIME(acquisition_date, '%B %-d, %Y'))
+FROM new_customers
+GROUP BY DATE_TRUNC('MONTH', STRPTIME(acquisition_date, '%B %-d, %Y'))"""
+
+        ir = parse_sql_to_ir(sql)
+
+        assert len(ir.select) == 5
+        assert ir.group_by is not None
+        assert len(ir.group_by.columns) == 1
+        assert 'STRPTIME' in ir.group_by.columns[0].column
+
+        regenerated = any_ir_to_sql(ir)
+        assert 'GROUP BY' in regenerated
+        assert 'STRPTIME' in regenerated
+
+
 class TestCompoundQueries:
     """Test UNION / UNION ALL compound query parsing and generation."""
 
