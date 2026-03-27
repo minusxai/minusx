@@ -102,10 +102,15 @@ export const alertJobHandler: JobHandler = {
             },
           });
         } else if (recipient.channel === 'slack_alert') {
+          const channelConfig = config.channels?.find(c => c.name === recipient.address);
           messages.push({
             type: 'slack_alert',
-            content: plainText,
-            metadata: { channel: recipient.address, title: alertName, link: alertLink },
+            content: `*${alertName}*\n${plainText}\n<${alertLink}|View>`,
+            metadata: {
+              channel: recipient.address,
+              webhook_url: channelConfig?.webhook_url ?? '',
+              properties: channelConfig?.properties,
+            },
           });
         }
       }

@@ -22,10 +22,14 @@ export interface WebhookResult {
  */
 export async function executeWebhook(
   webhook: MessagingWebhook,
-  variables: Record<string, string>
+  variables: Record<string, string>,
+  bodyMerge?: Record<string, unknown>
 ): Promise<WebhookResult> {
   try {
-    // 1. Substitute variables in headers
+    // 1. Substitute variables in URL
+    const resolvedUrl = substituteVariables(webhook.url, variables);
+
+    // 2. Substitute variables in headers
     const headers: Record<string, string> = {};
     if (webhook.headers) {
       for (const [key, value] of Object.entries(webhook.headers)) {
@@ -33,7 +37,7 @@ export async function executeWebhook(
       }
     }
 
-    // 2. Substitute variables in body (recursively for nested objects)
+    // 3. Substitute variables in body (recursively for nested objects), then merge extras
     let body: any = undefined;
     if (webhook.body) {
       const bodyStr = JSON.stringify(webhook.body);
@@ -47,12 +51,15 @@ export async function executeWebhook(
       const substitutedStr = substituteVariables(bodyStr, jsonSafeVariables);
       body = JSON.parse(substitutedStr);
     }
+    if (bodyMerge) {
+      body = { ...(body ?? {}), ...bodyMerge };
+    }
 
-    // 3. Make HTTP request
+    // 4. Make HTTP request
     const requestBody = body ? JSON.stringify(body) : undefined;
     let response: Response;
     try {
-      response = await fetch(webhook.url, {
+      response = await fetch(resolvedUrl, {
         method: webhook.method,
         headers: {
           'Content-Type': 'application/json',
@@ -122,30 +129,19 @@ export async function sendEmailViaWebhook(
 
 /**
  * Send a Slack alert via a configured slack_alert webhook.
- * Builds the Slack payload directly — no body template needed, just a webhook URL.
+ * The webhook url/body may use {{SLACK_WEBHOOK_URL}} and {{SLACK_MESSAGE}} template variables.
+ * channelData.properties are merged into the request body after template substitution.
  */
 export async function sendSlackViaWebhook(
   webhook: MessagingWebhook,
-  message: string,
-  extras?: { title?: string; link?: string }
+  text: string,
+  channelData: { webhook_url: string; properties?: Record<string, unknown> }
 ): Promise<WebhookResult> {
-  const text = extras?.title
-    ? `*${extras.title}*\n${message}${extras.link ? `\n<${extras.link}|View>` : ''}`
-    : message;
-  try {
-    const response = await fetch(webhook.url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    });
-    const responseBody = await response.text().catch(() => undefined);
-    if (!response.ok) {
-      return { success: false, error: `HTTP ${response.status}: ${response.statusText}`, statusCode: response.status, responseBody };
-    }
-    return { success: true, statusCode: response.status, responseBody };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Unknown error' };
-  }
+  return executeWebhook(
+    webhook,
+    { SLACK_WEBHOOK_URL: channelData.webhook_url, SLACK_MESSAGE: text },
+    channelData.properties
+  );
 }
 
 /**

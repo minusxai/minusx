@@ -278,6 +278,12 @@ export interface FolderContent extends BaseFileContent {
   description?: string;      // optional folder description
 }
 
+export interface ConfigChannel {
+  name: string;           // Display name for UI selection (e.g. "Engineering", "Alerts")
+  webhook_url: string;    // Slack incoming webhook URL for this channel
+  properties?: Record<string, unknown>;  // Extra Slack body properties (e.g. { username, icon_emoji })
+}
+
 export interface ConfigContent extends BaseFileContent {
   branding?: {
     logoLight?: string;
@@ -294,6 +300,7 @@ export interface ConfigContent extends BaseFileContent {
   messaging?: {
     webhooks: MessagingWebhook[];
   };
+  channels?: ConfigChannel[];
   // Future: other config sections can be added here
 }
 
@@ -528,7 +535,7 @@ export interface AlertOutput {
 export type RunMessage =
   | { type: 'email_alert';  content: string; metadata: { to: string; subject: string } }
   | { type: 'phone_alert';  content: string; metadata: { to: string; title?: string; desc?: string; link?: string; summary?: string } }
-  | { type: 'slack_alert';  content: string; metadata: { channel: string; title?: string; link?: string } };
+  | { type: 'slack_alert';  content: string; metadata: { channel: string; webhook_url: string; properties?: Record<string, unknown> } };
 
 export interface MessageAttemptLog {
   attemptedAt: string;

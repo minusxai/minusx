@@ -175,8 +175,8 @@ export const POST = withAuth(async (request: NextRequest, user) => {
                 msg.status = 'failed';
                 msg.deliveryError = 'No slack_alert webhook configured';
               } else {
-                const result = await sendSlackViaWebhook(slackWebhook, msg.content, { title: msg.metadata.title, link: msg.metadata.link });
-                const attemptLog: MessageAttemptLog = { attemptedAt: new Date().toISOString(), success: result.success, statusCode: result.statusCode, error: result.error, responseBody: result.responseBody };
+                const result = await sendSlackViaWebhook(slackWebhook, msg.content, { webhook_url: msg.metadata.webhook_url, properties: msg.metadata.properties });
+                const attemptLog: MessageAttemptLog = { attemptedAt: new Date().toISOString(), success: result.success, statusCode: result.statusCode, error: result.error, requestBody: result.requestBody, responseBody: result.responseBody };
                 msg.logs = [...(msg.logs ?? []), attemptLog];
                 if (result.success) {
                   msg.status = 'sent';

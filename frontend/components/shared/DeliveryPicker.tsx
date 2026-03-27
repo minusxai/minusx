@@ -6,7 +6,7 @@ import { Box, HStack, Text, Input, Flex, Badge } from '@chakra-ui/react';
 import { LuX, LuChevronDown, LuMail, LuMessageCircle, LuHash } from 'react-icons/lu';
 import { useFetch } from '@/lib/api/useFetch';
 import { API } from '@/lib/api/declarations';
-import { AlertRecipient, User } from '@/lib/types';
+import { AlertRecipient, ConfigChannel, User } from '@/lib/types';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 
 interface DeliveryPickerProps {
@@ -18,7 +18,7 @@ interface DeliveryPickerProps {
 type DropdownOption =
   | { kind: 'email_alert'; user: User }
   | { kind: 'phone_alert'; user: User }
-  | { kind: 'slack_alert' };
+  | { kind: 'slack_alert'; channel: ConfigChannel };
 
 function DropdownMenu({ containerRef, options, onSelect }: {
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -71,13 +71,13 @@ function DropdownMenu({ containerRef, options, onSelect }: {
             e.preventDefault();
             if (opt.kind === 'email_alert') onSelect({ channel: 'email_alert', address: opt.user.email });
             else if (opt.kind === 'phone_alert') onSelect({ channel: 'phone_alert', address: opt.user.phone! });
-            else onSelect({ channel: 'slack_alert', address: '#alerts' });
+            else onSelect({ channel: 'slack_alert', address: opt.channel.name });
           }}
         >
           {opt.kind === 'email_alert' ? <LuMail size={12} /> : opt.kind === 'phone_alert' ? <LuMessageCircle size={12} /> : <LuHash size={12} />}
           <Box>
             {opt.kind === 'slack_alert'
-              ? <Text fontSize="xs" fontWeight="500">Slack</Text>
+              ? <Text fontSize="xs" fontWeight="500">{opt.channel.name}</Text>
               : <Text fontSize="xs" fontWeight="500">{opt.user.name}</Text>}
             {opt.kind !== 'slack_alert' && (
               <Text fontSize="xs" color="fg.muted">
@@ -110,7 +110,9 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
     () => new Set(config.messaging?.webhooks?.map(w => w.type) ?? []),
     [config.messaging?.webhooks]
   );
-  const hasAnyChannel = configuredWebhookTypes.has('email_alert') || configuredWebhookTypes.has('phone_alert') || configuredWebhookTypes.has('slack_alert');
+  const configuredChannels = config.channels ?? [];
+  const hasAnyChannel = configuredWebhookTypes.has('email_alert') || configuredWebhookTypes.has('phone_alert') ||
+    (configuredWebhookTypes.has('slack_alert') && configuredChannels.length > 0);
   const effectiveDisabled = disabled || !hasAnyChannel;
 
   const userNameByAddress = useMemo(() => {
@@ -140,12 +142,16 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
         opts.push({ kind: 'phone_alert', user });
       }
     }
-    // Slack is a single workspace-level option, not per-user
-    if (configuredWebhookTypes.has('slack_alert') && !recipients.some(r => r.channel === 'slack_alert')) {
-      opts.push({ kind: 'slack_alert' });
+    // Slack: one option per configured channel
+    if (configuredWebhookTypes.has('slack_alert')) {
+      for (const ch of configuredChannels) {
+        if (!recipients.some(r => r.channel === 'slack_alert' && r.address === ch.name)) {
+          opts.push({ kind: 'slack_alert', channel: ch });
+        }
+      }
     }
     return opts;
-  }, [users, inputValue, recipientKeys, configuredWebhookTypes]);
+  }, [users, inputValue, recipientKeys, configuredWebhookTypes, configuredChannels, recipients]);
 
   const addRecipient = (recipient: AlertRecipient) => {
     const key = `${recipient.channel}:${recipient.address}`;

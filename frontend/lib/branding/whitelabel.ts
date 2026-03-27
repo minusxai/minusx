@@ -4,7 +4,7 @@
  */
 
 import type { FileType } from '@/lib/ui/file-metadata';
-import type { UserRole } from '@/lib/types';
+import type { UserRole, ConfigChannel } from '@/lib/types';
 
 /**
  * Per-role file type access override
@@ -50,6 +50,7 @@ export interface CompanyConfig {
       body?: Record<string, any>;
     }>;
   };
+  channels?: ConfigChannel[];
   city?: string;  // Optional city identifier for agent context
   thinkingPhrases?: string[];  // Optional custom thinking phrases for AI indicator
   accessRules?: AccessRulesOverride;  // Per-company file type access overrides (overrides rules.json)
@@ -112,6 +113,7 @@ export function mergeConfig(
       ...(overrides.links || {})
     },
     messaging: overrides.messaging ?? defaults.messaging,
+    channels: overrides.channels ?? defaults.channels,
     city: overrides.city ?? defaults.city,
     // Override thinkingPhrases only if present and non-empty array
     thinkingPhrases: (overrides.thinkingPhrases && overrides.thinkingPhrases.length > 0)
