@@ -278,11 +278,10 @@ export interface FolderContent extends BaseFileContent {
   description?: string;      // optional folder description
 }
 
-export interface ConfigChannel {
-  name: string;           // Display name for UI selection (e.g. "Engineering", "Alerts")
-  webhook_url: string;    // Slack incoming webhook URL for this channel
-  properties?: Record<string, unknown>;  // Extra Slack body properties (e.g. { username, icon_emoji })
-}
+export type ConfigChannel =
+  | { type: 'slack'; name: string; webhook_url: string; properties?: Record<string, unknown> }
+  | { type: 'email'; name: string; address: string }
+  | { type: 'phone'; name: string; address: string };
 
 export interface ConfigContent extends BaseFileContent {
   branding?: {

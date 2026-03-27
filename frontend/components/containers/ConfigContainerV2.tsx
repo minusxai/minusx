@@ -12,6 +12,7 @@ import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectIsDirty, isVirtualFileId, setFullContent, clearEdits, setSaving, updateFileContent, addFile, type FileId } from '@/store/filesSlice';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { reloadFile } from '@/lib/api/file-state';
+import { reloadConfigs } from '@/lib/hooks/useConfigs';
 import ConfigEditor from '@/components/config/ConfigEditor';
 import { ConfigContent } from '@/lib/types';
 import { useMemo, useCallback } from 'react';
@@ -84,6 +85,9 @@ export default function ConfigContainerV2({
         dispatch(updateFileContent({ id: fileId, file: result.data }));
         dispatch(clearEdits(fileId));
       }
+
+      // Refresh configs in Redux so the app reflects the new config immediately
+      await reloadConfigs();
     } catch (err) {
       console.error('Save failed:', err);
       throw err;

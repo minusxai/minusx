@@ -15,10 +15,12 @@ interface DeliveryPickerProps {
   disabled?: boolean;
 }
 
+type SlackChannel = Extract<ConfigChannel, { type: 'slack' }>;
+
 type DropdownOption =
   | { kind: 'email_alert'; user: User }
   | { kind: 'phone_alert'; user: User }
-  | { kind: 'slack_alert'; channel: ConfigChannel };
+  | { kind: 'slack_alert'; channel: SlackChannel };
 
 function DropdownMenu({ containerRef, options, onSelect }: {
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -110,9 +112,12 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
     () => new Set(config.messaging?.webhooks?.map(w => w.type) ?? []),
     [config.messaging?.webhooks]
   );
-  const configuredChannels = config.channels ?? [];
+  const slackChannels = useMemo(
+    () => (config.channels ?? []).filter((c): c is SlackChannel => c.type === 'slack'),
+    [config.channels]
+  );
   const hasAnyChannel = configuredWebhookTypes.has('email_alert') || configuredWebhookTypes.has('phone_alert') ||
-    (configuredWebhookTypes.has('slack_alert') && configuredChannels.length > 0);
+    (configuredWebhookTypes.has('slack_alert') && slackChannels.length > 0);
   const effectiveDisabled = disabled || !hasAnyChannel;
 
   const userNameByAddress = useMemo(() => {
@@ -144,14 +149,14 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
     }
     // Slack: one option per configured channel
     if (configuredWebhookTypes.has('slack_alert')) {
-      for (const ch of configuredChannels) {
+      for (const ch of slackChannels) {
         if (!recipients.some(r => r.channel === 'slack_alert' && r.address === ch.name)) {
           opts.push({ kind: 'slack_alert', channel: ch });
         }
       }
     }
     return opts;
-  }, [users, inputValue, recipientKeys, configuredWebhookTypes, configuredChannels, recipients]);
+  }, [users, inputValue, recipientKeys, configuredWebhookTypes, slackChannels, recipients]);
 
   const addRecipient = (recipient: AlertRecipient) => {
     const key = `${recipient.channel}:${recipient.address}`;

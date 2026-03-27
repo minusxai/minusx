@@ -8,13 +8,14 @@ import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { setAskForConfirmation, setShowDebug, setShowJson, setShowAllErrorToasts } from '@/store/uiSlice';
 import RecordingControl from '@/components/RecordingControl';
 import DataManagementSection from '@/components/DataManagementSection';
+import { ChannelsSection } from '@/components/settings/ChannelsSection';
 import { toaster } from '@/components/ui/toaster';
 import { switchMode } from '@/lib/mode/mode-utils';
 import Breadcrumb from '@/components/Breadcrumb';
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import { API } from '@/lib/api/declarations';
 
-type TabId = 'general' | 'dev' | 'data';
+type TabId = 'general' | 'dev' | 'data' | 'messaging';
 
 interface SettingEntry {
   tab: TabId;
@@ -206,6 +207,16 @@ export default function SettingsPage() {
   const tabs: TabEntry[] = useMemo(() => [
     { id: 'general', label: 'General' },
     { id: 'dev', label: 'Dev', visible: isAdmin },
+    {
+      id: 'messaging',
+      label: 'Messaging',
+      visible: isAdmin,
+      custom: (
+        <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
+          <ChannelsSection />
+        </Box>
+      ),
+    },
     {
       id: 'data',
       label: 'Data Management',

@@ -102,7 +102,10 @@ export const alertJobHandler: JobHandler = {
             },
           });
         } else if (recipient.channel === 'slack_alert') {
-          const channelConfig = config.channels?.find(c => c.name === recipient.address);
+          const channelConfig = config.channels?.find(
+            (c): c is Extract<import('@/lib/types').ConfigChannel, { type: 'slack' }> =>
+              c.name === recipient.address && c.type === 'slack'
+          );
           messages.push({
             type: 'slack_alert',
             content: `*${alertName}*\n${plainText}\n<${alertLink}|View>`,
