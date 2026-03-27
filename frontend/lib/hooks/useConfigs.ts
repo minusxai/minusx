@@ -4,7 +4,6 @@ import { getStore } from '@/store/store';
 import { CompanyConfig } from '@/lib/branding/whitelabel';
 import { selectConfig, selectConfigsLoaded, setConfigs } from '@/store/configsSlice';
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
-import { API } from '@/lib/api/declarations';
 
 /**
  * Fetch the latest config from the server and update Redux.
@@ -12,7 +11,7 @@ import { API } from '@/lib/api/declarations';
  */
 export async function reloadConfigs(): Promise<void> {
   const response = await fetchWithCache<{ success: boolean; data: { config: CompanyConfig } }>(
-    '/api/configs', { method: 'GET', cacheStrategy: API.configs.get.cache }
+    '/api/configs', { method: 'GET', skipCache: true }
   );
   if (response.data?.config) {
     getStore().dispatch(setConfigs({ config: response.data.config }));

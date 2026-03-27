@@ -15,12 +15,16 @@ interface DeliveryPickerProps {
   disabled?: boolean;
 }
 
-type SlackChannel = Extract<ConfigChannel, { type: 'slack' }>;
+type SlackChannel  = Extract<ConfigChannel, { type: 'slack' }>;
+type EmailChannel  = Extract<ConfigChannel, { type: 'email' }>;
+type PhoneChannel  = Extract<ConfigChannel, { type: 'phone' }>;
 
 type DropdownOption =
-  | { kind: 'email_alert'; user: User }
-  | { kind: 'phone_alert'; user: User }
-  | { kind: 'slack_alert'; channel: SlackChannel };
+  | { kind: 'email_alert'; via: 'user';    user: User }
+  | { kind: 'phone_alert'; via: 'user';    user: User }
+  | { kind: 'slack_alert'; via: 'channel'; channel: SlackChannel }
+  | { kind: 'email_alert'; via: 'channel'; channel: EmailChannel }
+  | { kind: 'phone_alert'; via: 'channel'; channel: PhoneChannel };
 
 function DropdownMenu({ containerRef, options, onSelect }: {
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -61,37 +65,42 @@ function DropdownMenu({ containerRef, options, onSelect }: {
       maxH="220px"
       overflowY="auto"
     >
-      {options.map((opt, i) => (
-        <HStack
-          key={i}
-          px={3}
-          py={2}
-          gap={2}
-          cursor="pointer"
-          _hover={{ bg: 'bg.muted' }}
-          onMouseDown={(e: React.MouseEvent) => {
-            e.preventDefault();
-            if (opt.kind === 'email_alert') onSelect({ channel: 'email_alert', address: opt.user.email });
-            else if (opt.kind === 'phone_alert') onSelect({ channel: 'phone_alert', address: opt.user.phone! });
-            else onSelect({ channel: 'slack_alert', address: opt.channel.name });
-          }}
-        >
-          {opt.kind === 'email_alert' ? <LuMail size={12} /> : opt.kind === 'phone_alert' ? <LuMessageCircle size={12} /> : <LuHash size={12} />}
-          <Box>
-            {opt.kind === 'slack_alert'
-              ? <Text fontSize="xs" fontWeight="500">{opt.channel.name}</Text>
-              : <Text fontSize="xs" fontWeight="500">{opt.user.name}</Text>}
-            {opt.kind !== 'slack_alert' && (
-              <Text fontSize="xs" color="fg.muted">
-                {opt.kind === 'email_alert' ? opt.user.email : opt.user.phone}
-              </Text>
-            )}
-          </Box>
-          <Badge size="xs" color={opt.kind === 'email_alert' ? 'accent.danger' : opt.kind === 'phone_alert' ? 'accent.primary' : 'accent.warning'} ml="auto">
-            {opt.kind === 'email_alert' ? 'email' : opt.kind === 'phone_alert' ? 'phone' : 'slack'}
-          </Badge>
-        </HStack>
-      ))}
+      {options.map((opt, i) => {
+        const address =
+          opt.via === 'user'
+            ? (opt.kind === 'email_alert' ? opt.user.email : opt.user.phone!)
+            : opt.kind === 'slack_alert' ? opt.channel.name : opt.channel.address;
+        const displayName =
+          opt.via === 'user' ? opt.user.name :
+          opt.kind === 'slack_alert' ? opt.channel.name : opt.channel.name;
+        const subLabel =
+          opt.via === 'user' ? address :
+          opt.kind === 'slack_alert' ? undefined : opt.channel.address;
+
+        return (
+          <HStack
+            key={i}
+            px={3}
+            py={2}
+            gap={2}
+            cursor="pointer"
+            _hover={{ bg: 'bg.muted' }}
+            onMouseDown={(e: React.MouseEvent) => {
+              e.preventDefault();
+              onSelect({ channel: opt.kind, address });
+            }}
+          >
+            {opt.kind === 'email_alert' ? <LuMail size={12} /> : opt.kind === 'phone_alert' ? <LuMessageCircle size={12} /> : <LuHash size={12} />}
+            <Box>
+              <Text fontSize="xs" fontWeight="500">{displayName}</Text>
+              {subLabel && <Text fontSize="xs" color="fg.muted">{subLabel}</Text>}
+            </Box>
+            <Badge size="xs" color={opt.kind === 'email_alert' ? 'accent.danger' : opt.kind === 'phone_alert' ? 'accent.primary' : 'accent.warning'} ml="auto">
+              {opt.kind === 'email_alert' ? 'email' : opt.kind === 'phone_alert' ? 'phone' : 'slack'}
+            </Badge>
+          </HStack>
+        );
+      })}
     </Box>
   );
 }
@@ -116,8 +125,19 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
     () => (config.channels ?? []).filter((c): c is SlackChannel => c.type === 'slack'),
     [config.channels]
   );
-  const hasAnyChannel = configuredWebhookTypes.has('email_alert') || configuredWebhookTypes.has('phone_alert') ||
-    (configuredWebhookTypes.has('slack_alert') && slackChannels.length > 0);
+  const emailChannels = useMemo(
+    () => (config.channels ?? []).filter((c): c is EmailChannel => c.type === 'email'),
+    [config.channels]
+  );
+  const phoneChannels = useMemo(
+    () => (config.channels ?? []).filter((c): c is PhoneChannel => c.type === 'phone'),
+    [config.channels]
+  );
+
+  const hasAnyChannel =
+    configuredWebhookTypes.has('email_alert') || configuredWebhookTypes.has('phone_alert') ||
+    (configuredWebhookTypes.has('slack_alert') && slackChannels.length > 0) ||
+    emailChannels.length > 0 || phoneChannels.length > 0;
   const effectiveDisabled = disabled || !hasAnyChannel;
 
   const userNameByAddress = useMemo(() => {
@@ -129,6 +149,14 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
     return map;
   }, [users]);
 
+  const channelNameByAddress = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const ch of config.channels ?? []) {
+      if (ch.type === 'email' || ch.type === 'phone') map.set(ch.address, ch.name);
+    }
+    return map;
+  }, [config.channels]);
+
   const recipientKeys = useMemo(
     () => new Set(recipients.map(r => `${r.channel}:${r.address}`)),
     [recipients]
@@ -137,26 +165,40 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
   const dropdownOptions = useMemo<DropdownOption[]>(() => {
     const query = inputValue.toLowerCase();
     const opts: DropdownOption[] = [];
+
+    // User-based email/phone options
     for (const user of users) {
       const matches = !query || user.name.toLowerCase().includes(query) || user.email.toLowerCase().includes(query);
       if (!matches) continue;
       if (configuredWebhookTypes.has('email_alert') && !recipientKeys.has(`email_alert:${user.email}`)) {
-        opts.push({ kind: 'email_alert', user });
+        opts.push({ kind: 'email_alert', via: 'user', user });
       }
       if (configuredWebhookTypes.has('phone_alert') && user.phone && !recipientKeys.has(`phone_alert:${user.phone}`)) {
-        opts.push({ kind: 'phone_alert', user });
+        opts.push({ kind: 'phone_alert', via: 'user', user });
       }
     }
-    // Slack: one option per configured channel
+
+    // Config channel options
+    for (const ch of emailChannels) {
+      if (!recipientKeys.has(`email_alert:${ch.address}`)) {
+        opts.push({ kind: 'email_alert', via: 'channel', channel: ch });
+      }
+    }
+    for (const ch of phoneChannels) {
+      if (!recipientKeys.has(`phone_alert:${ch.address}`)) {
+        opts.push({ kind: 'phone_alert', via: 'channel', channel: ch });
+      }
+    }
     if (configuredWebhookTypes.has('slack_alert')) {
       for (const ch of slackChannels) {
         if (!recipients.some(r => r.channel === 'slack_alert' && r.address === ch.name)) {
-          opts.push({ kind: 'slack_alert', channel: ch });
+          opts.push({ kind: 'slack_alert', via: 'channel', channel: ch });
         }
       }
     }
+
     return opts;
-  }, [users, inputValue, recipientKeys, configuredWebhookTypes, slackChannels, recipients]);
+  }, [users, inputValue, recipientKeys, configuredWebhookTypes, emailChannels, phoneChannels, slackChannels, recipients]);
 
   const addRecipient = (recipient: AlertRecipient) => {
     const key = `${recipient.channel}:${recipient.address}`;
@@ -223,7 +265,9 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
             fontSize="xs"
           >
             <Text fontSize="xs" lineHeight="short">
-              {r.channel === 'slack_alert' ? r.address : (userNameByAddress.get(r.address) ?? r.address)}
+              {r.channel === 'slack_alert'
+                ? r.address
+                : (channelNameByAddress.get(r.address) ?? userNameByAddress.get(r.address) ?? r.address)}
             </Text>
             <Badge size="xs" color={r.channel === 'email_alert' ? 'accent.danger' : r.channel === 'phone_alert' ? 'accent.primary' : 'accent.warning'}>
               {r.channel === 'email_alert' ? 'email' : r.channel === 'phone_alert' ? 'phone' : 'slack'}
@@ -260,7 +304,7 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
         {effectiveDisabled && !hasAnyChannel && (
           <Text fontSize="xs" color="fg.muted" px={1}>No delivery channels configured</Text>
         )}
-        {!effectiveDisabled && users.length > 0 && (
+        {!effectiveDisabled && dropdownOptions.length > 0 && (
           <button
             onClick={() => { setShowDropdown(!showDropdown); inputRef.current?.focus(); }}
             style={{ display: 'flex', alignItems: 'center', flexShrink: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'inherit' }}
