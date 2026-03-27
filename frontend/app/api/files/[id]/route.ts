@@ -7,10 +7,7 @@ import { DocumentDB } from '@/lib/database/documents-db';
 import { canDeleteFileType } from '@/lib/auth/access-rules';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
-import { eventBus, BusEvents } from '@/lib/event-bus';
-import { ensureEventHandlersRegistered } from '@/lib/event-bus/register.server';
-
-ensureEventHandlersRegistered();
+import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 
 // Route segment config: optimize for API routes
 export const dynamic = 'force-dynamic';
@@ -43,7 +40,7 @@ export const GET = withAuth(async (
       console.log(`[FILES API] loadFile took ${Date.now() - loadStart}ms`);
       console.log(`[FILES API] Total request time: ${Date.now() - startTime}ms`);
       // Track direct read (fire-and-forget)
-      eventBus.pub(BusEvents.FILE_VIEWED, {
+      appEventRegistry.publish(AppEvents.FILE_VIEWED, {
         fileId: id,
         fileType: result.data.type,
         filePath: result.data.path,
@@ -61,7 +58,7 @@ export const GET = withAuth(async (
     console.log(`[FILES API] loadFile (with refs) took ${Date.now() - loadStart}ms`);
     console.log(`[FILES API] Total request time: ${Date.now() - startTime}ms`);
     // Track direct read (fire-and-forget)
-    eventBus.pub(BusEvents.FILE_VIEWED, {
+    appEventRegistry.publish(AppEvents.FILE_VIEWED, {
       fileId: id,
       fileType: result.data.type,
       filePath: result.data.path,
@@ -209,7 +206,7 @@ export const DELETE = withAuth(async (
     }
 
     // Track deleted event (fire-and-forget)
-    eventBus.pub(BusEvents.FILE_DELETED, {
+    appEventRegistry.publish(AppEvents.FILE_DELETED, {
       fileId: id,
       fileType: file.type,
       filePath: file.path,

@@ -1,7 +1,7 @@
 import 'server-only';
 import type { LLMCallDetail } from '@/lib/chat-orchestration';
 
-export const BusEvents = {
+export const AppEvents = {
   FILE_CREATED:             'file:created',
   FILE_VIEWED:              'file:viewed',
   FILE_VIEWED_AS_REFERENCE: 'file:viewed_as_reference',
@@ -12,9 +12,9 @@ export const BusEvents = {
   ERROR:                    'error',
 } as const;
 
-export type BusEventName = typeof BusEvents[keyof typeof BusEvents];
+export type AppEventName = typeof AppEvents[keyof typeof AppEvents];
 
-export interface BusEventPayloads {
+export interface AppEventPayloads {
   'file:created':             { fileId: number; fileType?: string; filePath?: string; fileName?: string; companyId: number; userId?: number; userEmail?: string; userRole?: string };
   'file:viewed':              { fileId: number; fileType?: string; filePath?: string; fileName?: string; companyId: number; userId?: number; userEmail?: string; userRole?: string };
   'file:viewed_as_reference': { fileId: number; fileType?: string; filePath?: string; fileName?: string; companyId: number; userId?: number; userEmail?: string; userRole?: string; referencedByFileId: number; referencedByFileType?: string };

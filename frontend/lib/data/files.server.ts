@@ -34,10 +34,7 @@ import { listAllConnections } from './connections.server';
 import { computeSchemaFromDatabases } from './loaders/context-loader-utils';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import { getFileAnalyticsSummary, getFilesAnalyticsSummary, getConversationAnalytics } from '@/lib/analytics/file-analytics.server';
-import { eventBus, BusEvents } from '@/lib/event-bus';
-import { ensureEventHandlersRegistered } from '@/lib/event-bus/register.server';
-
-ensureEventHandlersRegistered();
+import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 
 export class ConflictError extends Error {
   currentFile: DbFile;
@@ -106,7 +103,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     // Track read_as_reference for each loaded reference (fire-and-forget)
     for (const ref of references) {
-      eventBus.pub(BusEvents.FILE_VIEWED_AS_REFERENCE, {
+      appEventRegistry.publish(AppEvents.FILE_VIEWED_AS_REFERENCE, {
         fileId: ref.id,
         fileType: ref.type,
         filePath: ref.path,
@@ -413,7 +410,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
 
     // Track created event (fire-and-forget)
-    eventBus.pub(BusEvents.FILE_CREATED, {
+    appEventRegistry.publish(AppEvents.FILE_CREATED, {
       fileId: newFile.id,
       fileType: newFile.type,
       filePath: newFile.path,
@@ -502,7 +499,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
 
     // Track updated event (fire-and-forget)
-    eventBus.pub(BusEvents.FILE_UPDATED, {
+    appEventRegistry.publish(AppEvents.FILE_UPDATED, {
       fileId: id,
       fileType: existingFile.type,
       filePath: path,

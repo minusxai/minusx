@@ -3,10 +3,7 @@ import { successResponse, handleApiError } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
 import { loadFiles } from '@/lib/data/files.server';
 import { validateFileIds } from '@/lib/data/helpers/validation';
-import { eventBus, BusEvents } from '@/lib/event-bus';
-import { ensureEventHandlersRegistered } from '@/lib/event-bus/register.server';
-
-ensureEventHandlersRegistered();
+import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 
 /**
  * POST /api/files/batch
@@ -27,7 +24,7 @@ export const POST = withAuth(async (
 
     // Track read_direct for each loaded file (fire-and-forget, non-blocking)
     for (const file of result.data) {
-      eventBus.pub(BusEvents.FILE_VIEWED, {
+      appEventRegistry.publish(AppEvents.FILE_VIEWED, {
         fileId: file.id,
         fileType: file.type,
         filePath: file.path,

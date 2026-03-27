@@ -16,12 +16,9 @@ import {
 import './tool-handlers.server';
 import { orchestratePendingTools } from './orchestrator';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
-import { eventBus, BusEvents } from '@/lib/event-bus';
-import { ensureEventHandlersRegistered } from '@/lib/event-bus/register.server';
+import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { UserInterruptError } from '@/lib/errors/user-interrupt-error';
-
-ensureEventHandlersRegistered();
 
 /**
  * Chat response to frontend
@@ -189,7 +186,7 @@ export async function POST(request: NextRequest) {
       // Track LLM call analytics in DuckDB (fire-and-forget)
       // IMPORTANT: Use UPDATED currentConversationID (may have changed due to forking)
       if (pythonResponse.llm_calls && Object.keys(pythonResponse.llm_calls).length > 0) {
-        eventBus.pub(BusEvents.LLM_CALL, {
+        appEventRegistry.publish(AppEvents.LLM_CALL, {
           llmCalls: pythonResponse.llm_calls,
           conversationId: currentConversationID,
           companyId: user.companyId,
