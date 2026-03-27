@@ -23,7 +23,6 @@ export interface WebhookResult {
 export async function executeWebhook(
   webhook: MessagingWebhook,
   variables: Record<string, string>,
-  bodyMerge?: Record<string, unknown>
 ): Promise<WebhookResult> {
   try {
     // 1. Substitute variables in URL
@@ -37,22 +36,16 @@ export async function executeWebhook(
       }
     }
 
-    // 3. Substitute variables in body (recursively for nested objects), then merge extras
+    // 3. Build body
     let body: any = undefined;
-    if (webhook.body) {
-      const bodyStr = JSON.stringify(webhook.body);
-      // JSON-escape each value before substituting into the stringified JSON,
-      // so that quotes, newlines, backslashes, etc. don't break JSON.parse.
+    if (typeof webhook.body === 'string') {
+      body = JSON.parse(substituteVariables(webhook.body, variables));
+    } else if (webhook.body) {
       const jsonSafeVariables: Record<string, string> = {};
       for (const [key, value] of Object.entries(variables)) {
-        // JSON.stringify produces `"value"` — strip the surrounding quotes to get just the escaped content
         jsonSafeVariables[key] = JSON.stringify(value).slice(1, -1);
       }
-      const substitutedStr = substituteVariables(bodyStr, jsonSafeVariables);
-      body = JSON.parse(substitutedStr);
-    }
-    if (bodyMerge) {
-      body = { ...(body ?? {}), ...bodyMerge };
+      body = JSON.parse(substituteVariables(JSON.stringify(webhook.body), jsonSafeVariables));
     }
 
     // 4. Make HTTP request
@@ -129,19 +122,22 @@ export async function sendEmailViaWebhook(
 
 /**
  * Send a Slack alert via a configured slack_alert webhook.
- * The webhook url/body may use {{SLACK_WEBHOOK_URL}} and {{SLACK_MESSAGE}} template variables.
- * channelData.properties are merged into the request body after template substitution.
+ * Webhook url uses {{SLACK_WEBHOOK}}, body uses {{SLACK_PROPERTIES}}.
+ * {{SLACK_MESSAGE}} is substituted within channel properties values before sending.
  */
 export async function sendSlackViaWebhook(
   webhook: MessagingWebhook,
   text: string,
   channelData: { webhook_url: string; properties?: Record<string, unknown> }
 ): Promise<WebhookResult> {
-  return executeWebhook(
-    webhook,
-    { SLACK_WEBHOOK_URL: channelData.webhook_url, SLACK_MESSAGE: text },
-    channelData.properties
-  );
+  const props = channelData.properties ?? {};
+  const jsonSafeMessage = JSON.stringify(text).slice(1, -1);
+  const substitutedProps = substituteVariables(JSON.stringify(props), { SLACK_MESSAGE: jsonSafeMessage });
+
+  return executeWebhook(webhook, {
+    SLACK_WEBHOOK: channelData.webhook_url,
+    SLACK_PROPERTIES: substitutedProps,
+  });
 }
 
 /**

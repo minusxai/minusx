@@ -337,7 +337,7 @@ export interface MessagingWebhook {
   url: string;
   method: 'GET' | 'POST' | 'PUT';
   headers?: Record<string, string>;
-  body?: Record<string, any>;
+  body?: string | Record<string, any>;
 }
 
 export interface SchemaInfo {
