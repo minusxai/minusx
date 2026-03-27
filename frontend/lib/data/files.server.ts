@@ -33,7 +33,11 @@ import { getLoader, LoaderOptions } from './loaders';
 import { listAllConnections } from './connections.server';
 import { computeSchemaFromDatabases } from './loaders/context-loader-utils';
 import { selectDatabase } from '@/lib/utils/database-selector';
-import { trackFileEvent, getFileAnalyticsSummary, getFilesAnalyticsSummary, getConversationAnalytics } from '@/lib/analytics/file-analytics.server';
+import { getFileAnalyticsSummary, getFilesAnalyticsSummary, getConversationAnalytics } from '@/lib/analytics/file-analytics.server';
+import { eventBus, BusEvents } from '@/lib/event-bus';
+import { ensureEventHandlersRegistered } from '@/lib/event-bus/register.server';
+
+ensureEventHandlersRegistered();
 
 export class ConflictError extends Error {
   currentFile: DbFile;
@@ -102,8 +106,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     // Track read_as_reference for each loaded reference (fire-and-forget)
     for (const ref of references) {
-      trackFileEvent({
-        eventType: 'read_as_reference',
+      eventBus.pub(BusEvents.FILE_VIEWED_AS_REFERENCE, {
         fileId: ref.id,
         fileType: ref.type,
         filePath: ref.path,
@@ -114,7 +117,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
         companyId: user.companyId,
         referencedByFileId: file.id,
         referencedByFileType: file.type,
-      }).catch(err => console.error('[analytics] trackFileEvent failed:', err));
+      });
     }
 
     // Reference filtering depends on the parent file type:
@@ -410,8 +413,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
 
     // Track created event (fire-and-forget)
-    trackFileEvent({
-      eventType: 'created',
+    eventBus.pub(BusEvents.FILE_CREATED, {
       fileId: newFile.id,
       fileType: newFile.type,
       filePath: newFile.path,
@@ -420,7 +422,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
       userEmail: user.email,
       userRole: user.role,
       companyId: user.companyId,
-    }).catch(err => console.error('[analytics] trackFileEvent failed:', err));
+    });
 
     return {
       data: newFile
@@ -500,8 +502,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
 
     // Track updated event (fire-and-forget)
-    trackFileEvent({
-      eventType: 'updated',
+    eventBus.pub(BusEvents.FILE_UPDATED, {
       fileId: id,
       fileType: existingFile.type,
       filePath: path,
@@ -510,7 +511,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
       userEmail: user.email,
       userRole: user.role,
       companyId: user.companyId,
-    }).catch(err => console.error('[analytics] trackFileEvent failed:', err));
+    });
 
     // For connections, reload through loader with refresh=true to update schema
     if (existingFile.type === 'connection') {

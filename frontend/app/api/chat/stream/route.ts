@@ -14,8 +14,11 @@ import {
 // Import tool handlers first to register them
 import '../tool-handlers.server';
 import { orchestratePendingTools, ToolExecutionResult } from '../orchestrator';
-import { trackLLMCallEvents } from '@/lib/analytics/file-analytics.server';
+import { eventBus, BusEvents } from '@/lib/event-bus';
+import { ensureEventHandlersRegistered } from '@/lib/event-bus/register.server';
 import { UserInterruptError } from '@/lib/errors/user-interrupt-error';
+
+ensureEventHandlersRegistered();
 
 /**
  * SSE Event types
@@ -309,9 +312,14 @@ export async function POST(request: NextRequest) {
           // Track LLM call analytics in DuckDB (fire-and-forget)
           // IMPORTANT: Use UPDATED currentConversationID (may have changed due to forking)
           if (pythonDoneEvent.llm_calls && Object.keys(pythonDoneEvent.llm_calls).length > 0) {
-            trackLLMCallEvents(pythonDoneEvent.llm_calls, currentConversationID, user.companyId, user.userId, user.email, user.role).catch(
-              (err: unknown) => console.error('[LLM Analytics] Failed to track:', err)
-            );
+            eventBus.pub(BusEvents.LLM_CALL, {
+              llmCalls: pythonDoneEvent.llm_calls,
+              conversationId: currentConversationID,
+              companyId: user.companyId,
+              userId: user.userId,
+              userEmail: user.email,
+              userRole: user.role,
+            });
           }
 
           // Clear user_message after first call

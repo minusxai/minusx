@@ -7,7 +7,10 @@ import { DocumentDB } from '@/lib/database/documents-db';
 import { canDeleteFileType } from '@/lib/auth/access-rules';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
-import { trackFileEvent } from '@/lib/analytics/file-analytics.server';
+import { eventBus, BusEvents } from '@/lib/event-bus';
+import { ensureEventHandlersRegistered } from '@/lib/event-bus/register.server';
+
+ensureEventHandlersRegistered();
 
 // Route segment config: optimize for API routes
 export const dynamic = 'force-dynamic';
@@ -40,8 +43,7 @@ export const GET = withAuth(async (
       console.log(`[FILES API] loadFile took ${Date.now() - loadStart}ms`);
       console.log(`[FILES API] Total request time: ${Date.now() - startTime}ms`);
       // Track direct read (fire-and-forget)
-      trackFileEvent({
-        eventType: 'read_direct',
+      eventBus.pub(BusEvents.FILE_VIEWED, {
         fileId: id,
         fileType: result.data.type,
         filePath: result.data.path,
@@ -50,7 +52,7 @@ export const GET = withAuth(async (
         userEmail: user.email,
         userRole: user.role,
         companyId: user.companyId,
-      }).catch(err => console.error('[analytics] trackFileEvent failed:', err));
+      });
       return successResponse(result.data);
     }
 
@@ -59,8 +61,7 @@ export const GET = withAuth(async (
     console.log(`[FILES API] loadFile (with refs) took ${Date.now() - loadStart}ms`);
     console.log(`[FILES API] Total request time: ${Date.now() - startTime}ms`);
     // Track direct read (fire-and-forget)
-    trackFileEvent({
-      eventType: 'read_direct',
+    eventBus.pub(BusEvents.FILE_VIEWED, {
       fileId: id,
       fileType: result.data.type,
       filePath: result.data.path,
@@ -69,7 +70,7 @@ export const GET = withAuth(async (
       userEmail: user.email,
       userRole: user.role,
       companyId: user.companyId,
-    }).catch(err => console.error('[analytics] trackFileEvent failed:', err));
+    });
     return successResponse(result);
   } catch (error) {
     console.log(`[FILES API] Error after ${Date.now() - startTime}ms`);
@@ -208,8 +209,7 @@ export const DELETE = withAuth(async (
     }
 
     // Track deleted event (fire-and-forget)
-    trackFileEvent({
-      eventType: 'deleted',
+    eventBus.pub(BusEvents.FILE_DELETED, {
       fileId: id,
       fileType: file.type,
       filePath: file.path,
@@ -218,7 +218,7 @@ export const DELETE = withAuth(async (
       userEmail: user.email,
       userRole: user.role,
       companyId: user.companyId,
-    }).catch(err => console.error('[analytics] trackFileEvent failed:', err));
+    });
 
     return successResponse({ message: 'File deleted successfully' });
   } catch (error) {
