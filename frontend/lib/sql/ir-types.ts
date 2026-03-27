@@ -91,6 +91,7 @@ export interface CTE {
 }
 
 export interface QueryIR {
+  type?: 'simple';  // Discriminator (optional for backward compat)
   version: number;
   distinct?: boolean;
   ctes?: CTE[];
@@ -102,4 +103,21 @@ export interface QueryIR {
   having?: FilterGroup;
   order_by?: OrderByClause[];
   limit?: number;
+}
+
+export type CompoundOperator = 'UNION' | 'UNION ALL';
+
+export interface CompoundQueryIR {
+  type: 'compound';
+  version: number;
+  queries: QueryIR[];              // 2+ queries
+  operators: CompoundOperator[];   // len = len(queries) - 1
+  order_by?: OrderByClause[];      // Applies to final result
+  limit?: number;                  // Applies to final result
+}
+
+export type AnyQueryIR = QueryIR | CompoundQueryIR;
+
+export function isCompoundQueryIR(ir: AnyQueryIR): ir is CompoundQueryIR {
+  return ir.type === 'compound';
 }

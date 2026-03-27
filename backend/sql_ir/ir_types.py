@@ -121,6 +121,7 @@ class QueryIR(BaseModel):
     """Intermediate Representation of a SQL query for GUI builder."""
     model_config = ConfigDict(populate_by_name=True)
 
+    type: Literal['simple'] = 'simple'  # Discriminator for simple vs compound
     version: int = 1  # Schema version for future migrations
     distinct: bool = False  # SELECT DISTINCT support
     ctes: Optional[List[CTE]] = None  # WITH clause CTEs
@@ -132,3 +133,15 @@ class QueryIR(BaseModel):
     having: Optional[FilterGroup] = None
     order_by: Optional[List[OrderByClause]] = None
     limit: Optional[int] = None
+
+
+class CompoundQueryIR(BaseModel):
+    """IR for compound queries (UNION, UNION ALL)."""
+    model_config = ConfigDict(populate_by_name=True)
+
+    type: Literal['compound'] = 'compound'
+    version: int = 1
+    queries: List[QueryIR]  # 2+ queries
+    operators: List[Literal['UNION', 'UNION ALL']]  # len = len(queries) - 1
+    order_by: Optional[List[OrderByClause]] = None  # Applies to final result
+    limit: Optional[int] = None  # Applies to final result

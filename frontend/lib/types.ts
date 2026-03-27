@@ -24,6 +24,9 @@ export type {
 // Re-export SQL IR types
 export type {
   QueryIR,
+  CompoundQueryIR,
+  CompoundOperator,
+  AnyQueryIR,
   SelectColumn,
   TableReference,
   JoinClause,
@@ -34,6 +37,7 @@ export type {
   GroupByClause,
   OrderByClause,
 } from './sql/ir-types';
+export { isCompoundQueryIR } from './sql/ir-types';
 
 /**
  * Base entity interface shared by all database entities

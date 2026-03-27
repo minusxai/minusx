@@ -5,7 +5,8 @@ This mirrors the frontend TypeScript implementation in ir-to-sql.ts
 and is used for round-trip validation.
 """
 
-from .ir_types import QueryIR, SelectColumn, FilterGroup, FilterCondition
+from typing import Union
+from .ir_types import QueryIR, CompoundQueryIR, SelectColumn, FilterGroup, FilterCondition
 
 
 def ir_to_sql(ir: QueryIR) -> str:
@@ -19,13 +20,14 @@ def ir_to_sql(ir: QueryIR) -> str:
 
     # SELECT clause with optional DISTINCT
     select_keyword = "SELECT DISTINCT" if ir.distinct else "SELECT"
-    select_cols = generate_select_clause(ir)
+    select_col_list = generate_select_column_list(ir)
     # Format SELECT columns with indentation if multiple columns
-    if "," in select_cols:
-        cols_list = [c.strip() for c in select_cols.split(",")]
-        parts.append(f"{select_keyword}\n  " + ",\n  ".join(cols_list))
+    if len(select_col_list) > 1:
+        parts.append(f"{select_keyword}\n  " + ",\n  ".join(select_col_list))
+    elif select_col_list:
+        parts.append(f"{select_keyword} {select_col_list[0]}")
     else:
-        parts.append(f"{select_keyword} {select_cols}")
+        parts.append(f"{select_keyword} *")
 
     # FROM clause
     from_clause = ir.from_.table
@@ -74,21 +76,21 @@ def ir_to_sql(ir: QueryIR) -> str:
     return "\n".join(parts)
 
 
-def generate_select_clause(ir: QueryIR) -> str:
-    """Generate SELECT column list."""
+def generate_select_column_list(ir: QueryIR) -> list:
+    """Generate SELECT columns as a list of individual SQL strings."""
     if not ir.select:
-        return "*"
+        return ["*"]
 
     # Check for SELECT *
     if len(ir.select) == 1 and ir.select[0].column == "*" and ir.select[0].type == "column":
-        return "*"
+        return ["*"]
 
-    cols = []
-    for col in ir.select:
-        col_sql = generate_select_column(col)
-        cols.append(col_sql)
+    return [generate_select_column(col) for col in ir.select]
 
-    return ", ".join(cols)
+
+def generate_select_clause(ir: QueryIR) -> str:
+    """Generate SELECT column list as a single string."""
+    return ", ".join(generate_select_column_list(ir))
 
 
 def generate_select_column(col: SelectColumn) -> str:
@@ -275,6 +277,54 @@ def generate_order_by_expression(col) -> str:
     if col.table:
         return f"{col.table}.{col.column}"
     return col.column
+
+
+def compound_ir_to_sql(ir: CompoundQueryIR) -> str:
+    """Convert CompoundQueryIR (UNION/UNION ALL) to SQL string."""
+    if len(ir.queries) < 2:
+        raise ValueError("Compound query must have at least 2 queries")
+    if len(ir.operators) != len(ir.queries) - 1:
+        raise ValueError("Number of operators must be len(queries) - 1")
+
+    # Generate SQL for each individual query (without order_by/limit)
+    query_sqls = []
+    for q in ir.queries:
+        # Temporarily clear order_by and limit for individual queries
+        q_copy = q.model_copy(update={'order_by': None, 'limit': None})
+        query_sqls.append(ir_to_sql(q_copy))
+
+    # Interleave queries with operators
+    parts = [query_sqls[0]]
+    for i, op in enumerate(ir.operators):
+        parts.append(op)
+        parts.append(query_sqls[i + 1])
+
+    result = "\n".join(parts)
+
+    # Append compound-level ORDER BY
+    if ir.order_by:
+        order_parts = []
+        for col in ir.order_by:
+            col_expr = generate_order_by_expression(col)
+            order_parts.append(f"{col_expr} {col.direction}")
+        result += "\nORDER BY " + ", ".join(order_parts)
+
+    # Append compound-level LIMIT
+    if ir.limit is not None:
+        result += f"\nLIMIT {ir.limit}"
+
+    return result
+
+
+def any_ir_to_sql(ir: Union[QueryIR, CompoundQueryIR, dict]) -> str:
+    """Dispatch to the correct generator based on IR type."""
+    if isinstance(ir, dict):
+        if ir.get('type') == 'compound':
+            return compound_ir_to_sql(CompoundQueryIR.model_validate(ir))
+        return ir_to_sql(QueryIR.model_validate(ir))
+    if isinstance(ir, CompoundQueryIR):
+        return compound_ir_to_sql(ir)
+    return ir_to_sql(ir)
 
 
 def format_value(value) -> str:

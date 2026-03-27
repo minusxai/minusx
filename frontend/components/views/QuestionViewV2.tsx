@@ -42,7 +42,7 @@ import QuestionPickerModal from '../modals/QuestionPickerModal';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { addReferenceToQuestion, removeReferenceFromQuestion, setFile } from '@/store/filesSlice';
 import { setSqlEditorCollapsed, selectSqlEditorCollapsed, setQuestionCollapsedPanel, selectQuestionCollapsedPanel, selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
-import { QueryBuilder, QueryModeSelector } from '../query-builder';
+import { QueryBuilderRoot, QueryModeSelector } from '../query-builder';
 import { FilesAPI } from '@/lib/data/files';
 
 /**
@@ -640,7 +640,7 @@ export default function QuestionViewV2({
                 {/* GUI Mode: Visual Query Builder */}
                 {queryMode === 'gui' && (
                   <Box flex={1} overflow="auto">
-                    <QueryBuilder
+                    <QueryBuilderRoot
                       databaseName={content.database_name || ''}
                       sql={content.query}
                       onSqlChange={handleQueryChange}

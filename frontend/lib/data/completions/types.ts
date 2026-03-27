@@ -5,7 +5,7 @@
 
 import type { DatabaseWithSchema } from '@/lib/types';
 import type { ResolvedReference } from '@/lib/sql/query-composer';
-import type { QueryIR } from '@/lib/sql/ir-types';
+import type { QueryIR, AnyQueryIR } from '@/lib/sql/ir-types';
 
 /**
  * Options for fetching mention completions
@@ -88,7 +88,7 @@ export interface SqlToIROptions {
  */
 export interface SqlToIRResult {
   success: boolean;
-  ir?: QueryIR;
+  ir?: AnyQueryIR;
   error?: string;
   unsupportedFeatures?: string[];
   hint?: string;
@@ -99,7 +99,7 @@ export interface SqlToIRResult {
  * IR to SQL conversion options
  */
 export interface IRToSqlOptions {
-  ir: QueryIR;
+  ir: AnyQueryIR;
 }
 
 /**

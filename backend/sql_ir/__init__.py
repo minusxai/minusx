@@ -2,6 +2,7 @@
 
 from .ir_types import (
     QueryIR,
+    CompoundQueryIR,
     SelectColumn,
     TableReference,
     JoinClause,
@@ -13,7 +14,7 @@ from .ir_types import (
 )
 from .parser import parse_sql_to_ir, UnsupportedSQLError
 from .validator import validate_ir, validate_sql_features
-from .generator import ir_to_sql
+from .generator import ir_to_sql, compound_ir_to_sql, any_ir_to_sql
 from .enhanced_validator import (
     validate_sql_for_gui,
     compare_sql_ast,
@@ -24,6 +25,7 @@ from .enhanced_validator import (
 
 __all__ = [
     "QueryIR",
+    "CompoundQueryIR",
     "SelectColumn",
     "TableReference",
     "JoinClause",
@@ -34,6 +36,8 @@ __all__ = [
     "OrderByClause",
     "parse_sql_to_ir",
     "ir_to_sql",
+    "compound_ir_to_sql",
+    "any_ir_to_sql",
     "UnsupportedSQLError",
     "validate_ir",
     "validate_sql_features",

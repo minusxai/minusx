@@ -5,6 +5,7 @@ from sqlglot import exp
 from typing import List, Optional, Union
 from .ir_types import (
     QueryIR,
+    CompoundQueryIR,
     SelectColumn,
     TableReference,
     JoinClause,
@@ -18,19 +19,19 @@ from .ir_types import (
 )
 from .validator import UnsupportedSQLError, validate_sql_features
 from .enhanced_validator import validate_sql_for_gui, compare_sql_ast
-from .generator import ir_to_sql
+from .generator import ir_to_sql, compound_ir_to_sql
 
 
-def parse_sql_to_ir(sql: str, _skip_validation: bool = False) -> QueryIR:
+def parse_sql_to_ir(sql: str, _skip_validation: bool = False) -> Union[QueryIR, CompoundQueryIR]:
     """
-    Parse SQL string into QueryIR representation.
+    Parse SQL string into QueryIR or CompoundQueryIR representation.
 
     Args:
         sql: SQL query string
         _skip_validation: Internal flag to skip validation (used by round-trip check)
 
     Returns:
-        QueryIR object
+        QueryIR for simple queries, CompoundQueryIR for UNION/UNION ALL queries
 
     Raises:
         UnsupportedSQLError: If SQL contains unsupported features (would lose information)
@@ -51,18 +52,133 @@ def parse_sql_to_ir(sql: str, _skip_validation: bool = False) -> QueryIR:
     except Exception as e:
         raise UnsupportedSQLError(f"Failed to parse SQL: {str(e)}", ["PARSE_ERROR"])
 
-    # Extract CTEs — sqlglot stores them in select.args['with_'], not as a separate With node
+    # Check if this is a compound query (UNION / UNION ALL)
+    if isinstance(ast, exp.Union):
+        return _parse_compound_query(ast, sql, _skip_validation)
+
+    # Simple query path
+    return _parse_simple_query(ast, sql, _skip_validation)
+
+
+def _parse_compound_query(ast: exp.Union, original_sql: str, _skip_validation: bool) -> CompoundQueryIR:
+    """Parse a UNION/UNION ALL compound query into CompoundQueryIR."""
+    # Flatten the nested Union tree into a list of (select_node, operator) pairs
+    # sqlglot represents A UNION B UNION ALL C as Union(Union(A, B), C)
+    queries_nodes = []
+    operators = []
+
+    def flatten_union(node):
+        if isinstance(node, exp.Union):
+            flatten_union(node.left)
+            # Determine operator: UNION ALL vs UNION
+            # sqlglot uses 'distinct' arg: True = UNION (distinct), False = UNION ALL
+            is_distinct = node.args.get('distinct')
+            if is_distinct is False:
+                operators.append('UNION ALL')
+            else:
+                operators.append('UNION')
+            flatten_union(node.right)
+        else:
+            queries_nodes.append(node)
+
+    flatten_union(ast)
+
+    # Extract compound-level ORDER BY and LIMIT from the outermost Union node
+    compound_order_by = None
+    compound_limit = None
+
+    # sqlglot puts ORDER BY/LIMIT on the outermost Union node
+    order_clause = ast.args.get("order")
+    if order_clause:
+        # We need a Select-like node to use parse_order_by, but Union doesn't have select expressions
+        # Parse order by manually from the order clause
+        compound_order_by = _parse_order_by_from_clause(order_clause)
+
+    limit_clause = ast.args.get("limit")
+    if limit_clause:
+        limit_expr = limit_clause.expression if hasattr(limit_clause, 'expression') else limit_clause.this
+        if isinstance(limit_expr, exp.Literal):
+            try:
+                compound_limit = int(limit_expr.this)
+            except ValueError:
+                pass
+
+    # Parse each SELECT branch into a QueryIR (skip order_by/limit on individual queries)
+    query_irs = []
+    for select_node in queries_nodes:
+        if not isinstance(select_node, exp.Select):
+            raise UnsupportedSQLError("Expected SELECT in UNION branch", ["COMPOUND_PARSE_ERROR"])
+        ir = _parse_select_to_query_ir(select_node)
+        query_irs.append(ir)
+
+    compound_ir = CompoundQueryIR(
+        version=1,
+        queries=query_irs,
+        operators=operators,
+        order_by=compound_order_by,
+        limit=compound_limit,
+    )
+
+    # Round-trip validation
+    if not _skip_validation:
+        try:
+            regenerated_sql = compound_ir_to_sql(compound_ir)
+            comparison = compare_sql_ast(original_sql, regenerated_sql)
+            if not comparison.equivalent:
+                raise UnsupportedSQLError(
+                    "Round-trip validation failed: regenerated SQL differs from original",
+                    comparison.differences or ["SQL statements differ"],
+                    hint="This query structure is not fully supported in GUI mode. Use SQL mode."
+                )
+        except UnsupportedSQLError:
+            raise
+        except Exception as e:
+            raise UnsupportedSQLError(
+                f"Validation error: {str(e)}",
+                ["VALIDATION_ERROR"],
+                hint="An error occurred validating this query. Use SQL mode."
+            )
+
+    return compound_ir
+
+
+def _parse_order_by_from_clause(order_clause) -> Optional[List[OrderByClause]]:
+    """Parse ORDER BY from a standalone order clause (not attached to a Select)."""
+    order_by = []
+    for ordered in order_clause.expressions:
+        if isinstance(ordered, exp.Ordered):
+            column_expr = ordered.this
+            direction = 'DESC' if ordered.args.get('desc') else 'ASC'
+
+            if isinstance(column_expr, exp.Column):
+                order_by.append(OrderByClause(
+                    type='column',
+                    column=column_expr.name,
+                    table=column_expr.table if hasattr(column_expr, 'table') and column_expr.table else None,
+                    direction=direction,
+                ))
+            elif isinstance(column_expr, (exp.TimestampTrunc, exp.DateTrunc)):
+                item = parse_order_by_date_trunc(column_expr, direction)
+                if item:
+                    order_by.append(item)
+            else:
+                order_by.append(OrderByClause(
+                    type='raw',
+                    raw_sql=column_expr.sql(dialect='postgres'),
+                    direction=direction,
+                ))
+    return order_by if order_by else None
+
+
+def _parse_select_to_query_ir(select_node: exp.Select) -> QueryIR:
+    """Parse a single SELECT node into a QueryIR (used for both simple and compound queries)."""
+    # Extract CTEs
     ctes = []
-    with_clause = ast.args.get('with_') if isinstance(ast, exp.Select) else None
+    with_clause = select_node.args.get('with_')
     if with_clause:
         for cte_node in with_clause.expressions:
             cte_body_sql = cte_node.this.sql(dialect='postgres')
             ctes.append(CTE(name=cte_node.alias, raw_sql=cte_body_sql))
-
-    # Extract SELECT node
-    select_node = ast if isinstance(ast, exp.Select) else ast.find(exp.Select)
-    if not select_node:
-        raise UnsupportedSQLError("No SELECT statement found", ["NO_SELECT"])
 
     # Check for SELECT DISTINCT
     distinct = False
@@ -79,12 +195,12 @@ def parse_sql_to_ir(sql: str, _skip_validation: bool = False) -> QueryIR:
     order_by = parse_order_by(select_node)
     limit = parse_limit(select_node)
 
-    ir = QueryIR(
+    return QueryIR(
         version=1,
         distinct=distinct,
         ctes=ctes if ctes else None,
         select=select_columns,
-        **{"from": from_table},  # Use dict unpacking for 'from' keyword
+        **{"from": from_table},
         joins=joins,
         where=where_clause,
         group_by=group_by,
@@ -93,11 +209,21 @@ def parse_sql_to_ir(sql: str, _skip_validation: bool = False) -> QueryIR:
         limit=limit,
     )
 
+
+def _parse_simple_query(ast, original_sql: str, _skip_validation: bool) -> QueryIR:
+    """Parse a simple (non-compound) query into QueryIR."""
+    # Extract SELECT node
+    select_node = ast if isinstance(ast, exp.Select) else ast.find(exp.Select)
+    if not select_node:
+        raise UnsupportedSQLError("No SELECT statement found", ["NO_SELECT"])
+
+    ir = _parse_select_to_query_ir(select_node)
+
     # Round-trip validation: SQL → IR → SQL must be lossless
     if not _skip_validation:
         try:
             regenerated_sql = ir_to_sql(ir)
-            comparison = compare_sql_ast(sql, regenerated_sql)
+            comparison = compare_sql_ast(original_sql, regenerated_sql)
             if not comparison.equivalent:
                 raise UnsupportedSQLError(
                     "Round-trip validation failed: regenerated SQL differs from original",
@@ -192,6 +318,13 @@ def parse_select(select_node: exp.Select) -> List[SelectColumn]:
             if col:
                 col.alias = alias
                 columns.append(col)
+            else:
+                # Complex DATE_TRUNC (e.g. DATE_TRUNC('month', STRPTIME(...))) → raw passthrough
+                columns.append(SelectColumn(
+                    type='raw',
+                    raw_sql=actual.sql(dialect='postgres'),
+                    alias=alias,
+                ))
 
         elif isinstance(actual, exp.Date):
             inner = actual.this
@@ -602,6 +735,12 @@ def parse_group_by(select_node: exp.Select) -> Optional[GroupByClause]:
             item = parse_group_by_date_trunc(expr)
             if item:
                 columns.append(item)
+            else:
+                # Complex DATE_TRUNC (e.g. DATE_TRUNC('month', STRPTIME(...))) → raw passthrough
+                columns.append(GroupByItem(
+                    type='column',
+                    column=expr.sql(dialect='postgres'),
+                ))
         elif isinstance(expr, exp.Date):
             inner = expr.this
             columns.append(GroupByItem(
@@ -640,6 +779,18 @@ def parse_group_by(select_node: exp.Select) -> Optional[GroupByClause]:
                     item = parse_group_by_date_trunc(actual)
                     if item:
                         columns.append(item)
+                    else:
+                        # Complex DATE_TRUNC → use full SQL as column reference
+                        columns.append(GroupByItem(
+                            type='column',
+                            column=actual.sql(dialect='postgres'),
+                        ))
+                else:
+                    # Unrecognized expression → use full SQL as column reference
+                    columns.append(GroupByItem(
+                        type='column',
+                        column=actual.sql(dialect='postgres'),
+                    ))
 
     return GroupByClause(columns=columns) if columns else None
 
@@ -686,6 +837,13 @@ def parse_order_by(select_node: exp.Select) -> Optional[List[OrderByClause]]:
                 item = parse_order_by_date_trunc(column_expr, direction)
                 if item:
                     order_by.append(item)
+                else:
+                    # Complex DATE_TRUNC → raw passthrough
+                    order_by.append(OrderByClause(
+                        type='raw',
+                        raw_sql=column_expr.sql(dialect='postgres'),
+                        direction=direction,
+                    ))
             elif isinstance(column_expr, exp.Literal) and not column_expr.is_string:
                 # Positional reference like ORDER BY 1 — resolve to actual SELECT column
                 try:
@@ -706,6 +864,18 @@ def parse_order_by(select_node: exp.Select) -> Optional[List[OrderByClause]]:
                         item = parse_order_by_date_trunc(actual, direction)
                         if item:
                             order_by.append(item)
+                        elif isinstance(ref_expr, exp.Alias) and ref_expr.alias:
+                            order_by.append(OrderByClause(
+                                type='column',
+                                column=ref_expr.alias,
+                                direction=direction,
+                            ))
+                        else:
+                            order_by.append(OrderByClause(
+                                type='raw',
+                                raw_sql=actual.sql(dialect='postgres'),
+                                direction=direction,
+                            ))
                     elif isinstance(ref_expr, exp.Alias) and ref_expr.alias:
                         # For aggregates or other complex expressions, use alias as column ref
                         order_by.append(OrderByClause(

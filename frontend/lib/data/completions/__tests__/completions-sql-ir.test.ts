@@ -63,7 +63,7 @@ describe('Completions SQL IR - E2E Tests', () => {
       expect(result.success).toBe(true);
       expect(result.ir).toBeDefined();
 
-      const ir = result.ir!;
+      const ir = result.ir! as QueryIR;
 
       // Verify SELECT clause
       expect(ir.select).toHaveLength(5);
@@ -139,7 +139,7 @@ describe('Completions SQL IR - E2E Tests', () => {
       const result = await CompletionsAPI.sqlToIR({ sql });
 
       expect(result.success).toBe(true);
-      expect(result.ir!.select[1]).toMatchObject({
+      expect((result.ir! as QueryIR).select[1]).toMatchObject({
         type: 'aggregate',
         aggregate: 'COUNT_DISTINCT',
         column: 'user_id',
@@ -153,10 +153,10 @@ describe('Completions SQL IR - E2E Tests', () => {
       const result = await CompletionsAPI.sqlToIR({ sql });
 
       expect(result.success).toBe(true);
-      expect(result.ir!.where).toBeDefined();
+      expect((result.ir! as QueryIR).where).toBeDefined();
 
       // Find parameter conditions
-      const conditions = result.ir!.where!.conditions;
+      const conditions = (result.ir! as QueryIR).where!.conditions;
       const paramConditions = conditions.filter((c: any) => c.param_name);
       expect(paramConditions.length).toBeGreaterThanOrEqual(2);
     });
@@ -167,9 +167,9 @@ describe('Completions SQL IR - E2E Tests', () => {
       const result = await CompletionsAPI.sqlToIR({ sql });
 
       expect(result.success).toBe(true);
-      expect(result.ir!.where).toBeDefined();
+      expect((result.ir! as QueryIR).where).toBeDefined();
 
-      const conditions = result.ir!.where!.conditions;
+      const conditions = (result.ir! as QueryIR).where!.conditions;
       expect(conditions.some((c: any) => c.operator === 'IS NULL')).toBe(true);
       expect(conditions.some((c: any) => c.operator === 'IS NOT NULL')).toBe(true);
     });
@@ -198,17 +198,17 @@ describe('Completions SQL IR - E2E Tests', () => {
       const result = await CompletionsAPI.sqlToIR({ sql });
 
       expect(result.success).toBe(true);
-      expect(result.ir?.ctes).toBeDefined();
-      expect(result.ir?.ctes?.length).toBeGreaterThan(0);
+      expect((result.ir as QueryIR | undefined)?.ctes).toBeDefined();
+      expect((result.ir as QueryIR | undefined)?.ctes?.length).toBeGreaterThan(0);
     });
 
-    it('should reject query with UNION', async () => {
+    it('should parse query with UNION as compound IR', async () => {
       const sql = 'SELECT * FROM users UNION SELECT * FROM admins';
 
       const result = await CompletionsAPI.sqlToIR({ sql });
 
-      expect(result.success).toBe(false);
-      expect(result.unsupportedFeatures).toContain('UNION');
+      expect(result.success).toBe(true);
+      expect(result.ir?.type).toBe('compound');
     });
 
     it('should parse query with CASE expression as raw passthrough', async () => {
@@ -217,7 +217,7 @@ describe('Completions SQL IR - E2E Tests', () => {
       const result = await CompletionsAPI.sqlToIR({ sql });
 
       expect(result.success).toBe(true);
-      expect(result.ir?.select.some((c) => c.type === 'raw')).toBe(true);
+      expect((result.ir as QueryIR | undefined)?.select.some((c: { type: string }) => c.type === 'raw')).toBe(true);
     });
 
     it('should reject query with window function', async () => {
@@ -513,7 +513,7 @@ describe('Completions SQL IR - E2E Tests', () => {
 
         expect(result.success).toBe(true);
         expect(result.ir).toBeDefined();
-        expect(result.ir!.distinct).toBe(true);
+        expect((result.ir! as QueryIR).distinct).toBe(true);
       });
 
       it('should generate SELECT DISTINCT from IR', async () => {
@@ -553,9 +553,9 @@ describe('Completions SQL IR - E2E Tests', () => {
 
         expect(result.success).toBe(true);
         expect(result.ir).toBeDefined();
-        expect(result.ir!.select[0].type).toBe('aggregate');
-        expect(result.ir!.select[0].aggregate).toBe('COUNT');
-        expect(result.ir!.select[0].column).toBeNull(); // null indicates COUNT(*)
+        expect((result.ir! as QueryIR).select[0].type).toBe('aggregate');
+        expect((result.ir! as QueryIR).select[0].aggregate).toBe('COUNT');
+        expect((result.ir! as QueryIR).select[0].column).toBeNull(); // null indicates COUNT(*)
       });
 
       it('should preserve COUNT(column) in IR', async () => {
@@ -564,9 +564,9 @@ describe('Completions SQL IR - E2E Tests', () => {
         const result = await CompletionsAPI.sqlToIR({ sql });
 
         expect(result.success).toBe(true);
-        expect(result.ir!.select[0].type).toBe('aggregate');
-        expect(result.ir!.select[0].aggregate).toBe('COUNT');
-        expect(result.ir!.select[0].column).toBe('id');
+        expect((result.ir! as QueryIR).select[0].type).toBe('aggregate');
+        expect((result.ir! as QueryIR).select[0].aggregate).toBe('COUNT');
+        expect((result.ir! as QueryIR).select[0].column).toBe('id');
       });
 
       it('should generate COUNT(*) from IR with null column', async () => {
@@ -655,7 +655,7 @@ describe('Completions SQL IR - E2E Tests', () => {
 
         const result = await CompletionsAPI.sqlToIR({ sql });
         expect(result.success).toBe(true);
-        expect(result.ir?.select.some((c) => c.type === 'raw')).toBe(true);
+        expect((result.ir as QueryIR | undefined)?.select.some((c: { type: string }) => c.type === 'raw')).toBe(true);
       });
 
       it('should parse COUNT(CASE WHEN ...) as raw passthrough', async () => {
@@ -664,7 +664,7 @@ describe('Completions SQL IR - E2E Tests', () => {
         const result = await CompletionsAPI.sqlToIR({ sql });
 
         expect(result.success).toBe(true);
-        expect(result.ir?.select.some((c) => c.type === 'raw')).toBe(true);
+        expect((result.ir as QueryIR | undefined)?.select.some((c: { type: string }) => c.type === 'raw')).toBe(true);
       });
 
       it('should parse AVG(col1 + col2) as raw passthrough', async () => {
@@ -672,7 +672,7 @@ describe('Completions SQL IR - E2E Tests', () => {
 
         const result = await CompletionsAPI.sqlToIR({ sql });
         expect(result.success).toBe(true);
-        expect(result.ir?.select.some((c) => c.type === 'raw')).toBe(true);
+        expect((result.ir as QueryIR | undefined)?.select.some((c: { type: string }) => c.type === 'raw')).toBe(true);
       });
     });
 
@@ -1089,7 +1089,7 @@ HAVING AVG(avg_order_value) > '75'`;
       expect(parseResult.ir).toBeDefined();
 
       // HAVING value should be preserved as string '75'
-      const havingCond = parseResult.ir!.having?.conditions?.[0] as any;
+      const havingCond = (parseResult.ir! as QueryIR).having?.conditions?.[0] as any;
       expect(havingCond?.value).toBe('75');
       expect(typeof havingCond?.value).toBe('string');
 
@@ -1104,7 +1104,7 @@ HAVING AVG(avg_order_value) > '75'`;
 
       const parseResult = await CompletionsAPI.sqlToIR({ sql });
       // May be undefined or null - both are acceptable for "no WHERE clause"
-      expect(parseResult.ir!.where == null).toBe(true);
+      expect((parseResult.ir! as QueryIR).where == null).toBe(true);
 
       const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir! });
       expect(generateResult.sql).not.toContain('WHERE');
@@ -1127,7 +1127,7 @@ HAVING AVG(avg_order_value) > '75'`;
       expect(parseResult.success).toBe(true);
       expect(parseResult.ir).toBeDefined();
 
-      const ir = parseResult.ir!;
+      const ir = parseResult.ir! as QueryIR;
       expect(ir.select).toHaveLength(2);
       expect(ir.select[0].type).toBe('expression');
       expect(ir.select[0].function).toBe('DATE_TRUNC');
@@ -1159,7 +1159,7 @@ HAVING AVG(avg_order_value) > '75'`;
       const parseResult = await CompletionsAPI.sqlToIR({ sql });
       expect(parseResult.success).toBe(true);
 
-      const ir = parseResult.ir!;
+      const ir = parseResult.ir! as QueryIR;
       expect(ir.where).toBeDefined();
       expect(ir.where!.operator).toBe('AND');
       expect(ir.where!.conditions).toHaveLength(2);
@@ -1186,7 +1186,7 @@ HAVING AVG(avg_order_value) > '75'`;
       const parseResult = await CompletionsAPI.sqlToIR({ sql });
       expect(parseResult.success).toBe(true);
 
-      const ir = parseResult.ir!;
+      const ir = parseResult.ir! as QueryIR;
       expect(ir.where).toBeDefined();
       expect(ir.where!.operator).toBe('OR');
       expect(ir.group_by).toBeDefined();

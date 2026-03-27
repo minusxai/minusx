@@ -33,8 +33,7 @@ def validate_sql_features(sql: str) -> None:
             unsupported_features.add("SUBQUERY")
         elif isinstance(node, exp.CTE):
             unsupported_features.add("CTE")
-        elif isinstance(node, exp.Union):
-            unsupported_features.add("UNION")
+        # UNION is now supported (handled by CompoundQueryIR)
         elif isinstance(node, exp.Window):
             unsupported_features.add("WINDOW_FUNCTION")
         elif isinstance(node, exp.Case):

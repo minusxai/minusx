@@ -8,7 +8,7 @@ These tests validate that queries can be:
 """
 
 import pytest
-from sql_ir import parse_sql_to_ir
+from sql_ir import parse_sql_to_ir, any_ir_to_sql, CompoundQueryIR
 
 
 def normalize_sql(sql: str) -> str:
@@ -526,3 +526,168 @@ class TestDateTruncFilters:
         assert "subscription_end IS NULL" in norm
         assert "CURRENT_TIMESTAMP" in norm
         assert "GROUP BY plan_type" in norm
+
+
+class TestComplexExpressions:
+    """Test complex expressions that fall through to raw passthrough."""
+
+    def test_date_trunc_with_strptime_and_literals(self):
+        """DATE_TRUNC wrapping STRPTIME + string/NULL literals + GROUP BY 1."""
+        sql = """SELECT
+    DATE_TRUNC('month', STRPTIME(acquisition_date, '%B %-d, %Y')) AS month,
+    COUNT(*) AS value,
+    'New Customers' AS label,
+    NULL AS category
+  FROM new_customers
+  GROUP BY 1"""
+
+        ir = parse_sql_to_ir(sql)
+
+        # All 4 columns present
+        assert len(ir.select) == 4
+
+        # DATE_TRUNC(STRPTIME(...)) → raw passthrough
+        assert ir.select[0].type == 'raw'
+        assert 'STRPTIME' in ir.select[0].raw_sql
+        assert ir.select[0].alias == 'month'
+
+        # COUNT(*)
+        assert ir.select[1].type == 'aggregate'
+        assert ir.select[1].aggregate == 'COUNT'
+
+        # String literal
+        assert ir.select[2].type == 'raw'
+        assert ir.select[2].alias == 'label'
+
+        # NULL literal
+        assert ir.select[3].type == 'raw'
+        assert ir.select[3].alias == 'category'
+
+        # GROUP BY resolved from positional reference
+        assert ir.group_by is not None
+        assert len(ir.group_by.columns) == 1
+
+        # Round-trip: generate SQL and verify it parses back
+        regenerated = any_ir_to_sql(ir)
+        assert 'STRPTIME' in regenerated
+        assert 'GROUP BY' in regenerated
+        assert 'COUNT(*)' in regenerated
+        assert "'New Customers'" in regenerated
+        assert 'NULL' in regenerated
+
+
+    def test_date_trunc_strptime_with_explicit_group_by(self):
+        """DATE_TRUNC(STRPTIME(...)) with explicit (non-positional) GROUP BY expression."""
+        sql = """SELECT
+  DATE_TRUNC('MONTH', STRPTIME(acquisition_date, '%B %-d, %Y')) AS month,
+  COUNT(*) AS value,
+  'New Customers' AS label,
+  NULL AS category,
+  DATE_TRUNC('MONTH', STRPTIME(acquisition_date, '%B %-d, %Y'))
+FROM new_customers
+GROUP BY DATE_TRUNC('MONTH', STRPTIME(acquisition_date, '%B %-d, %Y'))"""
+
+        ir = parse_sql_to_ir(sql)
+
+        assert len(ir.select) == 5
+        assert ir.group_by is not None
+        assert len(ir.group_by.columns) == 1
+        assert 'STRPTIME' in ir.group_by.columns[0].column
+
+        regenerated = any_ir_to_sql(ir)
+        assert 'GROUP BY' in regenerated
+        assert 'STRPTIME' in regenerated
+
+
+class TestCompoundQueries:
+    """Test UNION / UNION ALL compound query parsing and generation."""
+
+    def test_simple_union(self):
+        """Test basic UNION of two queries."""
+        sql = "SELECT name FROM users UNION SELECT name FROM admins"
+        ir = parse_sql_to_ir(sql)
+
+        assert isinstance(ir, CompoundQueryIR)
+        assert ir.type == 'compound'
+        assert len(ir.queries) == 2
+        assert ir.operators == ['UNION']
+        assert ir.queries[0].from_.table == 'users'
+        assert ir.queries[1].from_.table == 'admins'
+        assert ir.order_by is None
+        assert ir.limit is None
+
+    def test_union_all(self):
+        """Test UNION ALL preserves duplicates operator."""
+        sql = "SELECT id, name FROM t1 UNION ALL SELECT id, name FROM t2"
+        ir = parse_sql_to_ir(sql)
+
+        assert isinstance(ir, CompoundQueryIR)
+        assert ir.operators == ['UNION ALL']
+        assert len(ir.queries[0].select) == 2
+        assert len(ir.queries[1].select) == 2
+
+    def test_triple_union(self):
+        """Test three queries with mixed UNION and UNION ALL."""
+        sql = "SELECT a FROM t1 UNION SELECT a FROM t2 UNION ALL SELECT a FROM t3"
+        ir = parse_sql_to_ir(sql)
+
+        assert isinstance(ir, CompoundQueryIR)
+        assert len(ir.queries) == 3
+        assert ir.operators == ['UNION', 'UNION ALL']
+
+    def test_union_with_order_by_and_limit(self):
+        """Test compound query with ORDER BY and LIMIT on the result."""
+        sql = "SELECT name FROM users UNION ALL SELECT name FROM admins ORDER BY name LIMIT 10"
+        ir = parse_sql_to_ir(sql)
+
+        assert isinstance(ir, CompoundQueryIR)
+        assert ir.order_by is not None
+        assert len(ir.order_by) == 1
+        assert ir.order_by[0].column == 'name'
+        assert ir.limit == 10
+        # Individual queries should NOT have order_by/limit
+        for q in ir.queries:
+            assert q.order_by is None
+            assert q.limit is None
+
+    def test_union_round_trip(self):
+        """Test SQL → IR → SQL round-trip for compound queries."""
+        sql = "SELECT name, email FROM users WHERE active = true UNION ALL SELECT name, email FROM admins WHERE role = 'admin'"
+        ir = parse_sql_to_ir(sql)
+
+        assert isinstance(ir, CompoundQueryIR)
+        regenerated = any_ir_to_sql(ir)
+        norm = normalize_sql(regenerated)
+
+        assert "UNION ALL" in norm
+        assert "FROM users" in norm
+        assert "FROM admins" in norm
+        assert "WHERE" in norm
+
+    def test_union_with_where_clauses(self):
+        """Test that individual queries in UNION preserve their WHERE clauses."""
+        sql = "SELECT name FROM users WHERE active = true UNION SELECT name FROM admins WHERE role = 'superadmin'"
+        ir = parse_sql_to_ir(sql)
+
+        assert isinstance(ir, CompoundQueryIR)
+        assert ir.queries[0].where is not None
+        assert ir.queries[1].where is not None
+
+    def test_simple_query_still_returns_query_ir(self):
+        """Ensure simple queries still return QueryIR, not CompoundQueryIR."""
+        sql = "SELECT id, name FROM users WHERE id > 5"
+        ir = parse_sql_to_ir(sql)
+
+        assert not isinstance(ir, CompoundQueryIR)
+        assert ir.from_.table == 'users'
+
+    def test_compound_serialization_type_field(self):
+        """Test that serialized IR includes the type discriminator."""
+        sql = "SELECT a FROM t1 UNION SELECT a FROM t2"
+        ir = parse_sql_to_ir(sql)
+        dumped = ir.model_dump(by_alias=True)
+
+        assert dumped['type'] == 'compound'
+        assert len(dumped['queries']) == 2
+        for q in dumped['queries']:
+            assert q['type'] == 'simple'
