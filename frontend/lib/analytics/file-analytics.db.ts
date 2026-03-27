@@ -55,6 +55,32 @@ ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS trigger VARCHAR;
 ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS user_id INTEGER;
 ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS user_email VARCHAR;
 ALTER TABLE llm_call_events ADD COLUMN IF NOT EXISTS user_role VARCHAR;
+
+CREATE SEQUENCE IF NOT EXISTS query_execution_events_id_seq;
+
+CREATE TABLE IF NOT EXISTS query_execution_events (
+  id            BIGINT    DEFAULT nextval('query_execution_events_id_seq') PRIMARY KEY,
+  query_hash    VARCHAR   NOT NULL,
+  database_name VARCHAR,
+  duration_ms   INTEGER   NOT NULL DEFAULT 0,
+  row_count     INTEGER   NOT NULL DEFAULT 0,
+  was_cache_hit BOOLEAN   NOT NULL DEFAULT false,
+  user_email    VARCHAR,
+  company_id    INTEGER,
+  timestamp     TIMESTAMP NOT NULL DEFAULT current_timestamp
+);
+
+CREATE INDEX IF NOT EXISTS idx_qee_hash ON query_execution_events(query_hash);
+CREATE INDEX IF NOT EXISTS idx_qee_ts   ON query_execution_events(timestamp);
+CREATE INDEX IF NOT EXISTS idx_qee_co   ON query_execution_events(company_id);
+
+ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS query_hash    VARCHAR;
+ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS database_name VARCHAR;
+ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS duration_ms   INTEGER;
+ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS row_count     INTEGER;
+ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS was_cache_hit BOOLEAN;
+ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS user_email    VARCHAR;
+ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS company_id    INTEGER;
 `;
 
 // Track which absolute paths have already had initSchema run (idempotent guard)

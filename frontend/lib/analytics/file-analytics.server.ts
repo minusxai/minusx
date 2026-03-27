@@ -192,6 +192,42 @@ GROUP BY file_id
   }
 }
 
+const INSERT_QUERY_EXEC_SQL = `
+INSERT INTO query_execution_events
+  (query_hash, database_name, duration_ms, row_count, was_cache_hit, user_email, company_id)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+`;
+
+interface QueryExecutionEvent {
+  queryHash: string;
+  databaseName: string | null;
+  durationMs: number;
+  rowCount: number;
+  wasCacheHit: boolean;
+  userEmail: string | null;
+  companyId: number;
+}
+
+/**
+ * Track a query execution event (cache hit or real execution). Fire-and-forget; errors logged only.
+ */
+export async function trackQueryExecutionEvent(event: QueryExecutionEvent): Promise<void> {
+  try {
+    const db = await getAnalyticsDb(event.companyId);
+    await runStatement(db, INSERT_QUERY_EXEC_SQL, [
+      event.queryHash,
+      event.databaseName ?? null,
+      event.durationMs,
+      event.rowCount,
+      event.wasCacheHit,
+      event.userEmail ?? null,
+      event.companyId,
+    ]);
+  } catch (err) {
+    console.error('[analytics] trackQueryExecutionEvent failed:', err);
+  }
+}
+
 const INSERT_LLM_SQL = `
 INSERT INTO llm_call_events
   (conversation_id, llm_call_id, model, total_tokens, prompt_tokens, completion_tokens, cost, duration_s, finish_reason, trigger, user_id, user_email, user_role)

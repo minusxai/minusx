@@ -1,7 +1,7 @@
 import 'server-only';
 import { AppEvents } from './events';
 import type { AppEventName, AppEventPayloads } from './events';
-import { trackFileEvent, trackLLMCallEvents } from '@/lib/analytics/file-analytics.server';
+import { trackFileEvent, trackLLMCallEvents, trackQueryExecutionEvent } from '@/lib/analytics/file-analytics.server';
 import { notifyErrorEvent } from '@/lib/messaging/error-notifier';
 
 export { AppEvents } from './events';
@@ -39,4 +39,5 @@ appEventRegistry.subscribe(AppEvents.FILE_VIEWED_AS_REFERENCE, p => trackFileEve
 appEventRegistry.subscribe(AppEvents.FILE_UPDATED,             p => trackFileEvent({ eventType: 'updated',           ...p }));
 appEventRegistry.subscribe(AppEvents.FILE_DELETED,             p => trackFileEvent({ eventType: 'deleted',           ...p }));
 appEventRegistry.subscribe(AppEvents.LLM_CALL,                 p => trackLLMCallEvents(p.llmCalls, p.conversationId, p.companyId, p.userId!, p.userEmail!, p.userRole!));
+appEventRegistry.subscribe(AppEvents.QUERY_EXECUTED,           p => trackQueryExecutionEvent({ queryHash: p.queryHash, databaseName: p.databaseName, durationMs: p.durationMs, rowCount: p.rowCount, wasCacheHit: p.wasCacheHit, userEmail: p.userEmail ?? null, companyId: p.companyId }));
 appEventRegistry.subscribe(AppEvents.ERROR,                    p => notifyErrorEvent(p));

@@ -34,6 +34,7 @@ interface QuestionVisualizationProps {
   loading: boolean;
   error: string | null;
   data: QueryResult | null;
+  queryEstimatedDurationMs?: number | null;
   onVizTypeChange: (type: VizSettings['type']) => void;
   onAxisChange: (xCols: string[], yCols: string[]) => void;
   onPivotConfigChange?: (config: PivotConfig) => void;
@@ -41,7 +42,7 @@ interface QuestionVisualizationProps {
   onColorsChange?: (colors: Record<string, string>) => void;
 }
 
-function QueryLoadingIndicator() {
+function QueryLoadingIndicator({ estimatedDurationMs }: { estimatedDurationMs?: number | null }) {
   const [dotCount, setDotCount] = useState(1);
   const [elapsed, setElapsed] = useState(0);
 
@@ -58,6 +59,12 @@ function QueryLoadingIndicator() {
     };
   }, []);
 
+  const estimateLabel = estimatedDurationMs != null
+    ? estimatedDurationMs >= 1000
+      ? `Est. ~${(estimatedDurationMs / 1000).toFixed(1)}s`
+      : `Est. ~${estimatedDurationMs}ms`
+    : null;
+
   return (
     <VStack gap={2}>
       <Text fontFamily="mono">
@@ -66,6 +73,11 @@ function QueryLoadingIndicator() {
           {'.'.repeat(dotCount)}
         </Box>
       </Text>
+      {estimateLabel && elapsed < 10 && (
+        <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+          {estimateLabel}
+        </Text>
+      )}
       {elapsed >= 10 && (
         <Text fontSize="xs" color="fg.muted" fontFamily="mono">
           Query is still running... ({elapsed}s elapsed)
@@ -81,6 +93,7 @@ export function QuestionVisualization({
   loading,
   error,
   data,
+  queryEstimatedDurationMs,
   onVizTypeChange,
   onAxisChange,
   onPivotConfigChange,
@@ -285,7 +298,7 @@ export function QuestionVisualization({
                 justifyContent="center"
               >
                 <Spinner size="xl" color="accent.teal" />
-                <QueryLoadingIndicator />
+                <QueryLoadingIndicator estimatedDurationMs={queryEstimatedDurationMs} />
               </VStack>
             ) : data ? (
               <>

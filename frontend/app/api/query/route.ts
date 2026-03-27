@@ -1,4 +1,4 @@
-import type { QuestionReference, QuestionContent } from '@/lib/types';
+import type { QuestionReference, QuestionContent, QueryResult } from '@/lib/types';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
 import { NextRequest } from 'next/server';
@@ -7,6 +7,8 @@ import { FilesAPI } from '@/lib/data/files.server';
 import { runQuery } from '@/lib/connections/run-query';
 import { removeNoneParamConditions } from '@/lib/sql/ir-transforms';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
+import { getQueryHash } from '@/lib/utils/query-hash';
+import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 
 /**
  * Transform a query+params pair so that None (null) parameter values are handled:
@@ -56,6 +58,21 @@ async function applyNoneParams(
   return { sql: query, params: effectiveParams };
 }
 
+// ---- Server-side query result cache (shared across sessions per process) ----
+const QUERY_CACHE_TTL_MS = 60_000; // 60 seconds, hardcoded
+
+interface CacheEntry { result: QueryResult; cachedAt: number; }
+const queryCache = new Map<string, CacheEntry>();
+const queryInflight = new Map<string, Promise<QueryResult>>();
+
+// Evict stale entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, e] of queryCache) {
+    if (now - e.cachedAt > QUERY_CACHE_TTL_MS) queryCache.delete(k);
+  }
+}, 5 * 60 * 1000);
+
 // Route segment config: optimize for API routes
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -80,35 +97,82 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       Object.assign(paramValues, parameters);
     }
 
-    // Handle composed questions (CTE construction)
-    let finalQuery = query;
-    if (references && Array.isArray(references) && references.length > 0) {
-      console.log(`[QUERY API] Constructing CTEs for ${references.length} references`);
-      const cteStart = Date.now();
+    // Compute hash on raw inputs (matches client-side Redux hash key)
+    const queryHash = getQueryHash(query, paramValues, database_name);
 
-      // Load referenced questions from DB
-      const resolvedRefs: ResolvedReference[] = await Promise.all(
-        (references as QuestionReference[]).map(async (ref) => {
-          const result = await FilesAPI.loadFile(ref.id, user);
-          return {
-            id: ref.id,
-            alias: ref.alias,
-            query: (result.data.content as QuestionContent).query
-          };
-        })
-      );
-
-      // Use extracted function to build CTEs
-      finalQuery = CTEfyQuery(query, resolvedRefs);
-      console.log(`[QUERY API] CTE construction took ${Date.now() - cteStart}ms`);
+    // Cache hit — return immediately
+    const cached = queryCache.get(queryHash);
+    if (cached && Date.now() - cached.cachedAt < QUERY_CACHE_TTL_MS) {
+      appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
+        queryHash, databaseName: database_name, durationMs: 0,
+        rowCount: cached.result.rows.length, wasCacheHit: true,
+        companyId: user.companyId, userEmail: user.email,
+      });
+      console.log(`[QUERY API] Cache hit. Total request time: ${Date.now() - startTime}ms`);
+      return successResponse({ ...cached.result, cachedAt: cached.cachedAt });
     }
 
-    // Apply None params: remove filter conditions or substitute with NULL
-    const { sql: resolvedQuery, params: resolvedParams } = await applyNoneParams(finalQuery, paramValues);
+    // Thundering herd: join in-flight promise for same hash
+    const existingInflight = queryInflight.get(queryHash);
+    if (existingInflight) {
+      const result = await existingInflight;
+      return successResponse(result);
+    }
 
-    const result = await runQuery(database_name, resolvedQuery, resolvedParams, user);
-    console.log(`[QUERY API] Total request time: ${Date.now() - startTime}ms`);
-    return successResponse(result);
+    // Execute query (wrapped in a promise so concurrent identical requests share it)
+    const execPromise = (async () => {
+      // Handle composed questions (CTE construction)
+      let finalQuery = query;
+      if (references && Array.isArray(references) && references.length > 0) {
+        console.log(`[QUERY API] Constructing CTEs for ${references.length} references`);
+        const cteStart = Date.now();
+
+        // Load referenced questions from DB
+        const resolvedRefs: ResolvedReference[] = await Promise.all(
+          (references as QuestionReference[]).map(async (ref) => {
+            const result = await FilesAPI.loadFile(ref.id, user);
+            return {
+              id: ref.id,
+              alias: ref.alias,
+              query: (result.data.content as QuestionContent).query
+            };
+          })
+        );
+
+        // Use extracted function to build CTEs
+        finalQuery = CTEfyQuery(query, resolvedRefs);
+        console.log(`[QUERY API] CTE construction took ${Date.now() - cteStart}ms`);
+      }
+
+      // Apply None params: remove filter conditions or substitute with NULL
+      const { sql: resolvedQuery, params: resolvedParams } = await applyNoneParams(finalQuery, paramValues);
+
+      const queryStart = Date.now();
+      const result = await runQuery(database_name, resolvedQuery, resolvedParams, user);
+      const durationMs = Date.now() - queryStart;
+
+      // Populate server-side cache
+      const cachedAt = Date.now();
+      queryCache.set(queryHash, { result, cachedAt });
+
+      // Publish analytics event (fire-and-forget via registry)
+      appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
+        queryHash, databaseName: database_name, durationMs,
+        rowCount: result.rows.length, wasCacheHit: false,
+        companyId: user.companyId, userEmail: user.email,
+      });
+
+      return { ...result, cachedAt };
+    })();
+
+    queryInflight.set(queryHash, execPromise);
+    try {
+      const result = await execPromise;
+      console.log(`[QUERY API] Total request time: ${Date.now() - startTime}ms`);
+      return successResponse(result);
+    } finally {
+      queryInflight.delete(queryHash);
+    }
   } catch (error) {
     console.error(`[QUERY API] Error after ${Date.now() - startTime}ms:`, error);
     return handleApiError(error);
