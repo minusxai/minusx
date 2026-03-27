@@ -303,12 +303,12 @@ class TestUnsupportedFeatures:
         assert len(ir.ctes) == 1
         assert ir.ctes[0].name == "active_users"
 
-    def test_union_rejected(self):
-        """Test that UNION is rejected"""
+    def test_union_supported(self):
+        """Test that UNION is now supported (returns CompoundQueryIR)"""
         sql = "SELECT * FROM users UNION SELECT * FROM admins"
-        with pytest.raises(UnsupportedSQLError) as exc_info:
-            parse_sql_to_ir(sql)
-        assert "UNION" in exc_info.value.features
+        ir = parse_sql_to_ir(sql)
+        assert ir is not None
+        assert ir.type == 'compound'
 
     def test_case_supported(self):
         """Test that CASE expressions are now supported (stored as raw SQL in IR)"""
