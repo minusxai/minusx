@@ -19,6 +19,7 @@ interface CompoundQueryBuilderProps {
   databaseName: string;
   ir: CompoundQueryIR;
   onIRChange: (ir: CompoundQueryIR) => void;
+  onDissolve?: (keepIndex: number) => void;  // Convert back to simple, keeping the query at keepIndex
   onExecute?: () => void;
   isExecuting?: boolean;
   availableQuestions?: QuestionOption[];
@@ -70,22 +71,25 @@ export function CompoundQueryBuilder({
   databaseName,
   ir,
   onIRChange,
+  onDissolve,
   onExecute,
   isExecuting = false,
   availableQuestions = [],
 }: CompoundQueryBuilderProps) {
   // Track per-query SQL for converting individual QueryIR changes back to SQL
   const [querySqls, setQuerySqls] = useState<string[]>(() => ir.queries.map(() => ''));
-  const lastIrRef = useRef(ir);
+  const lastIrJsonRef = useRef('');
 
-  // When ir prop changes (from parent), regenerate SQL for each query
+  // When ir prop changes, regenerate SQL for each query
   useEffect(() => {
-    if (ir === lastIrRef.current) return;
-    lastIrRef.current = ir;
+    const irJson = JSON.stringify(ir.queries);
+    if (irJson === lastIrJsonRef.current) return;
+    lastIrJsonRef.current = irJson;
 
     async function regenerateSqls() {
       const sqls = await Promise.all(
         ir.queries.map(async (q) => {
+          if (!q.from?.table) return ''; // Skip empty queries
           try {
             const result = await CompletionsAPI.irToSql({ ir: q });
             return result.success && result.sql ? result.sql : '';
@@ -109,6 +113,7 @@ export function CompoundQueryBuilder({
       });
 
       // Parse the SQL back to IR and update the compound query
+      if (!sql.trim()) return; // Skip empty SQL
       CompletionsAPI.sqlToIR({ sql }).then((result) => {
         if (result.success && result.ir && result.ir.type !== 'compound') {
           const queryIR = result.ir as QueryIR;
@@ -149,7 +154,12 @@ export function CompoundQueryBuilder({
 
   const handleRemoveQuery = useCallback(
     (index: number) => {
-      if (ir.queries.length <= 2) return; // Minimum 2 queries
+      if (ir.queries.length <= 2) {
+        // Dissolve to simple: keep the OTHER query
+        const keepIndex = index === 0 ? 1 : 0;
+        if (onDissolve) onDissolve(keepIndex);
+        return;
+      }
       const newQueries = ir.queries.filter((_, i) => i !== index);
       // Remove the operator: if removing first query, remove operator[0];
       // otherwise remove operator[index - 1]
@@ -162,7 +172,7 @@ export function CompoundQueryBuilder({
       });
       setQuerySqls((prev) => prev.filter((_, i) => i !== index));
     },
-    [ir, onIRChange]
+    [ir, onIRChange, onDissolve]
   );
 
   const handleOrderByChange = useCallback(
@@ -195,8 +205,8 @@ export function CompoundQueryBuilder({
               borderRadius="lg"
               overflow="hidden"
             >
-              {/* Remove button (only when 3+ queries) */}
-              {ir.queries.length > 2 && (
+              {/* Remove button — dissolves to simple when 2 queries, removes block when 3+ */}
+              {(
                 <Box
                   as="button"
                   position="absolute"

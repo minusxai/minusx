@@ -99,13 +99,8 @@ export function QueryBuilderRoot({
         };
         setCompoundIR(compound);
         setMode('compound');
-
-        // Generate SQL for the compound IR
-        const sqlResult = await CompletionsAPI.irToSql({ ir: compound });
-        if (sqlResult.success && sqlResult.sql) {
-          lastGeneratedSqlRef.current = sqlResult.sql;
-          onSqlChange(sqlResult.sql);
-        }
+        // Don't generate SQL yet — second query has no table.
+        // SQL will be generated when the user fills in the second query.
       }
     } catch (err) {
       console.error('[QueryBuilderRoot] Failed to convert to compound:', err);
@@ -130,6 +125,10 @@ export function QueryBuilderRoot({
         }
         return;
       }
+
+      // Only generate SQL when all queries have a table selected
+      const allHaveTables = newIR.queries.every(q => q.from?.table);
+      if (!allHaveTables) return;
 
       // Generate SQL from updated compound IR
       try {
@@ -158,11 +157,30 @@ export function QueryBuilderRoot({
   }
 
   if (mode === 'compound' && compoundIR) {
+    const handleDissolve = async (keepIndex: number) => {
+      // Keep the specified query
+      const kept = compoundIR.queries[keepIndex];
+      if (kept?.from?.table) {
+        try {
+          const result = await CompletionsAPI.irToSql({ ir: kept });
+          if (result.success && result.sql) {
+            lastGeneratedSqlRef.current = result.sql;
+            lastSqlRef.current = result.sql;
+            // Update SQL first, then switch mode so QueryBuilder sees simple SQL
+            onSqlChange(result.sql);
+          }
+        } catch { /* fall through */ }
+      }
+      setCompoundIR(null);
+      setMode('simple');
+    };
+
     return (
       <CompoundQueryBuilder
         databaseName={databaseName}
         ir={compoundIR}
         onIRChange={handleCompoundIRChange}
+        onDissolve={handleDissolve}
         onExecute={onExecute}
         isExecuting={isExecuting}
         availableQuestions={availableQuestions}
