@@ -16,7 +16,7 @@ import {
 import './tool-handlers.server';
 import { orchestratePendingTools } from './orchestrator';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
-import { trackLLMCallEvents } from '@/lib/analytics/file-analytics.server';
+import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { UserInterruptError } from '@/lib/errors/user-interrupt-error';
 
@@ -186,9 +186,14 @@ export async function POST(request: NextRequest) {
       // Track LLM call analytics in DuckDB (fire-and-forget)
       // IMPORTANT: Use UPDATED currentConversationID (may have changed due to forking)
       if (pythonResponse.llm_calls && Object.keys(pythonResponse.llm_calls).length > 0) {
-        trackLLMCallEvents(pythonResponse.llm_calls, currentConversationID, user.companyId, user.userId, user.email, user.role).catch(
-          (err: unknown) => console.error('[LLM Analytics] Failed to track:', err)
-        );
+        appEventRegistry.publish(AppEvents.LLM_CALL, {
+          llmCalls: pythonResponse.llm_calls,
+          conversationId: currentConversationID,
+          companyId: user.companyId,
+          userId: user.userId,
+          userEmail: user.email,
+          userRole: user.role,
+        });
       }
 
       // Clear user_message after first call (subsequent calls are tool completions only)
