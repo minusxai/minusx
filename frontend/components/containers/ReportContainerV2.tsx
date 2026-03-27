@@ -11,7 +11,7 @@ import { selectMergedContent, selectEffectiveName, type FileId } from '@/store/f
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile } from '@/lib/api/file-state';
 import ReportView from '@/components/views/ReportView';
-import { ReportContent, ReportRunContent } from '@/lib/types';
+import { ReportContent, RunFileContent } from '@/lib/types';
 import { useJobRuns } from '@/lib/hooks/job-runs-hooks';
 import { useCallback } from 'react';
 import { type FileViewMode } from '@/lib/ui/fileComponents';
@@ -35,7 +35,7 @@ export default function ReportContainerV2({ fileId }: ReportContainerV2Props) {
   // Load the run file content for the currently selected run
   const runFileId = selectedRun?.output_file_id ?? undefined;
   const runFileAugmented = useFile(runFileId);
-  const reportRunContent = runFileAugmented?.fileState?.content as ReportRunContent | undefined;
+  const runFileContent = runFileAugmented?.fileState?.content as RunFileContent | undefined;
 
   const handleChange = useCallback((updates: Partial<ReportContent>) => {
     editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes: { content: updates } });
@@ -62,7 +62,8 @@ export default function ReportContainerV2({ fileId }: ReportContainerV2Props) {
       isRunning={isRunning}
       runs={runs}
       selectedRunId={selectedRunId}
-      reportRunContent={reportRunContent}
+      runFileContent={runFileContent}
+      runFileId={runFileId}
       onChange={handleChange}
       onRunNow={handleRunNow}
       onSelectRun={handleSelectRun}

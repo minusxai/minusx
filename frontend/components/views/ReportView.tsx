@@ -1,9 +1,11 @@
 'use client';
 
 import { Box, Text, VStack, HStack, Input, Button, Textarea, Flex, Badge, IconButton, Portal } from '@chakra-ui/react';
-import { ReportContent, ReportReference, ReportRunContent, JobRun } from '@/lib/types';
+import { ReportContent, ReportReference, ReportOutput, RunFileContent, JobRun } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { LuPlay, LuClock, LuMail, LuInfo, LuPlus, LuTrash2, LuFileText, LuGripVertical, LuListChecks, LuHistory } from 'react-icons/lu';
+import { LuPlay, LuClock, LuMail, LuInfo, LuPlus, LuTrash2, LuFileText, LuGripVertical, LuListChecks, LuHistory, LuExternalLink } from 'react-icons/lu';
+import Link from 'next/link';
+import { preserveParams } from '@/lib/navigation/url-utils';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
 import { SchedulePicker } from '@/components/shared/SchedulePicker';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
@@ -20,8 +22,10 @@ interface ReportViewProps {
   isRunning: boolean;
   runs?: JobRun[];
   selectedRunId?: number | null;
-  /** Content of the selected run file, loaded by the container */
-  reportRunContent?: ReportRunContent | null;
+  /** Run file content (RunFileContent) for the selected run, loaded by the container */
+  runFileContent?: RunFileContent | null;
+  /** File ID of the selected run file, for navigation link */
+  runFileId?: number;
 
   onChange: (updates: Partial<ReportContent>) => void;
   onRunNow: () => Promise<void>;
@@ -42,11 +46,13 @@ export default function ReportView({
   isRunning,
   runs = [],
   selectedRunId,
-  reportRunContent,
+  runFileContent,
+  runFileId,
   onChange,
   onRunNow,
   onSelectRun
 }: ReportViewProps) {
+  const reportOutput = runFileContent?.output as ReportOutput | undefined;
   // editMode, viewMode, and isDirty sourced from Redux (managed by FileHeader)
   const editMode = useAppSelector(state => selectFileEditMode(state, fileId));
   const activeTab = useAppSelector(state => selectFileViewMode(state, fileId));
@@ -600,19 +606,26 @@ export default function ReportView({
                 <VStack gap={4} align="center" justify="center" h="100%">
                   <Text color="fg.muted">Running report...</Text>
                 </VStack>
-              ) : reportRunContent ? (
+              ) : runFileContent ? (
                 <VStack align="stretch" gap={3}>
                   <HStack justify="space-between">
-                    <Badge
-                      colorPalette={reportRunContent.status === 'success' ? 'green' : reportRunContent.status === 'failed' ? 'red' : 'yellow'}
-                    >
-                      {reportRunContent.status}
-                    </Badge>
-                    <Text fontSize="xs" color="fg.muted">
-                      {new Date(reportRunContent.startedAt).toLocaleString()}
-                    </Text>
+                    <HStack gap={2}>
+                      <Badge
+                        colorPalette={runFileContent.status === 'success' ? 'green' : runFileContent.status === 'failure' ? 'red' : 'yellow'}
+                      >
+                        {runFileContent.status}
+                      </Badge>
+                      <Text fontSize="xs" color="fg.muted">
+                        {new Date(runFileContent.startedAt).toLocaleString()}
+                      </Text>
+                    </HStack>
+                    {runFileId && (
+                      <Link href={preserveParams(`/f/${runFileId}`)} style={{ opacity: 0.5 }}>
+                        <LuExternalLink size={14} />
+                      </Link>
+                    )}
                   </HStack>
-                  {reportRunContent.generatedReport && (
+                  {reportOutput?.generatedReport && (
                     <Box
                       p={4}
                       bg="bg.muted"
@@ -620,14 +633,14 @@ export default function ReportView({
                       overflow="auto"
                       maxH="none"
                     >
-                      <Markdown queries={reportRunContent.queries}>
-                        {reportRunContent.generatedReport}
+                      <Markdown queries={reportOutput.queries}>
+                        {reportOutput.generatedReport}
                       </Markdown>
                     </Box>
                   )}
-                  {reportRunContent.error && (
+                  {runFileContent.error && (
                     <Box p={3} bg="red.subtle" borderRadius="md" color="red.fg">
-                      <Text fontSize="sm">{reportRunContent.error}</Text>
+                      <Text fontSize="sm">{runFileContent.error}</Text>
                     </Box>
                   )}
                 </VStack>
