@@ -1,11 +1,11 @@
 'use client';
 
-import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuPlus, LuEllipsisVertical, LuSun, LuMoon } from 'react-icons/lu';
+import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { Box, Flex, VStack, HStack, Text, IconButton, Icon, Menu } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
 import { Link } from '@/components/ui/Link';
-import { Fragment, ReactNode, useMemo, useState, useEffect } from 'react';
+import { ReactNode, useMemo, useState, useEffect } from 'react';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { signOut } from 'next-auth/react';
@@ -125,7 +125,7 @@ export default function Sidebar() {
   const homeItem = { href: '/', icon: <LuHouse />, label: 'Home' };
 
   type NavItem = { href: string; icon: React.ReactElement; label: string; adminOnly?: boolean };
-  type NavAction = { label: string; fileType: string; adminOnly?: boolean };
+  type NavAction = { label: string; fileType: string; icon: React.ReactElement; adminOnly?: boolean };
   type NavSection = { category: string; items: NavItem[]; actions?: NavAction[] };
 
   // Get user mode for mode-aware navigation
@@ -138,8 +138,8 @@ export default function Sidebar() {
         { href: '/explore', icon: <FILE_TYPE_METADATA.explore.icon />, label: FILE_TYPE_METADATA.explore.label },
       ],
       actions: [
-        { label: 'New Question', fileType: 'question' },
-        { label: 'New Dashboard', fileType: 'dashboard' },
+        { label: 'Add New Question', fileType: 'question', icon: <FILE_TYPE_METADATA.question.icon size={12} /> },
+        { label: 'Add New Dashboard', fileType: 'dashboard', icon: <FILE_TYPE_METADATA.dashboard.icon size={12} /> },
       ]
     },
     {
@@ -148,7 +148,7 @@ export default function Sidebar() {
         { href: `/p/${mode}/database`, icon: <FILE_TYPE_METADATA.connection.icon />, label: FILE_TYPE_METADATA.connection.label, adminOnly: true },
       ],
       actions: [
-        { label: 'New Connection', fileType: 'connection', adminOnly: true },
+        { label: 'Add New DB Connection', fileType: 'connection', icon: <FILE_TYPE_METADATA.connection.icon size={12} />, adminOnly: true },
       ]
     },
     {
@@ -305,26 +305,29 @@ export default function Sidebar() {
               {/* Section Action Buttons (expanded only) */}
               {!isCollapsed && section.actions && section.actions.length > 0 && (
                 <Flex gap={2} px={3} py={1} flexWrap="wrap" alignItems="center">
-                  {section.actions.map((action, i) => (
-                    <Fragment key={action.fileType}>
-                      {i > 0 && <Text fontSize="2xs" color="fg.muted" lineHeight={1}>&middot;</Text>}
-                      <Box
-                        as="button"
-                        fontSize="2xs"
-                        color="fg.muted"
-                        fontFamily="mono"
-                        cursor="pointer"
-                        _hover={{ color: 'accent.teal' }}
-                        transition="color 0.2s"
-                        onClick={() => navigate(`/new/${action.fileType}?folder=${encodeURIComponent(currentPath)}`)}
-                        display="flex"
-                        alignItems="center"
-                        gap={0.5}
-                      >
-                        <LuPlus size={10} />
-                        {action.label}
-                      </Box>
-                    </Fragment>
+                  {section.actions.map((action) => (
+                    <Box
+                      key={action.fileType}
+                      as="button"
+                      fontSize="xs"
+                      color="accent.teal"
+                      fontFamily="mono"
+                      fontWeight="500"
+                      cursor="pointer"
+                      bg="bg.subtle"
+                      borderRadius="full"
+                      px={2.5}
+                      py={1}
+                      _hover={{ bg: 'bg.muted' }}
+                      transition="all 0.2s"
+                      onClick={() => navigate(`/new/${action.fileType}?folder=${encodeURIComponent(currentPath)}`)}
+                      display="flex"
+                      alignItems="center"
+                      gap={1}
+                    >
+                      {action.icon}
+                      {action.label}
+                    </Box>
                   ))}
                 </Flex>
               )}

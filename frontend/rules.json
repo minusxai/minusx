@@ -5,14 +5,14 @@
       "type": "fileTypeAccess",
       "role": "admin",
       "allowedTypes": "*",
-      "createTypes": ["question", "dashboard", "folder", "context", "connection", "alert"],
+      "createTypes": ["question", "dashboard", "folder", "connection", "alert"],
       "viewTypes": "*"
     },
     {
       "type": "fileTypeAccess",
       "role": "editor",
       "allowedTypes": ["question", "dashboard", "folder", "context", "connection", "conversation", "session", "report", "alert", "alert_run", "report_run", "transformation", "transformation_run"],
-      "createTypes": ["question", "dashboard", "folder", "context", "alert"],
+      "createTypes": ["question", "dashboard", "folder","alert"],
       "viewTypes": ["question", "dashboard", "folder", "context", "conversation", "session", "report", "alert", "alert_run", "report_run", "transformation", "transformation_run"]
     },
     {

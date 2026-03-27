@@ -571,17 +571,12 @@ class FilesDataLayerServer implements IFilesDataLayer {
         // Use centralized database selection logic (returns empty string if no connections)
         const defaultDb = selectDatabase(databaseConnections, options.databaseName);
 
-        // Validate that we have a database connection
-        if (!defaultDb) {
-          throw new Error('Cannot create question: No database connections available. Please create a connection first.');
-        }
-
         const content: QuestionContent = {
           description: '',
           query: options.query || '',
           vizSettings: { type: 'table' },
           parameters: [],
-          database_name: defaultDb
+          database_name: defaultDb || ''
         };
 
         return {
