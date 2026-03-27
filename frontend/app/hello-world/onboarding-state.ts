@@ -31,9 +31,18 @@ export interface OnboardingCheck {
  *
  * Used by middleware (server), page.tsx (client), and HelloWorldContent (client).
  */
+/**
+ * Onboarding stages:
+ * 1. No connections → welcome (choose demo or connect)
+ * 2. Connection exists, no context → context step
+ * 3. Connection + context exist, no dashboards/questions → generating step (TODO: auto-dashboard)
+ * 4. All exist → onboarding complete
+ */
 export function detectOnboardingState(
   connections: Array<{ id: number; name: string }>,
   contexts: Array<unknown>,
+  /** Optional: pass questions/dashboards to detect stage 3 */
+  questions?: Array<unknown>,
 ): OnboardingCheck {
   if (connections.length === 0) {
     return { needsOnboarding: true, redirectPath: '/hello-world' };
@@ -49,6 +58,16 @@ export function detectOnboardingState(
     return { needsOnboarding: true, redirectPath: `/hello-world?${params}` };
   }
 
+  // Connection + context exist but no questions → generating step
+  if (questions !== undefined && questions.length === 0) {
+    const conn = connections[0];
+    const params = new URLSearchParams({
+      step: 'generating',
+      connectionName: conn.name,
+    });
+    return { needsOnboarding: true, redirectPath: `/hello-world?${params}` };
+  }
+
   return { needsOnboarding: false, redirectPath: null };
 }
 
@@ -58,6 +77,7 @@ export function detectOnboardingState(
 export function detectStepFromSystemState(
   connections: Array<{ id: number; name: string }>,
   contexts: Array<unknown>,
+  questions?: Array<unknown>,
 ): OnboardingState {
   if (connections.length === 0) {
     return { step: 'welcome', connectionId: null, connectionName: null, contextFileId: null };
@@ -66,6 +86,11 @@ export function detectStepFromSystemState(
   if (contexts.length === 0) {
     const conn = connections[0];
     return { step: 'context', connectionId: conn.id, connectionName: conn.name, contextFileId: null };
+  }
+
+  if (questions !== undefined && questions.length === 0) {
+    const conn = connections[0];
+    return { step: 'generating', connectionId: conn.id, connectionName: conn.name, contextFileId: null };
   }
 
   // Onboarding complete

@@ -157,27 +157,31 @@ export default auth(async (req) => {
     },
   });
 
-  // Optimize: Redirect home route to user's home folder (server-side)
-  // This eliminates client-side redirect and saves 1 page load
+  // Onboarding detection: runs on /, /p/org*, and /hello-world (without step param)
+  // Routes users to the correct onboarding step if setup is incomplete.
+  const isHomePath = pathname === '/' || pathname === '/p/org' || pathname.startsWith('/p/org/');
+  const isHelloWorldWithoutStep = pathname === '/hello-world' && !req.nextUrl.searchParams.get('step');
+  const effectiveMode = (mode && isValidMode(mode)) ? mode : 'org';
+
+  if ((isHomePath || isHelloWorldWithoutStep) && effectiveMode === 'org' && req.auth.user?.companyId) {
+    try {
+      const companyId = req.auth.user.companyId;
+      const connections = await DocumentDB.listAll(companyId, 'connection', ['/org'], -1, false);
+      const contexts = await DocumentDB.listAll(companyId, 'context', ['/org'], -1, false);
+      const questions = await DocumentDB.listAll(companyId, 'question', ['/org'], -1, false);
+      const { needsOnboarding, redirectPath } = detectOnboardingState(connections, contexts, questions);
+      if (needsOnboarding && redirectPath) {
+        const protocol = req.headers.get('x-forwarded-proto') || 'https';
+        return NextResponse.redirect(new URL(`${protocol}://${hostname}${redirectPath}`));
+      }
+    } catch (e) {
+      console.error('[Middleware] Onboarding detection failed:', e);
+    }
+  }
+
+  // Redirect home route to user's home folder (server-side)
   if (pathname === '/') {
     const user = req.auth.user
-    const effectiveMode = (mode && isValidMode(mode)) ? mode : 'org';
-
-    // First-use detection: redirect new users to the right onboarding step
-    // Logic lives in onboarding-state.ts — this just fetches data and applies the result.
-    if (effectiveMode === 'org' && user?.companyId) {
-      try {
-        const connections = await DocumentDB.listAll(user.companyId, 'connection', ['/org'], -1, false);
-        const contexts = await DocumentDB.listAll(user.companyId, 'context', ['/org'], -1, false);
-        const { needsOnboarding, redirectPath } = detectOnboardingState(connections, contexts);
-        if (needsOnboarding && redirectPath) {
-          const protocol = req.headers.get('x-forwarded-proto') || 'https';
-          return NextResponse.redirect(new URL(`${protocol}://${hostname}${redirectPath}`));
-        }
-      } catch (e) {
-        console.error('[Middleware] First-use detection failed:', e);
-      }
-    }
 
     // Mode-aware home redirect
     const homeHref = user?.role && isAdmin(user.role)
