@@ -66,6 +66,10 @@ const customConfig = defineConfig({
       bg: 'bg.canvas',
       color: 'fg.default',
     },
+    '::selection': {
+      bg: 'accent.teal',
+      color: 'white',
+    },
   },
   theme: {
     tokens: {
