@@ -3,8 +3,8 @@
 import { use, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
-import { Box, VStack, HStack, Flex, useBreakpointValue, Button, Icon, Span } from '@chakra-ui/react';
-import { LuPlus, LuGraduationCap } from 'react-icons/lu';
+import { Box, VStack, HStack, Flex, useBreakpointValue, Button } from '@chakra-ui/react';
+import { LuPlus } from 'react-icons/lu';
 import Breadcrumb from '@/components/Breadcrumb';
 import FolderView from '@/components/FolderView';
 import RightSidebar from '@/components/RightSidebar';
@@ -12,7 +12,6 @@ import MobileRightSidebar from '@/components/MobileRightSidebar';
 import SearchBar from '@/components/SearchBar';
 import ProductTour from '@/components/ProductTour';
 import { useAppSelector } from '@/store/hooks';
-import { switchMode } from '@/lib/mode/mode-utils';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { useFolder } from '@/lib/hooks/file-state-hooks';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -143,25 +142,6 @@ export default function PathPage({ params }: PathPageProps) {
       );
     }
 
-    // Try Demo Mode button (only in org mode)
-    if (mode === 'org') {
-      elements.push(
-        <Button
-          key="try-demo"
-          onClick={() => switchMode('tutorial')}
-          variant="outline"
-          size="sm"
-          borderColor="accent.danger"
-          color="accent.danger"
-          _hover={{ bg: 'accent.danger', color: 'white' }}
-          gap={2}
-          aria-label='Try Demo Button'
-        >
-          <Icon as={LuGraduationCap} />
-          Try Demo Mode <Span fontSize="2xs">(Sample Data Included)</Span>
-        </Button>
-      );
-    }
 
     if (elements.length === 0) return undefined;
     if (elements.length === 1) return elements[0];

@@ -1,8 +1,8 @@
 'use client';
 
-import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon } from 'react-icons/lu';
+import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
-import { Box, Flex, VStack, HStack, Text, IconButton, Icon, Menu } from '@chakra-ui/react';
+import { Box, Flex, VStack, HStack, Text, IconButton, Icon, Menu, Button, Span } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
 import { Link } from '@/components/ui/Link';
 import { ReactNode, useMemo, useState, useEffect } from 'react';
@@ -20,6 +20,7 @@ import { exitImpersonation } from '@/lib/navigation/url-utils';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { analytics, AnalyticsEvents } from '@/lib/analytics';
+import { switchMode } from '@/lib/mode/mode-utils';
 
 interface NavItemProps {
   href: string;
@@ -367,6 +368,73 @@ export default function Sidebar() {
           >
             <ImpersonationSelector />
           </Box>
+        )}
+
+        {/* Try Demo Mode Button (only in org mode) */}
+        {mode === 'org' && !isCollapsed && (
+          <Box px={4} py={3} borderTop="1px solid" borderColor="border.default">
+            <Text fontSize="2xs" fontWeight="600" color="fg.subtle" textTransform="uppercase" letterSpacing="0.1em" fontFamily="mono" px={3} mb={2}>
+              Getting Started
+            </Text>
+            <VStack gap={2} align="stretch">
+              <Link href="/getting-started" prefetch={true} style={{ textDecoration: 'none' }}>
+                <Box
+                  fontSize="xs"
+                  color="fg.muted"
+                  fontFamily="mono"
+                  fontWeight="400"
+                  cursor="pointer"
+                  borderRadius="md"
+                  px={3}
+                  py={1.5}
+                  _hover={{ color: 'accent.teal', bg: 'bg.subtle' }}
+                  transition="all 0.2s"
+                  display="flex"
+                  alignItems="center"
+                  gap={2}
+                >
+                  <Icon as={LuBookOpen} boxSize={3} />
+                  How to use {displayName}
+                </Box>
+              </Link>
+              <Button
+                onClick={() => switchMode('tutorial')}
+                variant="outline"
+                size="sm"
+                width="100%"
+                borderColor="accent.danger"
+                color="accent.danger"
+                _hover={{ bg: 'accent.danger', color: 'white' }}
+                gap={2}
+                aria-label="Try Demo Button"
+              >
+                <Box textAlign="center" lineHeight="1.3">
+                  <HStack gap={1} justify="center">
+                    <Icon as={LuGraduationCap} />
+                    <Text fontSize="xs">Try Demo Mode</Text>
+                  </HStack>
+                  <Text fontSize="2xs" fontWeight="400">(Sample Data Included)</Text>
+                </Box>
+              </Button>
+            </VStack>
+          </Box>
+        )}
+        {mode === 'org' && isCollapsed && (
+          <Flex justify="center" py={3} borderTop="1px solid" borderColor="border.default">
+            <Tooltip content="Try Demo Mode" positioning={{ placement: 'right' }}>
+              <IconButton
+                onClick={() => switchMode('tutorial')}
+                variant="outline"
+                size="sm"
+                borderColor="accent.danger"
+                color="accent.danger"
+                _hover={{ bg: 'accent.danger', color: 'white' }}
+                aria-label="Try Demo Mode"
+              >
+                <LuGraduationCap />
+              </IconButton>
+            </Tooltip>
+          </Flex>
         )}
 
         {/* User Menu */}
