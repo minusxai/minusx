@@ -13,6 +13,7 @@ import type { JobRun, QuestionContent, Test, Transform, TransformationContent } 
 import TestList from '@/components/test/TestList';
 import { SchedulePicker } from '@/components/shared/SchedulePicker';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
+import { StatusBanner } from '@/components/shared/StatusBanner';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { useContext } from '@/lib/hooks/useContext';
 import { useFile } from '@/lib/hooks/file-state-hooks';
@@ -448,6 +449,15 @@ export default function TransformationView({
 
   return (
     <Box display="flex" flexDirection="column" overflow="hidden" flex="1" minH="0" fontFamily="mono">
+      {/* Status bar: Live/Draft toggle */}
+      <StatusBanner
+        status={transformation.status ?? 'draft'}
+        label="transformation"
+        runLabel="Run Now"
+        editMode={!!editMode}
+        onChange={(s) => onChange({ status: s })}
+      />
+
       {/* JSON View */}
       {activeTab === 'json' && (
         <Box p={4} bg="bg.muted" borderRadius="md" fontFamily="mono" fontSize="sm" overflow="auto">

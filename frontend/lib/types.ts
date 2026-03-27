@@ -238,6 +238,8 @@ export interface ContextContent extends BaseFileContent {
   /** Optional cron schedule for automatic eval runs */
   schedule?: AlertSchedule;
   recipients?: AlertRecipient[];
+  /** Scheduling gate: 'live' = runs on schedule, 'draft' = manual only (default when absent) */
+  status?: 'live' | 'draft';
 }
 
 export type UserRole = 'admin' | 'editor' | 'viewer';
@@ -671,6 +673,8 @@ export interface TransformationContent extends BaseFileContent {
   transforms: Transform[];
   schedule?: AlertSchedule;
   recipients?: AlertRecipient[];
+  /** Scheduling gate: 'live' = runs on schedule, 'draft' = manual only (default when absent) */
+  status?: 'live' | 'draft';
 }
 
 // Per-transform execution result (stored inside RunFileContent.output)

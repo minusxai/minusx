@@ -4,9 +4,10 @@ import { Box, Text, VStack, HStack, Input, Button, Flex, Portal, Switch, NativeS
 import type { CheckedChangeDetails } from '@zag-js/switch';
 import { AlertContent, JobRun, Test } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { LuPlay, LuClock, LuBell, LuMail, LuInfo, LuGripVertical, LuHistory, LuFlaskConical } from 'react-icons/lu';
+import { LuPlay, LuClock, LuBell, LuMail, LuGripVertical, LuHistory, LuFlaskConical } from 'react-icons/lu';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
 import { SchedulePicker } from '@/components/shared/SchedulePicker';
+import { StatusBanner } from '@/components/shared/StatusBanner';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { useAppSelector } from '@/store/hooks';
 import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
@@ -44,8 +45,6 @@ export default function AlertView({
   const editMode = useAppSelector(state => selectFileEditMode(state, fileId));
   const activeTab = useAppSelector(state => selectFileViewMode(state, fileId));
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
-  const isLive = (alert.status ?? 'draft') === 'live';
-
   const [forceRun, setForceRun] = useState(false);
   const [sendNotifications, setSendNotifications] = useState(true);
 
@@ -124,31 +123,13 @@ export default function AlertView({
   return (
     <Box display="flex" flexDirection="column" overflow="hidden" flex="1" minH="0" fontFamily="mono">
       {/* Status bar: Live/Draft toggle + cron info */}
-      <HStack gap={3} px={4} py={2} bg={isLive ? 'green.subtle' : 'yellow.subtle'} borderBottomWidth="1px" borderColor={isLive ? 'green.muted' : 'yellow.muted'} borderRadius="md">
-        <LuInfo size={14} color={isLive ? 'var(--chakra-colors-green-fg)' : 'var(--chakra-colors-yellow-fg)'} />
-        <Text fontSize="xs" color={isLive ? 'green.fg' : 'yellow.fg'} flex={1}>
-          {isLive
-            ? 'This alert is live. Scheduled runs will execute when the cron endpoint is triggered.'
-            : 'Draft mode — scheduled runs are disabled. Use Check Now to test.'}
-        </Text>
-        <HStack gap={2}>
-          <Text fontSize="xs" fontWeight="600" color={isLive ? 'green.fg' : 'yellow.fg'}>
-            {isLive ? 'Live' : 'Draft'}
-          </Text>
-          <Switch.Root
-            size="sm"
-            checked={isLive}
-            disabled={!editMode}
-            onCheckedChange={(e: CheckedChangeDetails) => onChange({ status: e.checked ? 'live' : 'draft' })}
-            colorPalette="green"
-          >
-            <Switch.HiddenInput />
-            <Switch.Control>
-              <Switch.Thumb />
-            </Switch.Control>
-          </Switch.Root>
-        </HStack>
-      </HStack>
+      <StatusBanner
+        status={alert.status ?? 'draft'}
+        label="alert"
+        runLabel="Check Now"
+        editMode={editMode}
+        onChange={(s) => onChange({ status: s })}
+      />
 
       {/* JSON View */}
       {activeTab === 'json' && (

@@ -3,11 +3,12 @@
 import { Box, Text, VStack, HStack, Input, Button, Textarea, Flex, Badge, IconButton, Portal } from '@chakra-ui/react';
 import { ReportContent, ReportReference, ReportOutput, RunFileContent, JobRun } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { LuPlay, LuClock, LuMail, LuInfo, LuPlus, LuTrash2, LuFileText, LuGripVertical, LuListChecks, LuHistory, LuExternalLink } from 'react-icons/lu';
+import { LuPlay, LuClock, LuMail, LuPlus, LuTrash2, LuFileText, LuGripVertical, LuListChecks, LuHistory, LuExternalLink } from 'react-icons/lu';
 import Link from 'next/link';
 import { preserveParams } from '@/lib/navigation/url-utils';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
 import { SchedulePicker } from '@/components/shared/SchedulePicker';
+import { StatusBanner } from '@/components/shared/StatusBanner';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import Markdown from '@/components/Markdown';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
@@ -187,22 +188,14 @@ export default function ReportView({
 
   return (
     <Box display="flex" flexDirection="column" overflow="hidden" flex="1" minH="0" fontFamily="mono">
-      {/* Scheduling status banner */}
-      {report.status === 'live' ? (
-        <HStack gap={2} px={4} py={2} bg="green.subtle" borderBottomWidth="1px" borderColor="green.muted" borderRadius="md">
-          <LuInfo size={14} color="var(--chakra-colors-green-fg)" />
-          <Text fontSize="xs" color="green.fg">
-            Scheduled runs are <strong>active</strong>. This report will run automatically per its cron schedule.
-          </Text>
-        </HStack>
-      ) : (
-        <HStack gap={2} px={4} py={2} bg="yellow.subtle" borderBottomWidth="1px" borderColor="yellow.muted" borderRadius="md">
-          <LuInfo size={14} color="var(--chakra-colors-yellow-fg)" />
-          <Text fontSize="xs" color="yellow.fg">
-            Scheduled runs are <strong>not active</strong>. Set status to <strong>Live</strong> to enable automatic scheduling.
-          </Text>
-        </HStack>
-      )}
+      {/* Status bar: Live/Draft toggle */}
+      <StatusBanner
+        status={report.status ?? 'draft'}
+        label="report"
+        runLabel="Run Now"
+        editMode={editMode}
+        onChange={(s) => onChange({ status: s })}
+      />
 
       {/* JSON View */}
       {activeTab === 'json' && (

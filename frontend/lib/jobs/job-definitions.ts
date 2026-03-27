@@ -16,7 +16,7 @@ export const JOB_DEFINITIONS: JobDefinition[] = [
   {
     job_type: 'context',
     file_type: 'context',
-    isActive: (content: ContextContent) => !!content.schedule,
+    isActive: (content: ContextContent) => content.status === 'live',
   },
   {
     job_type: 'report',
@@ -26,6 +26,6 @@ export const JOB_DEFINITIONS: JobDefinition[] = [
   {
     job_type: 'transformation',
     file_type: 'transformation',
-    isActive: (content: TransformationContent) => !!content.schedule,
+    isActive: (content: TransformationContent) => content.status === 'live',
   },
 ];

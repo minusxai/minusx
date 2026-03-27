@@ -12,6 +12,7 @@ import { LuCircleAlert, LuCircleCheck, LuPlus, LuTrash2, LuChevronDown, LuGlobe,
 import { ContextContent, DatabaseContext, WhitelistItem, ContextVersion, PublishedVersions, DocEntry, Test } from '@/lib/types';
 import { SchedulePicker } from '@/components/shared/SchedulePicker';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
+import { StatusBanner } from '@/components/shared/StatusBanner';
 import TestList from '../test/TestList';
 import ContextRunView from '../views/ContextRunView';
 import type { JobRun } from '@/lib/types';
@@ -601,6 +602,17 @@ export default function ContextEditorV2({
             </Text>
           </HStack>
         </Box>
+      )}
+
+      {/* Status bar: Live/Draft toggle — shown when schedule is configured */}
+      {content.schedule && (
+        <StatusBanner
+          status={content.status ?? 'draft'}
+          label="evals"
+          runLabel="Run Now"
+          editMode={editMode}
+          onChange={(s) => onChange({ status: s })}
+        />
       )}
 
       {/* Top-level Tabs */}
