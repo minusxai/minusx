@@ -62,6 +62,7 @@ export async function POST(request: NextRequest) {
   let currentConversationID = 0;
   let currentLogIndex = 0;
   let accumulatedCompletedToolCalls: CompletedToolCallFromPython[] = [];
+  let user: Awaited<ReturnType<typeof getEffectiveUser>> | undefined;
 
   try {
     // Parse request body
@@ -72,7 +73,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get effective user
-    const user = await getEffectiveUser();
+    user = await getEffectiveUser();
 
     if (!user || !user.companyId) {
       return NextResponse.json(
@@ -270,6 +271,15 @@ export async function POST(request: NextRequest) {
 
     // Handle other errors
     console.error('Chat API error:', error);
+
+    if (user?.companyId) {
+      appEventRegistry.publish(AppEvents.ERROR, {
+        source: 'nextjs_chat',
+        message: error.message || 'Unknown error',
+        companyId: user.companyId,
+        context: { route: '/api/chat' },
+      });
+    }
 
     return NextResponse.json(
       {

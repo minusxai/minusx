@@ -22,5 +22,5 @@ export interface AppEventPayloads {
   'file:deleted':             { fileId: number; fileType?: string; filePath?: string; fileName?: string; companyId: number; userId?: number; userEmail?: string; userRole?: string };
   'folder:created':           { folderId: number; folderPath: string; folderName: string; companyId: number; userId?: number; userEmail?: string; userRole?: string };
   'llm:call':                 { conversationId: number; llmCalls: Record<string, LLMCallDetail>; companyId: number; userId?: number; userEmail?: string; userRole?: string };
-  'error':                    { source: string; message: string; error?: unknown; context?: Record<string, unknown> };
+  'error':                    { source: string; message: string; error?: unknown; context?: Record<string, unknown>; companyId?: number };
 }

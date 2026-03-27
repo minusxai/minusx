@@ -2,6 +2,7 @@ import 'server-only';
 import { AppEvents } from './events';
 import type { AppEventName, AppEventPayloads } from './events';
 import { trackFileEvent, trackLLMCallEvents } from '@/lib/analytics/file-analytics.server';
+import { notifyErrorEvent } from '@/lib/messaging/error-notifier';
 
 export { AppEvents } from './events';
 export type { AppEventName, AppEventPayloads } from './events';
@@ -38,3 +39,4 @@ appEventRegistry.subscribe(AppEvents.FILE_VIEWED_AS_REFERENCE, p => trackFileEve
 appEventRegistry.subscribe(AppEvents.FILE_UPDATED,             p => trackFileEvent({ eventType: 'updated',           ...p }));
 appEventRegistry.subscribe(AppEvents.FILE_DELETED,             p => trackFileEvent({ eventType: 'deleted',           ...p }));
 appEventRegistry.subscribe(AppEvents.LLM_CALL,                 p => trackLLMCallEvents(p.llmCalls, p.conversationId, p.companyId, p.userId!, p.userEmail!, p.userRole!));
+appEventRegistry.subscribe(AppEvents.ERROR,                    p => notifyErrorEvent(p));

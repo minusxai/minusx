@@ -12,6 +12,7 @@ import { ChannelsSection } from '@/components/settings/ChannelsSection';
 import UsersContent from '@/components/UsersContent';
 import ConfigContainerV2 from '@/components/containers/ConfigContainerV2';
 import StylesContainerV2 from '@/components/containers/StylesContainerV2';
+import { ErrorDeliverySection } from '@/components/settings/ErrorDeliverySection';
 import { toaster } from '@/components/ui/toaster';
 import { switchMode } from '@/lib/mode/mode-utils';
 import Breadcrumb from '@/components/Breadcrumb';
@@ -306,9 +307,14 @@ export default function SettingsPage() {
       label: 'Messaging',
       visible: isAdmin,
       custom: (
-        <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
-          <ChannelsSection />
-        </Box>
+        <VStack align="stretch" gap={4}>
+          <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
+            <ChannelsSection />
+          </Box>
+          <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
+            <ErrorDeliverySection />
+          </Box>
+        </VStack>
       ),
     },
     {

@@ -300,6 +300,7 @@ export interface ConfigContent extends BaseFileContent {
     webhooks: MessagingWebhook[];
   };
   channels?: ConfigChannel[];
+  error_delivery?: AlertRecipient[];
   // Future: other config sections can be added here
 }
 
