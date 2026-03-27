@@ -16,10 +16,75 @@ import type {
   FileState,
   QueryResult,
   QuestionContent,
+  QuestionReference,
   FileType,
 } from '@/lib/types';
 
 const LIMIT_CHARS = 2_000;
+
+// ---------------------------------------------------------------------------
+// DbFile → FileState
+// ---------------------------------------------------------------------------
+
+/** Extract referenced file IDs from a DbFile's content */
+export function extractReferences(file: DbFile): number[] {
+  if (file.type === 'dashboard' || file.type === 'presentation' || file.type === 'notebook') {
+    const content = file.content as any;
+    return content.assets
+      ?.filter((a: any) => a.type === 'question')
+      ?.map((a: any) => a.id)
+      .filter((id: any): id is number => typeof id === 'number') || [];
+  }
+  if (file.type === 'report') {
+    const content = file.content as any;
+    return content.references
+      ?.map((r: any) => r.reference?.id)
+      .filter((id: any): id is number => typeof id === 'number') || [];
+  }
+  if (file.type === 'question') {
+    const content = file.content as QuestionContent;
+    return content.references?.map((ref: QuestionReference) => ref.id) || [];
+  }
+  return [];
+}
+
+/** Strip legacy queryResultId persisted inside question content */
+export function stripQueryResultId(file: DbFile): DbFile['content'] {
+  if (file.type !== 'question' || !file.content) return file.content;
+  const { queryResultId: _, ...rest } = file.content as any;
+  return rest as DbFile['content'];
+}
+
+/** Compute the query result cache key for a question file */
+export function computeQueryResultId(file: DbFile): string | undefined {
+  if (file.type !== 'question' || !file.content) return undefined;
+  const content = file.content as QuestionContent;
+  if (!content.query || !content.database_name) return undefined;
+  return getQueryHash(content.query, content.parameterValues || {}, content.database_name);
+}
+
+/**
+ * Convert a raw DbFile to a FileState with all UI fields zeroed.
+ *
+ * Single source of truth for the DbFile → FileState conversion.
+ * Used by both the Redux reducer (filesSlice.setFiles) and server-side
+ * code (dbFileToCompressedAugmented) so they stay in sync.
+ */
+export function dbFileToFileState(file: DbFile): FileState {
+  return {
+    ...file,
+    content: stripQueryResultId(file),
+    references: extractReferences(file),
+    queryResultId: computeQueryResultId(file),
+    loading: false,
+    saving: false,
+    updatedAt: Date.now(),
+    loadError: null,
+    persistableChanges: {},
+    ephemeralChanges: {},
+    metadataChanges: {},
+  } as FileState;
+}
 
 function mdTableCell(value: string): string {
   return value
@@ -119,21 +184,9 @@ export function dbFileToCompressedAugmented(
   file: DbFile,
   references: DbFile[] = []
 ): CompressedAugmentedFile {
-  // Build a minimal FileState from DbFile — no unsaved changes, no UI state
-  const toFileState = (f: DbFile): FileState => ({
-    ...f,
-    loading: false,
-    saving: false,
-    updatedAt: Date.now(),
-    loadError: null,
-    persistableChanges: {},
-    ephemeralChanges: {},
-    metadataChanges: {},
-  } as FileState);
-
   const augmented: AugmentedFile = {
-    fileState: toFileState(file),
-    references: references.map(toFileState),
+    fileState: dbFileToFileState(file),
+    references: references.map(dbFileToFileState),
     queryResults: [],  // No cached query results available server-side
   };
   return compressAugmentedFile(augmented);
