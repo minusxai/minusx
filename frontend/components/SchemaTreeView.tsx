@@ -48,6 +48,9 @@ interface SchemaTreeViewProps {
   schemaError?: string | null;
   connectionName?: string;
   onRetry?: () => void;  // Refresh schema from backend
+
+  /** Start with all schemas expanded */
+  defaultExpandedSchemas?: boolean;
 }
 
 const TABLES_PER_PAGE = 5;
@@ -66,8 +69,11 @@ export default function SchemaTreeView({
   schemaError,
   connectionName,
   onRetry,
+  defaultExpandedSchemas = false,
 }: SchemaTreeViewProps) {
-  const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set());
+  const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(() =>
+    defaultExpandedSchemas ? new Set(schemas.map(s => s.schema)) : new Set()
+  );
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [whitelistForSort, setWhitelistForSort] = useState(whitelist);

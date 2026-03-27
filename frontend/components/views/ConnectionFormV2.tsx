@@ -106,6 +106,7 @@ interface ConnectionFormV2Props {
   onCancel: () => void;
   onReload?: () => void;  // Optional reload function from container
   mode: 'create' | 'view';
+  hideCancel?: boolean;
 }
 
 export default function ConnectionFormV2({
@@ -119,7 +120,8 @@ export default function ConnectionFormV2({
   onSave,
   onCancel,
   onReload,
-  mode
+  mode,
+  hideCancel = false,
 }: ConnectionFormV2Props) {
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const companyId = useAppSelector((state) => state.auth.user?.companyId);
@@ -560,11 +562,13 @@ export default function ConnectionFormV2({
           </SimpleGrid>
 
           {/* Cancel Button */}
-          <HStack>
-            <Button onClick={onCancel} variant="ghost" size="sm">
-              Cancel
-            </Button>
-          </HStack>
+          {!hideCancel && (
+            <HStack>
+              <Button onClick={onCancel} variant="ghost" size="sm">
+                Cancel
+              </Button>
+            </HStack>
+          )}
         </VStack>
       </Box>
     );
@@ -658,9 +662,11 @@ export default function ConnectionFormV2({
                   <LuSave />
                   Save
                 </Button>
-                <Button onClick={onCancel} variant="ghost" size="xs">
-                  Cancel
-                </Button>
+                {!hideCancel && (
+                  <Button onClick={onCancel} variant="ghost" size="xs">
+                    Cancel
+                  </Button>
+                )}
               </>
             )}
           </HStack>

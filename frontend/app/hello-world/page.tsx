@@ -1,5 +1,10 @@
+import { Suspense } from 'react';
 import { HelloWorldContent } from './HelloWorldContent';
 
 export default function HelloWorldPage() {
-  return <HelloWorldContent />;
+  return (
+    <Suspense>
+      <HelloWorldContent />
+    </Suspense>
+  );
 }
