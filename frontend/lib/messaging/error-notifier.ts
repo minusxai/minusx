@@ -2,9 +2,10 @@ import 'server-only';
 import { getConfigsByCompanyId } from '@/lib/data/configs.server';
 import { sendEmailViaWebhook, sendSlackViaWebhook, sendPhoneAlertViaWebhook } from './webhook-executor';
 import type { AppEventPayloads } from '@/lib/app-event-registry/events';
+import type { Mode } from '@/lib/mode/mode-types';
 
 export async function notifyErrorEvent(payload: AppEventPayloads['error']): Promise<void> {
-  const { config } = await getConfigsByCompanyId(payload.companyId);
+  const { config } = await getConfigsByCompanyId(payload.companyId, payload.mode as Mode | undefined);
   const recipients = config.error_delivery ?? [];
   if (!recipients.length) return;
 

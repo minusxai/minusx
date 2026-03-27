@@ -16,6 +16,7 @@ export type AppEventName = typeof AppEvents[keyof typeof AppEvents];
 
 interface BaseEventPayload {
   companyId: number;
+  mode: string;
 }
 
 export interface AppEventPayloads {
@@ -26,5 +27,5 @@ export interface AppEventPayloads {
   'file:deleted':             BaseEventPayload & { fileId: number; fileType?: string; filePath?: string; fileName?: string; userId?: number; userEmail?: string; userRole?: string };
   'folder:created':           BaseEventPayload & { folderId: number; folderPath: string; folderName: string; userId?: number; userEmail?: string; userRole?: string };
   'llm:call':                 BaseEventPayload & { conversationId: number; llmCalls: Record<string, LLMCallDetail>; userId?: number; userEmail?: string; userRole?: string };
-  'error':                    BaseEventPayload & { source: string; message: string; error?: unknown; context?: Record<string, unknown> };
+  'error':                    BaseEventPayload & { source: string; message: string; mode?: string; error?: unknown; context?: Record<string, unknown> };
 }

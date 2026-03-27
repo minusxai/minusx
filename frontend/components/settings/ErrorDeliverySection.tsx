@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { Box, VStack, HStack, Text, Button } from '@chakra-ui/react';
 import { LuBell, LuSave } from 'react-icons/lu';
-import { useAppSelector } from '@/store/hooks';
+import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { updateFileContent } from '@/store/filesSlice';
 import { useConfigs, reloadConfigs } from '@/lib/hooks/useConfigs';
 import { useFileByPath } from '@/lib/hooks/file-state-hooks';
 import { resolvePath } from '@/lib/mode/path-resolver';
@@ -13,6 +14,7 @@ import type { AlertRecipient, ConfigContent } from '@/lib/types';
 import type { Mode } from '@/lib/mode/mode-types';
 
 export function ErrorDeliverySection() {
+  const dispatch = useAppDispatch();
   const user = useAppSelector(state => state.auth.user);
   const { config } = useConfigs();
 
@@ -43,6 +45,7 @@ export function ErrorDeliverySection() {
 
       if (configFile && typeof configFile.fileState.id === 'number') {
         await FilesAPI.saveFile(configFile.fileState.id, configFile.fileState.name, configFile.fileState.path, newContent, []);
+        dispatch(updateFileContent({ id: configFile.fileState.id, file: { ...configFile.fileState, content: newContent } }));
       } else {
         await FilesAPI.createFile({ name: 'config', path: configPath, type: 'config', content: newContent, references: [] });
       }

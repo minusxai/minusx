@@ -314,6 +314,7 @@ export async function POST(request: NextRequest) {
               llmCalls: pythonDoneEvent.llm_calls,
               conversationId: currentConversationID,
               companyId: user.companyId,
+              mode: user.mode,
               userId: user.userId,
               userEmail: user.email,
               userRole: user.role,
@@ -421,6 +422,7 @@ export async function POST(request: NextRequest) {
             source: 'nextjs_stream',
             message: error.message || 'Stream error',
             companyId: user.companyId,
+            mode: user.mode,
             context: { route: '/api/chat/stream' },
           });
         }

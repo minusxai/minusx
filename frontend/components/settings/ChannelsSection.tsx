@@ -7,6 +7,7 @@ import {
 } from '@chakra-ui/react';
 import { LuPlus, LuTrash2, LuChevronDown, LuChevronUp, LuSave } from 'react-icons/lu';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { updateFileContent } from '@/store/filesSlice';
 import { useConfigs, reloadConfigs } from '@/lib/hooks/useConfigs';
 import { useFileByPath } from '@/lib/hooks/file-state-hooks';
 import { resolvePath } from '@/lib/mode/path-resolver';
@@ -222,6 +223,7 @@ export function ChannelsSection() {
 
       if (configFile && typeof configFile.fileState.id === 'number') {
         await FilesAPI.saveFile(configFile.fileState.id, configFile.fileState.name, configFile.fileState.path, newContent, []);
+        dispatch(updateFileContent({ id: configFile.fileState.id, file: { ...configFile.fileState, content: newContent } }));
       } else {
         await FilesAPI.createFile({ name: 'config', path: configPath, type: 'config', content: newContent, references: [] });
       }

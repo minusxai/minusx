@@ -191,6 +191,7 @@ export async function POST(request: NextRequest) {
           llmCalls: pythonResponse.llm_calls,
           conversationId: currentConversationID,
           companyId: user.companyId,
+          mode: user.mode,
           userId: user.userId,
           userEmail: user.email,
           userRole: user.role,
@@ -250,6 +251,7 @@ export async function POST(request: NextRequest) {
         source: 'python_backend',
         message: pythonResponse.error,
         companyId: user.companyId,
+        mode: user.mode,
         context: { route: '/api/chat' },
       });
     }
@@ -287,6 +289,7 @@ export async function POST(request: NextRequest) {
         source: 'nextjs_chat',
         message: error.message || 'Unknown error',
         companyId: user.companyId,
+        mode: user.mode,
         context: { route: '/api/chat' },
       });
     }

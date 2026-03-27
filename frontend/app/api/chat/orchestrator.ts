@@ -215,6 +215,7 @@ export async function orchestratePendingTools(
             source: 'tool_handler',
             message: errorObj.message,
             companyId: user.companyId,
+            mode: user.mode,
             context: { tool: toolCall.function.name },
           });
 
