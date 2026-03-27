@@ -15,7 +15,7 @@ import { reloadFile } from '@/lib/api/file-state';
 import { reloadConfigs } from '@/lib/hooks/useConfigs';
 import ConfigEditor from '@/components/config/ConfigEditor';
 import { ConfigContent } from '@/lib/types';
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useState } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { FilesAPI } from '@/lib/data/files';
 import { slugify } from '@/lib/slug-utils';
@@ -39,6 +39,7 @@ export default function ConfigContainerV2({
 }: ConfigContainerV2Props) {
   const router = useRouter();
   const dispatch = useAppDispatch();
+  const [syncing, setSyncing] = useState(false);
 
   // Use useFile hook for state management (but we'll handle save ourselves)
   const { fileState: file } = useFile(fileId) ?? {};
@@ -87,7 +88,12 @@ export default function ConfigContainerV2({
       }
 
       // Refresh configs in Redux so the app reflects the new config immediately
-      await reloadConfigs();
+      setSyncing(true);
+      try {
+        await reloadConfigs();
+      } finally {
+        setSyncing(false);
+      }
     } catch (err) {
       console.error('Save failed:', err);
       throw err;
@@ -117,6 +123,7 @@ export default function ConfigContainerV2({
       content={currentContent}
       isDirty={isDirty}
       isSaving={saving}
+      isSyncing={syncing}
       onChange={handleChange}
       onSave={handleSave}
       onRevert={handleRevert}

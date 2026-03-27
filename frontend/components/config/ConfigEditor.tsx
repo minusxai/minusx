@@ -17,6 +17,7 @@ interface ConfigEditorProps {
   content: ConfigContent;
   isDirty: boolean;
   isSaving: boolean;
+  isSyncing?: boolean;
   onChange: (updates: Partial<ConfigContent>) => void;
   onSave: () => Promise<void>;
   onRevert: () => void;
@@ -26,6 +27,7 @@ export default function ConfigEditor({
   content,
   isDirty,
   isSaving,
+  isSyncing = false,
   onChange,
   onSave,
   onRevert
@@ -118,8 +120,15 @@ export default function ConfigEditor({
             </HStack>
           )}
 
+          {/* Syncing indicator */}
+          {isSyncing && (
+            <Text fontSize="sm" color="fg.muted" fontFamily="mono">
+              Syncing config...
+            </Text>
+          )}
+
           {/* Dirty indicator */}
-          {isDirty && !error && (
+          {isDirty && !error && !isSyncing && (
             <Text fontSize="sm" color="accent.warning" fontFamily="mono">
               Unsaved changes
             </Text>

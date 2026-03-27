@@ -191,6 +191,7 @@ export function ChannelsSection() {
   const [channels, setChannels] = useState<ConfigChannel[]>([]);
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // Sync from config on load (only when not dirty — avoid clobbering edits)
@@ -225,7 +226,12 @@ export function ChannelsSection() {
         await FilesAPI.createFile({ name: 'config', path: configPath, type: 'config', content: newContent, references: [] });
       }
 
-      await reloadConfigs();
+      setIsSyncing(true);
+      try {
+        await reloadConfigs();
+      } finally {
+        setIsSyncing(false);
+      }
       setIsDirty(false);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Save failed');
@@ -276,19 +282,24 @@ export function ChannelsSection() {
         </VStack>
       )}
 
-      {isDirty && (
+      {(isDirty || isSyncing) && (
         <HStack justify="flex-end" gap={3}>
+          {isSyncing && (
+            <Text fontSize="xs" color="fg.muted" fontFamily="mono">Syncing config...</Text>
+          )}
           {saveError && <Text fontSize="xs" color="accent.danger" fontFamily="mono">{saveError}</Text>}
-          <Button
-            size="sm"
-            colorPalette="teal"
-            onClick={handleSave}
-            loading={isSaving}
-            disabled={isSaving}
-          >
-            <LuSave />
-            Save
-          </Button>
+          {isDirty && (
+            <Button
+              size="sm"
+              colorPalette="teal"
+              onClick={handleSave}
+              loading={isSaving}
+              disabled={isSaving || isSyncing}
+            >
+              <LuSave />
+              Save
+            </Button>
+          )}
         </HStack>
       )}
     </VStack>

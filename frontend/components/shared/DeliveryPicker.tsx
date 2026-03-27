@@ -135,9 +135,9 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
   );
 
   const hasAnyChannel =
-    configuredWebhookTypes.has('email_alert') || configuredWebhookTypes.has('phone_alert') ||
-    (configuredWebhookTypes.has('slack_alert') && slackChannels.length > 0) ||
-    emailChannels.length > 0 || phoneChannels.length > 0;
+    (configuredWebhookTypes.has('email_alert') && (users.length > 0 || emailChannels.length > 0)) ||
+    (configuredWebhookTypes.has('phone_alert') && (users.some(u => u.phone) || phoneChannels.length > 0)) ||
+    (configuredWebhookTypes.has('slack_alert') && slackChannels.length > 0);
   const effectiveDisabled = disabled || !hasAnyChannel;
 
   const userNameByAddress = useMemo(() => {
@@ -178,15 +178,19 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
       }
     }
 
-    // Config channel options
-    for (const ch of emailChannels) {
-      if (!recipientKeys.has(`email_alert:${ch.address}`)) {
-        opts.push({ kind: 'email_alert', via: 'channel', channel: ch });
+    // Config channel options (only if corresponding webhook is configured)
+    if (configuredWebhookTypes.has('email_alert')) {
+      for (const ch of emailChannels) {
+        if (!recipientKeys.has(`email_alert:${ch.address}`)) {
+          opts.push({ kind: 'email_alert', via: 'channel', channel: ch });
+        }
       }
     }
-    for (const ch of phoneChannels) {
-      if (!recipientKeys.has(`phone_alert:${ch.address}`)) {
-        opts.push({ kind: 'phone_alert', via: 'channel', channel: ch });
+    if (configuredWebhookTypes.has('phone_alert')) {
+      for (const ch of phoneChannels) {
+        if (!recipientKeys.has(`phone_alert:${ch.address}`)) {
+          opts.push({ kind: 'phone_alert', via: 'channel', channel: ch });
+        }
       }
     }
     if (configuredWebhookTypes.has('slack_alert')) {
