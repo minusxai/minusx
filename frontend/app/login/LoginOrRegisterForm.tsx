@@ -256,6 +256,10 @@ export function LoginOrRegisterForm({
 
   // Send email OTP for passwordless login
   const handleSendEmailOTP = async () => {
+    if (!email) {
+      setError('Please enter your email address');
+      return;
+    }
     setError(null);
     setOtpLoading(true);
     const companyToUse = isSubdomainMode ? subdomainCompanyName! : company;
@@ -672,6 +676,7 @@ export function LoginOrRegisterForm({
                   gap={1}
                 >
                   <Button
+                    type="button"
                     size="sm"
                     variant="ghost"
                     bg={loginMethod === 'password' ? 'bg.surface' : 'transparent'}
@@ -689,6 +694,7 @@ export function LoginOrRegisterForm({
                     Password
                   </Button>
                   <Button
+                    type="button"
                     size="sm"
                     variant="ghost"
                     bg={loginMethod === 'emailOtp' ? 'bg.surface' : 'transparent'}
@@ -760,7 +766,7 @@ export function LoginOrRegisterForm({
                       color="white"
                       size="lg"
                       loading={otpLoading}
-                      disabled={otpLoading || !email}
+                      disabled={otpLoading}
                       _hover={{ bg: 'accent.teal', opacity: 0.9 }}
                     >
                       <LuLogIn />
