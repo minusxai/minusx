@@ -4,7 +4,7 @@
  */
 
 import type { FileType } from '@/lib/ui/file-metadata';
-import type { UserRole } from '@/lib/types';
+import type { UserRole, ConfigChannel, MessagingWebhook } from '@/lib/types';
 
 /**
  * Per-role file type access override
@@ -42,14 +42,9 @@ export interface CompanyConfig {
   branding: CompanyBranding;
   links: CompanyLinks;
   messaging?: {
-    webhooks: Array<{
-      type: 'phone_otp' | 'email_otp' | 'email_alert' | 'phone_alert' | 'sms';
-      url: string;
-      method: 'GET' | 'POST' | 'PUT';
-      headers?: Record<string, string>;
-      body?: Record<string, any>;
-    }>;
+    webhooks: MessagingWebhook[];
   };
+  channels?: ConfigChannel[];
   city?: string;  // Optional city identifier for agent context
   thinkingPhrases?: string[];  // Optional custom thinking phrases for AI indicator
   accessRules?: AccessRulesOverride;  // Per-company file type access overrides (overrides rules.json)
@@ -72,7 +67,14 @@ export const DEFAULT_CONFIG: CompanyConfig = {
     githubIssuesUrl: 'https://github.com/minusxai/minusx/issues'
   },
   messaging: {
-    webhooks: []
+    webhooks: [
+      {
+        type: 'slack_alert',
+        url: '{{SLACK_WEBHOOK}}',
+        method: 'POST',
+        body: '{{SLACK_PROPERTIES}}',
+      },
+    ]
   }
 };
 
@@ -112,6 +114,7 @@ export function mergeConfig(
       ...(overrides.links || {})
     },
     messaging: overrides.messaging ?? defaults.messaging,
+    channels: overrides.channels ?? defaults.channels,
     city: overrides.city ?? defaults.city,
     // Override thinkingPhrases only if present and non-empty array
     thinkingPhrases: (overrides.thinkingPhrases && overrides.thinkingPhrases.length > 0)

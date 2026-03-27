@@ -5,7 +5,7 @@ import type { CheckedChangeDetails } from '@zag-js/switch';
 import { AlertContent, JobRun, Test } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { LuPlay, LuClock, LuBell, LuMail, LuInfo, LuGripVertical, LuHistory, LuFlaskConical } from 'react-icons/lu';
-import { DeliveryPicker } from '@/components/shared/DeliveryPicker';
+import { DeliveryCard } from '@/components/shared/DeliveryPicker';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { useAppSelector } from '@/store/hooks';
 import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
@@ -339,28 +339,11 @@ export default function AlertView({
               </Box>
 
               {/* Delivery Card */}
-              <Box
-                position="relative"
-                bg="bg.muted"
-                borderRadius="md"
-                border="1px solid"
-                borderColor="border.muted"
-                p={3}
-                pl={5}
-                overflow="hidden"
-              >
-                <Box position="absolute" left={0} top={0} bottom={0} width="3px" bg="accent.primary" borderLeftRadius="md" />
-                <HStack mb={2} gap={1.5}>
-                  <LuMail size={14} color="var(--chakra-colors-accent-primary)" />
-                  <Text fontWeight="700" fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Delivery</Text>
-                </HStack>
-
-                <DeliveryPicker
-                  recipients={alert.recipients || []}
-                  onChange={(recipients) => onChange({ recipients })}
-                  disabled={!editMode}
-                />
-              </Box>
+              <DeliveryCard
+                recipients={alert.recipients || []}
+                onChange={(recipients) => onChange({ recipients })}
+                disabled={!editMode}
+              />
             </VStack>
           </Box>
 

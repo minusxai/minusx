@@ -8,7 +8,7 @@
  */
 import { Box, Text, VStack, HStack, Badge, Separator } from '@chakra-ui/react';
 import { useState } from 'react';
-import { LuChevronDown, LuChevronRight, LuClock, LuTimer } from 'react-icons/lu';
+import { LuChevronDown, LuChevronRight, LuClock, LuTimer, LuHash } from 'react-icons/lu';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import type { AlertOutput, AlertRunContent, MessageAttemptLog, RunFileContent, RunMessageRecord, TestRunResult } from '@/lib/types';
 import TestRunResultsList from '@/components/test/TestRunResultsList';
@@ -75,6 +75,8 @@ function MessageRow({ msg }: { msg: RunMessageRecord }) {
   const [open, setOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
   const isEmail = msg.type === 'email_alert';
+  const isSlack = msg.type === 'slack_alert';
+  const address = isSlack ? msg.metadata.channel : (msg.metadata as { to: string }).to;
   return (
     <Box borderRadius="md" border="1px solid" borderColor="border.muted" overflow="hidden">
       <HStack
@@ -87,8 +89,8 @@ function MessageRow({ msg }: { msg: RunMessageRecord }) {
       >
         <HStack gap={1.5} flex={1} minW={0}>
           {open ? <LuChevronDown size={13} /> : <LuChevronRight size={13} />}
-          {isEmail ? <LuMail size={13} /> : <LuMessageCircle size={13} />}
-          <Text fontSize="sm" truncate>{msg.metadata.to}</Text>
+          {isEmail ? <LuMail size={13} /> : isSlack ? <LuHash size={13} /> : <LuMessageCircle size={13} />}
+          <Text fontSize="sm" truncate>{address}</Text>
         </HStack>
         <MessageStatusBadge status={msg.status} />
       </HStack>

@@ -22,10 +22,13 @@ export interface WebhookResult {
  */
 export async function executeWebhook(
   webhook: MessagingWebhook,
-  variables: Record<string, string>
+  variables: Record<string, string>,
 ): Promise<WebhookResult> {
   try {
-    // 1. Substitute variables in headers
+    // 1. Substitute variables in URL
+    const resolvedUrl = substituteVariables(webhook.url, variables);
+
+    // 2. Substitute variables in headers
     const headers: Record<string, string> = {};
     if (webhook.headers) {
       for (const [key, value] of Object.entries(webhook.headers)) {
@@ -33,26 +36,23 @@ export async function executeWebhook(
       }
     }
 
-    // 2. Substitute variables in body (recursively for nested objects)
+    // 3. Build body
     let body: any = undefined;
-    if (webhook.body) {
-      const bodyStr = JSON.stringify(webhook.body);
-      // JSON-escape each value before substituting into the stringified JSON,
-      // so that quotes, newlines, backslashes, etc. don't break JSON.parse.
+    if (typeof webhook.body === 'string') {
+      body = JSON.parse(substituteVariables(webhook.body, variables));
+    } else if (webhook.body) {
       const jsonSafeVariables: Record<string, string> = {};
       for (const [key, value] of Object.entries(variables)) {
-        // JSON.stringify produces `"value"` — strip the surrounding quotes to get just the escaped content
         jsonSafeVariables[key] = JSON.stringify(value).slice(1, -1);
       }
-      const substitutedStr = substituteVariables(bodyStr, jsonSafeVariables);
-      body = JSON.parse(substitutedStr);
+      body = JSON.parse(substituteVariables(JSON.stringify(webhook.body), jsonSafeVariables));
     }
 
-    // 3. Make HTTP request
+    // 4. Make HTTP request
     const requestBody = body ? JSON.stringify(body) : undefined;
     let response: Response;
     try {
-      response = await fetch(webhook.url, {
+      response = await fetch(resolvedUrl, {
         method: webhook.method,
         headers: {
           'Content-Type': 'application/json',
@@ -121,6 +121,26 @@ export async function sendEmailViaWebhook(
 }
 
 /**
+ * Send a Slack alert via a configured slack_alert webhook.
+ * Webhook url uses {{SLACK_WEBHOOK}}, body uses {{SLACK_PROPERTIES}}.
+ * {{SLACK_MESSAGE}} is substituted within channel properties values before sending.
+ */
+export async function sendSlackViaWebhook(
+  webhook: MessagingWebhook,
+  text: string,
+  channelData: { webhook_url: string; properties?: Record<string, unknown> }
+): Promise<WebhookResult> {
+  const props = channelData.properties ?? {};
+  const jsonSafeMessage = JSON.stringify(text).slice(1, -1);
+  const substitutedProps = substituteVariables(JSON.stringify(props), { SLACK_MESSAGE: jsonSafeMessage });
+
+  return executeWebhook(webhook, {
+    SLACK_WEBHOOK: channelData.webhook_url,
+    SLACK_PROPERTIES: substitutedProps,
+  });
+}
+
+/**
  * Validate a webhook configuration
  * Checks URL format, method, headers structure, and body JSON validity
  * @param webhook - Webhook configuration to validate
@@ -132,7 +152,8 @@ export function validateWebhook(webhook: MessagingWebhook): string[] {
   // Validate URL
   if (!webhook.url) {
     errors.push('URL is required');
-  } else {
+  } else if (!/\{\{[^}]+\}\}/.test(webhook.url)) {
+    // Skip URL validation for template variable URLs (e.g. {{SLACK_WEBHOOK}})
     try {
       const url = new URL(webhook.url);
       if (!url.protocol.startsWith('http')) {
@@ -157,10 +178,8 @@ export function validateWebhook(webhook: MessagingWebhook): string[] {
   }
 
   // Validate body (if present)
-  if (webhook.body !== undefined) {
-    if (typeof webhook.body !== 'object') {
-      errors.push('Body must be an object');
-    }
+  // String body is a template placeholder (e.g. '{{SLACK_PROPERTIES}}') — substituted + JSON.parsed at runtime
+  if (webhook.body !== undefined && typeof webhook.body !== 'string') {
     // Try to stringify to catch circular references
     try {
       JSON.stringify(webhook.body);

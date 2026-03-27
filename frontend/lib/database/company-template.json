@@ -96,6 +96,16 @@
                         "name": "config",
                         "branding": {
                             "displayName": "Demo Mode"
+                        },
+                        "messaging": {
+                            "webhooks": [
+                                {
+                                    "type": "slack_alert",
+                                    "url": "{{SLACK_WEBHOOK}}",
+                                    "method": "POST",
+                                    "body": "{{SLACK_PROPERTIES}}"
+                                }
+                            ]
                         }
                     },
                     "company_id": "{{COMPANY_ID}}",
@@ -1517,6 +1527,16 @@
                             "displayName": "{{COMPANY_NAME}}",
                             "agentName": "MinusX",
                             "favicon": "/favicon.ico"
+                        },
+                        "messaging": {
+                            "webhooks": [
+                                {
+                                    "type": "slack_alert",
+                                    "url": "{{SLACK_WEBHOOK}}",
+                                    "method": "POST",
+                                    "body": "{{SLACK_PROPERTIES}}"
+                                }
+                            ]
                         }
                     },
                     "company_id": "{{COMPANY_ID}}",
@@ -1661,6 +1681,16 @@
                     "content": {
                         "branding": {
                             "displayName": "Internals"
+                        },
+                        "messaging": {
+                            "webhooks": [
+                                {
+                                    "type": "slack_alert",
+                                    "url": "{{SLACK_WEBHOOK}}",
+                                    "method": "POST",
+                                    "body": "{{SLACK_PROPERTIES}}"
+                                }
+                            ]
                         }
                     },
                     "company_id": "{{COMPANY_ID}}",

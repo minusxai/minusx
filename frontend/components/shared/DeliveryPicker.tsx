@@ -3,21 +3,18 @@
 import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Box, HStack, Text, Input, Flex, Badge } from '@chakra-ui/react';
-import { LuX, LuChevronDown, LuMail, LuMessageCircle } from 'react-icons/lu';
+import { LuX, LuChevronDown, LuMail, LuMessageCircle, LuHash } from 'react-icons/lu';
 import { useFetch } from '@/lib/api/useFetch';
 import { API } from '@/lib/api/declarations';
 import { AlertRecipient, User } from '@/lib/types';
 import { useConfigs } from '@/lib/hooks/useConfigs';
+import { hasDeliveryEnabled, buildDropdownOptions, type DropdownOption } from '@/lib/messaging/delivery-options';
 
 interface DeliveryPickerProps {
   recipients: AlertRecipient[];
   onChange: (recipients: AlertRecipient[]) => void;
   disabled?: boolean;
 }
-
-type DropdownOption =
-  | { kind: 'email_alert'; user: User }
-  | { kind: 'phone_alert'; user: User };
 
 function DropdownMenu({ containerRef, options, onSelect }: {
   containerRef: React.RefObject<HTMLDivElement | null>;
@@ -58,37 +55,41 @@ function DropdownMenu({ containerRef, options, onSelect }: {
       maxH="220px"
       overflowY="auto"
     >
-      {options.map((opt, i) => (
-        <HStack
-          key={i}
-          px={3}
-          py={2}
-          gap={2}
-          cursor="pointer"
-          _hover={{ bg: 'bg.muted' }}
-          onMouseDown={(e: React.MouseEvent) => {
-            e.preventDefault();
-            onSelect(
-              opt.kind === 'email_alert'
-                ? { channel: 'email_alert', address: opt.user.email }
-                : { channel: 'phone_alert', address: opt.user.phone! }
-            );
-          }}
-        >
-          {opt.kind === 'email_alert'
-            ? <LuMail size={12} />
-            : <LuMessageCircle size={12} />}
-          <Box>
-            <Text fontSize="xs" fontWeight="500">{opt.user.name}</Text>
-            <Text fontSize="xs" color="fg.muted">
-              {opt.kind === 'email_alert' ? opt.user.email : opt.user.phone}
-            </Text>
-          </Box>
-          <Badge size="xs" color={opt.kind === 'email_alert' ? 'accent.danger' : 'accent.primary'} ml="auto">
-            {opt.kind === 'email_alert' ? 'email' : 'phone'}
-          </Badge>
-        </HStack>
-      ))}
+      {options.map((opt, i) => {
+        const address =
+          opt.via === 'user'
+            ? (opt.kind === 'email_alert' ? opt.user.email : opt.user.phone!)
+            : opt.kind === 'slack_alert' ? opt.channel.name : opt.channel.address;
+        const displayName =
+          opt.via === 'user' ? opt.user.name : opt.channel.name;
+        const subLabel =
+          opt.via === 'user' ? address :
+          opt.kind === 'slack_alert' ? undefined : opt.channel.address;
+
+        return (
+          <HStack
+            key={i}
+            px={3}
+            py={2}
+            gap={2}
+            cursor="pointer"
+            _hover={{ bg: 'bg.muted' }}
+            onMouseDown={(e: React.MouseEvent) => {
+              e.preventDefault();
+              onSelect({ channel: opt.kind, address });
+            }}
+          >
+            {opt.kind === 'email_alert' ? <LuMail size={12} /> : opt.kind === 'phone_alert' ? <LuMessageCircle size={12} /> : <LuHash size={12} />}
+            <Box>
+              <Text fontSize="xs" fontWeight="500">{displayName}</Text>
+              {subLabel && <Text fontSize="xs" color="fg.muted">{subLabel}</Text>}
+            </Box>
+            <Badge size="xs" color={opt.kind === 'email_alert' ? 'accent.danger' : opt.kind === 'phone_alert' ? 'accent.primary' : 'accent.warning'} ml="auto">
+              {opt.kind === 'email_alert' ? 'email' : opt.kind === 'phone_alert' ? 'phone' : 'slack'}
+            </Badge>
+          </HStack>
+        );
+      })}
     </Box>
   );
 }
@@ -105,12 +106,9 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
   const users = usersResponse?.data?.users ?? [];
 
   const { config } = useConfigs();
-  const configuredWebhookTypes = useMemo(
-    () => new Set(config.messaging?.webhooks?.map(w => w.type) ?? []),
-    [config.messaging?.webhooks]
-  );
-  const hasAnyChannel = configuredWebhookTypes.has('email_alert') || configuredWebhookTypes.has('phone_alert');
-  const effectiveDisabled = disabled || !hasAnyChannel;
+
+  const enabled = useMemo(() => hasDeliveryEnabled(config, users), [config, users]);
+  const effectiveDisabled = disabled || !enabled;
 
   const userNameByAddress = useMemo(() => {
     const map = new Map<string, string>();
@@ -121,37 +119,29 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
     return map;
   }, [users]);
 
-  const recipientKeys = useMemo(
-    () => new Set(recipients.map(r => `${r.channel}:${r.address}`)),
-    [recipients]
-  );
-
-  const dropdownOptions = useMemo<DropdownOption[]>(() => {
-    const query = inputValue.toLowerCase();
-    const opts: DropdownOption[] = [];
-    for (const user of users) {
-      const matches = !query || user.name.toLowerCase().includes(query) || user.email.toLowerCase().includes(query);
-      if (!matches) continue;
-      if (configuredWebhookTypes.has('email_alert') && !recipientKeys.has(`email_alert:${user.email}`)) {
-        opts.push({ kind: 'email_alert', user });
-      }
-      if (configuredWebhookTypes.has('phone_alert') && user.phone && !recipientKeys.has(`phone_alert:${user.phone}`)) {
-        opts.push({ kind: 'phone_alert', user });
-      }
+  const channelNameByAddress = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const ch of config.channels ?? []) {
+      if (ch.type === 'email' || ch.type === 'phone') map.set(ch.address, ch.name);
     }
-    return opts;
-  }, [users, inputValue, recipientKeys, configuredWebhookTypes]);
+    return map;
+  }, [config.channels]);
+
+  const dropdownOptions = useMemo(
+    () => buildDropdownOptions(config, users, recipients, inputValue),
+    [config, users, recipients, inputValue],
+  );
 
   const addRecipient = (recipient: AlertRecipient) => {
     const key = `${recipient.channel}:${recipient.address}`;
-    if (recipientKeys.has(key)) return;
+    if (recipients.some(r => `${r.channel}:${r.address}` === key)) return;
     onChange([...recipients, recipient]);
     setInputValue('');
     setShowDropdown(false);
   };
 
   const addEmailFromInput = (email: string, { validate = false } = {}) => {
-    if (!configuredWebhookTypes.has('email_alert')) return;
+    if (!config.messaging?.webhooks?.some(w => w.type === 'email_alert')) return;
     const trimmed = email.trim().toLowerCase();
     if (!trimmed) return;
     if (validate && !EMAIL_REGEX.test(trimmed)) return;
@@ -197,20 +187,14 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
         onClick={() => { if (!effectiveDisabled) inputRef.current?.focus(); }}
       >
         {recipients.map((r, i) => (
-          <HStack
-            key={i}
-            bg="bg.muted"
-            borderRadius="sm"
-            px={2}
-            py={0.5}
-            gap={1}
-            fontSize="xs"
-          >
+          <HStack key={i} bg="bg.muted" borderRadius="sm" px={2} py={0.5} gap={1} fontSize="xs">
             <Text fontSize="xs" lineHeight="short">
-              {userNameByAddress.get(r.address) ?? r.address}
+              {r.channel === 'slack_alert'
+                ? r.address
+                : (channelNameByAddress.get(r.address) ?? userNameByAddress.get(r.address) ?? r.address)}
             </Text>
-            <Badge size="xs" color={r.channel === 'email_alert' ? 'accent.danger' : 'accent.primary'}>
-              {r.channel === 'email_alert' ? 'email' : 'phone'}
+            <Badge size="xs" color={r.channel === 'email_alert' ? 'accent.danger' : r.channel === 'phone_alert' ? 'accent.primary' : 'accent.warning'}>
+              {r.channel === 'email_alert' ? 'email' : r.channel === 'phone_alert' ? 'phone' : 'slack'}
             </Badge>
             {!effectiveDisabled && (
               <button
@@ -241,10 +225,10 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
             fontSize="xs"
           />
         )}
-        {effectiveDisabled && !hasAnyChannel && (
+        {effectiveDisabled && !enabled && (
           <Text fontSize="xs" color="fg.muted" px={1}>No delivery channels configured</Text>
         )}
-        {!effectiveDisabled && users.length > 0 && (
+        {!effectiveDisabled && dropdownOptions.length > 0 && (
           <button
             onClick={() => { setShowDropdown(!showDropdown); inputRef.current?.focus(); }}
             style={{ display: 'flex', alignItems: 'center', flexShrink: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'inherit' }}
@@ -258,6 +242,19 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
         <DropdownMenu containerRef={containerRef} options={dropdownOptions} onSelect={addRecipient} />,
         document.body
       )}
+    </Box>
+  );
+}
+
+export function DeliveryCard({ recipients, onChange, disabled }: DeliveryPickerProps) {
+  return (
+    <Box position="relative" bg="bg.muted" borderRadius="md" border="1px solid" borderColor="border.muted" p={3} pl={5} overflow="hidden">
+      <Box position="absolute" left={0} top={0} bottom={0} width="3px" bg="accent.primary" borderLeftRadius="md" />
+      <HStack mb={2} gap={1.5}>
+        <LuMail size={14} color="var(--chakra-colors-accent-primary)" />
+        <Text fontWeight="700" fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Delivery</Text>
+      </HStack>
+      <DeliveryPicker recipients={recipients} onChange={onChange} disabled={disabled} />
     </Box>
   );
 }

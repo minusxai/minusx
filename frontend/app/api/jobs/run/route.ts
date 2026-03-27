@@ -20,7 +20,7 @@ import { FilesAPI } from '@/lib/data/files.server';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { JOB_HANDLERS } from '@/lib/jobs/job-registry';
 import { getConfigsByCompanyId } from '@/lib/data/configs.server';
-import { sendEmailViaWebhook, sendPhoneAlertViaWebhook } from '@/lib/messaging/webhook-executor';
+import { sendEmailViaWebhook, sendPhoneAlertViaWebhook, sendSlackViaWebhook } from '@/lib/messaging/webhook-executor';
 import type { MessageAttemptLog, RunFileContent, RunMessageRecord } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -135,6 +135,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         const { config } = await getConfigsByCompanyId(user.companyId, user.mode);
         const emailWebhook = config.messaging?.webhooks?.find(w => w.type === 'email_alert');
         const phoneAlertWebhook = config.messaging?.webhooks?.find(w => w.type === 'phone_alert');
+        const slackWebhook = config.messaging?.webhooks?.find(w => w.type === 'slack_alert');
         for (const msg of messages) {
           try {
             if (msg.type === 'email_alert') {
@@ -159,6 +160,22 @@ export const POST = withAuth(async (request: NextRequest, user) => {
                 msg.deliveryError = 'No phone_alert webhook configured';
               } else {
                 const result = await sendPhoneAlertViaWebhook(phoneAlertWebhook, msg.metadata.to, msg.content, { title: msg.metadata.title, desc: msg.metadata.desc, link: msg.metadata.link, summary: msg.metadata.summary });
+                const attemptLog: MessageAttemptLog = { attemptedAt: new Date().toISOString(), success: result.success, statusCode: result.statusCode, error: result.error, requestBody: result.requestBody, responseBody: result.responseBody };
+                msg.logs = [...(msg.logs ?? []), attemptLog];
+                if (result.success) {
+                  msg.status = 'sent';
+                  msg.sentAt = new Date().toISOString();
+                } else {
+                  msg.status = 'failed';
+                  msg.deliveryError = result.error ?? `HTTP ${result.statusCode}`;
+                }
+              }
+            } else if (msg.type === 'slack_alert') {
+              if (!slackWebhook) {
+                msg.status = 'failed';
+                msg.deliveryError = 'No slack_alert webhook configured';
+              } else {
+                const result = await sendSlackViaWebhook(slackWebhook, msg.content, { webhook_url: msg.metadata.webhook_url, properties: msg.metadata.properties });
                 const attemptLog: MessageAttemptLog = { attemptedAt: new Date().toISOString(), success: result.success, statusCode: result.statusCode, error: result.error, requestBody: result.requestBody, responseBody: result.responseBody };
                 msg.logs = [...(msg.logs ?? []), attemptLog];
                 if (result.success) {

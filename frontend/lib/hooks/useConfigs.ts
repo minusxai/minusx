@@ -1,9 +1,22 @@
 import { useEffect, useState } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { getStore } from '@/store/store';
 import { CompanyConfig } from '@/lib/branding/whitelabel';
 import { selectConfig, selectConfigsLoaded, setConfigs } from '@/store/configsSlice';
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
-import { API } from '@/lib/api/declarations';
+
+/**
+ * Fetch the latest config from the server and update Redux.
+ * Call this after saving config changes to reflect them immediately.
+ */
+export async function reloadConfigs(): Promise<void> {
+  const response = await fetchWithCache<{ success: boolean; data: { config: CompanyConfig } }>(
+    '/api/configs', { method: 'GET', skipCache: true }
+  );
+  if (response.data?.config) {
+    getStore().dispatch(setConfigs({ config: response.data.config }));
+  }
+}
 
 export interface UseConfigsOptions {
   skip?: boolean;
@@ -29,11 +42,7 @@ export function useConfigs(options: UseConfigsOptions = {}): {
     const fetchConfigs = async () => {
       setLoading(true);
       try {
-        const data = await fetchWithCache('/api/configs', {
-          method: 'GET',
-          cacheStrategy: API.configs.get.cache,
-        });
-        dispatch(setConfigs({ config: data.config }));
+        await reloadConfigs();
       } catch (error) {
         console.error('[useConfigs] Error fetching configs:', error);
       } finally {
