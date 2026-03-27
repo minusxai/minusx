@@ -5,8 +5,10 @@ import { CURRENT_TOKEN_VERSION } from "@/lib/auth/auth-constants"
 import { isValidMode } from "@/lib/mode/mode-types"
 import { extractSubdomain, isSubdomainRoutingEnabled } from "@/lib/utils/subdomain"
 import { CompanyDB } from "@/lib/database/company-db"
+import { DocumentDB } from "@/lib/database/documents-db"
+import { detectOnboardingState } from "@/app/hello-world/onboarding-state"
 
-export default auth((req) => {
+export default auth(async (req) => {
   const { pathname } = req.nextUrl
 
   // Extract subdomain from hostname (no async lookup - keep middleware fast)
@@ -160,6 +162,22 @@ export default auth((req) => {
   if (pathname === '/') {
     const user = req.auth.user
     const effectiveMode = (mode && isValidMode(mode)) ? mode : 'org';
+
+    // First-use detection: redirect new users to the right onboarding step
+    // Logic lives in onboarding-state.ts — this just fetches data and applies the result.
+    if (effectiveMode === 'org' && user?.companyId) {
+      try {
+        const connections = await DocumentDB.listAll(user.companyId, 'connection', ['/org'], -1, false);
+        const contexts = await DocumentDB.listAll(user.companyId, 'context', ['/org'], -1, false);
+        const { needsOnboarding, redirectPath } = detectOnboardingState(connections, contexts);
+        if (needsOnboarding && redirectPath) {
+          const protocol = req.headers.get('x-forwarded-proto') || 'https';
+          return NextResponse.redirect(new URL(`${protocol}://${hostname}${redirectPath}`));
+        }
+      } catch (e) {
+        console.error('[Middleware] First-use detection failed:', e);
+      }
+    }
 
     // Mode-aware home redirect
     const homeHref = user?.role && isAdmin(user.role)

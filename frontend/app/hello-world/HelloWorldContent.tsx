@@ -47,6 +47,12 @@ export function HelloWorldContent() {
   const greetingLine2 = "I'm MinusX. Let's get you set up.";
   const fullGreeting = `${greetingLine1}\n${greetingLine2}`;
 
+  // Adapt Redux connections to the { id, name }[] shape used by onboarding-state
+  const connectionList = useMemo(() =>
+    Object.entries(connections).map(([name]) => ({ id: 0, name })),
+    [connections]
+  );
+
   // Determine initial state: URL params take priority, otherwise detect from system state
   const initialState = useMemo(() => {
     const urlState = readStateFromURL(searchParams);
@@ -54,8 +60,8 @@ export function HelloWorldContent() {
     if (searchParams.get('step')) return urlState;
     // Otherwise, auto-detect from connections/contexts
     if (connectionsLoading || contextsLoading) return urlState;
-    return detectStepFromSystemState(connections, contexts);
-  }, [searchParams, connections, contexts, connectionsLoading, contextsLoading]);
+    return detectStepFromSystemState(connectionList, contexts);
+  }, [searchParams, connectionList, contexts, connectionsLoading, contextsLoading]);
 
   const [step, setStep] = useState<WizardStep>(initialState.step);
   const [connectionId, setConnectionId] = useState<number | null>(initialState.connectionId);
