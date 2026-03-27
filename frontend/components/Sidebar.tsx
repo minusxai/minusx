@@ -1,6 +1,6 @@
 'use client';
 
-import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen } from 'react-icons/lu';
+import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen, LuDatabaseZap } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { Box, Flex, VStack, HStack, Text, IconButton, Icon, Menu } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -142,7 +142,7 @@ export default function Sidebar() {
       category: 'Engineering',
       items: [
         { href: `/p/${mode}/database`, icon: <FILE_TYPE_METADATA.connection.icon />, label: FILE_TYPE_METADATA.connection.label, adminOnly: true },
-        { href: `/new/connection?folder=${encodeURIComponent(currentPath)}`, icon: <FILE_TYPE_METADATA.connection.icon />, label: 'New DB Connection', adminOnly: true },
+        { href: `/new/connection?folder=${encodeURIComponent(currentPath)}`, icon: <LuDatabaseZap />, label: 'New DB Connection', adminOnly: true },
       ],
     },
     {
@@ -299,23 +299,23 @@ export default function Sidebar() {
         </VStack>
       </VStack>
 
-      {/* Footer with Theme Toggle */}
-      <Box
-        // borderTop="1px solid"
-        // borderColor="border.default"
-      >
+      {/* Footer */}
+      <Box borderTop="1px solid" borderColor="border.default">
         {/* Collapse button when collapsed */}
         {isCollapsed && (
-          <Flex justify="center" py={3} borderY="1px solid" borderColor="border.default">
-            <IconButton
-              onClick={handleToggleSidebar}
-              variant="ghost"
-              aria-label="Expand sidebar"
-              size="sm"
-            >
-              <LuChevronRight />
-            </IconButton>
-          </Flex>
+          <>
+            <Flex justify="center" py={3}>
+              <IconButton
+                onClick={handleToggleSidebar}
+                variant="ghost"
+                aria-label="Expand sidebar"
+                size="sm"
+              >
+                <LuChevronRight />
+              </IconButton>
+            </Flex>
+            <Box h="1px" bg="border.muted" mx={3} />
+          </>
         )}
 
         {/* Impersonation Selector (Admin + Advanced only, when expanded, after mount to avoid hydration mismatch) */}
@@ -323,8 +323,6 @@ export default function Sidebar() {
           <Box
             px={4}
             py={3}
-            borderBottom="1px solid"
-            borderColor="border.default"
             opacity={isCollapsed ? 0 : 1}
             transition="opacity 0.2s"
           >
@@ -334,7 +332,7 @@ export default function Sidebar() {
 
         {/* Getting Started section (only in org mode) */}
         {mode === 'org' && !isCollapsed && (
-          <Box px={4} py={2} borderTop="1px solid" borderColor="border.default">
+          <Box px={4} py={2}>
             <Box px={3} py={2}>
               <Text fontSize="2xs" fontWeight="600" color="fg.subtle" textTransform="uppercase" letterSpacing="0.1em" fontFamily="mono">
                 Getting Started
@@ -384,7 +382,7 @@ export default function Sidebar() {
           </Box>
         )}
         {mode === 'org' && isCollapsed && (
-          <VStack gap={0} py={2} borderTop="1px solid" borderColor="border.default">
+          <VStack gap={0} py={2}>
             <Tooltip content="How to use MinusX" positioning={{ placement: 'right' }}>
               <Link href="/getting-started" prefetch={true} style={{ textDecoration: 'none' }}>
                 <Flex justify="center" py={2}>
@@ -411,9 +409,12 @@ export default function Sidebar() {
             </Tooltip>
           </VStack>
         )}
+        {isCollapsed && mode === 'org' && (
+          <Box h="1px" bg="border.muted" mx={3} />
+        )}
 
         {/* User Menu */}
-        <Box borderTop="1px solid" borderColor="border.default">
+        <Box>
           <Menu.Root positioning={{ placement: isCollapsed ? 'right-end' : 'top-start' }}>
             <Menu.Trigger asChild>
               <Flex
