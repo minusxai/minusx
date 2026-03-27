@@ -72,10 +72,12 @@ export default async function LoginPage({
   }
 
   // Load company-specific config for branding (single-tenant or subdomain mode)
+  let hasEmailOTP = false;
   if (companyForConfig) {
     try {
       const result = await getConfigsByCompanyId(companyForConfig.id);
       loginPageConfig = result.config;
+      hasEmailOTP = !!loginPageConfig.messaging?.webhooks?.some(w => w.type === 'email_otp');
     } catch (error) {
       console.error('[LoginPage] Failed to load company config:', error);
       // Fallback to default config
@@ -98,6 +100,7 @@ export default async function LoginPage({
       companyConfig={loginPageConfig}
       showMarketingPage={showMarketingPage}
       inviteCode={inviteCode}
+      hasEmailOTP={hasEmailOTP}
     />
   );
 }

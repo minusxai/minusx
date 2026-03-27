@@ -29,6 +29,7 @@ interface LoginOrRegisterFormProps {
   companyConfig?: CompanyConfig | null;
   showMarketingPage?: boolean;
   inviteCode?: string | null;
+  hasEmailOTP?: boolean;
 }
 
 export function LoginOrRegisterForm({
@@ -39,7 +40,8 @@ export function LoginOrRegisterForm({
   subdomainCompanyName,
   companyConfig,
   showMarketingPage = false,
-  inviteCode = null
+  inviteCode = null,
+  hasEmailOTP = false,
 }: LoginOrRegisterFormProps) {
   const searchParams = useSearchParams();
   const colorMode = useAppSelector((state) => state.ui.colorMode);
@@ -64,7 +66,10 @@ export function LoginOrRegisterForm({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  // 2FA state
+  // Login method toggle: password (default) or email OTP (passwordless)
+  const [loginMethod, setLoginMethod] = useState<'password' | 'emailOtp'>('password');
+
+  // 2FA state (phone 2FA after password login) and email OTP state (passwordless)
   const [showOTPInput, setShowOTPInput] = useState(false);
   const [otpToken, setOtpToken] = useState<string | null>(null);
   const [otp, setOtp] = useState('');
@@ -245,6 +250,84 @@ export function LoginOrRegisterForm({
     } catch (err) {
       console.error('Verify OTP error:', err);
       setError('Failed to verify OTP');
+      setOtpLoading(false);
+    }
+  };
+
+  // Send email OTP for passwordless login
+  const handleSendEmailOTP = async () => {
+    if (!email) {
+      setError('Please enter your email address');
+      return;
+    }
+    setError(null);
+    setOtpLoading(true);
+    const companyToUse = isSubdomainMode ? subdomainCompanyName! : company;
+    try {
+      const data = await fetchWithCache('/api/auth/send-otp', {
+        method: 'POST',
+        body: JSON.stringify({
+          email,
+          company: companyToUse || undefined,
+          channel: 'email',
+        }),
+        cacheStrategy: API.auth.sendOTP.cache,
+      });
+      setOtpToken(data.data.token);
+      setShowOTPInput(true);
+      setResendCooldown(30);
+      const interval = setInterval(() => {
+        setResendCooldown((prev) => {
+          if (prev <= 1) { clearInterval(interval); return 0; }
+          return prev - 1;
+        });
+      }, 1000);
+    } catch (err) {
+      console.error('Send email OTP error:', err);
+      setError('Failed to send login code. Please check your email and try again.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  // Verify email OTP and complete passwordless sign-in
+  const handleVerifyEmailOTP = async () => {
+    if (!otpToken || otp.length !== 6) return;
+    setError(null);
+    setOtpLoading(true);
+    try {
+      let verifyData;
+      try {
+        verifyData = await fetchWithCache('/api/auth/verify-otp', {
+          method: 'POST',
+          body: JSON.stringify({ token: otpToken, otp }),
+          cacheStrategy: API.auth.verifyOTP.cache,
+        });
+      } catch {
+        setError('Invalid or expired code. Please try again.');
+        setOtpLoading(false);
+        return;
+      }
+
+      const companyToUse = isSubdomainMode ? subdomainCompanyName! : company;
+      const result = await signIn('credentials', {
+        company: companyToUse,
+        email,
+        otp_verified_token: verifyData.data.verifiedToken,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError('Sign-in failed. Please try again.');
+        setOtpLoading(false);
+        return;
+      }
+
+      const callbackUrl = searchParams.get('callbackUrl') || '/';
+      window.location.href = callbackUrl;
+    } catch (err) {
+      console.error('Verify email OTP error:', err);
+      setError('Failed to verify code');
       setOtpLoading(false);
     }
   };
@@ -580,112 +663,259 @@ export function LoginOrRegisterForm({
           {/* Conditional form rendering */}
           {!showRegistration ? (
             // LOGIN FORM
-            <form onSubmit={handleLogin}>
-              <VStack gap={4}>
-                {/* Show subdomain banner if present (same for valid/invalid to prevent enumeration) */}
-                {isSubdomainMode && (
-                  <Box
-                    w="full"
-                    p={3}
-                    bg="accent.teal/10"
-                    borderRadius="md"
-                    border="1px solid"
-                    borderColor="accent.teal"
+            <VStack gap={4}>
+              {/* Login method toggle — only shown when email OTP is configured */}
+              {hasEmailOTP && (
+                <Box
+                  w="full"
+                  display="grid"
+                  gridTemplateColumns="1fr 1fr"
+                  bg="bg.muted"
+                  borderRadius="md"
+                  p={1}
+                  gap={1}
+                >
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    bg={loginMethod === 'password' ? 'bg.surface' : 'transparent'}
+                    color={loginMethod === 'password' ? 'fg.default' : 'fg.muted'}
+                    borderRadius="sm"
+                    fontWeight={loginMethod === 'password' ? 600 : 400}
+                    onClick={() => {
+                      setLoginMethod('password');
+                      setShowOTPInput(false);
+                      setOtp('');
+                      setOtpToken(null);
+                      setError(null);
+                    }}
                   >
-                    <Text fontSize="sm" color="accent.teal" fontFamily="mono">
-                      Logging in to: <strong>{subdomain}</strong>
-                    </Text>
-                  </Box>
-                )}
+                    Password
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    bg={loginMethod === 'emailOtp' ? 'bg.surface' : 'transparent'}
+                    color={loginMethod === 'emailOtp' ? 'fg.default' : 'fg.muted'}
+                    borderRadius="sm"
+                    fontWeight={loginMethod === 'emailOtp' ? 600 : 400}
+                    onClick={() => {
+                      setLoginMethod('emailOtp');
+                      setShowOTPInput(false);
+                      setOtp('');
+                      setOtpToken(null);
+                      setError(null);
+                    }}
+                  >
+                    Email Code
+                  </Button>
+                </Box>
+              )}
 
-                {/* Only show company field if not single-tenant AND not subdomain mode */}
-                {!isSingleTenant && !isSubdomainMode && (
-                  <Input
-                    type="text"
-                    fontFamily="mono"
-                    placeholder="Company"
-                    value={company}
-                    onChange={(e) => setCompany(e.target.value)}
-                    required
-                    autoFocus
-                    size="lg"
-                  />
-                )}
-                <Input
-                  type="email"
-                  fontFamily="mono"
-                  placeholder="Email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  autoFocus={isSingleTenant || isSubdomainMode}
-                  size="lg"
-                />
-                <Input
-                  type="password"
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  size="lg"
-                  disabled={showOTPInput}
-                />
+              {loginMethod === 'emailOtp' ? (
+                // EMAIL OTP (PASSWORDLESS) FLOW
+                <VStack gap={4} w="full">
+                  {/* Subdomain banner */}
+                  {isSubdomainMode && (
+                    <Box
+                      w="full"
+                      p={3}
+                      bg="accent.teal/10"
+                      borderRadius="md"
+                      border="1px solid"
+                      borderColor="accent.teal"
+                    >
+                      <Text fontSize="sm" color="accent.teal" fontFamily="mono">
+                        Logging in to: <strong>{subdomain}</strong>
+                      </Text>
+                    </Box>
+                  )}
 
-                {/* 2FA OTP Input */}
-                {showOTPInput && (
-                  <VStack gap={4} w="full" mt={4}>
-                    <Text fontSize="sm" color="fg.muted" textAlign="center">
-                      We've sent a verification code to your phone. Please enter it below.
-                    </Text>
-                    <OTPInput
-                      value={otp}
-                      onChange={setOtp}
-                      onComplete={handleVerifyOTP}
-                      disabled={otpLoading}
+                  {!isSingleTenant && !isSubdomainMode && (
+                    <Input
+                      type="text"
+                      fontFamily="mono"
+                      placeholder="Company"
+                      value={company}
+                      onChange={(e) => setCompany(e.target.value)}
+                      required
+                      autoFocus
+                      size="lg"
+                      disabled={showOTPInput}
                     />
+                  )}
+                  <Input
+                    type="email"
+                    fontFamily="mono"
+                    placeholder="Email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    autoFocus={isSingleTenant || isSubdomainMode}
+                    size="lg"
+                    disabled={showOTPInput}
+                  />
+
+                  {!showOTPInput ? (
                     <Button
-                      onClick={handleVerifyOTP}
+                      onClick={handleSendEmailOTP}
                       w="full"
                       bg="accent.teal"
                       color="white"
                       size="lg"
                       loading={otpLoading}
-                      disabled={otpLoading || otp.length !== 6}
+                      disabled={otpLoading}
                       _hover={{ bg: 'accent.teal', opacity: 0.9 }}
                     >
-                      Verify OTP
+                      <LuLogIn />
+                      Send Login Code
                     </Button>
-                    <Button
-                      onClick={() => handleSendOTP()}
-                      variant="ghost"
-                      size="sm"
-                      disabled={resendCooldown > 0 || otpLoading}
-                    >
-                      {resendCooldown > 0
-                        ? `Resend OTP (${resendCooldown}s)`
-                        : 'Resend OTP'}
-                    </Button>
-                  </VStack>
-                )}
+                  ) : (
+                    <VStack gap={4} w="full">
+                      <Text fontSize="sm" color="fg.muted" textAlign="center">
+                        We've sent a login code to <strong>{email}</strong>. Enter it below.
+                      </Text>
+                      <OTPInput
+                        value={otp}
+                        onChange={setOtp}
+                        onComplete={handleVerifyEmailOTP}
+                        disabled={otpLoading}
+                      />
+                      <Button
+                        onClick={handleVerifyEmailOTP}
+                        w="full"
+                        bg="accent.teal"
+                        color="white"
+                        size="lg"
+                        loading={otpLoading}
+                        disabled={otpLoading || otp.length !== 6}
+                        _hover={{ bg: 'accent.teal', opacity: 0.9 }}
+                      >
+                        Verify Code
+                      </Button>
+                      <Button
+                        onClick={handleSendEmailOTP}
+                        variant="ghost"
+                        size="sm"
+                        disabled={resendCooldown > 0 || otpLoading}
+                      >
+                        {resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : 'Resend code'}
+                      </Button>
+                    </VStack>
+                  )}
+                </VStack>
+              ) : (
+                // PASSWORD LOGIN FLOW (existing)
+                <form onSubmit={handleLogin} style={{ width: '100%' }}>
+                  <VStack gap={4}>
+                    {/* Show subdomain banner if present (same for valid/invalid to prevent enumeration) */}
+                    {isSubdomainMode && (
+                      <Box
+                        w="full"
+                        p={3}
+                        bg="accent.teal/10"
+                        borderRadius="md"
+                        border="1px solid"
+                        borderColor="accent.teal"
+                      >
+                        <Text fontSize="sm" color="accent.teal" fontFamily="mono">
+                          Logging in to: <strong>{subdomain}</strong>
+                        </Text>
+                      </Box>
+                    )}
 
-                {/* Sign In Button (only show if not in OTP mode) */}
-                {!showOTPInput && (
-                  <Button
-                    type="submit"
-                    w="full"
-                    bg="accent.teal"
-                    color="white"
-                    size="lg"
-                    loading={loading}
-                    disabled={loading}
-                    _hover={{ bg: 'accent.teal', opacity: 0.9 }}
-                  >
-                    <LuLogIn />
-                    Sign In
-                  </Button>
-                )}
-              </VStack>
-            </form>
+                    {/* Only show company field if not single-tenant AND not subdomain mode */}
+                    {!isSingleTenant && !isSubdomainMode && (
+                      <Input
+                        type="text"
+                        fontFamily="mono"
+                        placeholder="Company"
+                        value={company}
+                        onChange={(e) => setCompany(e.target.value)}
+                        required
+                        autoFocus
+                        size="lg"
+                      />
+                    )}
+                    <Input
+                      type="email"
+                      fontFamily="mono"
+                      placeholder="Email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      autoFocus={isSingleTenant || isSubdomainMode}
+                      size="lg"
+                    />
+                    <Input
+                      type="password"
+                      placeholder="Password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      size="lg"
+                      disabled={showOTPInput}
+                    />
+
+                    {/* Phone 2FA OTP Input */}
+                    {showOTPInput && (
+                      <VStack gap={4} w="full" mt={4}>
+                        <Text fontSize="sm" color="fg.muted" textAlign="center">
+                          We've sent a verification code to your phone. Please enter it below.
+                        </Text>
+                        <OTPInput
+                          value={otp}
+                          onChange={setOtp}
+                          onComplete={handleVerifyOTP}
+                          disabled={otpLoading}
+                        />
+                        <Button
+                          onClick={handleVerifyOTP}
+                          w="full"
+                          bg="accent.teal"
+                          color="white"
+                          size="lg"
+                          loading={otpLoading}
+                          disabled={otpLoading || otp.length !== 6}
+                          _hover={{ bg: 'accent.teal', opacity: 0.9 }}
+                        >
+                          Verify OTP
+                        </Button>
+                        <Button
+                          onClick={() => handleSendOTP()}
+                          variant="ghost"
+                          size="sm"
+                          disabled={resendCooldown > 0 || otpLoading}
+                        >
+                          {resendCooldown > 0
+                            ? `Resend OTP (${resendCooldown}s)`
+                            : 'Resend OTP'}
+                        </Button>
+                      </VStack>
+                    )}
+
+                    {/* Sign In Button (only show if not in OTP mode) */}
+                    {!showOTPInput && (
+                      <Button
+                        type="submit"
+                        w="full"
+                        bg="accent.teal"
+                        color="white"
+                        size="lg"
+                        loading={loading}
+                        disabled={loading}
+                        _hover={{ bg: 'accent.teal', opacity: 0.9 }}
+                      >
+                        <LuLogIn />
+                        Sign In
+                      </Button>
+                    )}
+                  </VStack>
+                </form>
+              )}
+            </VStack>
           ) : (
             // REGISTRATION FORM
             <form onSubmit={handleRegister}>

@@ -1,33 +1,82 @@
 /**
  * POST /api/auth/send-otp
- * Send OTP to user's phone number for 2FA verification
+ * Send OTP to user for authentication.
+ *
+ * Supports two channels via the `channel` body field:
+ *   - "phone" (default): sends OTP to user's phone for 2FA after password login
+ *   - "email": sends OTP to user's email for passwordless login
  */
 
 import { NextRequest } from 'next/server';
 import { UserDB } from '@/lib/database/user-db';
+import { CompanyDB } from '@/lib/database/company-db';
 import { generateOTP, hashOTP, createOTPToken } from '@/lib/auth/otp-utils';
 import { getConfigsByCompanyId } from '@/lib/data/configs.server';
-import { executeWebhook } from '@/lib/messaging/webhook-executor';
+import { executeWebhook, sendEmailViaWebhook } from '@/lib/messaging/webhook-executor';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
 import { UserState } from '@/lib/types';
 
 export async function POST(request: NextRequest) {
   try {
-    // Parse request body
     const body = await request.json();
-    const { email, companyId } = body;
+    const { email, channel = 'phone' } = body;
+    let { companyId } = body;
 
-    if (!email || !companyId) {
-      return ApiErrors.badRequest('Email and companyId are required');
+    if (!email) {
+      return ApiErrors.badRequest('Email is required');
+    }
+
+    // Resolve companyId from company name if not provided directly
+    if (!companyId) {
+      const company = body.company
+        ? await CompanyDB.getByName(body.company)
+        : await CompanyDB.getDefaultCompany();
+      if (!company) {
+        return ApiErrors.badRequest('Company not found');
+      }
+      companyId = company.id;
     }
 
     // Look up user
     const user = await UserDB.getByEmailAndCompany(email, companyId);
     if (!user) {
-      return ApiErrors.notFound('User not found');
+      // Return generic error to avoid user enumeration
+      return ApiErrors.badRequest('Invalid email or company');
     }
 
-    // Check if user has phone number and 2FA enabled
+    if (channel === 'email') {
+      // --- Passwordless email OTP ---
+      const { config } = await getConfigsByCompanyId(companyId);
+      const webhook = config.messaging?.webhooks?.find(w => w.type === 'email_otp');
+      if (!webhook) {
+        return ApiErrors.badRequest('Email OTP is not configured for this company');
+      }
+
+      const otp = generateOTP();
+      const otpHash = hashOTP(otp);
+      console.log('[send-otp/email] Generated OTP for user:', user.email);
+
+      const token = createOTPToken({
+        email: user.email,
+        companyId: user.company_id,
+        otpHash,
+      });
+
+      const result = await sendEmailViaWebhook(
+        webhook,
+        user.email,
+        'Your login code',
+        `Your login code is: ${otp}`
+      );
+
+      if (!result.success) {
+        return ApiErrors.internalError(`Failed to send OTP email: ${result.error}`);
+      }
+
+      return successResponse({ success: true, token, message: 'OTP sent to email' });
+    }
+
+    // --- Phone 2FA OTP (existing flow) ---
     if (!user.phone) {
       return ApiErrors.badRequest('User does not have a phone number configured');
     }
@@ -39,27 +88,23 @@ export async function POST(request: NextRequest) {
       return ApiErrors.badRequest('2FA is not enabled for this user');
     }
 
-    // Generate OTP
     const otp = generateOTP();
     const otpHash = hashOTP(otp);
-    console.log('[send-otp] Generated OTP:', otp, 'Hash:', otpHash);
+    console.log('[send-otp/phone] Generated OTP:', otp, 'Hash:', otpHash);
 
-    // Create JWT token with OTP hash
     const token = createOTPToken({
       email: user.email,
       phone: user.phone,
       companyId: user.company_id,
       otpHash,
     });
-    console.log('[send-otp] Created token for user:', user.email);
+    console.log('[send-otp/phone] Created token for user:', user.email);
 
-    // Load company config with messaging
     const { config } = await getConfigsByCompanyId(companyId);
-    if (!config.messaging || !config.messaging.webhooks || config.messaging.webhooks.length === 0) {
+    if (!config.messaging?.webhooks?.length) {
       return ApiErrors.internalError('Messaging configuration not found in company config');
     }
 
-    // Send OTP via first configured webhook (Phone 2FA)
     const webhook = config.messaging.webhooks.find(w => w.type === 'phone_otp') || config.messaging.webhooks[0];
     const result = await executeWebhook(webhook, {
       USER_NUMBER: user.phone,
@@ -70,12 +115,7 @@ export async function POST(request: NextRequest) {
       return ApiErrors.internalError(`Failed to send OTP: ${result.error}`);
     }
 
-    // Return success with token
-    return successResponse({
-      success: true,
-      token,
-      message: 'OTP sent successfully',
-    });
+    return successResponse({ success: true, token, message: 'OTP sent successfully' });
   } catch (error) {
     return handleApiError(error);
   }
