@@ -2,7 +2,7 @@
 
 import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
-import { Box, Flex, VStack, HStack, Text, IconButton, Icon, Menu, Button, Span } from '@chakra-ui/react';
+import { Box, Flex, VStack, HStack, Text, IconButton, Icon, Menu } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
 import { Link } from '@/components/ui/Link';
 import { ReactNode, useMemo, useState, useEffect } from 'react';
@@ -40,9 +40,7 @@ function NavItem({ href, icon, label, isCollapsed, isActive }: NavItemProps) {
           py={2}
           borderRadius="md"
           cursor="pointer"
-          bg={isActive ? 'bg.transparent' : 'transparent'}
-          borderWidth="2px"
-          borderColor={isActive ? 'accent.teal' : 'transparent'}
+          bg={isActive ? 'bg.muted' : 'transparent'}
           _hover={{ bg: 'bg.muted' }}
           transition="all 0.2s"
           display="flex"
@@ -126,8 +124,7 @@ export default function Sidebar() {
   const homeItem = { href: '/', icon: <LuHouse />, label: 'Home' };
 
   type NavItem = { href: string; icon: React.ReactElement; label: string; adminOnly?: boolean };
-  type NavAction = { label: string; fileType: string; icon: React.ReactElement; adminOnly?: boolean };
-  type NavSection = { category: string; items: NavItem[]; actions?: NavAction[] };
+  type NavSection = { category: string; items: NavItem[] };
 
   // Get user mode for mode-aware navigation
   const mode = effectiveUser?.mode || 'org';
@@ -137,20 +134,16 @@ export default function Sidebar() {
       category: 'Analytics',
       items: [
         { href: '/explore', icon: <FILE_TYPE_METADATA.explore.icon />, label: FILE_TYPE_METADATA.explore.label },
+        { href: `/new/question?folder=${encodeURIComponent(currentPath)}`, icon: <FILE_TYPE_METADATA.question.icon />, label: 'New Question' },
+        { href: `/new/dashboard?folder=${encodeURIComponent(currentPath)}`, icon: <FILE_TYPE_METADATA.dashboard.icon />, label: 'New Dashboard' },
       ],
-      actions: [
-        { label: 'Add New Question', fileType: 'question', icon: <FILE_TYPE_METADATA.question.icon size={12} /> },
-        { label: 'Add New Dashboard', fileType: 'dashboard', icon: <FILE_TYPE_METADATA.dashboard.icon size={12} /> },
-      ]
     },
     {
       category: 'Engineering',
       items: [
         { href: `/p/${mode}/database`, icon: <FILE_TYPE_METADATA.connection.icon />, label: FILE_TYPE_METADATA.connection.label, adminOnly: true },
+        { href: `/new/connection?folder=${encodeURIComponent(currentPath)}`, icon: <FILE_TYPE_METADATA.connection.icon />, label: 'New DB Connection', adminOnly: true },
       ],
-      actions: [
-        { label: 'Add New DB Connection', fileType: 'connection', icon: <FILE_TYPE_METADATA.connection.icon size={12} />, adminOnly: true },
-      ]
     },
     {
       category: 'Debug',
@@ -164,7 +157,6 @@ export default function Sidebar() {
   const userIsAdmin = effectiveUser?.role && isAdmin(effectiveUser.role);
   const navSections = rawNavSections
     .filter(section => {
-      // Hide Debug category if showDebug is false
       if (section.category === 'Debug' && !showDebug) {
         return false;
       }
@@ -173,7 +165,6 @@ export default function Sidebar() {
     .map(section => ({
       ...section,
       items: section.items.filter((item: NavItem) => !item.adminOnly || userIsAdmin),
-      actions: section.actions?.filter((action: NavAction) => !action.adminOnly || userIsAdmin),
     }))
     .filter(section => section.items.length > 0);
 
@@ -300,38 +291,9 @@ export default function Sidebar() {
                   icon={item.icon}
                   label={item.label}
                   isCollapsed={isCollapsed}
-                  isActive={pathname === item.href}
+                  isActive={pathname === item.href.split('?')[0]}
                 />
               ))}
-              {/* Section Action Buttons (expanded only) */}
-              {!isCollapsed && section.actions && section.actions.length > 0 && (
-                <Flex gap={2} px={3} py={1} flexWrap="wrap" alignItems="center">
-                  {section.actions.map((action) => (
-                    <Box
-                      key={action.fileType}
-                      as="button"
-                      fontSize="xs"
-                      color="accent.teal"
-                      fontFamily="mono"
-                      fontWeight="500"
-                      cursor="pointer"
-                      bg="bg.subtle"
-                      borderRadius="full"
-                      px={2.5}
-                      py={1}
-                      _hover={{ bg: 'bg.muted' }}
-                      transition="all 0.2s"
-                      onClick={() => navigate(`/new/${action.fileType}?folder=${encodeURIComponent(currentPath)}`)}
-                      display="flex"
-                      alignItems="center"
-                      gap={1}
-                    >
-                      {action.icon}
-                      {action.label}
-                    </Box>
-                  ))}
-                </Flex>
-              )}
             </Box>
           ))}
         </VStack>
@@ -370,71 +332,84 @@ export default function Sidebar() {
           </Box>
         )}
 
-        {/* Try Demo Mode Button (only in org mode) */}
+        {/* Getting Started section (only in org mode) */}
         {mode === 'org' && !isCollapsed && (
-          <Box px={4} py={3} borderTop="1px solid" borderColor="border.default">
-            <Text fontSize="2xs" fontWeight="600" color="fg.subtle" textTransform="uppercase" letterSpacing="0.1em" fontFamily="mono" px={3} mb={2}>
-              Getting Started
-            </Text>
-            <VStack gap={2} align="stretch">
-              <Link href="/getting-started" prefetch={true} style={{ textDecoration: 'none' }}>
-                <Box
-                  fontSize="xs"
-                  color="fg.muted"
-                  fontFamily="mono"
-                  fontWeight="400"
-                  cursor="pointer"
-                  borderRadius="md"
-                  px={3}
-                  py={1.5}
-                  _hover={{ color: 'accent.teal', bg: 'bg.subtle' }}
-                  transition="all 0.2s"
-                  display="flex"
-                  alignItems="center"
-                  gap={2}
-                >
-                  <Icon as={LuBookOpen} boxSize={3} />
-                  How to use {displayName}
-                </Box>
-              </Link>
-              <Button
-                onClick={() => switchMode('tutorial')}
-                variant="outline"
-                size="sm"
-                width="100%"
-                borderColor="accent.danger"
-                color="accent.danger"
-                _hover={{ bg: 'accent.danger', color: 'white' }}
-                gap={2}
-                aria-label="Try Demo Button"
+          <Box px={4} py={2} borderTop="1px solid" borderColor="border.default">
+            <Box px={3} py={2}>
+              <Text fontSize="2xs" fontWeight="600" color="fg.subtle" textTransform="uppercase" letterSpacing="0.1em" fontFamily="mono">
+                Getting Started
+              </Text>
+            </Box>
+            <Link href="/getting-started" prefetch={true} style={{ textDecoration: 'none' }}>
+              <Box
+                px={3}
+                py={2}
+                borderRadius="md"
+                cursor="pointer"
+                _hover={{ bg: 'bg.muted' }}
+                transition="all 0.2s"
+                display="flex"
+                alignItems="center"
+                gap={3}
               >
-                <Box textAlign="center" lineHeight="1.3">
-                  <HStack gap={1} justify="center">
-                    <Icon as={LuGraduationCap} />
-                    <Text fontSize="xs">Try Demo Mode</Text>
-                  </HStack>
-                  <Text fontSize="2xs" fontWeight="400">(Sample Data Included)</Text>
+                <Box color="accent.teal" display="flex" alignItems="center" fontSize="lg">
+                  <LuBookOpen />
                 </Box>
-              </Button>
-            </VStack>
+                <Text fontSize="sm" color="fg.default" fontFamily="mono" fontWeight="400">
+                  How to use {displayName}
+                </Text>
+              </Box>
+            </Link>
+            <Box
+              as="button"
+              px={3}
+              py={2}
+              borderRadius="md"
+              cursor="pointer"
+              _hover={{ bg: 'bg.muted' }}
+              transition="all 0.2s"
+              display="flex"
+              alignItems="center"
+              gap={3}
+              width="100%"
+              onClick={() => switchMode('tutorial')}
+            >
+              <Box color="accent.teal" display="flex" alignItems="center" fontSize="lg">
+                <LuGraduationCap />
+              </Box>
+              <Text fontSize="sm" color="fg.default" fontFamily="mono" fontWeight="400">
+                Try Demo Mode
+              </Text>
+            </Box>
           </Box>
         )}
         {mode === 'org' && isCollapsed && (
-          <Flex justify="center" py={3} borderTop="1px solid" borderColor="border.default">
-            <Tooltip content="Try Demo Mode" positioning={{ placement: 'right' }}>
-              <IconButton
-                onClick={() => switchMode('tutorial')}
-                variant="outline"
-                size="sm"
-                borderColor="accent.danger"
-                color="accent.danger"
-                _hover={{ bg: 'accent.danger', color: 'white' }}
-                aria-label="Try Demo Mode"
-              >
-                <LuGraduationCap />
-              </IconButton>
+          <VStack gap={0} py={2} borderTop="1px solid" borderColor="border.default">
+            <Tooltip content="How to use MinusX" positioning={{ placement: 'right' }}>
+              <Link href="/getting-started" prefetch={true} style={{ textDecoration: 'none' }}>
+                <Flex justify="center" py={2}>
+                  <Box color="accent.teal" display="flex" alignItems="center" fontSize="lg">
+                    <LuBookOpen />
+                  </Box>
+                </Flex>
+              </Link>
             </Tooltip>
-          </Flex>
+            <Tooltip content="Try Demo Mode" positioning={{ placement: 'right' }}>
+              <Flex
+                justify="center"
+                py={2}
+                cursor="pointer"
+                onClick={() => switchMode('tutorial')}
+                _hover={{ bg: 'bg.muted' }}
+                borderRadius="md"
+                transition="all 0.2s"
+              >
+                <Box color="accent.teal" display="flex" alignItems="center" fontSize="lg">
+                  <LuGraduationCap />
+                </Box>
+              </Flex>
+            </Tooltip>
+          </VStack>
         )}
 
         {/* User Menu */}
