@@ -43,7 +43,7 @@ export interface CompanyConfig {
   links: CompanyLinks;
   messaging?: {
     webhooks: Array<{
-      type: 'phone_otp' | 'email_otp' | 'email_alert' | 'phone_alert' | 'sms';
+      type: 'phone_otp' | 'email_otp' | 'email_alert' | 'phone_alert' | 'sms' | 'slack_alert';
       url: string;
       method: 'GET' | 'POST' | 'PUT';
       headers?: Record<string, string>;

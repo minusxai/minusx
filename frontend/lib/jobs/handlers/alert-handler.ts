@@ -101,6 +101,12 @@ export const alertJobHandler: JobHandler = {
               summary: plainText,
             },
           });
+        } else if (recipient.channel === 'slack_alert') {
+          messages.push({
+            type: 'slack_alert',
+            content: plainText,
+            metadata: { channel: recipient.address, title: alertName, link: alertLink },
+          });
         }
       }
     }

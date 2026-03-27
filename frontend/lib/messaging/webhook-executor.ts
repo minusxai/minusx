@@ -121,6 +121,34 @@ export async function sendEmailViaWebhook(
 }
 
 /**
+ * Send a Slack alert via a configured slack_alert webhook.
+ * Builds the Slack payload directly — no body template needed, just a webhook URL.
+ */
+export async function sendSlackViaWebhook(
+  webhook: MessagingWebhook,
+  message: string,
+  extras?: { title?: string; link?: string }
+): Promise<WebhookResult> {
+  const text = extras?.title
+    ? `*${extras.title}*\n${message}${extras.link ? `\n<${extras.link}|View>` : ''}`
+    : message;
+  try {
+    const response = await fetch(webhook.url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    const responseBody = await response.text().catch(() => undefined);
+    if (!response.ok) {
+      return { success: false, error: `HTTP ${response.status}: ${response.statusText}`, statusCode: response.status, responseBody };
+    }
+    return { success: true, statusCode: response.status, responseBody };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Unknown error' };
+  }
+}
+
+/**
  * Validate a webhook configuration
  * Checks URL format, method, headers structure, and body JSON validity
  * @param webhook - Webhook configuration to validate

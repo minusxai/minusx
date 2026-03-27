@@ -327,7 +327,7 @@ export interface StylesContent extends BaseFileContent {
  * Used in ConfigContent.messaging section
  */
 export interface MessagingWebhook {
-  type: 'phone_otp' | 'email_otp' | 'email_alert' | 'phone_alert' | 'sms';
+  type: 'phone_otp' | 'email_otp' | 'email_alert' | 'phone_alert' | 'sms' | 'slack_alert';
   url: string;
   method: 'GET' | 'POST' | 'PUT';
   headers?: Record<string, string>;
@@ -469,7 +469,8 @@ export interface AlertSchedule {
 
 export type AlertRecipient =
   | { channel: 'email_alert'; address: string }
-  | { channel: 'phone_alert'; address: string };
+  | { channel: 'phone_alert'; address: string }
+  | { channel: 'slack_alert'; address: string };  // address = Slack channel name e.g. '#alerts'
 
 export interface AlertContent extends BaseFileContent {
   description?: string;
@@ -525,8 +526,9 @@ export interface AlertOutput {
 }
 
 export type RunMessage =
-  | { type: 'email_alert';    content: string; metadata: { to: string; subject: string } }
-  | { type: 'phone_alert'; content: string; metadata: { to: string; title?: string; desc?: string; link?: string; summary?: string } };
+  | { type: 'email_alert';  content: string; metadata: { to: string; subject: string } }
+  | { type: 'phone_alert';  content: string; metadata: { to: string; title?: string; desc?: string; link?: string; summary?: string } }
+  | { type: 'slack_alert';  content: string; metadata: { channel: string; title?: string; link?: string } };
 
 export interface MessageAttemptLog {
   attemptedAt: string;
