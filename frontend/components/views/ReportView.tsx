@@ -5,6 +5,7 @@ import { ReportContent, ReportReference, ReportRunContent, JobRun } from '@/lib/
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { LuPlay, LuClock, LuMail, LuInfo, LuPlus, LuTrash2, LuFileText, LuGripVertical, LuListChecks, LuHistory } from 'react-icons/lu';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
+import { SchedulePicker } from '@/components/shared/SchedulePicker';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import Markdown from '@/components/Markdown';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
@@ -27,35 +28,6 @@ interface ReportViewProps {
   onSelectRun?: (runId: number | null) => void;
 }
 
-// Common cron presets
-const CRON_PRESETS = [
-  { value: '0 9 * * *', label: 'Daily at 9am' },
-  { value: '0 9 * * 1', label: 'Weekly on Monday' },
-  { value: '0 9 * * 1-5', label: 'Weekdays at 9am' },
-  { value: '0 9 1 * *', label: 'Monthly on 1st' },
-  { value: '0 17 * * 5', label: 'Fridays at 5pm' },
-];
-
-const cronCollection = createListCollection({
-  items: CRON_PRESETS.map(p => ({ value: p.value, label: p.label }))
-});
-
-// Common timezones
-const TIMEZONES = [
-  { value: 'America/New_York', label: 'ET' },
-  { value: 'America/Chicago', label: 'CT' },
-  { value: 'America/Denver', label: 'MT' },
-  { value: 'America/Los_Angeles', label: 'PT' },
-  { value: 'UTC', label: 'UTC' },
-  { value: 'Europe/London', label: 'GMT' },
-  { value: 'Europe/Paris', label: 'CET' },
-  { value: 'Asia/Tokyo', label: 'JST' },
-  { value: 'Asia/Kolkata', label: 'IST' },
-];
-
-const timezoneCollection = createListCollection({
-  items: TIMEZONES.map(tz => ({ value: tz.value, label: tz.label }))
-});
 
 const referenceTypeCollection = createListCollection({
   items: [
@@ -260,93 +232,11 @@ export default function ReportView({
           >
             <VStack gap={3} align="stretch" p={4}>
               {/* Schedule Card */}
-              <Box
-                position="relative"
-                bg="bg.muted"
-                borderRadius="md"
-                border="1px solid"
-                borderColor="border.muted"
-                p={3}
-                pl={5}
-                overflow="hidden"
-              >
-                <Box position="absolute" left={0} top={0} bottom={0} width="3px" bg="accent.teal" borderLeftRadius="md" />
-                <HStack mb={2} gap={1.5}>
-                  <LuClock size={14} color="var(--chakra-colors-accent-teal)" />
-                  <Text fontWeight="700" fontSize="xs" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Schedule</Text>
-                </HStack>
-
-                <HStack gap={2}>
-                  <Box flex={2}>
-                    <SelectRoot
-                      collection={cronCollection}
-                      value={[report.schedule?.cron || '0 9 * * 1']}
-                      onValueChange={(e) => onChange({
-                        schedule: { ...report.schedule, cron: e.value[0] }
-                      })}
-                      disabled={!editMode}
-                      size="sm"
-                    >
-                      <SelectTrigger bg="bg.surface">
-                        <SelectValueText placeholder="Select schedule" />
-                      </SelectTrigger>
-                      <Portal>
-                        <SelectPositioner>
-                          <SelectContent>
-                            {cronCollection.items.map((item) => (
-                              <SelectItem key={item.value} item={item}>
-                                {item.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </SelectPositioner>
-                      </Portal>
-                    </SelectRoot>
-                  </Box>
-
-                  <Box flex={1}>
-                    <Input
-                      value={report.schedule?.cron || ''}
-                      onChange={(e) => onChange({
-                        schedule: { ...report.schedule, cron: e.target.value }
-                      })}
-                      placeholder="cron"
-                      disabled={!editMode}
-                      size="sm"
-                      fontFamily="mono"
-                      fontSize="xs"
-                      bg="bg.surface"
-                    />
-                  </Box>
-
-                  <Box flex={1}>
-                    <SelectRoot
-                      collection={timezoneCollection}
-                      value={[report.schedule?.timezone || 'America/New_York']}
-                      onValueChange={(e) => onChange({
-                        schedule: { ...report.schedule, timezone: e.value[0] }
-                      })}
-                      disabled={!editMode}
-                      size="sm"
-                    >
-                      <SelectTrigger bg="bg.surface">
-                        <SelectValueText placeholder="TZ" />
-                      </SelectTrigger>
-                      <Portal>
-                        <SelectPositioner>
-                          <SelectContent>
-                            {timezoneCollection.items.map((item) => (
-                              <SelectItem key={item.value} item={item}>
-                                {item.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </SelectPositioner>
-                      </Portal>
-                    </SelectRoot>
-                  </Box>
-                </HStack>
-              </Box>
+              <SchedulePicker
+                schedule={{ cron: report.schedule?.cron || '0 9 * * 1', timezone: report.schedule?.timezone || 'America/New_York' }}
+                onChange={(s) => onChange({ schedule: s })}
+                editMode={editMode}
+              />
 
               {/* Analysis Card */}
               <Box

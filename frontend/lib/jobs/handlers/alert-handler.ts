@@ -1,21 +1,12 @@
 import 'server-only';
 import { FilesAPI } from '@/lib/data/files.server';
-import { AUTH_URL } from '@/lib/config';
-import { CompanyDB } from '@/lib/database/company-db';
-import { isSubdomainRoutingEnabled } from '@/lib/utils/subdomain';
+import { resolveBaseUrl } from '@/lib/jobs/job-utils';
 import { buildAlertEmailHtml } from '@/lib/messaging/alert-email-html';
 import { getConfigsByCompanyId } from '@/lib/data/configs.server';
 import { createServerRunner } from '@/lib/tests/server';
 import type { AlertContent, AlertOutput, JobHandlerResult, JobRunnerInput, TestRunResult } from '@/lib/types';
 import type { JobHandler } from '../job-registry';
 
-async function resolveBaseUrl(companyId: number): Promise<string> {
-  if (!isSubdomainRoutingEnabled()) return AUTH_URL;
-  const company = await CompanyDB.getById(companyId);
-  if (!company?.subdomain) return AUTH_URL;
-  const url = new URL(AUTH_URL);
-  return `${url.protocol}//${company.subdomain}.${url.host}`;
-}
 
 export const alertJobHandler: JobHandler = {
   async execute({ runFileId, jobId, file }: JobRunnerInput, user): Promise<JobHandlerResult> {

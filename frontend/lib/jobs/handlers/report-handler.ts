@@ -3,20 +3,11 @@ import 'server-only';
 import '@/app/api/chat/tool-handlers.server';
 import { FilesAPI } from '@/lib/data/files.server';
 import { runChatOrchestration } from '@/lib/chat/run-orchestration';
-import { AUTH_URL } from '@/lib/config';
-import { CompanyDB } from '@/lib/database/company-db';
-import { isSubdomainRoutingEnabled } from '@/lib/utils/subdomain';
+import { resolveBaseUrl } from '@/lib/jobs/job-utils';
 import { dbFileToCompressedAugmented } from '@/lib/api/compress-augmented';
 import type { ReportContent, ReportOutput, ReportRunContent, JobHandlerResult, JobRunnerInput } from '@/lib/types';
 import type { JobHandler } from '../job-registry';
 
-async function resolveBaseUrl(companyId: number): Promise<string> {
-  if (!isSubdomainRoutingEnabled()) return AUTH_URL;
-  const company = await CompanyDB.getById(companyId);
-  if (!company?.subdomain) return AUTH_URL;
-  const url = new URL(AUTH_URL);
-  return `${url.protocol}//${company.subdomain}.${url.host}`;
-}
 
 export const reportJobHandler: JobHandler = {
   async execute({ runFileId, jobId, file }: JobRunnerInput, user): Promise<JobHandlerResult> {

@@ -11,6 +11,8 @@ import { selectIsDirty } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
 import type { JobRun, QuestionContent, Test, Transform, TransformationContent } from '@/lib/types';
 import TestList from '@/components/test/TestList';
+import { SchedulePicker } from '@/components/shared/SchedulePicker';
+import { DeliveryCard } from '@/components/shared/DeliveryPicker';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { useContext } from '@/lib/hooks/useContext';
 import { useFile } from '@/lib/hooks/file-state-hooks';
@@ -513,6 +515,18 @@ export default function TransformationView({
                   Add Transform
                 </Button>
               )}
+
+              <SchedulePicker
+                schedule={{ cron: transformation.schedule?.cron || '0 9 * * 1', timezone: transformation.schedule?.timezone || 'America/New_York' }}
+                onChange={(s) => onChange({ schedule: s })}
+                editMode={editMode}
+              />
+
+              <DeliveryCard
+                recipients={transformation.recipients || []}
+                onChange={(recipients) => onChange({ recipients })}
+                disabled={!editMode}
+              />
             </VStack>
           </Box>
 

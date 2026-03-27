@@ -1,4 +1,4 @@
-import type { AlertContent, ContextContent, ReportContent } from '@/lib/types';
+import type { AlertContent, ContextContent, ReportContent, TransformationContent } from '@/lib/types';
 import type { FileType } from '@/lib/ui/file-metadata';
 
 export interface JobDefinition {
@@ -22,5 +22,10 @@ export const JOB_DEFINITIONS: JobDefinition[] = [
     job_type: 'report',
     file_type: 'report',
     isActive: (content: ReportContent) => content.status === 'live',
+  },
+  {
+    job_type: 'transformation',
+    file_type: 'transformation',
+    isActive: (content: TransformationContent) => !!content.schedule,
   },
 ];

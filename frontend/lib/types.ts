@@ -237,6 +237,7 @@ export interface ContextContent extends BaseFileContent {
   evals?: Test[];
   /** Optional cron schedule for automatic eval runs */
   schedule?: AlertSchedule;
+  recipients?: AlertRecipient[];
 }
 
 export type UserRole = 'admin' | 'editor' | 'viewer';
@@ -668,6 +669,8 @@ export interface Transform {
 export interface TransformationContent extends BaseFileContent {
   description?: string;
   transforms: Transform[];
+  schedule?: AlertSchedule;
+  recipients?: AlertRecipient[];
 }
 
 // Per-transform execution result (stored inside RunFileContent.output)
