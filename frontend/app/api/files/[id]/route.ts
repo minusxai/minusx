@@ -50,6 +50,7 @@ export const GET = withAuth(async (
         userEmail: user.email,
         userRole: user.role,
         companyId: user.companyId,
+        mode: user.mode,
       });
       return successResponse(result.data);
     }
@@ -68,6 +69,7 @@ export const GET = withAuth(async (
       userEmail: user.email,
       userRole: user.role,
       companyId: user.companyId,
+      mode: user.mode,
     });
     return successResponse(result);
   } catch (error) {
@@ -219,6 +221,7 @@ export const DELETE = withAuth(async (
       userEmail: user.email,
       userRole: user.role,
       companyId: user.companyId,
+      mode: user.mode,
     });
 
     return successResponse({ message: 'File deleted successfully' });

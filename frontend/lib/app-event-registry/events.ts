@@ -14,13 +14,18 @@ export const AppEvents = {
 
 export type AppEventName = typeof AppEvents[keyof typeof AppEvents];
 
+interface BaseEventPayload {
+  companyId: number;
+  mode: string;
+}
+
 export interface AppEventPayloads {
-  'file:created':             { fileId: number; fileType?: string; filePath?: string; fileName?: string; companyId: number; userId?: number; userEmail?: string; userRole?: string };
-  'file:viewed':              { fileId: number; fileType?: string; filePath?: string; fileName?: string; companyId: number; userId?: number; userEmail?: string; userRole?: string };
-  'file:viewed_as_reference': { fileId: number; fileType?: string; filePath?: string; fileName?: string; companyId: number; userId?: number; userEmail?: string; userRole?: string; referencedByFileId: number; referencedByFileType?: string };
-  'file:updated':             { fileId: number; fileType?: string; filePath?: string; fileName?: string; companyId: number; userId?: number; userEmail?: string; userRole?: string };
-  'file:deleted':             { fileId: number; fileType?: string; filePath?: string; fileName?: string; companyId: number; userId?: number; userEmail?: string; userRole?: string };
-  'folder:created':           { folderId: number; folderPath: string; folderName: string; companyId: number; userId?: number; userEmail?: string; userRole?: string };
-  'llm:call':                 { conversationId: number; llmCalls: Record<string, LLMCallDetail>; companyId: number; userId?: number; userEmail?: string; userRole?: string };
-  'error':                    { source: string; message: string; error?: unknown; context?: Record<string, unknown> };
+  'file:created':             BaseEventPayload & { fileId: number; fileType?: string; filePath?: string; fileName?: string; userId?: number; userEmail?: string; userRole?: string };
+  'file:viewed':              BaseEventPayload & { fileId: number; fileType?: string; filePath?: string; fileName?: string; userId?: number; userEmail?: string; userRole?: string };
+  'file:viewed_as_reference': BaseEventPayload & { fileId: number; fileType?: string; filePath?: string; fileName?: string; userId?: number; userEmail?: string; userRole?: string; referencedByFileId: number; referencedByFileType?: string };
+  'file:updated':             BaseEventPayload & { fileId: number; fileType?: string; filePath?: string; fileName?: string; userId?: number; userEmail?: string; userRole?: string };
+  'file:deleted':             BaseEventPayload & { fileId: number; fileType?: string; filePath?: string; fileName?: string; userId?: number; userEmail?: string; userRole?: string };
+  'folder:created':           BaseEventPayload & { folderId: number; folderPath: string; folderName: string; userId?: number; userEmail?: string; userRole?: string };
+  'llm:call':                 BaseEventPayload & { conversationId: number; llmCalls: Record<string, LLMCallDetail>; userId?: number; userEmail?: string; userRole?: string };
+  'error':                    BaseEventPayload & { source: string; message: string; mode?: string; error?: unknown; context?: Record<string, unknown> };
 }

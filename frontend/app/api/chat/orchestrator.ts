@@ -16,6 +16,7 @@ import { ToolCall, ConversationLogEntry, ToolCallDetails } from '@/lib/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { appendLogToConversation } from '@/lib/conversations';
 import { FrontendToolException } from './frontend-tool-exception';
+import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import {
   CompletedToolCallPayload,
   generate_unique_tool_call_id
@@ -210,6 +211,13 @@ export async function orchestratePendingTools(
           // Other error - mark as failed
           const errorObj = error instanceof Error ? error : new Error(String(error));
           callbacks?.onToolFailed?.(toolCall, errorObj);
+          appEventRegistry.publish(AppEvents.ERROR, {
+            source: 'tool_handler',
+            message: errorObj.message,
+            companyId: user.companyId,
+            mode: user.mode,
+            context: { tool: toolCall.function.name },
+          });
 
           // Record failure to avoid infinite loop
           completedTools.push({

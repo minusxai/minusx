@@ -112,6 +112,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
         userEmail: user.email,
         userRole: user.role,
         companyId: user.companyId,
+        mode: user.mode,
         referencedByFileId: file.id,
         referencedByFileType: file.type,
       });
@@ -419,6 +420,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
       userEmail: user.email,
       userRole: user.role,
       companyId: user.companyId,
+      mode: user.mode,
     });
 
     return {
@@ -508,6 +510,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
       userEmail: user.email,
       userRole: user.role,
       companyId: user.companyId,
+      mode: user.mode,
     });
 
     // For connections, reload through loader with refresh=true to update schema

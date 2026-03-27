@@ -210,7 +210,7 @@ class ConfigsDataLayerServer {
         }
       }
     } catch (error) {
-      console.log('[Configs] Using default config (document not found)');
+      console.log('[Configs] Using default config (document not found)', error);
     }
 
     // Fall back to defaults

@@ -33,6 +33,7 @@ export const POST = withAuth(async (
         userEmail: user.email,
         userRole: user.role,
         companyId: user.companyId,
+        mode: user.mode,
       });
     }
 

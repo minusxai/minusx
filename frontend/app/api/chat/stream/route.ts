@@ -148,11 +148,12 @@ export async function POST(request: NextRequest) {
       let currentConversationID = 0;
       let currentLogIndex = 0;
       let accumulatedCompletedToolCalls: CompletedToolCallFromPython[] = [];
+      let user: Awaited<ReturnType<typeof getEffectiveUser>> | undefined;
 
       try {
         // Parse request
         const body: ChatRequest = await request.json();
-        const user = await getEffectiveUser();
+        user = await getEffectiveUser();
 
         if (!user || !user.companyId) {
           safeEnqueue(controller, encoder, 'error', {
@@ -313,6 +314,7 @@ export async function POST(request: NextRequest) {
               llmCalls: pythonDoneEvent.llm_calls,
               conversationId: currentConversationID,
               companyId: user.companyId,
+              mode: user.mode,
               userId: user.userId,
               userEmail: user.email,
               userRole: user.role,
@@ -415,6 +417,15 @@ export async function POST(request: NextRequest) {
 
         // Handle other errors
         console.error('[CHAT STREAM] Error:', error);
+        if (user?.companyId) {
+          appEventRegistry.publish(AppEvents.ERROR, {
+            source: 'nextjs_stream',
+            message: error.message || 'Stream error',
+            companyId: user.companyId,
+            mode: user.mode,
+            context: { route: '/api/chat/stream' },
+          });
+        }
         safeEnqueue(controller, encoder, 'error', {
           type: 'error',
           error: error.message || 'Unknown error',
