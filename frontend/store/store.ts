@@ -6,7 +6,6 @@ import queryResultsReducer from './queryResultsSlice';
 import configsReducer from './configsSlice';
 import chatReducer from './chatSlice';
 import recordingsReducer from './recordingsSlice';
-import reportRunsReducer from './reportRunsSlice';
 import jobRunsReducer from './jobRunsSlice';
 import navigationReducer from './navigationSlice';
 import { chatListenerMiddleware } from './chatListener';
@@ -22,7 +21,6 @@ function getAllReducers() {
     configs: configsReducer,
     chat: chatReducer,  // Orchestration API with automatic tool execution
     recordings: recordingsReducer,  // Session recording state
-    reportRuns: reportRunsReducer,  // Report run state (runs list, selected run)
     jobRuns: jobRunsReducer,        // Job run state (job_runs table records, all job types)
     navigation: navigationReducer,  // Navigation state (pathname, searchParams, activeVirtualId)
   }

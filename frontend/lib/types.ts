@@ -393,6 +393,9 @@ export interface ReportSchedule {
 export interface ReportContent extends BaseFileContent {
   description?: string;
 
+  // Scheduling gate: 'live' = runs on schedule, 'draft' = manual only (default when absent)
+  status?: 'live' | 'draft';
+
   // When to run
   schedule: ReportSchedule;
 
@@ -441,6 +444,14 @@ export interface ReportRunContent extends BaseFileContent {
   generatedReport?: string;  // The final generated report content (markdown)
   queries?: Record<string, ReportQueryResult>;  // Query results keyed by tool call ID for {{query:id}} references
   error?: string;         // Top-level error if any
+}
+
+// Report-specific output stored inside RunFileContent.output (for the job_runs system)
+export interface ReportOutput {
+  reportId: number;
+  reportName: string;
+  generatedReport?: string;   // markdown
+  queries?: Record<string, ReportQueryResult>;
 }
 
 // Alert types

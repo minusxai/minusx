@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, Text, VStack, HStack, Input, Button, Textarea, Flex, Badge, IconButton, Portal } from '@chakra-ui/react';
-import { ReportContent, ReportReference, ReportRunContent } from '@/lib/types';
+import { ReportContent, ReportReference, ReportRunContent, JobRun } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { LuPlay, LuClock, LuMail, LuInfo, LuPlus, LuTrash2, LuFileText, LuGripVertical, LuListChecks, LuHistory } from 'react-icons/lu';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
@@ -13,18 +13,14 @@ import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { selectIsDirty } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
 
-interface ReportRun {
-  id: number;
-  name: string;
-  content: ReportRunContent;
-}
-
 interface ReportViewProps {
   report: ReportContent;
   fileId: number;
   isRunning: boolean;
-  runs?: ReportRun[];
+  runs?: JobRun[];
   selectedRunId?: number | null;
+  /** Content of the selected run file, loaded by the container */
+  reportRunContent?: ReportRunContent | null;
 
   onChange: (updates: Partial<ReportContent>) => void;
   onRunNow: () => Promise<void>;
@@ -74,6 +70,7 @@ export default function ReportView({
   isRunning,
   runs = [],
   selectedRunId,
+  reportRunContent,
   onChange,
   onRunNow,
   onSelectRun
@@ -185,7 +182,7 @@ export default function ReportView({
   const runsCollection = useMemo(() => createListCollection({
     items: runs.map(r => ({
       value: r.id.toString(),
-      label: new Date(r.content.startedAt).toLocaleString()
+      label: new Date(r.created_at).toLocaleString()
     }))
   }), [runs]);
 
@@ -209,18 +206,25 @@ export default function ReportView({
     onChange({ references: newReferences });
   }, [onChange, report.references]);
 
-  // Get selected run
-  const selectedRun = runs.find(r => r.id === selectedRunId);
 
   return (
     <Box display="flex" flexDirection="column" overflow="hidden" flex="1" minH="0" fontFamily="mono">
-      {/* Cron not active info banner */}
-      <HStack gap={2} px={4} py={2} bg="yellow.subtle" borderBottomWidth="1px" borderColor="yellow.muted"  borderRadius={"md"}>
-        <LuInfo size={14} color="var(--chakra-colors-yellow-fg)" />
-        <Text fontSize="xs" color="yellow.fg">
-          Scheduled runs are not active yet. Use <strong>Run Now</strong> to generate a report.
-        </Text>
-      </HStack>
+      {/* Scheduling status banner */}
+      {report.status === 'live' ? (
+        <HStack gap={2} px={4} py={2} bg="green.subtle" borderBottomWidth="1px" borderColor="green.muted" borderRadius="md">
+          <LuInfo size={14} color="var(--chakra-colors-green-fg)" />
+          <Text fontSize="xs" color="green.fg">
+            Scheduled runs are <strong>active</strong>. This report will run automatically per its cron schedule.
+          </Text>
+        </HStack>
+      ) : (
+        <HStack gap={2} px={4} py={2} bg="yellow.subtle" borderBottomWidth="1px" borderColor="yellow.muted" borderRadius="md">
+          <LuInfo size={14} color="var(--chakra-colors-yellow-fg)" />
+          <Text fontSize="xs" color="yellow.fg">
+            Scheduled runs are <strong>not active</strong>. Set status to <strong>Live</strong> to enable automatic scheduling.
+          </Text>
+        </HStack>
+      )}
 
       {/* JSON View */}
       {activeTab === 'json' && (
@@ -706,19 +710,19 @@ export default function ReportView({
                 <VStack gap={4} align="center" justify="center" h="100%">
                   <Text color="fg.muted">Running report...</Text>
                 </VStack>
-              ) : selectedRun ? (
+              ) : reportRunContent ? (
                 <VStack align="stretch" gap={3}>
                   <HStack justify="space-between">
                     <Badge
-                      colorPalette={selectedRun.content.status === 'success' ? 'green' : selectedRun.content.status === 'failed' ? 'red' : 'yellow'}
+                      colorPalette={reportRunContent.status === 'success' ? 'green' : reportRunContent.status === 'failed' ? 'red' : 'yellow'}
                     >
-                      {selectedRun.content.status}
+                      {reportRunContent.status}
                     </Badge>
                     <Text fontSize="xs" color="fg.muted">
-                      {new Date(selectedRun.content.startedAt).toLocaleString()}
+                      {new Date(reportRunContent.startedAt).toLocaleString()}
                     </Text>
                   </HStack>
-                  {selectedRun.content.generatedReport && (
+                  {reportRunContent.generatedReport && (
                     <Box
                       p={4}
                       bg="bg.muted"
@@ -726,14 +730,14 @@ export default function ReportView({
                       overflow="auto"
                       maxH="none"
                     >
-                      <Markdown queries={selectedRun.content.queries}>
-                        {selectedRun.content.generatedReport}
+                      <Markdown queries={reportRunContent.queries}>
+                        {reportRunContent.generatedReport}
                       </Markdown>
                     </Box>
                   )}
-                  {selectedRun.content.error && (
+                  {reportRunContent.error && (
                     <Box p={3} bg="red.subtle" borderRadius="md" color="red.fg">
-                      <Text fontSize="sm">{selectedRun.content.error}</Text>
+                      <Text fontSize="sm">{reportRunContent.error}</Text>
                     </Box>
                   )}
                 </VStack>
