@@ -5,7 +5,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { verifyOTPToken, validateOTP } from '@/lib/auth/otp-utils';
+import { verifyOTPToken, validateOTP, createVerifiedToken } from '@/lib/auth/otp-utils';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
 
 export async function POST(request: NextRequest) {
@@ -38,10 +38,14 @@ export async function POST(request: NextRequest) {
 
     console.log('[verify-otp] OTP verified successfully for user:', payload.email);
 
+    // Create a short-lived verified token so the frontend can call signIn() without a password
+    const verifiedToken = createVerifiedToken(payload.email, payload.companyId);
+
     // Return success - frontend can now proceed with signIn()
     return successResponse({
       success: true,
       email: payload.email,
+      verifiedToken,
       message: 'OTP verified successfully',
     });
   } catch (error) {

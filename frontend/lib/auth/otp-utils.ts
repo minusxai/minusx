@@ -26,11 +26,51 @@ export function hashOTP(otp: string): string {
  */
 export interface OTPPayload {
   email: string;
-  phone: string;
+  phone?: string;  // optional — not present for email OTP
   companyId: number;
   otpHash: string;
   exp: number;  // Unix timestamp (expiry)
   nonce: string;  // Random string to prevent reuse
+}
+
+/**
+ * Verified OTP payload — created after successful OTP verification
+ * Short-lived token proving the user completed OTP verification
+ */
+export interface VerifiedOTPPayload {
+  email: string;
+  companyId: number;
+  verified: true;
+  exp: number;
+}
+
+/**
+ * Create a short-lived JWT proving OTP verification was completed
+ * Expires in 60 seconds — just enough time for signIn() to be called
+ */
+export function createVerifiedToken(email: string, companyId: number): string {
+  const secret = process.env.NEXTAUTH_SECRET;
+  if (!secret) {
+    throw new Error('NEXTAUTH_SECRET is not configured');
+  }
+  const exp = Math.floor(Date.now() / 1000) + 60;
+  return jwt.sign({ email, companyId, verified: true, exp }, secret);
+}
+
+/**
+ * Verify and decode a verified OTP token
+ * Returns null if token is invalid, expired, or not a verified token
+ */
+export function verifyVerifiedToken(token: string): VerifiedOTPPayload | null {
+  try {
+    const secret = process.env.NEXTAUTH_SECRET;
+    if (!secret) throw new Error('NEXTAUTH_SECRET is not configured');
+    const payload = jwt.verify(token, secret) as VerifiedOTPPayload;
+    if (!payload.verified) return null;
+    return payload;
+  } catch {
+    return null;
+  }
 }
 
 /**

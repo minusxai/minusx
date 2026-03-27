@@ -327,7 +327,7 @@ export interface StylesContent extends BaseFileContent {
  * Used in ConfigContent.messaging section
  */
 export interface MessagingWebhook {
-  type: 'phone_otp' | 'email_alert' | 'phone_alert' | 'sms';
+  type: 'phone_otp' | 'email_otp' | 'email_alert' | 'phone_alert' | 'sms';
   url: string;
   method: 'GET' | 'POST' | 'PUT';
   headers?: Record<string, string>;

@@ -3,6 +3,7 @@ import Credentials from "next-auth/providers/credentials"
 import { UserDB } from '@/lib/database/user-db'
 import { CompanyDB } from '@/lib/database/company-db'
 import { verifyPassword } from '@/lib/auth/password-utils'
+import { verifyVerifiedToken } from '@/lib/auth/otp-utils'
 import { IS_DEV } from '@/lib/constants'
 import { UserRole, UserState } from '@/lib/types'
 import { isAdmin } from '@/lib/auth/role-helpers'
@@ -17,9 +18,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         company: { label: "Company", type: "text" },
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        otp_verified_token: { label: "OTP Verified Token", type: "text" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
+        if (!credentials?.email) {
           return null
         }
 
@@ -59,23 +61,37 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             return null
           }
 
-          // Dev-only: Allow admins without password to login with email as password
-          if (IS_DEV && credentials.password === user.email) {
-            console.log('⚠️  Dev mode: User logged in using email as password')
-          } else if (isAdmin(user.role) && ADMIN_PWD && credentials.password === ADMIN_PWD) {
-            console.log('⚠️  Prod mode: Admin logged in using ADMIN_PWD')
-          } else if (!user.password_hash) {
-            return null
-          } else {
-            // Verify password
-            const isValid = await verifyPassword(
-              credentials.password as string,
-              user.password_hash
-            )
-
-            if (!isValid) {
-              console.log('Invalid password for user:', credentials.email)
+          // --- Passwordless path: verified OTP token provided instead of password ---
+          if (credentials.otp_verified_token && !credentials.password) {
+            const payload = verifyVerifiedToken(credentials.otp_verified_token as string)
+            if (!payload || payload.email !== credentials.email || payload.companyId !== company.id) {
+              console.log('Invalid or mismatched OTP verified token for:', credentials.email)
               return null
+            }
+            console.log('User logged in via email OTP (passwordless):', credentials.email)
+          } else {
+            // --- Password path (existing) ---
+            if (!credentials.password) {
+              return null
+            }
+            // Dev-only: Allow admins without password to login with email as password
+            if (IS_DEV && credentials.password === user.email) {
+              console.log('⚠️  Dev mode: User logged in using email as password')
+            } else if (isAdmin(user.role) && ADMIN_PWD && credentials.password === ADMIN_PWD) {
+              console.log('⚠️  Prod mode: Admin logged in using ADMIN_PWD')
+            } else if (!user.password_hash) {
+              return null
+            } else {
+              // Verify password
+              const isValid = await verifyPassword(
+                credentials.password as string,
+                user.password_hash
+              )
+
+              if (!isValid) {
+                console.log('Invalid password for user:', credentials.email)
+                return null
+              }
             }
           }
 
