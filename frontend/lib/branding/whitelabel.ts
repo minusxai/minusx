@@ -4,7 +4,7 @@
  */
 
 import type { FileType } from '@/lib/ui/file-metadata';
-import type { UserRole, ConfigChannel } from '@/lib/types';
+import type { UserRole, ConfigChannel, MessagingWebhook } from '@/lib/types';
 
 /**
  * Per-role file type access override
@@ -42,13 +42,7 @@ export interface CompanyConfig {
   branding: CompanyBranding;
   links: CompanyLinks;
   messaging?: {
-    webhooks: Array<{
-      type: 'phone_otp' | 'email_otp' | 'email_alert' | 'phone_alert' | 'sms' | 'slack_alert';
-      url: string;
-      method: 'GET' | 'POST' | 'PUT';
-      headers?: Record<string, string>;
-      body?: Record<string, any>;
-    }>;
+    webhooks: MessagingWebhook[];
   };
   channels?: ConfigChannel[];
   city?: string;  // Optional city identifier for agent context
@@ -73,7 +67,14 @@ export const DEFAULT_CONFIG: CompanyConfig = {
     githubIssuesUrl: 'https://github.com/minusxai/minusx/issues'
   },
   messaging: {
-    webhooks: []
+    webhooks: [
+      {
+        type: 'slack_alert',
+        url: '{{SLACK_WEBHOOK}}',
+        method: 'POST',
+        body: '{{SLACK_PROPERTIES}}',
+      },
+    ]
   }
 };
 
