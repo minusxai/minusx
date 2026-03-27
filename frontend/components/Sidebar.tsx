@@ -2,7 +2,7 @@
 
 import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen, LuDatabaseZap } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
-import { Box, Flex, VStack, HStack, Text, IconButton, Icon, Menu } from '@chakra-ui/react';
+import { Box, Flex, VStack, HStack, Text, IconButton, Icon, Menu, Portal } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
 import { Link } from '@/components/ui/Link';
 import { ReactNode, useMemo, useState, useEffect } from 'react';
@@ -33,7 +33,7 @@ interface NavItemProps {
 function NavItem({ href, icon, label, isCollapsed, isActive }: NavItemProps) {
   return (
     <Tooltip content={label} disabled={!isCollapsed} positioning={{ placement: 'right' }}>
-      <Link href={href} prefetch={true} style={{ textDecoration: 'none' }}>
+      <Link href={href} prefetch={true} style={{ textDecoration: 'none', display: 'block', width: '100%' }}>
         <Box
           aria-label={label}
           px={isCollapsed ? 0 : 3}
@@ -300,7 +300,7 @@ export default function Sidebar() {
       </VStack>
 
       {/* Footer */}
-      <Box borderTop="1px solid" borderColor="border.default">
+      <Box borderTop="1px solid" borderColor="border.default" flexShrink={0}>
         {/* Collapse button when collapsed */}
         {isCollapsed && (
           <>
@@ -338,33 +338,21 @@ export default function Sidebar() {
                 Getting Started
               </Text>
             </Box>
-            <Link href="/getting-started" prefetch={true} style={{ textDecoration: 'none' }}>
-              <Box
-                px={3}
-                py={2}
-                borderRadius="md"
-                cursor="pointer"
-                _hover={{ bg: 'bg.muted' }}
-                transition="all 0.2s"
-                display="flex"
-                alignItems="center"
-                gap={3}
-              >
-                <Box color="accent.teal" display="flex" alignItems="center" fontSize="lg">
-                  <LuBookOpen />
-                </Box>
-                <Text fontSize="sm" color="fg.default" fontFamily="mono" fontWeight="400">
-                  How to use {displayName}
-                </Text>
-              </Box>
-            </Link>
+            <NavItem
+              href="/getting-started"
+              icon={<LuBookOpen />}
+              label={`How to use ${displayName}`}
+              isCollapsed={false}
+              isActive={pathname === '/getting-started'}
+            />
             <Box
               as="button"
               px={3}
               py={2}
               borderRadius="md"
               cursor="pointer"
-              _hover={{ bg: 'bg.muted' }}
+              bg="accent.danger"
+              _hover={{ opacity: 0.85 }}
               transition="all 0.2s"
               display="flex"
               alignItems="center"
@@ -372,55 +360,109 @@ export default function Sidebar() {
               width="100%"
               onClick={() => switchMode('tutorial')}
             >
-              <Box color="accent.teal" display="flex" alignItems="center" fontSize="lg">
+              <Box color="white" display="flex" alignItems="center" fontSize="lg">
                 <LuGraduationCap />
               </Box>
-              <Text fontSize="sm" color="fg.default" fontFamily="mono" fontWeight="400">
+              <Text fontSize="sm" color="white" fontFamily="mono" fontWeight="400">
                 Try Demo Mode
               </Text>
             </Box>
           </Box>
         )}
         {mode === 'org' && isCollapsed && (
-          <VStack gap={0} py={2}>
-            <Tooltip content="How to use MinusX" positioning={{ placement: 'right' }}>
-              <Link href="/getting-started" prefetch={true} style={{ textDecoration: 'none' }}>
-                <Flex justify="center" py={2}>
-                  <Box color="accent.teal" display="flex" alignItems="center" fontSize="lg">
-                    <LuBookOpen />
-                  </Box>
-                </Flex>
-              </Link>
-            </Tooltip>
+          <VStack gap={0} py={2} px={3} borderTop="1px solid" borderColor="border.default">
+            <NavItem
+              href="/getting-started"
+              icon={<LuBookOpen />}
+              label={`How to use ${displayName}`}
+              isCollapsed={true}
+              isActive={pathname === '/getting-started'}
+            />
             <Tooltip content="Try Demo Mode" positioning={{ placement: 'right' }}>
-              <Flex
-                justify="center"
+              <Box
+                as="button"
                 py={2}
+                borderRadius="md"
                 cursor="pointer"
                 onClick={() => switchMode('tutorial')}
-                _hover={{ bg: 'bg.muted' }}
-                borderRadius="md"
+                bg="accent.danger"
+                _hover={{ opacity: 0.85 }}
                 transition="all 0.2s"
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                width="100%"
               >
-                <Box color="accent.teal" display="flex" alignItems="center" fontSize="lg">
+                <Box color="white" display="flex" alignItems="center" fontSize="lg">
                   <LuGraduationCap />
                 </Box>
-              </Flex>
+              </Box>
             </Tooltip>
           </VStack>
         )}
-        {isCollapsed && mode === 'org' && (
+        {/* Exit Demo Mode (only in tutorial mode) */}
+        {mode === 'tutorial' && !isCollapsed && (
+          <Box px={4} py={2} borderTop="1px solid" borderColor="border.default">
+            <Box
+              as="button"
+              px={3}
+              py={2}
+              borderRadius="md"
+              cursor="pointer"
+              bg="accent.danger"
+              _hover={{ opacity: 0.85 }}
+              transition="all 0.2s"
+              display="flex"
+              alignItems="center"
+              gap={3}
+              width="100%"
+              onClick={() => switchMode('org')}
+            >
+              <Box color="white" display="flex" alignItems="center" fontSize="lg">
+                <LuGraduationCap />
+              </Box>
+              <Text fontSize="sm" color="white" fontFamily="mono" fontWeight="400">
+                Exit Demo Mode
+              </Text>
+            </Box>
+          </Box>
+        )}
+        {mode === 'tutorial' && isCollapsed && (
+          <VStack gap={0} py={2} px={3} borderTop="1px solid" borderColor="border.default">
+            <Tooltip content="Exit Demo Mode" positioning={{ placement: 'right' }}>
+              <Box
+                as="button"
+                py={2}
+                borderRadius="md"
+                cursor="pointer"
+                onClick={() => switchMode('org')}
+                bg="accent.danger"
+                _hover={{ opacity: 0.85 }}
+                transition="all 0.2s"
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                width="100%"
+              >
+                <Box color="white" display="flex" alignItems="center" fontSize="lg">
+                  <LuGraduationCap />
+                </Box>
+              </Box>
+            </Tooltip>
+          </VStack>
+        )}
+        {isCollapsed && (mode === 'org' || mode === 'tutorial') && (
           <Box h="1px" bg="border.muted" mx={3} />
         )}
 
         {/* User Menu */}
-        <Box>
+        <Box flexShrink={0}>
           <Menu.Root positioning={{ placement: isCollapsed ? 'right-end' : 'top-start' }}>
             <Menu.Trigger asChild>
               <Flex
                 align="center"
                 gap={3}
-                px={isCollapsed ? 0 : 4}
+                px={isCollapsed ? 3 : 4}
                 py={3}
                 justify={isCollapsed ? 'center' : 'flex-start'}
                 cursor="pointer"
@@ -469,8 +511,9 @@ export default function Sidebar() {
                 )}
               </Flex>
             </Menu.Trigger>
-            <Menu.Positioner zIndex={200}>
-              <Menu.Content minW="220px" p={2} bg="bg.surface" shadow="lg" borderRadius="lg" fontFamily="mono">
+            <Portal>
+              <Menu.Positioner zIndex={200}>
+                <Menu.Content minW="220px" p={2} bg="bg.surface" shadow="lg" borderRadius="lg" fontFamily="mono">
                 {/* User info header */}
                 <Box px={3} py={2} mb={1}>
                   <Text fontSize="xs" color="fg.subtle" fontFamily="mono">Signed in as</Text>
@@ -590,8 +633,9 @@ export default function Sidebar() {
                     {displayName} v{APP_VERSION}
                   </Text>
                 </Box>
-              </Menu.Content>
-            </Menu.Positioner>
+                </Menu.Content>
+              </Menu.Positioner>
+            </Portal>
           </Menu.Root>
         </Box>
       </Box>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Box, Heading, Text, VStack, HStack, Icon, Collapsible } from '@chakra-ui/react';
+import { Box, Flex, Heading, Text, VStack, Icon, Collapsible } from '@chakra-ui/react';
 import {
   LuDatabase,
   LuScanSearch,
@@ -10,18 +10,21 @@ import {
   LuSparkles,
   LuChevronDown,
   LuChevronRight,
-  LuExternalLink,
+  LuFileText,
+  LuBookOpen,
+  LuUsers,
 } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
 import NextLink from 'next/link';
 import Breadcrumb from '@/components/Breadcrumb';
 import { useConfigs } from '@/lib/hooks/useConfigs';
+import { useContexts } from '@/lib/hooks/useContexts';
 
 interface GuideItem {
   icon: IconType;
   title: string;
   description: string;
-  link?: { label: string; href: string };
+  link?: { label: string; href: string; disabled?: boolean };
 }
 
 interface GuideSection {
@@ -46,10 +49,11 @@ function AccordionItem({ item }: { item: GuideItem }) {
         display="flex"
         alignItems="center"
         gap={4}
-        px={5}
-        py={4}
+        px={4}
+        py={1}
         cursor="pointer"
-        _hover={{ bg: 'bg.subtle' }}
+        bg={isOpen ? 'bg.muted' : 'transparent'}
+        _hover={{ bg: 'bg.muted' }}
         transition="background 0.2s"
         onClick={() => setIsOpen(!isOpen)}
       >
@@ -60,7 +64,7 @@ function AccordionItem({ item }: { item: GuideItem }) {
           w={10}
           h={10}
           borderRadius="lg"
-          bg="bg.subtle"
+          bg={isOpen ? 'bg.muted' : 'bg.subtle'}
           flexShrink={0}
         >
           <Icon as={item.icon} boxSize={5} color="accent.teal" />
@@ -72,24 +76,47 @@ function AccordionItem({ item }: { item: GuideItem }) {
       </Box>
       <Collapsible.Root open={isOpen}>
         <Collapsible.Content>
-          <Box px={5} pb={4} pl={19}>
-            <Text fontSize="sm" color="fg.muted" lineHeight="tall" mb={item.link ? 3 : 0}>
+          <Box px={5} pt={3} pb={4} pl={19}>
+            <Text fontSize="sm" color="fg.muted" lineHeight="tall">
               {item.description}
             </Text>
             {item.link && (
-              <NextLink href={item.link.href} style={{ textDecoration: 'none' }}>
-                <HStack
-                  gap={1}
-                  color="accent.teal"
-                  fontSize="sm"
-                  fontWeight="500"
-                  _hover={{ opacity: 0.8 }}
-                  transition="opacity 0.2s"
-                >
-                  <Text>{item.link.label}</Text>
-                  <Icon as={LuExternalLink} boxSize={3} />
-                </HStack>
-              </NextLink>
+              <Flex justify="flex-end" mt={3}>
+                {item.link.disabled ? (
+                  <Box
+                    px={4}
+                    py={1.5}
+                    bg="bg.muted"
+                    color="fg.muted"
+                    fontSize="sm"
+                    fontWeight="500"
+                    fontFamily="mono"
+                    borderRadius="md"
+                    cursor="not-allowed"
+                    opacity={0.6}
+                  >
+                    {item.link.label}
+                  </Box>
+                ) : (
+                  <NextLink href={item.link.href} style={{ textDecoration: 'none' }}>
+                    <Box
+                      px={4}
+                      py={1.5}
+                      bg="accent.teal"
+                      color="white"
+                      fontSize="sm"
+                      fontWeight="500"
+                      fontFamily="mono"
+                      borderRadius="md"
+                      cursor="pointer"
+                      _hover={{ opacity: 0.9 }}
+                      transition="opacity 0.2s"
+                    >
+                      {item.link.label}
+                    </Box>
+                  </NextLink>
+                )}
+              </Flex>
             )}
           </Box>
         </Collapsible.Content>
@@ -101,6 +128,11 @@ function AccordionItem({ item }: { item: GuideItem }) {
 export default function GettingStartedPage() {
   const { config } = useConfigs();
   const agentName = config.branding.agentName;
+  const { contexts } = useContexts();
+  const firstContext = contexts[0];
+  const contextLink = firstContext
+    ? { label: 'Edit Context', href: `/f/${firstContext.id}` }
+    : { label: 'No Knowledge Base Available', href: '#', disabled: true };
 
   const sections: GuideSection[] = [
     {
@@ -109,14 +141,20 @@ export default function GettingStartedPage() {
         {
           icon: LuDatabase,
           title: 'Connect a database',
-          description: `Add a database connection so ${agentName} can query your data. Supports DuckDB, PostgreSQL, and BigQuery.`,
+          description: `Add a database connection so ${agentName} can query your data. Supports DuckDB, PostgreSQL, BigQuery, etc.`,
           link: { label: 'Add Connection', href: '/new/connection' },
         },
         {
           icon: LuNotebookText,
           title: 'Add context about your data',
-          description: 'Select which tables are relevant and add business context — column descriptions, metric definitions, team-specific notes. This helps the AI write better queries.',
-          link: { label: 'Add Context', href: '/new/context' },
+          description: 'Select which tables are relevant and add business context — column descriptions, metric definitions, team-specific notes. This helps the agent write better queries.',
+          link: contextLink,
+        },
+        {
+          icon: LuUsers,
+          title: 'Invite colleagues',
+          description: 'Add team members so they can explore data, build dashboards, and collaborate with the AI.',
+          link: { label: 'Manage Users', href: '/settings?tab=users' },
         },
       ],
     },
@@ -147,14 +185,16 @@ export default function GettingStartedPage() {
       title: `Get the most out of ${agentName}`,
       items: [
         {
-          icon: LuNotebookText,
-          title: 'Write good context',
-          description: 'The better your context, the better the AI performs. Include things like: what each table represents, how key metrics are calculated, and any naming conventions or gotchas in your schema.',
+          icon: LuFileText,
+          title: 'Read the docs',
+          description: `Learn about ${agentName}'s features, configuration options, and best practices.`,
+          link: { label: 'Open Docs', href: 'https://docsv2.minusx.ai/docs' },
         },
         {
-          icon: LuSparkles,
-          title: 'Iterate with the AI',
-          description: `You can refine results by chatting — ask ${agentName} to filter, group, change the visualization, or fix errors. The AI sees your current query and results, so it can build on what you have.`,
+          icon: LuBookOpen,
+          title: 'Follow step-by-step guides',
+          description: 'Practical walkthroughs for common workflows — connecting databases, writing context, building dashboards, and more.',
+          link: { label: 'Open Guides', href: 'https://docsv2.minusx.ai/guides' },
         },
       ],
     },
@@ -186,14 +226,13 @@ export default function GettingStartedPage() {
 
         <VStack alignItems={"center"} justify={"center"}>
             <VStack alignItems={"stretch"} w={{ base: '100%', md: '80%', lg: '50%' }}>
-            <VStack gap={10} align="stretch">
             {sections.map((section) => (
                 <Box key={section.title}>
                 <Text
                     fontSize="lg"
                     fontWeight="700"
                     color="fg.default"
-                    mb={4}
+                    mb={2}
                 >
                     {section.title}
                 </Text>
@@ -204,21 +243,6 @@ export default function GettingStartedPage() {
                 </VStack>
                 </Box>
             ))}
-            </VStack>
-
-            {/* Footer links */}
-            <Box mt={12} mb={8} pt={8} borderTop="1px solid" borderColor="border.default" textAlign="center">
-            <Text fontSize="sm" color="fg.muted" lineHeight="tall">
-                {agentName} can do a lot. To learn more, check out our{' '}
-                <NextLink href={config.links.docsUrl} target="_blank" style={{ color: 'var(--chakra-colors-accent-teal)', textDecoration: 'underline' }}>
-                Docs
-                </NextLink>
-                {' '}or reach out via{' '}
-                <NextLink href={config.links.supportUrl} target="_blank" style={{ color: 'var(--chakra-colors-accent-teal)', textDecoration: 'underline' }}>
-                Support
-                </NextLink>.
-            </Text>
-            </Box>
             </VStack>
         </VStack>
       </Box>
