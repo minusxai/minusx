@@ -244,6 +244,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Publish soft Python errors (returned as HTTP 200 with error field)
+    if (pythonResponse.error && user?.companyId) {
+      appEventRegistry.publish(AppEvents.ERROR, {
+        source: 'python_backend',
+        message: pythonResponse.error,
+        companyId: user.companyId,
+        context: { route: '/api/chat' },
+      });
+    }
+
     // Return response - conversationID may have changed if forked
     return NextResponse.json({
       conversationID: currentConversationID,

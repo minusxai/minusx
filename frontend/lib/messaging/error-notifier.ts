@@ -4,8 +4,6 @@ import { sendEmailViaWebhook, sendSlackViaWebhook, sendPhoneAlertViaWebhook } fr
 import type { AppEventPayloads } from '@/lib/app-event-registry/events';
 
 export async function notifyErrorEvent(payload: AppEventPayloads['error']): Promise<void> {
-  if (!payload.companyId) return;
-
   const { config } = await getConfigsByCompanyId(payload.companyId);
   const recipients = config.error_delivery ?? [];
   if (!recipients.length) return;
