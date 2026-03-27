@@ -6,6 +6,7 @@ import { runChatOrchestration } from '@/lib/chat/run-orchestration';
 import { AUTH_URL } from '@/lib/config';
 import { CompanyDB } from '@/lib/database/company-db';
 import { isSubdomainRoutingEnabled } from '@/lib/utils/subdomain';
+import { dbFileToCompressedAugmented } from '@/lib/api/compress-augmented';
 import type { ReportContent, ReportOutput, ReportRunContent, JobHandlerResult, JobRunnerInput } from '@/lib/types';
 import type { JobHandler } from '../job-registry';
 
@@ -26,19 +27,28 @@ export const reportJobHandler: JobHandler = {
     const reportFileResult = await FilesAPI.loadFile(reportId, user);
     const reportName = reportFileResult.data?.name ?? `Report ${reportId}`;
 
-    // Load reference files from DB and enrich with connection info
+    // Load reference files from DB and build CompressedAugmentedFile for each.
+    // The Python AnalystAgent expects app_state: { type: 'file', state: CompressedAugmentedFile }
+    // — the same shape ChatInterface builds client-side via compressAugmentedFile().
+    // dbFileToCompressedAugmented handles the DbFile → CompressedAugmentedFile pipeline,
+    // including passing the file's own references (e.g. questions inside a dashboard).
     const enrichedReferences = await Promise.all(
       (report.references || []).map(async (ref) => {
         const refResult = await FilesAPI.loadFile(ref.reference.id, user);
         const refFile = refResult.data;
+        const refFileRefs = (refResult.metadata?.references ?? []);
         const connectionId = (refFile?.content as any)?.database_name;
+
+        const appState = refFile
+          ? { type: 'file' as const, state: dbFileToCompressedAugmented(refFile, refFileRefs) }
+          : null;
+
         return {
           ...ref,
           file_name: refFile?.name || `Reference ${ref.reference.id}`,
           file_path: refFile?.path || '',
           connection_id: connectionId,
-          // Pass the saved DB state as app_state so the analyst agent can read the SQL
-          app_state: refFile ? { type: 'file' as const, state: { fileState: refFile } } : null,
+          app_state: appState,
         };
       })
     );
