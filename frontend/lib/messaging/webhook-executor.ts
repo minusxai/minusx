@@ -152,7 +152,8 @@ export function validateWebhook(webhook: MessagingWebhook): string[] {
   // Validate URL
   if (!webhook.url) {
     errors.push('URL is required');
-  } else {
+  } else if (!/\{\{[^}]+\}\}/.test(webhook.url)) {
+    // Skip URL validation for template variable URLs (e.g. {{SLACK_WEBHOOK}})
     try {
       const url = new URL(webhook.url);
       if (!url.protocol.startsWith('http')) {
@@ -177,10 +178,8 @@ export function validateWebhook(webhook: MessagingWebhook): string[] {
   }
 
   // Validate body (if present)
-  if (webhook.body !== undefined) {
-    if (typeof webhook.body !== 'object') {
-      errors.push('Body must be an object');
-    }
+  // String body is a template placeholder (e.g. '{{SLACK_PROPERTIES}}') — substituted + JSON.parsed at runtime
+  if (webhook.body !== undefined && typeof webhook.body !== 'string') {
     // Try to stringify to catch circular references
     try {
       JSON.stringify(webhook.body);
