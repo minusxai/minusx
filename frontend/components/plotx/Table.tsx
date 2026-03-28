@@ -315,7 +315,7 @@ export const Table = ({ columns, types, rows, pageSize: fixedPageSize, sql, data
           </Text>
         </Box>
       ) : (
-      <Box flex="1" minHeight="0" overflowX="scroll" overflowY="auto" css={{ '&::-webkit-scrollbar': { height: '10px', width: '10px' }, '&::-webkit-scrollbar-track': { background: 'var(--chakra-colors-bg-muted)', borderRadius: '5px' }, '&::-webkit-scrollbar-thumb': { background: '#16a085', borderRadius: '5px' }, '&::-webkit-scrollbar-thumb:hover': { background: '#1abc9c' } }}>
+      <Box flex="1" minHeight="0" overflowX="auto" overflowY="auto" css={{ '&::-webkit-scrollbar': { height: '10px', width: '10px' }, '&::-webkit-scrollbar-track': { background: 'var(--chakra-colors-bg-muted)', borderRadius: '5px' }, '&::-webkit-scrollbar-thumb': { background: '#16a085', borderRadius: '5px' }, '&::-webkit-scrollbar-thumb:hover': { background: '#1abc9c' } }}>
         <ChakraTable.Root key={displayColumnIndices.join(',')} variant="outline" size="sm" tableLayout="fixed" minW={`${displayColumnIndices.length * 100}px`} width={totalTableWidth ? `${totalTableWidth}px` : undefined}>
           <ChakraTable.Header position="sticky" top={0} zIndex={1} bg="bg.muted">
             <ChakraTable.Row bg="bg.muted">
