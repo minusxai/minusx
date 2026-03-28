@@ -7,6 +7,7 @@ import SchemaTreeView, { type WhitelistItem, type SchemaTreeItem } from '@/compo
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import { pulseKeyframes, sparkleKeyframes } from '@/lib/ui/animations';
 import { useConnections } from '@/lib/hooks/useConnections';
+import { useFile } from '@/lib/hooks/file-state-hooks';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import {
   setSidebarPendingMessage,
@@ -17,7 +18,7 @@ import Editor from '@monaco-editor/react';
 import Markdown from '@/components/Markdown';
 import type { ContextContent, DatabaseContext } from '@/lib/types';
 
-const AGENT_DESCRIBE_MESSAGE = 'Write the data documentation for this knowledge base. Look at the schema, describe what the database contains, what the key tables are, and what kinds of questions can be answered.';
+const AGENT_DESCRIBE_MESSAGE = 'Write the data documentation for this knowledge base. Look at the schema, describe what the database contains, what the key tables are, and a tl;dr on what kinds of questions can be answered.';
 
 interface StepContextProps {
   connectionName: string;
@@ -46,12 +47,36 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
   const [description, setDescription] = useState('');
   const [savedFileId, setSavedFileId] = useState<number | null>(null);
 
+  // Watch the saved context file in Redux for agent edits
+  const { fileState: savedContextFile } = useFile(savedFileId ?? undefined) ?? {};
+
+  // Sync description from Redux when agent edits the file
+  const lastSyncedContent = useRef<string | null>(null);
+  useEffect(() => {
+    if (!savedContextFile || savedContextFile.loading) return;
+    const content = savedContextFile.content as ContextContent | undefined;
+    const merged = { ...content, ...savedContextFile.persistableChanges } as ContextContent;
+    // Get the latest version's first doc
+    const versions = merged?.versions;
+    if (!versions || versions.length === 0) return;
+    const latestVersion = versions[versions.length - 1];
+    const docContent = latestVersion?.docs?.[0]?.content ?? '';
+    // Only sync if it changed externally (not from our own typing)
+    if (docContent !== lastSyncedContent.current && docContent !== description) {
+      lastSyncedContent.current = docContent;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setDescription(docContent);
+    }
+  }, [savedContextFile]);
+
   // Debounced markdown change (same pattern as ContextEditorV2)
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const handleEditorChange = useCallback((value: string | undefined) => {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => {
-      setDescription(value || '');
+      const newVal = value || '';
+      lastSyncedContent.current = newVal;
+      setDescription(newVal);
     }, 300);
   }, []);
 
@@ -291,7 +316,7 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
               <Editor
                 height="250px"
                 language="markdown"
-                defaultValue={description}
+                value={description}
                 onChange={handleEditorChange}
                 theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
                 options={{
