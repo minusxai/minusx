@@ -4,13 +4,13 @@ import { Box, Text } from '@chakra-ui/react';
 import { AssetReference, DashboardLayoutItem, DocumentContent, QuestionContent, QuestionParameter } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
 import ParameterRow from '../ParameterRow';
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Layout, WidthProvider, Responsive } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import JsonEditor from '../slides/JsonEditor';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectMergedContent, selectIsDirty, setEphemeral, addQuestionToDashboard } from '@/store/filesSlice';
+import { selectMergedContent, selectIsDirty, setEphemeral, addQuestionToDashboard, isVirtualFileId, removeVirtualFile } from '@/store/filesSlice';
 import { editFile } from '@/lib/api/file-state';
 import { openFileModal, selectDashboardEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -248,6 +248,19 @@ export default function DashboardView({
     return values;
   }, [mergedParameters, lastExecutedParams, paramValues, questionParamDefaults]);
 
+  // Queue of virtual file IDs to clean up after they're removed from assets
+  const pendingVirtualCleanup = useRef<number[]>([]);
+
+  // Effect: clean up virtual files after React has rendered the asset removal
+  useEffect(() => {
+    if (pendingVirtualCleanup.current.length === 0) return;
+    const idsToCleanup = [...pendingVirtualCleanup.current];
+    pendingVirtualCleanup.current = [];
+    for (const id of idsToCleanup) {
+      dispatch(removeVirtualFile(id));
+    }
+  });
+
   // Handler for removing questions (needs to be defined before questionGridItems)
   const handleRemoveQuestion = useCallback((questionIdStr: string) => {
     if (!document?.assets) return;
@@ -276,6 +289,11 @@ export default function DashboardView({
       assets: updatedAssets,
       layout: updatedLayout
     });
+
+    // Queue virtual file for cleanup after render
+    if (isVirtualFileId(questionId)) {
+      pendingVirtualCleanup.current.push(questionId);
+    }
   }, [document?.assets, document?.layout?.items, onChange]);
 
   // Memoize the grid background to prevent re-rendering on every keystroke
@@ -436,7 +454,7 @@ export default function DashboardView({
           )}
 
           {/* Grid Layout */}
-          <Box position="relative" maxW="100%" pb={30}  minH={editMode ? '1500px' : 'auto'}>
+          <Box position="relative" maxW="100%" pb={30}>
             {gridBackground}
 
             {questionIds.length > 0 ? (

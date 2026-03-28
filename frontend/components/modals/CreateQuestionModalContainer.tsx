@@ -133,10 +133,15 @@ export default function CreateQuestionModalContainer({
   // No API call — the question will be published later via "Publish All".
   const handleAdd = useCallback(() => {
     if (typeof effectiveId !== 'number') return;
+    const trimmedName = effectiveName.trim();
+    if (!trimmedName || trimmedName === 'New Question') {
+      setSaveError('Please enter a question name before adding.');
+      return;
+    }
     setSaveError(null);
     onQuestionCreated(effectiveId); // passes the (negative) virtual ID to parent
     onClose();
-  }, [effectiveId, onQuestionCreated, onClose]);
+  }, [effectiveId, effectiveName, onQuestionCreated, onClose]);
 
   // Edit mode: "Update" — changes are already staged in Redux via editFile() calls.
   // No API call — the question will be published later via "Publish All".

@@ -623,6 +623,16 @@ const filesSlice = createSlice({
     },
 
     /**
+     * Remove a virtual file from Redux cache.
+     * Unlike deleteFile, this only removes the file entry — no path cleanup or folder updates.
+     * Safe for virtual files (negative IDs) that were never persisted.
+     */
+    removeVirtualFile(state, action: PayloadAction<FileId>) {
+      const id = action.payload;
+      delete state.files[id];
+    },
+
+    /**
      * Add a new file/folder to Redux cache
      * Updates parent folder to include the new file in references
      */
@@ -845,6 +855,7 @@ export const {
   clearFiles,
   setFolderInfo,
   deleteFile,
+  removeVirtualFile,
   addFile,
   addQuestionToDashboard,
   addReferenceToQuestion,

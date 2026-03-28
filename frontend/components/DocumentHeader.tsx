@@ -279,7 +279,7 @@ export default function DocumentHeader({
                 borderColor={`${highlightColor}/30`}
               >
                 <Box css={{ animation: 'iconBlink 1.5s ease-in-out infinite' }} display="inline-flex">
-                  <Icon as={LuPencil} boxSize={3} color={highlightColor} />
+                  <Icon as={LuPencil} boxSize={3} color={highlightColor}/>
                 </Box>
                 <Text fontSize="xs" color={highlightColor} fontWeight="600" fontFamily="mono">
                   {highlightLabel}
