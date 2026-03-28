@@ -31,6 +31,7 @@ import StepConnection from './components/StepConnection';
 import StepContext from './components/StepContext';
 import StepGenerating from './components/StepGenerating';
 import StepComplete from './components/StepComplete';
+import { useConfigs } from '@/lib/hooks/useConfigs';
 
 const TYPEWRITER_SPEED = 35; // ms per character
 
@@ -56,9 +57,11 @@ export function HelloWorldContent() {
   const orb3Ref = useRef<HTMLDivElement>(null);
 
   // Build greeting with user name
+  const { config } = useConfigs();
+  const agentName = config.branding.agentName;
   const userName = user?.name?.split(' ')[0] || '';
   const greetingLine1 = userName ? `Hi ${userName}!` : 'Hi!';
-  const greetingLine2 = "I'm MinusX. Let's get you set up.";
+  const greetingLine2 = `I'm ${agentName}. Let's get you set up.`;
   const fullGreeting = `${greetingLine1}\n${greetingLine2}`;
 
   // Adapt Redux connections to the { id, name }[] shape used by onboarding-state
@@ -468,7 +471,7 @@ export function HelloWorldContent() {
             css={{ animation: 'fadeInUp 0.4s ease-out forwards' }}
           >
             {step === 'connection' && (
-              <StepConnection onComplete={handleConnectionComplete} />
+              <StepConnection onComplete={handleConnectionComplete} greeting={`Step 1: Let's connect your data.`} />
             )}
             {step === 'context' && connectionName && (
               <StepContext
@@ -477,6 +480,7 @@ export function HelloWorldContent() {
                 onComplete={handleContextComplete}
                 onRequestChat={handleRequestChat}
                 onContextCreated={handleRequestChat}
+                greeting="Step 2: Let's add some context."
               />
             )}
             {step === 'generating' && connectionName && (

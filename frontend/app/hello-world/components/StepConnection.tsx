@@ -7,9 +7,10 @@ import { createVirtualFile } from '@/lib/api/file-state';
 
 interface StepConnectionProps {
   onComplete: (connectionId: number, connectionName: string) => void;
+  greeting?: string;
 }
 
-export default function StepConnection({ onComplete }: StepConnectionProps) {
+export default function StepConnection({ onComplete, greeting }: StepConnectionProps) {
   const [virtualFileId, setVirtualFileId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -35,6 +36,7 @@ export default function StepConnection({ onComplete }: StepConnectionProps) {
         mode="create"
         onSaveSuccess={onComplete}
         hideCancel
+        greeting={greeting}
       />
     </Box>
   );

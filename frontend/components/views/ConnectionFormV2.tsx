@@ -15,7 +15,7 @@
  * - Domain-specific logic (connection testing, JSON parsing)
  * - Calling onChange for content updates
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
   Box,
@@ -40,6 +40,9 @@ import { useAppSelector } from '@/store/hooks';
 import ConnectionTablesBrowser from '../ConnectionTablesBrowser';
 import Image from 'next/image';
 import { DuckDBConfig, BigQueryConfig, PostgreSQLConfig, CsvConfig, GoogleSheetsConfig } from './connection-configs';
+import { cursorBlinkKeyframes } from '@/lib/ui/animations';
+
+const TYPEWRITER_SPEED = 35;
 
 // Connection type metadata for the selection screen
 const CONNECTION_TYPES = [
@@ -107,6 +110,7 @@ interface ConnectionFormV2Props {
   onReload?: () => void;  // Optional reload function from container
   mode: 'create' | 'view';
   hideCancel?: boolean;
+  greeting?: string;
 }
 
 export default function ConnectionFormV2({
@@ -122,6 +126,7 @@ export default function ConnectionFormV2({
   onReload,
   mode,
   hideCancel = false,
+  greeting,
 }: ConnectionFormV2Props) {
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const companyId = useAppSelector((state) => state.auth.user?.companyId);
@@ -141,6 +146,26 @@ export default function ConnectionFormV2({
     message: string;
     schema?: any;
   } | null>(null);
+
+  // Typewriter effect for greeting
+  const [displayedText, setDisplayedText] = useState('');
+  const [typingDone, setTypingDone] = useState(!greeting);
+
+  useEffect(() => {
+    if (!greeting) return;
+    let i = 0;
+    setDisplayedText('');
+    setTypingDone(false);
+    const interval = setInterval(() => {
+      i++;
+      setDisplayedText(greeting.slice(0, i));
+      if (i >= greeting.length) {
+        clearInterval(interval);
+        setTypingDone(true);
+      }
+    }, TYPEWRITER_SPEED);
+    return () => clearInterval(interval);
+  }, [greeting]);
 
   // Handle type selection from the initial screen
   const handleTypeSelect = (selectedType: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets') => {
@@ -474,18 +499,47 @@ export default function ConnectionFormV2({
     return (
       <Box p={6} overflowY="auto">
         <VStack align="stretch" gap={8} pb={4}>
-          {/* Header */}
+          {/* Keyframes */}
+          <style>{cursorBlinkKeyframes}</style>
+
+          {/* Header with optional typewriter */}
           <VStack align="start" gap={2}>
-            <Heading fontSize="2xl" fontWeight="900" letterSpacing="-0.02em">
-              Add Connection
-            </Heading>
-            <Text color="fg.muted" fontSize="sm">
-              Select a database type to connect to
-            </Text>
+            {greeting ? (
+              <Heading
+                fontSize="2xl"
+                fontFamily="mono"
+                fontWeight="400"
+                letterSpacing="-0.02em"
+                lineHeight="1.4"
+              >
+                {displayedText}
+                {!typingDone && (
+                  <Box
+                    as="span"
+                    display="inline-block"
+                    w="2px"
+                    h="1em"
+                    bg="accent.teal"
+                    ml="2px"
+                    verticalAlign="text-bottom"
+                    css={{ animation: 'cursorBlink 0.8s step-end infinite' }}
+                  />
+                )}
+              </Heading>
+            ) : (
+              <>
+                <Heading fontSize="2xl" fontWeight="900" letterSpacing="-0.02em">
+                  Add Connection
+                </Heading>
+                <Text color="fg.muted" fontSize="sm">
+                  Select a database type to connect to
+                </Text>
+              </>
+            )}
           </VStack>
 
           {/* Connection Type Cards */}
-          <SimpleGrid columns={{ base: 1, md: 5 }} gap={4}>
+          <SimpleGrid columns={{ base: 1, md: 4 }} gap={4}>
             {CONNECTION_TYPES.map((connType) => (
               <Box
                 key={connType.type}
@@ -648,26 +702,10 @@ export default function ConnectionFormV2({
                 accentColor="accent.teal"
               />
             )}
-            {activeSection === 'settings' && (
-              <>
-                <Button
-                  onClick={handleSaveClick}
-                  loading={isSaving}
-                  disabled={!isDirty}
-                  size="xs"
-                  bg="accent.teal"
-                  color="white"
-                  _hover={{ bg: 'accent.muted', opacity: 0.9 }}
-                >
-                  <LuSave />
-                  Save
+            {activeSection === 'settings' && !hideCancel && (
+                <Button onClick={onCancel} variant="ghost" size="xs">
+                  Cancel
                 </Button>
-                {!hideCancel && (
-                  <Button onClick={onCancel} variant="ghost" size="xs">
-                    Cancel
-                  </Button>
-                )}
-              </>
             )}
           </HStack>
         </HStack>
@@ -941,6 +979,7 @@ export default function ConnectionFormV2({
               disabled={!isFormValidForTest()}
               colorPalette="red"
               size="sm"
+              variant="outline"
             >
               Test Connection
             </Button>
@@ -956,7 +995,7 @@ export default function ConnectionFormV2({
             {testResult && (
               <Text
                 fontSize="xs"
-                color={testResult.success ? 'accent.success' : 'accent.danger'}
+                color={testResult.success ? 'accent.teal' : 'accent.danger'}
                 fontWeight="600"
               >
                 {testResult.message}
@@ -1002,6 +1041,21 @@ export default function ConnectionFormV2({
             </Box>
           )}
             </VStack>
+
+        {/* Save Button */}
+        <HStack gap={2}>
+          <Button
+            onClick={handleSaveClick}
+            loading={isSaving}
+            disabled={!isDirty}
+            size="sm"
+            bg="accent.teal"
+            color="white"
+          >
+            <LuSave />
+            Save DB Connection
+          </Button>
+        </HStack>
             </>
             )}
 
