@@ -29,7 +29,7 @@ export default function StepGenerating({ connectionName, contextFileId }: StepGe
   const router = useRouter();
   const dispatch = useAppDispatch();
   const reduxState = useAppSelector(state => state);
-  const devMode = useAppSelector(state => state.ui.devMode);
+  const showDebug = useAppSelector(state => state.ui.showDebug);
 
   // Load context (schema + docs) from the saved context file
   const contextInfo = useContext('/org/context');
@@ -124,12 +124,11 @@ export default function StepGenerating({ connectionName, contextFileId }: StepGe
     setShowTrace(true);
   }, [dispatch, connectionName, virtualDashboardId, reduxState, hasStarted, databases, contextDocs]);
 
-  // Publish all dirty files (questions + dashboard) and navigate to the dashboard
+  // Publish all dirty files and navigate to the dashboard
   const handleGoToDashboard = useCallback(async () => {
     if (!virtualDashboardId) return;
     try {
       await publishAll();
-      // Read fresh state AFTER publish — the hook-captured reduxState is stale
       const freshState = getStore().getState();
       const allFiles = Object.values(freshState.files.files);
       const dashboard = allFiles.find(f => f.type === 'dashboard' && f.id > 0 && f.name === 'Getting Started');
@@ -208,7 +207,7 @@ export default function StepGenerating({ connectionName, contextFileId }: StepGe
       </HStack>
 
       {/* Debug: appState */}
-      {devMode && virtualDashboardId && (
+      {showDebug && virtualDashboardId && (
         <Collapsible.Root>
           <Collapsible.Trigger asChild>
             <HStack cursor="pointer" px={3} py={1.5} bg="bg.muted" borderRadius="md" gap={2}>
@@ -244,16 +243,31 @@ export default function StepGenerating({ connectionName, contextFileId }: StepGe
               borderRadius="lg"
               _hover={{ bg: 'bg.emphasis' }}
               gap={2}
+              justify="space-between"
             >
-              <Icon as={LuSparkles} boxSize={3.5} color="accent.teal" />
-              <Text fontSize="sm" fontFamily="mono" fontWeight="500" color="accent.teal" flex={1}>
-                {showTrace ? 'Hide MinusX agent trace' : 'See MinusX agent in action'}
-              </Text>
-              <Icon
-                as={showTrace ? LuChevronDown : LuChevronRight}
-                boxSize={4}
-                color="fg.subtle"
-              />
+              <HStack>
+                <Icon as={LuSparkles} boxSize={3.5} color="accent.teal" />
+                <Text fontSize="sm" fontFamily="mono" fontWeight="500" color="accent.teal">
+                  {showTrace ? 'Hide MinusX agent trace' : 'See MinusX agent in action'}
+                </Text>
+              </HStack>
+              <HStack>
+                {isGenerating && (
+                  <Text fontSize="xs" fontFamily="mono" color="fg.subtle">
+                    Exploring data & building visualizations (~1 min)
+                  </Text>
+                )}
+                {isDone && (
+                  <Text fontSize="xs" fontFamily="mono" color="accent.teal">
+                    Done!
+                  </Text>
+                )}
+                <Icon
+                  as={showTrace ? LuChevronDown : LuChevronRight}
+                  boxSize={4}
+                  color="fg.subtle"
+                />
+              </HStack>
             </HStack>
           </Collapsible.Trigger>
           <Collapsible.Content>

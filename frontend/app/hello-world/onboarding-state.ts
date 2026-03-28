@@ -9,7 +9,7 @@
  *   ?step=context&connectionName=mydb&connectionId=42
  */
 
-export type WizardStep = 'welcome' | 'connection' | 'context' | 'generating';
+export type WizardStep = 'welcome' | 'connection' | 'context' | 'generating' | 'complete';
 
 export interface OnboardingState {
   step: WizardStep;
@@ -93,13 +93,13 @@ export function detectStepFromSystemState(
     return { step: 'generating', connectionId: conn.id, connectionName: conn.name, contextFileId: null };
   }
 
-  // Onboarding complete
-  return { step: 'welcome', connectionId: null, connectionName: null, contextFileId: null };
+  // All setup done → complete step (shows getting started / next actions)
+  return { step: 'complete', connectionId: null, connectionName: null, contextFileId: null };
 }
 
 // ─── URL params ───
 
-const VALID_STEPS: WizardStep[] = ['welcome', 'connection', 'context', 'generating'];
+const VALID_STEPS: WizardStep[] = ['welcome', 'connection', 'context', 'generating', 'complete'];
 
 /** Read onboarding state from URL search params */
 export function readStateFromURL(searchParams: URLSearchParams): OnboardingState {
@@ -139,4 +139,5 @@ export const STEP_LABELS: Record<Exclude<WizardStep, 'welcome'>, { number: numbe
   connection: { number: 1, label: 'Connect Data' },
   context: { number: 2, label: 'Add Context' },
   generating: { number: 3, label: 'Build' },
+  complete: { number: 4, label: 'Explore' },
 };

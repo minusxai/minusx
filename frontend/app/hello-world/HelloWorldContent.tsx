@@ -30,6 +30,7 @@ import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import StepConnection from './components/StepConnection';
 import StepContext from './components/StepContext';
 import StepGenerating from './components/StepGenerating';
+import StepComplete from './components/StepComplete';
 
 const TYPEWRITER_SPEED = 35; // ms per character
 
@@ -70,18 +71,14 @@ export function HelloWorldContent() {
   const effectiveMode = user?.mode || 'org';
   const isOrgMode = effectiveMode === 'org';
 
-  // Determine initial state:
-  // - If URL has a step param, validate it against system state (auto-advance if past that step)
-  // - If no step param (/hello-world bare), show welcome — don't auto-advance
-  // - Only auto-advance in org mode (tutorial mode has its own connections/contexts)
+  // Determine initial state: always auto-advance to match system state
   const initialState = useMemo(() => {
     const urlState = readStateFromURL(searchParams);
-    const hasStepParam = !!searchParams.get('step');
-    if (!hasStepParam || !isOrgMode) return urlState;
+    if (!isOrgMode) return urlState;
     if (connectionsLoading || contextsLoading || questionsLoading) return urlState;
     const systemState = detectStepFromSystemState(connectionList, contexts, questions);
     // Use whichever is further along (don't go backwards)
-    const stepOrder: WizardStep[] = ['welcome', 'connection', 'context', 'generating'];
+    const stepOrder: WizardStep[] = ['welcome', 'connection', 'context', 'generating', 'complete'];
     const urlIdx = stepOrder.indexOf(urlState.step);
     const sysIdx = stepOrder.indexOf(systemState.step);
     return sysIdx > urlIdx ? systemState : urlState;
@@ -190,6 +187,9 @@ export function HelloWorldContent() {
     } else if (step === 'generating') {
       setStep('context');
       pushState({ step: 'context', connectionId, connectionName, contextFileId });
+    } else if (step === 'complete') {
+      setStep('generating');
+      pushState({ step: 'generating', connectionId, connectionName, contextFileId });
     }
   }, [step, pushState, connectionId, connectionName, contextFileId]);
 
@@ -484,6 +484,9 @@ export function HelloWorldContent() {
                 connectionName={connectionName}
                 contextFileId={contextFileId!}
               />
+            )}
+            {step === 'complete' && (
+              <StepComplete />
             )}
           </Box>
         </Box>

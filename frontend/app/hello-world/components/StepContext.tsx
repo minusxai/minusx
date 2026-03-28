@@ -9,7 +9,7 @@ import { useConnections } from '@/lib/hooks/useConnections';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { createVirtualFile, editFile, publishFile } from '@/lib/api/file-state';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { createConversation } from '@/store/chatSlice';
+import { createConversation, selectActiveConversation, selectConversation } from '@/store/chatSlice';
 import { selectAugmentedFiles, compressAugmentedFile } from '@/lib/api/file-state';
 import Editor from '@monaco-editor/react';
 import Markdown from '@/components/Markdown';
@@ -26,8 +26,8 @@ interface StepContextProps {
   onContextCreated?: (contextFileId: number) => void;
 }
 
-/** Collapsible agent trace with toggle text */
-function AgentFeedCollapsible({ connectionName }: { connectionName: string }) {
+/** Collapsible agent trace with toggle text and status indicator */
+function AgentFeedCollapsible({ connectionName, isRunning }: { connectionName: string; isRunning: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   return (
     <Collapsible.Root open={isOpen} onOpenChange={(e) => setIsOpen(e.open)}>
@@ -40,16 +40,32 @@ function AgentFeedCollapsible({ connectionName }: { connectionName: string }) {
           borderRadius="lg"
           _hover={{ bg: 'bg.emphasis' }}
           gap={2}
+          justify={"space-between"}
         >
+          <HStack>
           <Icon as={LuSparkles} boxSize={3.5} color="accent.teal" />
-          <Text fontSize="sm" fontFamily="mono" fontWeight="500" color="accent.teal" flex={1}>
+          <Text fontSize="sm" fontFamily="mono" fontWeight="500" color="accent.teal">
             {isOpen ? 'Hide MinusX agent trace' : 'See MinusX agent in action'}
           </Text>
+          </HStack>
+          <HStack>
+          {isRunning && (
+            <Text fontSize="xs" fontFamily="mono" color="fg.subtle" flex={1}>
+              Exploring tables & writing first draft (~30s)
+            </Text>
+          )}
+          {!isRunning && (
+            <Text fontSize="xs" fontFamily="mono" color="accent.teal" flex={1}>
+              Done!
+            </Text>
+          )}
+          {!isRunning && !isOpen && <Box flex={1} />}
           <Icon
             as={isOpen ? LuChevronDown : LuChevronRight}
             boxSize={4}
             color="fg.subtle"
           />
+          </HStack>
         </HStack>
       </Collapsible.Trigger>
       <Collapsible.Content>
@@ -76,7 +92,7 @@ function AgentFeedCollapsible({ connectionName }: { connectionName: string }) {
 export default function StepContext({ connectionName, connectionId, onComplete, onRequestChat, onContextCreated }: StepContextProps) {
   const { connections, loading: connectionsLoading } = useConnections({ skip: false });
   const colorMode = useAppSelector((state) => state.ui.colorMode);
-  const devMode = useAppSelector((state) => state.ui.devMode);
+  const showDebug = useAppSelector((state) => state.ui.showDebug);
   const dispatch = useAppDispatch();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,6 +100,13 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
   // Virtual file ID (negative) — only persisted on "Continue"
   const [virtualFileId, setVirtualFileId] = useState<number | null>(null);
   const [showAgentFeed, setShowAgentFeed] = useState(false);
+
+  // Track if agent is still running
+  const activeConvId = useAppSelector(selectActiveConversation);
+  const conversation = useAppSelector(state =>
+    activeConvId ? selectConversation(state, activeConvId) : undefined
+  );
+  const isAgentRunning = showAgentFeed && conversation?.executionState !== 'FINISHED';
 
   // Watch the virtual file in Redux for agent edits
   const { fileState: contextFile } = useFile(virtualFileId ?? undefined) ?? {};
@@ -349,20 +372,6 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
                 <Text fontSize="sm" fontWeight="500">
                   Data Context <Text as="span" color="fg.subtle">(optional, markdown)</Text>
                 </Text>
-                {!showAgentFeed && (
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    fontFamily="mono"
-                    color="accent.teal"
-                    _hover={{ bg: 'bg.muted' }}
-                    onClick={handleAgentDescribe}
-                    disabled={saving}
-                  >
-                    <LuSparkles size={12} />
-                    Let the agent figure it out
-                  </Button>
-                )}
               </HStack>
               <Box
                 border="1px solid"
@@ -415,11 +424,11 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
 
       {/* Agent activity feed — always rendered when active, not auto-expanded */}
       {showAgentFeed && (
-        <AgentFeedCollapsible connectionName={connectionName} />
+        <AgentFeedCollapsible connectionName={connectionName} isRunning={isAgentRunning} />
       )}
 
       {/* Debug: appState */}
-      {devMode && virtualFileId && (
+      {showDebug && virtualFileId && (
         <Collapsible.Root>
           <Collapsible.Trigger asChild>
             <HStack cursor="pointer" px={3} py={1.5} bg="bg.muted" borderRadius="md" gap={2}>
@@ -448,21 +457,44 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
         <Text color="accent.danger" fontSize="sm">{error}</Text>
       )}
 
-      {/* Actions */}
-      <HStack justify="flex-end" gap={3} pt={2}>
-        <Button
-          bg="accent.teal"
-          color="white"
-          _hover={{ opacity: 0.9 }}
-          size="sm"
-          fontFamily="mono"
-          onClick={handleSave}
-          disabled={saving}
-        >
-          {saving ? <Spinner size="xs" mr={2} /> : null}
-          Continue
-        </Button>
-      </HStack>
+      {/* Running indicator — teal dots above agent trace */}
+      {isAgentRunning && (
+        <HStack justify="center" gap={1} pt={2}>
+          <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out infinite' }} />
+          <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out 0.2s infinite' }} />
+          <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out 0.4s infinite' }} />
+        </HStack>
+      )}
+
+      {/* Actions — hidden while agent is running */}
+      {!isAgentRunning && (
+        <HStack justify="flex-end" gap={3} pt={2}>
+          {!showAgentFeed && (
+            <Button
+              bg="accent.teal"
+              color="white"
+              _hover={{ opacity: 0.9 }}
+              size="sm"
+              fontFamily="mono"
+              onClick={handleAgentDescribe}
+              disabled={saving}
+            >
+              <LuSparkles size={14} />
+              Let the agent figure it out
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            size="sm"
+            fontFamily="mono"
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? <Spinner size="xs" mr={2} /> : null}
+            {showAgentFeed ? 'Save & Continue' : 'Skip & Continue'}
+          </Button>
+        </HStack>
+      )}
     </VStack>
   );
 }

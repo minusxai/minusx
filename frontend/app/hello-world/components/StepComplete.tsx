@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { Box, Flex, Heading, Text, VStack, Icon, Collapsible } from '@chakra-ui/react';
+import { Box, VStack, HStack, Text, Heading, Button, Icon, Flex, Collapsible } from '@chakra-ui/react';
 import {
+  LuRocket,
   LuDatabase,
-  LuScanSearch,
-  LuLayoutDashboard,
   LuNotebookText,
+  LuLayoutDashboard,
+  LuScanSearch,
   LuSparkles,
   LuChevronDown,
   LuChevronRight,
@@ -16,9 +17,10 @@ import {
 } from 'react-icons/lu';
 import type { IconType } from 'react-icons';
 import NextLink from 'next/link';
-import Breadcrumb from '@/components/Breadcrumb';
+import { useRouter } from '@/lib/navigation/use-navigation';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { useContexts } from '@/lib/hooks/useContexts';
+import { sparkleKeyframes } from '@/lib/ui/animations';
 
 interface GuideItem {
   icon: IconType;
@@ -125,7 +127,8 @@ function AccordionItem({ item }: { item: GuideItem }) {
   );
 }
 
-export default function GettingStartedPage() {
+export default function StepComplete() {
+  const router = useRouter();
   const { config } = useConfigs();
   const agentName = config.branding.agentName;
   const { contexts } = useContexts();
@@ -147,7 +150,7 @@ export default function GettingStartedPage() {
         {
           icon: LuNotebookText,
           title: 'Add context about your data',
-          description: 'Select which tables are relevant and add business context — column descriptions, metric definitions, team-specific notes. This helps the agent write better queries.',
+          description: 'Select which tables are relevant and add business context — column descriptions, metric definitions, team-specific notes.',
           link: contextLink,
         },
         {
@@ -170,13 +173,13 @@ export default function GettingStartedPage() {
         {
           icon: LuScanSearch,
           title: 'Create a saved question',
-          description: 'Write or generate a SQL query, pick a visualization (table, bar, line, pie, etc.), and save it for later. Saved questions can be added to dashboards.',
+          description: 'Write or generate a SQL query, pick a visualization, and save it for later.',
           link: { label: 'New Question', href: '/new/question' },
         },
         {
           icon: LuLayoutDashboard,
           title: 'Build a dashboard',
-          description: 'Combine multiple saved questions into a single view with a grid layout. Add parameters to filter across all questions at once.',
+          description: 'Combine multiple saved questions into a single view with a grid layout.',
           link: { label: 'New Dashboard', href: '/new/dashboard' },
         },
       ],
@@ -193,59 +196,66 @@ export default function GettingStartedPage() {
         {
           icon: LuBookOpen,
           title: 'Follow step-by-step guides',
-          description: 'Practical walkthroughs for common workflows — connecting databases, writing context, building dashboards, and more.',
+          description: 'Practical walkthroughs for common workflows.',
           link: { label: 'Open Guides', href: 'https://docsv2.minusx.ai/guides' },
         },
       ],
     },
   ];
 
-  const breadcrumbItems = [
-    { label: 'Home', href: '/' },
-    { label: 'Getting Started', href: undefined },
-  ];
-
   return (
-    <Box minH="100vh" bg="bg.canvas">
-      <Box px={{ base: 4, md: 8, lg: 12 }} pt={{ base: 3, md: 4, lg: 5 }} pb={{ base: 6, md: 8, lg: 10 }}>
-        <Breadcrumb items={breadcrumbItems} />
+    <VStack gap={3} align="stretch">
+      <style>{sparkleKeyframes}</style>
 
-        <Heading
-          fontSize={{ base: '3xl', md: '4xl', lg: '5xl' }}
-          fontWeight="900"
-          letterSpacing="-0.03em"
-          mt={10}
-          mb={3}
-          color="fg.default"
-        >
-          Getting Started
+      {/* Header */}
+      <VStack gap={1} textAlign="center" py={2}>
+        <Box css={{ animation: 'sparkle 2s ease-in-out infinite' }}>
+          <Icon as={LuRocket} boxSize={10} color="accent.teal" />
+        </Box>
+        <Heading size="lg" fontFamily="mono" fontWeight="400">
+          You&apos;re all set!
         </Heading>
-        <Text fontSize="md" color="fg.muted" mb={10}>
-          Everything you need to go from zero to insights with {agentName}.
-        </Text>
+      </VStack>
 
-        <VStack alignItems={"center"} justify={"center"}>
-            <VStack alignItems={"stretch"} w={{ base: '100%', md: '80%', lg: '50%' }}>
-            {sections.map((section) => (
-                <Box key={section.title}>
-                <Text
-                    fontSize="lg"
-                    fontWeight="700"
-                    color="fg.default"
-                    mb={2}
-                >
-                    {section.title}
-                </Text>
-                <VStack gap={2} align="stretch">
-                    {section.items.map((item) => (
-                    <AccordionItem key={item.title} item={item} />
-                    ))}
-                </VStack>
-                </Box>
-            ))}
+      {/* Quick actions */}
+      <HStack justify="center" gap={4}>
+        <Button
+          bg="accent.teal"
+          color="white"
+          _hover={{ opacity: 0.9 }}
+          size="sm"
+          fontFamily="mono"
+          onClick={() => router.push('/')}
+        >
+          <LuRocket size={14} />
+          Go to home
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          fontFamily="mono"
+          onClick={() => router.push('/explore')}
+        >
+          <LuSparkles size={14} />
+          Start exploring
+        </Button>
+      </HStack>
+
+      {/* Guide sections — same as /getting-started page */}
+      <VStack gap={6} align="stretch" pt={2}>
+        {sections.map((section) => (
+          <Box key={section.title}>
+            <Text fontSize="md" fontWeight="700" color="fg.default" mb={2}>
+              {section.title}
+            </Text>
+            <VStack gap={2} align="stretch">
+              {section.items.map((item) => (
+                <AccordionItem key={item.title} item={item} />
+              ))}
             </VStack>
-        </VStack>
-      </Box>
-    </Box>
+          </Box>
+        ))}
+      </VStack>
+    </VStack>
   );
 }
