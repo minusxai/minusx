@@ -339,11 +339,11 @@ export default function Sidebar() {
               </Text>
             </Box>
             <NavItem
-              href="/getting-started"
+              href="/hello-world"
               icon={<LuBookOpen />}
               label={`How to use ${displayName}`}
               isCollapsed={false}
-              isActive={pathname === '/getting-started'}
+              isActive={pathname === '/hello-world'}
             />
             <Box
               as="button"
@@ -372,11 +372,11 @@ export default function Sidebar() {
         {mode === 'org' && isCollapsed && (
           <VStack gap={0} py={2} px={3} borderTop="1px solid" borderColor="border.default">
             <NavItem
-              href="/getting-started"
+              href="/hello-world"
               icon={<LuBookOpen />}
               label={`How to use ${displayName}`}
               isCollapsed={true}
-              isActive={pathname === '/getting-started'}
+              isActive={pathname === '/hello-world'}
             />
             <Tooltip content="Try Demo Mode" positioning={{ placement: 'right' }}>
               <Box
