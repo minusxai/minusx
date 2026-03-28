@@ -487,6 +487,7 @@ export function HelloWorldContent() {
               <StepGenerating
                 connectionName={connectionName}
                 contextFileId={contextFileId!}
+                greeting="Step 3: Let's build your first dashboard."
               />
             )}
             {step === 'complete' && (

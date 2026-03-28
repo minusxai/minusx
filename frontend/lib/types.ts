@@ -965,6 +965,8 @@ export const ToolNames = {
   ATLAS_ANALYST_AGENT: 'AtlasAnalystAgent',
   TEST_AGENT: 'TestAgent',
   EXECUTE_QUERY: 'ExecuteQuery',
+  ONBOARDING_CONTEXT_AGENT: 'OnboardingContextAgent',
+  ONBOARDING_DASHBOARD_AGENT: 'OnboardingDashboardAgent',
 } as const;
 
 export type ToolName = typeof ToolNames[keyof typeof ToolNames];

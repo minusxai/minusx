@@ -144,6 +144,15 @@ class AnalystAgent(Agent):
         )
         return {"role": "user", "content": content}
 
+    def _get_llm_settings(self) -> LlmSettings:
+        """Get LLM settings for this agent. Override in subclasses to customize."""
+        return LlmSettings(
+            model=ANALYST_V2_MODEL,
+            response_format={"type": "text"},
+            tool_choice="auto",
+            include_web_search=True
+        )
+
     def _get_available_tools(self):
         """Get list of tools available to this agent."""
         if len(self.tool_thread) >= MAX_STEPS_LOWER_LEVEL - 5:
@@ -167,12 +176,7 @@ class AnalystAgent(Agent):
             available_tools = self._get_available_tools()
 
             # Call LLM
-            llm_settings = LlmSettings(
-                model=ANALYST_V2_MODEL,
-                response_format={"type": "text"},
-                tool_choice="auto",
-                include_web_search=True
-            )
+            llm_settings = self._get_llm_settings()
 
             response, _ = await allm_request(
                 ALLMRequest(

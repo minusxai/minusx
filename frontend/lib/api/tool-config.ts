@@ -43,6 +43,12 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
   [ToolNames.TEST_AGENT]: {
     displayComponent: ContentDisplay,
   },
+  [ToolNames.ONBOARDING_CONTEXT_AGENT]: {
+    displayComponent: ContentDisplay,
+  },
+  [ToolNames.ONBOARDING_DASHBOARD_AGENT]: {
+    displayComponent: ContentDisplay,
+  },
   'Navigate': {
     displayComponent: NavigateDisplay
   },

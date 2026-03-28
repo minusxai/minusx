@@ -9,6 +9,7 @@ SUMMARIZE_FILTER_MODEL = "gpt-5-mini-2025-08-07"
 # Model configurations
 DEFAULT_MODEL = CODING_MODEL
 ANALYST_V2_MODEL = CODING_MODEL
+ONBOARDING_MODEL = 'claude-haiku-4-5'
 
 # Token and step limits
 MAX_TOKENS = 4000

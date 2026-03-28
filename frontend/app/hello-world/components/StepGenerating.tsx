@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Box, VStack, HStack, Text, Heading, Button, Icon, Collapsible } from '@chakra-ui/react';
+import { Box, VStack, HStack, Text, Heading, Button, Icon, Collapsible, Input } from '@chakra-ui/react';
 import { LuSparkles, LuRocket, LuLayoutDashboard, LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
@@ -10,10 +10,12 @@ import { setNavigation, setActiveVirtualId } from '@/store/navigationSlice';
 import { createVirtualFile, editFile, publishAll, selectAugmentedFiles, compressAugmentedFile } from '@/lib/api/file-state';
 import { getStore } from '@/store/store';
 import { useFile } from '@/lib/hooks/file-state-hooks';
-import { sparkleKeyframes, pulseKeyframes } from '@/lib/ui/animations';
+import { sparkleKeyframes, pulseKeyframes, cursorBlinkKeyframes } from '@/lib/ui/animations';
 import { useContext } from '@/lib/hooks/useContext';
 import ChatInterface from '@/components/explore/ChatInterface';
 import type { CompletedToolCall } from '@/lib/types';
+
+const TYPEWRITER_SPEED = 35;
 
 const DASHBOARD_PROMPT = `You are on an empty dashboard page. Add 3-4 interesting questions to this dashboard that showcase different aspects of the data.
 Use varied visualization types (line, bar, pie, table).
@@ -23,9 +25,10 @@ Use the EditDashboard tool to add questions directly to this dashboard.`;
 interface StepGeneratingProps {
   connectionName: string;
   contextFileId: number;
+  greeting?: string;
 }
 
-export default function StepGenerating({ connectionName, contextFileId }: StepGeneratingProps) {
+export default function StepGenerating({ connectionName, contextFileId, greeting }: StepGeneratingProps) {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const reduxState = useAppSelector(state => state);
@@ -39,6 +42,27 @@ export default function StepGenerating({ connectionName, contextFileId }: StepGe
   const [hasStarted, setHasStarted] = useState(false);
   const [virtualDashboardId, setVirtualDashboardId] = useState<number | null>(null);
   const [showTrace, setShowTrace] = useState(false);
+  const [userPreference, setUserPreference] = useState('');
+
+  // Typewriter effect for greeting
+  const [displayedText, setDisplayedText] = useState('');
+  const [typingDone, setTypingDone] = useState(!greeting);
+
+  useEffect(() => {
+    if (!greeting) return;
+    let i = 0;
+    setDisplayedText('');
+    setTypingDone(false);
+    const interval = setInterval(() => {
+      i++;
+      setDisplayedText(greeting.slice(0, i));
+      if (i >= greeting.length) {
+        clearInterval(interval);
+        setTypingDone(true);
+      }
+    }, TYPEWRITER_SPEED);
+    return () => clearInterval(interval);
+  }, [greeting]);
 
   // Create virtual dashboard file on mount
   const hasCreatedVirtual = useRef(false);
@@ -108,7 +132,7 @@ export default function StepGenerating({ connectionName, contextFileId }: StepGe
 
     dispatch(createConversation({
       conversationID: -Date.now(),
-      agent: 'AnalystAgent',
+      agent: 'OnboardingDashboardAgent',
       agent_args: {
         connection_id: connectionName,
         context_path: '/org/context',
@@ -117,7 +141,9 @@ export default function StepGenerating({ connectionName, contextFileId }: StepGe
         context: contextDocs || '',
         app_state: appState,
       },
-      message: DASHBOARD_PROMPT,
+      message: userPreference.trim()
+        ? `${DASHBOARD_PROMPT}\n\nUser preference: ${userPreference.trim()}`
+        : DASHBOARD_PROMPT,
     }));
 
     setIsGenerating(true);
@@ -149,15 +175,36 @@ export default function StepGenerating({ connectionName, contextFileId }: StepGe
     <VStack gap={6} align="stretch" minH="400px">
       <style>{sparkleKeyframes}</style>
       <style>{pulseKeyframes}</style>
+      {greeting && <style>{cursorBlinkKeyframes}</style>}
 
       {/* Header */}
-      <VStack gap={3} textAlign="center" py={6}>
-        <Box css={{ animation: 'sparkle 2s ease-in-out infinite' }}>
-          <Icon as={LuRocket} boxSize={10} color="accent.teal" />
-        </Box>
-        <Heading size="lg" fontFamily="mono" fontWeight="400">
-          {isDone ? 'Your dashboard is ready!' : isGenerating ? 'Building your dashboard...' : 'Build a starter dashboard'}
-        </Heading>
+      <VStack gap={3} align="start" py={6}>
+        {greeting ? (
+          <Heading
+            fontSize="2xl"
+            fontFamily="mono"
+            fontWeight="400"
+            letterSpacing="-0.02em"
+          >
+            {displayedText}
+            {!typingDone && (
+              <Box
+                as="span"
+                display="inline-block"
+                w="2px"
+                h="1em"
+                bg="accent.teal"
+                ml="2px"
+                verticalAlign="text-bottom"
+                css={{ animation: 'cursorBlink 0.8s step-end infinite' }}
+              />
+            )}
+          </Heading>
+        ) : (
+          <Heading size="lg" fontFamily="mono" fontWeight="400">
+            {isDone ? 'Your dashboard is ready!' : isGenerating ? 'Building your dashboard...' : 'Build a starter dashboard'}
+          </Heading>
+        )}
         <Text color="fg.muted" fontSize="sm" maxW="450px">
           {isDone
             ? 'MinusX created questions and assembled them into a dashboard for you.'
@@ -167,6 +214,22 @@ export default function StepGenerating({ connectionName, contextFileId }: StepGe
           }
         </Text>
       </VStack>
+
+      {/* User preference input — only before generation starts */}
+      {!hasStarted && (
+        <Box>
+          <Text fontSize="sm" fontWeight="500" mb={2}>
+            Any specific focus? <Text as="span" color="fg.subtle">(optional)</Text>
+          </Text>
+          <Input
+            value={userPreference}
+            onChange={(e) => setUserPreference(e.target.value)}
+            placeholder="e.g., focus on revenue trends and customer retention"
+            fontFamily="mono"
+            fontSize="sm"
+          />
+        </Box>
+      )}
 
       {/* Action buttons */}
       <HStack justify="center" gap={4}>

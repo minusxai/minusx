@@ -283,7 +283,7 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
     // Create a conversation and send the message directly (no sidebar needed)
     dispatch(createConversation({
       conversationID: -Date.now(),
-      agent: 'AnalystAgent',
+      agent: 'OnboardingContextAgent',
       agent_args: {
         connection_id: connectionName,
         context_path: '/org/context',
