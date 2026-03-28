@@ -39,6 +39,8 @@ interface ChatInterfaceProps {
   container?: 'page' | 'sidebar';  // Layout mode: 'page' for full explore page, 'sidebar' for right sidebar
   onContextChange?: (contextPath: string | null, version?: number) => void;  // Context change callback (for parent coordination)
   onDatabaseChange?: (name: string) => void;  // Database change callback (for parent coordination)
+  /** Read-only mode: hides input box and action buttons. For inline agent activity feeds. */
+  readOnly?: boolean;
 }
 
 export default function ChatInterface({
@@ -49,7 +51,8 @@ export default function ChatInterface({
   appState,
   container = 'page',
   onContextChange,
-  onDatabaseChange
+  onDatabaseChange,
+  readOnly = false,
 }: ChatInterfaceProps) {
   const router = useRouter();
   const dispatch = useAppDispatch();
@@ -265,7 +268,7 @@ export default function ChatInterface({
   }, []);
 
   // Compute layout based on container width and mode
-  console.log('Container width:', containerWidth, 'Container:', container);
+//   console.log('Container width:', containerWidth, 'Container:', container);
   const isCompact = container === 'sidebar' || (containerWidth > 0 && containerWidth < 900);
   const colSpan = isCompact ? 12 : { base: 12, md: 8, lg: 6 };
   const colStart = isCompact ? 1 : { base: 1, md: 3, lg: 4 };
@@ -494,8 +497,8 @@ export default function ChatInterface({
 
   return (
     <VStack gap={0} align="stretch" height="100%" overflow="hidden">
-      {/* Action Buttons Bar (only show when there are messages) */}
-      {allMessages.length > 0 && (
+      {/* Action Buttons Bar (only show when there are messages, hidden in readOnly) */}
+      {!readOnly && allMessages.length > 0 && (
         <Box
           position="sticky"
           top={0}
@@ -592,7 +595,7 @@ export default function ChatInterface({
             </VStack>
           ) : loadError ? (
             <FileNotFound/>
-          ) : allMessages.length === 0 ? (
+          ) : !readOnly && allMessages.length === 0 ? (
             <ExampleQuestions
               onPromptClick={handleSendMessage}
               container={container}
@@ -740,8 +743,8 @@ export default function ChatInterface({
         />
       )}
 
-      {/* Input - Sticky at bottom */}
-      {!loadError && (
+      {/* Input - Sticky at bottom (hidden in readOnly mode) */}
+      {!readOnly && !loadError && (
         <Box
           position="sticky"
           bottom={0}

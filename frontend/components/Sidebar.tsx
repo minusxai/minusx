@@ -128,21 +128,21 @@ export default function Sidebar() {
 
   // Get user mode for mode-aware navigation
   const mode = effectiveUser?.mode || 'org';
-
+  const effectiveDir = currentPath === '/' ? encodeURIComponent('/org') : encodeURIComponent(currentPath);
   const rawNavSections: NavSection[] = [
     {
       category: 'Analytics',
       items: [
         { href: '/explore', icon: <FILE_TYPE_METADATA.explore.icon />, label: FILE_TYPE_METADATA.explore.label },
-        { href: `/new/question?folder=${encodeURIComponent(currentPath)}`, icon: <FILE_TYPE_METADATA.question.icon />, label: 'New Question' },
-        { href: `/new/dashboard?folder=${encodeURIComponent(currentPath)}`, icon: <FILE_TYPE_METADATA.dashboard.icon />, label: 'New Dashboard' },
+        { href: `/new/question?folder=${effectiveDir}`, icon: <FILE_TYPE_METADATA.question.icon />, label: 'New Question' },
+        { href: `/new/dashboard?folder=${effectiveDir}`, icon: <FILE_TYPE_METADATA.dashboard.icon />, label: 'New Dashboard' },
       ],
     },
     {
       category: 'Engineering',
       items: [
         { href: `/p/${mode}/database`, icon: <FILE_TYPE_METADATA.connection.icon />, label: FILE_TYPE_METADATA.connection.label, adminOnly: true },
-        { href: `/new/connection?folder=${encodeURIComponent(currentPath)}`, icon: <LuDatabaseZap />, label: 'New DB Connection', adminOnly: true },
+        { href: `/new/connection`, icon: <LuDatabaseZap />, label: 'New DB Connection', adminOnly: true },
       ],
     },
     {
@@ -339,11 +339,11 @@ export default function Sidebar() {
               </Text>
             </Box>
             <NavItem
-              href="/getting-started"
+              href="/hello-world"
               icon={<LuBookOpen />}
               label={`How to use ${displayName}`}
               isCollapsed={false}
-              isActive={pathname === '/getting-started'}
+              isActive={pathname === '/hello-world'}
             />
             <Box
               as="button"
@@ -372,11 +372,11 @@ export default function Sidebar() {
         {mode === 'org' && isCollapsed && (
           <VStack gap={0} py={2} px={3} borderTop="1px solid" borderColor="border.default">
             <NavItem
-              href="/getting-started"
+              href="/hello-world"
               icon={<LuBookOpen />}
               label={`How to use ${displayName}`}
               isCollapsed={true}
-              isActive={pathname === '/getting-started'}
+              isActive={pathname === '/hello-world'}
             />
             <Tooltip content="Try Demo Mode" positioning={{ placement: 'right' }}>
               <Box

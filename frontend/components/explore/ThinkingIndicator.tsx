@@ -5,27 +5,11 @@ import { Box, HStack, Text, Icon } from '@chakra-ui/react';
 import { LuSparkles } from 'react-icons/lu';
 import { thinkingPhrases as defaultThinkingPhrases } from './message/thinkingPhrases';
 import { useConfigs } from '@/lib/hooks/useConfigs';
+import { pulseKeyframes, sparkleKeyframes } from '@/lib/ui/animations';
 
 interface ThinkingIndicatorProps {
   waitingForInput?: boolean;
 }
-
-// Use CSS keyframes with Chakra v3
-const pulseAnimation = `
-  @keyframes pulse {
-    0%, 100% { opacity: 0.3; transform: scale(1); }
-    50% { opacity: 1; transform: scale(1.2); }
-  }
-`;
-
-const sparkleAnimation = `
-  @keyframes sparkle {
-    0%, 100% { transform: rotate(0deg) scale(1); }
-    25% { transform: rotate(-10deg) scale(1.1); }
-    50% { transform: rotate(10deg) scale(0.9); }
-    75% { transform: rotate(-5deg) scale(1.05); }
-  }
-`;
 
 export default function ThinkingIndicator({ waitingForInput = false }: ThinkingIndicatorProps) {
   const { config } = useConfigs();
@@ -54,8 +38,8 @@ export default function ThinkingIndicator({ waitingForInput = false }: ThinkingI
   const currentPhrase = waitingForInput ? 'Waiting for your input' : thinkingPhrases[phraseIndex];
   return (
     <>
-      <style>{pulseAnimation}</style>
-      <style>{sparkleAnimation}</style>
+      <style>{pulseKeyframes}</style>
+      <style>{sparkleKeyframes}</style>
       <Box p={3} bg="bg.muted" borderRadius="md" my={2}>
         <HStack gap={2.5}>
           <Box

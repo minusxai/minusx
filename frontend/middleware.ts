@@ -5,8 +5,10 @@ import { CURRENT_TOKEN_VERSION } from "@/lib/auth/auth-constants"
 import { isValidMode } from "@/lib/mode/mode-types"
 import { extractSubdomain, isSubdomainRoutingEnabled } from "@/lib/utils/subdomain"
 import { CompanyDB } from "@/lib/database/company-db"
+import { DocumentDB } from "@/lib/database/documents-db"
+import { detectOnboardingState } from "@/app/hello-world/onboarding-state"
 
-export default auth((req) => {
+export default auth(async (req) => {
   const { pathname } = req.nextUrl
 
   // Extract subdomain from hostname (no async lookup - keep middleware fast)
@@ -155,11 +157,33 @@ export default auth((req) => {
     },
   });
 
-  // Optimize: Redirect home route to user's home folder (server-side)
-  // This eliminates client-side redirect and saves 1 page load
+  // Onboarding detection: runs on /, /p/org*, and /hello-world (without step param)
+  // Routes users to the correct onboarding step if setup is incomplete.
+//   const isHomePath = pathname === '/' || pathname === '/p/org' || pathname.startsWith('/p/org/');
+  const isHomePath = pathname === '/';
+  const isHelloWorldWithoutStep = pathname === '/hello-world' && !req.nextUrl.searchParams.get('step');
+  const effectiveMode = (mode && isValidMode(mode)) ? mode : 'org';
+
+  if ((isHomePath || isHelloWorldWithoutStep) && effectiveMode === 'org' && req.auth.user?.companyId) {
+    try {
+      const companyId = req.auth.user.companyId;
+      const connections = await DocumentDB.listAll(companyId, 'connection', ['/org'], -1, false);
+      const contexts = await DocumentDB.listAll(companyId, 'context', ['/org'], -1, false);
+      const questions = await DocumentDB.listAll(companyId, 'question', ['/org'], -1, false);
+      const { needsOnboarding, redirectPath } = detectOnboardingState(connections, contexts, questions);
+      const currentPath = pathname + (req.nextUrl.search || '');
+      if (needsOnboarding && redirectPath && redirectPath !== currentPath) {
+        const protocol = req.headers.get('x-forwarded-proto') || 'https';
+        return NextResponse.redirect(new URL(`${protocol}://${hostname}${redirectPath}`));
+      }
+    } catch (e) {
+      console.error('[Middleware] Onboarding detection failed:', e);
+    }
+  }
+
+  // Redirect home route to user's home folder (server-side)
   if (pathname === '/') {
     const user = req.auth.user
-    const effectiveMode = (mode && isValidMode(mode)) ? mode : 'org';
 
     // Mode-aware home redirect
     const homeHref = user?.role && isAdmin(user.role)

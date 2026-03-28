@@ -366,6 +366,34 @@ The application supports mode-based file system isolation, similar to the `as_us
 
 **Pattern consistency**: Mode follows exact same propagation pattern as `as_user` for architectural consistency.
 
+### First-Use Onboarding Flow
+
+The `/hello-world` page guides new users through setup. All onboarding state logic is centralized in `frontend/app/hello-world/onboarding-state.ts`.
+
+**Onboarding stages** (detected from connections/contexts/questions in org mode):
+1. No connections → `/hello-world` (welcome: choose demo or connect)
+2. Connection exists, no context → `/hello-world?step=context&connectionName=...`
+3. Connection + context, no questions → `/hello-world?step=generating&connectionName=...`
+4. All exist → onboarding complete, normal home redirect
+
+**Routing**: Detection runs in three places (all calling `detectOnboardingState` from `onboarding-state.ts`):
+- `middleware.ts` — server-side on `/`, `/p/org*`, `/hello-world` (without step param)
+- `app/page.tsx` — client-side navigation to `/`
+- `HelloWorldContent.tsx` — auto-detect when on `/hello-world` without URL step param
+
+**Key pattern**: The hello-world page acts as a context file page during the "Describe" step:
+- Context file is eagerly created on mount (or found if it already exists)
+- `setNavigation({ pathname: '/f/{contextFileId}' })` is dispatched so `selectAppState` resolves to the context file — this allows the agent's EditFile tool to work
+- `RightSidebar` is rendered as a page-level sibling (same layout as `FileLayout`) with `appStateOverride` and `sectionIds` props
+- `sectionIds` prop on RightSidebar allows overriding which sections to show (skips auto-detection)
+
+**Key files:**
+- `frontend/app/hello-world/onboarding-state.ts` — centralized state detection, URL param read/write, step labels
+- `frontend/app/hello-world/HelloWorldContent.tsx` — wizard UI with welcome screen + 3 steps
+- `frontend/app/hello-world/components/StepConnection.tsx` — embeds ConnectionContainerV2 with `onSaveSuccess` + `hideCancel`
+- `frontend/app/hello-world/components/StepContext.tsx` — schema browser + Monaco markdown editor, syncs with Redux when agent edits
+- `frontend/app/hello-world/components/StepGenerating.tsx` — placeholder "You're all set" page
+
 ### Parameter System
 - **Syntax**: `:paramName` in SQL queries (e.g., `:limit`, `:start_date`)
 - **Types**: `text`, `number`, `date`

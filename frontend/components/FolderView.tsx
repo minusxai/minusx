@@ -148,11 +148,6 @@ export default function FolderView({ path, title, type, headerRight }: FolderVie
       {/* Getting Started Section - only show in tutorial/demo mode */}
       {!isThisSystemFolder && mode === 'tutorial' && <GettingStartedSection />}
 
-      {/* Progressive onboarding banner - show above files in org mode */}
-      {!isThisSystemFolder && mode !== 'tutorial' && files.length > 0 && (
-        <GettingStartedV2 variant="banner" />
-      )}
-
       {/* File list or empty state */}
       {files.length > 0 ? (
         <FilesList files={files as any} />
@@ -191,6 +186,12 @@ export default function FolderView({ path, title, type, headerRight }: FolderVie
           />
         );
       })()}
+
+      {/* Progressive onboarding banner - show above files in org mode */}
+      {!isThisSystemFolder && mode !== 'tutorial' && files.length > 0 && (
+        <GettingStartedV2 variant="banner" />
+      )}
+      
     </Box>
   );
 }

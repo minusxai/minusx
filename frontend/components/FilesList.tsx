@@ -170,7 +170,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
   };
 
   return (
-    <Box>
+    <Box minH="500px">
       {/* Toolbar: Filter + View Toggle */}
       {showToolbar && (
       <HStack justify="space-between" mb={3}>

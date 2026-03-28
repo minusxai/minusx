@@ -27,12 +27,18 @@ interface ConnectionContainerV2Props {
   fileId: FileId;
   mode?: FileViewMode;
   defaultFolder?: string;
+  /** When provided, called after successful create instead of redirectAfterSave. Used by onboarding wizard. */
+  onSaveSuccess?: (connectionId: number, connectionName: string) => void;
+  /** Hide the cancel button (e.g., in onboarding wizard where Back handles navigation) */
+  hideCancel?: boolean;
 }
 
 export default function ConnectionContainerV2({
   fileId,
   mode = 'view',
-  defaultFolder = '/org'
+  defaultFolder = '/org',
+  onSaveSuccess,
+  hideCancel = false,
 }: ConnectionContainerV2Props) {
   const router = useRouter();
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -89,7 +95,11 @@ export default function ConnectionContainerV2({
         const result = json.data;
         console.log('[ConnectionContainerV2] Extracted result:', result);
         console.log('[ConnectionContainerV2] Current fileId:', fileId);
-        redirectAfterSave(result, fileId, router);
+        if (onSaveSuccess) {
+          onSaveSuccess(result.id, result.name);
+        } else {
+          redirectAfterSave(result, fileId, router);
+        }
       } else {
         // For edit mode, use the Phase 2 unified PATCH endpoint
         const result = await publishFile({ fileId });
@@ -146,6 +156,7 @@ export default function ConnectionContainerV2({
       onCancel={handleCancel}
       onReload={handleReload}
       mode={mode === 'preview' ? 'view' : mode}
+      hideCancel={hideCancel}
     />
   );
 }

@@ -51,7 +51,7 @@ export default function RightSidebar({
   fileType,
   contextVersion,
   selectedContextPath,
-  onContextChange
+  onContextChange,
 }: RightSidebarProps) {
   const dispatch = useAppDispatch();
   const { isCollapsed, width, devMode, colorMode, activeSidebarSection } = useAppSelector(selectRightSidebarUIState);
@@ -231,20 +231,6 @@ export default function RightSidebar({
   if (history !== undefined) {
     sections.push(getSidebarSection('history'));
   }
-
-  // Share section - only visible for admins with valid fileId and shareable file types
-  //ToDo: Vivek: can enable later
-//   const shareableTypes: Array<string> = ['question', 'dashboard', 'folder'];
-//   if (
-//     currentUser &&
-//     currentUser.role === 'admin' &&
-//     fileId &&
-//     typeof fileId === 'number' &&
-//     pageDetails.pageType &&
-//     shareableTypes.includes(pageDetails.pageType)
-//   ) {
-//     sections.push(getSidebarSection('share'));
-//   }
 
   // Dev section - only visible when devMode is enabled
   if (devMode) {
