@@ -327,6 +327,7 @@ export default function DashboardView({
                 borderColor="border.muted"
                 borderRadius="md"
                 bg="bg.muted"
+                opacity={0.6}
               />
             </Box>
           );
@@ -346,20 +347,13 @@ export default function DashboardView({
         <Box
           key={questionId || index}
           bg="bg.surface"
-          borderWidth={editMode ? '2px' : '1px'}
+          borderWidth="1px"
           borderColor={
-            editMode ? 'accent.teal' :
             isHighlighted === true ? 'accent.teal' :
             isHighlighted === false ? 'border.subtle' :
             'border.default'
           }
           borderRadius="md"
-          shadow={editMode ? 'lg' : 'sm'}
-          boxShadow={
-            editMode ? '0 0 20px rgba(22, 160, 133, 0.3)' :
-            isHighlighted === true ? '0 0 12px rgba(22, 160, 133, 0.35)' :
-            undefined
-          }
           opacity={isHighlighted === false ? 0.5 : 1}
           overflow="hidden"
           display="flex"
@@ -442,7 +436,7 @@ export default function DashboardView({
           )}
 
           {/* Grid Layout */}
-          <Box position="relative" maxW="100%" pb={30} minH={editMode ? '1500px' : 'auto'}>
+          <Box position="relative" maxW="100%" pb={30}  minH={editMode ? '1500px' : 'auto'}>
             {gridBackground}
 
             {questionIds.length > 0 ? (

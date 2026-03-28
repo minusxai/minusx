@@ -9,6 +9,7 @@ import {
   IconButton,
   HStack,
   VStack,
+  Icon,
 } from '@chakra-ui/react';
 import { LuSave, LuPencil, LuTriangleAlert, LuEye, LuCode, LuUpload } from 'react-icons/lu';
 import { getFileTypeMetadata, isSystemFileType, type FileType } from '@/lib/ui/file-metadata';
@@ -16,6 +17,17 @@ import TabSwitcher from './TabSwitcher';
 import FileTypeBadge from './FileTypeBadge';
 import ExplainButton from '@/components/ExplainButton';
 import { useAppSelector } from '@/store/hooks';
+
+const pulseAnimation = `
+  @keyframes borderPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+  @keyframes iconBlink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.2; }
+  }
+`;
 
 // Default placeholder values that should be treated as empty
 const DEFAULT_PLACEHOLDERS: Record<string, { name: string; description: string }> = {
@@ -68,6 +80,10 @@ export interface DocumentHeaderProps {
   // Keeps the Publish button visible even when not editing the current file,
   // so it acts as a persistent reminder of unpublished work.
   anyDirtyFiles?: boolean;
+
+  // Optional highlight color for the header background (e.g. dashboard edit mode)
+  highlightColor?: string;
+  highlightLabel?: string;  // Label shown next to title when highlighted (e.g. "Editing Dashboard")
 }
 
 export default function DocumentHeader({
@@ -91,10 +107,14 @@ export default function DocumentHeader({
   questionId,
   onPublish,
   anyDirtyFiles = false,
+  highlightColor,
+  highlightLabel,
 }: DocumentHeaderProps) {
   const metadata = getFileTypeMetadata(fileType);
   const [validationError, setValidationError] = useState<string | null>(null);
   const showJson = useAppSelector((state) => state.ui.showJson);
+  const titleColor = 'fg.default';
+  const subtitleColor = 'fg.muted';
 
   // System files (connection, config, styles, context) always use inline Save.
   // All other files use Publish when onPublish is provided.
@@ -131,7 +151,26 @@ export default function DocumentHeader({
   const displayError = validationError || saveError;
 
   return (
-    <Box>
+    <Box
+      {...(highlightColor ? {
+        position: 'relative' as const,
+        pl: 3,
+      } : {})}
+      css={highlightColor ? {
+        '&::before': {
+          content: '""',
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: '3px',
+          backgroundColor: `var(--chakra-colors-${highlightColor.replace('.', '-')})`,
+          borderRadius: '2px',
+          animation: 'borderPulse 2s ease-in-out infinite',
+        }
+      } : undefined}
+    >
+      {highlightColor && <style>{pulseAnimation}</style>}
       {/* Main Header Section */}
       <VStack align="start" gap={1} mb={2}>
         <HStack justify="space-between" width="100%" flexWrap="wrap" gap={2} align="center">
@@ -145,12 +184,12 @@ export default function DocumentHeader({
                 fontSize={{ base: 'xl', md: '2xl' }}
                 fontWeight="900"
                 letterSpacing="-0.02em"
-                color="fg.default"
+                color={titleColor}
                 fontFamily="mono"
                 variant="flushed"
                 placeholder={`Add a ${metadata.label} name`}
-                borderBottom="1px dashed"
-                borderColor="border.muted"
+                borderBottom="0px"
+                // borderColor="border.muted"
                 bg="transparent"
                 _focus={{ borderColor: 'border.emphasized', outline: 'none' }}
                 px={0}
@@ -163,7 +202,7 @@ export default function DocumentHeader({
                 fontSize={{ base: 'xl', md: '2xl' }}
                 fontWeight="900"
                 letterSpacing="-0.02em"
-                color="fg.default"
+                color={titleColor}
                 fontFamily="mono"
                 onDoubleClick={readOnlyName ? undefined : onEditModeToggle}
                 cursor={readOnlyName ? 'default' : 'text'}
@@ -179,13 +218,13 @@ export default function DocumentHeader({
                   value={description || ''}
                   onChange={(e) => onDescriptionChange(e.target.value)}
                   placeholder="Add a description"
-                  color="fg.muted"
+                  color={subtitleColor}
                   fontSize="sm"
                   fontWeight="600"
                   lineHeight="1.5"
                   variant="flushed"
-                  borderBottom="1px dashed"
-                  borderColor="border.muted"
+                  borderBottom="0px"
+                //   borderColor="border.muted"
                   borderRadius="0"
                   bg="transparent"
                   _focus={{ borderColor: 'border.emphasized', outline: 'none' }}
@@ -195,11 +234,12 @@ export default function DocumentHeader({
                   h="auto"
                   minH="0"
                   flex="1"
+                  
                 />
               ) : (
                 !hideDescription && description && (
                   <Text
-                    color="fg.muted"
+                    color={subtitleColor}
                     fontSize="sm"
                     lineHeight="1.5"
                     fontWeight="600"
@@ -227,6 +267,25 @@ export default function DocumentHeader({
 
           {/* Actions */}
           <HStack gap={2} flexShrink={0}>
+            {/* Highlight label (e.g. "Editing Dashboard") */}
+            {highlightLabel && (
+              <HStack
+                gap={1.5}
+                px={2}
+                py={1}
+                bg={`${highlightColor}/15`}
+                borderRadius="md"
+                border="1px solid"
+                borderColor={`${highlightColor}/30`}
+              >
+                <Box css={{ animation: 'iconBlink 1.5s ease-in-out infinite' }} display="inline-flex">
+                  <Icon as={LuPencil} boxSize={3} color={highlightColor} />
+                </Box>
+                <Text fontSize="xs" color={highlightColor} fontWeight="600" fontFamily="mono">
+                  {highlightLabel}
+                </Text>
+              </HStack>
+            )}
             {/* Unsaved changes warning */}
             {editMode && isDirty && (
               <HStack
@@ -238,7 +297,7 @@ export default function DocumentHeader({
                 border="1px solid"
                 borderColor="accent.warning/30"
               >
-                <LuTriangleAlert size={14} color="var(--chakra-colors-accent-warning)" />
+                <Icon as={LuTriangleAlert} boxSize={3.5} color="accent.warning" />
                 <Text fontSize="xs" color="accent.warning" fontWeight="600">
                   Unsaved changes
                 </Text>

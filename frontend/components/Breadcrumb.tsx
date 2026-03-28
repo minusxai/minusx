@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Flex, Text, Menu, Icon, Box, Button } from '@chakra-ui/react';
 import { Link } from '@/components/ui/Link';
-import { LuChevronRight, LuChevronDown, LuTriangleAlert } from 'react-icons/lu';
+import { LuChevronRight, LuChevronDown, LuTriangleAlert, LuPencil } from 'react-icons/lu';
 import { BaseFileMetadata } from '@/lib/types';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
@@ -23,21 +23,24 @@ interface BreadcrumbProps {
   items: BreadcrumbItem[];
   siblingFiles?: BaseFileMetadata[];
   currentFileId?: number;
+  bannerColor?: string;  // Optional accent color for banner mode (e.g. dashboard edit mode)
+  bannerLabel?: string;  // Optional label shown in the banner
 }
 
-export default function Breadcrumb({ items, siblingFiles, currentFileId }: BreadcrumbProps) {
+export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerColor, bannerLabel }: BreadcrumbProps) {
   const { navigate } = useNavigationGuard();
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const isTutorialMode = effectiveUser?.mode === 'tutorial';
+  const hasBanner = isTutorialMode || !!bannerColor;
   const dirtyFiles = useDirtyFiles();
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const isLastItem = (index: number) => index === items.length - 1;
   const hasDropdown = siblingFiles && siblingFiles.length > 0;
 
-  // Colors that adapt based on demo mode
-  const textColor = isTutorialMode ? 'white' : 'fg.muted';
-  const textColorActive = isTutorialMode ? 'white' : 'fg.default';
-  const chevronColor = isTutorialMode ? 'rgba(255,255,255,0.6)' : 'var(--chakra-colors-fg-subtle)';
+  // Colors that adapt based on banner mode (demo or custom banner)
+  const textColor = hasBanner ? 'white' : 'fg.muted';
+  const textColorActive = hasBanner ? 'white' : 'fg.default';
+  const chevronColor = hasBanner ? 'rgba(255,255,255,0.6)' : 'var(--chakra-colors-fg-subtle)';
 
   const breadcrumbItems = (
     <Flex align="center" gap={2}>
@@ -54,12 +57,12 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId }: Bread
                   align="center"
                   gap={1}
                   cursor="pointer"
-                  bg={isTutorialMode ? 'whiteAlpha.200' : 'bg.surface'}
+                  bg={hasBanner ? 'whiteAlpha.200' : 'bg.surface'}
                   border="1px solid"
-                  borderColor={isTutorialMode ? 'whiteAlpha.300' : 'border.default'}
+                  borderColor={hasBanner ? 'whiteAlpha.300' : 'border.default'}
                   _hover={{
-                    bg: isTutorialMode ? 'whiteAlpha.300' : 'bg.subtle',
-                    borderColor: isTutorialMode ? 'whiteAlpha.400' : 'border.emphasized'
+                    bg: hasBanner ? 'whiteAlpha.300' : 'bg.subtle',
+                    borderColor: hasBanner ? 'whiteAlpha.400' : 'border.emphasized'
                   }}
                   px={1.5}
                   py={0.5}
@@ -74,7 +77,7 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId }: Bread
                   >
                     {item.label}
                   </Text>
-                  <LuChevronDown size={14} color={isTutorialMode ? 'white' : 'var(--chakra-colors-accent-teal)'} />
+                  <LuChevronDown size={14} color={hasBanner ? 'white' : 'var(--chakra-colors-accent-teal)'} />
                 </Flex>
               </Menu.Trigger>
               <Menu.Positioner>
@@ -149,11 +152,11 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId }: Bread
     <Button
       size="xs"
       variant="solid"
-      bg={isTutorialMode ? 'whiteAlpha.500' : 'accent.danger/15'}
+      bg={hasBanner ? 'whiteAlpha.500' : 'accent.danger/15'}
       border="1px solid"
-      borderColor={isTutorialMode ? 'whiteAlpha.600' : 'accent.danger/30'}
-      color={isTutorialMode ? 'white' : 'accent.danger'}
-      _hover={isTutorialMode ? { bg: 'white', color: 'accent.danger' } : undefined}
+      borderColor={hasBanner ? 'whiteAlpha.600' : 'accent.danger/30'}
+      color={hasBanner ? 'white' : 'accent.danger'}
+      _hover={hasBanner ? { bg: 'white', color: 'accent.danger' } : undefined}
       fontFamily="mono"
       onClick={() => setIsPublishModalOpen(true)}
     >
@@ -169,6 +172,41 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId }: Bread
         <DemoModeBanner unsavedChangesButton={unsavedChangesButton}>
           {breadcrumbItems}
         </DemoModeBanner>
+        <PublishModal isOpen={isPublishModalOpen} onClose={() => setIsPublishModalOpen(false)} />
+      </>
+    );
+  }
+
+  // Custom banner mode (e.g. dashboard edit mode)
+  if (bannerColor) {
+    return (
+      <>
+        <Flex
+          align="center"
+          justify="space-between"
+          gap={2}
+          mb={2}
+          px={4}
+          py={1}
+          bg={bannerColor}
+          borderRadius="md"
+        >
+          <Box flex="0 0 auto">
+            {breadcrumbItems}
+          </Box>
+          {bannerLabel && (
+            <Flex align="center" gap={2} flex={1} justify="center">
+              <LuPencil size={14} color="white" />
+              <Text fontSize="xs" fontWeight="600" color="white" fontFamily="mono" whiteSpace="nowrap">
+                {bannerLabel}
+              </Text>
+            </Flex>
+          )}
+          <Flex gap={2} align="center" flexShrink={0} display={{ base: 'none', md: 'flex' }}>
+            {unsavedChangesButton}
+            <FileSearchBar />
+          </Flex>
+        </Flex>
         <PublishModal isOpen={isPublishModalOpen} onClose={() => setIsPublishModalOpen(false)} />
       </>
     );

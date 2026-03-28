@@ -172,6 +172,8 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
             <Text color="fg.muted">{questionCount !== 1 ? 'questions' : 'question'}</Text>
           </HStack>
         ) : undefined}
+        highlightColor={isDashboard && editMode ? 'accent.primary' : undefined}
+        highlightLabel={isDashboard && editMode ? 'Editing Dashboard' : undefined}
       />
       <PublishModal isOpen={isPublishModalOpen} onClose={() => setIsPublishModalOpen(false)} />
     </>
