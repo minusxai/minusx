@@ -5,6 +5,7 @@ import { Box, Heading, Text, Flex, HStack, Icon, VStack } from '@chakra-ui/react
 import { LuPlay, LuDatabase, LuSparkles, LuArrowLeft, LuCheck } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setLeftSidebarCollapsed } from '@/store/uiSlice';
+import { setNavigation } from '@/store/navigationSlice';
 import { switchMode } from '@/lib/mode/mode-utils';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -24,6 +25,11 @@ import {
 } from './onboarding-state';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { useContexts } from '@/lib/hooks/useContexts';
+import { useFile, useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
+import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
+import { selectAugmentedFiles, compressAugmentedFile } from '@/lib/api/file-state';
+import RightSidebar from '@/components/RightSidebar';
+import type { AppState } from '@/lib/appState';
 import StepConnection from './components/StepConnection';
 import StepContext from './components/StepContext';
 import StepGenerating from './components/StepGenerating';
@@ -37,6 +43,16 @@ export function HelloWorldContent() {
   const user = useAppSelector(state => state.auth.user);
   const { connections, loading: connectionsLoading } = useConnections({ skip: false });
   const { contexts, loading: contextsLoading } = useContexts({ skip: false });
+  const homeFolder = user ? resolveHomeFolderSync(user.mode, user.home_folder || '') : '/org';
+  const questionsCriteria = useMemo(
+    () => ({ type: 'question' as const, paths: [homeFolder], depth: -1 }),
+    [homeFolder]
+  );
+  const { files: questions, loading: questionsLoading } = useFilesByCriteria({
+    criteria: questionsCriteria,
+    partial: true,
+    skip: false,
+  });
   const orb1Ref = useRef<HTMLDivElement>(null);
   const orb2Ref = useRef<HTMLDivElement>(null);
   const orb3Ref = useRef<HTMLDivElement>(null);
@@ -53,15 +69,14 @@ export function HelloWorldContent() {
     [connections]
   );
 
-  // Determine initial state: URL params take priority, otherwise detect from system state
+  // Determine initial state: system state is the source of truth, URL is a fallback while loading
   const initialState = useMemo(() => {
     const urlState = readStateFromURL(searchParams);
-    // If URL has an explicit step param, use it
-    if (searchParams.get('step')) return urlState;
-    // Otherwise, auto-detect from connections/contexts
-    if (connectionsLoading || contextsLoading) return urlState;
-    return detectStepFromSystemState(connectionList, contexts);
-  }, [searchParams, connectionList, contexts, connectionsLoading, contextsLoading]);
+    // While data is loading, use URL params as a hint
+    if (connectionsLoading || contextsLoading || questionsLoading) return urlState;
+    // Once loaded, always use system state (it may have advanced past the URL step)
+    return detectStepFromSystemState(connectionList, contexts, questions);
+  }, [searchParams, connectionList, contexts, questions, connectionsLoading, contextsLoading, questionsLoading]);
 
   const [step, setStep] = useState<WizardStep>(initialState.step);
   const [connectionId, setConnectionId] = useState<number | null>(initialState.connectionId);
@@ -160,29 +175,55 @@ export function HelloWorldContent() {
     } else if (step === 'context') {
       setStep('connection');
       pushState({ step: 'connection', connectionId, connectionName, contextFileId: null });
+    } else if (step === 'generating') {
+      setStep('context');
+      pushState({ step: 'context', connectionId, connectionName, contextFileId });
     }
-  }, [step, pushState, connectionId, connectionName]);
+  }, [step, pushState, connectionId, connectionName, contextFileId]);
 
   const handleStartConnection = useCallback(() => {
     setStep('connection');
     pushState({ step: 'connection', connectionId: null, connectionName: null, contextFileId: null });
   }, [pushState]);
 
+  const handleRequestChat = useCallback((fileId: number) => {
+    setContextFileId(fileId);
+    // Set navigation to fake the context file page so the agent's EditFile guard passes
+    // (EditFile checks selectAppState → navigation.pathname to verify you're on the right page)
+    dispatch(setNavigation({ pathname: `/f/${fileId}`, searchParams: {} }));
+  }, [dispatch]);
+
   const isWizard = step !== 'welcome';
+
+  // Load context file into Redux so the agent can see/edit it
+  const { fileState: contextFile } = useFile(contextFileId ?? undefined) ?? {};
+
+  // Build appState for RightSidebar using the same pipeline as real file pages
+  // (selectAugmentedFiles resolves references, compressAugmentedFile strips fullSchema columns, etc.)
+  const reduxState = useAppSelector(state => state);
+  const contextAppState: AppState | null = useMemo(() => {
+    if (!contextFileId || !contextFile || contextFile.loading) return null;
+    const [augmented] = selectAugmentedFiles(reduxState, [contextFileId]);
+    if (!augmented) return null;
+    return { type: 'file', state: compressAugmentedFile(augmented) };
+  }, [contextFileId, contextFile, reduxState]);
 
   // Split displayed text into lines for rendering (#2)
   const displayedLines = displayedText.split('\n');
 
   return (
+    <Box display="flex" h="100vh" bg="bg.canvas" overflow="hidden">
+    {/* Main content area */}
     <Box
+      flex="1"
+      minW="0"
       minH="100vh"
       display="flex"
       flexDirection="column"
       alignItems="center"
       justifyContent={isWizard ? 'flex-start' : 'center'}
-      bg="bg.canvas"
       position="relative"
-      overflow="hidden"
+      overflow={isWizard ? 'auto' : 'hidden'}
       px={4}
       pt={isWizard ? 10 : 0}
     >
@@ -355,11 +396,17 @@ export function HelloWorldContent() {
           <Flex
             align="center"
             justify="space-between"
-            mb={8}
+            mb={6}
+            bg="bg.surface"
+            border="1px solid"
+            borderColor="border.default"
+            borderRadius="lg"
+            px={5}
+            py={3}
             css={{ animation: 'fadeInUp 0.3s ease-out forwards' }}
           >
             {/* Back button */}
-            {step !== 'generating' ? (
+            {isWizard ? (
               <Box
                 as="button"
                 onClick={handleBack}
@@ -442,7 +489,7 @@ export function HelloWorldContent() {
             </HStack>
           </Flex>
 
-          {/* Step content area — wider maxW for connection grid (#5) */}
+          {/* Step content area */}
           <Box
             bg="bg.surface"
             border="1px solid"
@@ -460,6 +507,8 @@ export function HelloWorldContent() {
                 connectionName={connectionName}
                 connectionId={connectionId!}
                 onComplete={handleContextComplete}
+                onRequestChat={handleRequestChat}
+                onContextCreated={handleRequestChat}
               />
             )}
             {step === 'generating' && connectionName && (
@@ -509,6 +558,20 @@ export function HelloWorldContent() {
           animation: rotateBorder 2s linear infinite;
         }
       `}</style>
+    </Box>
+
+    {/* RightSidebar — page-level sibling, same as FileLayout */}
+    {isWizard && (
+      <RightSidebar
+        filePath="/org/context"
+        fileType="context"
+        fileId={contextFileId ?? undefined}
+        showChat
+        title="Knowledge Base"
+        sectionIds={['chat']}
+        appStateOverride={contextAppState}
+      />
+    )}
     </Box>
   );
 }

@@ -1,21 +1,32 @@
 'use client';
 
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Box, VStack, HStack, Text, Heading, Button, Spinner } from '@chakra-ui/react';
 import { LuSparkles } from 'react-icons/lu';
 import SchemaTreeView, { type WhitelistItem, type SchemaTreeItem } from '@/components/SchemaTreeView';
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import { pulseKeyframes, sparkleKeyframes } from '@/lib/ui/animations';
 import { useConnections } from '@/lib/hooks/useConnections';
-import { useAppSelector } from '@/store/hooks';
+import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import {
+  setSidebarPendingMessage,
+  setRightSidebarCollapsed,
+  setActiveSidebarSection,
+} from '@/store/uiSlice';
 import Editor from '@monaco-editor/react';
 import Markdown from '@/components/Markdown';
 import type { ContextContent, DatabaseContext } from '@/lib/types';
+
+const AGENT_DESCRIBE_MESSAGE = 'Write the data documentation for this knowledge base. Look at the schema, describe what the database contains, what the key tables are, and what kinds of questions can be answered.';
 
 interface StepContextProps {
   connectionName: string;
   connectionId: number;
   onComplete: (contextFileId: number) => void;
+  /** Called when the agent chat should open. Parent renders RightSidebar. */
+  onRequestChat?: (contextFileId: number) => void;
+  /** Called as soon as the context file is created (eagerly on mount). Parent uses this for appState. */
+  onContextCreated?: (contextFileId: number) => void;
 }
 
 /**
@@ -23,19 +34,19 @@ interface StepContextProps {
  * - Reads schema from Redux (already loaded by useConnections)
  * - Shows SchemaTreeView with all tables pre-whitelisted
  * - Lets user add a data description (optional)
+ * - "Let the agent figure it out" saves context and tells parent to show RightSidebar
  * - Creates a root context file on save
  */
-export default function StepContext({ connectionName, connectionId, onComplete }: StepContextProps) {
+export default function StepContext({ connectionName, connectionId, onComplete, onRequestChat, onContextCreated }: StepContextProps) {
   const { connections, loading: connectionsLoading } = useConnections({ skip: false });
   const colorMode = useAppSelector((state) => state.ui.colorMode);
+  const dispatch = useAppDispatch();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [description, setDescription] = useState('');
-  const [docView, setDocView] = useState<'editor' | 'preview' | null>(null); // null = side-by-side
+  const [savedFileId, setSavedFileId] = useState<number | null>(null);
 
   // Debounced markdown change (same pattern as ContextEditorV2)
-  const descriptionRef = useRef(description);
-  descriptionRef.current = description;
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const handleEditorChange = useCallback((value: string | undefined) => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -58,66 +69,104 @@ export default function StepContext({ connectionName, connectionId, onComplete }
   }, [schemas]);
 
   const [whitelist, setWhitelist] = useState<WhitelistItem[] | null>(null);
-  // Use local whitelist if user changed it, otherwise use default
   const effectiveWhitelist = whitelist ?? defaultWhitelist;
 
   const handleWhitelistChange = useCallback((newWhitelist: WhitelistItem[]) => {
     setWhitelist(newWhitelist);
   }, []);
 
-  const handleSave = useCallback(async () => {
-    setSaving(true);
-    setError(null);
+  /** Save context file and return the created file ID (or null on failure) */
+  const saveContext = useCallback(async (descriptionText: string): Promise<number | null> => {
+    const databases: DatabaseContext[] = [{
+      databaseName: connectionName,
+      whitelist: effectiveWhitelist,
+    }];
 
-    try {
-      // Build context content
-      const databases: DatabaseContext[] = [{
-        databaseName: connectionName,
-        whitelist: effectiveWhitelist,
-      }];
+    // Always include at least one doc entry so the agent can edit it via EditFile
+    const docs = [{ content: descriptionText.trim() || '' }];
 
-      const docs = description.trim()
-        ? [{ content: description.trim() }]
-        : [];
+    const contextContent: ContextContent = {
+      versions: [{
+        version: 1,
+        databases,
+        docs,
+        createdAt: new Date().toISOString(),
+        createdBy: 0,
+        description: 'Initial setup',
+      }],
+      published: { all: 1 },
+    };
 
-      const contextContent: ContextContent = {
-        versions: [{
-          version: 1,
-          databases,
-          docs,
-          createdAt: new Date().toISOString(),
-          createdBy: 0, // Will be overridden by server
-          description: 'Initial setup',
-        }],
-        published: { all: 1 },
-      };
+    const result = await fetchWithCache('/api/files', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Knowledge Base',
+        path: '/org/context',
+        type: 'context',
+        content: contextContent,
+        references: [],
+      }),
+      cacheStrategy: { ttl: 0, deduplicate: false },
+    });
 
-      // Create context file at root via POST /api/files
-      const result = await fetchWithCache('/api/files', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: 'Knowledge Base',
-          path: '/org/context',
-          type: 'context',
-          content: contextContent,
-          references: [],
-        }),
-        cacheStrategy: { ttl: 0, deduplicate: false },
-      });
+    return result?.data?.id ?? null;
+  }, [connectionName, effectiveWhitelist]);
 
-      const fileId = result?.data?.id;
-      if (fileId) {
-        onComplete(fileId);
-      } else {
-        setError('Failed to create context. Please try again.');
+  // Eagerly create context file on mount (once schemas load) so appState is available for the agent.
+  // If the file already exists (e.g., page refresh), look it up by path instead.
+  const hasEagerCreated = useRef(false);
+  useEffect(() => {
+    if (hasEagerCreated.current || loading || savedFileId) return;
+    hasEagerCreated.current = true;
+    (async () => {
+      try {
+        // First check if context already exists (e.g., from a previous onboarding attempt)
+        const existing = await fetchWithCache('/api/files?paths=/org&type=context&depth=-1&includeContent=true', {
+          cacheStrategy: { ttl: 0, deduplicate: false },
+        });
+        const existingFile = existing?.data?.[0];
+        if (existingFile) {
+          setSavedFileId(existingFile.id);
+          onContextCreated?.(existingFile.id);
+          return;
+        }
+        // No existing context — create one (wait for schemas)
+        if (schemas.length === 0) {
+          hasEagerCreated.current = false; // retry when schemas load
+          return;
+        }
+        const fileId = await saveContext('');
+        if (fileId) {
+          setSavedFileId(fileId);
+          onContextCreated?.(fileId);
+        }
+      } catch (err) {
+        console.error('[StepContext] Eager create failed:', err);
+        hasEagerCreated.current = false; // allow retry
       }
-    } catch (err) {
-      console.error('[StepContext] Save error:', err);
-      setError('Failed to save context. Please try again.');
-    } finally {
-      setSaving(false);
+    })();
+  }, [loading, schemas.length, savedFileId, saveContext, onContextCreated]);
+
+  /** Advance to next step — file is already created eagerly */
+  const handleSave = useCallback(() => {
+    if (savedFileId) {
+      onComplete(savedFileId);
+    } else {
+      setError('Context file is still being created. Please wait a moment.');
     }
-  }, [connectionName, effectiveWhitelist, description, onComplete]);
+  }, [savedFileId, onComplete]);
+
+  /** Open RightSidebar with agent message — file is already created eagerly */
+  const handleAgentDescribe = useCallback(() => {
+    if (!savedFileId) {
+      setError('Context file is still being created. Please wait a moment.');
+      return;
+    }
+    dispatch(setSidebarPendingMessage(AGENT_DESCRIBE_MESSAGE));
+    dispatch(setRightSidebarCollapsed(false));
+    dispatch(setActiveSidebarSection('chat'));
+    onRequestChat?.(savedFileId);
+  }, [savedFileId, dispatch, onRequestChat]);
 
   const totalTables = useMemo(() => {
     return schemas.reduce((sum, s) => sum + s.tables.length, 0);
@@ -216,27 +265,12 @@ export default function StepContext({ connectionName, connectionId, onComplete }
           </Text>
           <HStack gap={1}>
             <Button
-              size="xs"
-              variant={docView === 'editor' ? 'solid' : 'ghost'}
-              onClick={() => setDocView(docView === 'editor' ? null : 'editor')}
-            >
-              Editor
-            </Button>
-            <Button
-              size="xs"
-              variant={docView === 'preview' ? 'solid' : 'ghost'}
-              onClick={() => setDocView(docView === 'preview' ? null : 'preview')}
-            >
-              Preview
-            </Button>
-            <Box w="1px" h="16px" bg="border.default" mx={1} />
-            <Button
               variant="ghost"
               size="xs"
               fontFamily="mono"
               color="accent.teal"
               _hover={{ bg: 'bg.muted' }}
-              onClick={handleSave}
+              onClick={handleAgentDescribe}
               disabled={saving}
             >
               <LuSparkles size={12} />
@@ -250,19 +284,9 @@ export default function StepContext({ connectionName, connectionId, onComplete }
           borderRadius="lg"
           overflow="hidden"
         >
-          {/* Preview-only mode */}
-          {docView === 'preview' && (
-            <Box p={4} minH="250px" maxH="250px" overflowY="auto">
-              {description.trim() ? (
-                <Markdown context="mainpage">{description}</Markdown>
-              ) : (
-                <Text color="fg.muted" fontSize="sm">No content to preview.</Text>
-              )}
-            </Box>
-          )}
 
           {/* Editor + optional preview panel */}
-          <HStack gap={0} align="stretch" display={docView === 'preview' ? 'none' : 'flex'}>
+          <HStack gap={0} align="stretch" display={'flex'}>
             <Box flex={1} minW={0}>
               <Editor
                 height="250px"
@@ -283,12 +307,10 @@ export default function StepContext({ connectionName, connectionId, onComplete }
                 }}
               />
             </Box>
-            {/* Side-by-side preview (default null mode) */}
-            {docView === null && (
-              <Box
-                flex={1}
-                p={3}
-                bg="bg.muted"
+            <Box
+              flex={1}
+              p={3}
+              bg="bg.muted"
                 maxH="250px"
                 overflowY="auto"
                 borderLeft="1px solid"
@@ -301,7 +323,6 @@ export default function StepContext({ connectionName, connectionId, onComplete }
                   <Text color="fg.muted" fontSize="sm">Preview will appear here...</Text>
                 )}
               </Box>
-            )}
           </HStack>
         </Box>
       </Box>

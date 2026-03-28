@@ -88,6 +88,7 @@ export default function UserInputComponent({
           <HStack gap={2} justify="flex-end">
             <Button
               size="sm"
+              color="white"
               variant="outline"
               bg="accent.danger/80"
               onClick={() => handleSubmit(false)}
