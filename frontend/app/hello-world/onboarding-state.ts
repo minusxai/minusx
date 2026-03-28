@@ -136,7 +136,7 @@ export function buildSearchParams(state: OnboardingState): string {
 // ─── UI constants ───
 
 export const STEP_LABELS: Record<Exclude<WizardStep, 'welcome'>, { number: number; label: string }> = {
-  connection: { number: 1, label: 'Connect' },
-  context: { number: 2, label: 'Describe' },
+  connection: { number: 1, label: 'Connect Data' },
+  context: { number: 2, label: 'Add Context' },
   generating: { number: 3, label: 'Build' },
 };

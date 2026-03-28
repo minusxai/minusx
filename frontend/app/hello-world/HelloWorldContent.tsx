@@ -456,7 +456,8 @@ export function HelloWorldContent() {
                     <Text
                       fontSize="xs"
                       fontFamily="mono"
-                      color={isActive ? 'fg.default' : 'fg.subtle'}
+                      color={'accent.teal'}
+                      fontWeight={isActive ? 800 : 300}
                       display={{ base: 'none', md: 'block' }}
                       transition="color 0.3s"
                     >
