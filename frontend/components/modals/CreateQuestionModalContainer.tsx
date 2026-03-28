@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useCallback, useEffect, MutableRefObject } from 'react';
-import { Box, Button, Dialog, HStack, Input, Text, VStack, Portal } from '@chakra-ui/react';
+import { Box, Button, HStack, Input, Text } from '@chakra-ui/react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile, clearFileChanges, createVirtualFile } from '@/lib/api/file-state';
 import { useQueryResult } from '@/lib/hooks/file-state-hooks';
-import { selectIsDirty, selectMergedContent, selectEffectiveName, setEphemeral } from '@/store/filesSlice';
+import { selectMergedContent, selectEffectiveName, setEphemeral } from '@/store/filesSlice';
 import { setFileEditMode } from '@/store/uiSlice';
 import { QuestionContent } from '@/lib/types';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
@@ -50,13 +50,13 @@ export default function CreateQuestionModalContainer({
   // Use useFile hook for state management (skip if no ID yet)
   const { fileState: file } = useFile(effectiveId) ?? {};
   const fileLoading = !file || file.loading;
-  const isDirty = useAppSelector(state => effectiveId ? selectIsDirty(state, effectiveId) : false);
+
   const mergedContent = useAppSelector(state => effectiveId ? selectMergedContent(state, effectiveId) as QuestionContent | undefined : undefined);
   const effectiveName = useAppSelector(state => effectiveId ? selectEffectiveName(state, effectiveId) || '' : '');
 
   // Local state
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [showConfirmClose, setShowConfirmClose] = useState(false);
+
 
   // Query execution state
   const lastExecuted = (file?.ephemeralChanges as any)?.lastExecuted;
@@ -133,16 +133,19 @@ export default function CreateQuestionModalContainer({
   // No API call — the question will be published later via "Publish All".
   const handleAdd = useCallback(() => {
     if (typeof effectiveId !== 'number') return;
+    const trimmedName = effectiveName.trim();
+    if (!trimmedName || trimmedName === 'New Question') {
+      setSaveError('Please enter a question name before adding.');
+      return;
+    }
     setSaveError(null);
     onQuestionCreated(effectiveId); // passes the (negative) virtual ID to parent
-    setShowConfirmClose(false);
     onClose();
-  }, [effectiveId, onQuestionCreated, onClose]);
+  }, [effectiveId, effectiveName, onQuestionCreated, onClose]);
 
   // Edit mode: "Update" — changes are already staged in Redux via editFile() calls.
   // No API call — the question will be published later via "Publish All".
   const handleUpdate = useCallback(() => {
-    setShowConfirmClose(false);
     onClose();
   }, [onClose]);
 
@@ -150,18 +153,13 @@ export default function CreateQuestionModalContainer({
   const primaryActionLabel = isCreateMode ? 'Add' : 'Update';
   const handlePrimaryAction = isCreateMode ? handleAdd : handleUpdate;
 
-  // Handle cancel
+  // Handle cancel - always discard and close (low stakes for modal-created questions)
   const handleCancel = useCallback(() => {
-    if (isDirty) {
-      setShowConfirmClose(true);
-    } else {
-      if (typeof effectiveId === 'number') {
-        clearFileChanges({ fileId: effectiveId });
-      }
-      // NOTE: Don't cleanup virtual file - see save handler comment
-      onClose();
+    if (typeof effectiveId === 'number') {
+      clearFileChanges({ fileId: effectiveId });
     }
-  }, [isDirty, effectiveId, onClose]);
+    onClose();
+  }, [effectiveId, onClose]);
 
   // Register handleCancel with parent so ESC/click-outside go through dirty check
   useEffect(() => {
@@ -175,15 +173,6 @@ export default function CreateQuestionModalContainer({
     };
   }, [onAttemptCloseRef, handleCancel]);
 
-  // Handle discard changes
-  const handleDiscardChanges = useCallback(() => {
-    if (typeof effectiveId === 'number') {
-      clearFileChanges({ fileId: effectiveId });
-    }
-    // NOTE: Don't cleanup virtual file - see save handler comment
-    setShowConfirmClose(false);
-    onClose();
-  }, [effectiveId, onClose]);
 
   // Show loading state
   if (fileLoading || !file || !mergedContent) {
@@ -251,62 +240,6 @@ export default function CreateQuestionModalContainer({
         />
       </Box>
 
-      {/* Confirmation dialog for unsaved changes */}
-      <Dialog.Root
-        open={showConfirmClose}
-        onOpenChange={(e) => setShowConfirmClose(e.open)}
-        preventScroll={false}
-      >
-        <Portal>
-        <Dialog.Backdrop />
-        <Dialog.Positioner>
-          <Dialog.Content maxW="400px" p={6} borderRadius="lg" bg="bg.surface">
-            <Dialog.Header>
-              <Dialog.Title fontSize="lg" fontWeight="bold">
-                Unsaved Changes
-              </Dialog.Title>
-            </Dialog.Header>
-
-            <Dialog.Body>
-              <Text>
-                You have unsaved changes. What would you like to do?
-              </Text>
-            </Dialog.Body>
-
-            <Dialog.Footer>
-              <VStack align="stretch" gap={3} width="100%">
-                <Button
-                  onClick={handlePrimaryAction}
-                  bg="accent.teal"
-                  color="white"
-                  _hover={{ bg: 'accent.teal', opacity: 0.9 }}
-                  width="100%"
-                >
-                  {primaryActionLabel} & Close
-                </Button>
-                <HStack gap={2} width="100%">
-                  <Button
-                    variant="ghost"
-                    onClick={() => setShowConfirmClose(false)}
-                    flex={1}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={handleDiscardChanges}
-                    bg="accent.danger"
-                    variant="outline"
-                    flex={1}
-                  >
-                    Discard Changes
-                  </Button>
-                </HStack>
-              </VStack>
-            </Dialog.Footer>
-          </Dialog.Content>
-        </Dialog.Positioner>
-        </Portal>
-      </Dialog.Root>
     </>
   );
 }

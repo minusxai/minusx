@@ -64,12 +64,13 @@ export default function SmartEmbeddedQuestionContainer({
           px={3}
           py={1}
           borderBottom="1px solid"
-          borderColor={editMode ? 'accent.teal' : 'border.default'}
+          borderColor="border.default"
           display="flex"
           justifyContent="space-between"
           alignItems="center"
           transition="all 0.2s"
-          _hover={{ bg: editMode ? '#16a085' : 'bg.elevated' }}
+          _hover={{ bg: 'bg.elevated' }}
+          css={editMode ? { '& .edit-actions': { opacity: 0, transition: 'opacity 0.15s' }, '&:hover .edit-actions': { opacity: 1 } } : undefined}
         >
           <Box
             className={editMode ? "drag-handle" : ""}
@@ -105,37 +106,41 @@ export default function SmartEmbeddedQuestionContainer({
             {index !== undefined && !editMode && (
               <ExplainButton questionId={questionId} size="xs" />
             )}
-            {editMode && onEdit && (
-              <IconButton
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  onEdit();
-                }}
-                aria-label="Edit question"
-                size="xs"
-                variant="solid"
-                bg="accent.primary"
-                color="white"
-              >
-                <LuPencil />
-              </IconButton>
-            )}
-            {editMode && onRemove && (
-              <IconButton
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  onRemove();
-                }}
-                aria-label="Remove question"
-                size="xs"
-                variant="solid"
-                bg="accent.danger"
-                color="white"
-              >
-                <LuX />
-              </IconButton>
+            {editMode && (onEdit || onRemove) && (
+              <HStack gap={1} className="edit-actions">
+                {onEdit && (
+                  <IconButton
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      onEdit();
+                    }}
+                    aria-label="Edit question"
+                    size="xs"
+                    variant="solid"
+                    bg="accent.primary"
+                    color="white"
+                  >
+                    <LuPencil />
+                  </IconButton>
+                )}
+                {onRemove && (
+                  <IconButton
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      onRemove();
+                    }}
+                    aria-label="Remove question"
+                    size="xs"
+                    variant="solid"
+                    bg="accent.danger"
+                    color="white"
+                  >
+                    <LuX />
+                  </IconButton>
+                )}
+              </HStack>
             )}
           </HStack>
         </Box>

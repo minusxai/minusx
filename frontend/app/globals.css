@@ -28,15 +28,15 @@ body {
   width: 20px !important;
   height: 20px !important;
   background-color: #16a085 !important;
-  border-radius: 4px 0 4px 0 !important;
-  box-shadow: 0 0 10px rgba(22, 160, 133, 0.5) !important;
-  transition: all 0.2s ease !important;
+  border-radius: 2px 0 2px 0 !important;
+  /* box-shadow: 0 0 10px rgba(22, 160, 133, 0.5) !important; */
+  /* transition: all 0.2s ease !important; */
 }
 
 .react-grid-item > .react-resizable-handle:hover {
-  background-color: #1abc9c !important;
-  box-shadow: 0 0 15px rgba(22, 160, 133, 0.8) !important;
-  transform: scale(1.1) !important;
+  /* background-color: #1abc9c !important; */
+  /* box-shadow: 0 0 15px rgba(22, 160, 133, 0.8) !important; */
+  transform: scale(1.2) !important;
 }
 
 .react-grid-item > .react-resizable-handle::after {

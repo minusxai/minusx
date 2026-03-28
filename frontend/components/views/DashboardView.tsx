@@ -4,18 +4,19 @@ import { Box, Text } from '@chakra-ui/react';
 import { AssetReference, DashboardLayoutItem, DocumentContent, QuestionContent, QuestionParameter } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
 import ParameterRow from '../ParameterRow';
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Layout, WidthProvider, Responsive } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import JsonEditor from '../slides/JsonEditor';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectMergedContent, selectIsDirty, setEphemeral } from '@/store/filesSlice';
+import { selectMergedContent, selectIsDirty, setEphemeral, addQuestionToDashboard, isVirtualFileId, removeVirtualFile } from '@/store/filesSlice';
 import { editFile } from '@/lib/api/file-state';
 import { openFileModal, selectDashboardEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
 import { shallowEqual } from 'react-redux';
+import { QuestionBrowserPanel } from '../QuestionBrowserPanel';
 
 const EMPTY_PARAMS: Record<string, any> = {};
 const DASHBOARD_MIN_W = 2;
@@ -247,6 +248,19 @@ export default function DashboardView({
     return values;
   }, [mergedParameters, lastExecutedParams, paramValues, questionParamDefaults]);
 
+  // Queue of virtual file IDs to clean up after they're removed from assets
+  const pendingVirtualCleanup = useRef<number[]>([]);
+
+  // Effect: clean up virtual files after React has rendered the asset removal
+  useEffect(() => {
+    if (pendingVirtualCleanup.current.length === 0) return;
+    const idsToCleanup = [...pendingVirtualCleanup.current];
+    pendingVirtualCleanup.current = [];
+    for (const id of idsToCleanup) {
+      dispatch(removeVirtualFile(id));
+    }
+  });
+
   // Handler for removing questions (needs to be defined before questionGridItems)
   const handleRemoveQuestion = useCallback((questionIdStr: string) => {
     if (!document?.assets) return;
@@ -275,6 +289,11 @@ export default function DashboardView({
       assets: updatedAssets,
       layout: updatedLayout
     });
+
+    // Queue virtual file for cleanup after render
+    if (isVirtualFileId(questionId)) {
+      pendingVirtualCleanup.current.push(questionId);
+    }
   }, [document?.assets, document?.layout?.items, onChange]);
 
   // Memoize the grid background to prevent re-rendering on every keystroke
@@ -326,6 +345,7 @@ export default function DashboardView({
                 borderColor="border.muted"
                 borderRadius="md"
                 bg="bg.muted"
+                opacity={0.6}
               />
             </Box>
           );
@@ -345,20 +365,13 @@ export default function DashboardView({
         <Box
           key={questionId || index}
           bg="bg.surface"
-          borderWidth={editMode ? '2px' : '1px'}
+          borderWidth="1px"
           borderColor={
-            editMode ? 'accent.teal' :
             isHighlighted === true ? 'accent.teal' :
             isHighlighted === false ? 'border.subtle' :
             'border.default'
           }
           borderRadius="md"
-          shadow={editMode ? 'lg' : 'sm'}
-          boxShadow={
-            editMode ? '0 0 20px rgba(22, 160, 133, 0.3)' :
-            isHighlighted === true ? '0 0 12px rgba(22, 160, 133, 0.35)' :
-            undefined
-          }
           opacity={isHighlighted === false ? 0.5 : 1}
           overflow="hidden"
           display="flex"
@@ -441,7 +454,7 @@ export default function DashboardView({
           )}
 
           {/* Grid Layout */}
-          <Box position="relative" maxW="100%" pb={30}>
+          <Box position="relative" maxW="100%" pb={30} minH={"100%"}>
             {gridBackground}
 
             {questionIds.length > 0 ? (
@@ -461,7 +474,6 @@ export default function DashboardView({
                 margin={[6, 6]}
                 isDraggable={editMode}
                 isResizable={editMode}
-                style={{ minHeight: editMode ? '1500px' : 'auto' }}
               >
                 {questionGridItems}
               </ResponsiveGridLayout>
@@ -490,35 +502,42 @@ export default function DashboardView({
               </Box>
             ) : (
               <Box position="relative" minHeight="1500px">
-                {/* Empty state overlay for edit mode */}
+                {/* Empty state overlay for edit mode - question browser */}
                 <Box
                   position="absolute"
-                  top="20%"
+                  top="5%"
                   left="50%"
-                  transform="translate(-50%, -50%)"
-                  bg="bg.elevated/75"
-                  p={8}
-                  borderRadius="lg"
-                  border="2px dashed"
-                  borderColor="border.muted"
-                  textAlign="center"
+                  transform="translateX(-50%)"
+                  maxW="500px"
+                  width="100%"
                 >
-                  <Box mb={4} display="inline-block">
-                    {(() => {
-                      const QuestionIcon = getFileTypeMetadata('question').icon;
-                      return <QuestionIcon size={64} strokeWidth={1.5} style={{ opacity: 0.3 }} />;
-                    })()}
-                  </Box>
-                  <Text fontSize="lg" fontWeight="600" mb={2} color="fg.default">
-                    Add questions to the dashboard
-                  </Text>
-                  <Text color="fg.muted" fontSize="sm" maxW="sm">
-                    Use sidebar to add questions, or just ask {agentName} to do it!
-                  </Text>
+                  <QuestionBrowserPanel
+                    folderPath={folderPath}
+                    onAddQuestion={(questionId) => {
+                      dispatch(addQuestionToDashboard({ dashboardId: fileId, questionId }));
+                    }}
+                    excludedIds={questionIds}
+                    title="Let's add some questions!"
+                  />
                 </Box>
               </Box>
             )}
+
+            {/* Add Questions Panel - after last card in edit mode */}
+            {editMode && questionIds.length > 0 && (
+              <Box mt={4} maxW="500px" mx="auto" position="relative" zIndex={10}>
+                <QuestionBrowserPanel
+                  folderPath={folderPath}
+                  onAddQuestion={(questionId) => {
+                    dispatch(addQuestionToDashboard({ dashboardId: fileId, questionId }));
+                  }}
+                  excludedIds={questionIds}
+                  title="Add more questions"
+                />
+              </Box>
+            )}
           </Box>
+
         </>
       )}
 
