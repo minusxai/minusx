@@ -25,11 +25,8 @@ import {
 } from './onboarding-state';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { useContexts } from '@/lib/hooks/useContexts';
-import { useFile, useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
+import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
-import { selectAugmentedFiles, compressAugmentedFile } from '@/lib/api/file-state';
-import RightSidebar from '@/components/RightSidebar';
-import type { AppState } from '@/lib/appState';
 import StepConnection from './components/StepConnection';
 import StepContext from './components/StepContext';
 import StepGenerating from './components/StepGenerating';
@@ -213,33 +210,17 @@ export function HelloWorldContent() {
 
   const isWizard = step !== 'welcome';
 
-  // Load context file into Redux so the agent can see/edit it
-  const { fileState: contextFile } = useFile(contextFileId ?? undefined) ?? {};
-
-  // Build appState for RightSidebar using the same pipeline as real file pages
-  // (selectAugmentedFiles resolves references, compressAugmentedFile strips fullSchema columns, etc.)
-  const reduxState = useAppSelector(state => state);
-  const contextAppState: AppState | null = useMemo(() => {
-    if (!contextFileId || !contextFile || contextFile.loading) return null;
-    const [augmented] = selectAugmentedFiles(reduxState, [contextFileId]);
-    if (!augmented) return null;
-    return { type: 'file', state: compressAugmentedFile(augmented) };
-  }, [contextFileId, contextFile, reduxState]);
-
-  // Split displayed text into lines for rendering (#2)
+  // Split displayed text into lines for rendering
   const displayedLines = displayedText.split('\n');
 
   return (
-    <Box display="flex" h="100vh" bg="bg.canvas" overflow="hidden">
-    {/* Main content area */}
     <Box
-      flex="1"
-      minW="0"
       minH="100vh"
       display="flex"
       flexDirection="column"
       alignItems="center"
       justifyContent={isWizard ? 'flex-start' : 'center'}
+      bg="bg.canvas"
       position="relative"
       overflow={isWizard ? 'auto' : 'hidden'}
       px={4}
@@ -545,20 +526,6 @@ export function HelloWorldContent() {
           animation: rotateBorder 2s linear infinite;
         }
       `}</style>
-    </Box>
-
-    {/* RightSidebar — page-level sibling, same as FileLayout */}
-    {isWizard && (
-      <RightSidebar
-        filePath="/org/context"
-        fileType="context"
-        fileId={contextFileId ?? undefined}
-        showChat
-        title="Knowledge Base"
-        sectionIds={['chat']}
-        appStateOverride={contextAppState}
-      />
-    )}
     </Box>
   );
 }

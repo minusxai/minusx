@@ -268,7 +268,7 @@ export default function ChatInterface({
   }, []);
 
   // Compute layout based on container width and mode
-  console.log('Container width:', containerWidth, 'Container:', container);
+//   console.log('Container width:', containerWidth, 'Container:', container);
   const isCompact = container === 'sidebar' || (containerWidth > 0 && containerWidth < 900);
   const colSpan = isCompact ? 12 : { base: 12, md: 8, lg: 6 };
   const colStart = isCompact ? 1 : { base: 1, md: 3, lg: 4 };

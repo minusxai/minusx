@@ -7,7 +7,8 @@ import { useRouter } from '@/lib/navigation/use-navigation';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { createConversation, selectActiveConversation, selectConversation } from '@/store/chatSlice';
 import { setNavigation, setActiveVirtualId } from '@/store/navigationSlice';
-import { createVirtualFile, editFile, publishFile, selectAugmentedFiles, compressAugmentedFile } from '@/lib/api/file-state';
+import { createVirtualFile, editFile, publishAll, selectAugmentedFiles, compressAugmentedFile } from '@/lib/api/file-state';
+import { getStore } from '@/store/store';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { sparkleKeyframes, pulseKeyframes } from '@/lib/ui/animations';
 import { useContext } from '@/lib/hooks/useContext';
@@ -123,15 +124,22 @@ export default function StepGenerating({ connectionName, contextFileId }: StepGe
     setShowTrace(true);
   }, [dispatch, connectionName, virtualDashboardId, reduxState, hasStarted, databases, contextDocs]);
 
-  // Publish the virtual dashboard to get a real ID for navigation
+  // Publish all dirty files (questions + dashboard) and navigate to the dashboard
   const handleGoToDashboard = useCallback(async () => {
     if (!virtualDashboardId) return;
     try {
-      const result = await publishFile({ fileId: virtualDashboardId });
-      router.push(`/f/${result.id}`);
+      await publishAll();
+      // Read fresh state AFTER publish — the hook-captured reduxState is stale
+      const freshState = getStore().getState();
+      const allFiles = Object.values(freshState.files.files);
+      const dashboard = allFiles.find(f => f.type === 'dashboard' && f.id > 0 && f.name === 'Getting Started');
+      if (dashboard) {
+        router.push(`/f/${dashboard.id}`);
+      } else {
+        router.push('/');
+      }
     } catch (err) {
       console.error('[StepGenerating] Publish failed:', err);
-      // Fallback: just go home
       router.push('/');
     }
   }, [virtualDashboardId, router]);

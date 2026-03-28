@@ -9,7 +9,6 @@ import { setFiles, selectMergedContent, addQuestionToDashboard } from '@/store/f
 import { QuestionBrowserPanel } from './QuestionBrowserPanel';
 import QuestionSchemaSection from './QuestionSchemaSection';
 import { DocumentContent, FileType } from '@/lib/types';
-import type { AppState } from '@/lib/appState';
 import SchemaTreeView from './SchemaTreeView';
 import Markdown from './Markdown';
 import ChatInterface from './explore/ChatInterface';
@@ -21,7 +20,7 @@ import { useContext } from '@/lib/hooks/useContext';
 import { useAppState } from '@/lib/hooks/file-state-hooks';
 import { ContextSelector } from './explore/ContextSelector';
 import { selectActiveConversation, selectConversation } from '@/store/chatSlice';
-import { getSidebarSection, getSidebarSections, SidebarSectionMetadata, SidebarSectionId } from '@/lib/ui/sidebar-sections';
+import { getSidebarSection, SidebarSectionMetadata } from '@/lib/ui/sidebar-sections';
 
 // ============================================================================
 // RightSidebar Props Interface
@@ -37,10 +36,6 @@ export interface RightSidebarProps {
   contextVersion?: number;  // Selected context version (admin testing)
   selectedContextPath?: string | null;  // Selected context path for dropdown
   onContextChange?: (path: string | null, version?: number) => void;  // Context change callback
-  /** Override which sections to show. When provided, skips auto-detection. */
-  sectionIds?: SidebarSectionId[];
-  /** Override appState (e.g., for hello-world page that acts as a context file page). */
-  appStateOverride?: AppState | null;
 }
 
 // ============================================================================
@@ -57,15 +52,12 @@ export default function RightSidebar({
   contextVersion,
   selectedContextPath,
   onContextChange,
-  sectionIds,
-  appStateOverride,
 }: RightSidebarProps) {
   const dispatch = useAppDispatch();
   const { isCollapsed, width, devMode, colorMode, activeSidebarSection } = useAppSelector(selectRightSidebarUIState);
 
-  // Get current page app state (use override if provided)
-  const { appState: derivedAppState, loading: appStateLoading } = useAppState();
-  const appState = appStateOverride !== undefined ? appStateOverride : derivedAppState;
+  // Get current page app state
+  const { appState, loading: appStateLoading } = useAppState();
 
   // Read from Redux (loaded by layout.tsx)
   const currentUser = useAppSelector(state => state.auth.user);
@@ -209,10 +201,7 @@ export default function RightSidebar({
   }, [isDragging, dispatch]);
 
   // Determine which sections to show
-  const sections: SidebarSectionMetadata[] = sectionIds ? getSidebarSections(sectionIds) : [];
-
-  if (!sectionIds) {
-  // Auto-detect sections based on context
+  const sections: SidebarSectionMetadata[] = [];
 
   // Questions section - only visible for dashboards in edit mode (shown first)
   if (isDashboard && dashboardEditMode && appState?.type === 'file') {
@@ -243,29 +232,8 @@ export default function RightSidebar({
     sections.push(getSidebarSection('history'));
   }
 
-  // Share section - only visible for admins with valid fileId and shareable file types
-  //ToDo: Vivek: can enable later
-//   const shareableTypes: Array<string> = ['question', 'dashboard', 'folder'];
-//   if (
-//     currentUser &&
-//     currentUser.role === 'admin' &&
-//     fileId &&
-//     typeof fileId === 'number' &&
-//     pageDetails.pageType &&
-//     shareableTypes.includes(pageDetails.pageType)
-//   ) {
-//     sections.push(getSidebarSection('share'));
-//   }
-
   // Dev section - only visible when devMode is enabled
   if (devMode) {
-    sections.push(getSidebarSection('dev'));
-  }
-
-  } // end if (!sectionIds)
-
-  // Dev section for overridden sections too
-  if (sectionIds && devMode && !sectionIds.includes('dev')) {
     sections.push(getSidebarSection('dev'));
   }
 
