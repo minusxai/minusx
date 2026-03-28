@@ -4,19 +4,21 @@ import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Box, VStack, HStack, Text, Heading, Button, Spinner, Collapsible, Icon } from '@chakra-ui/react';
 import { LuSparkles, LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import SchemaTreeView, { type WhitelistItem, type SchemaTreeItem } from '@/components/SchemaTreeView';
-import { pulseKeyframes, sparkleKeyframes } from '@/lib/ui/animations';
+import { pulseKeyframes, sparkleKeyframes, cursorBlinkKeyframes } from '@/lib/ui/animations';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { createVirtualFile, editFile, publishFile } from '@/lib/api/file-state';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { createConversation, selectActiveConversation, selectConversation } from '@/store/chatSlice';
+import { createConversation, selectActiveConversation, selectConversation, interruptChat } from '@/store/chatSlice';
 import { selectAugmentedFiles, compressAugmentedFile } from '@/lib/api/file-state';
 import Editor from '@monaco-editor/react';
 import Markdown from '@/components/Markdown';
 import ChatInterface from '@/components/explore/ChatInterface';
 import type { ContextContent, DatabaseContext } from '@/lib/types';
 
-const AGENT_DESCRIBE_MESSAGE = 'Write the data documentation for this knowledge base. Look at the schema, describe what the database contains, what the key tables are, and a tl;dr on what kinds of questions can be answered.';
+const TYPEWRITER_SPEED = 35;
+
+const AGENT_DESCRIBE_MESSAGE = 'Write the data documentation for this database.';
 
 interface StepContextProps {
   connectionName: string;
@@ -24,6 +26,7 @@ interface StepContextProps {
   onComplete: (contextFileId: number) => void;
   onRequestChat?: (contextFileId: number) => void;
   onContextCreated?: (contextFileId: number) => void;
+  greeting?: string;
 }
 
 /** Collapsible agent trace with toggle text and status indicator */
@@ -89,7 +92,7 @@ function AgentFeedCollapsible({ connectionName, isRunning }: { connectionName: s
   );
 }
 
-export default function StepContext({ connectionName, connectionId, onComplete, onRequestChat, onContextCreated }: StepContextProps) {
+export default function StepContext({ connectionName, connectionId, onComplete, onRequestChat, onContextCreated, greeting }: StepContextProps) {
   const { connections, loading: connectionsLoading } = useConnections({ skip: false });
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const showDebug = useAppSelector((state) => state.ui.showDebug);
@@ -100,6 +103,26 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
   // Virtual file ID (negative) — only persisted on "Continue"
   const [virtualFileId, setVirtualFileId] = useState<number | null>(null);
   const [showAgentFeed, setShowAgentFeed] = useState(false);
+
+  // Typewriter effect for greeting
+  const [displayedText, setDisplayedText] = useState('');
+  const [typingDone, setTypingDone] = useState(!greeting);
+
+  useEffect(() => {
+    if (!greeting) return;
+    let i = 0;
+    setDisplayedText('');
+    setTypingDone(false);
+    const interval = setInterval(() => {
+      i++;
+      setDisplayedText(greeting.slice(0, i));
+      if (i >= greeting.length) {
+        clearInterval(interval);
+        setTypingDone(true);
+      }
+    }, TYPEWRITER_SPEED);
+    return () => clearInterval(interval);
+  }, [greeting]);
 
   // Track if agent is still running
   const activeConvId = useAppSelector(selectActiveConversation);
@@ -260,7 +283,7 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
     // Create a conversation and send the message directly (no sidebar needed)
     dispatch(createConversation({
       conversationID: -Date.now(),
-      agent: 'AnalystAgent',
+      agent: 'OnboardingContextAgent',
       agent_args: {
         connection_id: connectionName,
         context_path: '/org/context',
@@ -273,6 +296,16 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
     }));
     setShowAgentFeed(true);
   }, [virtualFileId, dispatch, onRequestChat, connectionName, reduxState, connections, description]);
+
+  /** Skip: interrupt agent if running, save context without docs, advance */
+  const handleSkip = useCallback(async () => {
+    // Interrupt agent if running
+    if (activeConvId) {
+      dispatch(interruptChat({ conversationID: activeConvId }));
+    }
+    // Save as-is (handleSave already uses current description which may be empty)
+    await handleSave();
+  }, [activeConvId, dispatch, handleSave]);
 
   const totalTables = useMemo(() => {
     return schemas.reduce((sum, s) => sum + s.tables.length, 0);
@@ -315,11 +348,37 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
 
   return (
     <VStack gap={6} align="stretch">
+      {greeting && <style>{cursorBlinkKeyframes}</style>}
+
       {/* Header */}
       <Box>
-        <Heading size="md" fontFamily="mono" fontWeight="500" mb={1}>
-          Tell us about your data
-        </Heading>
+        {greeting ? (
+          <Heading
+            fontSize="2xl"
+            fontFamily="mono"
+            fontWeight="400"
+            mb={1}
+            letterSpacing="-0.02em"
+          >
+            {displayedText}
+            {!typingDone && (
+              <Box
+                as="span"
+                display="inline-block"
+                w="2px"
+                h="1em"
+                bg="accent.teal"
+                ml="2px"
+                verticalAlign="text-bottom"
+                css={{ animation: 'cursorBlink 0.8s step-end infinite' }}
+              />
+            )}
+          </Heading>
+        ) : (
+          <Heading size="md" fontFamily="mono" fontWeight="500" mb={1}>
+            Tell us about your data
+          </Heading>
+        )}
         <Text color="fg.muted" fontSize="sm">
           {totalTables > 0
             ? <>We&apos;ve auto-selected {totalTables === 1 ? '' : 'all '}<Text as="span" color="accent.teal" fontWeight="600">{totalTables} {totalTables === 1 ? 'table' : 'tables'}</Text>. Deselect anything you don&apos;t need.</>
@@ -328,99 +387,148 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
         </Text>
       </Box>
 
-      {/* Tables & data context — always visible */}
-      <Box>
-          <VStack gap={6} align="stretch">
-            {/* Schema browser */}
-            {schemas.length > 0 && (
-              <Box
-                border="1px solid"
-                borderColor="border.default"
-                borderRadius="lg"
-                p={4}
-                maxH="300px"
-                overflowY="auto"
-              >
-                <HStack justify="space-between" mb={3}>
-                  <Text fontSize="xs" fontFamily="mono" color="fg.subtle">
-                    {whitelistedCount}/{totalTables} tables selected
-                  </Text>
-                </HStack>
-                <SchemaTreeView
-                  schemas={schemas}
-                  selectable
-                  whitelist={effectiveWhitelist}
-                  onWhitelistChange={handleWhitelistChange}
-                  showColumns={false}
-                  connectionName={connectionName}
-                  defaultExpandedSchemas
-                />
-              </Box>
-            )}
-
-            {schemas.length === 0 && (
-              <Box p={4} bg="bg.muted" borderRadius="lg">
-                <Text color="fg.muted" fontSize="sm">
-                  No schema found for this connection. You can still add a description below.
-                </Text>
-              </Box>
-            )}
-
-            {/* Data context */}
-            <Box>
-              <HStack justify="space-between" mb={2}>
-                <Text fontSize="sm" fontWeight="500">
-                  Data Context <Text as="span" color="fg.subtle">(optional, markdown)</Text>
+      {/* Tables — collapsible */}
+      {schemas.length > 0 && (
+        <Collapsible.Root defaultOpen>
+          <Collapsible.Trigger asChild>
+            <HStack
+              cursor="pointer"
+              px={4}
+              py={3}
+              border="1px solid"
+              borderColor="border.default"
+              borderRadius="lg"
+              _hover={{ bg: 'bg.muted' }}
+              justify="space-between"
+            >
+              <HStack gap={2}>
+                <Text fontSize="sm" fontWeight="600">Tables</Text>
+                <Text fontSize="xs" fontFamily="mono" color="fg.subtle">
+                  {whitelistedCount}/{totalTables} selected
                 </Text>
               </HStack>
-              <Box
-                border="1px solid"
-                borderColor="border.default"
-                borderRadius="lg"
-                overflow="hidden"
-              >
-                <HStack gap={0} align="stretch" display="flex">
-                  <Box flex={1} minW={0}>
-                    <Editor
-                      height="250px"
-                      language="markdown"
-                      value={description}
-                      onChange={handleEditorChange}
-                      theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
-                      options={{
-                        minimap: { enabled: false },
-                        wordWrap: 'on',
-                        lineNumbers: 'off',
-                        fontSize: 13,
-                        fontFamily: 'JetBrains Mono, monospace',
-                        scrollBeyondLastLine: false,
-                        automaticLayout: true,
-                        tabSize: 2,
-                        placeholder: 'Describe your data here... e.g.,\n\n# My Database\n\nThis contains our e-commerce data: orders, customers, products.',
-                      }}
-                    />
-                  </Box>
-                  <Box
-                    flex={1}
-                    p={3}
-                    bg="bg.muted"
-                    maxH="250px"
-                    overflowY="auto"
-                    borderLeft="1px solid"
-                    borderColor="border.default"
-                    minW={0}
-                  >
-                    {description.trim() ? (
-                      <Markdown context="mainpage">{description}</Markdown>
-                    ) : (
-                      <Text color="fg.muted" fontSize="sm">Preview will appear here...</Text>
-                    )}
-                  </Box>
-                </HStack>
-              </Box>
+              <Icon
+                as={LuChevronDown}
+                boxSize={4}
+                color="fg.subtle"
+                css={{
+                  '[data-state=closed] &': { transform: 'rotate(-90deg)' },
+                  transition: 'transform 0.15s',
+                }}
+              />
+            </HStack>
+          </Collapsible.Trigger>
+          <Collapsible.Content>
+            <Box
+              border="1px solid"
+              borderColor="border.default"
+              borderTop="0"
+              borderRadius="0 0 lg lg"
+              p={4}
+              maxH="300px"
+              overflowY="auto"
+              mt="-1px"
+            >
+              <SchemaTreeView
+                schemas={schemas}
+                selectable
+                whitelist={effectiveWhitelist}
+                onWhitelistChange={handleWhitelistChange}
+                showColumns={false}
+                connectionName={connectionName}
+                defaultExpandedSchemas
+              />
             </Box>
-          </VStack>
-      </Box>
+          </Collapsible.Content>
+        </Collapsible.Root>
+      )}
+
+      {schemas.length === 0 && (
+        <Box p={4} bg="bg.muted" borderRadius="lg">
+          <Text color="fg.muted" fontSize="sm">
+            No schema found for this connection. You can still add a description below.
+          </Text>
+        </Box>
+      )}
+
+      {/* Data context — collapsible */}
+      <Collapsible.Root defaultOpen>
+        <Collapsible.Trigger asChild>
+          <HStack
+            cursor="pointer"
+            px={4}
+            py={3}
+            border="1px solid"
+            borderColor="border.default"
+            borderRadius="lg"
+            _hover={{ bg: 'bg.muted' }}
+            justify="space-between"
+          >
+            <HStack gap={2}>
+              <Text fontSize="sm" fontWeight="600">Data Context</Text>
+              <Text as="span" fontSize="xs" color="fg.subtle">(optional, markdown)</Text>
+            </HStack>
+            <Icon
+              as={LuChevronDown}
+              boxSize={4}
+              color="fg.subtle"
+              css={{
+                '[data-state=closed] &': { transform: 'rotate(-90deg)' },
+                transition: 'transform 0.15s',
+              }}
+            />
+          </HStack>
+        </Collapsible.Trigger>
+        <Collapsible.Content>
+          <Box
+            border="1px solid"
+            borderColor="border.default"
+            borderTop="0"
+            borderRadius="0 0 lg lg"
+            overflow="hidden"
+            mt="-1px"
+          >
+            <HStack gap={0} align="stretch" display="flex">
+              <Box flex={1} minW={0}>
+                <Editor
+                  height="250px"
+                  language="markdown"
+                  value={description}
+                  onChange={handleEditorChange}
+                  theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
+                  options={{
+                    minimap: { enabled: false },
+                    wordWrap: 'on',
+                    lineNumbers: 'off',
+                    fontSize: 13,
+                    fontFamily: 'JetBrains Mono, monospace',
+                    scrollBeyondLastLine: false,
+                    automaticLayout: true,
+                    tabSize: 2,
+                    placeholder: 'Describe your data here... e.g.,\n\n# My Database\n\nThis contains our e-commerce data: orders, customers, products.',
+                  }}
+                />
+              </Box>
+              <Box
+                flex={1}
+                p={3}
+                bg="bg.muted"
+                maxH="250px"
+                overflowY="auto"
+                borderLeft="1px solid"
+                borderColor="border.default"
+                minW={0}
+              >
+                {description.trim() ? (
+                  <Markdown context="mainpage">{description}</Markdown>
+                ) : (
+                  <Text color="fg.muted" fontSize="sm">Preview will appear here...</Text>
+                )}
+              </Box>
+            </HStack>
+          </Box>
+        </Collapsible.Content>
+      </Collapsible.Root>
 
       {/* Agent activity feed — always rendered when active, not auto-expanded */}
       {showAgentFeed && (
@@ -457,12 +565,25 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
         <Text color="accent.danger" fontSize="sm">{error}</Text>
       )}
 
-      {/* Running indicator — teal dots above agent trace */}
+      {/* Running indicator + skip escape hatch */}
       {isAgentRunning && (
-        <HStack justify="center" gap={1} pt={2}>
-          <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out infinite' }} />
-          <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out 0.2s infinite' }} />
-          <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out 0.4s infinite' }} />
+        <HStack justify="space-between" align="center" pt={2}>
+          <HStack gap={1}>
+            <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out infinite' }} />
+            <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out 0.2s infinite' }} />
+            <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out 0.4s infinite' }} />
+          </HStack>
+          <Text
+            as="button"
+            fontSize="xs"
+            color="fg.subtle"
+            fontFamily="mono"
+            cursor="pointer"
+            _hover={{ color: 'fg.muted', textDecoration: 'underline' }}
+            onClick={handleSkip}
+          >
+            Skip & figure out later
+          </Text>
         </HStack>
       )}
 

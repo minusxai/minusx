@@ -225,20 +225,21 @@ export default function StepComplete() {
           _hover={{ opacity: 0.9 }}
           size="sm"
           fontFamily="mono"
-          onClick={() => router.push('/')}
-        >
-          <LuRocket size={14} />
-          Go to home
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          fontFamily="mono"
           onClick={() => router.push('/explore')}
         >
           <LuSparkles size={14} />
           Start exploring
         </Button>
+        <Button
+          variant={"outline"}
+          size="sm"
+          fontFamily="mono"
+          onClick={() => router.push('https://docsv2.minusx.ai/docs')}
+        >
+          <LuRocket size={14} />
+          Read the docs
+        </Button>
+        
       </HStack>
 
       {/* Guide sections — same as /getting-started page */}

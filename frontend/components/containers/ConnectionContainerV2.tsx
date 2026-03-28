@@ -31,6 +31,8 @@ interface ConnectionContainerV2Props {
   onSaveSuccess?: (connectionId: number, connectionName: string) => void;
   /** Hide the cancel button (e.g., in onboarding wizard where Back handles navigation) */
   hideCancel?: boolean;
+  /** Optional greeting text shown with typewriter animation on the type selection screen */
+  greeting?: string;
 }
 
 export default function ConnectionContainerV2({
@@ -39,6 +41,7 @@ export default function ConnectionContainerV2({
   defaultFolder = '/org',
   onSaveSuccess,
   hideCancel = false,
+  greeting,
 }: ConnectionContainerV2Props) {
   const router = useRouter();
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -157,6 +160,7 @@ export default function ConnectionContainerV2({
       onReload={handleReload}
       mode={mode === 'preview' ? 'view' : mode}
       hideCancel={hideCancel}
+      greeting={greeting}
     />
   );
 }

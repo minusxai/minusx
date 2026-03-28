@@ -77,7 +77,7 @@ export default function CsvConfig({
           <Button
             as="label"
             size="sm"
-            colorPalette="teal"
+            bg="accent.teal"
             cursor="pointer"
             width="fit-content"
           >
@@ -135,7 +135,7 @@ export default function CsvConfig({
                 onClick={handleCsvUpload}
                 loading={uploadProgress === 'uploading'}
                 disabled={csvFiles.length === 0}
-                colorPalette="teal"
+                bg="accent.teal"
                 size="sm"
                 mt={3}
                 width="100%"
@@ -152,7 +152,7 @@ export default function CsvConfig({
             </Text>
           )}
           {uploadProgress === 'done' && (
-            <Text fontSize="xs" color="accent.success">
+            <Text fontSize="xs" color="accent.teal">
               Database created successfully! You can now test the connection.
             </Text>
           )}
@@ -198,10 +198,10 @@ export default function CsvConfig({
               p={3}
               borderRadius="md"
               border="1px solid"
-              borderColor="accent.success"
-              bg="accent.success/5"
+              borderColor="accent.teal"
+              bg="accent.teal/5"
             >
-              <Text fontSize="xs" fontWeight="600" mb={2} color="accent.success">
+              <Text fontSize="xs" fontWeight="600" mb={2} color="accent.teal">
                 Created Tables
               </Text>
               <VStack align="stretch" gap={2}>
