@@ -159,7 +159,8 @@ export default auth(async (req) => {
 
   // Onboarding detection: runs on /, /p/org*, and /hello-world (without step param)
   // Routes users to the correct onboarding step if setup is incomplete.
-  const isHomePath = pathname === '/' || pathname === '/p/org' || pathname.startsWith('/p/org/');
+//   const isHomePath = pathname === '/' || pathname === '/p/org' || pathname.startsWith('/p/org/');
+  const isHomePath = pathname === '/';
   const isHelloWorldWithoutStep = pathname === '/hello-world' && !req.nextUrl.searchParams.get('step');
   const effectiveMode = (mode && isValidMode(mode)) ? mode : 'org';
 
@@ -170,7 +171,8 @@ export default auth(async (req) => {
       const contexts = await DocumentDB.listAll(companyId, 'context', ['/org'], -1, false);
       const questions = await DocumentDB.listAll(companyId, 'question', ['/org'], -1, false);
       const { needsOnboarding, redirectPath } = detectOnboardingState(connections, contexts, questions);
-      if (needsOnboarding && redirectPath) {
+      const currentPath = pathname + (req.nextUrl.search || '');
+      if (needsOnboarding && redirectPath && redirectPath !== currentPath) {
         const protocol = req.headers.get('x-forwarded-proto') || 'https';
         return NextResponse.redirect(new URL(`${protocol}://${hostname}${redirectPath}`));
       }

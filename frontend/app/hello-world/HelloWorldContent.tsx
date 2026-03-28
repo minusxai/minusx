@@ -5,7 +5,7 @@ import { Box, Heading, Text, Flex, HStack, Icon, VStack } from '@chakra-ui/react
 import { LuPlay, LuDatabase, LuSparkles, LuArrowLeft, LuCheck } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setLeftSidebarCollapsed } from '@/store/uiSlice';
-import { setNavigation } from '@/store/navigationSlice';
+import { setNavigation, setActiveVirtualId } from '@/store/navigationSlice';
 import { switchMode } from '@/lib/mode/mode-utils';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -69,14 +69,26 @@ export function HelloWorldContent() {
     [connections]
   );
 
-  // Determine initial state: system state is the source of truth, URL is a fallback while loading
+  // Only run onboarding detection in org mode
+  const effectiveMode = user?.mode || 'org';
+  const isOrgMode = effectiveMode === 'org';
+
+  // Determine initial state:
+  // - If URL has a step param, validate it against system state (auto-advance if past that step)
+  // - If no step param (/hello-world bare), show welcome — don't auto-advance
+  // - Only auto-advance in org mode (tutorial mode has its own connections/contexts)
   const initialState = useMemo(() => {
     const urlState = readStateFromURL(searchParams);
-    // While data is loading, use URL params as a hint
+    const hasStepParam = !!searchParams.get('step');
+    if (!hasStepParam || !isOrgMode) return urlState;
     if (connectionsLoading || contextsLoading || questionsLoading) return urlState;
-    // Once loaded, always use system state (it may have advanced past the URL step)
-    return detectStepFromSystemState(connectionList, contexts, questions);
-  }, [searchParams, connectionList, contexts, questions, connectionsLoading, contextsLoading, questionsLoading]);
+    const systemState = detectStepFromSystemState(connectionList, contexts, questions);
+    // Use whichever is further along (don't go backwards)
+    const stepOrder: WizardStep[] = ['welcome', 'connection', 'context', 'generating'];
+    const urlIdx = stepOrder.indexOf(urlState.step);
+    const sysIdx = stepOrder.indexOf(systemState.step);
+    return sysIdx > urlIdx ? systemState : urlState;
+  }, [searchParams, connectionList, contexts, questions, connectionsLoading, contextsLoading, questionsLoading, isOrgMode]);
 
   const [step, setStep] = useState<WizardStep>(initialState.step);
   const [connectionId, setConnectionId] = useState<number | null>(initialState.connectionId);
@@ -90,21 +102,21 @@ export function HelloWorldContent() {
     router.replace(url);
   }, [router]);
 
-  // Sync state when initialState changes (e.g., connections finish loading) and push to URL
-  const prevInitialStepRef = useRef(initialState.step);
+  // Sync state from initialState on first load only.
+  // Once the user interacts (clicks connect/back/etc), don't override their navigation.
+  const hasUserNavigated = useRef(false);
+  const hasSyncedOnce = useRef(false);
   useEffect(() => {
-    if (initialState.step !== prevInitialStepRef.current) {
-      prevInitialStepRef.current = initialState.step;
+    if (hasUserNavigated.current || hasSyncedOnce.current) return;
+    // Only sync if initialState is different from the default welcome state
+    if (initialState.step !== 'welcome') {
+      hasSyncedOnce.current = true;
       setStep(initialState.step);
       setConnectionId(initialState.connectionId);
       setConnectionName(initialState.connectionName);
       setContextFileId(initialState.contextFileId);
-      // Also push auto-detected state to URL so it's visible and survives refresh
-      if (!searchParams.get('step')) {
-        pushState(initialState);
-      }
     }
-  }, [initialState, pushState, searchParams]);
+  }, [initialState]);
 
   // Typewriter state
   const [displayedText, setDisplayedText] = useState('');
@@ -156,6 +168,7 @@ export function HelloWorldContent() {
 
   // Wizard handlers - push state to URL on each transition (#8)
   const handleConnectionComplete = useCallback((id: number, name: string) => {
+    hasUserNavigated.current = true;
     setConnectionId(id);
     setConnectionName(name);
     setStep('context');
@@ -163,12 +176,14 @@ export function HelloWorldContent() {
   }, [pushState]);
 
   const handleContextComplete = useCallback((fileId: number) => {
+    hasUserNavigated.current = true;
     setContextFileId(fileId);
     setStep('generating');
     pushState({ step: 'generating', connectionId, connectionName, contextFileId: fileId });
   }, [pushState, connectionId, connectionName]);
 
   const handleBack = useCallback(() => {
+    hasUserNavigated.current = true;
     if (step === 'connection') {
       setStep('welcome');
       pushState({ step: 'welcome', connectionId: null, connectionName: null, contextFileId: null });
@@ -182,15 +197,18 @@ export function HelloWorldContent() {
   }, [step, pushState, connectionId, connectionName, contextFileId]);
 
   const handleStartConnection = useCallback(() => {
+    hasUserNavigated.current = true;
     setStep('connection');
     pushState({ step: 'connection', connectionId: null, connectionName: null, contextFileId: null });
   }, [pushState]);
 
   const handleRequestChat = useCallback((fileId: number) => {
     setContextFileId(fileId);
-    // Set navigation to fake the context file page so the agent's EditFile guard passes
-    // (EditFile checks selectAppState → navigation.pathname to verify you're on the right page)
-    dispatch(setNavigation({ pathname: `/f/${fileId}`, searchParams: {} }));
+    // Set navigation to fake a "new context" page so selectAppState resolves to this virtual file.
+    // EditFile checks selectAppState → navigation.pathname to verify you're on the right page.
+    // Use /new/context with virtualId param so computePathState resolves the virtual file.
+    dispatch(setNavigation({ pathname: '/new/context', searchParams: { virtualId: String(fileId) } }));
+    dispatch(setActiveVirtualId(fileId));
   }, [dispatch]);
 
   const isWizard = step !== 'welcome';
@@ -234,20 +252,22 @@ export function HelloWorldContent() {
       <style>{rotateBorderKeyframes}</style>
       <style>{cursorBlinkKeyframes}</style>
 
-      {/* Background aurora gradients */}
-      <Box
-        position="absolute"
-        inset={0}
-        zIndex={0}
-        pointerEvents="none"
-        css={{
-          background: `
-            radial-gradient(ellipse 80% 50% at 50% -20%, rgba(22, 160, 133, 0.30), transparent),
-            radial-gradient(ellipse 60% 40% at 100% 100%, rgba(22, 160, 133, 0.15), transparent),
-            radial-gradient(ellipse 50% 40% at 0% 80%, rgba(22, 160, 133, 0.10), transparent)
-          `,
-        }}
-      />
+      {/* Background aurora gradients — only on welcome screen */}
+      {!isWizard && (
+        <Box
+          position="absolute"
+          inset={0}
+          zIndex={0}
+          pointerEvents="none"
+          css={{
+            background: `
+              radial-gradient(ellipse 80% 50% at 50% -20%, rgba(22, 160, 133, 0.30), transparent),
+              radial-gradient(ellipse 60% 40% at 100% 100%, rgba(22, 160, 133, 0.15), transparent),
+              radial-gradient(ellipse 50% 40% at 0% 80%, rgba(22, 160, 133, 0.10), transparent)
+            `,
+          }}
+        />
+      )}
 
       {/* Floating orbs */}
       <Box ref={orb1Ref} className="hw-orb hw-orb-1" position="absolute" w="400px" h="400px" borderRadius="full" bg="accent.teal" opacity={0.12} filter="blur(80px)" zIndex={0} pointerEvents="none" />
@@ -395,7 +415,7 @@ export function HelloWorldContent() {
           {/* Top bar */}
           <Flex
             align="center"
-            justify="space-between"
+            justify="center"
             mb={6}
             bg="bg.surface"
             border="1px solid"
@@ -405,28 +425,6 @@ export function HelloWorldContent() {
             py={3}
             css={{ animation: 'fadeInUp 0.3s ease-out forwards' }}
           >
-            {/* Back button */}
-            {isWizard ? (
-              <Box
-                as="button"
-                onClick={handleBack}
-                display="flex"
-                alignItems="center"
-                gap={1.5}
-                color="fg.muted"
-                fontSize="sm"
-                fontFamily="mono"
-                cursor="pointer"
-                _hover={{ color: 'fg.default' }}
-                transition="color 0.15s"
-              >
-                <LuArrowLeft size={14} />
-                Back
-              </Box>
-            ) : (
-              <Box />
-            )}
-
             {/* Step indicator */}
             <HStack gap={3}>
               {(['connection', 'context', 'generating'] as const).map((s) => {
@@ -475,18 +473,6 @@ export function HelloWorldContent() {
                   </HStack>
                 );
               })}
-            </HStack>
-
-            {/* Agent presence */}
-            <HStack gap={1.5} color="accent.teal">
-              <Box css={{ animation: 'sparkle 2s ease-in-out infinite' }}>
-                <LuSparkles size={14} />
-              </Box>
-              <HStack gap={0.5}>
-                <Box w="3px" h="3px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out infinite' }} />
-                <Box w="3px" h="3px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out 0.2s infinite' }} />
-                <Box w="3px" h="3px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out 0.4s infinite' }} />
-              </HStack>
             </HStack>
           </Flex>
 
