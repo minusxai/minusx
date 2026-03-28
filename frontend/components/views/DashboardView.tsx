@@ -454,7 +454,7 @@ export default function DashboardView({
           )}
 
           {/* Grid Layout */}
-          <Box position="relative" maxW="100%" pb={30}>
+          <Box position="relative" maxW="100%" pb={30} minH={"100%"}>
             {gridBackground}
 
             {questionIds.length > 0 ? (

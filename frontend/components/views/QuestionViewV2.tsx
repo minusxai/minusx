@@ -129,18 +129,12 @@ export default function QuestionViewV2({
   // Resizable panel state
   const [leftPanelWidth, setLeftPanelWidth] = useState(45); // percentage
   const [isResizing, setIsResizing] = useState(false);
-  const reduxCollapsedPanel = useAppSelector(selectQuestionCollapsedPanel);
-  const [userToggledPanel, setUserToggledPanel] = useState(false);
-  // Auto-derive: if user hasn't manually toggled, collapse query panel when data exists
-  const collapsedPanel = userToggledPanel
-    ? reduxCollapsedPanel
-    : (queryData ? 'left' : 'none');
+  const collapsedPanel = useAppSelector(selectQuestionCollapsedPanel);
   const resizeStartX = useRef<number>(0);
   const resizeStartWidth = useRef<number>(45);
   const rafRef = useRef<number | null>(null);
   const dispatch = useAppDispatch();
   const toggleCollapsedPanel = useCallback((panel: 'none' | 'left' | 'right') => {
-    setUserToggledPanel(true);
     dispatch(setQuestionCollapsedPanel(panel));
   }, [dispatch]);
 
