@@ -10,12 +10,13 @@ import 'react-grid-layout/css/styles.css';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import JsonEditor from '../slides/JsonEditor';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectMergedContent, selectIsDirty, setEphemeral } from '@/store/filesSlice';
+import { selectMergedContent, selectIsDirty, setEphemeral, addQuestionToDashboard } from '@/store/filesSlice';
 import { editFile } from '@/lib/api/file-state';
 import { openFileModal, selectDashboardEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
 import { shallowEqual } from 'react-redux';
+import { QuestionBrowserPanel } from '../QuestionBrowserPanel';
 
 const EMPTY_PARAMS: Record<string, any> = {};
 const DASHBOARD_MIN_W = 2;
@@ -441,7 +442,7 @@ export default function DashboardView({
           )}
 
           {/* Grid Layout */}
-          <Box position="relative" maxW="100%" pb={30}>
+          <Box position="relative" maxW="100%" pb={30} minH={editMode ? '1500px' : 'auto'}>
             {gridBackground}
 
             {questionIds.length > 0 ? (
@@ -461,7 +462,6 @@ export default function DashboardView({
                 margin={[6, 6]}
                 isDraggable={editMode}
                 isResizable={editMode}
-                style={{ minHeight: editMode ? '1500px' : 'auto' }}
               >
                 {questionGridItems}
               </ResponsiveGridLayout>
@@ -490,35 +490,42 @@ export default function DashboardView({
               </Box>
             ) : (
               <Box position="relative" minHeight="1500px">
-                {/* Empty state overlay for edit mode */}
+                {/* Empty state overlay for edit mode - question browser */}
                 <Box
                   position="absolute"
-                  top="20%"
+                  top="5%"
                   left="50%"
-                  transform="translate(-50%, -50%)"
-                  bg="bg.elevated/75"
-                  p={8}
-                  borderRadius="lg"
-                  border="2px dashed"
-                  borderColor="border.muted"
-                  textAlign="center"
+                  transform="translateX(-50%)"
+                  maxW="500px"
+                  width="100%"
                 >
-                  <Box mb={4} display="inline-block">
-                    {(() => {
-                      const QuestionIcon = getFileTypeMetadata('question').icon;
-                      return <QuestionIcon size={64} strokeWidth={1.5} style={{ opacity: 0.3 }} />;
-                    })()}
-                  </Box>
-                  <Text fontSize="lg" fontWeight="600" mb={2} color="fg.default">
-                    Add questions to the dashboard
-                  </Text>
-                  <Text color="fg.muted" fontSize="sm" maxW="sm">
-                    Use sidebar to add questions, or just ask {agentName} to do it!
-                  </Text>
+                  <QuestionBrowserPanel
+                    folderPath={folderPath}
+                    onAddQuestion={(questionId) => {
+                      dispatch(addQuestionToDashboard({ dashboardId: fileId, questionId }));
+                    }}
+                    excludedIds={questionIds}
+                    title="Let's add some questions!"
+                  />
                 </Box>
               </Box>
             )}
+
+            {/* Add Questions Panel - after last card in edit mode */}
+            {editMode && questionIds.length > 0 && (
+              <Box mt={4} maxW="500px" mx="auto" position="relative" zIndex={10}>
+                <QuestionBrowserPanel
+                  folderPath={folderPath}
+                  onAddQuestion={(questionId) => {
+                    dispatch(addQuestionToDashboard({ dashboardId: fileId, questionId }));
+                  }}
+                  excludedIds={questionIds}
+                  title="Add more questions"
+                />
+              </Box>
+            )}
           </Box>
+
         </>
       )}
 

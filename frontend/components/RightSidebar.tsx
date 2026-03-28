@@ -4,11 +4,10 @@ import { useState, useEffect, useRef, ReactNode } from 'react';
 import { Box, VStack, HStack, Text, Icon, IconButton } from '@chakra-ui/react';
 import { LuChevronRight, LuChevronLeft, LuGripVertical, LuChevronDown, LuRefreshCw } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { setRightSidebarCollapsed, setRightSidebarWidth, setActiveSidebarSection, selectRightSidebarUIState, selectDashboardEditMode } from '@/store/uiSlice';
-import { setFiles, selectMergedContent, addQuestionToDashboard } from '@/store/filesSlice';
-import { QuestionBrowserPanel } from './QuestionBrowserPanel';
+import { setRightSidebarCollapsed, setRightSidebarWidth, setActiveSidebarSection, selectRightSidebarUIState } from '@/store/uiSlice';
+import { setFiles } from '@/store/filesSlice';
 import QuestionSchemaSection from './QuestionSchemaSection';
-import { DocumentContent, FileType } from '@/lib/types';
+import { FileType } from '@/lib/types';
 import SchemaTreeView from './SchemaTreeView';
 import Markdown from './Markdown';
 import ChatInterface from './explore/ChatInterface';
@@ -89,47 +88,15 @@ export default function RightSidebar({
     activeConversation.executionState === 'EXECUTING'
   );
 
-  // Dashboard edit mode detection
-  const isDashboard = appState?.type === 'file' && appState.state.fileState.type === 'dashboard';
-  const dashboardEditMode = useAppSelector(state =>
-    appState?.type === 'file' && isDashboard ? selectDashboardEditMode(state, appState.state.fileState.id) : false
-  );
-
   // Auto-open sidebar sections based on state changes
-  // Priority: chat running > user's explicit selection > default dashboard edit behavior
   useEffect(() => {
     if (showChat && isChatRunning) {
       // When chat starts running, always switch to chat section
       dispatch(setRightSidebarCollapsed(false));
       dispatch(setActiveSidebarSection('chat'));
-    } else if (isDashboard && dashboardEditMode && !activeSidebarSection) {
-      // Only auto-open questions section if no section is currently active
-      // This prevents overriding user's explicit choice (e.g., staying in chat)
-      dispatch(setRightSidebarCollapsed(false));
-      dispatch(setActiveSidebarSection('questions'));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isChatRunning, dashboardEditMode, dispatch]);
-
-  // Get dashboard content for question IDs (needed for excludedIds)
-  const dashboardContent = useAppSelector(state =>
-    appState?.type === 'file' && isDashboard ? selectMergedContent(state, appState.state.fileState.id) as DocumentContent | undefined : undefined
-  );
-
-  // Extract folder path from file path (for QuestionBrowserPanel)
-  const dashboardFolderPath = filePath ? filePath.substring(0, filePath.lastIndexOf('/')) || '/' : '/';
-
-  // Get excluded question IDs from dashboard assets
-  const excludedQuestionIds = dashboardContent?.assets
-    ?.filter(a => a.type === 'question' && 'id' in a)
-    ?.map(a => (a as { type: 'question'; id: number }).id) || [];
-
-  // Handler for adding questions to dashboard
-  const handleAddQuestionToDashboard = (questionId: number) => {
-    if (appState?.type === 'file' && isDashboard) {
-      dispatch(addQuestionToDashboard({ dashboardId: appState.state.fileState.id, questionId }));
-    }
-  };
+  }, [isChatRunning, dispatch]);
 
   // Refresh handler - fetch fresh connections
   // Note: Contexts are now loaded as files and will refresh via useFile cache invalidation
@@ -202,11 +169,6 @@ export default function RightSidebar({
 
   // Determine which sections to show
   const sections: SidebarSectionMetadata[] = [];
-
-  // Questions section - only visible for dashboards in edit mode (shown first)
-  if (isDashboard && dashboardEditMode && appState?.type === 'file') {
-    sections.push(getSidebarSection('questions'));
-  }
 
   // Context Selector section - only visible when onContextChange is provided
   if (onContextChange) {
@@ -545,15 +507,6 @@ export default function RightSidebar({
                         {section.id === 'question-references' && (
                           <Box p={0} maxH="calc(100vh - 200px)" overflowY="auto">
                             <QuestionSchemaSection />
-                          </Box>
-                        )}
-                        {section.id === 'questions' && appState?.type === 'file' && (
-                          <Box p={0} maxH="calc(100vh - 200px)" overflowY="auto">
-                            <QuestionBrowserPanel
-                              folderPath={dashboardFolderPath}
-                              onAddQuestion={handleAddQuestionToDashboard}
-                              excludedIds={excludedQuestionIds}
-                            />
                           </Box>
                         )}
                       </Box>

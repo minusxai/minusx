@@ -4,10 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Box, VStack, HStack, Text, Icon, Dialog, Portal } from '@chakra-ui/react';
 import { LuX, LuMove } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { setActiveSidebarSection, selectDashboardEditMode } from '@/store/uiSlice';
-import { selectMergedContent, addQuestionToDashboard } from '@/store/filesSlice';
-import { QuestionBrowserPanel } from './QuestionBrowserPanel';
-import { DocumentContent } from '@/lib/types';
+import { setActiveSidebarSection } from '@/store/uiSlice';
 import { AppState } from '@/lib/appState';
 import SchemaTreeView from './SchemaTreeView';
 import Markdown from './Markdown';
@@ -63,44 +60,12 @@ export default function MobileRightSidebar({
   const dragStartY = useRef<number>(0);
   const dragStartPosition = useRef<number>(80);
 
-  // Dashboard edit mode detection
-  const isDashboard = appState?.type === 'file' && appState.state.fileState.type === 'dashboard';
-  const dashboardEditMode = useAppSelector(state =>
-    appState?.type === 'file' && isDashboard ? selectDashboardEditMode(state, appState.state.fileState.id) : false
-  );
-
-  // Get dashboard content for question IDs (needed for excludedIds)
-  const dashboardContent = useAppSelector(state =>
-    appState?.type === 'file' && isDashboard ? selectMergedContent(state, appState.state.fileState.id) as DocumentContent | undefined : undefined
-  );
-
-  // Extract folder path from file path (for QuestionBrowserPanel)
-  const dashboardFolderPath = filePath ? filePath.substring(0, filePath.lastIndexOf('/')) || '/' : '/';
-
-  // Get excluded question IDs from dashboard assets
-  const excludedQuestionIds = dashboardContent?.assets
-    ?.filter(a => a.type === 'question' && 'id' in a)
-    ?.map(a => (a as { type: 'question'; id: number }).id) || [];
-
-  // Handler for adding questions to dashboard
-  const handleAddQuestionToDashboard = (questionId: number) => {
-    if (appState?.type === 'file' && isDashboard) {
-      dispatch(addQuestionToDashboard({ dashboardId: appState.state.fileState.id, questionId }));
-    }
-  };
-
-
   // Min/max limits for icon bar position
   const MIN_POSITION = 15; // 15% from top
   const MAX_POSITION = 75; // 85% from top
 
   // Build sections array
   const sections: SidebarSectionMetadata[] = [];
-
-  // Questions section - only visible for dashboards in edit mode (shown first)
-  if (isDashboard && dashboardEditMode && appState?.type === 'file') {
-    sections.push(getSidebarSection('questions'));
-  }
 
   // Context Selector section - only visible when onContextChange is provided
   if (onContextChange) {
@@ -375,15 +340,6 @@ export default function MobileRightSidebar({
                 </Box>
               )}
 
-              {activeSection === 'questions' && appState?.type === 'file' && (
-                <Box p={0} maxH="calc(75vh - 60px)" overflowY="auto">
-                  <QuestionBrowserPanel
-                    folderPath={dashboardFolderPath}
-                    onAddQuestion={handleAddQuestionToDashboard}
-                    excludedIds={excludedQuestionIds}
-                  />
-                </Box>
-              )}
             </Box>
           </Dialog.Content>
         </Dialog.Positioner>
