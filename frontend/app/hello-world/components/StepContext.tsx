@@ -18,7 +18,7 @@ import type { ContextContent, DatabaseContext } from '@/lib/types';
 
 const TYPEWRITER_SPEED = 35;
 
-const AGENT_DESCRIBE_MESSAGE = 'Write the data documentation for this knowledge base. Look at the schema, describe what the database contains, what the key tables are, and a tl;dr on what kinds of questions can be answered.';
+const AGENT_DESCRIBE_MESSAGE = 'Write the data documentation for this database.';
 
 interface StepContextProps {
   connectionName: string;

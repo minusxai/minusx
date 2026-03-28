@@ -17,10 +17,7 @@ import type { CompletedToolCall } from '@/lib/types';
 
 const TYPEWRITER_SPEED = 35;
 
-const DASHBOARD_PROMPT = `You are on an empty dashboard page. Add 3-4 interesting questions to this dashboard that showcase different aspects of the data.
-Use varied visualization types (line, bar, pie, table).
-Cover different analysis angles: trends over time, distributions, breakdowns by category.
-Use the EditDashboard tool to add questions directly to this dashboard.`;
+const DASHBOARD_PROMPT = `Let's build the dashboard!`;
 
 interface StepGeneratingProps {
   connectionName: string;
@@ -205,7 +202,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
             {isDone ? 'Your dashboard is ready!' : isGenerating ? 'Building your dashboard...' : 'Build a starter dashboard'}
           </Heading>
         )}
-        <Text color="fg.muted" fontSize="sm" maxW="450px">
+        <Text color="fg.muted" fontSize="sm">
           {isDone
             ? 'MinusX created questions and assembled them into a dashboard for you.'
             : isGenerating
@@ -219,12 +216,12 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
       {!hasStarted && (
         <Box>
           <Text fontSize="sm" fontWeight="500" mb={2}>
-            Any specific focus? <Text as="span" color="fg.subtle">(optional)</Text>
+            Anything specific you want the agent to focus on? <Text as="span" color="fg.subtle">(optional)</Text>
           </Text>
           <Input
             value={userPreference}
             onChange={(e) => setUserPreference(e.target.value)}
-            placeholder="e.g., focus on revenue trends and customer retention"
+            placeholder="e.g., focus on revenue over time and order distribution across X categories"
             fontFamily="mono"
             fontSize="sm"
           />

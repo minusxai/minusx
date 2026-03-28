@@ -10,7 +10,7 @@ from .agent import AnalystAgent
 from .tools import SearchDBSchema, EditFile, ExecuteQuery, CreateFile
 
 
-ONBOARDING_MAX_STEPS = 10  # Keep it fast — schema scan + a few edits
+ONBOARDING_MAX_STEPS = 15  # Keep it fast — schema scan + a few edits
 
 
 @register_agent
@@ -44,7 +44,12 @@ Look at the schema below, then write concise markdown documentation for this kno
     - **You can ONLY edit the `content` field of doc entries within versions** — do NOT modify `databases`, `whitelist`, `published`, `evals`, `fullSchema`, `childPaths`, or `draft`
     - Each doc entry has: `content` (markdown text), optional `childPaths` (which child folders inherit this doc), optional `draft` (if true, excluded from agent-facing output). Only `content` is editable.
     - To edit docs, use EditFile with oldMatch/newMatch targeting the `"content"` string value within a doc entry
-- Write 100-300 words of markdown: a title, a short description of what the database contains, a list of key tables (group them into 2-3 groups if there are too many tables) with one-line descriptions, and a "What you can ask" section.
+- Write 100-300 words of markdown: 
+  - a title
+  - a short description of what the database contains
+  - a list of key tables (group them into 2-3 groups if there are too many tables) with one-line descriptions
+  - some key metrics that can be calculated from the data (e.g. "total revenue", "conversion rate"). No need to mention obvious metrics like "count of rows" or "number of users" unless there's something interesting about them.
+  - a "What you can ask" section
 - DO NOT mention every single table/column — focus on the most important ones. Be concise.
 - Be factual — only describe what you see in the schema. Do not invent data.
 - You can use ExecuteQuery to run a quick SQL query if you need to explore specific data (e.g., sample rows, distinct values). But don't query every table or column — focus on the schema.
@@ -145,21 +150,39 @@ The dashboard in AppState has this content shape:
 - Minimum width/height for a question is 3.
 
 ## Workflow
-1. Call SearchDBSchema once to see the full column details.
+1. Call SearchDBSchema once to see the full column details, if context is not sufficient.
 2. For each question (3-4 total):
    a. Optionally run ExecuteQuery to verify the SQL works.
    b. Call CreateFile to create the question (it returns a virtual ID).
-3. After all questions are created, call EditFile on the dashboard to add all questions to `assets` and `layout` in one edit.
+3. After all questions are created, call EditFile on the dashboard to add all questions to `assets` and `layout` in one edit. You have to Edit the dashboard you already have in AppState, not a new one, since the frontend creates a dashboard file with a specific ID at the start of onboarding.
 
 ## Guidelines
-- Create 3-4 questions that showcase different aspects of the data.
-- Use varied visualization types (line, bar, pie, table, etc.).
+- Create 4-6 questions that showcase different aspects of the data.
+- Use varied visualization types (line, bar, pie, area, trend, etc.).
 - Cover different analysis angles: trends, distributions, breakdowns, summaries.
 - Write clear, short names and descriptions for each question.
 - Keep SQL simple and readable — these are starter queries for a new user.
-- Lay out the dashboard in a 2-column grid (w=6 each) for a clean look.
+- The questions and dashboard need to be at path `/org`. The dashboard should be named "Getting Started Dashboard" and the questions can be named after their question (e.g. "Revenue by Categories").
 - You have at most {min(DASHBOARD_MAX_STEPS, MAX_STEPS_LOWER_LEVEL - 5)} tool calls. Be efficient — batch the final dashboard edit into one EditFile call.
-- No need to narrate what you're doing — just build the dashboard."""
+- No need to narrate what you're doing — just build the dashboard.
+- No need for a long summary at the end — the user can see the dashboard and questions in the UI. You can just end with a helpful sentence like I've built a starter dashboard with 4 questions: a line chart showing X trend, a bar chart comparing Y across categories, a pie chart showing Z distribution, etc.
+- Rely on the context. No need to investigate the data about areas the context already covers. Focus on creating interesting questions based on the schema and context.
+## Some good dashboard templates to consider:
+- Sales Performance Dashboard: 
+  - Row 1: 3 trend plots on top row (they are small so can fit 3-4)
+  - Row 2: a bar chart of revenue or orders or customer count split by some dimension, across time (months or weeks). An area chart with with some other metric split by some dimension across time. Remember, the bar and area plot will show as stacked bars on the splits.
+  - Row 3: a pie chart showing distribution of some key metric across categories, or if you are really confident with a flow, a funnel chart showing conversion across steps in a funnel (e.g. website visits -> product views -> add to cart -> purchase)
+
+- Customer Analysis Dashboard:
+    - Row 1: a trend plot showing total customers, a pie chart showing distribution of customers across some dimension
+    - Row 2: a bar chart showing revenue or orders or customer count split by some dimension, across time (months or weeks). An area chart with with some other metric split by some dimension across time.
+    - Row 3: A line chart showing a key metric (e.g. revenue, orders, customer count) across time, split by a key dimension (e.g. product category, customer segment). This will show as multiple lines on the same chart, so choose a dimension with not too many values (ideally under 10) to keep it readable.
+
+- Ads Performance Dashboard:
+    - Row 1: a trend plot showing total ad spend, a pie chart showing distribution of spend across channels
+    - Row 2: a bar chart showing total spend or conversions split by some dimension, across time (months or weeks). An area chart with with some other metric split by some dimension across time.
+    - Row 3: A line chart showing a key metric (e.g. conversions, click through rate) across time, split by a key dimension (e.g. ad type, channel). This will show as multiple lines on the same chart, so choose a dimension with not too many values (ideally under 10) to keep it readable).
+"""
 
         return {"role": "system", "content": content}
 
