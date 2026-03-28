@@ -9,7 +9,7 @@ import { useConnections } from '@/lib/hooks/useConnections';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { createVirtualFile, editFile, publishFile } from '@/lib/api/file-state';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { createConversation, selectActiveConversation, selectConversation } from '@/store/chatSlice';
+import { createConversation, selectActiveConversation, selectConversation, interruptChat } from '@/store/chatSlice';
 import { selectAugmentedFiles, compressAugmentedFile } from '@/lib/api/file-state';
 import Editor from '@monaco-editor/react';
 import Markdown from '@/components/Markdown';
@@ -297,6 +297,16 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
     setShowAgentFeed(true);
   }, [virtualFileId, dispatch, onRequestChat, connectionName, reduxState, connections, description]);
 
+  /** Skip: interrupt agent if running, save context without docs, advance */
+  const handleSkip = useCallback(async () => {
+    // Interrupt agent if running
+    if (activeConvId) {
+      dispatch(interruptChat({ conversationID: activeConvId }));
+    }
+    // Save as-is (handleSave already uses current description which may be empty)
+    await handleSave();
+  }, [activeConvId, dispatch, handleSave]);
+
   const totalTables = useMemo(() => {
     return schemas.reduce((sum, s) => sum + s.tables.length, 0);
   }, [schemas]);
@@ -555,12 +565,25 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
         <Text color="accent.danger" fontSize="sm">{error}</Text>
       )}
 
-      {/* Running indicator — teal dots above agent trace */}
+      {/* Running indicator + skip escape hatch */}
       {isAgentRunning && (
-        <HStack justify="center" gap={1} pt={2}>
-          <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out infinite' }} />
-          <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out 0.2s infinite' }} />
-          <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out 0.4s infinite' }} />
+        <HStack justify="space-between" align="center" pt={2}>
+          <HStack gap={1}>
+            <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out infinite' }} />
+            <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out 0.2s infinite' }} />
+            <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out 0.4s infinite' }} />
+          </HStack>
+          <Text
+            as="button"
+            fontSize="xs"
+            color="fg.subtle"
+            fontFamily="mono"
+            cursor="pointer"
+            _hover={{ color: 'fg.muted', textDecoration: 'underline' }}
+            onClick={handleSkip}
+          >
+            Skip & figure out later
+          </Text>
         </HStack>
       )}
 

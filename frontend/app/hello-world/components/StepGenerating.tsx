@@ -5,7 +5,7 @@ import { Box, VStack, HStack, Text, Heading, Button, Icon, Collapsible, Input } 
 import { LuSparkles, LuRocket, LuLayoutDashboard, LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { createConversation, selectActiveConversation, selectConversation } from '@/store/chatSlice';
+import { createConversation, selectActiveConversation, selectConversation, interruptChat } from '@/store/chatSlice';
 import { setNavigation, setActiveVirtualId } from '@/store/navigationSlice';
 import { createVirtualFile, editFile, publishAll, selectAugmentedFiles, compressAugmentedFile } from '@/lib/api/file-state';
 import { getStore } from '@/store/store';
@@ -75,7 +75,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
           content: {
             description: '',
             assets: [],
-            layout: [],
+            layout: { columns: 12, items: [] },
           },
           name: 'Getting Started',
           path: '/org/Getting Started',
@@ -166,6 +166,14 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     }
   }, [virtualDashboardId, router]);
 
+  /** Skip: interrupt agent, discard virtual files, go to /new/dashboard */
+  const handleSkip = useCallback(() => {
+    if (activeConvId) {
+      dispatch(interruptChat({ conversationID: activeConvId }));
+    }
+    router.push('/new/dashboard');
+  }, [activeConvId, dispatch, router]);
+
   const isDone = !isGenerating && hasStarted;
 
   return (
@@ -231,18 +239,31 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
       {/* Action buttons */}
       <HStack justify="center" gap={4}>
         {!isGenerating && !isDone && (
-          <Button
-            bg="accent.teal"
-            color="white"
-            _hover={{ opacity: 0.9 }}
-            size="sm"
-            fontFamily="mono"
-            onClick={handleGenerate}
-            disabled={!virtualDashboardId}
-          >
-            <LuSparkles size={14} />
-            Auto-generate dashboard
-          </Button>
+          <VStack gap={2}>
+            <Button
+              bg="accent.teal"
+              color="white"
+              _hover={{ opacity: 0.9 }}
+              size="sm"
+              fontFamily="mono"
+              onClick={handleGenerate}
+              disabled={!virtualDashboardId}
+            >
+              <LuSparkles size={14} />
+              Auto-generate dashboard
+            </Button>
+            <Text
+              as="button"
+              fontSize="xs"
+              color="fg.subtle"
+              fontFamily="mono"
+              cursor="pointer"
+              _hover={{ color: 'fg.muted', textDecoration: 'underline' }}
+              onClick={handleSkip}
+            >
+              Skip & build manually
+            </Text>
+          </VStack>
         )}
         {isDone && (
           <Button
@@ -258,10 +279,23 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
           </Button>
         )}
         {isGenerating && (
-          <HStack gap={1}>
-            <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out infinite' }} />
-            <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out 0.2s infinite' }} />
-            <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out 0.4s infinite' }} />
+          <HStack gap={3} align="center">
+            <HStack gap={1}>
+              <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out infinite' }} />
+              <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out 0.2s infinite' }} />
+              <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out 0.4s infinite' }} />
+            </HStack>
+            <Text
+              as="button"
+              fontSize="xs"
+              color="fg.subtle"
+              fontFamily="mono"
+              cursor="pointer"
+              _hover={{ color: 'fg.muted', textDecoration: 'underline' }}
+              onClick={handleSkip}
+            >
+              Skip & build manually
+            </Text>
           </HStack>
         )}
       </HStack>
