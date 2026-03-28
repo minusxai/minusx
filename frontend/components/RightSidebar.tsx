@@ -13,7 +13,7 @@ import Markdown from './Markdown';
 import ChatInterface from './explore/ChatInterface';
 import AccessTokenManager from './AccessTokenManager';
 import DevToolsPanel from './DevToolsPanel';
-import { resolvePath } from '@/lib/mode/path-resolver';
+import { resolvePath, resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { Tooltip } from './ui/tooltip';
 import { useContext } from '@/lib/hooks/useContext';
 import { useAppState } from '@/lib/hooks/file-state-hooks';
@@ -170,8 +170,12 @@ export default function RightSidebar({
   // Determine which sections to show
   const sections: SidebarSectionMetadata[] = [];
 
-  // Context Selector section - only visible when onContextChange is provided
-  if (onContextChange) {
+  // Context Selector section - only visible when onContextChange is provided AND multiple contexts exist
+  const homeFolder = currentUser ? resolveHomeFolderSync(currentUser.mode, currentUser.home_folder || '') : '';
+  const filesState = useAppSelector(state => state.files.files);
+  const contextFileCount = currentUser ? Object.values(filesState)
+    .filter(file => file.type === 'context' && file.path.startsWith(homeFolder) && file.id > 0).length : 0;
+  if (onContextChange && contextFileCount > 1) {
     sections.push(getSidebarSection('context'));
   }
 
