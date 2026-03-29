@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { useAppSelector } from '@/store/hooks';
 import { selectMergedContent, selectEffectiveName } from '@/store/filesSlice';
@@ -21,7 +22,7 @@ interface SmartEmbeddedQuestionContainerProps {
   index?: number;  // Optional index for numbering (e.g., #01, #02)
 }
 
-export default function SmartEmbeddedQuestionContainer({
+function SmartEmbeddedQuestionContainerInner({
   questionId,
   externalParameters,
   externalParamValues,
@@ -154,3 +155,15 @@ export default function SmartEmbeddedQuestionContainer({
     </>
   );
 }
+
+// Custom comparator: skip re-render when only unstable callback refs change (onEdit/onRemove
+// are inline arrow functions in DashboardView's questionGridItems useMemo, so they're always
+// new references when hoveredParamKey changes — ignoring them prevents 77-render cascades).
+export default React.memo(SmartEmbeddedQuestionContainerInner, (prev, next) =>
+  prev.questionId === next.questionId &&
+  prev.externalParameters === next.externalParameters &&
+  prev.externalParamValues === next.externalParamValues &&
+  prev.showTitle === next.showTitle &&
+  prev.editMode === next.editMode &&
+  prev.index === next.index
+);

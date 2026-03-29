@@ -1,5 +1,6 @@
 'use client';
 
+import React from 'react';
 import { Box, Button, VStack, Text, Spinner, HStack } from '@chakra-ui/react';
 import { ConversationSummary } from '@/app/api/conversations/route';
 import FileTypeBadge from '../FileTypeBadge';
@@ -85,7 +86,7 @@ interface ConversationItemProps {
   onClick: () => void;
 }
 
-function ConversationItem({ conversation, isActive, onClick }: ConversationItemProps) {
+const ConversationItem = React.memo(function ConversationItem({ conversation, isActive, onClick }: ConversationItemProps) {
   // Format timestamp to relative time
   const getRelativeTime = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -136,4 +137,4 @@ function ConversationItem({ conversation, isActive, onClick }: ConversationItemP
       </VStack>
     </Box>
   );
-}
+});

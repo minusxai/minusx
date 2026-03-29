@@ -1,11 +1,13 @@
 'use client';
 
-import { useState, useEffect, useRef, ReactNode } from 'react';
+import { useState, useEffect, useRef, ReactNode, useMemo } from 'react';
 import { Box, VStack, HStack, Text, Icon, IconButton } from '@chakra-ui/react';
 import { LuChevronRight, LuChevronLeft, LuGripVertical, LuChevronDown, LuRefreshCw } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setRightSidebarCollapsed, setRightSidebarWidth, setActiveSidebarSection, selectRightSidebarUIState } from '@/store/uiSlice';
 import { setFiles } from '@/store/filesSlice';
+import { createSelector } from '@reduxjs/toolkit';
+import type { RootState } from '@/store/store';
 import QuestionSchemaSection from './QuestionSchemaSection';
 import { FileType } from '@/lib/types';
 import SchemaTreeView from './SchemaTreeView';
@@ -36,6 +38,19 @@ export interface RightSidebarProps {
   selectedContextPath?: string | null;  // Selected context path for dropdown
   onContextChange?: (path: string | null, version?: number) => void;  // Context change callback
 }
+
+// Per-instance memoized selector factory — avoids O(n) Object.values scan on every Redux state change.
+// Created once per component instance via useMemo so the memoization cache is isolated per sidebar.
+const makeSelectContextFileCount = () =>
+  createSelector(
+    [(state: RootState) => state.files.files, (_: RootState, homeFolder: string) => homeFolder],
+    (files, homeFolder) =>
+      homeFolder
+        ? Object.values(files).filter(
+            file => file.type === 'context' && file.path.startsWith(homeFolder) && file.id > 0
+          ).length
+        : 0
+  );
 
 // ============================================================================
 // Right Sidebar Component
@@ -172,9 +187,8 @@ export default function RightSidebar({
 
   // Context Selector section - only visible when onContextChange is provided AND multiple contexts exist
   const homeFolder = currentUser ? resolveHomeFolderSync(currentUser.mode, currentUser.home_folder || '') : '';
-  const filesState = useAppSelector(state => state.files.files);
-  const contextFileCount = currentUser ? Object.values(filesState)
-    .filter(file => file.type === 'context' && file.path.startsWith(homeFolder) && file.id > 0).length : 0;
+  const selectContextFileCount = useMemo(() => makeSelectContextFileCount(), []);
+  const contextFileCount = useAppSelector(state => selectContextFileCount(state, homeFolder));
   if (onContextChange && contextFileCount > 1) {
     sections.push(getSidebarSection('context'));
   }

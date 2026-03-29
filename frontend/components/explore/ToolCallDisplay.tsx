@@ -1,25 +1,23 @@
 'use client';
 
 import { useSelector } from 'react-redux';
+import { useMemo } from 'react';
 import { Grid, GridItem, VStack } from '@chakra-ui/react';
 import { CompletedToolCall } from '@/lib/types';
 import { getToolConfig } from '@/lib/api/tool-config';
 import type { RootState } from '@/store/store';
 import UserInputComponent from './UserInputComponent';
 import { DisplayProps } from '@/lib/types';
+import { makeSelectConversationByToolCallId } from '@/store/chatSlice';
 
 
 export default function ToolCallDisplay({ toolCallTuple, databaseName, isCompact, showThinking, markdownContext}: DisplayProps) {
   const [toolCall] = toolCallTuple;
   const functionName = toolCall.function.name;
 
-  // Check if this tool has pending user inputs
-  const conversation = useSelector((state: RootState) => {
-    // Find conversation containing this tool call
-    return Object.values(state.chat.conversations).find(conv =>
-      conv.pending_tool_calls.some(p => p.toolCall.id === toolCall.id)
-    );
-  });
+  // Per-instance memoized selector — avoids O(n×m) scan on every Redux state change
+  const selectConversation = useMemo(() => makeSelectConversationByToolCallId(), []);
+  const conversation = useSelector((state: RootState) => selectConversation(state, toolCall.id));
 
   const pendingTool = conversation?.pending_tool_calls.find(
     p => p.toolCall.id === toolCall.id
