@@ -31,8 +31,9 @@ import { screen, waitFor, within, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import * as storeModule from '@/store/store';
-import { setFile } from '@/store/filesSlice';
+import { setFile, setEdit, addQuestionToDashboard, selectDirtyFiles } from '@/store/filesSlice';
 import { setDashboardEditMode } from '@/store/uiSlice';
+import { publishAll } from '@/lib/api/file-state';
 import type { DashboardContent } from '@/lib/types.gen';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import FileHeader from '@/components/FileHeader';
@@ -194,6 +195,148 @@ describe('Dashboard UI — manual interactions', () => {
       ([url, init]) => typeof url === 'string' && url.includes(`/api/files/${DASHBOARD_ID}`) && init?.method?.toUpperCase() === 'PATCH'
     );
     expect(saveCalls).toHaveLength(1);
+  });
+
+  it('publishAll saves virtual question first then virtual dashboard with resolved references', async () => {
+    const Q_VID = -1;
+    const DASH_VID = -2;
+    const REAL_Q_ID = 10;
+    const REAL_DASH_ID = 11;
+    const Q_NAME = 'Revenue Query';
+    const DASH_NAME = 'New Dashboard';
+
+    // Seed virtual files into Redux with negative IDs
+    testStore.dispatch(setFile({
+      file: {
+        id: Q_VID,
+        name: Q_NAME,
+        type: 'question' as const,
+        path: `/org/${Q_NAME}`,
+        content: { query: '', vizSettings: { type: 'table' as const }, database_name: '' },
+        created_at: '',
+        updated_at: '',
+        references: [] as number[],
+        version: 1,
+        last_edit_id: null,
+        company_id: 1,
+      },
+      references: [],
+    }));
+    testStore.dispatch(setFile({
+      file: {
+        id: DASH_VID,
+        name: DASH_NAME,
+        type: 'dashboard' as const,
+        path: `/org/${DASH_NAME}`,
+        content: { assets: [], layout: null },
+        created_at: '',
+        updated_at: '',
+        references: [] as number[],
+        version: 1,
+        last_edit_id: null,
+        company_id: 1,
+      },
+      references: [],
+    }));
+
+    // Make the question dirty and link it to the dashboard
+    testStore.dispatch(setEdit({
+      fileId: Q_VID,
+      edits: { query: 'SELECT revenue FROM sales', vizSettings: { type: 'table' as const }, database_name: 'default' },
+    }));
+    testStore.dispatch(addQuestionToDashboard({ dashboardId: DASH_VID, questionId: Q_VID }));
+
+    // Track batch-create calls to assert save order
+    const batchCreateBodies: Array<{ files: Array<{ virtualId: number; type: string; content: unknown }> }> = [];
+
+    global.fetch = jest.fn().mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      const method = init?.method?.toUpperCase() ?? 'GET';
+
+      if (method === 'POST' && url.includes('/api/files/batch-create')) {
+        const body = JSON.parse(init?.body as string) as typeof batchCreateBodies[number];
+        batchCreateBodies.push(body);
+        const callIndex = batchCreateBodies.length;
+
+        if (callIndex === 1) {
+          // First call: question (has no virtual-ID refs)
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              data: [{
+                virtualId: Q_VID,
+                file: {
+                  id: REAL_Q_ID,
+                  name: Q_NAME,
+                  type: 'question',
+                  path: `/org/${Q_NAME}`,
+                  content: { query: 'SELECT revenue FROM sales', vizSettings: { type: 'table' }, database_name: 'default' },
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString(),
+                  references: [],
+                  version: 1,
+                  last_edit_id: null,
+                  company_id: 1,
+                },
+              }],
+            }),
+          };
+        }
+
+        // Second call: dashboard (refs resolved to real question ID)
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: [{
+              virtualId: DASH_VID,
+              file: {
+                id: REAL_DASH_ID,
+                name: DASH_NAME,
+                type: 'dashboard',
+                path: `/org/${DASH_NAME}`,
+                content: { assets: [{ type: 'question', id: REAL_Q_ID }], layout: { columns: 12, items: [] } },
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                references: [REAL_Q_ID],
+                version: 1,
+                last_edit_id: null,
+                company_id: 1,
+              },
+            }],
+          }),
+        };
+      }
+
+      return { ok: true, status: 200, json: async () => ({ data: null }) };
+    });
+
+    await act(async () => {
+      await publishAll();
+    });
+
+    // Two separate batch-create calls (one per topological level)
+    expect(batchCreateBodies).toHaveLength(2);
+
+    // First call: question only (no unresolved virtual refs)
+    const firstFiles = batchCreateBodies[0].files;
+    expect(firstFiles).toHaveLength(1);
+    expect(firstFiles[0].virtualId).toBe(Q_VID);
+    expect(firstFiles[0].type).toBe('question');
+
+    // Second call: dashboard, and its assets already contain the REAL question ID
+    const secondFiles = batchCreateBodies[1].files;
+    expect(secondFiles).toHaveLength(1);
+    expect(secondFiles[0].virtualId).toBe(DASH_VID);
+    expect(secondFiles[0].type).toBe('dashboard');
+
+    const savedDashContent = secondFiles[0].content as DashboardContent;
+    expect(savedDashContent.assets?.some(a => (a as { id: number }).id === REAL_Q_ID)).toBe(true);
+
+    // After publishAll, no dirty files remain
+    const remaining = selectDirtyFiles(testStore.getState());
+    expect(remaining).toHaveLength(0);
   });
 
   it('enters and exits edit mode via the Edit / Cancel toggle', async () => {

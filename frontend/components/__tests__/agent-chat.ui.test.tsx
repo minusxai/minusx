@@ -21,6 +21,20 @@
  */
 
 // Must be hoisted before any module imports
+jest.mock('@/lib/auth/auth-helpers', () => ({
+  getEffectiveUser: jest.fn().mockResolvedValue({
+    userId: 1,
+    email: 'test@example.com',
+    name: 'Test User',
+    role: 'admin',
+    companyId: 1,
+    companyName: 'test-company',
+    home_folder: '/org',
+    mode: 'org',
+  }),
+  isAdmin: jest.fn().mockReturnValue(true),
+}));
+
 jest.mock('@/lib/database/db-config', () => {
   const path = require('path');
   return {
@@ -59,15 +73,19 @@ function AgentFileResult() {
   const questions = Object.values(files).filter(f => f.type === 'question');
   return (
     <div aria-label="agent file results">
-      {questions.map(q => (
-        <div
-          key={q.id}
-          role="article"
-          aria-label={q.name || 'Untitled Question'}
-        >
-          {q.name || 'Untitled Question'}
-        </div>
-      ))}
+      {questions.map(q => {
+        // metadataChanges.name wins over file.name (set via setMetadataEdit)
+        const effectiveName = q.metadataChanges?.name ?? q.name ?? 'Untitled Question';
+        return (
+          <div
+            key={q.id}
+            role="article"
+            aria-label={effectiveName}
+          >
+            {effectiveName}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -94,6 +112,20 @@ describe('Agent-driven UI — chat interactions', () => {
         includesUrl: ['localhost:3000/api/chat'],
         startsWithUrl: ['/api/chat'],
         handler: chatPostHandler,
+      },
+    ],
+    // createVirtualFile() fetches a file template — return a minimal question template
+    additionalInterceptors: [
+      async (urlStr: string, init?: RequestInit) => {
+        const method = init?.method?.toUpperCase() ?? 'GET';
+        if (method === 'POST' && urlStr.includes('/api/files/template')) {
+          const body = JSON.parse(init?.body as string) as { type: string };
+          const content = body.type === 'question'
+            ? { query: '', vizSettings: { type: 'table' }, database_name: '', parameters: [] }
+            : { assets: [], layout: { columns: 12, items: [] } };
+          return { ok: true, status: 200, json: async () => ({ data: { content, fileName: '', metadata: { availableDatabases: [] } } }) } as Response;
+        }
+        return null;
       },
     ],
   });
@@ -177,34 +209,27 @@ describe('Agent-driven UI — chat interactions', () => {
     let realConvId = CONV_ID;
     await waitFor(
       () => {
-        const temp = selectConversation(
-          testStore.getState() as RootState,
-          CONV_ID
-        );
+        const temp = selectConversation(testStore.getState() as RootState, CONV_ID);
         if (temp?.forkedConversationID) {
           realConvId = temp.forkedConversationID;
         }
-        const conv = selectConversation(
-          testStore.getState() as RootState,
-          realConvId
-        );
-        return conv?.executionState === 'FINISHED';
+        const conv = selectConversation(testStore.getState() as RootState, realConvId);
+        // Throw so waitFor keeps polling until FINISHED
+        expect(conv?.executionState).toBe('FINISHED');
       },
       { timeout: 40000 }
     );
 
     // The conversation should have finished without errors
-    const finalConv = selectConversation(
-      testStore.getState() as RootState,
-      realConvId
-    );
-    expect(finalConv?.executionState).toBe('FINISHED');
+    const finalConv = selectConversation(testStore.getState() as RootState, realConvId);
     expect(finalConv?.error).toBeUndefined();
 
     // The new question file should now exist in Redux state
+    // Name is set via setMetadataEdit → lives in metadataChanges.name, not file.name
     const filesState = testStore.getState().files.files;
     const createdQuestion = Object.values(filesState).find(
-      f => f.type === 'question' && f.name === 'Total Revenue'
+      f => f.type === 'question' &&
+           (f.metadataChanges?.name ?? f.name) === 'Total Revenue'
     );
     expect(createdQuestion).toBeDefined();
 

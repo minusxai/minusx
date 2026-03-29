@@ -1,7 +1,7 @@
 /** @type {import('jest').Config} */
 const config = {
   preset: 'ts-jest',
-  testEnvironment: 'jest-environment-jsdom',
+  testEnvironment: '<rootDir>/test/setup/jest-env-jsdom-fetch.js',
   testTimeout: 45000,
   setupFilesAfterEnv: [
     '<rootDir>/jest.setup.js',
@@ -21,6 +21,11 @@ const config = {
     // everything under echarts/* gets the empty stub here.
     '^echarts/.+': '<rootDir>/test/setup/style-mock.js',
   },
+  // Override jsdom's default 'browser' export condition so packages like
+  // jsonpath-plus resolve their Node CJS build instead of the browser ESM build.
+  testEnvironmentOptions: {
+    customExportConditions: ['require', 'node', 'node-addons'],
+  },
   // Custom resolver: retries .cjs → .js fallback for @zag-js packages
   // whose dist/index.js requires sibling .cjs files that weren't shipped.
   resolver: '<rootDir>/test/setup/jest-cjs-resolver.js',
@@ -29,7 +34,7 @@ const config = {
     '**/__tests__/**/*.ui.test.ts',
   ],
   transformIgnorePatterns: [
-    'node_modules/(?!(next-auth|@auth)/)',
+    'node_modules/(?!(next-auth|@auth|jsonpath-plus)/)',
   ],
   transform: {
     '^.+\\.tsx?$': ['ts-jest', {
