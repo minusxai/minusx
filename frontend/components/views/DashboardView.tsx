@@ -412,7 +412,7 @@ export default function DashboardView({
   };
 
   return (
-    <Box flex="1" data-file-id={fileId}>
+    <Box flex="1" data-file-id={fileId} role="region" aria-label="Dashboard">
 
       {/* JSON View */}
       {activeTab === 'json' && (
