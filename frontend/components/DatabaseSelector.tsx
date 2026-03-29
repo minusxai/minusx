@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { useAppSelector } from '@/store/hooks';
+import { selectConnectionsLoading } from '@/store/filesSlice';
 import { LuDatabase } from 'react-icons/lu';
 import GenericSelector, { SelectorOption } from './GenericSelector';
 
@@ -34,9 +35,7 @@ export default function DatabaseSelector({
   }, [connectionsMap, allowedDatabaseNames]);
 
   // Check if connections are loading from Redux (this fixes the "No connection" flash bug)
-  const connectionsLoading = useAppSelector(state =>
-    Object.values(state.files.files).some(f => f.type === 'connection' && f.loading === true)
-  );
+  const connectionsLoading = useAppSelector(selectConnectionsLoading);
 
   return (
     <GenericSelector

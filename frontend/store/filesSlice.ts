@@ -1044,6 +1044,28 @@ export const selectDirtyFiles = createSelector(
     ) as FileState[]
 );
 
+export const selectConnectionsLoading = createSelector(
+  [(state: RootState) => state.files.files],
+  (files) => Object.values(files).some(f => f.type === 'connection' && f.loading === true)
+);
+
+export const selectConnectionIds = createSelector(
+  [(state: RootState) => state.files.files],
+  (files) => Object.values(files)
+    .filter(f => f.type === 'connection' && f.id > 0)
+    .map(f => f.id as number)
+);
+
+export const selectDashboardFiles = createSelector(
+  [(state: RootState) => state.files.files],
+  (files) => Object.values(files).filter(f => f.type === 'dashboard' && f.id > 0)
+);
+
+export const selectQuestionFiles = createSelector(
+  [(state: RootState) => state.files.files],
+  (files) => Object.values(files).filter(f => f.type === 'question' && f.id > 0)
+);
+
 // ============================================================================
 // BACKWARDS COMPATIBILITY: Connection selectors
 // ============================================================================

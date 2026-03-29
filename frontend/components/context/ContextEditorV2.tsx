@@ -24,6 +24,7 @@ import Editor, { DiffEditor } from '@monaco-editor/react';
 import Markdown from '../Markdown';
 import DocumentHeader from '../DocumentHeader';
 import { useAppSelector } from '@/store/hooks';
+import { selectConnectionsLoading } from '@/store/filesSlice';
 import { HIDDEN_SYSTEM_FOLDERS } from '@/lib/mode/path-resolver';
 
 interface ContextEditorV2Props {
@@ -117,9 +118,7 @@ export default function ContextEditorV2({
   const [docViewModes, setDocViewModes] = useState<Record<number, 'editor' | 'preview' | 'diff' | null>>({});
 
   // Get connections loading state from Redux (for loading indicator)
-  const isLoading = useAppSelector(state =>
-    Object.values(state.files.files).some(f => f.type === 'connection' && f.loading)
-  );
+  const isLoading = useAppSelector(selectConnectionsLoading);
 
   // Use fullSchema from content (what parent makes available)
   // This ensures hierarchical filtering - children can only whitelist from parent's whitelist

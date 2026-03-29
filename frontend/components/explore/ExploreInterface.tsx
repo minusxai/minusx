@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box, HStack, VStack, Flex } from '@chakra-ui/react';
 import ChatInterface from './ChatInterface';
@@ -111,14 +111,13 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
   // Track mobile state (default to false for SSR, update on client)
   const [isMobile, setIsMobile] = useState(false);
 
-  const handleConversationSelect = (id?: number) => {
-    // Navigate to conversation or new conversation page
+  const handleConversationSelect = useCallback((id?: number) => {
     if (id) {
       router.push(`/explore/${id}`);
     } else {
       router.push('/explore');
     }
-  };
+  }, [router]);
 
   // Open right sidebar when explore page loads
   useEffect(() => {

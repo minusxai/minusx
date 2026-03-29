@@ -6,7 +6,7 @@
  */
 import { Box } from '@chakra-ui/react';
 import { useAppSelector } from '@/store/hooks';
-import { selectMergedContent, selectEffectiveName, type FileId } from '@/store/filesSlice';
+import { selectMergedContent, selectEffectiveName, selectConnectionIds, type FileId } from '@/store/filesSlice';
 import { setFiles } from '@/store/filesSlice';
 import { useAppDispatch } from '@/store/hooks';
 import { useFile } from '@/lib/hooks/file-state-hooks';
@@ -37,11 +37,7 @@ export default function TransformationContainerV2({ fileId }: TransformationCont
     editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes: { content: updates } });
   }, [fileId]);
 
-  const connectionIds = useAppSelector(state =>
-    Object.values(state.files.files)
-      .filter(f => f.type === 'connection' && f.id > 0)
-      .map(f => f.id as number)
-  );
+  const connectionIds = useAppSelector(selectConnectionIds);
 
   const handleRunNow = useCallback(async (runMode?: 'full' | 'test_only') => {
     await trigger({ run_mode: runMode });

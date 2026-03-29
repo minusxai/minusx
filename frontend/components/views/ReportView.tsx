@@ -14,7 +14,7 @@ import Markdown from '@/components/Markdown';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { useAppSelector } from '@/store/hooks';
 import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
-import { selectIsDirty } from '@/store/filesSlice';
+import { selectIsDirty, selectDashboardFiles, selectQuestionFiles } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
 
 interface ReportViewProps {
@@ -137,16 +137,11 @@ export default function ReportView({
     };
   }, [isResizing, handleResizeMove, handleResizeEnd]);
 
-  // Get available dashboards and questions from Redux
+  // Get available dashboards and questions from Redux — memoized selectors avoid O(n) scan on every file change
+  const dashboards = useAppSelector(selectDashboardFiles);
+  const questions = useAppSelector(selectQuestionFiles);
+  // By-ID dictionary for reference lookups (O(1) access)
   const files = useAppSelector(state => state.files.files);
-  const dashboards = useMemo(() =>
-    Object.values(files).filter(f => f.type === 'dashboard' && f.id > 0),
-    [files]
-  );
-  const questions = useMemo(() =>
-    Object.values(files).filter(f => f.type === 'question' && f.id > 0),
-    [files]
-  );
 
   // Create collections for select dropdowns
   const questionCollection = useMemo(() => createListCollection({

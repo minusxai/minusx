@@ -140,6 +140,9 @@ export default function ChatInterface({
   const isNewConversation = !providedConversationId;
   const conversationID = conversation?.conversationID;
 
+  // Stable callback — inline arrow would defeat React.memo on SimpleChatMessage (re-renders all messages each streaming chunk)
+  const toggleShowThinking = useCallback(() => setShowThinking(prev => !prev), []);
+
   // Single unified source for all messages (completed, streaming, pending)
   const allMessages = useMemo(() => {
     if (!conversation) return [];
@@ -578,7 +581,7 @@ export default function ChatInterface({
                         databaseName={selectedDatabase || ''}
                         isCompact={isCompact}
                         showThinking={showThinking}
-                        toggleShowThinking={() => setShowThinking(!showThinking)}
+                        toggleShowThinking={toggleShowThinking}
                         markdownContext={container === 'sidebar' ? 'sidebar' : 'mainpage'}
                     />
                 })
