@@ -11,7 +11,7 @@
  * - Shows old results while editing query
  * - Background refetch for stale data
  */
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectMergedContent, setEphemeral, type FileId } from '@/store/filesSlice';
 import { selectProposedQuery } from '@/store/uiSlice';
@@ -58,6 +58,27 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
   // whether on the file page, inside a dashboard, or in the PublishModal right-pane —
   // will run the up-to-date query, not whatever lastExecuted holds from a prior session.
   const hasAutoExecutedRef = useRef(false);
+
+  // Fetch estimated duration for the current query from analytics history
+  const [queryEstimatedDurationMs, setQueryEstimatedDurationMs] = useState<number | null>(null);
+  useEffect(() => {
+    const q = queryToExecute.query;
+    const db = queryToExecute.database;
+    if (!q || !db) return;
+    fetch('/api/query-estimate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: q, params: queryToExecute.params, database: db }),
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (d?.data?.estimated_duration_ms != null) {
+          setQueryEstimatedDurationMs(d.data.estimated_duration_ms);
+        }
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryToExecute.query, queryToExecute.database]);
 
   // Phase 3: Use useQueryResult hook for query execution with caching
   const { data: queryData, loading: queryLoading, error: queryError, isStale: queryStale } = useQueryResult(
@@ -154,6 +175,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
       queryLoading={queryLoading}
       queryError={queryError}
       queryStale={queryStale}
+      queryEstimatedDurationMs={queryEstimatedDurationMs}
       lastSubmittedParamValues={lastExecuted?.params}
       proposedQuery={containerMode === 'preview' ? undefined : proposedQuery}
       originalQuery={originalQuery}

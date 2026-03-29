@@ -103,7 +103,8 @@ export interface QueryResult {
   columns: string[];
   types: string[];
   rows: Record<string, any>[];
-  id?: string;  // query hash for delta deduplication
+  id?: string;        // query hash for delta deduplication
+  cachedAt?: number;  // Unix timestamp (ms) when result was cached; absent on cache miss
 }
 
 export interface CompressedQueryResult {

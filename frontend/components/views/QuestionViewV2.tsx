@@ -76,6 +76,9 @@ interface QuestionViewV2Props {
   // Hide viz type buttons and viz settings toggle (chart still renders)
   showVizControls?: boolean;
 
+  // Estimated query duration from analytics history (shown during loading)
+  queryEstimatedDurationMs?: number | null;
+
   // Handlers
   onChange: (updates: Partial<QuestionContent>) => void;
   onParameterValueChange?: (paramName: string, value: string | number | null) => void;  // Ephemeral
@@ -96,6 +99,7 @@ export default function QuestionViewV2({
   originalQuery,
   mode = 'view',
   showVizControls = true,
+  queryEstimatedDurationMs,
   onChange,
   onParameterValueChange,
   onExecute,
@@ -870,6 +874,7 @@ export default function QuestionViewV2({
                 loading={queryLoading && !queryData}
                 error={queryError}
                 data={queryData}
+                queryEstimatedDurationMs={queryEstimatedDurationMs}
                 onVizTypeChange={handleVizTypeChange}
                 onAxisChange={handleAxisChange}
                 onPivotConfigChange={handlePivotConfigChange}

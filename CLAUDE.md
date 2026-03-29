@@ -83,6 +83,8 @@ The `import-db` script supports:
 
 **Analytics DuckDB** (`frontend/lib/analytics/file-analytics.db.ts`) — has no migration framework. `initSchema()` runs `CREATE TABLE/INDEX IF NOT EXISTS` once per process restart, which is a no-op on existing databases. To add new columns to an existing table, append `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` guards to `SCHEMA_SQL` after the relevant `CREATE TABLE` block. These guards are idempotent (no-op on fresh installs) and fire automatically on each server restart.
 
+**App Event Registry** (`frontend/lib/app-event-registry/`) — a lightweight server-side pub/sub system for app-level events (file operations, LLM calls, query executions, etc.). API routes publish typed events via `appEventRegistry.publish(AppEvents.X, payload)`; analytics handlers subscribe centrally in `index.ts` rather than being scattered across call sites. Always use this pattern when adding new analytics tracking — never call analytics functions directly from API routes or business logic.
+
 ## High-Level Architecture
 
 ### Dual-Database System
