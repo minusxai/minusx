@@ -1031,16 +1031,18 @@ export const selectFileLoadError = (state: RootState, id: FileId): LoadError | n
  * System files (connection, config, styles, context) are excluded:
  * they save in-place and are discarded on navigation-away anyway.
  */
-export const selectDirtyFiles = (state: RootState): FileState[] => {
-  return Object.values(state.files.files).filter(file =>
-    file &&
-    !SYSTEM_FILE_TYPES_SET.has(file.type) &&
-    (
-      (file.persistableChanges && Object.keys(file.persistableChanges).length > 0) ||
-      (file.metadataChanges && (file.metadataChanges.name !== undefined || file.metadataChanges.path !== undefined))
-    )
-  ) as FileState[];
-};
+export const selectDirtyFiles = createSelector(
+  [(state: RootState) => state.files.files],
+  (files): FileState[] =>
+    Object.values(files).filter(file =>
+      file &&
+      !SYSTEM_FILE_TYPES_SET.has(file.type) &&
+      (
+        (file.persistableChanges && Object.keys(file.persistableChanges).length > 0) ||
+        (file.metadataChanges && (file.metadataChanges.name !== undefined || file.metadataChanges.path !== undefined))
+      )
+    ) as FileState[]
+);
 
 // ============================================================================
 // BACKWARDS COMPATIBILITY: Connection selectors
