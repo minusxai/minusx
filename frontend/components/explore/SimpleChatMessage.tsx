@@ -23,7 +23,7 @@ interface ChatMessageProps {
   markdownContext?: 'sidebar' | 'mainpage';
 }
 
-export default function SimpleChatMessage({ message, databaseName, isCompact = false, showThinking = false, toggleShowThinking, markdownContext = 'mainpage' }: ChatMessageProps) {
+const SimpleChatMessage = React.memo(function SimpleChatMessage({ message, databaseName, isCompact = false, showThinking = false, toggleShowThinking, markdownContext = 'mainpage' }: ChatMessageProps) {
   // Handle debug messages (admin-only) - only show if there are LLM calls
   if (message.role === 'debug') {
     const debugInfo = message as any as MessageDebugInfo;
@@ -38,7 +38,9 @@ export default function SimpleChatMessage({ message, databaseName, isCompact = f
 
   const isUser = message.role === 'user';
   const isTool = message.role === 'tool';
-  const hasContent = !!message.content && JSON.stringify(message.content).trim().length > 0;
+  const hasContent = !!message.content && (
+    typeof message.content === 'string' ? message.content.trim().length > 0 : true
+  );
   const userColSpan = isCompact ? 12 : { base: 12, md: 8 };
   const userColStart = isCompact ? 1 : { base: 1, md: 5};
 
@@ -128,4 +130,6 @@ export default function SimpleChatMessage({ message, databaseName, isCompact = f
         </Grid>
     )
   }
-}
+});
+
+export default SimpleChatMessage;

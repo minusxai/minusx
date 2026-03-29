@@ -262,7 +262,7 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
   }, [shouldGuardInAppNavigation, openGuardModal]);
 
   return (
-    <NavigationGuardContext.Provider value={{ navigate }}>
+    <NavigationGuardContext.Provider value={useMemo(() => ({ navigate }), [navigate])}>
       {children}
 
       {/* Unsaved Changes Navigation Modal */}

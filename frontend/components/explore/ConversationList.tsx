@@ -1,5 +1,6 @@
 'use client';
 
+import React, { useCallback } from 'react';
 import { Box, Button, VStack, Text, Spinner, HStack } from '@chakra-ui/react';
 import { ConversationSummary } from '@/app/api/conversations/route';
 import FileTypeBadge from '../FileTypeBadge';
@@ -71,7 +72,7 @@ export function ConversationList({
             key={conv.id}
             conversation={conv}
             isActive={conv.id === currentConversationId}
-            onClick={() => onSelectConversation(conv.id)}
+            onSelect={onSelectConversation}
           />
         ))}
       </VStack>
@@ -82,10 +83,12 @@ export function ConversationList({
 interface ConversationItemProps {
   conversation: ConversationSummary;
   isActive: boolean;
-  onClick: () => void;
+  onSelect: (id: number) => void;
 }
 
-function ConversationItem({ conversation, isActive, onClick }: ConversationItemProps) {
+const ConversationItem = React.memo(function ConversationItem({ conversation, isActive, onSelect }: ConversationItemProps) {
+  const handleClick = useCallback(() => onSelect(conversation.id), [onSelect, conversation.id]);
+
   // Format timestamp to relative time
   const getRelativeTime = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -112,7 +115,7 @@ function ConversationItem({ conversation, isActive, onClick }: ConversationItemP
       borderWidth={isActive ? 1 : 0}
       borderColor="border.muted"
       _hover={{ bg: "bg.muted"}}
-      onClick={onClick}
+      onClick={handleClick}
       transition="all 0.15s"
     >
       <VStack align="stretch" gap={0.5}>
@@ -136,4 +139,4 @@ function ConversationItem({ conversation, isActive, onClick }: ConversationItemP
       </VStack>
     </Box>
   );
-}
+});

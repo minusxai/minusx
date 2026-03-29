@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box, HStack, VStack, Flex } from '@chakra-ui/react';
 import ChatInterface from './ChatInterface';
@@ -44,15 +44,18 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
   const [selectedVersion, setSelectedVersion] = useState<number | undefined>(storedContextVersion);
 
   // Find home context (any context file that is direct child of homeFolder)
-  const filesState = useAppSelector(state => state.files.files);
   const homeFolder = user ? resolveHomeFolderSync(user.mode, user.home_folder || '') : '/org';
 
-  const homeContext = Object.values(filesState).find(file => {
-    if (file.type !== 'context') return false;
-    const relativePath = file.path.substring(homeFolder.length);
-    if (!relativePath.startsWith('/')) return false;
-    const remainingSegments = relativePath.split('/').filter(Boolean);
-    return remainingSegments.length === 1; // Direct child
+  const homeContext = useAppSelector(state => {
+    const files = state.files.files;
+    for (const file of Object.values(files)) {
+      if (file.type !== 'context') continue;
+      const relativePath = file.path.substring(homeFolder.length);
+      if (!relativePath.startsWith('/')) continue;
+      const remainingSegments = relativePath.split('/').filter(Boolean);
+      if (remainingSegments.length === 1) return file;
+    }
+    return null;
   });
   const homeContextPath = homeContext?.path;
 
@@ -84,13 +87,13 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
   // stays after the context fully loads with multi-version options, causing a display mismatch in
   // ContextSelector (currentValue doesn't match any versioned option → GenericSelector falls back
   // to options[0], making it look like the selection was reset).
-  const selectedContextFile = useAppSelector(state =>
-    selectedContextPath
-      ? Object.values(state.files.files).find(
-          f => f.type === 'context' && f.path === selectedContextPath
-        ) ?? null
-      : null
-  );
+  const selectedContextFile = useAppSelector(state => {
+    if (!selectedContextPath) return null;
+    for (const file of Object.values(state.files.files)) {
+      if (file?.type === 'context' && file.path === selectedContextPath) return file;
+    }
+    return null;
+  });
   useEffect(() => {
     if (!selectedContextPath || selectedVersion !== undefined) return;
     const content = selectedContextFile?.content as ContextContent | undefined;
@@ -108,14 +111,13 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
   // Track mobile state (default to false for SSR, update on client)
   const [isMobile, setIsMobile] = useState(false);
 
-  const handleConversationSelect = (id?: number) => {
-    // Navigate to conversation or new conversation page
+  const handleConversationSelect = useCallback((id?: number) => {
     if (id) {
       router.push(`/explore/${id}`);
     } else {
       router.push('/explore');
     }
-  };
+  }, [router]);
 
   // Open right sidebar when explore page loads
   useEffect(() => {

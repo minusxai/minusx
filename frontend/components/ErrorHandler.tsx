@@ -20,6 +20,9 @@ export function GlobalErrorHandler() {
       // ResizeObserver loop errors are benign (browser fires them during layout shifts)
       if (event.message?.includes('ResizeObserver')) return;
 
+      // Ignore errors thrown by browser extensions — they're not our code
+      if (event.filename?.startsWith('chrome-extension://') || event.filename?.startsWith('moz-extension://')) return;
+
       const msg = event.error?.message || event.message || '';
 
       // React hydration errors are recoverable — React automatically re-renders on the client.

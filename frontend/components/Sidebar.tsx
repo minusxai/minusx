@@ -13,7 +13,6 @@ import ImpersonationSelector from './ImpersonationSelector';
 import CreateMenu from './CreateMenu';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
-import { selectFile } from '@/store/filesSlice';
 import { toggleLeftSidebar, selectShowDebug, selectShowAdvanced, toggleColorMode } from '@/store/uiSlice';
 import { APP_VERSION } from '@/lib/constants';
 import { exitImpersonation } from '@/lib/navigation/url-utils';
@@ -97,9 +96,9 @@ export default function Sidebar() {
   const fileIdMatch = pathname.match(/^\/f\/(\d+)/);
   const currentFileId = fileIdMatch ? parseInt(fileIdMatch[1], 10) : null;
 
-  // Get current file using selector (only if on file page)
-  const currentFile = useAppSelector(state =>
-    currentFileId ? selectFile(state, currentFileId) : undefined
+  // Only read file.path — avoids re-rendering when file content updates during streaming
+  const currentFilePath = useAppSelector(state =>
+    currentFileId ? state.files.files[currentFileId]?.path : undefined
   );
 
   // Extract current path for folder modal and new files
@@ -108,14 +107,14 @@ export default function Sidebar() {
     if (pathname.startsWith('/p/')) {
       return pathname.replace('/p', '');
     }
-    if (currentFile?.path) {
+    if (currentFilePath) {
       // Extract parent path from file's path
-      const pathParts = currentFile.path.split('/');
+      const pathParts = currentFilePath.split('/');
       pathParts.pop(); // Remove filename
       return pathParts.join('/') || '/';
     }
     return '/';
-  }, [pathname, currentFile]);
+  }, [pathname, currentFilePath]);
 
   const handleToggleSidebar = () => {
     dispatch(toggleLeftSidebar());
@@ -129,44 +128,43 @@ export default function Sidebar() {
   // Get user mode for mode-aware navigation
   const mode = effectiveUser?.mode || 'org';
   const effectiveDir = currentPath === '/' ? encodeURIComponent('/org') : encodeURIComponent(currentPath);
-  const rawNavSections: NavSection[] = [
-    {
-      category: 'Analytics',
-      items: [
-        { href: '/explore', icon: <FILE_TYPE_METADATA.explore.icon />, label: FILE_TYPE_METADATA.explore.label },
-        { href: `/new/question?folder=${effectiveDir}`, icon: <FILE_TYPE_METADATA.question.icon />, label: 'New Question' },
-        { href: `/new/dashboard?folder=${effectiveDir}`, icon: <FILE_TYPE_METADATA.dashboard.icon />, label: 'New Dashboard' },
-      ],
-    },
-    {
-      category: 'Engineering',
-      items: [
-        { href: `/p/${mode}/database`, icon: <FILE_TYPE_METADATA.connection.icon />, label: FILE_TYPE_METADATA.connection.label, adminOnly: true },
-        { href: `/new/connection`, icon: <LuDatabaseZap />, label: 'New DB Connection', adminOnly: true },
-      ],
-    },
-    {
-      category: 'Debug',
-      items: [
-        { href: '/recordings', icon: <FILE_TYPE_METADATA.session.icon />, label: FILE_TYPE_METADATA.session.label, adminOnly: true },
-        { href: `/p/${mode}/logs`, icon: <FILE_TYPE_METADATA.conversation.icon />, label: FILE_TYPE_METADATA.conversation.label, adminOnly: true },
-      ]
-    }
-  ];
-
   const userIsAdmin = effectiveUser?.role && isAdmin(effectiveUser.role);
-  const navSections = rawNavSections
-    .filter(section => {
-      if (section.category === 'Debug' && !showDebug) {
-        return false;
+
+  // Build and filter nav sections inside useMemo so JSX icon expressions are only evaluated
+  // when mode/effectiveDir/showDebug/userIsAdmin actually change (not on every streaming render)
+  const navSections = useMemo(() => {
+    const raw: NavSection[] = [
+      {
+        category: 'Analytics',
+        items: [
+          { href: '/explore', icon: <FILE_TYPE_METADATA.explore.icon />, label: FILE_TYPE_METADATA.explore.label },
+          { href: `/new/question?folder=${effectiveDir}`, icon: <FILE_TYPE_METADATA.question.icon />, label: 'New Question' },
+          { href: `/new/dashboard?folder=${effectiveDir}`, icon: <FILE_TYPE_METADATA.dashboard.icon />, label: 'New Dashboard' },
+        ],
+      },
+      {
+        category: 'Engineering',
+        items: [
+          { href: `/p/${mode}/database`, icon: <FILE_TYPE_METADATA.connection.icon />, label: FILE_TYPE_METADATA.connection.label, adminOnly: true },
+          { href: `/new/connection`, icon: <LuDatabaseZap />, label: 'New DB Connection', adminOnly: true },
+        ],
+      },
+      {
+        category: 'Debug',
+        items: [
+          { href: '/recordings', icon: <FILE_TYPE_METADATA.session.icon />, label: FILE_TYPE_METADATA.session.label, adminOnly: true },
+          { href: `/p/${mode}/logs`, icon: <FILE_TYPE_METADATA.conversation.icon />, label: FILE_TYPE_METADATA.conversation.label, adminOnly: true },
+        ]
       }
-      return true;
-    })
-    .map(section => ({
-      ...section,
-      items: section.items.filter((item: NavItem) => !item.adminOnly || userIsAdmin),
-    }))
-    .filter(section => section.items.length > 0);
+    ];
+    return raw
+      .filter(section => !(section.category === 'Debug' && !showDebug))
+      .map(section => ({
+        ...section,
+        items: section.items.filter((item: NavItem) => !item.adminOnly || userIsAdmin),
+      }))
+      .filter(section => section.items.length > 0);
+  }, [showDebug, userIsAdmin, mode, effectiveDir]);
 
   return (
     <Box

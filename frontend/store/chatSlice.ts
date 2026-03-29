@@ -535,4 +535,30 @@ export const selectActiveConversation = createSelector(
   }
 );
 
+// Memoized selector for new (temp) conversations — avoids Object.keys scan on every Redux change
+export const selectActiveTempConversation = createSelector(
+  [(state: RootState) => state.chat.conversations],
+  (conversations): Conversation | undefined => {
+    const tempIds = Object.keys(conversations)
+      .map(Number)
+      .filter(id => id < 0)
+      .sort((a, b) => b - a);
+    for (const tempId of tempIds) {
+      const conv = conversations[tempId];
+      if (conv?.active && !conv.forkedConversationID) return conv;
+    }
+    return undefined;
+  }
+);
+
+// Per-instance selector factory — each ToolCallDisplay gets its own memoized instance
+export const makeSelectConversationByToolCallId = () =>
+  createSelector(
+    [(state: RootState) => state.chat.conversations, (_: RootState, toolCallId: string) => toolCallId],
+    (conversations, toolCallId) =>
+      Object.values(conversations).find(conv =>
+        conv.pending_tool_calls.some(p => p.toolCall.id === toolCallId)
+      )
+  );
+
 export default chatSlice.reducer;

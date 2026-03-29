@@ -10,7 +10,7 @@ import { AppState } from '@/lib/appState';
 import ChatInput from './ChatInput';
 import ThinkingIndicator from './ThinkingIndicator';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { createConversation, sendMessage, updateAgentArgs, interruptChat, selectOptionalConversation, setActiveConversation } from '@/store/chatSlice';
+import { createConversation, sendMessage, updateAgentArgs, interruptChat, selectOptionalConversation, setActiveConversation, selectActiveTempConversation } from '@/store/chatSlice';
 import { useConversation } from '@/lib/hooks/useConversation';
 import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -122,46 +122,26 @@ export default function ChatInterface({
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const userIsAdmin = effectiveUser?.role ? isAdmin(effectiveUser.role) : false;
 
-  // Single conversation selector - handles both existing and new conversations
-  // Uses active flag to find the global conversation
-  const conversation = useAppSelector(state => {
-    // Case 1: Existing conversation (from URL) - use loaded conversation
-    if (providedConversationId && loadedConversation) {
-      let conv = loadedConversation;
-      // Follow fork chain to get most recent version
-      while (conv?.forkedConversationID) {
-        conv = selectOptionalConversation(state, conv.forkedConversationID) || conv;
-      }
-      return conv;
+  // Case 1: existing conversation — follow fork chain from loaded conversation
+  const forkFollowedConversation = useAppSelector(state => {
+    if (!providedConversationId || !loadedConversation) return null;
+    let conv = loadedConversation;
+    while (conv?.forkedConversationID) {
+      conv = selectOptionalConversation(state, conv.forkedConversationID) || conv;
     }
-
-    // Case 2: New conversation - find active temp conversation (negative ID)
-    const conversations = state.chat.conversations;
-    const tempIds = Object.keys(conversations)
-      .map(Number)
-      .filter(id => id < 0)
-      .sort((a, b) => b - a); // Most negative = most recent
-
-    // Find first active temp conversation
-    for (const tempId of tempIds) {
-      let conv = conversations[tempId];
-
-      // Follow fork chain
-      while (conv?.forkedConversationID) {
-        conv = selectOptionalConversation(state, conv.forkedConversationID) || conv;
-      }
-
-      // Only use if active
-      if (conv && conv.active) {
-        return conv;
-      }
-    }
-
-    return undefined;
+    return conv;
   });
+
+  // Case 2: new conversation — memoized selector avoids Object.keys scan on every Redux change
+  const activeTempConversation = useAppSelector(selectActiveTempConversation);
+
+  const conversation = forkFollowedConversation ?? activeTempConversation;
 
   const isNewConversation = !providedConversationId;
   const conversationID = conversation?.conversationID;
+
+  // Stable callback — inline arrow would defeat React.memo on SimpleChatMessage (re-renders all messages each streaming chunk)
+  const toggleShowThinking = useCallback(() => setShowThinking(prev => !prev), []);
 
   // Single unified source for all messages (completed, streaming, pending)
   const allMessages = useMemo(() => {
@@ -169,25 +149,21 @@ export default function ChatInterface({
     return deduplicateMessages(conversation)
   }, [conversation?.messages, conversation?.streamedCompletedToolCalls, conversation?.pending_tool_calls]);
 
-  // Extract streaming info (thinking text + tool calls)
-  // Note: Not using useMemo because streamedCompletedToolCalls items are mutated during streaming
-  const getStreamingInfo = () => {
+  // Extract streaming info (thinking text + tool calls) — memoized to avoid JSON.parse loop on every render
+  const streamingInfo = useMemo(() => {
     if (!conversation?.streamedCompletedToolCalls) return { thinkingText: null, toolCalls: [] };
 
     let thinkingText: string | null = null;
     const toolCalls: string[] = [];
 
-    // Collect all tool calls and find thinking text
     for (let i = conversation.streamedCompletedToolCalls.length - 1; i >= 0; i--) {
       const msg = conversation.streamedCompletedToolCalls[i];
       const toolName = msg.function?.name;
 
-      // Skip TalkToUser for tool call list (it's the thinking text)
       if (toolName && toolName !== 'TalkToUser') {
         toolCalls.unshift(toolName);
       }
 
-      // Look for thinking text in TalkToUser messages
       if (!thinkingText && toolName === 'TalkToUser') {
         let content = '';
         try {
@@ -205,28 +181,18 @@ export default function ChatInterface({
         }
 
         if (content) {
-          // Parse thinking/answer blocks
           const parsed = parseThinkingAnswer(content);
           if (parsed && parsed.thinking.length > 0) {
-            // Get the last thinking block
             const lastThinking = parsed.thinking[parsed.thinking.length - 1];
-
-            // Truncate to 2 lines with "..."
             const lines = lastThinking.split('\n').filter(line => line.trim());
-            if (lines.length > 2) {
-              thinkingText = lines.slice(0, 2).join('\n') + '...';
-            } else {
-              thinkingText = lines.join('\n');
-            }
+            thinkingText = lines.length > 2 ? lines.slice(0, 2).join('\n') + '...' : lines.join('\n');
           }
         }
       }
     }
 
     return { thinkingText, toolCalls };
-  };
-
-  const streamingInfo = getStreamingInfo();
+  }, [conversation?.streamedCompletedToolCalls]);
 
 //   console.log('allmessages', allMessages);
 
@@ -291,12 +257,12 @@ export default function ChatInterface({
   // Only the explicit Stop button aborts requests
 
   // Check if user is at the bottom of the scroll container
-  const checkScrollPosition = () => {
+  const checkScrollPosition = useCallback(() => {
     if (!scrollContainerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50; // 50px threshold
+    const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
     setShowScrollButton(!isAtBottom && allMessages.length > 0);
-  };
+  }, [allMessages.length]);
 
   // Scroll to bottom smoothly
   const scrollToBottom = () => {
@@ -615,7 +581,7 @@ export default function ChatInterface({
                         databaseName={selectedDatabase || ''}
                         isCompact={isCompact}
                         showThinking={showThinking}
-                        toggleShowThinking={() => setShowThinking(!showThinking)}
+                        toggleShowThinking={toggleShowThinking}
                         markdownContext={container === 'sidebar' ? 'sidebar' : 'mainpage'}
                     />
                 })
