@@ -10,7 +10,7 @@ import { ChartBuilder } from '@/components/plotx/ChartBuilder';
 import { parseErrorMessage } from '@/lib/utils/error-parser';
 import { VizTypeSelector } from './VizTypeSelector';
 import type { QuestionContent, QueryResult, VizSettings, PivotConfig, ColumnFormatConfig } from '@/lib/types';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAppDispatch } from '@/store/hooks';
 import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -45,6 +45,8 @@ interface QuestionVisualizationProps {
 function QueryLoadingIndicator({ estimatedDurationMs }: { estimatedDurationMs?: number | null }) {
   const [dotCount, setDotCount] = useState(1);
   const [elapsed, setElapsed] = useState(0);
+  const [barWidth, setBarWidth] = useState(0);
+  const barStarted = useRef(false);
 
   useEffect(() => {
     const dotInterval = setInterval(() => {
@@ -59,11 +61,21 @@ function QueryLoadingIndicator({ estimatedDurationMs }: { estimatedDurationMs?: 
     };
   }, []);
 
+  // Start bar animation once when estimate first arrives (may be after mount)
+  useEffect(() => {
+    if (estimatedDurationMs == null || barStarted.current) return;
+    barStarted.current = true;
+    const id = requestAnimationFrame(() => setBarWidth(90));
+    return () => cancelAnimationFrame(id);
+  }, [estimatedDurationMs]);
+
   const estimateLabel = estimatedDurationMs != null
     ? estimatedDurationMs >= 1000
       ? `Est. ~${(estimatedDurationMs / 1000).toFixed(1)}s`
       : `Est. ~${estimatedDurationMs}ms`
     : null;
+
+  const barDurationS = estimatedDurationMs != null ? (estimatedDurationMs + 3000) / 1000 : 0;
 
   return (
     <VStack gap={2}>
@@ -73,6 +85,18 @@ function QueryLoadingIndicator({ estimatedDurationMs }: { estimatedDurationMs?: 
           {'.'.repeat(dotCount)}
         </Box>
       </Text>
+      {estimatedDurationMs != null && (
+        <Box w="200px" h="2px" bg="bg.muted" borderRadius="full" overflow="hidden">
+          <Box
+            h="full"
+            bg="accent.teal"
+            style={{
+              width: `${barWidth}%`,
+              transition: `width ${barDurationS}s linear`,
+            }}
+          />
+        </Box>
+      )}
       {estimateLabel && elapsed < 10 && (
         <Text fontSize="xs" color="fg.muted" fontFamily="mono">
           {estimateLabel}
