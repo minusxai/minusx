@@ -159,8 +159,8 @@ export default auth(async (req) => {
 
   // Onboarding detection: runs on /, /p/org*, and /hello-world (without step param)
   // Routes users to the correct onboarding step if setup is incomplete.
-//   const isHomePath = pathname === '/' || pathname === '/p/org' || pathname.startsWith('/p/org/');
-  const isHomePath = pathname === '/';
+  const isHomePath = pathname === '/' || pathname === '/p/org' || pathname.startsWith('/p/org/');
+// const isHomePath = pathname === '/';
   const isHelloWorldWithoutStep = pathname === '/hello-world' && !req.nextUrl.searchParams.get('step');
   const effectiveMode = (mode && isValidMode(mode)) ? mode : 'org';
 
