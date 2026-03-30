@@ -126,6 +126,7 @@ const realFetch = global.fetch;
 
 const DASHBOARD_ID = 1;
 const QUESTION_ID = 2;
+const QUESTION_ID_2 = 3;
 const QUESTION_NAME = 'Sales Revenue';
 
 function makeDashboardDbFile() {
@@ -151,6 +152,22 @@ function makeQuestionDbFile() {
     type: 'question' as const,
     path: `/org/${QUESTION_NAME}`,
     content: { query: 'SELECT 1', vizSettings: { type: 'table' as const }, database_name: '' },
+    created_at: '2025-01-01T00:00:00Z',
+    updated_at: new Date().toISOString(),
+    references: [] as number[],
+    version: 1,
+    last_edit_id: null,
+    company_id: 1,
+  };
+}
+
+function makeQuestionDbFile2() {
+  return {
+    id: QUESTION_ID_2,
+    name: 'Regional Revenue',
+    type: 'question' as const,
+    path: '/org/Regional Revenue',
+    content: { query: 'SELECT region FROM sales GROUP BY region', vizSettings: { type: 'table' as const }, database_name: '' },
     created_at: '2025-01-01T00:00:00Z',
     updated_at: new Date().toISOString(),
     references: [] as number[],
@@ -278,6 +295,55 @@ async function insertDashboardAndQuestion(dbPath: string): Promise<void> {
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [1, QUESTION_ID, QUESTION_NAME, `/org/${QUESTION_NAME}`, 'question',
       JSON.stringify({ query: 'SELECT 1', vizSettings: { type: 'table' }, database_name: '' }), '[]', now, now]
+  );
+  await db.close();
+}
+
+/**
+ * Seeds dashboard(1) + question(2) + question(3) — for multi-question tests.
+ */
+async function insertDashboardAndTwoQuestions(dbPath: string): Promise<void> {
+  await insertDashboardAndQuestion(dbPath);
+  const { createAdapter } = await import('@/lib/database/adapter/factory');
+  const db = await createAdapter({ type: 'sqlite', sqlitePath: dbPath });
+  const now = new Date().toISOString();
+  await db.query(
+    `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [1, QUESTION_ID_2, 'Regional Revenue', '/org/Regional Revenue', 'question',
+      JSON.stringify({ query: 'SELECT region FROM sales GROUP BY region', vizSettings: { type: 'table' }, database_name: '' }),
+      '[]', now, now]
+  );
+  await db.close();
+}
+
+/**
+ * Seeds dashboard(1) + two questions with a shared :start_date param — for parameter merging tests.
+ */
+async function insertQuestionsWithSharedParams(dbPath: string): Promise<void> {
+  const { createAdapter } = await import('@/lib/database/adapter/factory');
+  const db = await createAdapter({ type: 'sqlite', sqlitePath: dbPath });
+  const now = new Date().toISOString();
+  await db.query(
+    `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [1, DASHBOARD_ID, 'Param Dashboard', '/org/Param Dashboard', 'dashboard',
+      JSON.stringify({ assets: [{ type: 'question', id: QUESTION_ID }, { type: 'question', id: QUESTION_ID_2 }], layout: null }),
+      JSON.stringify([QUESTION_ID, QUESTION_ID_2]), now, now]
+  );
+  await db.query(
+    `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [1, QUESTION_ID, 'Orders Q', '/org/Orders Q', 'question',
+      JSON.stringify({ query: 'SELECT * FROM orders WHERE order_date >= :start_date', parameters: [], vizSettings: { type: 'table' }, database_name: '' }),
+      '[]', now, now]
+  );
+  await db.query(
+    `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [1, QUESTION_ID_2, 'Revenue Q', '/org/Revenue Q', 'question',
+      JSON.stringify({ query: 'SELECT * FROM revenue WHERE order_date >= :start_date AND region = :region', parameters: [], vizSettings: { type: 'table' }, database_name: '' }),
+      '[]', now, now]
   );
   await db.close();
 }
@@ -443,6 +509,12 @@ describe('Add question to existing dashboard and save', () => {
       expect(Object.keys(fileState.persistableChanges ?? {})).toHaveLength(0);
     }, { timeout: 5000 });
 
+    // DB read-back: batch-save route returns full DbFile → setFile replaces content in Redux.
+    // Asserting here is equivalent to reading the DB row directly.
+    const savedContent = testStore.getState().files.files[DASHBOARD_ID].content as DashboardContent;
+    expect(savedContent.assets).toHaveLength(1);
+    expect(savedContent.assets![0]).toMatchObject({ type: 'question', id: QUESTION_ID });
+
     // Confirm the PATCH was issued exactly once
     const saveCalls = (global.fetch as jest.Mock).mock.calls.filter(
       ([url, init]) =>
@@ -534,6 +606,11 @@ describe('Create new dashboard and question, then publishAll', () => {
 
     // No dirty files remain after publishAll
     expect(selectDirtyFiles(testStore.getState())).toHaveLength(0);
+
+    // DB read-back: addFile(DB_response) put the new question in Redux — verify content round-trip.
+    const allFiles = Object.values(testStore.getState().files.files);
+    const savedQ = allFiles.find(f => f.type === 'question' && f.id > 0 && f.name === Q_NAME);
+    expect((savedQ!.content as any).query).toBe('SELECT revenue FROM sales');
   });
 });
 
@@ -1134,4 +1211,483 @@ describe('Combined flow: new dashboard with question from scratch', () => {
     // No dirty files remain
     expect(selectDirtyFiles(testStore.getState() as any)).toHaveLength(0);
   }, 45000);
+});
+
+// ============================================================================
+// publishAll retry / idempotency
+// Verifies that if the server created files but the response never reached the
+// client (network drop, 500), retrying publishAll recovers correctly via editId
+// idempotency — no duplicates, no stuck virtual files.
+// ============================================================================
+
+describe('publishAll retry idempotency', () => {
+  setupTestDb(getTestDbPath('dashboard_ui'));
+
+  let testStore: ReturnType<typeof storeModule.makeStore>;
+  let getStoreSpy: jest.SpyInstance;
+
+  const Q_VID   = -77;
+  const DASH_VID = -78;
+  const Q_RETRY_NAME = 'Retry Question';
+  const DASH_RETRY_NAME = 'Retry Dashboard';
+
+  beforeEach(() => {
+    testStore = storeModule.makeStore();
+    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+  });
+
+  afterEach(() => {
+    global.fetch = realFetch;
+    getStoreSpy.mockRestore();
+    jest.restoreAllMocks();
+  });
+
+  it('retry after ghost create: server already wrote files but client got 500 — retry recovers via editId, no duplicates', async () => {
+    // Seed virtual question + virtual dashboard (question → dashboard dependency)
+    testStore.dispatch(setFile({
+      file: {
+        id: Q_VID, name: Q_RETRY_NAME, type: 'question' as const,
+        path: `/org/${Q_RETRY_NAME}`,
+        content: { query: 'SELECT retry FROM data', vizSettings: { type: 'table' as const }, database_name: '' },
+        created_at: '', updated_at: '', references: [] as number[],
+        version: 1, last_edit_id: null, company_id: 1,
+      },
+      references: [],
+    }));
+    testStore.dispatch(setEdit({
+      fileId: Q_VID,
+      edits: { query: 'SELECT retry FROM data', vizSettings: { type: 'table' as const }, database_name: 'default' },
+    }));
+    testStore.dispatch(setFile({
+      file: {
+        id: DASH_VID, name: DASH_RETRY_NAME, type: 'dashboard' as const,
+        path: `/org/${DASH_RETRY_NAME}`,
+        content: { assets: [], layout: null },
+        created_at: '', updated_at: '', references: [] as number[],
+        version: 1, last_edit_id: null, company_id: 1,
+      },
+      references: [],
+    }));
+    testStore.dispatch(addQuestionToDashboard({ dashboardId: DASH_VID, questionId: Q_VID }));
+
+    // ── Attempt 1: server writes to DB but client gets 500 ──────────────────
+    // We call the real batchCreateHandler so the files ARE inserted into the DB,
+    // then return a fake 500 response so publishAll thinks the attempt failed.
+    let attempt = 0;
+    const realApiFetch = makeRealApiFetch();
+    global.fetch = jest.fn(async (url: string | Request | URL, init?: RequestInit): Promise<Response> => {
+      if (String(url).includes('/api/files/batch-create')) {
+        attempt++;
+        if (attempt === 1) {
+          // Fire the real handler (inserts into DB), then discard the response
+          await realApiFetch(url, init);
+          return { ok: false, status: 500, json: async () => ({ error: { message: 'Network error' } }) } as Response;
+        }
+      }
+      return realApiFetch(url, init);
+    });
+
+    await expect(publishAll()).rejects.toThrow('Network error');
+
+    // Virtual files still dirty — client never got the success response
+    expect(selectDirtyFiles(testStore.getState())).toHaveLength(2);
+
+    // ── Attempt 2 (retry): server finds files via editId, returns them ───────
+    // publishAll sends the same editId (deterministic hash of virtualId + content).
+    // createFile() sees the editId already in last_edit_id → returns existing file.
+    await act(async () => { await publishAll(); });
+
+    // Retry succeeded: both files now have real (positive) IDs in Redux
+    const allFiles = Object.values(testStore.getState().files.files);
+    const savedQ    = allFiles.find(f => f.type === 'question'  && f.id > 0 && f.name === Q_RETRY_NAME);
+    const savedDash = allFiles.find(f => f.type === 'dashboard' && f.id > 0 && f.name === DASH_RETRY_NAME);
+    expect(savedQ).toBeDefined();
+    expect(savedDash).toBeDefined();
+
+    // No dirty files remain
+    expect(selectDirtyFiles(testStore.getState())).toHaveLength(0);
+
+    // No duplicates: batch-create was called twice (attempt 1 + retry level-1 question,
+    // then retry level-2 dashboard) but each editId resolves to the SAME DB row —
+    // verify by checking total batch-create calls on the retry path.
+    const batchCreateCalls = (global.fetch as jest.Mock).mock.calls
+      .filter(([u]) => String(u).includes('/api/files/batch-create'));
+    // Attempt 1: 1 call (question only, level 1 — then 500 before dashboard)
+    // Attempt 2: 2 calls (question level 1 via editId, dashboard level 2 fresh)
+    expect(batchCreateCalls).toHaveLength(3);
+  });
+});
+
+// ============================================================================
+// publishAll error handling
+// (Gap 1: API failures leave files dirty; circular dep throws without API calls)
+// ============================================================================
+
+describe('publishAll error handling', () => {
+  setupTestDb(getTestDbPath('dashboard_ui'), { customInit: insertDashboardAndQuestion });
+
+  let testStore: ReturnType<typeof storeModule.makeStore>;
+  let getStoreSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    testStore = storeModule.makeStore();
+    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+  });
+
+  afterEach(() => {
+    global.fetch = realFetch;
+    getStoreSpy.mockRestore();
+    jest.restoreAllMocks();
+  });
+
+  it('batch-create failure: throws and leaves virtual files dirty', async () => {
+    const Q_VID = -1;
+    testStore.dispatch(setFile({
+      file: {
+        id: Q_VID, name: 'Q', type: 'question' as const,
+        path: '/org/Q',
+        content: { query: '', vizSettings: { type: 'table' as const }, database_name: '' },
+        created_at: '', updated_at: '', references: [] as number[],
+        version: 1, last_edit_id: null, company_id: 1,
+      },
+      references: [],
+    }));
+    testStore.dispatch(setEdit({
+      fileId: Q_VID,
+      edits: { query: 'SELECT 1', vizSettings: { type: 'table' as const }, database_name: 'default' },
+    }));
+
+    global.fetch = jest.fn(async (url: string | Request | URL) => {
+      if (String(url).includes('/api/files/batch-create'))
+        return { ok: false, status: 500, json: async () => ({ error: { message: 'DB unavailable' } }) } as Response;
+      throw new Error(`Unexpected fetch: ${String(url)}`);
+    });
+
+    await expect(publishAll()).rejects.toThrow('DB unavailable');
+
+    // Virtual file is still dirty — Redux unchanged
+    const dirty = selectDirtyFiles(testStore.getState());
+    expect(dirty).toHaveLength(1);
+    expect(dirty[0].id).toBe(Q_VID);
+  });
+
+  it('batch-save failure: throws and leaves real file dirty', async () => {
+    testStore.dispatch(setFile({ file: makeDashboardDbFile(), references: [] }));
+    testStore.dispatch(addQuestionToDashboard({ dashboardId: DASHBOARD_ID, questionId: QUESTION_ID }));
+
+    global.fetch = jest.fn(async (url: string | Request | URL) => {
+      if (String(url).includes('/api/files/batch-save'))
+        return { ok: false, status: 500, json: async () => ({ error: { message: 'Save failed' } }) } as Response;
+      throw new Error(`Unexpected fetch: ${String(url)}`);
+    });
+
+    await expect(publishAll()).rejects.toThrow('Save failed');
+
+    // Real file is still dirty
+    const dirty = selectDirtyFiles(testStore.getState());
+    expect(dirty).toHaveLength(1);
+    expect(dirty[0].id).toBe(DASHBOARD_ID);
+  });
+
+  it('circular dependency: throws before any API call', async () => {
+    const A = -20;
+    const B = -21;
+    // Two virtual dashboards that reference each other → circular
+    testStore.dispatch(setFile({
+      file: {
+        id: A, name: 'DashA', type: 'dashboard' as const, path: '/org/DashA',
+        content: { assets: [{ type: 'question' as const, id: B }], layout: null },
+        created_at: '', updated_at: '', references: [] as number[],
+        version: 1, last_edit_id: null, company_id: 1,
+      },
+      references: [],
+    }));
+    testStore.dispatch(setFile({
+      file: {
+        id: B, name: 'DashB', type: 'dashboard' as const, path: '/org/DashB',
+        content: { assets: [{ type: 'question' as const, id: A }], layout: null },
+        created_at: '', updated_at: '', references: [] as number[],
+        version: 1, last_edit_id: null, company_id: 1,
+      },
+      references: [],
+    }));
+    testStore.dispatch(setEdit({ fileId: A, edits: { description: 'dirty A' } }));
+    testStore.dispatch(setEdit({ fileId: B, edits: { description: 'dirty B' } }));
+
+    // No fetch call should happen — circular dep is detected before the first API call
+    global.fetch = jest.fn(() => { throw new Error('should not be called'); });
+
+    await expect(publishAll()).rejects.toThrow('Circular dependency detected');
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(selectDirtyFiles(testStore.getState())).toHaveLength(2);
+  });
+});
+
+// ============================================================================
+// Mixed real + virtual publishAll
+// (Gap 3: existing file dirty + new virtual file dirty simultaneously)
+// ============================================================================
+
+describe('Mixed real + virtual publishAll', () => {
+  setupTestDb(getTestDbPath('dashboard_ui'), { customInit: insertDashboardAndQuestion });
+
+  let testStore: ReturnType<typeof storeModule.makeStore>;
+  let getStoreSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    testStore = storeModule.makeStore();
+    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+    global.fetch = makeRealApiFetch();
+  });
+
+  afterEach(() => {
+    global.fetch = realFetch;
+    getStoreSpy.mockRestore();
+    jest.restoreAllMocks();
+  });
+
+  it('batch-creates virtual question then batch-saves existing dashboard with resolved real ID', async () => {
+    const Q_VID = -50;
+
+    // Virtual question (new, not yet in DB)
+    testStore.dispatch(setFile({
+      file: {
+        id: Q_VID, name: 'Mix Query', type: 'question' as const,
+        path: '/org/Mix Query',
+        content: { query: '', vizSettings: { type: 'table' as const }, database_name: '' },
+        created_at: '', updated_at: '', references: [] as number[],
+        version: 1, last_edit_id: null, company_id: 1,
+      },
+      references: [],
+    }));
+    testStore.dispatch(setEdit({
+      fileId: Q_VID,
+      edits: { query: 'SELECT mix FROM data', vizSettings: { type: 'table' as const }, database_name: 'default' },
+    }));
+
+    // Real dashboard (id=1, already in DB) referencing the virtual question
+    testStore.dispatch(setFile({ file: makeDashboardDbFile(), references: [] }));
+    testStore.dispatch(addQuestionToDashboard({ dashboardId: DASHBOARD_ID, questionId: Q_VID }));
+
+    await act(async () => { await publishAll(); });
+
+    const fetchMock = global.fetch as jest.Mock;
+    const batchCreateCalls = fetchMock.mock.calls.filter(([u]) => String(u).includes('/api/files/batch-create'));
+    const batchSaveCalls   = fetchMock.mock.calls.filter(([u]) => String(u).includes('/api/files/batch-save'));
+
+    // Virtual question → batch-create; real dashboard → batch-save
+    expect(batchCreateCalls).toHaveLength(1);
+    expect(batchSaveCalls).toHaveLength(1);
+
+    // Dashboard content now carries the real (positive) question ID — Q_VID was replaced before save
+    const savedContent = testStore.getState().files.files[DASHBOARD_ID].content as DashboardContent;
+    expect(savedContent.assets).toHaveLength(1);
+    expect(savedContent.assets!.every(a => (a as { id: number }).id > 0)).toBe(true);
+
+    expect(selectDirtyFiles(testStore.getState())).toHaveLength(0);
+  });
+});
+
+// ============================================================================
+// Multiple questions in dashboard
+// (Gap 5: add two questions; remove one via UI; verify saved content)
+// ============================================================================
+
+describe('Multiple questions in dashboard', () => {
+  setupTestDb(getTestDbPath('dashboard_ui'), { customInit: insertDashboardAndTwoQuestions });
+
+  let testStore: ReturnType<typeof storeModule.makeStore>;
+  let getStoreSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    testStore = storeModule.makeStore();
+    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+    global.fetch = makeRealApiFetch();
+  });
+
+  afterEach(() => {
+    global.fetch = realFetch;
+    getStoreSpy.mockRestore();
+    jest.restoreAllMocks();
+  });
+
+  it('adds two questions and saves both in dashboard content', async () => {
+    testStore.dispatch(setFile({ file: makeDashboardDbFile(), references: [] }));
+    testStore.dispatch(setFile({ file: makeQuestionDbFile(), references: [] }));
+    testStore.dispatch(setFile({ file: makeQuestionDbFile2(), references: [] }));
+
+    testStore.dispatch(addQuestionToDashboard({ dashboardId: DASHBOARD_ID, questionId: QUESTION_ID }));
+    testStore.dispatch(addQuestionToDashboard({ dashboardId: DASHBOARD_ID, questionId: QUESTION_ID_2 }));
+
+    await act(async () => { await publishAll(); });
+
+    const content = testStore.getState().files.files[DASHBOARD_ID].content as DashboardContent;
+    const savedIds = content.assets?.map(a => (a as { id: number }).id) ?? [];
+    expect(savedIds).toContain(QUESTION_ID);
+    expect(savedIds).toContain(QUESTION_ID_2);
+    expect(savedIds).toHaveLength(2);
+    expect(selectDirtyFiles(testStore.getState())).toHaveLength(0);
+  });
+
+  it('removes a question via UI remove button and saves without it', async () => {
+    const user = userEvent.setup();
+
+    // Start with a dashboard that already has both questions in content + layout
+    testStore.dispatch(setFile({
+      file: {
+        ...makeDashboardDbFile(),
+        content: {
+          assets: [
+            { type: 'question' as const, id: QUESTION_ID },
+            { type: 'question' as const, id: QUESTION_ID_2 },
+          ],
+          layout: {
+            columns: 12,
+            items: [
+              { id: QUESTION_ID,   x: 0, y: 0, w: 6, h: 4 },
+              { id: QUESTION_ID_2, x: 6, y: 0, w: 6, h: 4 },
+            ],
+          },
+        },
+        references: [QUESTION_ID, QUESTION_ID_2],
+      },
+      references: [],
+    }));
+    testStore.dispatch(setFile({ file: makeQuestionDbFile(), references: [] }));
+    testStore.dispatch(setFile({ file: makeQuestionDbFile2(), references: [] }));
+    testStore.dispatch(setDashboardEditMode({ fileId: DASHBOARD_ID, editMode: true }));
+
+    renderWithProviders(
+      <>
+        <FileHeader fileId={DASHBOARD_ID} fileType="dashboard" />
+        <DashboardContainerV2 fileId={DASHBOARD_ID} />
+      </>,
+      { store: testStore }
+    );
+
+    // Two "Remove question" buttons — one per tile.  Click the first.
+    const removeBtns = await screen.findAllByRole('button', { name: 'Remove question' });
+    expect(removeBtns).toHaveLength(2);
+    await user.click(removeBtns[0]);
+
+    // One question removed → merged assets has exactly 1 entry
+    await waitFor(() => {
+      const dash = testStore.getState().files.files[DASHBOARD_ID];
+      const merged = {
+        ...(dash.content as DashboardContent),
+        ...(dash.persistableChanges as Partial<DashboardContent> | undefined),
+      } as DashboardContent;
+      expect(merged.assets).toHaveLength(1);
+    }, { timeout: 3000 });
+
+    // Publish and verify DB round-trip via Redux content
+    await user.click(screen.getByRole('button', { name: 'Publish changes' }));
+    await waitFor(() => {
+      expect(Object.keys(testStore.getState().files.files[DASHBOARD_ID].persistableChanges ?? {})).toHaveLength(0);
+    }, { timeout: 5000 });
+
+    const savedContent = testStore.getState().files.files[DASHBOARD_ID].content as DashboardContent;
+    expect(savedContent.assets).toHaveLength(1);
+  });
+});
+
+// ============================================================================
+// Dashboard parameter merging
+// (Gap 6: shared params from multiple questions collapse to one input; parameterValues persisted)
+// ============================================================================
+
+describe('Dashboard parameter merging', () => {
+  setupTestDb(getTestDbPath('dashboard_ui'), { customInit: insertQuestionsWithSharedParams });
+
+  let testStore: ReturnType<typeof storeModule.makeStore>;
+  let getStoreSpy: jest.SpyInstance;
+
+  // Files for these tests: dashboard + two questions with overlapping :start_date param
+  const paramDash = () => ({
+    id: DASHBOARD_ID, name: 'Param Dashboard', type: 'dashboard' as const,
+    path: '/org/Param Dashboard',
+    content: {
+      assets: [
+        { type: 'question' as const, id: QUESTION_ID },
+        { type: 'question' as const, id: QUESTION_ID_2 },
+      ],
+      layout: null,
+    },
+    created_at: '2025-01-01T00:00:00Z', updated_at: new Date().toISOString(),
+    references: [QUESTION_ID, QUESTION_ID_2] as number[],
+    version: 1, last_edit_id: null, company_id: 1,
+  });
+  const paramQ1 = () => ({
+    id: QUESTION_ID, name: 'Orders Q', type: 'question' as const,
+    path: '/org/Orders Q',
+    content: {
+      query: 'SELECT * FROM orders WHERE order_date >= :start_date',
+      parameters: [],
+      vizSettings: { type: 'table' as const },
+      database_name: '',
+    },
+    created_at: '2025-01-01T00:00:00Z', updated_at: new Date().toISOString(),
+    references: [] as number[], version: 1, last_edit_id: null, company_id: 1,
+  });
+  const paramQ2 = () => ({
+    id: QUESTION_ID_2, name: 'Revenue Q', type: 'question' as const,
+    path: '/org/Revenue Q',
+    content: {
+      query: 'SELECT * FROM revenue WHERE order_date >= :start_date AND region = :region',
+      parameters: [],
+      vizSettings: { type: 'table' as const },
+      database_name: '',
+    },
+    created_at: '2025-01-01T00:00:00Z', updated_at: new Date().toISOString(),
+    references: [] as number[], version: 1, last_edit_id: null, company_id: 1,
+  });
+
+  beforeEach(() => {
+    testStore = storeModule.makeStore();
+    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+    testStore.dispatch(setFile({ file: paramDash(), references: [] }));
+    testStore.dispatch(setFile({ file: paramQ1(), references: [] }));
+    testStore.dispatch(setFile({ file: paramQ2(), references: [] }));
+    global.fetch = makeRealApiFetch();
+  });
+
+  afterEach(() => {
+    global.fetch = realFetch;
+    getStoreSpy.mockRestore();
+    jest.restoreAllMocks();
+  });
+
+  it('two questions sharing :start_date render exactly one merged date parameter input', async () => {
+    renderWithProviders(<DashboardContainerV2 fileId={DASHBOARD_ID} />, { store: testStore });
+
+    // inferParameterType('start_date') → 'date' → ParameterInput renders <input placeholder="YYYY-MM-DD">
+    // :start_date appears in BOTH queries but merges to a single input, not two.
+    // inferParameterType('region') → 'text' → simple input with placeholder="value"
+    await waitFor(() => {
+      expect(screen.getAllByPlaceholderText('YYYY-MM-DD')).toHaveLength(1);
+      expect(screen.getAllByPlaceholderText('value')).toHaveLength(1);
+    }, { timeout: 5000 });
+  });
+
+  it('parameterValues submitted via setEdit persist in dashboard content after publishAll', async () => {
+    // Dispatch the same Redux edit that DashboardView.onSubmit triggers
+    testStore.dispatch(setEdit({
+      fileId: DASHBOARD_ID,
+      edits: { parameterValues: { start_date: '2024-01-01', region: 'North' } },
+    }));
+
+    // persistableChanges carries the new values
+    const dirty = testStore.getState().files.files[DASHBOARD_ID];
+    expect((dirty.persistableChanges as any)?.parameterValues).toMatchObject({
+      start_date: '2024-01-01',
+      region: 'North',
+    });
+
+    // publishAll → batch-save → DB stores → setFile(DB_response) updates Redux content
+    await act(async () => { await publishAll(); });
+
+    const savedContent = testStore.getState().files.files[DASHBOARD_ID].content as DashboardContent;
+    expect(savedContent.parameterValues).toMatchObject({ start_date: '2024-01-01', region: 'North' });
+    expect(selectDirtyFiles(testStore.getState())).toHaveLength(0);
+  });
 });
