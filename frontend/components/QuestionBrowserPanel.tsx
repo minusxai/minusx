@@ -253,6 +253,8 @@ const QuestionItem = ({ question, onAddQuestion }: QuestionItemProps) => {
 
   return (
     <Box
+      role="article"
+      aria-label={question.name || 'Untitled Question'}
       p={3}
       bg="bg.surface"
       borderRadius="md"
@@ -280,7 +282,7 @@ const QuestionItem = ({ question, onAddQuestion }: QuestionItemProps) => {
               fontWeight="600"
               color="fg.default"
               lineClamp={1}
-             
+
             >
               {question.name || 'Untitled Question'}
             </Text>
@@ -300,7 +302,7 @@ const QuestionItem = ({ question, onAddQuestion }: QuestionItemProps) => {
         </VStack>
         <IconButton
           onClick={() => onAddQuestion(question.id)}
-          aria-label="Add question to dashboard"
+          aria-label="Add to dashboard"
           size="xs"
           variant="ghost"
           colorPalette="teal"
