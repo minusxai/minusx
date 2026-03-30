@@ -33,7 +33,7 @@ jest.mock('@/lib/connections/run-query', () => ({
   runQuery: mockRunQuery,
 }));
 
-import { POST as evalsPostHandler } from '@/app/api/evals/route';
+import { POST as evalsPostHandler } from '@/app/api/jobs/test/route';
 import { POST as chatPostHandler } from '@/app/api/chat/route';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
 import { withPythonBackend } from '@/test/harness/python-backend';
@@ -49,7 +49,7 @@ import type { Test } from '@/lib/types';
 const TEST_DB_PATH = getTestDbPath('test_runner_e2e');
 
 function createEvalsRequest(body: Record<string, unknown>): NextRequest {
-  return new NextRequest('http://localhost:3000/api/evals', {
+  return new NextRequest('http://localhost:3000/api/jobs/test', {
     method: 'POST',
     body: JSON.stringify(body),
     headers: { 'Content-Type': 'application/json' },

@@ -6,7 +6,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser, type EffectiveUser } from '@/lib/auth/auth-helpers';
 import { ApiErrors } from '@/lib/api/api-responses';
-
 /**
  * Type for authenticated API route handlers
  * Handler receives the request, authenticated user, and optional route context
@@ -18,20 +17,31 @@ type AuthHandler = (
 ) => Promise<NextResponse>;
 
 /**
- * Middleware wrapper for API routes requiring authentication
- *
- * Usage:
- * ```typescript
- * export const GET = withAuth(async (request, user) => {
- *   // user is guaranteed to be authenticated and have a companyId
- *   const documents = await DocumentDB.listAll(user.companyId);
- *   return successResponse(documents);
- * });
- * ```
- *
- * @param handler - The actual route handler that receives authenticated user
- * @returns Wrapped handler that performs auth checks before calling the original handler
+ * Type for cron route handlers — no user, just the raw request.
+ * The route is responsible for constructing per-company EffectiveUsers itself.
  */
+type CronHandler = (request: NextRequest) => Promise<NextResponse>;
+
+/**
+ * Auth middleware for cron endpoints.
+ *
+ * Only accepts `Authorization: Bearer <CRON_SECRET>`. No session fallback.
+ * The route receives the raw request and handles per-company logic itself.
+ *
+ * Required env var: CRON_SECRET
+ */
+export function withCronAuth(handler: CronHandler) {
+  return async (request: NextRequest) => {
+    const cronSecret = process.env.CRON_SECRET;
+    const authHeader = request.headers.get('authorization');
+    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+      // Return 200 to avoid leaking that this endpoint exists or requires auth
+      return NextResponse.json({ ok: true });
+    }
+    return handler(request);
+  };
+}
+
 export function withAuth(handler: AuthHandler) {
   return async (request: NextRequest, context?: any) => {
     const authStart = Date.now();

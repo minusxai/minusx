@@ -94,6 +94,21 @@ export function registerTool(name: string, handler: ToolHandler) {
 }
 
 /**
+ * Fallback tool registry — activated only in server-run mode (no browser client).
+ * Used for tools that normally execute client-side (Redux, UI) but have a
+ * server-safe alternative when running scheduled/remote jobs.
+ */
+export const fallbackToolRegistry: Record<string, ToolHandler> = {};
+
+/**
+ * Register a server-fallback tool handler.
+ * Called only when allowServerFallback=true is passed to orchestratePendingTools.
+ */
+export function registerToolFallback(name: string, handler: ToolHandler) {
+  fallbackToolRegistry[name] = handler;
+}
+
+/**
  * Check if a tool can be executed by the Next.js backend
  */
 export function canExecuteTool(toolCall: ToolCall): boolean {
@@ -102,17 +117,32 @@ export function canExecuteTool(toolCall: ToolCall): boolean {
 }
 
 /**
+ * Options for orchestratePendingTools
+ */
+export interface OrchestrationOptions {
+  /** Enable server-fallback handlers for client-only tools (e.g. ReadFiles).
+   *  Set true only in server-run paths (runChatOrchestration, tests/server.ts)
+   *  where no browser client is present. Default: false. */
+  allowServerFallback?: boolean;
+  /** Abort signal for user-initiated cancellation (interactive chat only). */
+  signal?: AbortSignal;
+  /** Streaming event callbacks (interactive chat only). */
+  callbacks?: OrchestrationCallbacks;
+}
+
+/**
  * Execute a tool call on the Next.js backend (internal)
  */
-async function executeToolInternal(toolCall: ToolCall, user: EffectiveUser): Promise<ToolExecutionResult> {
+async function executeToolInternal(toolCall: ToolCall, user: EffectiveUser, useFallback = false): Promise<ToolExecutionResult> {
   const toolName = toolCall.function?.name;
+  const registry = useFallback ? fallbackToolRegistry : toolRegistry;
 
-  if (!toolName || !toolRegistry[toolName]) {
+  if (!toolName || !registry[toolName]) {
     throw new Error(`Tool ${toolName} cannot be executed by backend`);
   }
 
   // Call handler with destructured args
-  const rawResult = await toolRegistry[toolName](
+  const rawResult = await registry[toolName](
     toolCall.function.arguments || {},
     user,
     toolCall.function.child_tasks_batch
@@ -153,9 +183,9 @@ export async function orchestratePendingTools(
   fileId: number,
   logIndex: number,
   user: EffectiveUser,
-  signal?: AbortSignal,
-  callbacks?: OrchestrationCallbacks
+  options: OrchestrationOptions = {}
 ): Promise<OrchestrationResult> {
+  const { allowServerFallback = false, signal, callbacks } = options;
   // Check abort at the very start (before executing any backend tools)
   if (signal?.aborted) {
     console.log('[orchestrator] Request aborted - skipping tool execution');
@@ -179,12 +209,17 @@ export async function orchestratePendingTools(
 
   // Process each pending tool
   for (const toolCall of pendingTools) {
-    if (canExecuteTool(toolCall)) {
-      // Backend can execute this tool
+    // When allowServerFallback=true, the fallback registry takes precedence over
+    // the primary registry. This lets server-run mode override tools like Clarify
+    // that have a primary handler but need different behaviour without a client.
+    const toolName = toolCall.function?.name ?? '';
+    const useFallback = allowServerFallback && toolName in fallbackToolRegistry;
+    if (useFallback || canExecuteTool(toolCall)) {
+      // Backend can execute this tool (fallback registry takes precedence in server-run mode)
       try {
         callbacks?.onToolExecuting?.(toolCall);
 
-        const result = await executeToolInternal(toolCall, user);
+        const result = await executeToolInternal(toolCall, user, useFallback);
         // Include details in payload — Python stores it in TaskResult and passes it back;
         // it is never forwarded to the LLM (task_to_tool_message uses only result, not details)
         completedTools.push(result);

@@ -108,7 +108,7 @@ async function executeLLMTestOnClient(
   test: Test & { type: 'llm' }
 ): Promise<TestRunResult> {
   try {
-    const response = await fetch('/api/evals', {
+    const response = await fetch('/api/jobs/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ test }),

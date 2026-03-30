@@ -10,7 +10,7 @@
  * Run: npm test -- store/__tests__/evalsE2E.test.ts
  */
 
-import { POST as evalsPostHandler } from '@/app/api/evals/route';
+import { POST as evalsPostHandler } from '@/app/api/jobs/test/route';
 import { POST as chatPostHandler } from '@/app/api/chat/route';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
 import { withPythonBackend } from '@/test/harness/python-backend';
@@ -30,7 +30,7 @@ jest.mock('@/lib/database/db-config', () => {
 const TEST_DB_PATH = getTestDbPath('evals_e2e');
 
 function createEvalsRequest(body: Record<string, unknown>): NextRequest {
-  return new NextRequest('http://localhost:3000/api/evals', {
+  return new NextRequest('http://localhost:3000/api/jobs/test', {
     method: 'POST',
     body: JSON.stringify(body),
     headers: { 'Content-Type': 'application/json' },

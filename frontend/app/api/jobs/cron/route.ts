@@ -10,7 +10,7 @@
  *   - Any scheduler that can POST to this endpoint
  */
 import { NextRequest } from 'next/server';
-import { withAuth } from '@/lib/api/with-auth';
+import { withCronAuth } from '@/lib/api/with-auth';
 import { successResponse, handleApiError } from '@/lib/api/api-responses';
 import { JobRunsDB } from '@/lib/database/job-runs-db';
 import { FilesAPI } from '@/lib/data/files.server';
@@ -20,6 +20,7 @@ import { JOB_HANDLERS } from '@/lib/jobs/job-registry';
 import { getConfigsByCompanyId } from '@/lib/data/configs.server';
 import { sendEmailViaWebhook, sendPhoneAlertViaWebhook } from '@/lib/messaging/webhook-executor';
 import type { AlertContent, MessageAttemptLog, RunFileContent, RunMessageRecord } from '@/lib/types';
+import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -93,15 +94,34 @@ function getPrevFireTime(cronExpr: string, now: Date, maxMinutes = 525_600): Dat
 
 // ---------------------------------------------------------------------------
 
-export const POST = withAuth(async (_request: NextRequest, user) => {
+export const POST = withCronAuth(async (request: NextRequest) => {
   try {
+    const body = await request.json().catch(() => ({}));
+    const companyIds: number[] = Array.isArray(body.company_ids) ? body.company_ids : [];
+
+    if (companyIds.length === 0) {
+      return handleApiError(new Error('company_ids must be a non-empty array'));
+    }
+
     await JobRunsDB.ensureTable();
 
     const now = new Date();
+    const results: Record<number, { triggered: number; skipped: number; failed: number }> = {};
 
-    let triggered = 0;
-    let skipped = 0;
-    let failed = 0;
+    for (const companyId of companyIds) {
+      const user: EffectiveUser = {
+        userId: 0,
+        email: 'cron@system',
+        name: 'Cron',
+        role: 'admin',
+        home_folder: '',
+        companyId,
+        mode: 'org',
+      };
+
+      let triggered = 0;
+      let skipped = 0;
+      let failed = 0;
 
     for (const jobDef of JOB_DEFINITIONS) {
       const handler = JOB_HANDLERS[jobDef.job_type];
@@ -282,7 +302,10 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
       }
     }
 
-    return successResponse({ triggered, skipped, failed });
+      results[companyId] = { triggered, skipped, failed };
+    }
+
+    return successResponse({ results });
   } catch (error) {
     return handleApiError(error);
   }

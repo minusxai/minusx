@@ -204,7 +204,8 @@ async function executeLLMTest(
       pythonResponse.pending_tool_calls,
       DUMMY_FILE_ID,
       DUMMY_LOG_INDEX,
-      user
+      user,
+      { allowServerFallback: true }
     );
     completedToolCalls = orchResult.completedTools;
     if (orchResult.completedTools.length === 0) break;
