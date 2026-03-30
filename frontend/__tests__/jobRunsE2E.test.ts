@@ -99,11 +99,24 @@ jest.mock('@/lib/data/configs.server', () => ({
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+const TEST_CRON_SECRET = 'test-cron-secret';
+
 function makeRequest(url: string, method: string, body?: object): NextRequest {
   return new NextRequest(`http://localhost:3000${url}`, {
     method,
     headers: { 'Content-Type': 'application/json', 'x-company-id': '1', 'x-user-id': '1' },
     body: body ? JSON.stringify(body) : undefined,
+  });
+}
+
+function makeCronRequest(companyIds: number[] = [1]): NextRequest {
+  return new NextRequest('http://localhost:3000/api/jobs/cron', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${TEST_CRON_SECRET}`,
+    },
+    body: JSON.stringify({ company_ids: companyIds }),
   });
 }
 
@@ -122,6 +135,8 @@ let draftAlertId: number;
 
 describe('Job Runs E2E', () => {
   beforeEach(async () => {
+    process.env.CRON_SECRET = TEST_CRON_SECRET;
+
     const { resetAdapter } = await import('@/lib/database/adapter/factory');
     await resetAdapter();
     await initTestDatabase(TEST_DB_PATH);
@@ -475,15 +490,15 @@ describe('Job Runs E2E', () => {
 
   describe('POST /api/jobs/cron', () => {
     it('triggers live alert with matching cron, skips draft', async () => {
-      const req = makeRequest('/api/jobs/cron', 'POST');
+      const req = makeCronRequest([1]);
       const res = await cronPostHandler(req);
       const body = await parseResponse(res);
 
       expect(res.status).toBe(200);
       // 1 live alert triggered, 1 draft skipped
-      expect(body.data.triggered).toBe(1);
-      expect(body.data.failed).toBe(0);
-      expect(body.data.skipped).toBeGreaterThanOrEqual(1);
+      expect(body.data.results[1].triggered).toBe(1);
+      expect(body.data.results[1].failed).toBe(0);
+      expect(body.data.results[1].skipped).toBeGreaterThanOrEqual(1);
 
       // job_runs row created for the live alert
       const runs = await JobRunsDB.getByJobId(String(alertId), 'alert', 1);
@@ -507,14 +522,14 @@ describe('Job Runs E2E', () => {
     });
 
     it('deduplicates: second cron call within the same minute is skipped', async () => {
-      const req1 = makeRequest('/api/jobs/cron', 'POST');
+      const req1 = makeCronRequest([1]);
       await cronPostHandler(req1);
 
-      const req2 = makeRequest('/api/jobs/cron', 'POST');
+      const req2 = makeCronRequest([1]);
       const res2 = await cronPostHandler(req2);
       const body2 = await parseResponse(res2);
 
-      expect(body2.data.triggered).toBe(0);
+      expect(body2.data.results[1].triggered).toBe(0);
       // The live alert was already run; the second call finds the existing run in the time window
       const runs = await JobRunsDB.getByJobId(String(alertId), 'alert', 1);
       expect(runs).toHaveLength(1);  // only one run, not two
@@ -530,11 +545,11 @@ describe('Job Runs E2E', () => {
       };
       await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', updatedContent, [questionId], 1);
 
-      const req = makeRequest('/api/jobs/cron', 'POST');
+      const req = makeCronRequest([1]);
       const res = await cronPostHandler(req);
       const body = await parseResponse(res);
 
-      expect(body.data.triggered).toBe(0);
+      expect(body.data.results[1].triggered).toBe(0);
       const runs = await JobRunsDB.getByJobId(String(alertId), 'alert', 1);
       expect(runs).toHaveLength(0);
     });
