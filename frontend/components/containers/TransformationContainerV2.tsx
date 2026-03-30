@@ -6,6 +6,7 @@
  */
 import { Box } from '@chakra-ui/react';
 import { useAppSelector } from '@/store/hooks';
+import { shallowEqual } from 'react-redux';
 import { selectMergedContent, selectEffectiveName, selectConnectionIds, type FileId } from '@/store/filesSlice';
 import { setFiles } from '@/store/filesSlice';
 import { useAppDispatch } from '@/store/hooks';
@@ -37,7 +38,7 @@ export default function TransformationContainerV2({ fileId }: TransformationCont
     editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes: { content: updates } });
   }, [fileId]);
 
-  const connectionIds = useAppSelector(selectConnectionIds);
+  const connectionIds = useAppSelector(selectConnectionIds, shallowEqual);
 
   const handleRunNow = useCallback(async (runMode?: 'full' | 'test_only') => {
     await trigger({ run_mode: runMode });

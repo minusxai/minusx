@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { useConnections } from '@/lib/hooks/useConnections';
 import { useContexts } from '@/lib/hooks/useContexts';
-import { setShowDebug, setShowJson, setShowAdvanced } from '@/store/uiSlice';
+import { setBulkUiFlags } from '@/store/uiSlice';
+import { selectConnectionsContentLoaded, selectContextsContentLoaded } from '@/store/filesSlice';
 
 /**
  * DataLoader Component
@@ -24,29 +25,24 @@ export function DataLoader() {
   const dispatch = useAppDispatch();
   const user = useAppSelector(state => state.auth.user);
 
-  // Restore persisted UI flags after hydration to avoid SSR mismatch
+  // Restore persisted UI flags after hydration — single dispatch avoids 3 separate re-render cycles
   useEffect(() => {
     try {
+      const flags: { showDebug?: boolean; showJson?: boolean; showAdvanced?: boolean } = {};
       const debug = localStorage.getItem('showDebug');
-      if (debug !== null) dispatch(setShowDebug(debug === 'true'));
+      if (debug !== null) flags.showDebug = debug === 'true';
       const json = localStorage.getItem('showJson');
-      if (json !== null) dispatch(setShowJson(json === 'true'));
+      if (json !== null) flags.showJson = json === 'true';
       const advanced = localStorage.getItem('showAdvanced');
-      if (advanced !== null) dispatch(setShowAdvanced(advanced === 'true'));
+      if (advanced !== null) flags.showAdvanced = advanced === 'true';
+      if (Object.keys(flags).length > 0) dispatch(setBulkUiFlags(flags));
     } catch { /* ignore */ }
   }, []);
   const configsLoaded = useAppSelector(state => state.configs.loadedAt !== null);
 
-  // Check if any connection/context is loaded (optimized to avoid Object.values on every render)
-  const files = useAppSelector(state => state.files.files);
-  const connectionsLoaded = useMemo(
-    () => Object.values(files).some(f => f.type === 'connection' && f.content !== null),
-    [files]
-  );
-  const contextsLoaded = useMemo(
-    () => Object.values(files).some(f => f.type === 'context'),
-    [files]
-  );
+  // Boolean selectors: return primitives so DataLoader only re-renders when the value actually flips
+  const connectionsLoaded = useAppSelector(selectConnectionsContentLoaded);
+  const contextsLoaded = useAppSelector(selectContextsContentLoaded);
 
   // All resources have client-side fallback
   const skipConfigs = !user || configsLoaded;

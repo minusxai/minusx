@@ -13,6 +13,7 @@ import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import Markdown from '@/components/Markdown';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { useAppSelector } from '@/store/hooks';
+import { shallowEqual } from 'react-redux';
 import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { selectIsDirty, selectDashboardFiles, selectQuestionFiles } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
@@ -138,8 +139,8 @@ export default function ReportView({
   }, [isResizing, handleResizeMove, handleResizeEnd]);
 
   // Get available dashboards and questions from Redux — memoized selectors avoid O(n) scan on every file change
-  const dashboards = useAppSelector(selectDashboardFiles);
-  const questions = useAppSelector(selectQuestionFiles);
+  const dashboards = useAppSelector(selectDashboardFiles, shallowEqual);
+  const questions = useAppSelector(selectQuestionFiles, shallowEqual);
   // By-ID dictionary for reference lookups (O(1) access)
   const files = useAppSelector(state => state.files.files);
 

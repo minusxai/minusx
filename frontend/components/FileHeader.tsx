@@ -14,6 +14,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { HStack, Text } from '@chakra-ui/react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { shallowEqual } from 'react-redux';
 import { selectIsDirty, selectEffectiveName, selectMergedContent, selectDirtyFiles } from '@/store/filesSlice';
 import {
   selectDashboardEditMode, setDashboardEditMode,
@@ -67,7 +68,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const isSystemFile = isSystemFileType(fileType as FileType);
-  const dirtyFiles = useAppSelector(selectDirtyFiles);
+  const dirtyFiles = useAppSelector(selectDirtyFiles, shallowEqual);
   const anyDirtyFiles = dirtyFiles.length > 0;
 
   // If this file's content references any virtual (unsaved) file IDs, we must
