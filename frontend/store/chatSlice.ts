@@ -3,6 +3,17 @@ import type { RootState } from './store';
 import type { UserInput } from '@/lib/api/user-input-exception';
 import type { MessageDebugInfo } from '@/lib/types';
 
+// Module-level counter — resets on page reload, which is safe: virtual IDs are never persisted.
+let _virtualConversationIdCounter = 0;
+
+/**
+ * Generate a virtual ID for a new temporary conversation (namespace 1.1).
+ * Always 10 digits: -(1_100_000_000 + counter)
+ */
+export function generateVirtualConversationId(): number {
+  return -(1_100_000_000 + (++_virtualConversationIdCounter));
+}
+
 // Types
 interface ToolCall {
   id: string;
@@ -272,7 +283,7 @@ const chatSlice = createSlice({
       // Handle NewConversation event (create real conversation, link from temp)
       if (type === 'NewConversation') {
         // Find latest temp conversation (most negative ID = most recent)
-        // Since we use -Date.now(), newer temps have smaller values (more negative)
+        // Since we use negative IDs, newer temps have smaller values (more negative)
         const tempIDs = Object.keys(state.conversations)
           .map(Number)
           .filter(id => id < 0);

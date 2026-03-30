@@ -5,7 +5,7 @@ import { Box, VStack, HStack, Text, Heading, Button, Icon, Collapsible, Input } 
 import { LuSparkles, LuRocket, LuLayoutDashboard, LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { createConversation, selectActiveConversation, selectConversation, interruptChat } from '@/store/chatSlice';
+import { createConversation, selectActiveConversation, selectConversation, interruptChat, generateVirtualConversationId } from '@/store/chatSlice';
 import { setNavigation, setActiveVirtualId } from '@/store/navigationSlice';
 import { createVirtualFile, editFile, publishAll, selectAugmentedFiles, compressAugmentedFile } from '@/lib/api/file-state';
 import { getStore } from '@/store/store';
@@ -128,7 +128,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     })) || [];
 
     dispatch(createConversation({
-      conversationID: -Date.now(),
+      conversationID: generateVirtualConversationId(),
       agent: 'OnboardingDashboardAgent',
       agent_args: {
         connection_id: connectionName,
