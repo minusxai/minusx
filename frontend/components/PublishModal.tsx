@@ -24,9 +24,10 @@ import {
   Button,
   Portal,
   Badge,
+  IconButton,
 } from '@chakra-ui/react';
 import { Dialog } from '@chakra-ui/react';
-import { LuUpload, LuUndo2 } from 'react-icons/lu';
+import { LuSave, LuUndo2, LuX, LuCheck, LuPanelLeftClose, LuPanelLeftOpen } from 'react-icons/lu';
 import { useDirtyFiles } from '@/lib/hooks/file-state-hooks';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import FileView from '@/components/FileView';
@@ -50,10 +51,16 @@ function DirtyFileItem({
   file,
   isSelected,
   onSelect,
+  onSave,
+  onDiscard,
+  isSaving,
 }: {
   file: FileState;
   isSelected: boolean;
   onSelect: () => void;
+  onSave: () => void;
+  onDiscard: () => void;
+  isSaving: boolean;
 }) {
   const meta = getFileTypeMetadata(file.type as any);
   const FileIcon = meta.icon;
@@ -62,8 +69,8 @@ function DirtyFileItem({
   return (
     <HStack
       px={3}
-      py={2.5}
-      gap={2.5}
+      py={2}
+      gap={2}
       cursor="pointer"
       onClick={onSelect}
       bg={isSelected ? 'bg.emphasized' : 'transparent'}
@@ -77,54 +84,52 @@ function DirtyFileItem({
       <Box color={meta.color} flexShrink={0}>
         <FileIcon size={15} />
       </Box>
-      <VStack align="start" gap={0} flex="1" minW="0">
-        <Text
-          fontSize="sm"
-          fontWeight="600"
-          fontFamily="mono"
-          lineHeight="1.3"
-          truncate
-          color="fg.default"
+      <Text
+        fontSize="sm"
+        fontWeight="600"
+        fontFamily="mono"
+        lineHeight="1.3"
+        truncate
+        color="fg.default"
+        flex="1"
+        minW="0"
+      >
+        {effectiveName || 'Untitled'}
+      </Text>
+      <HStack gap={0.5} flexShrink={0} onClick={(e) => e.stopPropagation()}>
+        <IconButton
+          aria-label="Discard changes"
+          size="2xs"
+          variant="ghost"
+          color="accent.danger"
+          onClick={onDiscard}
         >
-          {effectiveName || 'Untitled'}
-        </Text>
-      </VStack>
+          <LuUndo2 />
+        </IconButton>
+        <IconButton
+          aria-label="Save file"
+          size="2xs"
+          variant="ghost"
+          color="accent.teal"
+          loading={isSaving}
+          onClick={onSave}
+        >
+          <LuCheck />
+        </IconButton>
+      </HStack>
     </HStack>
   );
 }
 
-function SelectedFileName({ fileId }: { fileId: number }) {
-  const name = useAppSelector(state => selectEffectiveName(state, fileId));
-  const fileState = useAppSelector(state => selectFile(state, fileId));
-  const meta = fileState ? getFileTypeMetadata(fileState.type as any) : null;
-  const FileIcon = meta?.icon;
-  return (
-    <HStack gap={2} minW="0" flex="1">
-      {FileIcon && (
-        <Box color={meta?.color} flexShrink={0}>
-          <FileIcon size={15} />
-        </Box>
-      )}
-      <Text
-        fontSize="sm"
-        fontWeight="700"
-        fontFamily="mono"
-        truncate
-        color="fg.default"
-      >
-        {name || 'Untitled'}
-      </Text>
-    </HStack>
-  );
-}
 
 export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
   const dispatch = useAppDispatch();
   const dirtyFiles = useDirtyFiles();
   const [selectedFileId, setSelectedFileId] = useState<number | null>(null);
   const [isPublishing, setIsPublishing] = useState(false);
-  const [isPublishingSingle, setIsPublishingSingle] = useState(false);
+  const [publishingSingleId, setPublishingSingleId] = useState<number | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Auto-select first file when modal opens or list changes
   useEffect(() => {
@@ -155,15 +160,14 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
     }
   }, [dispatch]);
 
-  const handlePublishSelected = useCallback(async () => {
-    if (selectedFileId === null) return;
-    const file = dirtyFiles.find(f => f.id === selectedFileId);
-    setIsPublishingSingle(true);
+  const handlePublishFile = useCallback(async (fileId: number) => {
+    const file = dirtyFiles.find(f => f.id === fileId);
+    setPublishingSingleId(fileId);
     try {
       // Auto-publish virtual (negative-ID) dependencies first
       const state = getStore().getState();
-      const mergedContent = selectMergedContent(state, selectedFileId);
-      const fileState = selectFile(state, selectedFileId);
+      const mergedContent = selectMergedContent(state, fileId);
+      const fileState = selectFile(state, fileId);
       if (mergedContent && fileState) {
         const refIds = extractReferencesFromContent(mergedContent as any, fileState.type as FileType);
         const virtualRefIds = refIds.filter(id => id < 0);
@@ -176,19 +180,18 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
         }
       }
 
-      await publishFile({ fileId: selectedFileId });
-      exitEditMode(selectedFileId, file?.type);
+      await publishFile({ fileId });
+      exitEditMode(fileId, file?.type);
     } finally {
-      setIsPublishingSingle(false);
+      setPublishingSingleId(null);
     }
-  }, [selectedFileId, dirtyFiles, exitEditMode]);
+  }, [dirtyFiles, exitEditMode]);
 
-  const handleDiscardSelected = useCallback(() => {
-    if (selectedFileId === null) return;
-    const file = dirtyFiles.find(f => f.id === selectedFileId);
-    clearFileChanges({ fileId: selectedFileId });
-    exitEditMode(selectedFileId, file?.type);
-  }, [selectedFileId, dirtyFiles, exitEditMode]);
+  const handleDiscardFile = useCallback((fileId: number) => {
+    const file = dirtyFiles.find(f => f.id === fileId);
+    clearFileChanges({ fileId });
+    exitEditMode(fileId, file?.type);
+  }, [dirtyFiles, exitEditMode]);
 
   const handleDiscardAll = useCallback(() => {
     const filesToDiscard = [...dirtyFiles];
@@ -242,7 +245,6 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
             >
               <HStack justify="space-between" align="center" width="100%">
                 <HStack gap={2.5} align="center" minW="0">
-                  <LuUpload size={18} style={{ flexShrink: 0 }} />
                   <Text fontWeight="700" fontSize="lg" fontFamily="mono" whiteSpace="nowrap">
                     Review Unsaved Changes
                   </Text>
@@ -273,12 +275,17 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
                     loading={isPublishing}
                     onClick={handlePublishAll}
                   >
-                    <LuUpload />
+                    <LuSave />
                     Save All
                   </Button>
-                  <Button variant="ghost" size="xs" onClick={onClose}>
-                    Close
-                  </Button>
+                  <IconButton
+                    aria-label="Close"
+                    variant="ghost"
+                    size="sm"
+                    onClick={onClose}
+                  >
+                    <LuX />
+                  </IconButton>
                 </HStack>
               </HStack>
               {publishError && (
@@ -290,83 +297,85 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
 
             {/* Body: left list + right preview */}
             <Box flex="1" display="flex" overflow="hidden">
-              {/* Left pane: file list */}
-              <Box
-                w="260px"
-                flexShrink={0}
-                borderRight="1px solid"
-                borderColor="border.default"
-                overflowY="auto"
-                py={2}
-                px={2}
-                bg="bg.surface"
-              >
-                <Text
-                  px={3}
-                  py={1.5}
-                  fontSize="xs"
-                  fontWeight="700"
-                  color="fg.subtle"
-                  textTransform="uppercase"
-                  letterSpacing="0.08em"
-                  fontFamily="mono"
+              {/* Left pane: file list (collapsible) */}
+              {!sidebarCollapsed && (
+                <Box
+                  w="260px"
+                  flexShrink={0}
+                  borderRight="1px solid"
+                  borderColor="border.default"
+                  overflowY="auto"
+                  py={2}
+                  px={2}
+                  bg="bg.surface"
+                  display="flex"
+                  flexDirection="column"
                 >
-                  Unsaved Files
-                </Text>
-                <VStack align="stretch" gap={0.5} mt={1}>
-                  {dirtyFiles.map(file => (
-                    <DirtyFileItem
-                      key={file.id}
-                      file={file}
-                      isSelected={file.id === selectedFileId}
-                      onSelect={() => handleSelect(file.id)}
-                    />
-                  ))}
-                </VStack>
-              </Box>
+                  <HStack px={3} py={1.5} justify="space-between" align="center">
+                    <Text
+                      fontSize="xs"
+                      fontWeight="700"
+                      color="fg.subtle"
+                      textTransform="uppercase"
+                      letterSpacing="0.08em"
+                      fontFamily="mono"
+                    >
+                      Unsaved Files
+                    </Text>
+                    <IconButton
+                      aria-label="Collapse sidebar"
+                      size="2xs"
+                      variant="ghost"
+                      onClick={() => setSidebarCollapsed(true)}
+                    >
+                      <LuPanelLeftClose />
+                    </IconButton>
+                  </HStack>
+                  <VStack align="stretch" gap={0.5} mt={1}>
+                    {dirtyFiles.map(file => (
+                      <DirtyFileItem
+                        key={file.id}
+                        file={file}
+                        isSelected={file.id === selectedFileId}
+                        onSelect={() => handleSelect(file.id)}
+                        onSave={() => handlePublishFile(file.id)}
+                        onDiscard={() => handleDiscardFile(file.id)}
+                        isSaving={publishingSingleId === file.id}
+                      />
+                    ))}
+                  </VStack>
+                </Box>
+              )}
 
-              {/* Right pane: toolbar + file view */}
+              {/* Collapsed sidebar toggle */}
+              {sidebarCollapsed && (
+                <Box
+                  flexShrink={0}
+                  borderRight="1px solid"
+                  borderColor="border.default"
+                  bg="bg.surface"
+                  display="flex"
+                  alignItems="start"
+                  py={2}
+                  px={1}
+                >
+                  <IconButton
+                    aria-label="Expand sidebar"
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => setSidebarCollapsed(false)}
+                  >
+                    <LuPanelLeftOpen />
+                  </IconButton>
+                </Box>
+              )}
+
+              {/* Right pane: file view */}
               <Box flex="1" minW="0" display="flex" flexDirection="column" bg="bg.canvas" overflow="hidden">
                 {selectedFileId !== null ? (
-                  <>
-                    <HStack
-                      px={4}
-                      py={2}
-                      borderBottom="1px solid"
-                      borderColor="border.default"
-                      gap={2}
-                      flexShrink={0}
-                      justify="space-between"
-                    >
-                      <SelectedFileName fileId={selectedFileId} />
-                      <HStack gap={2} flexShrink={0}>
-                        <Button
-                          size="xs"
-                          variant="outline"
-                          color="accent.danger"
-                          borderColor={"accent.danger"}
-                          onClick={handleDiscardSelected}
-                        >
-                          <LuUndo2 />
-                          Discard File
-                        </Button>
-                        <Button
-                          size="xs"
-                          variant="outline"
-                          color="accent.teal"
-                          borderColor={"accent.teal"}
-                          loading={isPublishingSingle}
-                          onClick={handlePublishSelected}
-                        >
-                          <LuUpload />
-                          Save File
-                        </Button>
-                      </HStack>
-                    </HStack>
-                    <Box flex="1" minH="0" display="flex" flexDirection="column" overflowY="auto">
-                      <FileView key={selectedFileId} fileId={selectedFileId} mode="preview" hideHeader />
-                    </Box>
-                  </>
+                  <Box flex="1" minH="0" display="flex" flexDirection="column" overflowY="auto">
+                    <FileView key={selectedFileId} fileId={selectedFileId} mode="preview" hideHeader />
+                  </Box>
                 ) : (
                   <Box
                     display="flex"

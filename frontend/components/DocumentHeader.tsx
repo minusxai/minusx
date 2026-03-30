@@ -11,8 +11,8 @@ import {
   VStack,
   Icon,
 } from '@chakra-ui/react';
-import { LuSave, LuPencil, LuTriangleAlert, LuEye, LuCode, LuUpload } from 'react-icons/lu';
-import { getFileTypeMetadata, isSystemFileType, type FileType } from '@/lib/ui/file-metadata';
+import { LuSave, LuPencil, LuTriangleAlert, LuEye, LuCode, LuFiles } from 'react-icons/lu';
+import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import TabSwitcher from './TabSwitcher';
 import FileTypeBadge from './FileTypeBadge';
 import ExplainButton from '@/components/ExplainButton';
@@ -71,15 +71,9 @@ export interface DocumentHeaderProps {
   // Explain button (optional - shown for questions)
   questionId?: number;  // If provided, show explain button in view mode
 
-  // Publish workflow: when onPublish is provided and this is not a system file,
-  // the Save button is replaced with a Publish button that opens the PublishModal.
-  // System files (connection, config, styles, context) always use the inline Save button.
-  onPublish?: () => void;
-
-  // True when any file in the app has unsaved changes (not just this file).
-  // Keeps the Publish button visible even when not editing the current file,
-  // so it acts as a persistent reminder of unpublished work.
-  anyDirtyFiles?: boolean;
+  // When other files have unsaved changes, show a "Review N unsaved changes" button.
+  onReviewChanges?: () => void;
+  dirtyFileCount?: number;
 
   // Optional highlight color for the header background (e.g. dashboard edit mode)
   highlightColor?: string;
@@ -105,8 +99,8 @@ export default function DocumentHeader({
   viewMode = 'visual',
   onViewModeChange,
   questionId,
-  onPublish,
-  anyDirtyFiles = false,
+  onReviewChanges,
+  dirtyFileCount = 0,
   highlightColor,
   highlightLabel,
 }: DocumentHeaderProps) {
@@ -116,12 +110,7 @@ export default function DocumentHeader({
   const titleColor = 'fg.default';
   const subtitleColor = 'fg.muted';
 
-  // System files (connection, config, styles, context) always use inline Save.
-  // All other files use Publish when onPublish is provided.
-  const isSystemFile = isSystemFileType(fileType as FileType);
-  const showPublishButton = !isSystemFile && !!onPublish;
-
-  // Validate name before save/publish
+  // Validate name before save
   const validateName = useCallback((): boolean => {
     const placeholders = DEFAULT_PLACEHOLDERS[fileType];
     const trimmedName = name.trim();
@@ -140,12 +129,6 @@ export default function DocumentHeader({
     if (!validateName()) return;
     onSave();
   }, [validateName, onSave]);
-
-  // Validate and publish
-  const handlePublish = useCallback(() => {
-    if (!validateName()) return;
-    onPublish?.();
-  }, [validateName, onPublish]);
 
   // Combined error (validation takes precedence)
   const displayError = validationError || saveError;
@@ -286,51 +269,30 @@ export default function DocumentHeader({
                 </Text>
               </HStack>
             )}
-            {/* Unsaved changes warning */}
-            {editMode && isDirty && (
-              <HStack
-                gap={1.5}
-                px={2}
-                py={1}
-                bg="accent.warning/15"
-                borderRadius="md"
-                border="1px solid"
-                borderColor="accent.warning/30"
-              >
-                <Icon as={LuTriangleAlert} boxSize={3.5} color="accent.warning" />
-                <Text fontSize="xs" color="accent.warning" fontWeight="600">
-                  Unsaved changes
-                </Text>
-              </HStack>
-            )}
-
             {/* Explain Button (show in view mode for questions) */}
             {!editMode && questionId !== undefined && (
               <ExplainButton questionId={questionId} size="xs" />
             )}
 
-            {/* Save / Publish Button */}
-            {/* Publish: shown only when the current file has unsaved changes */}
-            {editMode && showPublishButton ? (
+            {/* Review N unsaved changes (when other files are dirty) */}
+            {onReviewChanges && dirtyFileCount > 0 ? (
               <IconButton
-                onClick={handlePublish}
-                aria-label="Publish changes"
+                onClick={onReviewChanges}
+                aria-label={`Review ${dirtyFileCount} unsaved changes`}
                 size="xs"
                 colorPalette="teal"
-                disabled={!isDirty}
                 px={2}
               >
-                <LuUpload />
-                Save
+                <LuFiles />
+                Review {dirtyFileCount} unsaved {dirtyFileCount === 1 ? 'change' : 'changes'}
               </IconButton>
-            ) : editMode && (
+            ) : editMode && isDirty && (
               <IconButton
                 onClick={handleSave}
                 aria-label="Save"
                 loading={isSaving}
                 size="xs"
                 colorPalette="teal"
-                disabled={!isDirty}
                 px={2}
               >
                 <LuSave />
@@ -338,8 +300,8 @@ export default function DocumentHeader({
               </IconButton>
             )}
 
-            {/* Edit/Cancel Button */}
-            {!hideEditToggle && (
+            {/* Edit/Cancel Button (hidden when review button is shown) */}
+            {!hideEditToggle && !(onReviewChanges && dirtyFileCount > 0) && (
             <IconButton
               onClick={onEditModeToggle}
               aria-label={editMode ? 'Cancel editing' : 'Edit'}
