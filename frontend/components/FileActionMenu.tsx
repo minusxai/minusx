@@ -98,6 +98,7 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
                 py={2}
                 _hover={{ bg: 'bg.muted' }}
                 onClick={() => onSelect(fileId)}
+                aria-label="Select"
               >
                 <HStack gap={2}>
                   <Icon as={LuListChecks} boxSize={4} />

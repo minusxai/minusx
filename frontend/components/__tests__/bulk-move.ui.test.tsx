@@ -210,25 +210,23 @@ describe('Bulk Move Files', () => {
     );
 
     // No checkboxes initially
-    expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+    expect(screen.queryAllByLabelText(/^Select/)).toHaveLength(0);
 
     // Open the action menu (ellipsis) for the first question
-    const actionButtons = screen.getAllByRole('button', { name: 'More actions' });
+    const actionButtons = screen.getAllByLabelText('More actions');
     await user.click(actionButtons[0]);
 
     // Click "Select" in the dropdown
-    const selectItem = await screen.findByText('Select');
+    const selectItem = await screen.findByLabelText('Select');
     await user.click(selectItem);
 
     // Now we should be in selection mode — checkboxes appear
     await waitFor(() => {
-      // Header checkbox + one per file
-      const checkboxes = screen.getAllByRole('checkbox');
-      expect(checkboxes.length).toBeGreaterThan(0);
+      expect(screen.getAllByLabelText(/^Select/).length).toBeGreaterThan(0);
     });
 
     // Bulk action bar should appear showing "1 file selected"
-    expect(screen.getByText(/1 file.* selected/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('Selection status')).toHaveTextContent(/1 file.* selected/i);
   });
 
   it('shows "0 files selected" with disabled Move button when entering selection mode with no selection', async () => {
@@ -240,18 +238,18 @@ describe('Bulk Move Files', () => {
     );
 
     // Enter selection mode via action menu
-    const actionButtons = screen.getAllByRole('button', { name: 'More actions' });
+    const actionButtons = screen.getAllByLabelText('More actions');
     await user.click(actionButtons[0]);
-    const selectItem = await screen.findByText('Select');
+    const selectItem = await screen.findByLabelText('Select');
     await user.click(selectItem);
 
     // The first file gets selected, so deselect it by clicking its checkbox
     await waitFor(() => {
-      expect(screen.getAllByRole('checkbox').length).toBeGreaterThan(0);
+      expect(screen.getAllByLabelText(/^Select/).length).toBeGreaterThan(0);
     });
 
     // Find the checked checkbox and uncheck it
-    const checkboxes = screen.getAllByRole('checkbox');
+    const checkboxes = screen.getAllByLabelText(/^Select/);
     const checkedCheckbox = checkboxes.find(
       (cb: HTMLElement) => cb.getAttribute('data-state') === 'checked' || (cb as HTMLInputElement).checked
     );
@@ -261,9 +259,9 @@ describe('Bulk Move Files', () => {
 
     // Should show "0 files selected" with disabled Move
     await waitFor(() => {
-      expect(screen.getByText(/0 files selected/i)).toBeInTheDocument();
+      expect(screen.getByLabelText('Selection status')).toHaveTextContent(/0 files selected/i);
     });
-    const moveBtn = screen.getByRole('button', { name: 'Move' });
+    const moveBtn = screen.getByLabelText('Move');
     expect(moveBtn).toBeDisabled();
   });
 
@@ -276,24 +274,24 @@ describe('Bulk Move Files', () => {
     );
 
     // Enter selection mode
-    const actionButtons = screen.getAllByRole('button', { name: 'More actions' });
+    const actionButtons = screen.getAllByLabelText('More actions');
     await user.click(actionButtons[0]);
-    const selectItem = await screen.findByText('Select');
+    const selectItem = await screen.findByLabelText('Select');
     await user.click(selectItem);
 
     await waitFor(() => {
-      expect(screen.getAllByRole('checkbox').length).toBeGreaterThan(0);
+      expect(screen.getAllByLabelText(/^Select/).length).toBeGreaterThan(0);
     });
 
     // Click Cancel
-    const cancelBtn = screen.getByRole('button', { name: 'Cancel' });
+    const cancelBtn = screen.getByLabelText('Cancel selection');
     await user.click(cancelBtn);
 
     // Selection mode should be exited — no checkboxes, no action bar
     await waitFor(() => {
-      expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+      expect(screen.queryAllByLabelText(/^Select/)).toHaveLength(0);
     });
-    expect(screen.queryByText(/files? selected/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Selection status')).not.toBeInTheDocument();
   });
 
   it('clicking a file row in selection mode toggles selection without navigating', async () => {
@@ -305,31 +303,31 @@ describe('Bulk Move Files', () => {
     );
 
     // Enter selection mode
-    const actionButtons = screen.getAllByRole('button', { name: 'More actions' });
+    const actionButtons = screen.getAllByLabelText('More actions');
     await user.click(actionButtons[0]);
-    const selectItem = await screen.findByText('Select');
+    const selectItem = await screen.findByLabelText('Select');
     await user.click(selectItem);
 
     await waitFor(() => {
-      expect(screen.getAllByRole('checkbox').length).toBeGreaterThan(0);
+      expect(screen.getAllByLabelText(/^Select/).length).toBeGreaterThan(0);
     });
 
     // Should start with 1 file selected (the file whose menu we used)
-    expect(screen.getByText(/1 file.* selected/i)).toBeInTheDocument();
+    expect(screen.getByLabelText('Selection status')).toHaveTextContent(/1 file.* selected/i);
 
-    // Click on a different file's row text to toggle its selection
-    const secondFileName = screen.getByText('Sales Summary');
-    await user.click(secondFileName);
+    // Click on a different file's row to toggle its selection
+    const secondFileRow = screen.getByLabelText('Sales Summary');
+    await user.click(secondFileRow);
 
     // Now 2 files selected
     await waitFor(() => {
-      expect(screen.getByText(/2 files selected/i)).toBeInTheDocument();
+      expect(screen.getByLabelText('Selection status')).toHaveTextContent(/2 files selected/i);
     });
 
     // Click the same row again to deselect
-    await user.click(secondFileName);
+    await user.click(secondFileRow);
     await waitFor(() => {
-      expect(screen.getByText(/1 file.* selected/i)).toBeInTheDocument();
+      expect(screen.getByLabelText('Selection status')).toHaveTextContent(/1 file.* selected/i);
     });
   });
 
@@ -342,31 +340,31 @@ describe('Bulk Move Files', () => {
     );
 
     // Enter selection mode via first question's menu
-    const actionButtons = screen.getAllByRole('button', { name: 'More actions' });
+    const actionButtons = screen.getAllByLabelText('More actions');
     await user.click(actionButtons[0]);
-    const selectItem = await screen.findByText('Select');
+    const selectItem = await screen.findByLabelText('Select');
     await user.click(selectItem);
 
     await waitFor(() => {
-      expect(screen.getAllByRole('checkbox').length).toBeGreaterThan(0);
+      expect(screen.getAllByLabelText(/^Select/).length).toBeGreaterThan(0);
     });
 
     // Select another file by clicking its row
-    const secondFileName = screen.getByText('Sales Summary');
-    await user.click(secondFileName);
+    const secondFileRow = screen.getByLabelText('Sales Summary');
+    await user.click(secondFileRow);
 
     await waitFor(() => {
-      expect(screen.getByText(/2 files selected/i)).toBeInTheDocument();
+      expect(screen.getByLabelText('Selection status')).toHaveTextContent(/2 files selected/i);
     });
 
     // Click "Move" in the bulk action bar
-    const moveBtn = screen.getByRole('button', { name: 'Move' });
+    const moveBtn = screen.getByLabelText('Move');
     expect(moveBtn).not.toBeDisabled();
     await user.click(moveBtn);
 
-    // The BulkMoveFileModal should open — look for "Move 2 files" title
+    // The BulkMoveFileModal should open
     await waitFor(() => {
-      expect(screen.getByText(/Move 2 files/i)).toBeInTheDocument();
+      expect(screen.getByLabelText('Move files modal')).toHaveTextContent(/Move 2 files/i);
     });
 
     // Verify that the batch-move API was called when we complete the move
@@ -383,13 +381,13 @@ describe('Bulk Move Files', () => {
     );
 
     // Enter selection mode
-    const actionButtons = screen.getAllByRole('button', { name: 'More actions' });
+    const actionButtons = screen.getAllByLabelText('More actions');
     await user.click(actionButtons[0]);
-    const selectItem = await screen.findByText('Select');
+    const selectItem = await screen.findByLabelText('Select');
     await user.click(selectItem);
 
     await waitFor(() => {
-      expect(screen.getAllByRole('checkbox').length).toBeGreaterThan(0);
+      expect(screen.getAllByLabelText(/^Select/).length).toBeGreaterThan(0);
     });
 
     // Press ESC
@@ -397,7 +395,7 @@ describe('Bulk Move Files', () => {
 
     // Should exit selection mode
     await waitFor(() => {
-      expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+      expect(screen.queryAllByLabelText(/^Select/)).toHaveLength(0);
     });
   });
 });

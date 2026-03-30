@@ -323,7 +323,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
           borderColor="accent.teal/30"
           justify="space-between"
         >
-          <Text fontSize="sm" fontWeight="500" color="fg.default">
+          <Text fontSize="sm" fontWeight="500" color="fg.default" aria-label="Selection status">
             {selectedFileIds.size} file{selectedFileIds.size !== 1 ? 's' : ''} selected
           </Text>
           <HStack gap={2}>
@@ -334,6 +334,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
               _hover={{ bg: 'accent.teal', opacity: 0.9 }}
               onClick={() => setShowBulkMoveModal(true)}
               disabled={selectedFileIds.size === 0}
+              aria-label="Move"
             >
               Move
             </Button>
@@ -341,6 +342,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
               size="xs"
               variant="ghost"
               onClick={exitSelectionMode}
+              aria-label="Cancel selection"
             >
               Cancel
             </Button>
@@ -368,6 +370,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
               size="sm"
               checked={filteredFiles.length > 0 && selectedFileIds.size === filteredFiles.length}
               onCheckedChange={() => toggleSelectAll()}
+              aria-label="Select all"
             />
           </Box>
         )}
@@ -426,6 +429,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
                 cursor: selectionMode ? 'pointer' : file.type === 'folder' ? 'pointer' : 'grabbing',
               }}
               transition="all 0.15s"
+              aria-label={file.name}
             >
               {/* Checkbox in selection mode */}
               {selectionMode && (
@@ -434,6 +438,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
                     size="sm"
                     checked={selectedFileIds.has(file.id)}
                     onCheckedChange={() => toggleFileSelection(file.id)}
+                    aria-label={`Select ${file.name}`}
                   />
                 </Box>
               )}
@@ -639,6 +644,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
                     size="sm"
                     checked={selectedFileIds.has(file.id)}
                     onCheckedChange={() => toggleFileSelection(file.id)}
+                    aria-label={`Select ${file.name}`}
                   />
                 </Box>
               )}
