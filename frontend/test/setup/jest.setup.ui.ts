@@ -118,7 +118,7 @@ jest.mock('next/navigation', () => ({
 // Custom navigation wrapper (used by FileHeader)
 jest.mock('@/lib/navigation/use-navigation', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn(), forward: jest.fn(), refresh: jest.fn(), prefetch: jest.fn() }),
-  getRouter: () => null,
+  getRouter: jest.fn(() => null),
 }));
 
 // ---------------------------------------------------------------------------

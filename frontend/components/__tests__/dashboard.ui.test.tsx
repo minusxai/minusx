@@ -41,6 +41,20 @@ jest.mock('@/lib/database/db-config', () => {
   };
 });
 
+// Wrap generateVirtualId in jest.fn so combined-flow tests can use
+// mockReturnValueOnce to predict which virtual IDs Navigate and CreateFile produce.
+// Explicitly include __esModule + default to survive the circular-ref between
+// filesSlice and store during jest.requireActual evaluation.
+jest.mock('@/store/filesSlice', () => {
+  const actual = jest.requireActual('@/store/filesSlice');
+  return {
+    __esModule: true,
+    ...actual,
+    default: actual.default,
+    generateVirtualId: jest.fn(actual.generateVirtualId),
+  };
+});
+
 import React, { useEffect, useRef } from 'react';
 import { screen, waitFor, within, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -48,8 +62,11 @@ import { NextRequest } from 'next/server';
 
 import * as storeModule from '@/store/store';
 import type { RootState } from '@/store/store';
+import * as filesSliceModule from '@/store/filesSlice';
 import { setFile, setEdit, addQuestionToDashboard, selectDirtyFiles } from '@/store/filesSlice';
+import * as useNavModule from '@/lib/navigation/use-navigation';
 import { setDashboardEditMode } from '@/store/uiSlice';
+import { setNavigation } from '@/store/navigationSlice';
 import { createConversation, sendMessage, selectConversation, setUserInputResult } from '@/store/chatSlice';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { publishAll } from '@/lib/api/file-state';
@@ -118,6 +135,35 @@ function makeUpdatedDashboardDbFile() {
 // ---------------------------------------------------------------------------
 // Agentic test helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Automatically confirms Navigate tool's UserInputException (type: 'confirmation').
+ * Renders nothing; exists only for side-effects.
+ */
+function AutoNavigateConfirmation() {
+  const dispatch = useAppDispatch();
+  const allConversations = useAppSelector((state: RootState) => state.chat.conversations);
+  const handledIds = useRef(new Set<string>());
+
+  useEffect(() => {
+    for (const conv of Object.values(allConversations)) {
+      for (const pendingTool of conv.pending_tool_calls ?? []) {
+        const ui = pendingTool.userInputs?.find(
+          u => u.result === undefined && u.props?.type === 'confirmation'
+        );
+        if (!ui || handledIds.current.has(ui.id)) continue;
+        handledIds.current.add(ui.id);
+        dispatch(setUserInputResult({
+          conversationID: conv.conversationID,
+          tool_call_id: pendingTool.toolCall.id,
+          userInputId: ui.id,
+          result: true,
+        }));
+      }
+    }
+  });
+  return null;
+}
 
 /**
  * Automatically handles PublishAll's UserInputException by calling publishAll()
@@ -812,6 +858,347 @@ describe('Dashboard agentic scenarios', () => {
     expect(batchCreateCallCount).toBe(2);
 
     // Virtual files replaced with real files in Redux
+    const filesState = testStore.getState().files.files;
+    expect(filesState[REAL_Q_ID]).toBeDefined();
+    expect(filesState[REAL_DASH_ID]).toBeDefined();
+
+    // No dirty files remain
+    expect(selectDirtyFiles(testStore.getState() as any)).toHaveLength(0);
+  }, 45000);
+});
+
+// ============================================================================
+// Combined flow: new dashboard with question from scratch
+// (manual + agentic — exercises Navigate → CreateFile → EditFile → PublishAll)
+// ============================================================================
+
+describe('Combined flow: new dashboard with question from scratch', () => {
+  const { getPythonPort, getLLMMockPort, getLLMMockServer } = withPythonBackend({ withLLMMock: true });
+  // Reuse the same DB as the other agentic describe — db-config mock always
+  // points to test_dashboard_ui.db regardless of which setupTestDb path is passed.
+  setupTestDb(getTestDbPath('dashboard_ui'));
+
+  // Virtual IDs — deterministic because generateVirtualId is mocked:
+  //   Navigate tool (after bug fix) → first generateVirtualId() call  → DASH_VID
+  //   CreateFile tool               → second generateVirtualId() call → Q_VID
+  const DASH_VID    = -1_000_000_091;
+  const Q_VID       = -1_000_000_092;
+  const REAL_Q_ID   = 50;
+  const REAL_DASH_ID = 51;
+  const Q_NAME = 'Revenue Query';
+  const DASH_NAME = 'My New Dashboard';
+
+  let testStore: ReturnType<typeof storeModule.makeStore>;
+  let getStoreSpy: jest.SpyInstance;
+  let batchCreateCallCount: number;
+
+  beforeEach(() => {
+    batchCreateCallCount = 0;
+    testStore = storeModule.makeStore();
+    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+
+    // Pin generateVirtualId: Navigate gets DASH_VID, CreateFile gets Q_VID.
+    (filesSliceModule.generateVirtualId as jest.Mock)
+      .mockReturnValueOnce(DASH_VID)
+      .mockReturnValueOnce(Q_VID);
+
+    // Override getRouter() so the Navigate tool's router.push dispatches
+    // setNavigation to the test store — exactly what NavigationSync does in prod.
+    (useNavModule.getRouter as jest.Mock).mockReturnValue({
+      push: (url: string) => {
+        const u = new URL(url, 'http://localhost');
+        const vid = u.searchParams.get('virtualId');
+        const folder = u.searchParams.get('folder') ?? '/org';
+        testStore.dispatch(setNavigation({
+          pathname: u.pathname,
+          searchParams: { virtualId: vid!, folder },
+        }));
+      },
+    });
+
+    const pythonPort = getPythonPort();
+    global.fetch = jest.fn(async (url: string | Request | URL, init?: RequestInit) => {
+      const urlStr = url.toString();
+      const method = (init?.method ?? 'GET').toUpperCase();
+
+      if (urlStr.startsWith('/api/chat') || urlStr.includes('localhost:3000/api/chat')) {
+        const req = new NextRequest('http://localhost:3000/api/chat', {
+          method: 'POST',
+          body: init?.body as string,
+          headers: init?.headers as HeadersInit,
+        });
+        const resp = await chatPostHandler(req);
+        const data = await resp.json();
+        return { ok: resp.status < 400, status: resp.status, json: async () => data } as Response;
+      }
+
+      if (urlStr.includes(`localhost:${pythonPort}`) || urlStr.includes('localhost:8001')) {
+        return realFetch(urlStr.replace('localhost:8001', `localhost:${pythonPort}`), init);
+      }
+
+      const llmPort = getLLMMockPort?.();
+      if (llmPort && urlStr.includes(`localhost:${llmPort}`)) {
+        return realFetch(urlStr, init);
+      }
+
+      if (method === 'POST' && urlStr.includes('/api/files/template')) {
+        const body = JSON.parse(init!.body as string) as { type: string };
+        const content = body.type === 'question'
+          ? { query: '', vizSettings: { type: 'table' }, database_name: '', parameters: [] }
+          : { assets: [], layout: { columns: 12, items: [] } };
+        return {
+          ok: true, status: 200,
+          json: async () => ({ data: { content, fileName: '', metadata: { availableDatabases: [] } } }),
+        } as Response;
+      }
+
+      // GET /api/files?type=question — QuestionBrowserPanel listing
+      if (method === 'GET' && urlStr.includes('/api/files') && urlStr.includes('type=question')) {
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            data: [{ id: QUESTION_ID, name: QUESTION_NAME, type: 'question', path: `/org/${QUESTION_NAME}` }],
+          }),
+        } as Response;
+      }
+
+      // Catch-all for non-critical GET requests (configs, etc.)
+      if (method === 'GET') {
+        return { ok: true, status: 200, json: async () => ({ data: null }) } as Response;
+      }
+
+      if (method === 'POST' && urlStr.includes('/api/files/batch-create')) {
+        batchCreateCallCount++;
+        const body = JSON.parse(init!.body as string) as {
+          files: Array<{ virtualId: number; type: string }>;
+        };
+        const firstFile = body.files[0];
+        // Call 1: question (agentic test) or dashboard (manual test — only 1 call)
+        if (firstFile.type === 'question') {
+          return {
+            ok: true, status: 200,
+            json: async () => ({
+              data: [{
+                virtualId: firstFile.virtualId,
+                file: {
+                  id: REAL_Q_ID, name: Q_NAME, type: 'question',
+                  path: `/org/${Q_NAME}`,
+                  content: { query: 'SELECT 1', vizSettings: { type: 'table' }, database_name: 'default' },
+                  created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+                  references: [], version: 1, last_edit_id: null, company_id: 1,
+                },
+              }],
+            }),
+          } as Response;
+        }
+        // Dashboard (manual test call 1, or agentic test call 2)
+        return {
+          ok: true, status: 200,
+          json: async () => ({
+            data: [{
+              virtualId: firstFile.virtualId,
+              file: {
+                id: REAL_DASH_ID, name: DASH_NAME, type: 'dashboard',
+                path: `/org/${DASH_NAME}`,
+                content: { assets: [{ type: 'question', id: REAL_Q_ID }], layout: { columns: 12, items: [] } },
+                created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+                references: [REAL_Q_ID], version: 1, last_edit_id: null, company_id: 1,
+              },
+            }],
+          }),
+        } as Response;
+      }
+
+      if (urlStr.includes('/health')) {
+        return { ok: true, status: 200, json: async () => ({ status: 'healthy' }) } as Response;
+      }
+
+      throw new Error(`[Combined flow] Unmocked fetch call to ${urlStr}`);
+    });
+  });
+
+  afterEach(() => {
+    global.fetch = realFetch;
+    getStoreSpy.mockRestore();
+    jest.restoreAllMocks();
+  });
+
+  // --------------------------------------------------------------------------
+  // Manual: simulate navigating to /new/dashboard, add a virtual question via
+  // QuestionBrowserPanel, then call publishAll() directly.
+  // --------------------------------------------------------------------------
+
+  it('manual: navigates to new dashboard, adds existing question via QuestionBrowserPanel, publishAll batch-creates the new dashboard', async () => {
+    const user = userEvent.setup();
+
+    // Pre-seed the real question in Redux (QuestionBrowserPanel reads it after the API call)
+    testStore.dispatch(setFile({ file: makeQuestionDbFile(), references: [] }));
+
+    // Simulate navigation to /new/dashboard — navigationListener creates the virtual dashboard.
+    // DASH_VID is pinned via mockReturnValueOnce in beforeEach.
+    testStore.dispatch(setNavigation({
+      pathname: '/new/dashboard',
+      searchParams: { virtualId: String(DASH_VID), folder: '/org' },
+    }));
+    await waitFor(
+      () => expect(testStore.getState().files.files[DASH_VID]).toBeDefined(),
+      { timeout: 5000 }
+    );
+
+    // New dashboards open in edit mode — QuestionBrowserPanel is visible
+    testStore.dispatch(setDashboardEditMode({ fileId: DASH_VID, editMode: true }));
+    renderWithProviders(
+      <DashboardContainerV2 fileId={DASH_VID} />,
+      { store: testStore }
+    );
+
+    // QuestionBrowserPanel loads questions (mocked GET /api/files?type=question)
+    // and renders each as an article.  Click "Add to dashboard" on the real question.
+    const card = await screen.findByRole('article', { name: QUESTION_NAME }, { timeout: 5000 });
+    await user.click(within(card).getByRole('button', { name: 'Add to dashboard' }));
+
+    // Virtual dashboard is now dirty — real question linked
+    await waitFor(() => {
+      const dash = testStore.getState().files.files[DASH_VID];
+      const merged = {
+        ...(dash.content as DashboardContent),
+        ...(dash.persistableChanges as Partial<DashboardContent> | undefined),
+      };
+      expect(merged.assets?.some(a => (a as { id: number }).id === QUESTION_ID)).toBe(true);
+    }, { timeout: 3000 });
+
+    // publishAll: only the virtual dashboard needs batch-create (real question is not dirty)
+    await act(async () => { await publishAll(); });
+
+    // Exactly 1 batch-create call — for the virtual dashboard
+    expect(batchCreateCallCount).toBe(1);
+    expect(testStore.getState().files.files[REAL_DASH_ID]).toBeDefined();
+    expect(selectDirtyFiles(testStore.getState())).toHaveLength(0);
+  });
+
+  // --------------------------------------------------------------------------
+  // Agentic: agent navigates from explore → new dashboard, creates a question,
+  // links it via EditFile, publishes via PublishAll.
+  // --------------------------------------------------------------------------
+
+  it('agentic: agent navigates to new dashboard, creates question, links via EditFile, publishes', async () => {
+    const mockServer = getLLMMockServer!();
+    await mockServer.reset();
+    await mockServer.configure([
+      // Turn 1: Navigate to /new/dashboard (will trigger UserInputException confirmation)
+      {
+        response: {
+          content: '',
+          role: 'assistant',
+          tool_calls: [{
+            id: 'tc_nav',
+            type: 'function',
+            function: {
+              name: 'Navigate',
+              arguments: JSON.stringify({ newFileType: 'dashboard', path: '/org' }),
+            },
+          }],
+          finish_reason: 'tool_calls',
+        },
+        usage: { total_tokens: 120, prompt_tokens: 90, completion_tokens: 30 },
+      },
+      // Turn 2: CreateFile — creates question on the new dashboard page
+      {
+        response: {
+          content: '',
+          role: 'assistant',
+          tool_calls: [{
+            id: 'tc_cf',
+            type: 'function',
+            function: {
+              name: 'CreateFile',
+              arguments: JSON.stringify({ file_type: 'question', name: Q_NAME }),
+            },
+          }],
+          finish_reason: 'tool_calls',
+        },
+        usage: { total_tokens: 100, prompt_tokens: 75, completion_tokens: 25 },
+      },
+      // Turn 3: EditFile — add question to dashboard assets
+      {
+        response: {
+          content: '',
+          role: 'assistant',
+          tool_calls: [{
+            id: 'tc_ef',
+            type: 'function',
+            function: {
+              name: 'EditFile',
+              arguments: JSON.stringify({
+                fileId: DASH_VID,
+                changes: [{
+                  oldMatch: '"assets":[]',
+                  newMatch: `"assets":[{"type":"question","id":${Q_VID}}]`,
+                }],
+              }),
+            },
+          }],
+          finish_reason: 'tool_calls',
+        },
+        usage: { total_tokens: 110, prompt_tokens: 80, completion_tokens: 30 },
+      },
+      // Turn 4: PublishAll (will trigger UserInputException publish)
+      {
+        response: {
+          content: '',
+          role: 'assistant',
+          tool_calls: [{
+            id: 'tc_pub',
+            type: 'function',
+            function: { name: 'PublishAll', arguments: '{}' },
+          }],
+          finish_reason: 'tool_calls',
+        },
+        usage: { total_tokens: 80, prompt_tokens: 60, completion_tokens: 20 },
+      },
+      // Turn 5: done
+      {
+        response: {
+          content: `Done! I've created ${Q_NAME} and added it to your new dashboard.`,
+          role: 'assistant',
+          tool_calls: [],
+          finish_reason: 'stop',
+        },
+        usage: { total_tokens: 70, prompt_tokens: 50, completion_tokens: 20 },
+      },
+    ]);
+
+    // Start on explore page — agent must navigate from here
+    testStore.dispatch(setNavigation({ pathname: '/explore', searchParams: {} }));
+
+    // Both auto-handlers mounted: confirmation (Navigate) + publish (PublishAll)
+    renderWithProviders(
+      <><AutoNavigateConfirmation /><AutoPublishUserInput /></>,
+      { store: testStore }
+    );
+
+    const CONV_ID = -600;
+    testStore.dispatch(createConversation({
+      conversationID: CONV_ID,
+      agent: 'AnalystAgent',
+      agent_args: { goal: `Create a dashboard with a ${Q_NAME} question` },
+    }));
+    testStore.dispatch(sendMessage({
+      conversationID: CONV_ID,
+      message: `Create a new dashboard with a question called ${Q_NAME}`,
+    }));
+
+    const realConvId = await waitForConversationFinished(
+      () => testStore.getState() as RootState,
+      CONV_ID
+    );
+
+    // Conversation completed without errors
+    expect(selectConversation(testStore.getState() as RootState, realConvId)?.error).toBeUndefined();
+
+    // Both virtual files published: question (level 1) then dashboard (level 2)
+    expect(batchCreateCallCount).toBe(2);
+
     const filesState = testStore.getState().files.files;
     expect(filesState[REAL_Q_ID]).toBeDefined();
     expect(filesState[REAL_DASH_ID]).toBeDefined();
