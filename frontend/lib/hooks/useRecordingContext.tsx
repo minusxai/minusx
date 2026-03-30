@@ -11,6 +11,7 @@ interface RecordingContextValue {
 }
 
 const RecordingContext = createContext<RecordingContextValue | null>(null);
+RecordingContext.displayName = 'RecordingContext';
 
 export function RecordingProvider({ children }: { children: ReactNode }) {
   const recordingManager = useRecordingManager();

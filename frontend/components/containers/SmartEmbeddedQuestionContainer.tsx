@@ -159,7 +159,7 @@ function SmartEmbeddedQuestionContainerInner({
 // Custom comparator: skip re-render when only unstable callback refs change (onEdit/onRemove
 // are inline arrow functions in DashboardView's questionGridItems useMemo, so they're always
 // new references when hoveredParamKey changes — ignoring them prevents 77-render cascades).
-export default React.memo(SmartEmbeddedQuestionContainerInner, (prev, next) =>
+const SmartEmbeddedQuestionContainer = React.memo(SmartEmbeddedQuestionContainerInner, (prev, next) =>
   prev.questionId === next.questionId &&
   prev.externalParameters === next.externalParameters &&
   prev.externalParamValues === next.externalParamValues &&
@@ -167,3 +167,4 @@ export default React.memo(SmartEmbeddedQuestionContainerInner, (prev, next) =>
   prev.editMode === next.editMode &&
   prev.index === next.index
 );
+export default SmartEmbeddedQuestionContainer;

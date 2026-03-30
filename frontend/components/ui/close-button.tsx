@@ -11,3 +11,4 @@ export const CloseButton = forwardRef<HTMLButtonElement, IconButtonProps>(
     )
   },
 )
+CloseButton.displayName = 'CloseButton'

@@ -57,6 +57,7 @@ interface NavigationGuardContextType {
 }
 
 const NavigationGuardContext = createContext<NavigationGuardContextType | null>(null);
+NavigationGuardContext.displayName = 'NavigationGuardContext';
 
 export function useNavigationGuard() {
   const context = useContext(NavigationGuardContext);

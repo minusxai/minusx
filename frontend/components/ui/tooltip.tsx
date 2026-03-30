@@ -45,3 +45,4 @@ export const Tooltip = React.forwardRef<HTMLDivElement, TooltipProps>(
     )
   }
 )
+Tooltip.displayName = 'Tooltip'
