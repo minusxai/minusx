@@ -605,6 +605,8 @@ See `store/__tests__/test-utils.ts` for available utilities and `chatE2E.test.ts
 
 **Test Ports:** Tests use ports 8002-8006 (distinct from dev servers on 3000 and 8001). Always check for stale test processes before running tests.
 
+For component-level UI interaction tests (React rendering, user events, DOM assertions), use the `*.ui.test.tsx` naming convention with the JSDOM runner instead (`npx jest --config jest.config.ui.js`). See `components/__tests__/dashboard.ui.test.tsx` for the reference pattern (real SQLite DB + real Next.js route handlers, no Python backend required).
+
 ## Pydantic → TypeScript Type Codegen
 
 **Single source of truth:** `backend/tasks/agents/analyst/file_schema.py` defines Pydantic models for all shared Atlas file types (`VizSettings`, `PivotConfig`, `QuestionContent`, `DashboardContent`, `FileReference`, `DashboardLayoutItem`, etc.).
