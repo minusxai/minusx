@@ -96,11 +96,14 @@ export async function runChatOrchestration({
     if (pythonResponse.pending_tool_calls.length === 0) break;
 
     // Execute Next.js-side tools (database queries, file access, etc.)
+    // allowServerFallback: true enables server-side handlers for client-only tools
+    // (e.g. ReadFiles, EditFile) since there is no browser client in scheduled runs.
     const result = await orchestratePendingTools(
       pythonResponse.pending_tool_calls,
       currentFileId,
       currentLogIndex,
-      user
+      user,
+      { allowServerFallback: true }
     );
 
     currentFileId = result.updatedFileId;

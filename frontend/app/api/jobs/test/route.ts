@@ -27,7 +27,7 @@ export interface EvalRunResponse {
 
 
 /**
- * POST /api/evals
+ * POST /api/jobs/test
  * Run a single eval item OR a unified Test against the agent and return pass/fail.
  *
  * Accepts two body formats:

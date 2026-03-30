@@ -335,23 +335,25 @@ export async function POST(request: NextRequest) {
             currentFileId,
             currentLogIndex,
             user,
-            request.signal,  // Pass abort signal
             {
-              onToolCompleted: (tool: ToolCall, result: ToolExecutionResult) => {
-                const event: StreamingEvent = {
-                  conversationID: currentConversationID,
-                  type: 'ToolCompleted',
-                  payload: {
-                    role: 'tool',
-                    tool_call_id: result.tool_call_id,
-                    content: result.content,
-                    run_id: '',
-                    function: tool.function,
-                    details: result.details,
-                    created_at: new Date().toISOString()
-                  } as CompletedToolCallFromPython
-                };
-                safeEnqueue(controller, encoder, 'streaming_event', event);
+              signal: request.signal,
+              callbacks: {
+                onToolCompleted: (tool: ToolCall, result: ToolExecutionResult) => {
+                  const event: StreamingEvent = {
+                    conversationID: currentConversationID,
+                    type: 'ToolCompleted',
+                    payload: {
+                      role: 'tool',
+                      tool_call_id: result.tool_call_id,
+                      content: result.content,
+                      run_id: '',
+                      function: tool.function,
+                      details: result.details,
+                      created_at: new Date().toISOString()
+                    } as CompletedToolCallFromPython
+                  };
+                  safeEnqueue(controller, encoder, 'streaming_event', event);
+                }
               }
             }
           );

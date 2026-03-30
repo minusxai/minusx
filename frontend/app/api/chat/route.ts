@@ -212,7 +212,7 @@ export async function POST(request: NextRequest) {
         currentFileId,
         currentLogIndex,
         user,
-        request.signal  // Pass abort signal
+        { signal: request.signal }
       );
 
       // Update state from orchestration result
