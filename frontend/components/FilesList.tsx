@@ -1,17 +1,19 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Box, HStack, Text, Icon, VStack, IconButton, Flex, SimpleGrid, Button } from '@chakra-ui/react';
 import { LuList, LuLayoutGrid, LuFiles } from 'react-icons/lu';
 import { DbFile } from '@/lib/types';
 import { FILE_TYPE_METADATA, getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import FileActionMenu from './FileActionMenu';
 import { Tooltip } from '@/components/ui/tooltip';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { generateFileUrl } from '@/lib/slug-utils';
 import { Link } from '@/components/ui/Link';
 import DashboardUsageBadge from './DashboardUsageBadge';
 import { moveFile } from '@/lib/api/file-state';
+import BulkMoveFileModal from './BulkMoveFileModal';
 
 interface FilesListProps {
   files: DbFile[];
@@ -30,6 +32,48 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
   const [draggedFileId, setDraggedFileId] = useState<number | null>(null);
   const [dropTargetId, setDropTargetId] = useState<number | null>(null);
   const [dragPosition, setDragPosition] = useState<{ x: number; y: number } | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedFileIds, setSelectedFileIds] = useState<Set<number>>(new Set());
+  const [showBulkMoveModal, setShowBulkMoveModal] = useState(false);
+
+  // Exit selection mode on ESC
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectionMode) {
+        setSelectionMode(false);
+        setSelectedFileIds(new Set());
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [selectionMode]);
+
+  const toggleFileSelection = useCallback((fileId: number) => {
+    setSelectedFileIds(prev => {
+      const next = new Set(prev);
+      if (next.has(fileId)) {
+        next.delete(fileId);
+      } else {
+        next.add(fileId);
+      }
+      return next;
+    });
+  }, []);
+
+  const exitSelectionMode = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedFileIds(new Set());
+  }, []);
+
+  const enterSelectionWithFile = useCallback((fileId: number) => {
+    setSelectionMode(true);
+    setSelectedFileIds(new Set([fileId]));
+  }, []);
+
+  const selectedFiles = useMemo(() =>
+    files.filter(f => selectedFileIds.has(f.id)).map(f => ({ id: f.id, name: f.name, path: f.path, type: f.type })),
+    [files, selectedFileIds]
+  );
 
   // Determine which types to show in the dropdown
   // If availableTypes is provided, use that; otherwise infer from files
@@ -74,6 +118,14 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
 
   // Apply limit if specified
   const filteredFiles = limit ? sorted.slice(0, limit) : sorted;
+
+  const toggleSelectAll = useCallback(() => {
+    if (selectedFileIds.size === filteredFiles.length) {
+      setSelectedFileIds(new Set());
+    } else {
+      setSelectedFileIds(new Set(filteredFiles.map(f => f.id)));
+    }
+  }, [selectedFileIds.size, filteredFiles]);
 
   // Toggle type selection
   const toggleType = (type: FileType) => {
@@ -217,45 +269,83 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
         </HStack>
 
         {/* View Toggle */}
-        <HStack
-          gap={0.5}
-          bg="bg.surface"
-          borderRadius="md"
-          p={0.5}
-          border="1px solid"
-          borderColor="border.default"
-          flexShrink={0}
-        >
-          <Tooltip content="List view" positioning={{ placement: 'bottom' }}>
-            <IconButton
-              variant="ghost"
-              size="sm"
-              aria-label="List view"
-              onClick={() => setViewMode('list')}
-              bg={viewMode === 'list' ? 'accent.teal' : 'transparent'}
-              color={viewMode === 'list' ? 'white' : 'fg.default'}
-              _hover={{ bg: viewMode === 'list' ? 'accent.teal' : 'bg.muted' }}
-              borderRadius="sm"
-            >
-              <LuList />
-            </IconButton>
-          </Tooltip>
-          <Tooltip content="Grid view" positioning={{ placement: 'bottom' }}>
-            <IconButton
-              variant="ghost"
-              size="sm"
-              aria-label="Grid view"
-              onClick={() => setViewMode('grid')}
-              bg={viewMode === 'grid' ? 'accent.teal' : 'transparent'}
-              color={viewMode === 'grid' ? 'white' : 'fg.default'}
-              _hover={{ bg: viewMode === 'grid' ? 'accent.teal' : 'bg.muted' }}
-              borderRadius="sm"
-            >
-              <LuLayoutGrid />
-            </IconButton>
-          </Tooltip>
+        <HStack gap={2} flexShrink={0}>
+          <HStack
+            gap={0.5}
+            bg="bg.surface"
+            borderRadius="md"
+            p={0.5}
+            border="1px solid"
+            borderColor="border.default"
+          >
+            <Tooltip content="List view" positioning={{ placement: 'bottom' }}>
+              <IconButton
+                variant="ghost"
+                size="sm"
+                aria-label="List view"
+                onClick={() => setViewMode('list')}
+                bg={viewMode === 'list' ? 'accent.teal' : 'transparent'}
+                color={viewMode === 'list' ? 'white' : 'fg.default'}
+                _hover={{ bg: viewMode === 'list' ? 'accent.teal' : 'bg.muted' }}
+                borderRadius="sm"
+              >
+                <LuList />
+              </IconButton>
+            </Tooltip>
+            <Tooltip content="Grid view" positioning={{ placement: 'bottom' }}>
+              <IconButton
+                variant="ghost"
+                size="sm"
+                aria-label="Grid view"
+                onClick={() => setViewMode('grid')}
+                bg={viewMode === 'grid' ? 'accent.teal' : 'transparent'}
+                color={viewMode === 'grid' ? 'white' : 'fg.default'}
+                _hover={{ bg: viewMode === 'grid' ? 'accent.teal' : 'bg.muted' }}
+                borderRadius="sm"
+              >
+                <LuLayoutGrid />
+              </IconButton>
+            </Tooltip>
+          </HStack>
         </HStack>
       </HStack>
+      )}
+
+      {/* Bulk Action Bar */}
+      {selectionMode && (
+        <HStack
+          px={4}
+          py={2}
+          mb={2}
+          bg="accent.teal/10"
+          borderRadius="md"
+          border="1px solid"
+          borderColor="accent.teal/30"
+          justify="space-between"
+        >
+          <Text fontSize="sm" fontWeight="500" color="fg.default">
+            {selectedFileIds.size} file{selectedFileIds.size !== 1 ? 's' : ''} selected
+          </Text>
+          <HStack gap={2}>
+            <Button
+              size="xs"
+              bg="accent.teal"
+              color="white"
+              _hover={{ bg: 'accent.teal', opacity: 0.9 }}
+              onClick={() => setShowBulkMoveModal(true)}
+              disabled={selectedFileIds.size === 0}
+            >
+              Move
+            </Button>
+            <Button
+              size="xs"
+              variant="ghost"
+              onClick={exitSelectionMode}
+            >
+              Cancel
+            </Button>
+          </HStack>
+        </HStack>
       )}
 
       {viewMode === 'list' ? (
@@ -272,6 +362,15 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
         textTransform="uppercase"
         letterSpacing="0.05em"
       >
+        {selectionMode && (
+          <Box flexShrink={0} onClick={(e) => e.stopPropagation()}>
+            <Checkbox
+              size="sm"
+              checked={filteredFiles.length > 0 && selectedFileIds.size === filteredFiles.length}
+              onCheckedChange={() => toggleSelectAll()}
+            />
+          </Box>
+        )}
         <Box flex="1">Name</Box>
         <Box w="120px" display={{ base: 'none', md: 'block' }}>Type</Box>
         <Box w="140px" display={{ base: 'none', lg: 'block' }}>Modified</Box>
@@ -284,22 +383,24 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
           key={file.id}
           position="relative"
           role="group"
-          onDragOver={(e) => handleDragOver(e, file)}
-          onDragEnter={(e) => handleDragEnter(e, file)}
-          onDragLeave={handleDragLeave}
-          onDrop={(e) => handleDrop(e, file)}
+          onDragOver={(e) => !selectionMode && handleDragOver(e, file)}
+          onDragEnter={(e) => !selectionMode && handleDragEnter(e, file)}
+          onDragLeave={() => !selectionMode && handleDragLeave()}
+          onDrop={(e) => !selectionMode && handleDrop(e, file)}
         >
           <Link
             href={file.type === 'folder' ? `/p${file.path}` : `/f/${generateFileUrl(file.id, file.name)}`}
-            prefetch={true}
+            prefetch={!selectionMode}
             style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}
-            draggable={file.type !== 'folder'}
-            onDragStart={(e) => handleDragStart(e, file)}
-            onDrag={handleDrag}
-            onDragEnd={handleDragEnd}
+            draggable={!selectionMode && file.type !== 'folder'}
+            onDragStart={(e) => !selectionMode && handleDragStart(e, file)}
+            onDrag={(e) => !selectionMode && handleDrag(e)}
+            onDragEnd={() => !selectionMode && handleDragEnd()}
             onClick={(e) => {
-              // Prevent navigation during drag
-              if (draggedFileId) {
+              if (selectionMode) {
+                e.preventDefault();
+                toggleFileSelection(file.id);
+              } else if (draggedFileId) {
                 e.preventDefault();
               }
             }}
@@ -314,18 +415,28 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
               h="52px"
               borderBottom="1px solid"
               borderColor="border.muted"
-              bg={dropTargetId === file.id && file.type === 'folder' ? 'accent.teal/10' : 'transparent'}
+              bg={selectionMode && selectedFileIds.has(file.id) ? 'accent.teal/10' : dropTargetId === file.id && file.type === 'folder' ? 'accent.teal/10' : 'transparent'}
               borderWidth={dropTargetId === file.id && file.type === 'folder' ? '2px' : '0'}
               borderStyle={dropTargetId === file.id && file.type === 'folder' ? 'dashed' : 'solid'}
               _hover={{
-                bg: dropTargetId === file.id && file.type === 'folder' ? 'accent.teal/20' : 'bg.surface',
+                bg: selectionMode ? 'accent.teal/5' : dropTargetId === file.id && file.type === 'folder' ? 'accent.teal/20' : 'bg.surface',
               }}
-              cursor={file.type === 'folder' ? 'pointer' : 'grab'}
+              cursor={selectionMode ? 'pointer' : file.type === 'folder' ? 'pointer' : 'grab'}
               _active={{
-                cursor: file.type === 'folder' ? 'pointer' : 'grabbing',
+                cursor: selectionMode ? 'pointer' : file.type === 'folder' ? 'pointer' : 'grabbing',
               }}
               transition="all 0.15s"
             >
+              {/* Checkbox in selection mode */}
+              {selectionMode && (
+                <Box flexShrink={0} onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    size="sm"
+                    checked={selectedFileIds.has(file.id)}
+                    onCheckedChange={() => toggleFileSelection(file.id)}
+                  />
+                </Box>
+              )}
               {/* Icon + Name */}
               <HStack flex="1" gap={3} minW={0}>
                 <Icon
@@ -392,7 +503,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
               e.stopPropagation();
             }}
           >
-            <FileActionMenu fileId={file.id} fileName={file.name} filePath={file.path} fileType={file.type} size="sm" />
+            <FileActionMenu fileId={file.id} fileName={file.name} filePath={file.path} fileType={file.type} size="sm" onSelect={enterSelectionWithFile} />
           </Box>
         </Box>
       ))}
@@ -424,22 +535,24 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
               key={file.id}
               position="relative"
               role="group"
-              onDragOver={(e) => handleDragOver(e, file)}
-              onDragEnter={(e) => handleDragEnter(e, file)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, file)}
+              onDragOver={(e) => !selectionMode && handleDragOver(e, file)}
+              onDragEnter={(e) => !selectionMode && handleDragEnter(e, file)}
+              onDragLeave={() => !selectionMode && handleDragLeave()}
+              onDrop={(e) => !selectionMode && handleDrop(e, file)}
             >
               <Link
                 href={file.type === 'folder' ? `/p${file.path}` : `/f/${generateFileUrl(file.id, file.name)}`}
-                prefetch={true}
+                prefetch={!selectionMode}
                 style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}
-                draggable={file.type !== 'folder'}
-                onDragStart={(e) => handleDragStart(e, file)}
-                onDrag={handleDrag}
-                onDragEnd={handleDragEnd}
+                draggable={!selectionMode && file.type !== 'folder'}
+                onDragStart={(e) => !selectionMode && handleDragStart(e, file)}
+                onDrag={(e) => !selectionMode && handleDrag(e)}
+                onDragEnd={() => !selectionMode && handleDragEnd()}
                 onClick={(e) => {
-                  // Prevent navigation during drag
-                  if (draggedFileId) {
+                  if (selectionMode) {
+                    e.preventDefault();
+                    toggleFileSelection(file.id);
+                  } else if (draggedFileId) {
                     e.preventDefault();
                   }
                 }}
@@ -450,18 +563,18 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
                 >
                 <VStack
                   p={4}
-                  bg={dropTargetId === file.id && file.type === 'folder' ? 'accent.teal/10' : 'bg.surface'}
+                  bg={selectionMode && selectedFileIds.has(file.id) ? 'accent.teal/10' : dropTargetId === file.id && file.type === 'folder' ? 'accent.teal/10' : 'bg.surface'}
                   borderRadius="md"
                   border="2px"
                   borderStyle={dropTargetId === file.id && file.type === 'folder' ? 'dashed' : 'solid'}
-                  borderColor={dropTargetId === file.id && file.type === 'folder' ? 'accent.teal' : 'border.default'}
+                  borderColor={selectionMode && selectedFileIds.has(file.id) ? 'accent.teal' : dropTargetId === file.id && file.type === 'folder' ? 'accent.teal' : 'border.default'}
                   _hover={{
-                    bg: dropTargetId === file.id && file.type === 'folder' ? 'accent.teal/20' : 'bg.elevated',
-                    borderColor: dropTargetId === file.id && file.type === 'folder' ? 'accent.teal' : getFileTypeMetadata(file.type).color,
+                    bg: selectionMode ? 'accent.teal/5' : dropTargetId === file.id && file.type === 'folder' ? 'accent.teal/20' : 'bg.elevated',
+                    borderColor: selectionMode && selectedFileIds.has(file.id) ? 'accent.teal' : dropTargetId === file.id && file.type === 'folder' ? 'accent.teal' : getFileTypeMetadata(file.type).color,
                   }}
-                  cursor={file.type === 'folder' ? 'pointer' : 'grab'}
+                  cursor={selectionMode ? 'pointer' : file.type === 'folder' ? 'pointer' : 'grab'}
                   _active={{
-                    cursor: file.type === 'folder' ? 'pointer' : 'grabbing',
+                    cursor: selectionMode ? 'pointer' : file.type === 'folder' ? 'pointer' : 'grabbing',
                   }}
                   transition="all 0.15s"
                   align="center"
@@ -511,7 +624,27 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
                 </Box>
               </Link>
 
+              {/* Checkbox overlay in selection mode */}
+              {selectionMode && (
+                <Box
+                  position="absolute"
+                  left={1}
+                  top={1}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.preventDefault();
+                  }}
+                >
+                  <Checkbox
+                    size="sm"
+                    checked={selectedFileIds.has(file.id)}
+                    onCheckedChange={() => toggleFileSelection(file.id)}
+                  />
+                </Box>
+              )}
+
               {/* Action Menu */}
+              {!selectionMode && (
               <Box
                 position="absolute"
                 right={1}
@@ -520,8 +653,9 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
                   e.stopPropagation();
                 }}
               >
-                <FileActionMenu fileId={file.id} fileName={file.name} filePath={file.path} fileType={file.type} size="xs" />
+                <FileActionMenu fileId={file.id} fileName={file.name} filePath={file.path} fileType={file.type} size="xs" onSelect={enterSelectionWithFile} />
               </Box>
+              )}
             </Box>
           ))}
 
@@ -645,6 +779,16 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
           </Box>
         );
       })()}
+
+      {/* Bulk Move Modal */}
+      <BulkMoveFileModal
+        isOpen={showBulkMoveModal}
+        onClose={() => {
+          setShowBulkMoveModal(false);
+          exitSelectionMode();
+        }}
+        files={selectedFiles}
+      />
     </Box>
   );
 }
