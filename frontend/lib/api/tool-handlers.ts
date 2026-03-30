@@ -6,7 +6,7 @@
  */
 
 import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema } from '@/lib/types';
-import { setEphemeral, selectMergedContent, selectDirtyFiles, type FileId } from '@/store/filesSlice';
+import { setEphemeral, selectMergedContent, selectDirtyFiles, generateVirtualId, type FileId } from '@/store/filesSlice';
 import type { AppDispatch, RootState } from '@/store/store';
 import { getStore } from '@/store/store';
 import type { UserInput } from './user-input-exception';
@@ -217,7 +217,7 @@ registerFrontendTool('Navigate', async (args, context) => {
       return { content: { success: false, message: msg }, details: { success: false, error: msg } };
     }
 
-    const virtualFileId = -Date.now();
+    const virtualFileId = generateVirtualId();
 
     // Build URL with virtualId and optional folder parameter
     const params = new URLSearchParams();
