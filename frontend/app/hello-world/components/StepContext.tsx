@@ -9,7 +9,7 @@ import { useConnections } from '@/lib/hooks/useConnections';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { createVirtualFile, editFile, publishFile } from '@/lib/api/file-state';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { createConversation, selectActiveConversation, selectConversation, interruptChat } from '@/store/chatSlice';
+import { createConversation, selectActiveConversation, selectConversation, interruptChat, generateVirtualConversationId } from '@/store/chatSlice';
 import { selectAugmentedFiles, compressAugmentedFile } from '@/lib/api/file-state';
 import Editor from '@monaco-editor/react';
 import Markdown from '@/components/Markdown';
@@ -282,7 +282,7 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
 
     // Create a conversation and send the message directly (no sidebar needed)
     dispatch(createConversation({
-      conversationID: -Date.now(),
+      conversationID: generateVirtualConversationId(),
       agent: 'OnboardingContextAgent',
       agent_args: {
         connection_id: connectionName,

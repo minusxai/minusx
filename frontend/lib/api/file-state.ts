@@ -1144,14 +1144,14 @@ export interface CreateVirtualFileOptions {
   databaseName?: string;
   /** For questions: pre-populate with this SQL query */
   query?: string;
-  /** Virtual ID override (defaults to -Date.now()) */
+  /** Virtual ID override */
   virtualId?: number;
 }
 
 /**
  * createVirtualFile - Create a virtual file for "create mode"
  *
- * Virtual files use negative IDs (-Date.now()) to distinguish them from real files.
+ * Virtual files use negative IDs to distinguish them from real files.
  * They exist only in Redux until saved via publishFile.
  *
  * @param type - The type of file to create (question, dashboard, etc.)

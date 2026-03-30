@@ -24,7 +24,7 @@
  */
 
 import { configureStore } from '@reduxjs/toolkit';
-import filesReducer from '../filesSlice';
+import filesReducer, { generateVirtualId } from '../filesSlice';
 import queryResultsReducer from '../queryResultsSlice';
 import authReducer from '../authSlice';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
@@ -268,7 +268,7 @@ describe('publishAll E2E', () => {
     // -----------------------------------------------------------------------
     // Step 3: Create a virtual new question in Redux (negative ID)
     // -----------------------------------------------------------------------
-    const virtualId = -Date.now();
+    const virtualId = generateVirtualId();
 
     const virtualContent: QuestionContent = {
       description: 'Brand new question',

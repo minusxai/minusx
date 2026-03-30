@@ -10,7 +10,7 @@ import { AppState } from '@/lib/appState';
 import ChatInput from './ChatInput';
 import ThinkingIndicator from './ThinkingIndicator';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { createConversation, sendMessage, updateAgentArgs, interruptChat, selectOptionalConversation, setActiveConversation, selectActiveTempConversation } from '@/store/chatSlice';
+import { createConversation, sendMessage, updateAgentArgs, interruptChat, selectOptionalConversation, setActiveConversation, selectActiveTempConversation, generateVirtualConversationId } from '@/store/chatSlice';
 import { useConversation } from '@/lib/hooks/useConversation';
 import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -349,7 +349,7 @@ export default function ChatInterface({
     if (isNewConversation && !conversationID) {
       // Create conversation with temp ID (negative) and initial message
       dispatch(createConversation({
-        conversationID: -Date.now(),
+        conversationID: generateVirtualConversationId(),
         agent: 'AnalystAgent',
         agent_args: {
           connection_id: selectedDatabase || null,
