@@ -607,6 +607,8 @@ See `store/__tests__/test-utils.ts` for available utilities and `chatE2E.test.ts
 
 For component-level UI interaction tests (React rendering, user events, DOM assertions), use the `*.ui.test.tsx` naming convention with the JSDOM runner instead (`npx jest --config jest.config.ui.js`). See `components/__tests__/dashboard.ui.test.tsx` for the reference pattern (real SQLite DB + real Next.js route handlers, no Python backend required).
 
+**UI test element queries: `aria-label` ONLY.** Never use `getByRole`, `getByText`, `getByPlaceholderText`, `getByTestId`, or any other query strategy. Every interactive element must be located exclusively via `getByLabelText` / `findByLabelText` (which matches `aria-label`). If an element lacks an `aria-label`, add one to the component — do not work around it with a different query.
+
 ## Pydantic → TypeScript Type Codegen
 
 **Single source of truth:** `backend/tasks/agents/analyst/file_schema.py` defines Pydantic models for all shared Atlas file types (`VizSettings`, `PivotConfig`, `QuestionContent`, `DashboardContent`, `FileReference`, `DashboardLayoutItem`, etc.).
