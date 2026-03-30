@@ -22,7 +22,9 @@ export function Checkbox({ checked, onCheckedChange, size = 'md', disabled, chil
       {...props}
     >
       <ChakraCheckbox.HiddenInput />
-      <ChakraCheckbox.Control />
+      <ChakraCheckbox.Control
+        _checked={{ bg: 'accent.teal', borderColor: 'accent.teal' }}
+      />
       {children && <ChakraCheckbox.Label>{children}</ChakraCheckbox.Label>}
     </ChakraCheckbox.Root>
   );

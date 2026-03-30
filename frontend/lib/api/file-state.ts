@@ -1055,6 +1055,59 @@ export async function moveFile(fileId: number, name: string, newPath: string): P
 }
 
 /**
+ * Move multiple files to a destination folder in a single API call.
+ */
+export async function batchMoveFiles(files: Array<{ id: number; name: string }>, destFolder: string): Promise<void> {
+  const response = await fetch('/api/files/batch-move', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      files: files.map(f => ({ id: f.id, name: f.name, destFolder })),
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.json();
+    throw new Error(body.error?.message || 'Failed to move files');
+  }
+
+  const { data } = await response.json();
+  const results = data as Array<{ id: number; name: string; path: string; oldPath: string }>;
+
+  // Batch-update Redux state for all moved files
+  const state = getStore().getState();
+  const fileInfoUpdates = results
+    .map(r => {
+      const file = selectFile(state, r.id);
+      if (!file) return null;
+      return { ...file, name: r.name, path: r.path, references: file.references ?? [] };
+    })
+    .filter((f): f is NonNullable<typeof f> => f !== null);
+
+  if (fileInfoUpdates.length > 0) {
+    getStore().dispatch(setFileInfo(fileInfoUpdates));
+  }
+
+  // Reload all affected parent folders
+  const parentsToReload = new Set<string>();
+  for (const r of results) {
+    const oldParent = r.oldPath.split('/').slice(0, -1).join('/') || '/';
+    const newParent = r.path.split('/').slice(0, -1).join('/') || '/';
+    parentsToReload.add(oldParent);
+    parentsToReload.add(newParent);
+  }
+  await Promise.all([...parentsToReload].map(p => readFolder(p, { forceLoad: true })));
+
+  // Reload any moved folders so their children get fresh paths
+  for (const r of results) {
+    const movedFile = selectFile(getStore().getState(), r.id);
+    if (movedFile?.type === 'folder') {
+      await readFolder(r.path, { forceLoad: true });
+    }
+  }
+}
+
+/**
  * Options for reloadFile
  */
 export interface ReloadFileOptions {

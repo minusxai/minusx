@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, IconButton, Menu, Portal, HStack, Icon, Button, Text, Dialog, CloseButton } from '@chakra-ui/react';
-import { LuEllipsis, LuCopy, LuTrash2, LuFolderInput } from 'react-icons/lu';
+import { LuEllipsis, LuCopy, LuTrash2, LuFolderInput, LuListChecks } from 'react-icons/lu';
 import { useState } from 'react';
 import { useAccessRules } from '@/lib/auth/access-rules.client';
 import { FileType } from '@/lib/types';
@@ -14,9 +14,10 @@ interface FileActionMenuProps {
   filePath: string;
   fileType: FileType;
   size?: 'xs' | 'sm';
+  onSelect?: (fileId: number) => void;
 }
 
-export default function FileActionMenu({ fileId, fileName, filePath, fileType, size = 'sm' }: FileActionMenuProps) {
+export default function FileActionMenu({ fileId, fileName, filePath, fileType, size = 'sm', onSelect }: FileActionMenuProps) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const { canDeleteFileType } = useAccessRules();
@@ -88,6 +89,22 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
                 <span>Duplicate</span>
               </HStack>
             </Menu.Item> */}
+            {onSelect && (
+              <Menu.Item
+                value="select"
+                cursor="pointer"
+                borderRadius="sm"
+                px={3}
+                py={2}
+                _hover={{ bg: 'bg.muted' }}
+                onClick={() => onSelect(fileId)}
+              >
+                <HStack gap={2}>
+                  <Icon as={LuListChecks} boxSize={4} />
+                  <span>Select</span>
+                </HStack>
+              </Menu.Item>
+            )}
             <Menu.Item
               value="move"
               cursor="pointer"
