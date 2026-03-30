@@ -915,6 +915,7 @@ export async function publishAll(): Promise<void> {
         type: f.type,
         content: merged,
         references: extractReferencesFromContent(merged as any, f.type as FileType),
+        editId: String(hashString(`${f.id}:${JSON.stringify(merged)}`)),
       };
     });
 

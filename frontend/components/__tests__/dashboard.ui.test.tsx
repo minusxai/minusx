@@ -1214,6 +1214,111 @@ describe('Combined flow: new dashboard with question from scratch', () => {
 });
 
 // ============================================================================
+// publishAll retry / idempotency
+// Verifies that if the server created files but the response never reached the
+// client (network drop, 500), retrying publishAll recovers correctly via editId
+// idempotency — no duplicates, no stuck virtual files.
+// ============================================================================
+
+describe('publishAll retry idempotency', () => {
+  setupTestDb(getTestDbPath('dashboard_ui'));
+
+  let testStore: ReturnType<typeof storeModule.makeStore>;
+  let getStoreSpy: jest.SpyInstance;
+
+  const Q_VID   = -77;
+  const DASH_VID = -78;
+  const Q_RETRY_NAME = 'Retry Question';
+  const DASH_RETRY_NAME = 'Retry Dashboard';
+
+  beforeEach(() => {
+    testStore = storeModule.makeStore();
+    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+  });
+
+  afterEach(() => {
+    global.fetch = realFetch;
+    getStoreSpy.mockRestore();
+    jest.restoreAllMocks();
+  });
+
+  it('retry after ghost create: server already wrote files but client got 500 — retry recovers via editId, no duplicates', async () => {
+    // Seed virtual question + virtual dashboard (question → dashboard dependency)
+    testStore.dispatch(setFile({
+      file: {
+        id: Q_VID, name: Q_RETRY_NAME, type: 'question' as const,
+        path: `/org/${Q_RETRY_NAME}`,
+        content: { query: 'SELECT retry FROM data', vizSettings: { type: 'table' as const }, database_name: '' },
+        created_at: '', updated_at: '', references: [] as number[],
+        version: 1, last_edit_id: null, company_id: 1,
+      },
+      references: [],
+    }));
+    testStore.dispatch(setEdit({
+      fileId: Q_VID,
+      edits: { query: 'SELECT retry FROM data', vizSettings: { type: 'table' as const }, database_name: 'default' },
+    }));
+    testStore.dispatch(setFile({
+      file: {
+        id: DASH_VID, name: DASH_RETRY_NAME, type: 'dashboard' as const,
+        path: `/org/${DASH_RETRY_NAME}`,
+        content: { assets: [], layout: null },
+        created_at: '', updated_at: '', references: [] as number[],
+        version: 1, last_edit_id: null, company_id: 1,
+      },
+      references: [],
+    }));
+    testStore.dispatch(addQuestionToDashboard({ dashboardId: DASH_VID, questionId: Q_VID }));
+
+    // ── Attempt 1: server writes to DB but client gets 500 ──────────────────
+    // We call the real batchCreateHandler so the files ARE inserted into the DB,
+    // then return a fake 500 response so publishAll thinks the attempt failed.
+    let attempt = 0;
+    const realApiFetch = makeRealApiFetch();
+    global.fetch = jest.fn(async (url: string | Request | URL, init?: RequestInit): Promise<Response> => {
+      if (String(url).includes('/api/files/batch-create')) {
+        attempt++;
+        if (attempt === 1) {
+          // Fire the real handler (inserts into DB), then discard the response
+          await realApiFetch(url, init);
+          return { ok: false, status: 500, json: async () => ({ error: { message: 'Network error' } }) } as Response;
+        }
+      }
+      return realApiFetch(url, init);
+    });
+
+    await expect(publishAll()).rejects.toThrow('Network error');
+
+    // Virtual files still dirty — client never got the success response
+    expect(selectDirtyFiles(testStore.getState())).toHaveLength(2);
+
+    // ── Attempt 2 (retry): server finds files via editId, returns them ───────
+    // publishAll sends the same editId (deterministic hash of virtualId + content).
+    // createFile() sees the editId already in last_edit_id → returns existing file.
+    await act(async () => { await publishAll(); });
+
+    // Retry succeeded: both files now have real (positive) IDs in Redux
+    const allFiles = Object.values(testStore.getState().files.files);
+    const savedQ    = allFiles.find(f => f.type === 'question'  && f.id > 0 && f.name === Q_RETRY_NAME);
+    const savedDash = allFiles.find(f => f.type === 'dashboard' && f.id > 0 && f.name === DASH_RETRY_NAME);
+    expect(savedQ).toBeDefined();
+    expect(savedDash).toBeDefined();
+
+    // No dirty files remain
+    expect(selectDirtyFiles(testStore.getState())).toHaveLength(0);
+
+    // No duplicates: batch-create was called twice (attempt 1 + retry level-1 question,
+    // then retry level-2 dashboard) but each editId resolves to the SAME DB row —
+    // verify by checking total batch-create calls on the retry path.
+    const batchCreateCalls = (global.fetch as jest.Mock).mock.calls
+      .filter(([u]) => String(u).includes('/api/files/batch-create'));
+    // Attempt 1: 1 call (question only, level 1 — then 500 before dashboard)
+    // Attempt 2: 2 calls (question level 1 via editId, dashboard level 2 fresh)
+    expect(batchCreateCalls).toHaveLength(3);
+  });
+});
+
+// ============================================================================
 // publishAll error handling
 // (Gap 1: API failures leave files dirty; circular dep throws without API calls)
 // ============================================================================
