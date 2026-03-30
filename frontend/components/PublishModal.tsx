@@ -121,6 +121,30 @@ function DirtyFileItem({
   );
 }
 
+function SelectedFileName({ fileId }: { fileId: number }) {
+  const name = useAppSelector(state => selectEffectiveName(state, fileId));
+  const fileState = useAppSelector(state => selectFile(state, fileId));
+  const meta = fileState ? getFileTypeMetadata(fileState.type as any) : null;
+  const FileIcon = meta?.icon;
+  return (
+    <HStack gap={2} minW="0" flex="1">
+      {FileIcon && (
+        <Box color={meta?.color} flexShrink={0}>
+          <FileIcon size={15} />
+        </Box>
+      )}
+      <Text
+        fontSize="sm"
+        fontWeight="700"
+        fontFamily="mono"
+        truncate
+        color="fg.default"
+      >
+        {name || 'Untitled'}
+      </Text>
+    </HStack>
+  );
+}
 
 export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
   const dispatch = useAppDispatch();
@@ -260,7 +284,7 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
                 </HStack>
                 <HStack gap={2} flexShrink={0}>
                   <Button
-                    size="sm"
+                    size="xs"
                     bg="accent.danger"
                     color="white"
                     onClick={handleDiscardAll}
@@ -269,7 +293,7 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
                     Discard All
                   </Button>
                   <Button
-                    size="sm"
+                    size="xs"
                     bg="accent.teal"
                     color="white"
                     loading={isPublishing}
@@ -373,9 +397,42 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
               {/* Right pane: file view */}
               <Box flex="1" minW="0" display="flex" flexDirection="column" bg="bg.canvas" overflow="hidden">
                 {selectedFileId !== null ? (
-                  <Box flex="1" minH="0" display="flex" flexDirection="column" overflowY="auto">
-                    <FileView key={selectedFileId} fileId={selectedFileId} mode="preview" hideHeader />
-                  </Box>
+                  <>
+                    <HStack
+                      px={4}
+                      py={2}
+                      borderBottom="1px solid"
+                      borderColor="border.default"
+                      flexShrink={0}
+                      justify="space-between"
+                    >
+                      <SelectedFileName fileId={selectedFileId} />
+                      <HStack gap={0.5} flexShrink={0}>
+                        <IconButton
+                          aria-label="Discard changes"
+                          size="2xs"
+                          variant="ghost"
+                          color="accent.danger"
+                          onClick={() => handleDiscardFile(selectedFileId)}
+                        >
+                          <LuUndo2 />
+                        </IconButton>
+                        <IconButton
+                          aria-label="Save file"
+                          size="2xs"
+                          variant="ghost"
+                          color="accent.teal"
+                          loading={publishingSingleId === selectedFileId}
+                          onClick={() => handlePublishFile(selectedFileId)}
+                        >
+                          <LuCheck />
+                        </IconButton>
+                      </HStack>
+                    </HStack>
+                    <Box flex="1" minH="0" display="flex" flexDirection="column" overflowY="auto">
+                      <FileView key={selectedFileId} fileId={selectedFileId} mode="preview" hideHeader />
+                    </Box>
+                  </>
                 ) : (
                   <Box
                     display="flex"
