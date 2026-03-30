@@ -135,6 +135,19 @@ export async function getAnalyticsDb(companyId: number): Promise<DuckDBInstance>
   }
 
   const dbPath = path.join(dir, `${companyId}.duckdb`);
+
+  // Proactively delete stale WAL before the first open in this process.
+  // initSchema always ends with CHECKPOINT so the WAL is empty after a clean shutdown.
+  // After an unclean shutdown the WAL may contain a few unsaved analytics events — acceptable loss.
+  // The duckdb-registry already handles the reactive case (deletes WAL on open error + retries),
+  // but proactive deletion avoids paying the cost of a failed open attempt.
+  if (!initializedPaths.has(dbPath)) {
+    const walPath = `${dbPath}.wal`;
+    if (fs.existsSync(walPath)) {
+      try { fs.unlinkSync(walPath); } catch { /* race with another request or already deleted */ }
+    }
+  }
+
   const instance = await getOrCreateDuckDbInstance(dbPath);
 
   // Run schema init once per path (all CREATE IF NOT EXISTS — safe to repeat, but skip for perf)
