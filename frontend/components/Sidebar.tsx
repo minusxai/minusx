@@ -17,7 +17,7 @@ import { toggleLeftSidebar, selectShowDebug, selectShowAdvanced, toggleColorMode
 import { APP_VERSION } from '@/lib/constants';
 import { exitImpersonation } from '@/lib/navigation/url-utils';
 import { isAdmin } from '@/lib/auth/role-helpers';
-import { useConfigs } from '@/lib/hooks/useConfigs';
+import { selectConfig } from '@/store/configsSlice';
 import { analytics, AnalyticsEvents } from '@/lib/analytics';
 import { switchMode } from '@/lib/mode/mode-utils';
 
@@ -87,9 +87,8 @@ export default function Sidebar() {
   // Check for impersonation - safe for SSR
   const isImpersonating = searchParams?.has('as_user') ?? false;
 
-  // Get company-specific config from Redux
-  const { config } = useConfigs();
-
+  // Read config directly — avoids useConfigs() loading state overhead (configs load once on startup)
+  const config = useAppSelector(selectConfig);
   const displayName = config.branding.agentName;
 
   // Extract file ID from pathname if on file page

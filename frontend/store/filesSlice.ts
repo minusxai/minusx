@@ -1066,6 +1066,18 @@ export const selectQuestionFiles = createSelector(
   (files) => Object.values(files).filter(f => f.type === 'question' && f.id > 0)
 );
 
+// Boolean selectors — return primitives so useAppSelector never triggers spurious re-renders.
+// Use these in DataLoader instead of subscribing to the full files dictionary.
+export const selectConnectionsContentLoaded = createSelector(
+  [(state: RootState) => state.files.files],
+  (files) => Object.values(files).some(f => f.type === 'connection' && f.content !== null)
+);
+
+export const selectContextsContentLoaded = createSelector(
+  [(state: RootState) => state.files.files],
+  (files) => Object.values(files).some(f => f.type === 'context')
+);
+
 // ============================================================================
 // BACKWARDS COMPATIBILITY: Connection selectors
 // ============================================================================

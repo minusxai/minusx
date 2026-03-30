@@ -11,6 +11,7 @@
  */
 
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo } from 'react';
+import { shallowEqual } from 'react-redux';
 import { usePathname } from 'next/navigation';
 import { useRouter } from './use-navigation';
 import { useAppSelector } from '@/store/hooks';
@@ -119,7 +120,7 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
     || activeConversation?.executionState === 'STREAMING';
 
   // Check if there are any dirty files (for in-app navigation and beforeunload)
-  const dirtyFiles = useAppSelector(state => selectDirtyFiles(state));
+  const dirtyFiles = useAppSelector(state => selectDirtyFiles(state), shallowEqual);
   const anyDirtyFiles = dirtyFiles.length > 0;
 
   // In-app nav guard: any dirty file (current or otherwise) OR agent running.

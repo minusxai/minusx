@@ -190,6 +190,12 @@ const uiSlice = createSlice({
     clearChatAttachments: (state) => {
       state.chatAttachments = [];
     },
+    setBulkUiFlags: (state, action: PayloadAction<{ showDebug?: boolean; showJson?: boolean; showAdvanced?: boolean }>) => {
+      const { showDebug, showJson, showAdvanced } = action.payload;
+      if (showDebug !== undefined) state.showDebug = showDebug;
+      if (showJson !== undefined) state.showJson = showJson;
+      if (showAdvanced !== undefined) state.showAdvanced = showAdvanced;
+    },
   },
 });
 
@@ -230,6 +236,7 @@ export const {
   addChatAttachment,
   removeChatAttachment,
   clearChatAttachments,
+  setBulkUiFlags,
 } = uiSlice.actions;
 
 export default uiSlice.reducer;

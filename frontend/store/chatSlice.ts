@@ -546,7 +546,9 @@ export const selectActiveConversation = createSelector(
   }
 );
 
-// Memoized selector for new (temp) conversations — avoids Object.keys scan on every Redux change
+// Memoized selector for new (temp) conversations — avoids Object.keys scan on every Redux change.
+// Follows the fork chain: when a temp conversation (-5) forks to a real one (123), returns
+// conversations[123] so that ChatInterface can navigate to /explore/123.
 export const selectActiveTempConversation = createSelector(
   [(state: RootState) => state.chat.conversations],
   (conversations): Conversation | undefined => {
@@ -556,7 +558,13 @@ export const selectActiveTempConversation = createSelector(
       .sort((a, b) => b - a);
     for (const tempId of tempIds) {
       const conv = conversations[tempId];
-      if (conv?.active && !conv.forkedConversationID) return conv;
+      if (!conv?.active) continue;
+      // Follow the fork chain to get the real (current) conversation
+      let current = conv;
+      while (current.forkedConversationID) {
+        current = conversations[current.forkedConversationID] || current;
+      }
+      return current;
     }
     return undefined;
   }
