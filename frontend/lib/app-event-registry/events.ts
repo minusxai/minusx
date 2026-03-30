@@ -11,6 +11,8 @@ export const AppEvents = {
   LLM_CALL:                 'llm:call',
   QUERY_EXECUTED:           'query:executed',
   ERROR:                    'error',
+  JOB_CRON_SUCCEEDED:       'job:cron_succeeded',
+  JOB_CRON_FAILED:          'job:cron_failed',
 } as const;
 
 export type AppEventName = typeof AppEvents[keyof typeof AppEvents];
@@ -30,4 +32,6 @@ export interface AppEventPayloads {
   'llm:call':                 BaseEventPayload & { conversationId: number; llmCalls: Record<string, LLMCallDetail>; userId?: number; userEmail?: string; userRole?: string };
   'query:executed':           { queryHash: string; databaseName: string | null; durationMs: number; rowCount: number; wasCacheHit: boolean; companyId: number; userEmail?: string | null };
   'error':                    BaseEventPayload & { source: string; message: string; mode?: string; error?: unknown; context?: Record<string, unknown> };
+  'job:cron_succeeded':       BaseEventPayload & { triggered: number; skipped: number };
+  'job:cron_failed':          BaseEventPayload & { triggered: number; skipped: number; failed: number };
 }
