@@ -223,7 +223,7 @@ describe('Agent creates files via chat', () => {
     expect(createdQuestion).toBeDefined();
 
     // Component reflects the new question
-    await screen.findByRole('article', { name: 'Total Revenue' }, { timeout: 5000 });
+    await screen.findByLabelText('Total Revenue', {}, { timeout: 5000 });
 
     // Both LLM turns were consumed
     expect((await mockServer.getCalls()).length).toBeGreaterThanOrEqual(2);
@@ -264,7 +264,7 @@ describe('Agent creates files via chat', () => {
     renderWithProviders(<AgentFileResult />, { store: testStore });
 
     // Nothing rendered before the agent runs
-    expect(screen.queryByRole('article')).toBeNull();
+    expect(screen.queryByLabelText('Monthly Users')).toBeNull();
 
     const CONV_ID = -300;
     testStore.dispatch(createConversation({
@@ -278,6 +278,6 @@ describe('Agent creates files via chat', () => {
     }));
 
     // Once the agent finishes, the article appears
-    await screen.findByRole('article', { name: 'Monthly Users' }, { timeout: 40000 });
+    await screen.findByLabelText('Monthly Users', {}, { timeout: 40000 });
   }, 45000);
 });

@@ -156,7 +156,7 @@ export default function ChatMessage({ message, databaseName, isCompact = false, 
                           colSpan={assistantColSpan}
                           colStart={assistantColStart}
                         >
-                          <Box px={3} py={1}>
+                          <Box px={3} py={1} aria-label="Thinking block">
                             <Markdown context={markdownContext}>{block}</Markdown>
                           </Box>
                         </GridItem>
@@ -181,7 +181,7 @@ export default function ChatMessage({ message, databaseName, isCompact = false, 
                           colSpan={assistantColSpan}
                           colStart={assistantColStart}
                         >
-                          <Box px={3} py={1}>
+                          <Box px={3} py={1} aria-label="Answer block">
                             <Markdown context={markdownContext}>{answerBlock}</Markdown>
                           </Box>
                         </GridItem>

@@ -11,9 +11,10 @@ interface DatePickerProps {
   value: string | undefined;
   onChange: (value: string) => void;
   placeholder?: string;
+  ariaLabel?: string;
 }
 
-export default function DatePicker({ value, onChange, placeholder = 'YYYY-MM-DD' }: DatePickerProps) {
+export default function DatePicker({ value, onChange, placeholder = 'YYYY-MM-DD', ariaLabel }: DatePickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [buttonRef, setButtonRef] = useState<HTMLDivElement | null>(null);
   const [inputValue, setInputValue] = useState(value || '');
@@ -80,6 +81,7 @@ export default function DatePicker({ value, onChange, placeholder = 'YYYY-MM-DD'
           onBlur={handleInputBlur}
           onKeyDown={handleInputKeyDown}
           placeholder={placeholder}
+          aria-label={ariaLabel}
           size="md"
           minW="120px"
           maxW="150px"
