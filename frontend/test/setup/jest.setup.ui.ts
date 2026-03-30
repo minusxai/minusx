@@ -29,7 +29,45 @@ jest.mock('@monaco-editor/react', () => {
   const React = require('react');
   const MockEditor = ({ value, onChange, onMount, ...props }: any) => {
     React.useEffect(() => {
-      onMount?.({ getValue: () => value ?? '', setValue: jest.fn() }, {});
+      // Editor instance stub — covers every method SqlEditor.onMount calls:
+      //   focus, trigger, getPosition, getModel, onDidDispose, onKeyUp,
+      //   onDidChangeModelContent, deltaDecorations, addCommand.
+      // getModel() returns null so updateDecorations/triggerValidation return early.
+      const editorStub = {
+        getValue: () => value ?? '',
+        setValue: jest.fn(),
+        focus: jest.fn(),
+        trigger: jest.fn(),
+        getPosition: () => null,
+        getModel: () => null,
+        onDidDispose: jest.fn(),
+        onKeyUp: jest.fn(),
+        onDidChangeModelContent: jest.fn(),
+        deltaDecorations: jest.fn(() => []),
+        addCommand: jest.fn(),
+      };
+      // Monaco instance stub — covers everything SqlEditor.onMount references on
+      // the second arg: languages providers, editor theme/markers/keybindings,
+      // Range constructor, KeyMod/KeyCode constants, MarkerSeverity.
+      const monacoStub = {
+        languages: {
+          registerCompletionItemProvider: jest.fn(() => ({ dispose: jest.fn() })),
+          registerHoverProvider: jest.fn(() => ({ dispose: jest.fn() })),
+        },
+        editor: {
+          defineTheme: jest.fn(),
+          setTheme: jest.fn(),
+          setModelMarkers: jest.fn(),
+          addKeybindingRules: jest.fn(),
+        },
+        Range: jest.fn((sl: number, sc: number, el: number, ec: number) => ({
+          startLineNumber: sl, startColumn: sc, endLineNumber: el, endColumn: ec,
+        })),
+        KeyMod: { CtrlCmd: 0 },
+        KeyCode: { Enter: 0, KeyK: 0 },
+        MarkerSeverity: { Error: 8 },
+      };
+      onMount?.(editorStub, monacoStub);
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
     return React.createElement('textarea', {
       'aria-label': 'SQL editor',
@@ -38,7 +76,12 @@ jest.mock('@monaco-editor/react', () => {
       readOnly: !onChange,
     });
   };
-  return { default: MockEditor, Editor: MockEditor };
+  // __esModule: true is required so that `import Editor from '@monaco-editor/react'`
+  // resolves to MockEditor (the default export) rather than the whole module object.
+  // Without it Jest treats the return value as a CJS module and the default import
+  // receives the entire { default, Editor, DiffEditor } object — causing React to
+  // throw "Element type is invalid: got: object" when SqlEditor tries to render it.
+  return { __esModule: true, default: MockEditor, Editor: MockEditor, DiffEditor: MockEditor };
 });
 
 // ---------------------------------------------------------------------------

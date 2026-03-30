@@ -17,6 +17,35 @@
  */
 
 // Must be hoisted before any module imports
+
+// Stub the Chakra Dialog + Portal shell of CreateQuestionModal to avoid JSDOM
+// incompatibilities (focus-trap, Portal rendering) while keeping the real
+// CreateQuestionModalContainer — which contains all application logic
+// (createVirtualFile, editFile, onQuestionCreated flow) — fully intact.
+jest.mock('@/components/modals/CreateQuestionModal', () => {
+  const React = require('react');
+  return {
+    __esModule: true,
+    default: ({ isOpen, onClose, onQuestionCreated, folderPath, questionId }: any) => {
+      if (!isOpen) return null;
+      // Lazy require avoids circular-dep issues at factory evaluation time.
+      const { default: Container } = require('@/components/modals/CreateQuestionModalContainer');
+      return React.createElement(
+        'section',
+        { role: 'dialog' },
+        React.createElement(Container, {
+          isOpen,
+          onClose,
+          onQuestionCreated,
+          folderPath,
+          questionId,
+          onAttemptCloseRef: { current: null },
+        })
+      );
+    },
+  };
+});
+
 jest.mock('@/lib/auth/auth-helpers', () => ({
   getEffectiveUser: jest.fn().mockResolvedValue({
     userId: 1,
@@ -79,6 +108,13 @@ import { withPythonBackend } from '@/test/harness/python-backend';
 import { setupTestDb } from '@/test/harness/test-db';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { POST as chatPostHandler } from '@/app/api/chat/route';
+import { GET as filesGetHandler } from '@/app/api/files/route';
+import { PATCH as filePatchHandler } from '@/app/api/files/[id]/route';
+import { POST as batchCreateHandler } from '@/app/api/files/batch-create/route';
+import { POST as batchSaveHandler } from '@/app/api/files/batch-save/route';
+import { POST as batchFilesHandler } from '@/app/api/files/batch/route';
+import { POST as templateHandler } from '@/app/api/files/template/route';
+import { GET as connectionsGetHandler } from '@/app/api/connections/route';
 
 // Capture the real Node.js fetch before any test can override global.fetch.
 // Used by the agentic fetch mock to route Python backend calls to the real server.
@@ -121,14 +157,6 @@ function makeQuestionDbFile() {
     version: 1,
     last_edit_id: null,
     company_id: 1,
-  };
-}
-
-function makeUpdatedDashboardDbFile() {
-  return {
-    ...makeDashboardDbFile(),
-    content: { assets: [{ type: 'question', id: QUESTION_ID }], layout: null },
-    updated_at: new Date().toISOString(),
   };
 }
 
@@ -232,34 +260,123 @@ async function waitForConversationFinished(
 }
 
 /**
- * Standard fetch mock for tests that render the dashboard UI:
- *   GET  /api/files?type=question  → QuestionBrowserPanel list
- *   PATCH /api/files/:id           → save dashboard
+ * Insert the shared dashboard + question fixtures into the test SQLite DB.
+ * Used as `customInit` in setupTestDb for tests that need pre-existing files.
  */
-function mockDashboardFetch() {
-  global.fetch = jest.fn().mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === 'string' ? input : input.toString();
-    const method = init?.method?.toUpperCase() ?? 'GET';
+async function insertDashboardAndQuestion(dbPath: string): Promise<void> {
+  const { createAdapter } = await import('@/lib/database/adapter/factory');
+  const db = await createAdapter({ type: 'sqlite', sqlitePath: dbPath });
+  const now = new Date().toISOString();
+  await db.query(
+    `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [1, DASHBOARD_ID, 'Test Dashboard', '/org/Test Dashboard', 'dashboard',
+      JSON.stringify({ assets: [], layout: null }), '[]', now, now]
+  );
+  await db.query(
+    `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [1, QUESTION_ID, QUESTION_NAME, `/org/${QUESTION_NAME}`, 'question',
+      JSON.stringify({ query: 'SELECT 1', vizSettings: { type: 'table' }, database_name: '' }), '[]', now, now]
+  );
+  await db.close();
+}
 
-    if (method === 'GET' && url.includes('/api/files') && url.includes('type=question')) {
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({
-          data: [{ id: QUESTION_ID, name: QUESTION_NAME, type: 'question', path: `/org/${QUESTION_NAME}` }],
-        }),
-      };
+/**
+ * Build a jest.fn() fetch mock that routes all dashboard-related API calls to
+ * real Next.js route handlers backed by the test SQLite DB (no hardcoded
+ * response bodies).  Pass pythonPort / llmPort to also route agent calls.
+ */
+function makeRealApiFetch(opts: { pythonPort?: number; llmPort?: number } = {}) {
+  const { pythonPort, llmPort } = opts;
+  const BASE = 'http://localhost:3000';
+
+  const call = async (
+    handler: (req: NextRequest, ctx?: any) => Promise<Response>,
+    url: string,
+    init?: RequestInit,
+    context?: any,
+  ): Promise<Response> => {
+    const req = new NextRequest(url, {
+      method: init?.method ?? 'GET',
+      body: (init?.body as string) ?? null,
+      headers: (init?.headers as HeadersInit) ?? undefined,
+    });
+    const resp = context ? await handler(req, context) : await handler(req);
+    const data = await resp.json();
+    return { ok: resp.status < 400, status: resp.status, json: async () => data } as Response;
+  };
+
+  return jest.fn(async (url: string | Request | URL, init?: RequestInit): Promise<Response> => {
+    const urlStr = url.toString();
+    const method = (init?.method ?? 'GET').toUpperCase();
+
+    // /api/chat → real chatPostHandler
+    if (urlStr.startsWith('/api/chat') || urlStr.includes('localhost:3000/api/chat')) {
+      return call(chatPostHandler, `${BASE}/api/chat`, init);
     }
 
-    if (method === 'PATCH' && url.includes(`/api/files/${DASHBOARD_ID}`)) {
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({ success: true, data: makeUpdatedDashboardDbFile() }),
-      };
+    // Python backend → pass through to real server
+    if (pythonPort && (urlStr.includes(`localhost:${pythonPort}`) || urlStr.includes('localhost:8001'))) {
+      return realFetch(urlStr.replace('localhost:8001', `localhost:${pythonPort}`), init);
     }
 
-    return { ok: true, status: 200, json: async () => ({ data: null }) };
+    // LLM mock server → pass through
+    if (llmPort && urlStr.includes(`localhost:${llmPort}`)) {
+      return realFetch(urlStr, init);
+    }
+
+    // POST /api/files/batch-create → real batchCreateHandler
+    if (method === 'POST' && urlStr.includes('/api/files/batch-create')) {
+      return call(batchCreateHandler, `${BASE}/api/files/batch-create`, init);
+    }
+
+    // POST /api/files/batch-save → real batchSaveHandler
+    if (method === 'POST' && urlStr.includes('/api/files/batch-save')) {
+      return call(batchSaveHandler, `${BASE}/api/files/batch-save`, init);
+    }
+
+    // POST /api/files/batch → real batchFilesHandler (load by IDs)
+    if (method === 'POST' && urlStr.includes('/api/files/batch')) {
+      return call(batchFilesHandler, `${BASE}/api/files/batch`, init);
+    }
+
+    // POST /api/files/template → real templateHandler
+    if (method === 'POST' && urlStr.includes('/api/files/template')) {
+      return call(templateHandler, `${BASE}/api/files/template`, init);
+    }
+
+    // PATCH /api/files/:id → real filePatchHandler (save individual file)
+    if (method === 'PATCH') {
+      const m = urlStr.match(/\/api\/files\/(\d+)/);
+      if (m) {
+        const fullUrl = urlStr.startsWith('http') ? urlStr : `${BASE}${urlStr}`;
+        return call(filePatchHandler, fullUrl, init, { params: Promise.resolve({ id: m[1] }) });
+      }
+    }
+
+    // GET /api/files?... → real filesGetHandler (folder listings, type filters)
+    if (method === 'GET' && urlStr.includes('/api/files') && !urlStr.match(/\/api\/files\/\d+/)) {
+      const fullUrl = urlStr.startsWith('http') ? urlStr : `${BASE}${urlStr}`;
+      return call(filesGetHandler, fullUrl, init);
+    }
+
+    // GET /api/connections → real connectionsGetHandler
+    if (method === 'GET' && urlStr.includes('/api/connections') && !urlStr.includes('/schema')) {
+      return call(connectionsGetHandler, `${BASE}/api/connections`, init);
+    }
+
+    // Health check
+    if (urlStr.includes('/health')) {
+      return { ok: true, status: 200, json: async () => ({ status: 'healthy' }) } as Response;
+    }
+
+    // Catch-all for non-critical GETs (configs, context, etc.) that are not under test
+    if (method === 'GET') {
+      return { ok: true, status: 200, json: async () => ({ data: null }) } as Response;
+    }
+
+    throw new Error(`[Dashboard UI] Unmocked fetch: ${method} ${urlStr}`);
   });
 }
 
@@ -268,6 +385,8 @@ function mockDashboardFetch() {
 // ============================================================================
 
 describe('Add question to existing dashboard and save', () => {
+  setupTestDb(getTestDbPath('dashboard_ui'), { customInit: insertDashboardAndQuestion });
+
   let testStore: ReturnType<typeof storeModule.makeStore>;
   let getStoreSpy: jest.SpyInstance;
 
@@ -277,7 +396,7 @@ describe('Add question to existing dashboard and save', () => {
     testStore.dispatch(setFile({ file: makeDashboardDbFile(), references: [] }));
     testStore.dispatch(setFile({ file: makeQuestionDbFile(), references: [] }));
     testStore.dispatch(setDashboardEditMode({ fileId: DASHBOARD_ID, editMode: true }));
-    mockDashboardFetch();
+    global.fetch = makeRealApiFetch();
   });
 
   afterEach(() => {
@@ -340,13 +459,16 @@ describe('Add question to existing dashboard and save', () => {
 // ============================================================================
 
 describe('Create new dashboard and question, then publishAll', () => {
+  // Fresh empty DB — virtual files created in test don't need pre-existing fixtures
+  setupTestDb(getTestDbPath('dashboard_ui'));
+
   let testStore: ReturnType<typeof storeModule.makeStore>;
   let getStoreSpy: jest.SpyInstance;
 
   beforeEach(() => {
     testStore = storeModule.makeStore();
     getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
-    // No pre-seeded files — each test creates its own virtual files
+    global.fetch = makeRealApiFetch();
   });
 
   afterEach(() => {
@@ -358,41 +480,27 @@ describe('Create new dashboard and question, then publishAll', () => {
   it('manual: publishAll saves virtual question first, then virtual dashboard with resolved references', async () => {
     const Q_VID = -1;
     const DASH_VID = -2;
-    const REAL_Q_ID = 10;
-    const REAL_DASH_ID = 11;
     const Q_NAME = 'Revenue Query';
     const DASH_NAME = 'New Dashboard';
 
     // Seed virtual files (negative IDs) into Redux
     testStore.dispatch(setFile({
       file: {
-        id: Q_VID,
-        name: Q_NAME,
-        type: 'question' as const,
+        id: Q_VID, name: Q_NAME, type: 'question' as const,
         path: `/org/${Q_NAME}`,
         content: { query: '', vizSettings: { type: 'table' as const }, database_name: '' },
-        created_at: '',
-        updated_at: '',
-        references: [] as number[],
-        version: 1,
-        last_edit_id: null,
-        company_id: 1,
+        created_at: '', updated_at: '', references: [] as number[],
+        version: 1, last_edit_id: null, company_id: 1,
       },
       references: [],
     }));
     testStore.dispatch(setFile({
       file: {
-        id: DASH_VID,
-        name: DASH_NAME,
-        type: 'dashboard' as const,
+        id: DASH_VID, name: DASH_NAME, type: 'dashboard' as const,
         path: `/org/${DASH_NAME}`,
         content: { assets: [], layout: null },
-        created_at: '',
-        updated_at: '',
-        references: [] as number[],
-        version: 1,
-        last_edit_id: null,
-        company_id: 1,
+        created_at: '', updated_at: '', references: [] as number[],
+        version: 1, last_edit_id: null, company_id: 1,
       },
       references: [],
     }));
@@ -404,77 +512,25 @@ describe('Create new dashboard and question, then publishAll', () => {
     }));
     testStore.dispatch(addQuestionToDashboard({ dashboardId: DASH_VID, questionId: Q_VID }));
 
-    // Track batch-create calls to verify save order
-    const batchCreateBodies: Array<{ files: Array<{ virtualId: number; type: string; content: unknown }> }> = [];
-
-    global.fetch = jest.fn().mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input.toString();
-      const method = init?.method?.toUpperCase() ?? 'GET';
-
-      if (method === 'POST' && url.includes('/api/files/batch-create')) {
-        const body = JSON.parse(init?.body as string) as typeof batchCreateBodies[number];
-        batchCreateBodies.push(body);
-
-        if (batchCreateBodies.length === 1) {
-          // First call: question (no virtual deps)
-          return {
-            ok: true,
-            status: 200,
-            json: async () => ({
-              data: [{
-                virtualId: Q_VID,
-                file: {
-                  id: REAL_Q_ID, name: Q_NAME, type: 'question',
-                  path: `/org/${Q_NAME}`,
-                  content: { query: 'SELECT revenue FROM sales', vizSettings: { type: 'table' }, database_name: 'default' },
-                  created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-                  references: [], version: 1, last_edit_id: null, company_id: 1,
-                },
-              }],
-            }),
-          };
-        }
-
-        // Second call: dashboard (after replaceVirtualIds resolves Q_VID → REAL_Q_ID)
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            data: [{
-              virtualId: DASH_VID,
-              file: {
-                id: REAL_DASH_ID, name: DASH_NAME, type: 'dashboard',
-                path: `/org/${DASH_NAME}`,
-                content: { assets: [{ type: 'question', id: REAL_Q_ID }], layout: { columns: 12, items: [] } },
-                created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-                references: [REAL_Q_ID], version: 1, last_edit_id: null, company_id: 1,
-              },
-            }],
-          }),
-        };
-      }
-
-      return { ok: true, status: 200, json: async () => ({ data: null }) };
-    });
-
     await act(async () => { await publishAll(); });
 
     // Two separate batch-create calls — one per topological level
-    expect(batchCreateBodies).toHaveLength(2);
+    const fetchMock = global.fetch as jest.Mock;
+    const batchCreateCalls = fetchMock.mock.calls.filter(([u]) => String(u).includes('/api/files/batch-create'));
+    expect(batchCreateCalls).toHaveLength(2);
 
-    // Call 1: question only (no unresolved virtual refs)
-    const firstFiles = batchCreateBodies[0].files;
-    expect(firstFiles).toHaveLength(1);
-    expect(firstFiles[0].virtualId).toBe(Q_VID);
-    expect(firstFiles[0].type).toBe('question');
+    // Call 1: question only (no unresolved virtual deps)
+    const firstBody = JSON.parse(batchCreateCalls[0][1].body) as { files: Array<{ type: string; virtualId: number }> };
+    expect(firstBody.files).toHaveLength(1);
+    expect(firstBody.files[0].type).toBe('question');
 
-    // Call 2: dashboard whose assets already carry the REAL question ID
-    const secondFiles = batchCreateBodies[1].files;
-    expect(secondFiles).toHaveLength(1);
-    expect(secondFiles[0].virtualId).toBe(DASH_VID);
-    expect(secondFiles[0].type).toBe('dashboard');
-    const savedDashContent = secondFiles[0].content as DashboardContent;
-    expect(savedDashContent.assets?.some(a => (a as { id: number }).id === REAL_Q_ID)).toBe(true);
+    // Call 2: dashboard whose assets already carry the REAL (positive) question ID
+    const secondBody = JSON.parse(batchCreateCalls[1][1].body) as { files: Array<{ type: string; content: DashboardContent }> };
+    expect(secondBody.files).toHaveLength(1);
+    expect(secondBody.files[0].type).toBe('dashboard');
+    const assetIds = secondBody.files[0].content.assets?.map(a => (a as { id: number }).id) ?? [];
+    expect(assetIds).toHaveLength(1);
+    expect(assetIds[0]).toBeGreaterThan(0); // real (DB-assigned) ID, not the virtual Q_VID
 
     // No dirty files remain after publishAll
     expect(selectDirtyFiles(testStore.getState())).toHaveLength(0);
@@ -486,6 +542,8 @@ describe('Create new dashboard and question, then publishAll', () => {
 // ============================================================================
 
 describe('Dashboard edit/cancel mode toggle', () => {
+  setupTestDb(getTestDbPath('dashboard_ui'), { customInit: insertDashboardAndQuestion });
+
   let testStore: ReturnType<typeof storeModule.makeStore>;
   let getStoreSpy: jest.SpyInstance;
 
@@ -494,7 +552,7 @@ describe('Dashboard edit/cancel mode toggle', () => {
     getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
     testStore.dispatch(setFile({ file: makeDashboardDbFile(), references: [] }));
     testStore.dispatch(setFile({ file: makeQuestionDbFile(), references: [] }));
-    mockDashboardFetch();
+    global.fetch = makeRealApiFetch();
   });
 
   afterEach(() => {
@@ -536,11 +594,10 @@ describe('Dashboard edit/cancel mode toggle', () => {
 
 describe('Dashboard agentic scenarios', () => {
   const { getPythonPort, getLLMMockPort, getLLMMockServer } = withPythonBackend({ withLLMMock: true });
-  setupTestDb(getTestDbPath('dashboard_ui'));
+  // customInit inserts the shared fixtures (dashboard id=1, question id=2) so the
+  // real batch-save and batch-create handlers can find/update them in the DB.
+  setupTestDb(getTestDbPath('dashboard_ui'), { customInit: insertDashboardAndQuestion });
 
-  // Real IDs returned by batch-create mock for Scenario 2
-  const REAL_Q_ID = 30;
-  const REAL_DASH_ID = 31;
   // Virtual IDs pre-seeded for Scenario 2
   const Q_VID = -100;
   const DASH_VID = -101;
@@ -549,128 +606,16 @@ describe('Dashboard agentic scenarios', () => {
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
   let getStoreSpy: jest.SpyInstance;
-  let batchCreateCallCount: number;
 
   beforeEach(() => {
-    batchCreateCallCount = 0;
     testStore = storeModule.makeStore();
     getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
 
     const pythonPort = getPythonPort();
+    const llmPort = getLLMMockPort?.();
 
-    // Custom fetch router: no spy — set directly so jest.restoreAllMocks() in
-    // manual-test afterEach blocks does not clobber it.
-    global.fetch = jest.fn(async (url: string | Request | URL, init?: RequestInit) => {
-      const urlStr = url.toString();
-      const method = (init?.method ?? 'GET').toUpperCase();
-
-      // /api/chat → route to Next.js chatPostHandler (relative or absolute)
-      if (urlStr.startsWith('/api/chat') || urlStr.includes('localhost:3000/api/chat')) {
-        const req = new NextRequest('http://localhost:3000/api/chat', {
-          method: 'POST',
-          body: init?.body as string,
-          headers: init?.headers as HeadersInit,
-        });
-        const resp = await chatPostHandler(req);
-        const data = await resp.json();
-        return { ok: resp.status < 400, status: resp.status, json: async () => data } as Response;
-      }
-
-      // Python backend → pass through to real server (redirect default 8001 → test port)
-      if (urlStr.includes(`localhost:${pythonPort}`) || urlStr.includes('localhost:8001')) {
-        const redirected = urlStr.replace('localhost:8001', `localhost:${pythonPort}`);
-        return realFetch(redirected, init);
-      }
-
-      // LLM mock server (configure/reset/calls) → pass through
-      const llmPort = getLLMMockPort?.();
-      if (llmPort && urlStr.includes(`localhost:${llmPort}`)) {
-        return realFetch(urlStr, init);
-      }
-
-      // POST /api/files/template → stub for createVirtualFile()
-      if (method === 'POST' && urlStr.includes('/api/files/template')) {
-        const body = JSON.parse(init!.body as string) as { type: string };
-        const content = body.type === 'question'
-          ? { query: '', vizSettings: { type: 'table' }, database_name: '', parameters: [] }
-          : { assets: [], layout: { columns: 12, items: [] } };
-        return {
-          ok: true, status: 200,
-          json: async () => ({ data: { content, fileName: '', metadata: { availableDatabases: [] } } }),
-        } as Response;
-      }
-
-      // POST /api/files/batch-save → Scenario 1 agentic (real dashboard published after EditFile)
-      if (method === 'POST' && urlStr.includes('/api/files/batch-save')) {
-        return {
-          ok: true, status: 200,
-          json: async () => ({
-            data: [{
-              id: DASHBOARD_ID,
-              name: 'Test Dashboard',
-              type: 'dashboard',
-              path: '/org/Test Dashboard',
-              content: { assets: [{ type: 'question', id: QUESTION_ID }], layout: null },
-              created_at: '2025-01-01T00:00:00Z',
-              updated_at: new Date().toISOString(),
-              references: [QUESTION_ID],
-              version: 2,
-              last_edit_id: null,
-              company_id: 1,
-            }],
-          }),
-        } as Response;
-      }
-
-      // POST /api/files/batch-create → Scenario 2 agentic (virtual files saved in topo order)
-      if (method === 'POST' && urlStr.includes('/api/files/batch-create')) {
-        batchCreateCallCount++;
-        const body = JSON.parse(init!.body as string) as {
-          files: Array<{ virtualId: number; type: string }>;
-        };
-        if (batchCreateCallCount === 1) {
-          // Level 1: question (no virtual deps)
-          return {
-            ok: true, status: 200,
-            json: async () => ({
-              data: [{
-                virtualId: body.files[0].virtualId,
-                file: {
-                  id: REAL_Q_ID, name: AGENTIC_Q_NAME, type: 'question',
-                  path: `/org/${AGENTIC_Q_NAME}`,
-                  content: { query: 'SELECT 1', vizSettings: { type: 'table' }, database_name: 'default' },
-                  created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-                  references: [], version: 1, last_edit_id: null, company_id: 1,
-                },
-              }],
-            }),
-          } as Response;
-        }
-        // Level 2: dashboard (virtual question ID already resolved by replaceVirtualIds)
-        return {
-          ok: true, status: 200,
-          json: async () => ({
-            data: [{
-              virtualId: body.files[0].virtualId,
-              file: {
-                id: REAL_DASH_ID, name: AGENTIC_DASH_NAME, type: 'dashboard',
-                path: `/org/${AGENTIC_DASH_NAME}`,
-                content: { assets: [{ type: 'question', id: REAL_Q_ID }], layout: null },
-                created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-                references: [REAL_Q_ID], version: 1, last_edit_id: null, company_id: 1,
-              },
-            }],
-          }),
-        } as Response;
-      }
-
-      // Health check
-      if (urlStr.includes('/health')) {
-        return { ok: true, status: 200, json: async () => ({ status: 'healthy' }) } as Response;
-      }
-
-      throw new Error(`[Dashboard agentic] Unmocked fetch call to ${urlStr}`);
-    });
+    // All API calls go to real Next.js route handlers backed by the test DB.
+    global.fetch = makeRealApiFetch({ pythonPort, llmPort });
   });
 
   afterEach(() => {
@@ -855,12 +800,14 @@ describe('Dashboard agentic scenarios', () => {
     expect(selectConversation(testStore.getState() as RootState, realConvId)?.error).toBeUndefined();
 
     // batch-create was called twice — question first (level 1), dashboard second (level 2)
-    expect(batchCreateCallCount).toBe(2);
+    const fetchMock = global.fetch as jest.Mock;
+    const batchCreateCalls = fetchMock.mock.calls.filter(([u]) => String(u).includes('/api/files/batch-create'));
+    expect(batchCreateCalls).toHaveLength(2);
 
-    // Virtual files replaced with real files in Redux
-    const filesState = testStore.getState().files.files;
-    expect(filesState[REAL_Q_ID]).toBeDefined();
-    expect(filesState[REAL_DASH_ID]).toBeDefined();
+    // Real (positive-ID) files added to Redux
+    const allFiles = Object.values(testStore.getState().files.files);
+    expect(allFiles.some(f => f.type === 'question' && f.id > 0 && f.name === AGENTIC_Q_NAME)).toBe(true);
+    expect(allFiles.some(f => f.type === 'dashboard' && f.id > 0)).toBe(true);
 
     // No dirty files remain
     expect(selectDirtyFiles(testStore.getState() as any)).toHaveLength(0);
@@ -874,26 +821,22 @@ describe('Dashboard agentic scenarios', () => {
 
 describe('Combined flow: new dashboard with question from scratch', () => {
   const { getPythonPort, getLLMMockPort, getLLMMockServer } = withPythonBackend({ withLLMMock: true });
-  // Reuse the same DB as the other agentic describe — db-config mock always
-  // points to test_dashboard_ui.db regardless of which setupTestDb path is passed.
-  setupTestDb(getTestDbPath('dashboard_ui'));
+  // customInit inserts QUESTION_ID=2 (Sales Revenue) so QuestionBrowserPanel's
+  // real GET /api/files?type=question call finds it when testing the add-existing-question flow.
+  // (DASHBOARD_ID=1 is also inserted but the combined flow creates a separate virtual dashboard.)
+  setupTestDb(getTestDbPath('dashboard_ui'), { customInit: insertDashboardAndQuestion });
 
   // Virtual IDs — deterministic because generateVirtualId is mocked:
   //   Navigate tool (after bug fix) → first generateVirtualId() call  → DASH_VID
   //   CreateFile tool               → second generateVirtualId() call → Q_VID
-  const DASH_VID    = -1_000_000_091;
-  const Q_VID       = -1_000_000_092;
-  const REAL_Q_ID   = 50;
-  const REAL_DASH_ID = 51;
+  const DASH_VID = -1_000_000_091;
+  const Q_VID    = -1_000_000_092;
   const Q_NAME = 'Revenue Query';
-  const DASH_NAME = 'My New Dashboard';
 
   let testStore: ReturnType<typeof storeModule.makeStore>;
   let getStoreSpy: jest.SpyInstance;
-  let batchCreateCallCount: number;
 
   beforeEach(() => {
-    batchCreateCallCount = 0;
     testStore = storeModule.makeStore();
     getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
 
@@ -917,104 +860,10 @@ describe('Combined flow: new dashboard with question from scratch', () => {
     });
 
     const pythonPort = getPythonPort();
-    global.fetch = jest.fn(async (url: string | Request | URL, init?: RequestInit) => {
-      const urlStr = url.toString();
-      const method = (init?.method ?? 'GET').toUpperCase();
+    const llmPort = getLLMMockPort?.();
 
-      if (urlStr.startsWith('/api/chat') || urlStr.includes('localhost:3000/api/chat')) {
-        const req = new NextRequest('http://localhost:3000/api/chat', {
-          method: 'POST',
-          body: init?.body as string,
-          headers: init?.headers as HeadersInit,
-        });
-        const resp = await chatPostHandler(req);
-        const data = await resp.json();
-        return { ok: resp.status < 400, status: resp.status, json: async () => data } as Response;
-      }
-
-      if (urlStr.includes(`localhost:${pythonPort}`) || urlStr.includes('localhost:8001')) {
-        return realFetch(urlStr.replace('localhost:8001', `localhost:${pythonPort}`), init);
-      }
-
-      const llmPort = getLLMMockPort?.();
-      if (llmPort && urlStr.includes(`localhost:${llmPort}`)) {
-        return realFetch(urlStr, init);
-      }
-
-      if (method === 'POST' && urlStr.includes('/api/files/template')) {
-        const body = JSON.parse(init!.body as string) as { type: string };
-        const content = body.type === 'question'
-          ? { query: '', vizSettings: { type: 'table' }, database_name: '', parameters: [] }
-          : { assets: [], layout: { columns: 12, items: [] } };
-        return {
-          ok: true, status: 200,
-          json: async () => ({ data: { content, fileName: '', metadata: { availableDatabases: [] } } }),
-        } as Response;
-      }
-
-      // GET /api/files?type=question — QuestionBrowserPanel listing
-      if (method === 'GET' && urlStr.includes('/api/files') && urlStr.includes('type=question')) {
-        return {
-          ok: true, status: 200,
-          json: async () => ({
-            data: [{ id: QUESTION_ID, name: QUESTION_NAME, type: 'question', path: `/org/${QUESTION_NAME}` }],
-          }),
-        } as Response;
-      }
-
-      // Catch-all for non-critical GET requests (configs, etc.)
-      if (method === 'GET') {
-        return { ok: true, status: 200, json: async () => ({ data: null }) } as Response;
-      }
-
-      if (method === 'POST' && urlStr.includes('/api/files/batch-create')) {
-        batchCreateCallCount++;
-        const body = JSON.parse(init!.body as string) as {
-          files: Array<{ virtualId: number; type: string }>;
-        };
-        const firstFile = body.files[0];
-        // Call 1: question (agentic test) or dashboard (manual test — only 1 call)
-        if (firstFile.type === 'question') {
-          return {
-            ok: true, status: 200,
-            json: async () => ({
-              data: [{
-                virtualId: firstFile.virtualId,
-                file: {
-                  id: REAL_Q_ID, name: Q_NAME, type: 'question',
-                  path: `/org/${Q_NAME}`,
-                  content: { query: 'SELECT 1', vizSettings: { type: 'table' }, database_name: 'default' },
-                  created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-                  references: [], version: 1, last_edit_id: null, company_id: 1,
-                },
-              }],
-            }),
-          } as Response;
-        }
-        // Dashboard (manual test call 1, or agentic test call 2)
-        return {
-          ok: true, status: 200,
-          json: async () => ({
-            data: [{
-              virtualId: firstFile.virtualId,
-              file: {
-                id: REAL_DASH_ID, name: DASH_NAME, type: 'dashboard',
-                path: `/org/${DASH_NAME}`,
-                content: { assets: [{ type: 'question', id: REAL_Q_ID }], layout: { columns: 12, items: [] } },
-                created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
-                references: [REAL_Q_ID], version: 1, last_edit_id: null, company_id: 1,
-              },
-            }],
-          }),
-        } as Response;
-      }
-
-      if (urlStr.includes('/health')) {
-        return { ok: true, status: 200, json: async () => ({ status: 'healthy' }) } as Response;
-      }
-
-      throw new Error(`[Combined flow] Unmocked fetch call to ${urlStr}`);
-    });
+    // All API calls go to real Next.js route handlers backed by the test DB.
+    global.fetch = makeRealApiFetch({ pythonPort, llmPort });
   });
 
   afterEach(() => {
@@ -1070,9 +919,84 @@ describe('Combined flow: new dashboard with question from scratch', () => {
     // publishAll: only the virtual dashboard needs batch-create (real question is not dirty)
     await act(async () => { await publishAll(); });
 
-    // Exactly 1 batch-create call — for the virtual dashboard
-    expect(batchCreateCallCount).toBe(1);
-    expect(testStore.getState().files.files[REAL_DASH_ID]).toBeDefined();
+    // Exactly 1 batch-create call — for the virtual dashboard only
+    const batchCreateCalls1 = (global.fetch as jest.Mock).mock.calls.filter(
+      ([u]) => String(u).includes('/api/files/batch-create')
+    );
+    expect(batchCreateCalls1).toHaveLength(1);
+    // Real dashboard added to Redux
+    const newDash = Object.values(testStore.getState().files.files).find(f => f.type === 'dashboard' && f.id > 0);
+    expect(newDash).toBeDefined();
+    expect(selectDirtyFiles(testStore.getState())).toHaveLength(0);
+  });
+
+  // --------------------------------------------------------------------------
+  // Manual (combined): user on /new/dashboard clicks "Create New Question",
+  // fills in a name, clicks "Add" → question linked to dashboard.
+  // publishAll must batch-create question first (level 1), dashboard second (level 2).
+  // --------------------------------------------------------------------------
+
+  it('manual (combined): creates new virtual question via "Create New Question" in QuestionBrowserPanel, links to virtual dashboard, publishAll saves both in topological order', async () => {
+    const user = userEvent.setup();
+
+    // Dispatch setNavigation WITHOUT virtualId → navigationListener calls
+    // generateVirtualId() → returns DASH_VID (1st beforeEach mock value).
+    // This mirrors the real app: Navigate tool generates the ID before pushing.
+    testStore.dispatch(setNavigation({
+      pathname: '/new/dashboard',
+      searchParams: { folder: '/org' },
+    }));
+    await waitFor(
+      () => expect(testStore.getState().files.files[DASH_VID]).toBeDefined(),
+      { timeout: 5000 }
+    );
+
+    testStore.dispatch(setDashboardEditMode({ fileId: DASH_VID, editMode: true }));
+    renderWithProviders(<DashboardContainerV2 fileId={DASH_VID} />, { store: testStore });
+
+    // QuestionBrowserPanel is visible in edit mode — click "Create New Question".
+    // This opens the real CreateQuestionModal (Portal + Dialog stubs make it render inline).
+    const createBtn = await screen.findByRole('button', { name: /Create New Question/i }, { timeout: 5000 });
+    await user.click(createBtn);
+
+    // Wait for CreateQuestionModalContainer to finish loading:
+    //   createVirtualFile() → dispatch(setFile) → useFile(vid) returns → loading clears
+    //   → real name input (placeholder "Question name...") appears.
+    const nameInput = await screen.findByPlaceholderText('Question name...', {}, { timeout: 8000 });
+
+    // Q_VID is now in Redux — createVirtualFile dispatched setFile before resolving
+    expect(testStore.getState().files.files[Q_VID]).toBeDefined();
+
+    // Typing calls handleMetadataChange → editFile({ name }) → metadataChanges.name set → dirty
+    await user.type(nameInput, Q_NAME);
+
+    // Click "Add" → handleAdd validates name (non-empty and not "New Question"),
+    // calls onQuestionCreated(Q_VID) → addQuestionToDashboard(DASH_VID, Q_VID)
+    const dialog = screen.getByRole('dialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+
+    // Virtual dashboard now has virtual question in its assets
+    await waitFor(() => {
+      const dash = testStore.getState().files.files[DASH_VID];
+      const merged = {
+        ...(dash.content as DashboardContent),
+        ...(dash.persistableChanges as Partial<DashboardContent> | undefined),
+      };
+      expect(merged.assets?.some(a => (a as { id: number }).id === Q_VID)).toBe(true);
+    }, { timeout: 3000 });
+
+    // publishAll: question first (no deps → level 1), dashboard second (refs Q_VID → level 2)
+    await act(async () => { await publishAll(); });
+
+    // Two separate batch-create calls — question then dashboard
+    const batchCreateCalls2 = (global.fetch as jest.Mock).mock.calls.filter(
+      ([u]) => String(u).includes('/api/files/batch-create')
+    );
+    expect(batchCreateCalls2).toHaveLength(2);
+    // Real files added to Redux (virtual files retain their entries but with cleared edits)
+    const allFilesAfter = Object.values(testStore.getState().files.files);
+    expect(allFilesAfter.some(f => f.type === 'question' && f.id > 0 && f.name === Q_NAME)).toBe(true);
+    expect(allFilesAfter.some(f => f.type === 'dashboard' && f.id > 0)).toBe(true);
     expect(selectDirtyFiles(testStore.getState())).toHaveLength(0);
   });
 
@@ -1197,11 +1121,15 @@ describe('Combined flow: new dashboard with question from scratch', () => {
     expect(selectConversation(testStore.getState() as RootState, realConvId)?.error).toBeUndefined();
 
     // Both virtual files published: question (level 1) then dashboard (level 2)
-    expect(batchCreateCallCount).toBe(2);
+    const batchCreateCalls3 = (global.fetch as jest.Mock).mock.calls.filter(
+      ([u]) => String(u).includes('/api/files/batch-create')
+    );
+    expect(batchCreateCalls3).toHaveLength(2);
 
-    const filesState = testStore.getState().files.files;
-    expect(filesState[REAL_Q_ID]).toBeDefined();
-    expect(filesState[REAL_DASH_ID]).toBeDefined();
+    // Real files added to Redux
+    const allFiles3 = Object.values(testStore.getState().files.files);
+    expect(allFiles3.some(f => f.type === 'question' && f.id > 0 && f.name === Q_NAME)).toBe(true);
+    expect(allFiles3.some(f => f.type === 'dashboard' && f.id > 0)).toBe(true);
 
     // No dirty files remain
     expect(selectDirtyFiles(testStore.getState() as any)).toHaveLength(0);

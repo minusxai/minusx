@@ -719,7 +719,7 @@ const filesSlice = createSlice({
 
       // Add new layout item with default size (w:6, h:4)
       const newLayoutItem = {
-        id: questionId.toString(),
+        id: questionId,
         x: 0,
         y: maxY,
         w: 6,
