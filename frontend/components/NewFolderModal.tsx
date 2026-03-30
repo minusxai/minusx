@@ -71,11 +71,10 @@ export default function NewFolderModal({ isOpen, onClose, defaultParentPath = '/
       // Use centralized createFolder function from file-state.ts
       const result = await createFolder(folderName.trim(), parentPath);
 
-      // Close modal and navigate to new folder
+      // Close modal and refresh current view
       onClose();
       setFolderName('');
       setError(null);
-      router.push(`/p${result.path}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create folder');
