@@ -4,7 +4,7 @@ from typing import Optional, List
 from tasks import register_agent
 from tasks.llm.config import MAX_STEPS_LOWER_LEVEL
 from .agent import AnalystAgent
-from .tools import SearchDBSchema, ExecuteQuery, SubmitBinary, SubmitNumber, SubmitString, CannotAnswer
+from .tools import SubmitBinary, SubmitNumber, SubmitString, CannotAnswer
 
 
 @register_agent
@@ -61,11 +61,11 @@ class TestAgent(AnalystAgent):
         }
 
     def _get_available_tools(self):
-        """Limit tools to schema search, query execution, and the submit tool."""
+        """Full AnalystAgent tool set plus the appropriate Submit tool for this assertion type."""
         if self.submit_called or len(self.tool_thread) >= MAX_STEPS_LOWER_LEVEL - 5:
             return []
 
-        tools = [SearchDBSchema, ExecuteQuery]
+        tools = list(super()._get_available_tools())
         assertion_type = self.assertion.get('type', 'binary')
         if assertion_type == 'binary':
             tools.append(SubmitBinary)

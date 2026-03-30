@@ -408,11 +408,44 @@ registerToolFallback('EditFile', async () => {
 /**
  * Navigate — server-side fallback.
  * UI navigation is not available during server-side evaluation runs.
- * Returns an informative error so the LLM can adjust its plan.
  */
 registerToolFallback('Navigate', async () => {
   return {
     content: { success: false, error: 'Navigate is not available in server-run mode. Navigation requires an interactive session.' },
     details: { success: false },
+  };
+});
+
+/**
+ * CreateFile — server-side fallback.
+ * File creation requires an interactive session with Redux state.
+ */
+registerToolFallback('CreateFile', async () => {
+  return {
+    content: { success: false, error: 'CreateFile is not available in server-run mode. File creation requires an interactive session.' },
+    details: { success: false },
+  };
+});
+
+/**
+ * PublishAll — server-side fallback.
+ * Publishing files requires an interactive session with Redux state.
+ */
+registerToolFallback('PublishAll', async () => {
+  return {
+    content: { success: false, error: 'PublishAll is not available in server-run mode. Publishing requires an interactive session.' },
+    details: { success: false },
+  };
+});
+
+/**
+ * Clarify — server-side fallback (overrides the primary handler).
+ * In server-run mode there is no user to ask, so the agent is instructed
+ * to figure it out on its own rather than waiting for a response.
+ */
+registerToolFallback('Clarify', async () => {
+  return {
+    content: 'Figure it out.',
+    details: { success: true },
   };
 });

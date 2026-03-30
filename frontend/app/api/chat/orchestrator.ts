@@ -209,9 +209,13 @@ export async function orchestratePendingTools(
 
   // Process each pending tool
   for (const toolCall of pendingTools) {
-    const useFallback = !canExecuteTool(toolCall) && allowServerFallback && (toolCall.function?.name ?? '') in fallbackToolRegistry;
-    if (canExecuteTool(toolCall) || useFallback) {
-      // Backend can execute this tool (primary or fallback registry)
+    // When allowServerFallback=true, the fallback registry takes precedence over
+    // the primary registry. This lets server-run mode override tools like Clarify
+    // that have a primary handler but need different behaviour without a client.
+    const toolName = toolCall.function?.name ?? '';
+    const useFallback = allowServerFallback && toolName in fallbackToolRegistry;
+    if (useFallback || canExecuteTool(toolCall)) {
+      // Backend can execute this tool (fallback registry takes precedence in server-run mode)
       try {
         callbacks?.onToolExecuting?.(toolCall);
 
