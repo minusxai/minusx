@@ -105,7 +105,7 @@ export default function BulkMoveFileModal({ isOpen, onClose, files }: BulkMoveFi
       <Portal>
       <Dialog.Backdrop />
       <Dialog.Positioner>
-        <Dialog.Content maxW="500px" p={6} borderRadius="lg" bg="bg.surface">
+        <Dialog.Content maxW="500px" p={6} borderRadius="lg" bg="bg.surface" aria-label="Move files modal">
           <Dialog.Header>
             <Dialog.Title fontSize="xl" fontWeight="bold">Move {files.length} file{files.length !== 1 ? 's' : ''}</Dialog.Title>
           </Dialog.Header>
