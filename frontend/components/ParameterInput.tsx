@@ -486,6 +486,7 @@ export default function ParameterInput({
             value={typeof value === 'string' ? value : ''}
             onChange={handleDateChange}
             placeholder="YYYY-MM-DD"
+            ariaLabel={parameter.name}
           />
         ) : (
           <Input
@@ -505,6 +506,7 @@ export default function ParameterInput({
               boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)',
             }}
             placeholder={parameter.type === 'number' ? '0' : 'value'}
+            aria-label={parameter.name}
           />
         )
         )}

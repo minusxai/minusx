@@ -182,7 +182,7 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
                     p={2}
                     my={1}
                 >
-                    <Box px={3} py={1}>
+                    <Box px={3} py={1} aria-label="Thinking block">
                         <Markdown context={markdownContext}>{block}</Markdown>
                     </Box>
                 </GridItem>
@@ -210,7 +210,7 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
                     colStart={1}
                     my={2}
                 >
-                    <Box px={3} py={1}>
+                    <Box px={3} py={1} aria-label="Answer block">
                         <Markdown context={markdownContext}>{block}</Markdown>
                     </Box>
                 </GridItem>

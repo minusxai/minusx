@@ -83,6 +83,7 @@ const SimpleChatMessage = React.memo(function SimpleChatMessage({ message, datab
               color="fg.subtle"
               fontSize="sm"
               w="fit-content"
+              aria-label={showThinking ? "Hide Thinking" : "Show Thinking"}
             >
               {showThinking ? <LuChevronDown size={16} /> : <LuChevronRight size={16} />}
               <Text>{showThinking ? "Hide" : "Show"} Thinking</Text>

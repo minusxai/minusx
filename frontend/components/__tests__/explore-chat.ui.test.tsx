@@ -298,16 +298,18 @@ describe('Explore page: submit question → agent responds → see answer → to
       );
 
       // Final answer from <answer> block is visible in the DOM
-      await screen.findByText(/the answer is 42/i, {}, { timeout: 5000 });
+      const answerBlock = await screen.findByLabelText('Answer block', {}, { timeout: 5000 });
+      expect(answerBlock).toHaveTextContent(/the answer is 42/i);
 
-      // "Show Thinking" button is present; thinking text is hidden by default
-      const showThinkingBtn = screen.getByText('Show Thinking');
-      expect(screen.queryByText(/let me think through/i)).not.toBeInTheDocument();
+      // "Show Thinking" button is present; thinking block is hidden by default
+      const showThinkingBtn = screen.getByLabelText('Show Thinking');
+      expect(screen.queryByLabelText('Thinking block')).not.toBeInTheDocument();
 
       // Clicking "Show Thinking" reveals thinking content and flips the button label
       await userEvent.click(showThinkingBtn);
-      await screen.findByText(/let me think through this step by step/i);
-      expect(screen.getByText('Hide Thinking')).toBeInTheDocument();
+      const thinkingBlock = await screen.findByLabelText('Thinking block');
+      expect(thinkingBlock).toHaveTextContent(/let me think through this step by step/i);
+      expect(screen.getByLabelText('Hide Thinking')).toBeInTheDocument();
     },
     45000
   );

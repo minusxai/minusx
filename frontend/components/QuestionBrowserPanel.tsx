@@ -146,6 +146,7 @@ export const QuestionBrowserPanel = ({
           }}
           colorPalette="teal"
           gap={2}
+          aria-label="Create New Question"
         >
           <LuPlus /> Create New Question
         </Button>

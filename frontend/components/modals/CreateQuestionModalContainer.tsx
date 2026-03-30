@@ -208,6 +208,7 @@ export default function CreateQuestionModalContainer({
               size="sm"
               variant="flushed"
               fontWeight="semibold"
+              aria-label="Question name"
             />
           </Box>
           {saveError && (
@@ -222,6 +223,7 @@ export default function CreateQuestionModalContainer({
             color="white"
             onClick={handlePrimaryAction}
             flexShrink={0}
+            aria-label={primaryActionLabel}
           >
             {primaryActionLabel}
           </Button>

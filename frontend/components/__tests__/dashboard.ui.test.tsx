@@ -32,7 +32,7 @@ jest.mock('@/components/modals/CreateQuestionModal', () => {
       const { default: Container } = require('@/components/modals/CreateQuestionModalContainer');
       return React.createElement(
         'section',
-        { role: 'dialog' },
+        { role: 'dialog', 'aria-label': 'Create question' },
         React.createElement(Container, {
           isOpen,
           onClose,
@@ -484,8 +484,8 @@ describe('Add question to existing dashboard and save', () => {
 
     // Dashboard is in edit mode with no questions — QuestionBrowserPanel is shown
     // inline. Wait for the panel to populate, find the question card, click Add.
-    const questionCard = await screen.findByRole('article', { name: QUESTION_NAME }, { timeout: 5000 });
-    const addButton = within(questionCard).getByRole('button', { name: 'Add to dashboard' });
+    const questionCard = await screen.findByLabelText(QUESTION_NAME, {}, { timeout: 5000 });
+    const addButton = within(questionCard).getByLabelText('Add to dashboard');
     await user.click(addButton);
 
     // Redux: dashboard is now dirty with the new asset
@@ -499,7 +499,7 @@ describe('Add question to existing dashboard and save', () => {
     }, { timeout: 3000 });
 
     // "Publish changes" button is now enabled
-    const publishBtn = screen.getByRole('button', { name: 'Publish changes' });
+    const publishBtn = screen.getByLabelText('Publish changes');
     expect(publishBtn).not.toBeDisabled();
     await user.click(publishBtn);
 
@@ -652,14 +652,14 @@ describe('Dashboard edit/cancel mode toggle', () => {
       { store: testStore }
     );
 
-    expect(await screen.findByRole('region', { name: 'Dashboard' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Dashboard')).toBeInTheDocument();
 
     // Enter edit mode
-    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    await user.click(screen.getByLabelText('Edit'));
     expect(testStore.getState().ui.dashboardEditMode?.[DASHBOARD_ID]).toBe(true);
 
     // Exit edit mode
-    await user.click(screen.getByRole('button', { name: 'Cancel editing' }));
+    await user.click(screen.getByLabelText('Cancel editing'));
     expect(testStore.getState().ui.dashboardEditMode?.[DASHBOARD_ID]).toBe(false);
   });
 });
@@ -980,8 +980,8 @@ describe('Combined flow: new dashboard with question from scratch', () => {
 
     // QuestionBrowserPanel loads questions (mocked GET /api/files?type=question)
     // and renders each as an article.  Click "Add to dashboard" on the real question.
-    const card = await screen.findByRole('article', { name: QUESTION_NAME }, { timeout: 5000 });
-    await user.click(within(card).getByRole('button', { name: 'Add to dashboard' }));
+    const card = await screen.findByLabelText(QUESTION_NAME, {}, { timeout: 5000 });
+    await user.click(within(card).getByLabelText('Add to dashboard'));
 
     // Virtual dashboard is now dirty — real question linked
     await waitFor(() => {
@@ -1033,13 +1033,13 @@ describe('Combined flow: new dashboard with question from scratch', () => {
 
     // QuestionBrowserPanel is visible in edit mode — click "Create New Question".
     // This opens the real CreateQuestionModal (Portal + Dialog stubs make it render inline).
-    const createBtn = await screen.findByRole('button', { name: /Create New Question/i }, { timeout: 5000 });
+    const createBtn = await screen.findByLabelText('Create New Question', {}, { timeout: 5000 });
     await user.click(createBtn);
 
     // Wait for CreateQuestionModalContainer to finish loading:
     //   createVirtualFile() → dispatch(setFile) → useFile(vid) returns → loading clears
-    //   → real name input (placeholder "Question name...") appears.
-    const nameInput = await screen.findByPlaceholderText('Question name...', {}, { timeout: 8000 });
+    //   → real name input appears.
+    const nameInput = await screen.findByLabelText('Question name', {}, { timeout: 8000 });
 
     // Q_VID is now in Redux — createVirtualFile dispatched setFile before resolving
     expect(testStore.getState().files.files[Q_VID]).toBeDefined();
@@ -1049,8 +1049,8 @@ describe('Combined flow: new dashboard with question from scratch', () => {
 
     // Click "Add" → handleAdd validates name (non-empty and not "New Question"),
     // calls onQuestionCreated(Q_VID) → addQuestionToDashboard(DASH_VID, Q_VID)
-    const dialog = screen.getByRole('dialog');
-    await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+    const dialog = screen.getByLabelText('Create question');
+    await user.click(within(dialog).getByLabelText('Add'));
 
     // Virtual dashboard now has virtual question in its assets
     await waitFor(() => {
@@ -1566,7 +1566,7 @@ describe('Multiple questions in dashboard', () => {
     );
 
     // Two "Remove question" buttons — one per tile.  Click the first.
-    const removeBtns = await screen.findAllByRole('button', { name: 'Remove question' });
+    const removeBtns = await screen.findAllByLabelText('Remove question');
     expect(removeBtns).toHaveLength(2);
     await user.click(removeBtns[0]);
 
@@ -1581,7 +1581,7 @@ describe('Multiple questions in dashboard', () => {
     }, { timeout: 3000 });
 
     // Publish and verify DB round-trip via Redux content
-    await user.click(screen.getByRole('button', { name: 'Publish changes' }));
+    await user.click(screen.getByLabelText('Publish changes'));
     await waitFor(() => {
       expect(Object.keys(testStore.getState().files.files[DASHBOARD_ID].persistableChanges ?? {})).toHaveLength(0);
     }, { timeout: 5000 });
@@ -1660,12 +1660,12 @@ describe('Dashboard parameter merging', () => {
   it('two questions sharing :start_date render exactly one merged date parameter input', async () => {
     renderWithProviders(<DashboardContainerV2 fileId={DASHBOARD_ID} />, { store: testStore });
 
-    // inferParameterType('start_date') → 'date' → ParameterInput renders <input placeholder="YYYY-MM-DD">
+    // inferParameterType('start_date') → 'date' → ParameterInput renders input with aria-label="start_date"
     // :start_date appears in BOTH queries but merges to a single input, not two.
-    // inferParameterType('region') → 'text' → simple input with placeholder="value"
+    // inferParameterType('region') → 'text' → simple input with aria-label="region"
     await waitFor(() => {
-      expect(screen.getAllByPlaceholderText('YYYY-MM-DD')).toHaveLength(1);
-      expect(screen.getAllByPlaceholderText('value')).toHaveLength(1);
+      expect(screen.getAllByLabelText('start_date')).toHaveLength(1);
+      expect(screen.getAllByLabelText('region')).toHaveLength(1);
     }, { timeout: 5000 });
   });
 
