@@ -17,7 +17,7 @@ import { IconType } from 'react-icons/lib';
  */
 export function extractParametersFromSQL(sql: string): string[] {
   if (!sql) return [];
-  const regex = /(?<![:\w\\]):(\w+)(?!:)/gu;
+  const regex = /(?<![:\w\\]):([a-zA-Z_]\w*)(?!:)/gu;
   const paramNames = new Set<string>();
   for (const match of sql.matchAll(regex)) {
     paramNames.add(match[1]);

@@ -97,6 +97,17 @@ describe('extractParametersFromSQL', () => {
     expect(extractParametersFromSQL(sql)).toEqual(['start']);
   });
 
+  it('ignores :00:00 time literal — no backtracking to :0', () => {
+    // Without [a-zA-Z_] anchor, the engine backtracks from :00 (fails lookahead) to :0 (passes)
+    expect(extractParametersFromSQL("SELECT ':00:00'")).toEqual([]);
+  });
+
+  it('handles DATE_PARSE format string with real param', () => {
+    const sql =
+      "SELECT DATE_PARSE(CONCAT(CAST(year AS VARCHAR), '-', LPAD(CAST(hour AS VARCHAR), 2, '0'), ':00:00'), '%Y-%m-%d %H:%i:%s') FROM t WHERE dt >= :start_date";
+    expect(extractParametersFromSQL(sql)).toEqual(['start_date']);
+  });
+
   it('handles param immediately followed by punctuation', () => {
     expect(extractParametersFromSQL('SELECT :p,')).toEqual(['p']);
     expect(extractParametersFromSQL('fn(:p)')).toEqual(['p']);
