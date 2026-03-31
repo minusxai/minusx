@@ -43,12 +43,14 @@ export function detectOnboardingState(
   contexts: Array<unknown>,
   /** Optional: pass questions/dashboards to detect stage 3 */
   questions?: Array<unknown>,
+    dashboards?: Array<unknown>,
 ): OnboardingCheck {
   if (connections.length === 0) {
     return { needsOnboarding: true, redirectPath: '/hello-world' };
   }
 
-  if (contexts.length === 0) {
+  // check if truly new user with no setup
+  if (contexts.length === 0 && questions !== undefined && questions.length === 0 && dashboards !== undefined && dashboards.length === 0) {
     const conn = connections[0];
     const params = new URLSearchParams({
       step: 'context',
@@ -59,7 +61,7 @@ export function detectOnboardingState(
   }
 
   // Connection + context exist but no questions → generating step
-  if (questions !== undefined && questions.length === 0) {
+  if (questions !== undefined && questions.length === 0 && dashboards !== undefined && dashboards.length === 0) {
     const conn = connections[0];
     const params = new URLSearchParams({
       step: 'generating',
