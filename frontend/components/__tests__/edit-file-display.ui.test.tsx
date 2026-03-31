@@ -41,7 +41,7 @@ import * as storeModule from '@/store/store';
 import { setFile } from '@/store/filesSlice';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
 import { encodeFileStr } from '@/lib/api/file-encoding';
-import type { DbFile, ToolCall, ToolMessage, CompletedToolCall } from '@/lib/types';
+import type { DbFile, ToolCall, ToolMessage, CompletedToolCall, EditFileDetails } from '@/lib/types';
 
 import EditFileDisplay from '@/components/explore/tools/EditFileDisplay';
 
@@ -99,7 +99,7 @@ function makeToolCallTuple(opts: { fileId: number; success: boolean; diff?: stri
     details: {
       success: opts.success,
       diff: opts.diff,
-    },
+    } as EditFileDetails,
   };
   return [toolCall, toolMessage];
 }
