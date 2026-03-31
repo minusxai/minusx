@@ -39,7 +39,7 @@ import Editor from '@monaco-editor/react';
 import { useAppSelector } from '@/store/hooks';
 import ConnectionTablesBrowser from '../ConnectionTablesBrowser';
 import Image from 'next/image';
-import { DuckDBConfig, BigQueryConfig, PostgreSQLConfig, CsvConfig, GoogleSheetsConfig } from './connection-configs';
+import { DuckDBConfig, BigQueryConfig, PostgreSQLConfig, CsvConfig, GoogleSheetsConfig, AthenaConfig } from './connection-configs';
 import { cursorBlinkKeyframes } from '@/lib/ui/animations';
 
 const TYPEWRITER_SPEED = 35;
@@ -76,6 +76,12 @@ const CONNECTION_TYPES = [
     logo: '/logos/google-sheets.svg',
     comingSoon: false,
     note: 'Public sheets only',
+  },
+  {
+    type: 'athena' as const,
+    name: 'Athena',
+    logo: '/logos/athena.svg',
+    comingSoon: false,
   },
   {
     type: 'clickhouse' as const,
@@ -168,7 +174,7 @@ export default function ConnectionFormV2({
   }, [greeting]);
 
   // Handle type selection from the initial screen
-  const handleTypeSelect = (selectedType: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets') => {
+  const handleTypeSelect = (selectedType: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena') => {
     handleTypeChange(selectedType);
     setStep('configure');
   };
@@ -221,6 +227,15 @@ export default function ConnectionFormV2({
           generated_db_path: config.generated_db_path || '',
           files: config.files || []
         }
+      : content.type === 'athena'
+      ? {
+          region_name: config.region_name || '',
+          s3_staging_dir: config.s3_staging_dir || '',
+          aws_access_key_id: config.aws_access_key_id ? '***REDACTED***' : '',
+          aws_secret_access_key: config.aws_secret_access_key ? '***REDACTED***' : '',
+          schema_name: config.schema_name || '',
+          work_group: config.work_group || ''
+        }
       : config
   }, null, 2);
 
@@ -266,6 +281,8 @@ export default function ConnectionFormV2({
       if (!config.generated_db_path) return false;
     } else if (content.type === 'google-sheets') {
       if (!config.generated_db_path) return false;
+    } else if (content.type === 'athena') {
+      if (!config.region_name || !config.s3_staging_dir) return false;
     }
 
     return true;
@@ -281,7 +298,7 @@ export default function ConnectionFormV2({
     }
   };
 
-  const handleTypeChange = (newType: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets') => {
+  const handleTypeChange = (newType: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena') => {
     // Clear config when switching types
     onChange({
       type: newType,
@@ -420,6 +437,23 @@ export default function ConnectionFormV2({
         // Test the connection (uses DuckDB internally)
         const result = await testConnection(content.type, config, mode === 'view' ? fileName : undefined, includeSchema);
         setTestResult(result);
+      } else {
+        // Generic handler for all other connection types (e.g. Athena)
+        if (mode === 'view') {
+          const result = await testConnection(content.type, config, fileName, includeSchema);
+          setTestResult(result);
+        } else {
+          if (!validateName(fileName)) {
+            setTestResult({
+              success: false,
+              message: 'Please enter a valid connection name first',
+            });
+            setTesting(false);
+            return;
+          }
+          const result = await testConnection(content.type, config, undefined, includeSchema);
+          setTestResult(result);
+        }
       }
     } catch (e) {
       setTestResult({
@@ -544,7 +578,7 @@ export default function ConnectionFormV2({
               <Box
                 key={connType.type}
                 as="button"
-                onClick={() => !connType.comingSoon && handleTypeSelect(connType.type as 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets')}
+                onClick={() => !connType.comingSoon && handleTypeSelect(connType.type as 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena')}
                 p={6}
                 borderRadius="lg"
                 border="1px solid"
@@ -667,6 +701,7 @@ export default function ConnectionFormV2({
                  content.type === 'postgresql' ? 'PostgreSQL' :
                  content.type === 'csv' ? 'CSV Files' :
                  content.type === 'google-sheets' ? 'Google Sheets' :
+                 content.type === 'athena' ? 'Athena' :
                  content.type}
               </Box>
             )}
@@ -894,7 +929,7 @@ export default function ConnectionFormV2({
                           py={2}
                           bg={content.type === connType.type ? 'accent.teal/10' : 'transparent'}
                           _hover={{ bg: content.type === connType.type ? 'accent.teal/20' : 'bg.muted' }}
-                          onClick={() => handleTypeChange(connType.type as 'duckdb' | 'bigquery' | 'postgresql')}
+                          onClick={() => handleTypeChange(connType.type as 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena')}
                         >
                           <HStack gap={2}>
                             <Box w="20px" h="20px" position="relative" flexShrink={0}>
@@ -967,6 +1002,15 @@ export default function ConnectionFormV2({
             companyId={companyId}
             userMode={userMode}
             onError={setNameError}
+          />
+        )}
+
+        {/* Athena Configuration */}
+        {content.type === 'athena' && (
+          <AthenaConfig
+            config={config}
+            onChange={(newConfig) => onChange({ config: newConfig })}
+            mode={mode}
           />
         )}
 

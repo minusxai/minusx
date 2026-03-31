@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <!-- AWS Athena style: purple hexagon with query/search icon -->
+  <polygon points="32,2 58,17 58,47 32,62 6,47 6,17" fill="#8C4FFF"/>
+  <polygon points="32,8 54,20.5 54,43.5 32,56 10,43.5 10,20.5" fill="#6B2FBC" opacity="0.4"/>
+  <!-- Magnifying glass -->
+  <circle cx="29" cy="28" r="9" fill="none" stroke="#ffffff" stroke-width="3.5"/>
+  <line x1="35.5" y1="35.5" x2="44" y2="44" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round"/>
+</svg>

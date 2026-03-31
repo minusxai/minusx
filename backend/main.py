@@ -157,6 +157,7 @@ def _get_dialect_for_connection(conn_type: str) -> str:
         'postgresql': 'postgres',
         'csv': 'duckdb',  # CSV uses DuckDB engine
         'google-sheets': 'duckdb',  # Google Sheets uses DuckDB engine
+        'athena': 'presto',  # Athena is Presto-compatible
     }
     return dialect_map.get(conn_type, 'postgres')
 

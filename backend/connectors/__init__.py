@@ -34,3 +34,5 @@ from .duckdb_connector_async import AsyncDuckDBConnector  # noqa: E402, F401
 from .bigquery_connector_async import AsyncBigQueryConnector  # noqa: E402, F401
 from .csv_connector_async import AsyncCsvConnector  # noqa: E402, F401
 from .google_sheets_connector_async import AsyncGoogleSheetsConnector  # noqa: E402, F401
+from .athena_connector import AthenaConnector  # noqa: E402, F401
+from .athena_connector_async import AsyncAthenaConnector  # noqa: E402, F401

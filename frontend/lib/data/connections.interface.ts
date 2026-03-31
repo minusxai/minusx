@@ -81,6 +81,6 @@ export interface UpdateConnectionResult {
  */
 export interface CreateConnectionInput {
   name: string;
-  type: 'duckdb' | 'bigquery' | 'postgresql';
+  type: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena';
   config: Record<string, any>;
 }
