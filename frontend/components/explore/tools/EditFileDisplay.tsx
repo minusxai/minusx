@@ -123,10 +123,10 @@ export default function EditFileDisplay({ toolCallTuple, showThinking }: Display
         {/* Undo/Redo buttons — top right */}
         {canUndoRedo && (
           <HStack gap={0.5} position="absolute" top={0} right={1.5} zIndex={1}>
-            <Tooltip content="Undo this edit">
+            <Tooltip content="Restore to before this edit">
               <Box
                 as="button"
-                aria-label="Undo edit"
+                aria-label="Restore to before this edit"
                 onClick={handleUndo}
                 px={1.5}
                 py={0.5}
@@ -138,10 +138,10 @@ export default function EditFileDisplay({ toolCallTuple, showThinking }: Display
                 <Icon as={LuUndo2} boxSize={3} color={color} />
               </Box>
             </Tooltip>
-            <Tooltip content="Redo this edit">
+            <Tooltip content="Restore to after this edit">
               <Box
                 as="button"
-                aria-label="Redo edit"
+                aria-label="Restore to after this edit"
                 onClick={handleRedo}
                 px={1.5}
                 py={0.5}
