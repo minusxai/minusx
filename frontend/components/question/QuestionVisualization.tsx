@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * Question Visualization Component
  * Displays query results with multiple visualization types

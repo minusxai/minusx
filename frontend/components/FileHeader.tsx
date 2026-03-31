@@ -62,11 +62,18 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
     }
   }, [dispatch, fileId, isDashboard]);
 
-
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const dirtyFiles = useAppSelector(selectDirtyFiles, shallowEqual);
   const otherDirtyFiles = dirtyFiles.filter(f => f.id !== fileId);
+
+  // Local state for name/description so typing feels instant.
+  // null = no local edit in progress; display falls back to the Redux value.
+  // editFile is debounced (300ms) to avoid Redux dispatch + path-slug regex on every keystroke.
+  const [localName, setLocalName] = useState<string | null>(null);
+  const [localDesc, setLocalDesc] = useState<string | null>(null);
+  const nameDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const descDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Set initial edit mode for create mode (once on mount only)
   const initializedRef = useRef(false);
@@ -87,6 +94,18 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
     }
   }, [anyDirty, editMode, dispatchSetEditMode]);
 
+  const handleNameChange = useCallback((name: string) => {
+    setLocalName(name);
+    if (nameDebounceRef.current) clearTimeout(nameDebounceRef.current);
+    nameDebounceRef.current = setTimeout(() => editFile({ fileId, changes: { name } }), 300);
+  }, [fileId]);
+
+  const handleDescChange = useCallback((desc: string) => {
+    setLocalDesc(desc);
+    if (descDebounceRef.current) clearTimeout(descDebounceRef.current);
+    descDebounceRef.current = setTimeout(() => editFile({ fileId, changes: { content: { description: desc } } }), 300);
+  }, [fileId]);
+
   const handleSave = useCallback(async () => {
     setSaveError(null);
     try {
@@ -104,6 +123,8 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
   }, [fileId, router, dispatchSetEditMode]);
 
   const handleCancel = useCallback(() => {
+    setLocalName(null);
+    setLocalDesc(null);
     clearFileChanges({ fileId });
     dispatchSetEditMode(false);
     setSaveError(null);
@@ -117,15 +138,15 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
   return (
     <>
       <DocumentHeader
-        name={effectiveName}
-        description={description}
+        name={localName ?? effectiveName}
+        description={localDesc ?? description}
         fileType={fileType as any}
         editMode={editMode}
         isDirty={isDirty}
         isSaving={isSaving}
         saveError={saveError}
-        onNameChange={(name) => editFile({ fileId, changes: { name } })}
-        onDescriptionChange={(description) => editFile({ fileId, changes: { content: { description } } })}
+        onNameChange={handleNameChange}
+        onDescriptionChange={handleDescChange}
         onEditModeToggle={() => {
           if (editMode) {
             handleCancel();
