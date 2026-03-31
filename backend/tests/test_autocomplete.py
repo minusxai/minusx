@@ -382,3 +382,222 @@ def test_schema_dot_table_autocomplete():
     # Should NOT show schema names here (already specified schema)
     assert "public" not in labels
     assert "analytics" not in labels
+
+
+def test_where_clause_filters_to_from_table_only():
+    """
+    Given: Query with COUNT(DISTINCT ...) FROM stores WHERE (user's exact case)
+    When: Cursor is after WHERE
+    Then: Only stores columns appear, not columns from other tables
+
+    Regression test for the 'from_' key bug in extract_tables_in_scope.
+    """
+    schema_data = [
+        {
+            "databaseName": "test_db",
+            "schemas": [
+                {
+                    "schema": "public",
+                    "tables": [
+                        {
+                            "table": "stores",
+                            "columns": [
+                                {"name": "id", "type": "int"},
+                                {"name": "store_name", "type": "varchar"},
+                                {"name": "region", "type": "varchar"},
+                            ]
+                        },
+                        {
+                            "table": "users",
+                            "columns": [
+                                {"name": "user_id", "type": "int"},
+                                {"name": "email", "type": "varchar"},
+                                {"name": "signup_date", "type": "date"},
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+
+    query = "SELECT COUNT(DISTINCT id) AS total_users FROM stores WHERE "
+    cursor_offset = len(query)
+
+    suggestions = get_completions(query, cursor_offset, schema_data)
+    column_names = [s.label for s in suggestions]
+
+    # Should show stores columns
+    assert "id" in column_names
+    assert "store_name" in column_names
+    assert "region" in column_names
+
+    # Must NOT show users columns
+    assert "user_id" not in column_names
+    assert "email" not in column_names
+    assert "signup_date" not in column_names
+
+
+def test_join_query_shows_columns_from_both_joined_tables_only():
+    """
+    Given: Query with FROM users JOIN orders (products not joined)
+    When: Cursor is in SELECT context
+    Then: Columns from users and orders appear, products columns do not
+
+    Regression test for the 'joins' arg collection in extract_tables_in_scope.
+    """
+    schema_data = [
+        {
+            "databaseName": "test_db",
+            "schemas": [
+                {
+                    "schema": "public",
+                    "tables": [
+                        {
+                            "table": "users",
+                            "columns": [
+                                {"name": "user_id", "type": "int"},
+                                {"name": "email", "type": "varchar"},
+                            ]
+                        },
+                        {
+                            "table": "orders",
+                            "columns": [
+                                {"name": "order_id", "type": "int"},
+                                {"name": "amount", "type": "decimal"},
+                            ]
+                        },
+                        {
+                            "table": "products",
+                            "columns": [
+                                {"name": "product_id", "type": "int"},
+                                {"name": "price", "type": "decimal"},
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+
+    query = "SELECT  FROM users JOIN orders ON users.user_id = orders.order_id"
+    cursor_offset = 7  # After "SELECT "
+
+    suggestions = get_completions(query, cursor_offset, schema_data)
+    column_names = [s.label for s in suggestions]
+
+    # Both joined tables should be in scope
+    assert "user_id" in column_names
+    assert "email" in column_names
+    assert "order_id" in column_names
+    assert "amount" in column_names
+
+    # Unjoined table must not appear
+    assert "product_id" not in column_names
+    assert "price" not in column_names
+
+
+def test_parse_failure_fallback_filters_by_from_table():
+    """
+    Given: A query that sqlglot cannot parse (malformed/truncated)
+    When: The raw text still contains a recognizable FROM <table>
+    Then: Only columns from that table are returned, not all columns
+
+    Regression test for the unfiltered fallback in the except branch.
+    """
+    schema_data = [
+        {
+            "databaseName": "test_db",
+            "schemas": [
+                {
+                    "schema": "public",
+                    "tables": [
+                        {
+                            "table": "stores",
+                            "columns": [
+                                {"name": "store_id", "type": "int"},
+                                {"name": "store_name", "type": "varchar"},
+                            ]
+                        },
+                        {
+                            "table": "users",
+                            "columns": [
+                                {"name": "user_id", "type": "int"},
+                                {"name": "email", "type": "varchar"},
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+
+    # Truncated mid-expression — forces sqlglot parse failure
+    query = "SELECT COUNT(DISTINCT FROM stores WHERE "
+    cursor_offset = len(query)
+
+    suggestions = get_completions(query, cursor_offset, schema_data)
+    column_names = [s.label for s in suggestions]
+
+    # Should show stores columns via regex fallback
+    assert "store_id" in column_names
+    assert "store_name" in column_names
+
+    # Must NOT show users columns even though parse failed
+    assert "user_id" not in column_names
+    assert "email" not in column_names
+
+
+def test_where_context_simple_two_table_schema():
+    """
+    Given: Schema with users and stores, query is FROM stores WHERE
+    When: Cursor is after WHERE
+    Then: Only stores columns appear
+
+    Simple regression test with no aggregates — minimum viable case
+    for the 'from_' key bug.
+    """
+    schema_data = [
+        {
+            "databaseName": "test_db",
+            "schemas": [
+                {
+                    "schema": "public",
+                    "tables": [
+                        {
+                            "table": "users",
+                            "columns": [
+                                {"name": "user_id", "type": "int"},
+                                {"name": "username", "type": "varchar"},
+                                {"name": "email", "type": "varchar"},
+                            ]
+                        },
+                        {
+                            "table": "stores",
+                            "columns": [
+                                {"name": "store_id", "type": "int"},
+                                {"name": "store_name", "type": "varchar"},
+                                {"name": "region", "type": "varchar"},
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+
+    query = "SELECT * FROM stores WHERE "
+    cursor_offset = len(query)
+
+    suggestions = get_completions(query, cursor_offset, schema_data)
+    column_names = [s.label for s in suggestions]
+
+    # Only stores columns
+    assert "store_id" in column_names
+    assert "store_name" in column_names
+    assert "region" in column_names
+
+    # No users columns
+    assert "user_id" not in column_names
+    assert "username" not in column_names
+    assert "email" not in column_names

@@ -7,7 +7,7 @@ import re
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 import sqlglot
-from sqlglot import exp
+from sqlglot import exp, ErrorLevel
 
 
 class CompletionItem(BaseModel):
@@ -50,23 +50,26 @@ def get_completions(
     is_table_context = needs_table_completion(text_before_cursor)
     is_dot_context = "." in text_before_cursor.split()[-1] if text_before_cursor.split() else False
 
-    # Try to parse SQL (for extracting context like tables in scope, CTEs, aliases)
+    # Phase 1: Error-tolerant parse. Returns a usable AST even for incomplete SQL
+    # (e.g. trailing WHERE with no condition). Only fails on empty/blank input.
     ast = None
     try:
-        ast = sqlglot.parse_one(query, read="postgres")
-    except Exception as e:
-        # Parse failed - use regex-based suggestions for incomplete SQL
+        ast = sqlglot.parse_one(query, read="postgres", error_level=ErrorLevel.IGNORE)
+    except Exception:
+        pass
+
+    if ast is None:
+        # Phase 2: Token-stream fallback (last resort — only fires on blank input)
         if is_dot_context and schema_data:
-            # Handle schema.table pattern without AST
             return get_schema_dot_completions_fallback(schema_data, text_before_cursor)
         elif is_column_context and schema_data:
-            # Show all columns (no filtering possible without parsed FROM clause)
+            tables = extract_tables_from_tokens(text_before_cursor)
+            if tables:
+                return get_column_completions_for_tables(tables, schema_data)
             return get_all_columns_unfiltered(schema_data)
         elif is_table_context and schema_data:
-            # Show all tables
             return get_all_tables_unfiltered(schema_data)
         else:
-            # Fall back to keywords
             return get_keyword_completions()
 
     # Determine completion context (check dot notation first)
@@ -390,6 +393,34 @@ def get_all_columns_unfiltered(schema_data: List[Dict[str, Any]]) -> List[Comple
     return suggestions
 
 
+def get_column_completions_for_tables(
+    table_names: List[str],
+    schema_data: List[Dict[str, Any]]
+) -> List[CompletionItem]:
+    """Get column suggestions filtered to a specific list of table names."""
+    suggestions = []
+    idx = 0
+    table_names_lower = [t.lower() for t in table_names]
+
+    for db in schema_data:
+        for schema in db.get("schemas", []):
+            for table in schema.get("tables", []):
+                if table["table"].lower() not in table_names_lower:
+                    continue
+                for col in table.get("columns", []):
+                    suggestions.append(CompletionItem(
+                        label=col["name"],
+                        kind="column",
+                        detail=f"  {table['table']}",
+                        documentation=f"Column from {schema['schema']}.{table['table']}",
+                        insert_text=col["name"],
+                        sort_text=str(idx).zfill(5)
+                    ))
+                    idx += 1
+
+    return suggestions
+
+
 def get_all_tables_unfiltered(schema_data: List[Dict[str, Any]]) -> List[CompletionItem]:
     """Get all tables and schemas (used when SQL parsing fails)"""
     suggestions = []
@@ -443,6 +474,36 @@ def extract_tables_in_scope(ast: exp.Expression) -> List[str]:
         for join in ast.args.get('joins') or []:
             if isinstance(join.this, exp.Table):
                 tables.append(join.this.name)
+
+    return tables
+
+
+def extract_tables_from_tokens(text: str) -> List[str]:
+    """
+    Extract FROM/JOIN table names by walking the token stream.
+    Last-resort fallback when error-tolerant parsing also fails (blank input etc.).
+    More robust than regex: handles quoted identifiers, comments, subqueries.
+    """
+    try:
+        token_list = list(sqlglot.Tokenizer().tokenize(text))
+    except Exception:
+        return []
+
+    tables = []
+    i = 0
+    while i < len(token_list):
+        tok = token_list[i]
+        if tok.token_type in (sqlglot.tokens.TokenType.FROM, sqlglot.tokens.TokenType.JOIN):
+            # Advance to the next identifier token
+            j = i + 1
+            while j < len(token_list) and token_list[j].token_type not in (
+                sqlglot.tokens.TokenType.VAR,
+                sqlglot.tokens.TokenType.IDENTIFIER,
+            ):
+                j += 1
+            if j < len(token_list):
+                tables.append(token_list[j].text.strip('"').strip('`'))
+        i += 1
 
     return tables
 
