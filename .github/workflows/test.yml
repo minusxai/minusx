@@ -69,3 +69,7 @@ jobs:
       - name: Run frontend tests
         working-directory: ./frontend
         run: npm test -- --ci --coverage --maxWorkers=2
+
+      - name: Run frontend UI tests
+        working-directory: ./frontend
+        run: npm run test:ui -- --ci --maxWorkers=2
