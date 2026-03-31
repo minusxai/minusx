@@ -170,7 +170,8 @@ export default auth(async (req) => {
       const connections = await DocumentDB.listAll(companyId, 'connection', ['/org'], -1, false);
       const contexts = await DocumentDB.listAll(companyId, 'context', ['/org'], -1, false);
       const questions = await DocumentDB.listAll(companyId, 'question', ['/org'], -1, false);
-      const { needsOnboarding, redirectPath } = detectOnboardingState(connections, contexts, questions);
+      const dashboards = await DocumentDB.listAll(companyId, 'dashboard', ['/org'], -1, false);
+      const { needsOnboarding, redirectPath } = detectOnboardingState(connections, contexts, questions, dashboards);
       const currentPath = pathname + (req.nextUrl.search || '');
       if (needsOnboarding && redirectPath && redirectPath !== currentPath) {
         const protocol = req.headers.get('x-forwarded-proto') || 'https';

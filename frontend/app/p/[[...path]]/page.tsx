@@ -92,7 +92,7 @@ export default function PathPage({ params }: PathPageProps) {
   // Determine page title from path
   const pageTitle = useMemo(() => {
     return pathSegments.length > 0
-      ? pathSegments[pathSegments.length - 1]
+      ? decodeURIComponent(pathSegments[pathSegments.length - 1])
       : 'Files';
   }, [pathSegments]);
 
@@ -102,7 +102,7 @@ export default function PathPage({ params }: PathPageProps) {
     return [
       { label: 'Home', href: '/' },
       ...pathSegments.map((segment, index) => ({
-        label: segment === currentMode ? config.branding.displayName : segment,
+        label: segment === currentMode ? config.branding.displayName : decodeURIComponent(segment),
         href: index === pathSegments.length - 1 ? undefined : `/p/${pathSegments.slice(0, index + 1).join('/')}`
       }))
     ];

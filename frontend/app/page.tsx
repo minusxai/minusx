@@ -31,8 +31,17 @@ export default function Home() {
     () => ({ type: 'question' as const, paths: [homeFolder], depth: -1 }),
     [homeFolder]
   );
+  const dashboardsCriteria = useMemo(
+    () => ({ type: 'dashboard' as const, paths: [homeFolder], depth: -1 }),
+    [homeFolder]
+  );
   const { files: questions, loading: questionsLoading } = useFilesByCriteria({
     criteria: questionsCriteria,
+    partial: true,
+    skip: false,
+  });
+  const { files: dashboards, loading: dashboardsLoading } = useFilesByCriteria({
+    criteria: dashboardsCriteria,
     partial: true,
     skip: false,
   });
@@ -50,7 +59,7 @@ export default function Home() {
 
     // Onboarding check (org mode only)
     if (effectiveMode === 'org') {
-      const { needsOnboarding, redirectPath } = detectOnboardingState(connectionList, contexts, questions);
+      const { needsOnboarding, redirectPath } = detectOnboardingState(connectionList, contexts, questions, dashboards);
       if (needsOnboarding && redirectPath) {
         router.replace(redirectPath);
         return;
@@ -66,7 +75,7 @@ export default function Home() {
     }
 
     router.replace(homeHref);
-  }, [user, router, connectionList, connectionsLoading, contexts, contextsLoading, questions, questionsLoading, homeFolder]);
+  }, [user, router, connectionList, connectionsLoading, contexts, contextsLoading, questions, questionsLoading, dashboards, dashboardsLoading, homeFolder]);
 
   return null;
 }
