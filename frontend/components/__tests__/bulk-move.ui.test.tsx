@@ -302,6 +302,10 @@ describe('Bulk Move Files', () => {
       { store: testStore }
     );
 
+    // Expand the Questions section (collapsed by default)
+    const questionsSection = screen.getByLabelText('Questions section');
+    await user.click(questionsSection);
+
     // Enter selection mode
     const actionButtons = screen.getAllByLabelText('More actions');
     await user.click(actionButtons[0]);
@@ -338,6 +342,10 @@ describe('Bulk Move Files', () => {
       <FilesList files={allFiles} />,
       { store: testStore }
     );
+
+    // Expand the Questions section (collapsed by default)
+    const questionsSection = screen.getByLabelText('Questions section');
+    await user.click(questionsSection);
 
     // Enter selection mode via first question's menu
     const actionButtons = screen.getAllByLabelText('More actions');

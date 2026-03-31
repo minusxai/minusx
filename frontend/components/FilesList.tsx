@@ -443,6 +443,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
                     // mb={1}
                     borderBottom="1px solid"
                     borderColor="border.muted"
+                    aria-label={`${section.label} section`}
                   >
                     <Icon
                       as={isCollapsed ? LuChevronRight : LuChevronDown}
