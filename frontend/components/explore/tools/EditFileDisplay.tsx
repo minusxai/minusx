@@ -1,14 +1,37 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { HStack, VStack, Text, Icon, GridItem, Box } from '@chakra-ui/react';
-import { LuCheck, LuX, LuPencilLine, LuChevronDown, LuChevronRight } from 'react-icons/lu';
+import { LuCheck, LuX, LuPencilLine, LuChevronDown, LuChevronRight, LuUndo2, LuRedo2 } from 'react-icons/lu';
 import { DisplayProps, EditFileDetails, contentToDetails } from '@/lib/types';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import type { FileType } from '@/lib/ui/file-metadata';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useAppSelector } from '@/store/hooks';
+import { Tooltip } from '@/components/ui/tooltip';
+import { decodeFileStr } from '@/lib/api/file-encoding';
+import { replaceFileState } from '@/lib/api/file-state';
+
+/**
+ * Extract the original (pre-edit) and final (post-edit) file objects from a diff string.
+ * The first `-` line is the original state; the last `+` line is the final state.
+ */
+function parseUndoRedoFromDiff(diff: string | undefined): { original: any | null; final: any | null } {
+  if (!diff) return { original: null, final: null };
+  const lines = diff.split('\n');
+  let original: any = null;
+  let final: any = null;
+  for (const line of lines) {
+    if (line.startsWith('-') && !original) {
+      try { original = decodeFileStr(line.slice(1)); } catch { /* skip unparseable */ }
+    }
+    if (line.startsWith('+')) {
+      try { final = decodeFileStr(line.slice(1)); } catch { /* skip unparseable */ }
+    }
+  }
+  return { original, final };
+}
 
 export default function EditFileDisplay({ toolCallTuple, showThinking }: DisplayProps) {
   const searchParams = useSearchParams();
@@ -40,6 +63,25 @@ export default function EditFileDisplay({ toolCallTuple, showThinking }: Display
   });
 
   const { success, error, diff } = contentToDetails<EditFileDetails>(toolMessage);
+
+  // Parse original/final states from diff for undo/redo
+  const { original, final: finalState } = useMemo(() => parseUndoRedoFromDiff(diff), [diff]);
+  const canUndoRedo = original !== null && finalState !== null && fileId !== undefined;
+  const [isUndone, setIsUndone] = useState(false);
+
+  const handleUndo = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!canUndoRedo || isUndone) return;
+    replaceFileState(fileId, original);
+    setIsUndone(true);
+  }, [canUndoRedo, isUndone, fileId, original]);
+
+  const handleRedo = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!canUndoRedo || !isUndone) return;
+    replaceFileState(fileId, finalState);
+    setIsUndone(false);
+  }, [canUndoRedo, isUndone, fileId, finalState]);
 
   const color = 'accent.secondary';
 
@@ -76,7 +118,43 @@ export default function EditFileDisplay({ toolCallTuple, showThinking }: Display
         border="1px solid"
         borderColor={`${color}/20`}
         overflow="hidden"
+        position="relative"
       >
+        {/* Undo/Redo buttons — top right */}
+        {canUndoRedo && (
+          <HStack gap={0.5} position="absolute" top={0} right={1.5} zIndex={1}>
+            <Tooltip content="Undo this edit">
+              <Box
+                as="button"
+                aria-label="Undo edit"
+                onClick={handleUndo}
+                px={1.5}
+                py={0.5}
+                borderRadius="sm"
+                cursor={isUndone ? 'default' : 'pointer'}
+                opacity={isUndone ? 0.4 : 1}
+                _hover={isUndone ? {} : { bg: `${color}/20` }}
+              >
+                <Icon as={LuUndo2} boxSize={3} color={color} />
+              </Box>
+            </Tooltip>
+            <Tooltip content="Redo this edit">
+              <Box
+                as="button"
+                aria-label="Redo edit"
+                onClick={handleRedo}
+                px={1.5}
+                py={0.5}
+                borderRadius="sm"
+                cursor={!isUndone ? 'default' : 'pointer'}
+                opacity={!isUndone ? 0.4 : 1}
+                _hover={!isUndone ? {} : { bg: `${color}/20` }}
+              >
+                <Icon as={LuRedo2} boxSize={3} color={color} />
+              </Box>
+            </Tooltip>
+          </HStack>
+        )}
         <HStack
           gap={1.5}
           py={1.5}
