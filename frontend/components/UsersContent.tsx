@@ -67,7 +67,6 @@ export default function UsersContent() {
       const data = await fetchWithCache('/api/users', {
         method: 'GET',
         cacheStrategy: API.users.list.cache,
-        skipCache: true,
       });
 
       if (data.success) {
@@ -77,9 +76,6 @@ export default function UsersContent() {
       }
       setLoading(false);
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        return; // Another request is already in flight — leave loading=true, show no error
-      }
       setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Failed to fetch users' });
       setLoading(false);
     }
