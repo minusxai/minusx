@@ -19,7 +19,7 @@
  */
 
 import { getStore } from '@/store/store';
-import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, selectEffectivePath, deleteFile as deleteFileAction, setFilePlaceholder, generateVirtualId, pathToVirtualId, selectDirtyFiles, replaceVirtualIds, hashString } from '@/store/filesSlice';
+import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, setEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, selectEffectivePath, deleteFile as deleteFileAction, setFilePlaceholder, generateVirtualId, pathToVirtualId, selectDirtyFiles, replaceVirtualIds, hashString, type FileId } from '@/store/filesSlice';
 import { ConflictError } from '@/lib/data/files';
 import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, setQueryLoading } from '@/store/queryResultsSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
@@ -507,6 +507,52 @@ export async function editFile(options: EditFileOptions): Promise<void> {
 
 
 /**
+ * Replace a file's entire state via editFileStr (same code path as EditFile tool).
+ * Also auto-executes query for question files so viz/columns update immediately.
+ *
+ * @param fileId - The file to replace
+ * @param targetFileObj - The full file object to apply (as parsed from a diff line)
+ */
+export async function replaceFileState(fileId: number, targetFileObj: { name?: string; path?: string; content: any }): Promise<{ success: boolean; error?: string }> {
+  const state = getStore().getState();
+  const built = buildCurrentFileStr(state, fileId);
+  if (!built.success) return built;
+
+  // Replace the entire file string via editFileStr (handles content, metadata, validation)
+  const targetStr = encodeFileStr(targetFileObj);
+  const result = await editFileStr({ fileId, oldMatch: built.fullFileStr, newMatch: targetStr });
+  if (!result.success) return result;
+
+  // Auto-execute query for questions (same as EditFile tool handler)
+  const fileState = selectFile(state, fileId);
+  if (fileState?.type === 'question') {
+    const updatedState = getStore().getState();
+    const finalContent = selectMergedContent(updatedState, fileId) as any;
+    if (finalContent?.query && finalContent?.database_name) {
+      const params = finalContent.parameterValues || {};
+      try {
+        await getQueryResult({ query: finalContent.query, params, database: finalContent.database_name });
+        getStore().dispatch(setEphemeral({
+          fileId: fileId as FileId,
+          changes: {
+            lastExecuted: {
+              query: finalContent.query,
+              params,
+              database: finalContent.database_name,
+              references: finalContent.references || []
+            }
+          }
+        }));
+      } catch (err) {
+        console.warn('[replaceFileState] Auto-execute failed:', err);
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
  * Options for editFileStr (string-based editing)
  */
 export interface EditFileStrOptions {
@@ -514,6 +560,48 @@ export interface EditFileStrOptions {
   oldMatch: string;    // String to search for
   newMatch: string;    // String to replace with
   replaceAll?: boolean; // default true: replace all occurrences; false: error if multiple found
+}
+
+/**
+ * Build the full encoded file string for a file from Redux state.
+ * Must match compressFileState exactly so oldMatch copied from ReadFiles/appState works verbatim.
+ * Used by editFileStr and replaceFileState.
+ */
+function buildCurrentFileStr(state: ReturnType<typeof getStore>['getState'] extends () => infer R ? R : never, fileId: number): { success: true; fullFileStr: string; mergedContent: any } | { success: false; error: string } {
+  const fileState = selectFile(state, fileId);
+  if (!fileState) {
+    return { success: false, error: `File ${fileId} not found` };
+  }
+  const baseContent = fileState.content;
+  if (!baseContent) {
+    return { success: false, error: `File ${fileId} has no content` };
+  }
+  const mergedContent = fileState.persistableChanges && Object.keys(fileState.persistableChanges).length > 0
+    ? { ...baseContent, ...fileState.persistableChanges }
+    : baseContent;
+  const currentName = selectEffectiveName(state, fileId) || '';
+  const isDirty = !!(
+    (fileState.persistableChanges && Object.keys(fileState.persistableChanges).length > 0) ||
+    fileState.metadataChanges?.name !== undefined ||
+    fileState.metadataChanges?.path !== undefined
+  );
+  let queryResultId = fileState.queryResultId;
+  if (fileState.type === 'question') {
+    const qc = mergedContent as QuestionContent;
+    if (qc?.query && qc?.database_name) {
+      queryResultId = getQueryHash(qc.query, qc.parameterValues || {}, qc.database_name);
+    }
+  }
+  const fullFileStr = encodeFileStr({
+    id: fileState.id,
+    name: currentName,
+    path: fileState.metadataChanges?.path ?? fileState.path,
+    type: fileState.type,
+    content: mergedContent,
+    isDirty,
+    ...(queryResultId ? { queryResultId } : {}),
+  });
+  return { success: true, fullFileStr, mergedContent };
 }
 
 /**
@@ -534,52 +622,11 @@ export async function editFileStr(
   const { fileId, oldMatch, newMatch } = options;
   const state = getStore().getState();
 
-  // Get file state
-  const fileState = selectFile(state, fileId);
-  if (!fileState) {
-    return { success: false, error: `File ${fileId} not found` };
-  }
-
-  // Get merged content (content + persistableChanges only — no ephemeralChanges).
-  // This must match exactly what compressAugmentedFile exposes so oldMatch is always
-  // a verbatim copy from what the model sees.
-  const baseContent = fileState.content;
-  if (!baseContent) {
-    return { success: false, error: `File ${fileId} has no content` };
-  }
-  const mergedContent = fileState.persistableChanges && Object.keys(fileState.persistableChanges).length > 0
-    ? { ...baseContent, ...fileState.persistableChanges }
-    : baseContent;
-
-  // Build FULL file JSON — must match compressFileState exactly so oldMatch copied
-  // from ReadFiles or appState output always works verbatim.
+  const built = buildCurrentFileStr(state, fileId);
+  if (!built.success) return built;
+  const { fullFileStr, mergedContent } = built;
+  const fileState = selectFile(state, fileId)!;
   const currentName = selectEffectiveName(state, fileId) || '';
-  const isDirty = !!(
-    (fileState.persistableChanges && Object.keys(fileState.persistableChanges).length > 0) ||
-    fileState.metadataChanges?.name !== undefined ||
-    fileState.metadataChanges?.path !== undefined
-  );
-  let queryResultId = fileState.queryResultId;
-  if (fileState.type === 'question') {
-    const qc = mergedContent as QuestionContent;
-    if (qc?.query && qc?.database_name) {
-      queryResultId = getQueryHash(qc.query, qc.parameterValues || {}, qc.database_name);
-    }
-  }
-  const fullFile = {
-    id: fileState.id,
-    name: currentName,
-    path: fileState.metadataChanges?.path ?? fileState.path,
-    type: fileState.type,
-    content: mergedContent,
-    isDirty,
-    ...(queryResultId ? { queryResultId } : {}),
-  };
-
-  // Encode file: like JSON.stringify but string values keep raw chars (real newlines,
-  // tabs, etc.) so the LLM's oldMatch (which sees raw chars via tool result decoding)
-  // matches directly — no fallback escaping needed.
-  const fullFileStr = encodeFileStr(fullFile);
 
   // Normalize \n escape sequences to literal newlines (LLM sometimes outputs \\n instead of real newlines)
   const normalizedOldMatch = oldMatch.includes('\\n') ? oldMatch.replace(/\\n/g, '\n') : oldMatch;
