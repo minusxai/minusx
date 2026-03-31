@@ -71,7 +71,10 @@ def enforce_query_limit(
         elif dialect == 'bigquery':
             # BigQuery uses @param, but SQLAlchemy expects :param
             modified_sql = re.sub(r'@(\w+)', r':\1', modified_sql)
-        # PostgreSQL already uses :param, no conversion needed
+        elif dialect == 'postgres':
+            # sqlglot serialises :param as %(param)s (Python DB-API style) for
+            # the postgres dialect, but SQLAlchemy's text() expects :param
+            modified_sql = re.sub(r'%\((\w+)\)s', r':\1', modified_sql)
 
         return modified_sql
 
