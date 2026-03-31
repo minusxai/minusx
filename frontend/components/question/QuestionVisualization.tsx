@@ -42,6 +42,7 @@ interface QuestionVisualizationProps {
   onPivotConfigChange?: (config: PivotConfig) => void;
   onColumnFormatsChange?: (formats: Record<string, ColumnFormatConfig>) => void;
   onColorsChange?: (colors: Record<string, string>) => void;
+  onAxisConfigChange?: (config: import('@/lib/types').AxisConfig) => void;
 }
 
 function QueryLoadingIndicator({ estimatedDurationMs }: { estimatedDurationMs?: number | null }) {
@@ -125,6 +126,7 @@ export function QuestionVisualization({
   onPivotConfigChange,
   onColumnFormatsChange,
   onColorsChange,
+  onAxisConfigChange,
 }: QuestionVisualizationProps) {
   const dispatch = useAppDispatch();
   const { config: appConfig } = useConfigs();
@@ -365,6 +367,8 @@ export function QuestionVisualization({
                       showChartTitle={showChartTitle}
                       colorOverrides={currentState.vizSettings?.colors ?? undefined}
                       onColorsChange={onColorsChange}
+                      axisConfig={currentState.vizSettings?.axisConfig ?? undefined}
+                      onAxisConfigChange={onAxisConfigChange}
                     />
                   </Box>
                 )}

@@ -65,6 +65,19 @@ class PivotConfig(BaseModel):
     rowFormulas: Optional[List[PivotFormula]] = Field(None, description="formulas combining top-level row dimension values")
     columnFormulas: Optional[List[PivotFormula]] = Field(None, description="formulas combining top-level column dimension values")
 
+class AxisScale(str, Enum):
+    LINEAR = "linear"
+    LOG = "log"
+
+class AxisConfig(BaseModel):
+    """Per-axis configuration for scale type and range."""
+    xScale: Optional[AxisScale] = Field(None, description="X-axis scale type: 'linear' (default) or 'log'")
+    yScale: Optional[AxisScale] = Field(None, description="Y-axis scale type: 'linear' (default) or 'log'")
+    xMin: Optional[float] = Field(None, description="explicit X-axis minimum value")
+    xMax: Optional[float] = Field(None, description="explicit X-axis maximum value")
+    yMin: Optional[float] = Field(None, description="explicit Y-axis minimum value")
+    yMax: Optional[float] = Field(None, description="explicit Y-axis maximum value")
+
 class ColumnFormatConfig(BaseModel):
     """Per-column display formatting. Only set when the user explicitly asks to change formatting."""
     alias: Optional[str] = Field(None, description="display name override for the column header")
@@ -81,6 +94,7 @@ class VisualizationSettings(BaseModel):
     pivotConfig: Optional[PivotConfig] = Field(None, description="pivot table configuration (only used when type is 'pivot')")
     columnFormats: Optional[Dict[str, ColumnFormatConfig]] = Field(None, description="per-column display formatting keyed by column name. Only set when user asks to rename columns, change decimal places, or change date format. Good defaults are applied automatically.")
     colors: Optional[Dict[str, str]] = Field(None, description="color overrides mapping series index to color key (e.g. {'0': 'danger', '2': 'warning'}). Only overridden indices are stored.")
+    axisConfig: Optional[AxisConfig] = Field(None, description="axis configuration for scale type (linear or log). Only set when user explicitly requests log scale.")
     model_config = {
         "populate_by_name": True,
         "title": "VizSettings"

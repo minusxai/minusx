@@ -133,6 +133,23 @@ export type Suffix = string | null;
 export type Colors = {
   [k: string]: string;
 } | null;
+export type AxisScale = "linear" | "log";
+/**
+ * explicit X-axis minimum value
+ */
+export type Xmin = number | null;
+/**
+ * explicit X-axis maximum value
+ */
+export type Xmax = number | null;
+/**
+ * explicit Y-axis minimum value
+ */
+export type Ymin = number | null;
+/**
+ * explicit Y-axis maximum value
+ */
+export type Ymax = number | null;
 export type Parameters = QuestionParameter[] | null;
 export type Name2 = string;
 export type ParameterType = "text" | "number" | "date";
@@ -213,6 +230,10 @@ export interface VizSettings {
   pivotConfig?: PivotConfig | null;
   columnFormats?: Columnformats;
   colors?: Colors;
+  /**
+   * axis configuration for scale type (linear or log). Only set when user explicitly requests log scale.
+   */
+  axisConfig?: AxisConfig | null;
 }
 /**
  * Configuration for pivot table visualization.
@@ -254,6 +275,23 @@ export interface ColumnFormatConfig {
   dateFormat?: Dateformat;
   prefix?: Prefix;
   suffix?: Suffix;
+}
+/**
+ * Per-axis configuration for scale type and range.
+ */
+export interface AxisConfig {
+  /**
+   * X-axis scale type: 'linear' (default) or 'log'
+   */
+  xScale?: AxisScale | null;
+  /**
+   * Y-axis scale type: 'linear' (default) or 'log'
+   */
+  yScale?: AxisScale | null;
+  xMin?: Xmin;
+  xMax?: Xmax;
+  yMin?: Ymin;
+  yMax?: Ymax;
 }
 export interface QuestionParameter {
   name: Name2;

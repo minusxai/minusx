@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useMemo } from 'react'
-import { Box, VStack, Text } from '@chakra-ui/react'
+import { Box, HStack, VStack, Text } from '@chakra-ui/react'
 import { LinePlot } from './LinePlot'
 import { BarPlot } from './BarPlot'
 import { AreaPlot } from './AreaPlot'
@@ -20,7 +20,7 @@ import { AxisBuilder, type AxisZone } from './AxisBuilder'
 import { resolveColumnType } from './AxisComponents'
 import { aggregateData } from '@/lib/chart/aggregate-data'
 import { aggregatePivotData, computeFormulas, getUniqueTopLevelRowValues, getUniqueTopLevelColumnValues, getUniqueRowValuesAtLevel } from '@/lib/chart/pivot-utils'
-import type { PivotConfig, ColumnFormatConfig } from '@/lib/types'
+import type { PivotConfig, ColumnFormatConfig, AxisConfig } from '@/lib/types'
 import { getEffectiveColorPalette } from '@/lib/chart/echarts-theme'
 import { ColorPicker } from './ColorPicker'
 
@@ -45,6 +45,8 @@ interface ChartBuilderProps {
   showChartTitle?: boolean
   colorOverrides?: Record<string, string> | null
   onColorsChange?: (colors: Record<string, string>) => void
+  axisConfig?: AxisConfig
+  onAxisConfigChange?: (config: AxisConfig) => void
 }
 
 interface GroupedColumns {
@@ -53,7 +55,7 @@ interface GroupedColumns {
   categories: string[]
 }
 
-export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true, colorOverrides, onColorsChange }: ChartBuilderProps) => {
+export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true, colorOverrides, onColorsChange, axisConfig, onAxisConfigChange }: ChartBuilderProps) => {
   const colorPalette = useMemo(() => getEffectiveColorPalette(colorOverrides), [colorOverrides])
 
   // Group columns by type
@@ -437,7 +439,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     <Box display="flex" flexDirection="column" gap={0} height={'100%'} width="100%">
       {/* Axis Builder (column palette + drop zones) */}
       {showAxisBuilder && (!useCompactView || settingsExpandedProp) && (
-        <AxisBuilder columns={columns} types={types} zones={chartZones} columnFormats={columnFormats} onColumnFormatChange={handleColumnFormatChange}>
+        <AxisBuilder columns={columns} types={types} zones={chartZones} columnFormats={columnFormats} onColumnFormatChange={handleColumnFormatChange} axisConfig={axisConfig} onAxisConfigChange={onAxisConfigChange} chartType={chartType}>
           {onColorsChange && (
             <ColorPicker
               colorOverrides={colorOverrides ?? {}}
@@ -497,6 +499,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       chartTitle,
                       showChartTitle,
                       colorPalette,
+                      axisConfig,
                     }
                     if (chartType === 'trend') return <TrendPlot series={aggregatedData.series} columnFormats={columnFormats} yAxisColumns={yAxisColumns} xAxisColumns={xAxisColumns} />
                     const plotMap = { line: LinePlot, bar: BarPlot, combo: ComboPlot, area: AreaPlot, scatter: ScatterPlot, funnel: FunnelPlot, pie: PiePlot, waterfall: WaterfallPlot } as const

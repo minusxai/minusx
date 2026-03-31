@@ -1,6 +1,6 @@
 import type { EChartsOption } from 'echarts'
 import { withMinusXTheme } from './echarts-theme'
-import type { ColumnFormatConfig } from '@/lib/types'
+import type { ColumnFormatConfig, AxisConfig } from '@/lib/types'
 
 // Chart props interface
 export interface ChartProps {
@@ -16,6 +16,7 @@ export interface ChartProps {
   chartTitle?: string  // Title shown in chart and included in downloads
   showChartTitle?: boolean  // Whether to show title in chart (always shown in downloads)
   colorPalette: string[]  // Effective color palette (hex values)
+  axisConfig?: AxisConfig  // Axis scale config (linear/log)
 }
 
 // Calculate axis label interval based on data length, container width, and max label length after truncation
@@ -352,10 +353,17 @@ interface BaseChartConfig {
   chartTitle?: string
   showChartTitle?: boolean
   colorPalette: string[]
+  axisConfig?: AxisConfig
 }
 
 export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
-  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette } = config
+  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig } = config
+  const xScaleType = axisConfig?.xScale ?? 'linear'
+  const yScaleType = axisConfig?.yScale ?? 'linear'
+  const xMin = axisConfig?.xMin ?? undefined
+  const xMax = axisConfig?.xMax ?? undefined
+  const yMin = axisConfig?.yMin ?? undefined
+  const yMax = axisConfig?.yMax ?? undefined
 
   // Resolve format configs for axes
   const { xDateFormat, yPrefix, ySuffix } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
@@ -396,7 +404,9 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
       name: seriesName,
       type: seriesType as 'line' | 'bar' | 'scatter',
       data: type === 'scatter'
-        ? series[index].data.map((y, i) => [xAxisData[i], y])
+        ? series[index].data
+            .map((y, i) => [Number(xAxisData[i]), y] as [number, number])
+            .filter(([x, y]) => isFinite(x) && isFinite(y))
         : series[index].data,
       itemStyle: {
         color: palette[index % palette.length],
@@ -496,31 +506,45 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   }
 
   // Build Y-axis configuration (single or dual)
+  const yAxisType = yScaleType === 'log' ? 'log' as const : 'value' as const
+  const yExtraProps = yScaleType === 'log'
+    ? {
+        logBase: 10,
+        minorTick: { show: true },
+        minorSplitLine: { show: true, lineStyle: { type: 'dashed' as const, opacity: 0.3 } },
+      }
+    : {}
+  const yAxisFormatter = (value: number) =>
+    applyPrefixSuffix(formatWithScale(value, yScale), yPrefix, ySuffix)
+  const yRangeProps = {
+    ...(yMin !== undefined ? { min: yMin } : {}),
+    ...(yMax !== undefined ? { max: yMax } : {}),
+  }
   const yAxisConfig = useDualYAxis
     ? [
         {
-          type: 'value' as const,
-          name: getAxisName(0), // Left axis shows names of series on left
+          type: yAxisType,
+          name: getAxisName(0),
           position: 'left' as const,
-          axisLabel: {
-            formatter: (value: number) => applyPrefixSuffix(formatWithScale(value, yScale), yPrefix, ySuffix),
-          },
+          ...yExtraProps,
+          ...yRangeProps,
+          axisLabel: { formatter: yAxisFormatter },
         },
         {
-          type: 'value' as const,
-          name: getAxisName(1), // Right axis shows names of series on right
+          type: yAxisType,
+          name: getAxisName(1),
           position: 'right' as const,
-          axisLabel: {
-            formatter: (value: number) => applyPrefixSuffix(formatWithScale(value, yScale), yPrefix, ySuffix),
-          },
+          ...yExtraProps,
+          ...yRangeProps,
+          axisLabel: { formatter: yAxisFormatter },
         },
       ]
     : {
-        type: 'value' as const,
+        type: yAxisType,
         name: wrapAxisName(yAxisLabel, maxAxisNameLength),
-        axisLabel: {
-          formatter: (value: number) => applyPrefixSuffix(formatWithScale(value, yScale), yPrefix, ySuffix),
-        },
+        ...yExtraProps,
+        ...yRangeProps,
+        axisLabel: { formatter: yAxisFormatter },
       }
 
   // Step 1: Detect date data characteristics for smart formatting
@@ -621,7 +645,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           transitionDuration: 0.2,
           formatter: (params: any) => {
             const [x, y] = params.data
-            const formattedX = x
+            const formattedX = formatLargeNumber(x)
             const scatterCfg = columnFormats?.[params.seriesName]
             const scatterPrefix = scatterCfg?.prefix || yPrefix
             const scatterSuffix = scatterCfg?.suffix || ySuffix
@@ -673,52 +697,61 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
       pageIconSize: 10, // Smaller navigation buttons
       pageTextStyle: {fontSize: 10},
     },
-    xAxis: {
-      type: 'category',
-      data: xAxisData,
-      name: xAxisLabel,
-      ...(chartType !== 'bar' && chartType !== 'combo' && { boundaryGap: false }),
-      axisLabel: {
-        interval: labelInterval, // Use pre-calculated interval based on truncated label length
-        rotate: 0, // Keep labels horizontal by default
-        formatter: (value: string) => {
-          // Use explicit date format if configured
-          if (xDateFormat) {
-            return formatDateValue(value, xDateFormat)
-          }
+    xAxis: chartType === 'scatter'
+      ? {
+          type: (xScaleType === 'log' ? 'log' : 'value') as 'log' | 'value',
+          name: xAxisLabel,
+          ...(xScaleType === 'log' ? {
+            logBase: 10,
+            minorTick: { show: true },
+            minorSplitLine: { show: true, lineStyle: { type: 'dashed' as const, opacity: 0.3 } },
+          } : {}),
+          ...(xMin !== undefined ? { min: xMin } : {}),
+          ...(xMax !== undefined ? { max: xMax } : {}),
+          axisLabel: {
+            formatter: (value: number) => formatLargeNumber(value),
+          },
+        }
+      : {
+          type: 'category' as const,
+          data: xAxisData,
+          name: xAxisLabel,
+          ...(chartType !== 'bar' && chartType !== 'combo' && { boundaryGap: false }),
+          axisLabel: {
+            interval: labelInterval,
+            rotate: 0,
+            formatter: (value: string) => {
+              if (xDateFormat) {
+                return formatDateValue(value, xDateFormat)
+              }
 
-          // Try to parse as date and format based on available space
-          // Priority when space is tight: Year > Month > Day
-          const date = new Date(value)
-          if (!isNaN(date.getTime()) && /^\d{4}-\d{2}-\d{2}/.test(value) && dateFormatNeeds) {
-            const month = date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })
-            const day = date.getUTCDate()
-            const year = date.getUTCFullYear()
-            const shortYear = (year % 100).toString().padStart(2, '0')
-            const pad = (n: number) => n.toString().padStart(2, '0')
-            const { needsDay } = dateFormatNeeds
+              const date = new Date(value)
+              if (!isNaN(date.getTime()) && /^\d{4}-\d{2}-\d{2}/.test(value) && dateFormatNeeds) {
+                const month = date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })
+                const day = date.getUTCDate()
+                const year = date.getUTCFullYear()
+                const shortYear = (year % 100).toString().padStart(2, '0')
+                const pad = (n: number) => n.toString().padStart(2, '0')
+                const { needsDay } = dateFormatNeeds
 
-            // Always try to show year first (most important), then month, then day
-            // Only drop components when space is insufficient
-            if (maxLabelLength >= 9 && needsDay) {
-              return `${year}-${month}-${pad(day)}` // "2024-Sep-01" - full detail
-            } else if (maxLabelLength >= 6) {
-              return `${month}'${shortYear}` // "Sep'24" - drop day, keep year+month
-            } else if (maxLabelLength >= 3) {
-              return `${year}` // "2024" - full year
-            }
-            return month // "Sep" - fallback
-          }
+                if (maxLabelLength >= 9 && needsDay) {
+                  return `${year}-${month}-${pad(day)}`
+                } else if (maxLabelLength >= 6) {
+                  return `${month}'${shortYear}`
+                } else if (maxLabelLength >= 3) {
+                  return `${year}`
+                }
+                return month
+              }
 
-          // Dynamically truncate long labels based on available space
-          if (value.length > maxLabelLength) {
-            return value.slice(0, maxLabelLength - 1) + '…'
-          }
-          return value
+              if (value.length > maxLabelLength) {
+                return value.slice(0, maxLabelLength - 1) + '…'
+              }
+              return value
+            },
+          },
+          ...(chartType === 'line' && { splitLine: { show: false } }),
         },
-      },
-      ...(chartType === 'line' && { splitLine: { show: false } }),
-    },
     yAxis: yAxisConfig,
     series: chartSeries,
   }

@@ -57,7 +57,7 @@ export const ColorPicker = ({ colorOverrides, numSeries, onChange }: ColorPicker
     <Box position="relative" ref={ref}>
       <HStack gap={1.5} px={1} py={0.5} alignItems="center" justify="center">
         <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" flexShrink={0}>Colors</Text>
-        {Array.from({ length: Math.max(numSeries, 1) }, (_, i) => (
+        {Array.from({ length: Math.min(Math.max(numSeries, 1), COLOR_PALETTE.length) }, (_, i) => (
           <Circle key={i} color={getColor(i)} size="14px" selected={activeIndex === i}
             onClick={() => setActiveIndex(activeIndex === i ? null : i)} />
         ))}

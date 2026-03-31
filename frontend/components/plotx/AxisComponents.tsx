@@ -98,9 +98,10 @@ interface DropZoneProps {
   onDrop: () => void
   isTouchDevice?: boolean
   children: React.ReactNode
+  labelExtra?: React.ReactNode
 }
 
-export const DropZone = ({ label, onDrop, isTouchDevice, children }: DropZoneProps) => {
+export const DropZone = ({ label, onDrop, isTouchDevice, children, labelExtra }: DropZoneProps) => {
   const [isDragOver, setIsDragOver] = useState(false)
 
   return (
@@ -116,6 +117,7 @@ export const DropZone = ({ label, onDrop, isTouchDevice, children }: DropZonePro
       borderColor={isDragOver ? 'accent.teal' : 'border.muted'}
       position="relative"
       minH="44px"
+      overflow="visible"
       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setIsDragOver(true) }}
       onDragLeave={() => setIsDragOver(false)}
       onDrop={(e) => { e.preventDefault(); setIsDragOver(false); onDrop() }}
@@ -123,12 +125,8 @@ export const DropZone = ({ label, onDrop, isTouchDevice, children }: DropZonePro
       cursor={isTouchDevice ? 'pointer' : 'default'}
       transition="border-color 0.15s, background 0.15s"
     >
-      <Text
-        fontSize="2xs"
-        fontWeight="700"
-        color="fg.subtle"
-        textTransform="uppercase"
-        letterSpacing="0.05em"
+      <HStack
+        gap={1}
         position="absolute"
         top={-2.5}
         bg="bg.muted"
@@ -136,9 +134,19 @@ export const DropZone = ({ label, onDrop, isTouchDevice, children }: DropZonePro
         borderRadius="sm"
         border="1px dashed"
         borderColor={isDragOver ? 'accent.teal' : 'border.muted'}
+        alignItems="center"
       >
-        {label}
-      </Text>
+        <Text
+          fontSize="2xs"
+          fontWeight="700"
+          color="fg.subtle"
+          textTransform="uppercase"
+          letterSpacing="0.05em"
+        >
+          {label}
+        </Text>
+        {labelExtra}
+      </HStack>
       {children}
     </VStack>
   )
