@@ -498,8 +498,8 @@ describe('Add question to existing dashboard and save', () => {
       expect(merged.assets?.some(a => (a as { id: number }).id === QUESTION_ID)).toBe(true);
     }, { timeout: 3000 });
 
-    // "Publish changes" button is now enabled
-    const publishBtn = screen.getByLabelText('Publish changes');
+    // "Save" button is now enabled
+    const publishBtn = screen.getByLabelText('Save');
     expect(publishBtn).not.toBeDisabled();
     await user.click(publishBtn);
 
@@ -1581,7 +1581,7 @@ describe('Multiple questions in dashboard', () => {
     }, { timeout: 3000 });
 
     // Publish and verify DB round-trip via Redux content
-    await user.click(screen.getByLabelText('Publish changes'));
+    await user.click(screen.getByLabelText('Save'));
     await waitFor(() => {
       expect(Object.keys(testStore.getState().files.files[DASHBOARD_ID].persistableChanges ?? {})).toHaveLength(0);
     }, { timeout: 5000 });
