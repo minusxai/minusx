@@ -5,7 +5,6 @@ import { Box, HStack, Text, VStack } from '@chakra-ui/react'
 import { LuPalette } from 'react-icons/lu'
 import { CHART_COLORS, COLOR_PALETTE } from '@/lib/chart/echarts-theme'
 import type { VisualizationStyleConfig } from '@/lib/types'
-import { createPortal } from 'react-dom'
 
 interface StyleConfigPopoverProps {
   chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo'
@@ -72,15 +71,11 @@ const hasStyleConfig = (config?: VisualizationStyleConfig) =>
 export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange }: StyleConfigPopoverProps) => {
   const [showPopover, setShowPopover] = useState(false)
   const [activeSeriesIndex, setActiveSeriesIndex] = useState<number | null>(null)
-  const [mounted, setMounted] = useState(false)
   const buttonRef = useRef<HTMLDivElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
-  const [popoverPosition, setPopoverPosition] = useState<{ top: number; left: number; maxHeight: number } | null>(null)
 
   const supportsMarkerSize = chartType === 'scatter' || chartType === 'line' || chartType === 'combo'
   const seriesCount = useMemo(() => Math.min(Math.max(numSeries, 1), COLOR_PALETTE.length), [numSeries])
-
-  useEffect(() => setMounted(true), [])
 
   useEffect(() => {
     if (!showPopover) return
@@ -96,34 +91,6 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [showPopover])
-
-  useEffect(() => {
-    if (!showPopover || !buttonRef.current) return
-    const updatePosition = () => {
-      if (!buttonRef.current) return
-      const rect = buttonRef.current.getBoundingClientRect()
-      const width = 280
-      const height = popoverRef.current?.offsetHeight ?? 220
-      const gutter = 8
-      let left = rect.right - width
-      left = Math.max(gutter, Math.min(left, window.innerWidth - width - gutter))
-      const spaceBelow = window.innerHeight - rect.bottom - gutter
-      const spaceAbove = rect.top - gutter
-      const openAbove = spaceBelow < Math.min(height, 180) && spaceAbove > spaceBelow
-      const top = openAbove ? Math.max(gutter, rect.top - height - 6) : rect.bottom + 6
-      const maxHeight = openAbove
-        ? Math.max(140, rect.top - gutter - 6)
-        : Math.max(140, window.innerHeight - rect.bottom - gutter - 6)
-      setPopoverPosition({ top, left, maxHeight })
-    }
-    updatePosition()
-    window.addEventListener('resize', updatePosition)
-    window.addEventListener('scroll', updatePosition, true)
-    return () => {
-      window.removeEventListener('resize', updatePosition)
-      window.removeEventListener('scroll', updatePosition, true)
-    }
   }, [showPopover])
 
   const emitConfig = (next: VisualizationStyleConfig) => {
@@ -168,16 +135,17 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
         </Text>
       </HStack>
 
-      {mounted && showPopover && popoverPosition && createPortal(
+      {showPopover && (
         <VStack
           ref={popoverRef}
-          position="fixed"
-          top={`${popoverPosition.top}px`}
-          left={`${popoverPosition.left}px`}
+          position="absolute"
+          top="100%"
+          right={0}
+          mt={1}
           align="stretch"
           p={3}
           width="280px"
-          maxHeight={`${popoverPosition.maxHeight}px`}
+          maxHeight="320px"
           overflowY="auto"
           gap={3}
           bg="bg.panel"
@@ -185,7 +153,7 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
           borderColor="border.muted"
           borderRadius="md"
           boxShadow="md"
-          zIndex={1400}
+          zIndex={20}
         >
           <Box>
             <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
@@ -252,8 +220,7 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
               </HStack>
             </Box>
           )}
-        </VStack>,
-        document.body
+        </VStack>
       )}
     </Box>
   )
