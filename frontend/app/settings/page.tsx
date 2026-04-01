@@ -9,6 +9,7 @@ import { setAskForConfirmation, setShowDebug, setShowJson, setShowAllErrorToasts
 import RecordingControl from '@/components/RecordingControl';
 import DataManagementSection from '@/components/DataManagementSection';
 import { ChannelsSection } from '@/components/settings/ChannelsSection';
+import { SlackBotSection } from '@/components/settings/bots/SlackBotSection';
 import UsersContent from '@/components/UsersContent';
 import ConfigContainerV2 from '@/components/containers/ConfigContainerV2';
 import StylesContainerV2 from '@/components/containers/StylesContainerV2';
@@ -22,7 +23,7 @@ import { useSearchParams } from 'next/navigation';
 import { useFileByPath } from '@/lib/hooks/file-state-hooks';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 
-type TabId = 'general' | 'dev' | 'data' | 'users' | 'configs' | 'styles' | 'messaging';
+type TabId = 'general' | 'dev' | 'data' | 'users' | 'configs' | 'styles' | 'messaging' | 'bots';
 
 interface SettingEntry {
   tab: TabId;
@@ -275,6 +276,16 @@ export default function SettingsPage() {
   const tabs: TabEntry[] = useMemo(() => [
     { id: 'general', label: 'General' },
     { id: 'users', label: 'Users', visible: isAdmin, custom: <UsersContent /> },
+    {
+      id: 'bots',
+      label: 'Bots',
+      visible: isAdmin,
+      custom: (
+        <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
+          <SlackBotSection />
+        </Box>
+      ),
+    },
     {
       id: 'messaging',
       label: 'Messaging',

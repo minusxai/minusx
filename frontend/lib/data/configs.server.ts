@@ -7,6 +7,8 @@ import { resolvePath } from '@/lib/mode/path-resolver';
 import { Mode, DEFAULT_MODE } from '@/lib/mode/mode-types';
 import { validateWebhook } from '@/lib/messaging/webhook-executor';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
+import type { ConfigBot } from '@/lib/types';
+import { revalidateTag } from 'next/cache';
 
 export interface GetConfigsResult {
   config: CompanyConfig;
@@ -125,6 +127,13 @@ export function validateCompanyConfig(content: unknown): content is Partial<Comp
     }
   }
 
+  // If bots exists, validate its structure
+  if (config.bots !== undefined) {
+    if (!validateBots(config.bots)) {
+      return false;
+    }
+  }
+
   return true;
 }
 
@@ -182,6 +191,62 @@ function validateAccessRulesOverride(accessRules: unknown): accessRules is Acces
   return true;
 }
 
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function validateSlackBot(bot: unknown): bot is ConfigBot {
+  if (!bot || typeof bot !== 'object') return false;
+
+  const botRecord = bot as Record<string, unknown>;
+
+  if (botRecord.type !== 'slack') return false;
+  if (!isNonEmptyString(botRecord.name)) return false;
+  if (botRecord.install_mode !== 'manifest_manual') return false;
+  if (!isNonEmptyString(botRecord.bot_token)) return false;
+  if (!isNonEmptyString(botRecord.signing_secret)) return false;
+
+  const optionalStringFields = [
+    'signing_secret',
+    'team_id',
+    'team_name',
+    'bot_user_id',
+    'app_id',
+    'enterprise_id',
+    'installed_at',
+    'installed_by',
+  ] as const;
+
+  for (const field of optionalStringFields) {
+    const value = botRecord[field];
+    if (value !== undefined && typeof value !== 'string') {
+      return false;
+    }
+  }
+
+  if (botRecord.enabled !== undefined && typeof botRecord.enabled !== 'boolean') {
+    return false;
+  }
+
+  if (botRecord.scopes !== undefined) {
+    if (!Array.isArray(botRecord.scopes) || !botRecord.scopes.every(scope => typeof scope === 'string')) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function validateBots(bots: unknown): bots is ConfigBot[] {
+  if (!Array.isArray(bots)) return false;
+  return bots.every((bot) => {
+    if (!bot || typeof bot !== 'object') return false;
+    const botRecord = bot as Record<string, unknown>;
+    if (botRecord.type === 'slack') return validateSlackBot(botRecord);
+    return false;
+  });
+}
+
 class ConfigsDataLayerServer {
   /**
    * Get configs for authenticated user
@@ -227,6 +292,56 @@ export const getConfigs = ConfigsAPI.getConfig.bind(ConfigsAPI);
  */
 export async function getConfigsByCompanyId(companyId: number, mode: Mode = DEFAULT_MODE): Promise<GetConfigsResult> {
   return ConfigsAPI['_loadConfigsByCompanyId'](companyId, mode);
+}
+
+/**
+ * Load raw company config content without merging defaults.
+ */
+export async function getRawConfigByCompanyId(
+  companyId: number,
+  mode: Mode = DEFAULT_MODE
+): Promise<Partial<CompanyConfig>> {
+  const configPath = resolvePath(mode, '/configs/config');
+  const doc = await DocumentDB.getByPath(configPath, companyId);
+
+  if (!doc?.content || typeof doc.content !== 'object') {
+    return {};
+  }
+
+  const content = doc.content as Partial<CompanyConfig>;
+  if (!validateCompanyConfig(content)) {
+    throw new Error(`Invalid config structure at ${configPath} for company ${companyId}`);
+  }
+
+  return content;
+}
+
+/**
+ * Save config for a company directly.
+ * Used by authenticated config routes and integration callbacks that do not have a user session.
+ */
+export async function saveConfigByCompanyId(
+  companyId: number,
+  mode: Mode,
+  content: Partial<CompanyConfig>
+): Promise<number> {
+  if (!validateCompanyConfig(content)) {
+    throw new Error('Invalid config structure');
+  }
+
+  const configPath = resolvePath(mode, '/configs/config');
+  const existing = await DocumentDB.getByPath(configPath, companyId);
+
+  let id: number;
+  if (existing) {
+    await DocumentDB.update(existing.id, 'config.json', configPath, content as any, [], companyId);
+    id = existing.id;
+  } else {
+    id = await DocumentDB.create('config.json', configPath, 'config', content as any, [], companyId);
+  }
+
+  revalidateTag('configs', 'default');
+  return id;
 }
 
 /**

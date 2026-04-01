@@ -53,7 +53,8 @@ export function truncateMessageForName(message: string): string {
 export async function getOrCreateConversation(
   conversationId: number | null,
   user: EffectiveUser,
-  firstUserMessage?: string
+  firstUserMessage?: string,
+  options?: { namePrefix?: string }
 ): Promise<{ fileId: number; content: ConversationFile }> {
   // If conversationId provided, load existing conversation
   if (conversationId) {
@@ -69,7 +70,8 @@ export async function getOrCreateConversation(
   // Create new conversation with auto-generated name from first message
   const userId = user.userId?.toString() || user.email;
   const timestamp = Date.now();
-  const name = truncateMessageForName(firstUserMessage || 'New Conversation');
+  const baseName = truncateMessageForName(firstUserMessage || 'New Conversation');
+  const name = `${options?.namePrefix || ''}${baseName}`;
   const slug = slugify(firstUserMessage || 'conversation');
   const fileName = `${timestamp}-${slug}.chat.json`;
   const path = resolvePath(user.mode, `/logs/conversations/${userId}/${fileName}`);

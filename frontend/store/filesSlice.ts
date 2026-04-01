@@ -2,6 +2,7 @@ import { createSlice, PayloadAction, createSelector } from '@reduxjs/toolkit';
 import type { DbFile, FileType, DocumentContent, AssetReference, QuestionContent, QuestionReference, DatabaseSchema } from '@/lib/types';
 import type { FileInfo } from '@/lib/data/types';
 import type { FileAnalyticsSummary, ConversationAnalyticsSummary } from '@/lib/analytics/file-analytics.types';
+import { findNearestContextPath } from '@/lib/context/context-utils';
 import type { RootState } from './store';
 import type { LoadError } from '@/lib/types/errors';
 import { replaceNegativeIdsInContent } from '@/lib/data/helpers/replace-references';
@@ -1108,30 +1109,14 @@ export const selectContextFromPath = createSelector(
   (files, path): FileState | undefined => {
     // Get all context files
     const contextFiles = Object.values(files).filter(f => f.type === 'context') as FileState[];
+    const nearestContextPath = findNearestContextPath(
+      contextFiles.map((file) => file.path),
+      path,
+    );
 
-    // Normalize path (remove trailing slash for consistent matching)
-    const normalizedPath = path.endsWith('/') && path !== '/' ? path.slice(0, -1) : path;
-
-    // Find matching contexts - ancestors and same directory
-    const matchingContexts = contextFiles.filter(ctx => {
-      const contextDir = ctx.path.substring(0, ctx.path.lastIndexOf('/')) || '/';
-
-      if (contextDir === '/') {
-        return normalizedPath.startsWith('/') && normalizedPath !== '/';
-      } else {
-        // Match if path is within contextDir OR equals contextDir (for folder views)
-        return normalizedPath.startsWith(contextDir + '/') || normalizedPath === contextDir;
-      }
-    });
-
-    // Sort by depth (deepest first = nearest ancestor)
-    const sortedContexts = matchingContexts.sort((a, b) => {
-      const depthA = (a.path.match(/\//g) || []).length;
-      const depthB = (b.path.match(/\//g) || []).length;
-      return depthB - depthA;
-    });
-
-    return sortedContexts[0];
+    return nearestContextPath
+      ? contextFiles.find((file) => file.path === nearestContextPath)
+      : undefined;
   }
 );
 

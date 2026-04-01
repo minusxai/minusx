@@ -227,3 +227,33 @@ export const getEffectiveUser = cache(async (): Promise<EffectiveUser | null> =>
     mode,
   };
 });
+
+/**
+ * Build an EffectiveUser for a known company user without relying on a request session.
+ * Used by background integrations such as Slack bot events.
+ */
+export async function getCompanyUserEffectiveUser(
+  companyId: number,
+  email: string,
+  mode: Mode
+): Promise<EffectiveUser | null> {
+  const [user, company] = await Promise.all([
+    UserDB.getByEmailAndCompany(email, companyId),
+    CompanyDB.getById(companyId),
+  ]);
+
+  if (!user) {
+    return null;
+  }
+
+  return {
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    home_folder: user.home_folder,
+    companyId,
+    companyName: company?.name,
+    mode,
+  };
+}

@@ -4,7 +4,7 @@
  */
 
 import type { FileType } from '@/lib/ui/file-metadata';
-import type { UserRole, ConfigChannel, MessagingWebhook, AlertRecipient } from '@/lib/types';
+import type { UserRole, ConfigChannel, MessagingWebhook, AlertRecipient, ConfigBot } from '@/lib/types';
 
 /**
  * Per-role file type access override
@@ -47,6 +47,7 @@ export interface CompanyConfig {
     webhooks: MessagingWebhook[];
   };
   channels?: ConfigChannel[];
+  bots?: ConfigBot[];
   error_delivery?: AlertRecipient[];
   city?: string;  // Optional city identifier for agent context
   thinkingPhrases?: string[];  // Optional custom thinking phrases for AI indicator
@@ -120,6 +121,7 @@ export function mergeConfig(
     },
     messaging: overrides.messaging ?? defaults.messaging,
     channels: overrides.channels ?? defaults.channels,
+    bots: overrides.bots ?? defaults.bots,
     error_delivery: overrides.error_delivery ?? defaults.error_delivery,
     city: overrides.city ?? defaults.city,
     // Override thinkingPhrases only if present and non-empty array

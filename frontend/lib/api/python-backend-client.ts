@@ -6,7 +6,7 @@
  */
 
 import { BACKEND_URL } from '@/lib/constants';
-import { getEffectiveUser } from '@/lib/auth/auth-helpers';
+import { getEffectiveUser, type EffectiveUser } from '@/lib/auth/auth-helpers';
 import { sessionTokenManager } from '@/lib/auth/session-tokens';
 
 /**
@@ -27,8 +27,15 @@ export async function pythonBackendFetch(
   endpoint: string,
   options: Omit<RequestInit, 'headers'> & { headers?: Record<string, string> } = {}
 ): Promise<Response> {
-  // Auto-fetch effective user (server-side only)
   const user = await getEffectiveUser();
+  return pythonBackendFetchForUser(user, endpoint, options);
+}
+
+export async function pythonBackendFetchForUser(
+  user: EffectiveUser | null,
+  endpoint: string,
+  options: Omit<RequestInit, 'headers'> & { headers?: Record<string, string> } = {}
+): Promise<Response> {
 
   // Build headers
   const requestHeaders: Record<string, string> = {

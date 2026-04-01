@@ -152,3 +152,25 @@ export function getPublishedVersionForUser(content: ContextContent, _userId: num
 export function getPublishedVersion(content: ContextContent): number {
   return content.published?.all ?? 1;
 }
+
+export function findNearestContextPath(contextPaths: string[], path: string): string | null {
+  const normalizedPath = path.endsWith('/') && path !== '/' ? path.slice(0, -1) : path;
+
+  const matchingContexts = contextPaths.filter((contextPath) => {
+    const contextDir = contextPath.substring(0, contextPath.lastIndexOf('/')) || '/';
+
+    if (contextDir === '/') {
+      return normalizedPath.startsWith('/') && normalizedPath !== '/';
+    }
+
+    return normalizedPath.startsWith(contextDir + '/') || normalizedPath === contextDir;
+  });
+
+  const sortedContexts = matchingContexts.sort((a, b) => {
+    const depthA = (a.match(/\//g) || []).length;
+    const depthB = (b.match(/\//g) || []).length;
+    return depthB - depthA;
+  });
+
+  return sortedContexts[0] ?? null;
+}

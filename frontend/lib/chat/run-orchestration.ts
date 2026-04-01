@@ -9,7 +9,7 @@
  */
 import 'server-only';
 import { getOrCreateConversation, appendLogToConversation } from '@/lib/conversations';
-import { pythonBackendFetch } from '@/lib/api/python-backend-client';
+import { pythonBackendFetchForUser } from '@/lib/api/python-backend-client';
 import { orchestratePendingTools } from '@/app/api/chat/orchestrator';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
@@ -21,6 +21,8 @@ export interface RunOrchestrationParams {
   agent_args: Record<string, any>;
   user: EffectiveUser;
   userMessage?: string;
+  conversationId?: number | null;
+  conversationNamePrefix?: string;
   /** Timeout in ms for each Python backend call. Default 5 min. */
   timeoutMs?: number;
 }
@@ -30,8 +32,12 @@ export interface RunOrchestrationResult {
   log: ConversationLogEntry[];
 }
 
-async function callPythonBackend(request: PythonChatRequest, timeoutMs: number): Promise<PythonChatResponse> {
-  const response = await pythonBackendFetch('/api/chat', {
+async function callPythonBackendForUser(
+  user: EffectiveUser,
+  request: PythonChatRequest,
+  timeoutMs: number
+): Promise<PythonChatResponse> {
+  const response = await pythonBackendFetchForUser(user, '/api/chat', {
     method: 'POST',
     body: JSON.stringify(request),
     signal: AbortSignal.timeout(timeoutMs),
@@ -57,9 +63,16 @@ export async function runChatOrchestration({
   agent_args,
   user,
   userMessage = 'Execute',
+  conversationId = null,
+  conversationNamePrefix,
   timeoutMs = 300_000,
 }: RunOrchestrationParams): Promise<RunOrchestrationResult> {
-  const { fileId: convFileId, content: conversation } = await getOrCreateConversation(null, user, userMessage);
+  const { fileId: convFileId, content: conversation } = await getOrCreateConversation(
+    conversationId,
+    user,
+    userMessage,
+    { namePrefix: conversationNamePrefix },
+  );
 
   const baseLog: ConversationLogEntry[] = conversation.log;
   let currentFileId = convFileId;
@@ -79,7 +92,7 @@ export async function runChatOrchestration({
       agent_args: { ...agent_args, home_folder: resolvedHomeFolder },
     };
 
-    const pythonResponse = await callPythonBackend(requestPayload, timeoutMs);
+    const pythonResponse = await callPythonBackendForUser(user, requestPayload, timeoutMs);
     accumulatedLogDiff.push(...pythonResponse.logDiff);
 
     const appendResult = await appendLogToConversation(

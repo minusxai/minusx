@@ -2,6 +2,8 @@
 
 import { ConversationLogEntry } from '@/lib/types';
 
+const ROOT_CHAT_AGENTS = new Set(['DefaultAgent', 'AnalystAgent', 'AtlasAnalystAgent', 'SlackAgent']);
+
 /**
  * Slugify text for use in filenames (max 50 chars)
  */
@@ -45,7 +47,7 @@ export function parseLogToMessages(log: ConversationLogEntry[]): any[] {
 
       // Check if this is the main agent task (contains user message)
       const userMessage = entry.args?.goal || entry.args?.user_message || entry.args?.message;
-      if (userMessage && (agent === 'AnalystAgent' || agent === 'DefaultAgent')) {
+      if (userMessage && ROOT_CHAT_AGENTS.has(agent)) {
         // User message
         messages.push({
           role: 'user',

@@ -47,6 +47,7 @@ export default auth(async (req) => {
     isPublicRoute ||
     pathname.startsWith('/api/auth') ||
     pathname.startsWith('/api/internal') ||
+    pathname.startsWith('/api/integrations/slack/events') ||
     pathname.startsWith('/api/companies/register') ||
     pathname === '/api/health'
   ) {

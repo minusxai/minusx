@@ -287,6 +287,25 @@ export type ConfigChannel =
   | { type: 'email'; name: string; address: string }
   | { type: 'phone'; name: string; address: string };
 
+export interface SlackBotConfig {
+  type: 'slack';
+  name: string;
+  install_mode: 'manifest_manual';
+  bot_token: string;
+  signing_secret?: string;
+  team_id?: string;
+  team_name?: string;
+  bot_user_id?: string;
+  app_id?: string;
+  enterprise_id?: string;
+  installed_at?: string;
+  installed_by?: string;
+  enabled?: boolean;
+  scopes?: string[];
+}
+
+export type ConfigBot = SlackBotConfig;
+
 export interface ConfigContent extends BaseFileContent {
   branding?: {
     logoLight?: string;
@@ -304,6 +323,7 @@ export interface ConfigContent extends BaseFileContent {
     webhooks: MessagingWebhook[];
   };
   channels?: ConfigChannel[];
+  bots?: ConfigBot[];
   error_delivery?: AlertRecipient[];
   // Future: other config sections can be added here
 }
@@ -964,6 +984,7 @@ export const ToolNames = {
   TALK_TO_USER: 'TalkToUser',
   ANALYST_AGENT: 'AnalystAgent',
   ATLAS_ANALYST_AGENT: 'AtlasAnalystAgent',
+  SLACK_AGENT: 'SlackAgent',
   TEST_AGENT: 'TestAgent',
   EXECUTE_QUERY: 'ExecuteQuery',
   ONBOARDING_CONTEXT_AGENT: 'OnboardingContextAgent',
