@@ -11,6 +11,7 @@
  * - Stale data indication with refetch badge
  */
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { debounce } from 'lodash';
 import {
   Box,
   Text,
@@ -402,10 +403,14 @@ export default function QuestionViewV2({
     onExecute(content.parameterValues ?? {});
   }, [onExecute, content.parameterValues]);
 
+  const debouncedQueryUpdate = useMemo(
+    () => debounce((query: string) => onChange({ query }), 150),
+    [onChange]
+  );
+
   // Handle query change with debounced param/ref sync
   const handleQueryChange = useCallback((newQuery: string) => {
-    // Update query immediately for responsive typing
-    onChange({ query: newQuery });
+    debouncedQueryUpdate(newQuery);
 
     // Debounce the param/ref sync (300ms)
     if (syncTimeoutRef.current) {
