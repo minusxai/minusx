@@ -320,15 +320,16 @@ describe('Autocomplete API — E2E', () => {
   });
 
   // -------------------------------------------------------------------------
-  // ORDER BY / GROUP BY regressions
+  // Clause / operator completion regressions
   //
   // Each test exercises a specific cursor-position variant to guard against
-  // the needs_column_completion() regex regressions:
-  //   - "ORDER BY"  (no trailing space)      → must return columns
-  //   - "ORDER BY " (trailing space)         → must return columns
-  //   - "GROUP BY"  (no trailing space)      → must return columns
-  //   - "GROUP BY col " (col + trailing sp.) → must return columns [was bugged]
-  //   - complex aggregation ORDER BY aliases → must include SELECT aliases
+  // needs_column_completion() regex regressions:
+  //   - "ORDER BY"  (no trailing space)       → must return columns
+  //   - "ORDER BY " (trailing space)          → must return columns
+  //   - "GROUP BY"  (no trailing space)       → must return columns
+  //   - "GROUP BY col " (col + trailing sp.)  → must return columns [was bugged]
+  //   - "WHERE col LIKE " (LIKE operator)     → must return columns [was bugged]
+  //   - complex aggregation ORDER BY aliases  → must include SELECT aliases
   // -------------------------------------------------------------------------
 
   describe('ORDER BY / GROUP BY regressions', () => {
@@ -450,6 +451,32 @@ describe('Autocomplete API — E2E', () => {
       expect(labels).toContain('date');
       expect(labels).toContain('total_sessions');
       expect(labels).toContain('event_id');
+    });
+
+    test('WHERE col LIKE (trailing space) returns columns — regression: was returning keywords', async () => {
+      // Bug: no pattern for LIKE operator, so "WHERE status LIKE " fell through to keywords.
+      const query = 'SELECT order_id, status FROM orders WHERE status LIKE ';
+      const result = await CompletionsAPI.getSqlCompletions({
+        query,
+        cursorOffset: query.length,
+        context: {
+          type: 'sql_editor' as const,
+          schemaData: mxfoodSchema,
+          resolvedReferences: [],
+          databaseName: 'mxfood',
+          connectionType: 'duckdb',
+        },
+      });
+
+      expect(result.suggestions.length).toBeGreaterThan(0);
+      const labels = result.suggestions.map((s: any) => s.label);
+      const kinds  = Object.fromEntries(result.suggestions.map((s: any) => [s.label, s.kind]));
+
+      const nonKeyword = labels.filter((l: string) => kinds[l] !== 'keyword');
+      expect(nonKeyword.length).toBeGreaterThan(0);
+
+      expect(labels).toContain('status');
+      expect(labels).toContain('order_id');
     });
 
     test('complex aggregation ORDER BY — SELECT aliases rank before base columns', async () => {

@@ -88,7 +88,7 @@ def get_completions(
         elif is_table_context and schema_data:
             return get_all_tables_unfiltered(schema_data)
         else:
-            return get_keyword_completions()
+            return []
 
     # Determine completion context (check dot notation first)
     if is_dot_context:
@@ -98,7 +98,7 @@ def get_completions(
     elif is_table_context:
         return get_table_completions(ast, schema_data)
     else:
-        return get_keyword_completions()
+        return []
 
 
 def needs_column_completion(text: str) -> bool:
@@ -113,6 +113,8 @@ def needs_column_completion(text: str) -> bool:
         r'\bORDER\s+BY(\s+\w+)*(\s+\w*)?$',
         r'\bHAVING(\s+\w*)?$',
         r'\bON(\s+\w*)?$',
+        r'\bLIKE\s+\w*$',
+        r'\bNOT\s+LIKE\s+\w*$',
         # Also handle trailing space after a comma-separated item ("col1, col2 ")
         r',\s*\w*\s*$',
     ]
@@ -395,19 +397,6 @@ def get_schema_dot_completions_fallback(
 
     return []
 
-
-def get_keyword_completions() -> List[CompletionItem]:
-    """Get common SQL keyword suggestions"""
-    keywords = ["SELECT", "FROM", "WHERE", "JOIN", "GROUP BY", "ORDER BY", "HAVING", "LIMIT"]
-    return [
-        CompletionItem(
-            label=kw,
-            kind="keyword",
-            insert_text=kw,
-            sort_text=str(i).zfill(5)
-        )
-        for i, kw in enumerate(keywords)
-    ]
 
 
 def get_all_columns_unfiltered(schema_data: List[Dict[str, Any]]) -> List[CompletionItem]:
