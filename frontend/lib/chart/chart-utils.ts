@@ -638,6 +638,23 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
 
   const maxAxisNameLength = calculateMaxAxisNameLength()
 
+  const getColumnDisplayName = (col: string) => columnFormats?.[col]?.alias || col
+
+  const getSeriesDisplayName = (seriesName: string): string => {
+    const axisMatch = seriesName.match(/^(.*) \(([LR])\)$/)
+    const baseName = axisMatch ? axisMatch[1] : seriesName
+    const axisSuffix = axisMatch ? ` (${axisMatch[2]})` : ''
+
+    for (const yCol of yAxisColumns ?? []) {
+      const rawSuffix = ` - ${yCol}`
+      if (baseName.endsWith(rawSuffix)) {
+        return `${baseName.slice(0, -rawSuffix.length)} - ${getColumnDisplayName(yCol)}${axisSuffix}`
+      }
+    }
+
+    return `${getColumnDisplayName(baseName)}${axisSuffix}`
+  }
+
   // Chart-specific series properties
   const getSeriesConfig = (type: string, index: number) => {
     const seriesType = type === 'area' ? 'line' : type
@@ -911,12 +928,10 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
 
   // Use the estimated interval (could refine further but this is good enough)
   const labelInterval = estimatedInterval
-  const getColumnDisplayName = (col: string) => columnFormats?.[col]?.alias || col
-
   // Helper to generate and download CSV from chart data
   const downloadCsv = () => {
     // Build CSV header: first column is X-axis, rest are series names
-    const headers = [xAxisLabel || 'X', ...series.map(s => s.name)]
+    const headers = [xAxisLabel || 'X', ...series.map(s => getSeriesDisplayName(s.name))]
 
     // Build rows: each row is [xValue, ...seriesValues]
     const rows = xAxisData.map((x, i) => [
@@ -1046,6 +1061,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
       type: 'scroll',
       pageIconSize: 10, // Smaller navigation buttons
       pageTextStyle: {fontSize: 10},
+      formatter: (name: string) => getSeriesDisplayName(name),
     },
     xAxis: chartType === 'scatter'
       ? {
