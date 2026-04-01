@@ -23,6 +23,7 @@ import { aggregatePivotData, computeFormulas, getUniqueTopLevelRowValues, getUni
 import type { PivotConfig, ColumnFormatConfig, AxisConfig, VisualizationStyleConfig } from '@/lib/types'
 import { getEffectiveColorPalette } from '@/lib/chart/echarts-theme'
 import { StyleConfigPopover } from './StyleConfigPopover'
+import type { CompanyBranding } from '@/lib/branding/whitelabel'
 
 interface ChartBuilderProps {
   columns: string[]
@@ -49,6 +50,7 @@ interface ChartBuilderProps {
   onStyleConfigChange?: (config: VisualizationStyleConfig) => void
   axisConfig?: AxisConfig
   onAxisConfigChange?: (config: AxisConfig) => void
+  exportBranding?: Partial<CompanyBranding>
 }
 
 interface GroupedColumns {
@@ -57,7 +59,7 @@ interface GroupedColumns {
   categories: string[]
 }
 
-export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange }: ChartBuilderProps) => {
+export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, exportBranding }: ChartBuilderProps) => {
   const colorPalette = useMemo(() => getEffectiveColorPalette(styleConfig?.colors), [styleConfig?.colors])
 
   // Group columns by type
@@ -567,6 +569,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       colorPalette,
                       axisConfig,
                       styleConfig,
+                      exportBranding,
                     }
                     if (chartType === 'trend') return <TrendPlot series={aggregatedData.series} columnFormats={columnFormats} yAxisColumns={yAxisColumns} xAxisColumns={xAxisColumns} />
                     const plotMap = { line: LinePlot, bar: BarPlot, combo: ComboPlot, area: AreaPlot, scatter: ScatterPlot, funnel: FunnelPlot, pie: PiePlot, waterfall: WaterfallPlot } as const

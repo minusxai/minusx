@@ -376,6 +376,7 @@ export function QuestionVisualization({
                       onStyleConfigChange={onStyleConfigChange}
                       axisConfig={currentState.vizSettings?.axisConfig ?? undefined}
                       onAxisConfigChange={onAxisConfigChange}
+                      exportBranding={appConfig.branding}
                     />
                   </Box>
                 )}

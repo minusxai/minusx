@@ -20,7 +20,7 @@ interface FunnelPlotProps extends ChartProps {
 }
 
 export const FunnelPlot = (props: FunnelPlotProps) => {
-  const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns, chartTitle, showChartTitle = true, colorPalette: customPalette, styleConfig } = props
+  const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns, chartTitle, showChartTitle = true, colorPalette: customPalette, styleConfig, exportBranding } = props
   const colorMode = useAppSelector((state) => state.ui.colorMode)
   const { containerRef, containerWidth, containerHeight, chartEvents } = useChartContainer(onChartClick)
   const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>('horizontal')
@@ -92,7 +92,12 @@ export const FunnelPlot = (props: FunnelPlotProps) => {
 
     const baseOption: EChartsOption = {
       ...(chartTitle ? { title: { text: chartTitle, left: 'center', top: 5, show: showChartTitle } } : {}),
-      toolbox: buildToolbox(colorMode, downloadCsv, chartTitle),
+      toolbox: buildToolbox({
+        colorMode,
+        downloadCsv,
+        chartTitle,
+        exportBranding,
+      }),
       tooltip: {
         trigger: 'item',
         appendToBody: true,
@@ -163,7 +168,7 @@ export const FunnelPlot = (props: FunnelPlotProps) => {
     }
 
     return withMinusXTheme(baseOption, colorMode)
-  }, [xAxisData, series, colorMode, containerWidth, containerHeight, orientation, fmtName, fmtValue])
+  }, [xAxisData, series, colorMode, containerWidth, containerHeight, orientation, fmtName, fmtValue, chartTitle, showChartTitle, customPalette, styleConfig, exportBranding])
 
   if ((xAxisColumns?.length ?? 0) > 1) {
     return <ChartError message="Funnel charts support only a single X-axis column. Remove extra columns from the X axis to continue." />

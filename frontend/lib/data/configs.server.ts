@@ -50,7 +50,7 @@ export function validateCompanyConfig(content: unknown): content is Partial<Comp
     }
 
     const branding = config.branding;
-    const validFields = ['displayName', 'agentName', 'favicon'];
+    const validFields = ['displayName', 'agentName', 'favicon', 'logoLight', 'logoDark'];
 
     // Validate that any present field is a non-empty string
     for (const field of validFields) {

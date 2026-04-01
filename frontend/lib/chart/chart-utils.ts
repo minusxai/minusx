@@ -1,6 +1,7 @@
 import type { EChartsOption } from 'echarts'
 import { withMinusXTheme } from './echarts-theme'
 import type { ColumnFormatConfig, AxisConfig, VisualizationStyleConfig } from '@/lib/types'
+import { getBrandLogoUrl, type CompanyBranding } from '@/lib/branding/whitelabel'
 
 // Chart props interface
 export interface ChartProps {
@@ -20,6 +21,7 @@ export interface ChartProps {
   colorPalette: string[]  // Effective color palette (hex values)
   axisConfig?: AxisConfig  // Axis scale config (linear/log)
   styleConfig?: VisualizationStyleConfig
+  exportBranding?: Partial<CompanyBranding>
 }
 
 // Calculate axis label interval based on data length, container width, and max label length after truncation
@@ -178,42 +180,220 @@ export const getTimestamp = () => {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
 }
 
-// Build toolbox configuration for charts (PNG + CSV download)
-export const buildToolbox = (
-  colorMode: 'light' | 'dark',
-  downloadCsv: () => void,
+const loadImage = (src: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
+  const image = new Image()
+  image.crossOrigin = 'anonymous'
+  image.onload = () => resolve(image)
+  image.onerror = reject
+  image.src = src
+})
+
+const fitTextToWidth = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number) => {
+  if (ctx.measureText(text).width <= maxWidth) return text
+
+  const ellipsis = '...'
+  for (let i = text.length - 1; i > 0; i--) {
+    const candidate = `${text.slice(0, i).trimEnd()}${ellipsis}`
+    if (ctx.measureText(candidate).width <= maxWidth) {
+      return candidate
+    }
+  }
+
+  return ellipsis
+}
+
+const getExportTitleSegments = (title: string, colorMode: 'light' | 'dark') => {
+  const connectorColors = {
+    vs: colorMode === 'dark' ? '#4ec9b0' : '#0f766e',
+    split: colorMode === 'dark' ? '#f6ad55' : '#b45309',
+  }
+
+  const segments: Array<{ text: string; color: string }> = []
+  const splitByToken = ' split by '
+  const vsToken = ' vs '
+
+  const splitIndex = title.indexOf(splitByToken)
+  const mainTitle = splitIndex >= 0 ? title.slice(0, splitIndex) : title
+  const splitSuffix = splitIndex >= 0 ? title.slice(splitIndex + splitByToken.length) : ''
+
+  const vsIndex = mainTitle.indexOf(vsToken)
+  if (vsIndex >= 0) {
+    const left = mainTitle.slice(0, vsIndex)
+    const right = mainTitle.slice(vsIndex + vsToken.length)
+    if (left) segments.push({ text: left, color: 'currentColor' })
+    segments.push({ text: ' vs ', color: connectorColors.vs })
+    if (right) segments.push({ text: right, color: 'currentColor' })
+  } else if (mainTitle) {
+    segments.push({ text: mainTitle, color: 'currentColor' })
+  }
+
+  if (splitIndex >= 0) {
+    segments.push({ text: ' split by ', color: connectorColors.split })
+    if (splitSuffix) {
+      segments.push({ text: splitSuffix, color: 'currentColor' })
+    }
+  }
+
+  return segments
+}
+
+const composeChartExportUrl = async ({
+  chartDataUrl,
+  chartTitle,
+  colorMode,
+  branding,
+}: {
+  chartDataUrl: string
   chartTitle?: string
-) => ({
+  colorMode: 'light' | 'dark'
+  branding?: Partial<CompanyBranding>
+}) => {
+  const chartImage = await loadImage(chartDataUrl)
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return chartDataUrl
+
+  const theme = colorMode === 'dark'
+    ? {
+        background: '#161b22',
+        border: 'rgba(230, 237, 243, 0.14)',
+        title: '#f0f6fc',
+      }
+    : {
+        background: '#ffffff',
+        border: 'rgba(13, 17, 23, 0.10)',
+        title: '#0d1117',
+      }
+
+  let logoImage: HTMLImageElement | null = null
+  try {
+    const logoUrl = getBrandLogoUrl(branding, colorMode)
+    logoImage = await loadImage(logoUrl)
+  } catch {
+    logoImage = null
+  }
+
+  const hasHeader = Boolean(chartTitle)
+  const headerHeight = hasHeader ? 92 : 0
+  const horizontalPadding = 36
+  const footerPadding = 24
+  const logoSize = logoImage ? 34 : 0
+  const maxTextWidth = chartImage.width - horizontalPadding * 2
+
+  canvas.width = chartImage.width
+  canvas.height = chartImage.height + headerHeight
+
+  ctx.fillStyle = theme.background
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+  if (hasHeader) {
+    ctx.strokeStyle = theme.border
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(0, headerHeight)
+    ctx.lineTo(canvas.width, headerHeight)
+    ctx.stroke()
+
+    const titleText = chartTitle?.trim() || ''
+    const titleSegments = getExportTitleSegments(titleText, colorMode)
+    ctx.font = '700 28px JetBrains Mono, Consolas, Monaco, Courier New, monospace'
+    ctx.textBaseline = 'middle'
+    ctx.textAlign = 'left'
+
+    const totalWidth = titleSegments.reduce((sum, segment) => {
+      const measuredText = fitTextToWidth(ctx, segment.text, maxTextWidth)
+      return sum + ctx.measureText(measuredText).width
+    }, 0)
+
+    let cursorX = Math.max(horizontalPadding, (canvas.width - totalWidth) / 2)
+    const titleY = headerHeight / 2
+
+    for (const segment of titleSegments) {
+      const segmentText = fitTextToWidth(ctx, segment.text, maxTextWidth)
+      ctx.fillStyle = segment.color === 'currentColor' ? theme.title : segment.color
+      ctx.fillText(segmentText, cursorX, titleY)
+      cursorX += ctx.measureText(segmentText).width
+    }
+  }
+
+  ctx.drawImage(chartImage, 0, headerHeight, chartImage.width, chartImage.height)
+
+  if (logoImage) {
+    const logoX = canvas.width - footerPadding - logoSize
+    const logoY = canvas.height - footerPadding - logoSize
+    ctx.drawImage(logoImage, logoX, logoY, logoSize, logoSize)
+  }
+
+  return canvas.toDataURL('image/png')
+}
+
+interface ChartToolboxConfig {
+  colorMode: 'light' | 'dark'
+  downloadCsv: () => void
+  chartTitle?: string
+  exportBranding?: Partial<CompanyBranding>
+}
+
+// Build toolbox configuration for charts (PNG + CSV download)
+export const buildToolbox = ({
+  colorMode,
+  downloadCsv,
+  chartTitle,
+  exportBranding,
+}: ChartToolboxConfig) => ({
   feature: {
     mySaveAsImage: {
       show: true,
       title: '',
       icon: `image://data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${colorMode === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10l-3.1-3.1a2 2 0 0 0-2.814.014L6 21"/><path d="m14 19 3 3v-5.5"/><path d="m17 22 3-3"/><circle cx="9" cy="9" r="2"/></svg>`)}`,
       onclick: function (this: { ecModel: { scheduler: { ecInstance: any } } }) {
-        const chart = this.ecModel?.scheduler?.ecInstance
-        if (!chart) return
+        void (async () => {
+          const chart = this.ecModel?.scheduler?.ecInstance
+          if (!chart) return
 
-        // Temporarily show title and shift legend down for export
-        const hasHiddenTitle = chartTitle && chart.getOption()?.title?.[0]?.show === false
-        if (hasHiddenTitle) {
-          chart.setOption({ title: { show: true }, legend: { top: 35 } }, false)
-        }
+          const option = chart.getOption?.() ?? {}
+          const currentTitle = Array.isArray(option.title) ? option.title[0] : option.title
+          const currentLegend = Array.isArray(option.legend) ? option.legend[0] : option.legend
+          const titleWasVisible = Boolean(chartTitle && currentTitle && currentTitle.show !== false)
+          const originalLegendTop = currentLegend?.top
 
-        const url = chart.getDataURL({
-          type: 'png',
-          pixelRatio: 2,
-          backgroundColor: colorMode === 'dark' ? '#1a1a1a' : '#ffffff',
-        })
+          if (titleWasVisible) {
+            chart.setOption({
+              title: { show: false },
+              ...(currentLegend ? { legend: { top: 10 } } : {}),
+            }, false)
+          }
 
-        // Restore hidden title and legend position
-        if (hasHiddenTitle) {
-          chart.setOption({ title: { show: false }, legend: { top: 10 } }, false)
-        }
+          try {
+            const chartUrl = chart.getDataURL({
+              type: 'png',
+              pixelRatio: 2,
+              backgroundColor: colorMode === 'dark' ? '#161b22' : '#ffffff',
+              excludeComponents: ['toolbox'],
+            })
 
-        const link = document.createElement('a')
-        link.href = url
-        link.download = `chart-${getTimestamp()}.png`
-        link.click()
+            const exportUrl = await composeChartExportUrl({
+              chartDataUrl: chartUrl,
+              chartTitle,
+              colorMode,
+              branding: exportBranding,
+            })
+
+            const link = document.createElement('a')
+            link.href = exportUrl
+            link.download = `chart-${getTimestamp()}.png`
+            link.click()
+          } finally {
+            if (titleWasVisible) {
+              chart.setOption({
+                title: { show: currentTitle?.show ?? true },
+                ...(currentLegend
+                  ? { legend: { top: originalLegendTop ?? 35 } }
+                  : {}),
+              }, false)
+            }
+          }
+        })()
       },
     },
     myDownloadCsv: {
@@ -360,10 +540,11 @@ interface BaseChartConfig {
   colorPalette: string[]
   axisConfig?: AxisConfig
   styleConfig?: VisualizationStyleConfig
+  exportBranding?: Partial<CompanyBranding>
 }
 
 export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
-  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, pointMeta, tooltipColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig, styleConfig } = config
+  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, pointMeta, tooltipColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig, styleConfig, exportBranding } = config
   const xScaleType = axisConfig?.xScale ?? 'linear'
   const yScaleType = axisConfig?.yScale ?? 'linear'
   const xMin = axisConfig?.xMin ?? undefined
@@ -722,7 +903,12 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
 
   const baseOption: EChartsOption = {
     ...(chartTitle ? { title: { text: chartTitle, left: 'center', top: 5, show: showChartTitle } } : {}),
-    toolbox: buildToolbox(colorMode, downloadCsv, chartTitle),
+    toolbox: buildToolbox({
+      colorMode,
+      downloadCsv,
+      chartTitle,
+      exportBranding,
+    }),
     tooltip: chartType === 'scatter'
       ? {
           trigger: 'item',

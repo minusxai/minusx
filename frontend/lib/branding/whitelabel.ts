@@ -26,6 +26,8 @@ export interface CompanyBranding {
   displayName: string;  // Company display name
   agentName: string;    // Agent name
   favicon: string;      // Favicon URL
+  logoLight?: string;   // Light mode logo URL
+  logoDark?: string;    // Dark mode logo URL
 }
 
 export interface CompanyLinks {
@@ -60,7 +62,9 @@ export const DEFAULT_CONFIG: CompanyConfig = {
   branding: {
     displayName: 'MinusX',
     agentName: 'MinusX',
-    favicon: '/favicon.ico'
+    favicon: '/favicon.ico',
+    logoLight: '/logox_dark.svg',
+    logoDark: '/logox.svg',
   },
   links: {
     docsUrl: 'https://docsv2.minusx.ai',
@@ -127,3 +131,13 @@ export function mergeConfig(
   };
 }
 
+export function getBrandLogoUrl(
+  branding: Partial<CompanyBranding> | undefined,
+  colorMode: 'light' | 'dark',
+): string {
+  if (colorMode === 'dark') {
+    return branding?.logoDark || branding?.logoLight || DEFAULT_CONFIG.branding.logoDark || '/logox.svg';
+  }
+
+  return branding?.logoLight || branding?.logoDark || DEFAULT_CONFIG.branding.logoLight || '/logox_dark.svg';
+}
