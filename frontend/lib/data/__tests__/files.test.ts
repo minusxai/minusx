@@ -19,7 +19,7 @@ import type {
   ConnectionContent,
   ContextContent
 } from '@/lib/types';
-import * as pythonBackend from '@/lib/backend/python-backend';
+import * as pythonBackend from '@/lib/backend/python-backend.server';
 
 // Database-specific mock
 jest.mock('@/lib/database/db-config', () => {

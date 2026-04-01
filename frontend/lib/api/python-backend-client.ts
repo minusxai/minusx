@@ -5,7 +5,7 @@
  * Session tokens allow Python to securely call back to Next.js internal APIs without shared secrets.
  */
 
-import { BACKEND_URL } from '@/lib/constants';
+import { BACKEND_URL } from '@/lib/config';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { sessionTokenManager } from '@/lib/auth/session-tokens';
 

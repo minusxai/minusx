@@ -1,6 +1,6 @@
 import 'server-only';
 import { resolveBaseUrl } from '@/lib/jobs/job-utils';
-import { BACKEND_URL } from '@/lib/constants';
+import { BACKEND_URL } from '@/lib/config';
 import { FilesAPI } from '@/lib/data/files.server';
 import { runQuery } from '@/lib/connections/run-query';
 import { DocumentDB } from '@/lib/database/documents-db';

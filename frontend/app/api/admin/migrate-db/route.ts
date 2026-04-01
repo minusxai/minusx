@@ -18,7 +18,7 @@ import { applyMigrations, getTargetVersions, needsSchemaMigration, MIGRATIONS } 
 import { LATEST_SCHEMA_VERSION } from '@/lib/database/constants';
 import { DB_PATH, getDbType } from '@/lib/database/db-config';
 import { createAdapter } from '@/lib/database/adapter/factory';
-import { BACKEND_URL } from '@/lib/constants';
+import { BACKEND_URL } from '@/lib/config';
 import { POSTGRES_URL } from '@/lib/config';
 import fs from 'fs';
 

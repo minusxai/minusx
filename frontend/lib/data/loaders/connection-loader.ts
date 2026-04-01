@@ -5,7 +5,7 @@
 
 import { DbFile, ConnectionContent, DatabaseSchema } from '@/lib/types';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { getSchemaFromPython } from '@/lib/backend/python-backend';
+import { getSchemaFromPython } from '@/lib/backend/python-backend.server';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { CustomLoader } from './types';
 import { getNodeConnector } from '@/lib/connections';

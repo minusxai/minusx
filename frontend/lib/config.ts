@@ -27,6 +27,7 @@ interface EnvironmentConfig {
   MX_API_KEY: string;
   ANALYTICS_DB_DIR: string | undefined;
   DEFAULT_DB_TYPE: string;
+  BACKEND_URL: string;
 }
 
 const errors: string[] = [];
@@ -72,6 +73,7 @@ const config: EnvironmentConfig = {
   MX_API_KEY: getOptional(process.env.MX_API_KEY, ''),
   ANALYTICS_DB_DIR: process.env.ANALYTICS_DB_DIR,
   DEFAULT_DB_TYPE: getOptional(process.env.DEFAULT_DB_TYPE, 'duckdb'),
+  BACKEND_URL: getOptional(process.env.NEXT_PUBLIC_BACKEND_URL, 'http://localhost:8001'),
 };
 
 // Skip validation in test mode or browser (client-side)
@@ -113,3 +115,4 @@ export const MX_API_BASE_URL = config.MX_API_BASE_URL;
 export const MX_API_KEY = config.MX_API_KEY;
 export const ANALYTICS_DB_DIR = config.ANALYTICS_DB_DIR;
 export const DEFAULT_DB_TYPE = config.DEFAULT_DB_TYPE;
+export const BACKEND_URL = config.BACKEND_URL;
