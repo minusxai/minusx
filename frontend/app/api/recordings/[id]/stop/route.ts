@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { stopRecording } from '@/lib/recordings';
+import { handleApiError } from '@/lib/api/api-responses';
 
 /**
  * POST /api/recordings/[id]/stop
@@ -35,10 +36,6 @@ export async function POST(
     return NextResponse.json(result);
 
   } catch (error: any) {
-    console.error('[POST /api/recordings/[id]/stop] Error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Failed to stop recording' },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 }

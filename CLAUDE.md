@@ -491,6 +491,22 @@ When modifying SQLite schema:
 5. Re-initialize: `npm run import-db -- --replace-db=y`
 6. Test with existing seed data
 
+### Adding Next.js API Routes
+
+**Always use `handleApiError` in catch blocks** — never return `NextResponse.json({ error }, { status: 500 })` directly:
+```typescript
+import { handleApiError } from '@/lib/api/api-responses';
+
+export async function POST(req: NextRequest) {
+  try {
+    // ...
+  } catch (error) {
+    return handleApiError(error); // reports to bug + returns consistent error shape
+  }
+}
+```
+`handleApiError` calls `notifyInternal` for all unhandled errors, ensuring they reach the bug channel. ESLint enforces this — a direct `NextResponse.json` with `{ status: 500 }` is a lint error in `app/api/**`. If a route genuinely needs a custom response shape for 500s (e.g. `/api/chat` returns `ChatResponse`), suppress inline with `// eslint-disable-next-line no-restricted-syntax` and ensure the error is reported via `AppEvents.ERROR` or `notifyInternal` manually.
+
 ### Adding Python Backend Endpoints
 1. Add route handler in `backend/main.py`
 2. Define Pydantic models for request/response

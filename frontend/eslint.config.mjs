@@ -4,6 +4,23 @@ import nextTs from "eslint-config-next/typescript";
 import unusedImports from "eslint-plugin-unused-imports";
 import importPlugin from "eslint-plugin-import-x";
 
+// Shared no-restricted-syntax selectors — reused across multiple file-scoped overrides
+// so that per-file configs can extend rather than replace the base rules.
+const BASE_RESTRICTED_SYNTAX = [
+  {
+    selector: "ImportExpression",
+    message: "Dynamic imports (await import()) are not allowed. Use static imports at the top of the file. Inline imports indicate circular dependencies or poor architecture - fix the design instead.",
+  },
+  {
+    selector: "CallExpression[callee.name='require']",
+    message: "require() calls are not allowed. Use static ES module imports at the top of the file instead.",
+  },
+  {
+    selector: "MemberExpression[object.name='process'][property.name='env']",
+    message: "Do not access process.env directly. Import from lib/config.ts (server-only vars) or lib/constants.ts (client-safe NEXT_PUBLIC_* vars) instead.",
+  },
+];
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -57,36 +74,28 @@ const eslintConfig = defineConfig([
       "import-x/first": "error",
       // Prevent inline/dynamic imports (code smell indicating circular dependencies)
       // Enforce process.env access only through lib/config.ts or lib/constants.ts
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector: "ImportExpression",
-          message: "Dynamic imports (await import()) are not allowed. Use static imports at the top of the file. Inline imports indicate circular dependencies or poor architecture - fix the design instead.",
-        },
-        {
-          selector: "CallExpression[callee.name='require']",
-          message: "require() calls are not allowed. Use static ES module imports at the top of the file instead.",
-        },
-        {
-          selector: "MemberExpression[object.name='process'][property.name='env']",
-          message: "Do not access process.env directly. Import from lib/config.ts (server-only vars) or lib/constants.ts (client-safe NEXT_PUBLIC_* vars) instead.",
-        },
-      ],
+      "no-restricted-syntax": ["error", ...BASE_RESTRICTED_SYNTAX],
     },
   },
   // Allow process.env in the two centralized config files, scripts, and test bootstrap
   {
     files: ["lib/config.ts", "lib/constants.ts", "scripts/**", "jest.setup.js", "next.config.ts"],
     rules: {
+      "no-restricted-syntax": ["error", BASE_RESTRICTED_SYNTAX[0], BASE_RESTRICTED_SYNTAX[1]],
+    },
+  },
+  // API routes must use handleApiError() for 500s — ensures all errors reach internal Slack.
+  // If a route genuinely needs a custom 500 shape (e.g. /api/chat returns ChatResponse),
+  // suppress inline with: // eslint-disable-next-line no-restricted-syntax
+  {
+    files: ["app/api/**/*.ts"],
+    rules: {
       "no-restricted-syntax": [
         "error",
+        ...BASE_RESTRICTED_SYNTAX,
         {
-          selector: "ImportExpression",
-          message: "Dynamic imports (await import()) are not allowed. Use static imports at the top of the file. Inline imports indicate circular dependencies or poor architecture - fix the design instead.",
-        },
-        {
-          selector: "CallExpression[callee.name='require']",
-          message: "require() calls are not allowed. Use static ES module imports at the top of the file instead.",
+          selector: "CallExpression[callee.object.name='NextResponse'][callee.property.name='json']:has(Property[key.name='status'][value.value=500])",
+          message: "Use handleApiError(error) instead of NextResponse.json with { status: 500 }. This ensures the error is reported to internal monitoring.",
         },
       ],
     },

@@ -154,7 +154,7 @@ export function handleApiError(error: unknown): NextResponse<ApiResponse> {
       return ApiErrors.validationError(error.message);
     }
 
-    // Generic internal error — report to internal Slack
+    // Generic internal error — report to bug channel
     void notifyInternal('api:500', error.message, { stack: (error.stack ?? '').slice(0, 500) });
     return errorResponse(
       ErrorCodes.INTERNAL_ERROR,
@@ -163,7 +163,7 @@ export function handleApiError(error: unknown): NextResponse<ApiResponse> {
     );
   }
 
-  // Unknown error type — report to internal Slack
+  // Unknown error type — report to bug channel
   void notifyInternal('api:500', 'Unknown error type thrown in API route');
   return ApiErrors.internalError('An unexpected error occurred');
 }
