@@ -6,6 +6,7 @@
 
 import { withAuth } from '@/lib/api/with-auth';
 import { NextRequest, NextResponse } from 'next/server';
+import { handleApiError } from '@/lib/api/api-responses';
 import { FilesAPI } from '@/lib/data/files.server';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import { QuestionContent, DatabaseWithSchema } from '@/lib/types';
@@ -97,9 +98,6 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     return NextResponse.json(data);
   } catch (error) {
     console.error('[API /infer-columns] Error:', error);
-    return NextResponse.json(
-      { columns: [], error: 'Internal server error' },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 });

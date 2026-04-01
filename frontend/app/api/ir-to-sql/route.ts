@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
+import { handleApiError } from '@/lib/api/api-responses';
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,12 +27,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(data);
   } catch (error) {
     console.error('[API /ir-to-sql] Error:', error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Internal server error',
-      },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 }

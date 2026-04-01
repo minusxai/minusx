@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withAuth } from '@/lib/api/with-auth';
 import { isAdmin } from '@/lib/auth/role-helpers';
-import { ApiErrors } from '@/lib/api/api-responses';
+import { ApiErrors, handleApiError } from '@/lib/api/api-responses';
 import { exportDatabase } from '@/lib/database/import-export';
 import { validateInitData } from '@/lib/database/validation';
 import { getDataVersion, getSchemaVersion } from '@/lib/database/config-db';
@@ -59,10 +59,6 @@ export const GET = withAuth(async (request: NextRequest, user) => {
     });
   } catch (error: any) {
     console.error('Validation error:', error);
-    return NextResponse.json({
-      valid: false,
-      errors: [error.message],
-      warnings: []
-    }, { status: 500 });
+    return handleApiError(error);
   }
 });

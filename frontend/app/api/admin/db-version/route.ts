@@ -10,7 +10,7 @@
 import { NextResponse } from 'next/server';
 import { withAuth } from '@/lib/api/with-auth';
 import { isAdmin } from '@/lib/auth/role-helpers';
-import { ApiErrors } from '@/lib/api/api-responses';
+import { ApiErrors, handleApiError } from '@/lib/api/api-responses';
 import { getDataVersion } from '@/lib/database/config-db';
 
 export const GET = withAuth(async (request, user) => {
@@ -24,9 +24,6 @@ export const GET = withAuth(async (request, user) => {
     return NextResponse.json({ version });
   } catch (error: any) {
     console.error('Get version error:', error);
-    return NextResponse.json(
-      { error: error.message },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 });

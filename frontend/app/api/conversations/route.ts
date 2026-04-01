@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
+import { handleApiError } from '@/lib/api/api-responses';
 import { FilesAPI } from '@/lib/data/files.server';
 import { ConversationFileContent, ConversationLogEntry, FileType } from '@/lib/types';
 import { truncateMessageForName } from '@/lib/conversations';
@@ -132,13 +133,6 @@ export async function GET() {
 
   } catch (error: any) {
     console.error('Conversations API error:', error);
-
-    return NextResponse.json(
-      {
-        conversations: [],
-        error: error.message || 'Unknown error occurred'
-      } as ConversationsResponse,
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 }

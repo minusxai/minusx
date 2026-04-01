@@ -5,6 +5,7 @@
 
 import { withAuth } from '@/lib/api/with-auth';
 import { NextRequest, NextResponse } from 'next/server';
+import { handleApiError } from '@/lib/api/api-responses';
 import { CompletionsAPI } from '@/lib/data/completions/completions.server';
 import { TableSuggestionsOptions } from '@/lib/data/completions/types';
 
@@ -31,12 +32,6 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     return NextResponse.json(result);
   } catch (error) {
     console.error('[API /table-suggestions] Error:', error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Internal server error',
-      },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 });
