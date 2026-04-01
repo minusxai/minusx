@@ -1,6 +1,22 @@
 import type { NextConfig } from "next";
+import { execSync } from "child_process";
+
+function readGitCommitSha(): string {
+  if (process.env.GIT_COMMIT_SHA) return process.env.GIT_COMMIT_SHA;
+  try {
+    return execSync("git rev-parse HEAD").toString().trim().slice(0, 8);
+  } catch {
+    return "unknown";
+  }
+}
+
+const GIT_COMMIT_SHA = readGitCommitSha();
 
 const nextConfig: NextConfig = {
+  // Embed git commit SHA at build time — available as process.env.GIT_COMMIT_SHA everywhere
+  env: {
+    GIT_COMMIT_SHA,
+  },
   // Enable standalone output for optimized Docker deployments (60% smaller images)
   output: 'standalone',
 

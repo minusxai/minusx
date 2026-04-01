@@ -33,6 +33,9 @@ EXPOSE 8001
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
+# Accept git commit SHA from CI build arg
+ARG GIT_COMMIT_SHA
+ENV GIT_COMMIT_SHA=$GIT_COMMIT_SHA
 
 # Default to 4 workers if not specified
 # Recommended: (2 x CPU cores) + 1

@@ -73,12 +73,8 @@ export const DEFAULT_CONFIG: CompanyConfig = {
   },
   messaging: {
     webhooks: [
-      {
-        type: 'slack_alert',
-        url: '{{SLACK_WEBHOOK}}',
-        method: 'POST',
-        body: '{{SLACK_PROPERTIES}}',
-      },
+      { type: 'email_alert', keyword: 'EMAIL_DEFAULT' },
+      { type: 'slack_alert', keyword: 'SLACK_DEFAULT' },
     ]
   }
 };

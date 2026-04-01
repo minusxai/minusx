@@ -13,6 +13,7 @@ import UsersContent from '@/components/UsersContent';
 import ConfigContainerV2 from '@/components/containers/ConfigContainerV2';
 import StylesContainerV2 from '@/components/containers/StylesContainerV2';
 import { ErrorDeliverySection } from '@/components/settings/ErrorDeliverySection';
+import { GIT_COMMIT_SHA } from '@/lib/constants';
 import { toaster } from '@/components/ui/toaster';
 import { switchMode } from '@/lib/mode/mode-utils';
 import Breadcrumb from '@/components/Breadcrumb';
@@ -392,6 +393,10 @@ export default function SettingsPage() {
             </Tabs.Content>
           ))}
         </Tabs.Root>
+
+        <Text mt={12} fontSize="xs" color="fg.subtle" fontFamily="mono" textAlign="center">
+          build: {GIT_COMMIT_SHA}
+        </Text>
       </Container>
     </Box>
   );

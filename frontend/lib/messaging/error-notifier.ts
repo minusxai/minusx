@@ -1,10 +1,14 @@
 import 'server-only';
 import { getConfigsByCompanyId } from '@/lib/data/configs.server';
 import { sendEmailViaWebhook, sendSlackViaWebhook, sendPhoneAlertViaWebhook } from './webhook-executor';
+import { resolveWebhook } from './webhook-resolver.server';
+import { notifyInternal } from './internal-notifier';
 import type { AppEventPayloads } from '@/lib/app-event-registry/events';
 import type { Mode } from '@/lib/mode/mode-types';
 
 export async function notifyErrorEvent(payload: AppEventPayloads['error']): Promise<void> {
+  // Always notify internal channel (independent of company config, fire-and-forget)
+  void notifyInternal(payload.source, payload.message);
   const { config } = await getConfigsByCompanyId(payload.companyId, payload.mode as Mode | undefined);
   const recipients = config.error_delivery ?? [];
   if (!recipients.length) return;
@@ -13,7 +17,8 @@ export async function notifyErrorEvent(payload: AppEventPayloads['error']): Prom
   const message = `[${payload.source}] ${payload.message}`;
 
   for (const recipient of recipients) {
-    const webhook = webhooks.find(w => w.type === recipient.channel);
+    const raw = webhooks.find(w => w.type === recipient.channel);
+    const webhook = raw ? resolveWebhook(raw) : null;
     if (!webhook) continue;
 
     if (recipient.channel === 'slack_alert') {

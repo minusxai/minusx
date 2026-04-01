@@ -39,6 +39,7 @@ from tasks import Orchestrator, AgentCall, UserInputException
 from tasks.orchestrator import ConversationLog
 from tasks.conversation import get_latest_root, update_log_with_completed_tool_calls, get_pending_tool_calls, get_completed_tool_calls
 from tasks.types import ChatCompletionToolMessageParamMX, ChatCompletionMessageToolCallParamMX, CompletedToolCallsMXWithRunId
+from internal_notifier import notify_internal
 
 app = FastAPI(title="MinusX BI Backend")
 
@@ -53,6 +54,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> None:
+    await notify_internal(
+        'backend',
+        str(exc),
+        {'traceback': traceback.format_exc()[-500:], 'path': str(request.url.path)},
+    )
+    raise exc
 
 
 class QueryRequest(BaseModel):

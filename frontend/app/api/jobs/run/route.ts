@@ -21,6 +21,7 @@ import { resolvePath } from '@/lib/mode/path-resolver';
 import { JOB_HANDLERS } from '@/lib/jobs/job-registry';
 import { getConfigsByCompanyId } from '@/lib/data/configs.server';
 import { sendEmailViaWebhook, sendPhoneAlertViaWebhook, sendSlackViaWebhook } from '@/lib/messaging/webhook-executor';
+import { resolveWebhook } from '@/lib/messaging/webhook-resolver.server';
 import type { MessageAttemptLog, RunFileContent, RunMessageRecord } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -133,9 +134,12 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       // Deliver messages (skipped when send=false)
       if (send) {
         const { config } = await getConfigsByCompanyId(user.companyId, user.mode);
-        const emailWebhook = config.messaging?.webhooks?.find(w => w.type === 'email_alert');
-        const phoneAlertWebhook = config.messaging?.webhooks?.find(w => w.type === 'phone_alert');
-        const slackWebhook = config.messaging?.webhooks?.find(w => w.type === 'slack_alert');
+        const _emailRaw = config.messaging?.webhooks?.find(w => w.type === 'email_alert');
+        const emailWebhook = _emailRaw ? resolveWebhook(_emailRaw) : null;
+        const _phoneRaw = config.messaging?.webhooks?.find(w => w.type === 'phone_alert');
+        const phoneAlertWebhook = _phoneRaw ? resolveWebhook(_phoneRaw) : null;
+        const _slackRaw = config.messaging?.webhooks?.find(w => w.type === 'slack_alert');
+        const slackWebhook = _slackRaw ? resolveWebhook(_slackRaw) : null;
         for (const msg of messages) {
           try {
             if (msg.type === 'email_alert') {

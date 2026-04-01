@@ -334,16 +334,27 @@ export interface StylesContent extends BaseFileContent {
 }
 
 /**
- * Messaging webhook configuration
- * Used in ConfigContent.messaging section
+ * Messaging webhook — explicit HTTP config (url/method/headers/body)
  */
-export interface MessagingWebhook {
-  type: 'phone_otp' | 'email_otp' | 'email_alert' | 'phone_alert' | 'sms' | 'slack_alert';
+export interface MessagingWebhookHttp {
+  type: 'phone_otp' | 'email_otp' | 'email_alert' | 'phone_alert' | 'slack_alert';
   url: string;
   method: 'GET' | 'POST' | 'PUT';
   headers?: Record<string, string>;
   body?: string | Record<string, any>;
 }
+
+/**
+ * Messaging webhook — keyword alias resolved server-side at send time.
+ * Clients only see the keyword; credentials are never in the config.
+ * Only valid type+keyword combinations are allowed.
+ */
+export type MessagingWebhookKeyword =
+  | { type: 'email_otp';   keyword: 'EMAIL_DEFAULT' }
+  | { type: 'email_alert'; keyword: 'EMAIL_DEFAULT' }
+  | { type: 'slack_alert'; keyword: 'SLACK_DEFAULT' };
+
+export type MessagingWebhook = MessagingWebhookHttp | MessagingWebhookKeyword;
 
 export interface SchemaInfo {
   name: string;

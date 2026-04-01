@@ -13,6 +13,7 @@ import { CompanyDB } from '@/lib/database/company-db';
 import { generateOTP, hashOTP, createOTPToken } from '@/lib/auth/otp-utils';
 import { getConfigsByCompanyId } from '@/lib/data/configs.server';
 import { executeWebhook, sendEmailViaWebhook } from '@/lib/messaging/webhook-executor';
+import { resolveWebhook } from '@/lib/messaging/webhook-resolver.server';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
 import { UserState } from '@/lib/types';
 
@@ -47,7 +48,8 @@ export async function POST(request: NextRequest) {
     if (channel === 'email') {
       // --- Passwordless email OTP ---
       const { config } = await getConfigsByCompanyId(companyId);
-      const webhook = config.messaging?.webhooks?.find(w => w.type === 'email_otp');
+      const _emailOtpRaw = config.messaging?.webhooks?.find(w => w.type === 'email_otp');
+      const webhook = _emailOtpRaw ? resolveWebhook(_emailOtpRaw) : null;
       if (!webhook) {
         return ApiErrors.badRequest('Email OTP is not configured for this company');
       }
@@ -105,7 +107,11 @@ export async function POST(request: NextRequest) {
       return ApiErrors.internalError('Messaging configuration not found in company config');
     }
 
-    const webhook = config.messaging.webhooks.find(w => w.type === 'phone_otp') || config.messaging.webhooks[0];
+    const _phoneOtpRaw = config.messaging.webhooks.find(w => w.type === 'phone_otp') || config.messaging.webhooks[0];
+    const webhook = _phoneOtpRaw ? resolveWebhook(_phoneOtpRaw) : null;
+    if (!webhook) {
+      return ApiErrors.internalError('Phone OTP webhook could not be resolved');
+    }
     const result = await executeWebhook(webhook, {
       USER_NUMBER: user.phone,
       AUTH_OTP: otp,
