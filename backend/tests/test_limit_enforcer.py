@@ -175,3 +175,52 @@ def test_different_dialects_bigquery():
     sql = "SELECT * FROM users"
     result = enforce_query_limit(sql, default_limit=1000, dialect="bigquery")
     assert "LIMIT 1000" in result
+
+
+# ---------------------------------------------------------------------------
+# Named-parameter preservation — the :paramName syntax used by SQLAlchemy
+# must survive the sqlglot parse→serialize round-trip for all dialects.
+# ---------------------------------------------------------------------------
+
+def test_postgres_preserves_named_param_date_filter():
+    """Postgres: :date_min must survive round-trip (the reported bug)."""
+    sql = "SELECT COUNT(DISTINCT id) AS total_users FROM stores WHERE created_at > :date_min"
+    result = enforce_query_limit(sql, default_limit=1000, dialect="postgres")
+    assert ":date_min" in result, f"Expected ':date_min' in output, got: {result}"
+    assert "LIMIT 1000" in result
+
+
+def test_postgres_preserves_named_param_number_filter():
+    """Postgres: :min_amount must survive round-trip."""
+    sql = "SELECT * FROM orders WHERE amount > :min_amount"
+    result = enforce_query_limit(sql, default_limit=1000, dialect="postgres")
+    assert ":min_amount" in result, f"Expected ':min_amount' in output, got: {result}"
+
+
+def test_postgres_preserves_multiple_named_params():
+    """Postgres: multiple params in a date range must both survive."""
+    sql = "SELECT * FROM events WHERE created_at > :date_min AND created_at < :date_max"
+    result = enforce_query_limit(sql, default_limit=1000, dialect="postgres")
+    assert ":date_min" in result, f"Expected ':date_min' in output, got: {result}"
+    assert ":date_max" in result, f"Expected ':date_max' in output, got: {result}"
+
+
+def test_postgres_preserves_named_param_text_filter():
+    """Postgres: :name_val must survive round-trip."""
+    sql = "SELECT * FROM users WHERE name = :name_val"
+    result = enforce_query_limit(sql, default_limit=1000, dialect="postgres")
+    assert ":name_val" in result, f"Expected ':name_val' in output, got: {result}"
+
+
+def test_duckdb_preserves_named_param_date_filter():
+    """DuckDB: :date_min must survive round-trip."""
+    sql = "SELECT * FROM stores WHERE created_at > :date_min"
+    result = enforce_query_limit(sql, default_limit=1000, dialect="duckdb")
+    assert ":date_min" in result, f"Expected ':date_min' in output, got: {result}"
+
+
+def test_bigquery_preserves_named_param_date_filter():
+    """BigQuery: :date_min must survive round-trip."""
+    sql = "SELECT * FROM stores WHERE created_at > :date_min"
+    result = enforce_query_limit(sql, default_limit=1000, dialect="bigquery")
+    assert ":date_min" in result, f"Expected ':date_min' in output, got: {result}"

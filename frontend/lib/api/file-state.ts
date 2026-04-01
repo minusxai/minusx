@@ -1576,6 +1576,7 @@ export interface QueryExecutionParams {
   params: Record<string, any>;
   database: string;
   references?: QuestionReference[];  // For CTE composition
+  parameterTypes?: Record<string, 'text' | 'number' | 'date'>;  // Declared types for asyncpg coercion
 }
 
 /**
@@ -1617,7 +1618,7 @@ export async function getQueryResult(
   params: QueryExecutionParams,
   options: GetQueryResultOptions = {}
 ): Promise<QueryResult> {
-  const { query, params: queryParams, database, references } = params;
+  const { query, params: queryParams, database, references, parameterTypes } = params;
   const { ttl = CACHE_TTL.QUERY, skip = false, forceLoad = false } = options;
 
   if (skip) {
@@ -1657,7 +1658,8 @@ export async function getQueryResult(
           query,
           database_name: database,
           parameters: queryParams,
-          references: references || []
+          references: references || [],
+          ...(parameterTypes && { parameterTypes })
         })
       });
 

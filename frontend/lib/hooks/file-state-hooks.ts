@@ -378,6 +378,7 @@ export interface UseQueryResultReturn {
 export interface UseQueryResultOptions {
   ttl?: number;      // Time-to-live in ms (default: CACHE_TTL.QUERY = 10 hours)
   skip?: boolean;    // Skip execution (for conditional use)
+  parameterTypes?: Record<string, 'text' | 'number' | 'date'>;  // Declared types for asyncpg coercion
 }
 
 /**
@@ -437,12 +438,12 @@ export function useQueryResult(
   references?: QuestionReference[],
   options: UseQueryResultOptions = {}
 ): UseQueryResultReturn {
-  const { ttl = CACHE_TTL.QUERY, skip = false } = options;
+  const { ttl = CACHE_TTL.QUERY, skip = false, parameterTypes } = options;
 
   useEffect(() => {
     if (skip) return;
-    getQueryResult({ query, params, database, references }, { ttl }).catch(() => {});
-  }, [query, params, database, references, ttl, skip]);
+    getQueryResult({ query, params, database, references, parameterTypes }, { ttl }).catch(() => {});
+  }, [query, params, database, references, parameterTypes, ttl, skip]);
 
   return useQueryResultSelector(query, params, database);
 }
