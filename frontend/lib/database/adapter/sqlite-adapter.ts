@@ -4,6 +4,7 @@ import path from 'path';
 import { IDatabaseAdapter, ITransactionContext, QueryResult } from './types';
 import { DB_DIR, DB_PATH } from '../db-config';
 import { DATABASE_SCHEMA } from '../schema';
+import { DATABASE_URL } from '@/lib/config';
 
 /**
  * SQLite adapter that wraps better-sqlite3 with async interface
@@ -16,7 +17,7 @@ export class SqliteAdapter implements IDatabaseAdapter {
   private dbPath: string;
 
   constructor(dbPath?: string) {
-    const rawPath = dbPath || process.env.DATABASE_URL || DB_PATH;
+    const rawPath = dbPath || DATABASE_URL || DB_PATH;
 
     // Validate path stays within allowed data directories to prevent path traversal
     const normalizedPath = path.resolve(rawPath);

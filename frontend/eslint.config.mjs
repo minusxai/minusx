@@ -56,6 +56,28 @@ const eslintConfig = defineConfig([
       // Enforce all imports at the top of the file before any other code
       "import-x/first": "error",
       // Prevent inline/dynamic imports (code smell indicating circular dependencies)
+      // Enforce process.env access only through lib/config.ts or lib/constants.ts
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "ImportExpression",
+          message: "Dynamic imports (await import()) are not allowed. Use static imports at the top of the file. Inline imports indicate circular dependencies or poor architecture - fix the design instead.",
+        },
+        {
+          selector: "CallExpression[callee.name='require']",
+          message: "require() calls are not allowed. Use static ES module imports at the top of the file instead.",
+        },
+        {
+          selector: "MemberExpression[object.name='process'][property.name='env']",
+          message: "Do not access process.env directly. Import from lib/config.ts (server-only vars) or lib/constants.ts (client-safe NEXT_PUBLIC_* vars) instead.",
+        },
+      ],
+    },
+  },
+  // Allow process.env in the two centralized config files, scripts, and test bootstrap
+  {
+    files: ["lib/config.ts", "lib/constants.ts", "scripts/**", "jest.setup.js", "next.config.ts"],
+    rules: {
       "no-restricted-syntax": [
         "error",
         {

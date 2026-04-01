@@ -3,6 +3,7 @@ import { CompanyDB } from '@/lib/database/company-db';
 import { LoginOrRegisterForm } from './LoginOrRegisterForm';
 import { CompanyConfig, DEFAULT_CONFIG } from '@/lib/branding/whitelabel';
 import { getConfigsByCompanyId } from '@/lib/data/configs.server';
+import { ALLOW_MULTIPLE_COMPANIES, CREATE_COMPANY_SECRET } from '@/lib/config';
 
 /**
  * Login page - checks if companies exist server-side
@@ -31,13 +32,13 @@ export default async function LoginPage({
   }
 
   // Check if multiple companies are allowed (default: false)
-  const allowMultipleCompanies = process.env.ALLOW_MULTIPLE_COMPANIES === 'true';
+  const allowMultipleCompanies = ALLOW_MULTIPLE_COMPANIES;
 
   // Extract subdomain from headers (set by middleware)
   const headersList = await headers();
   const subdomain = headersList.get('x-subdomain');
   console.log('[LoginPage] x-subdomain header:', subdomain);
-  console.log('[LoginPage] ALLOW_MULTIPLE_COMPANIES:', process.env.ALLOW_MULTIPLE_COMPANIES);
+  console.log('[LoginPage] ALLOW_MULTIPLE_COMPANIES:', ALLOW_MULTIPLE_COMPANIES);
 
   // Look up company by subdomain if present (multi-tenant mode)
   let subdomainCompanyName: string | null = null;
@@ -87,7 +88,7 @@ export default async function LoginPage({
 
   // Check if we should show marketing page instead of login
   // Only on main domain (no subdomain), multi-tenant mode, and CREATE_COMPANY_SECRET is set
-  const hasCompanySecret = !!process.env.CREATE_COMPANY_SECRET;
+  const hasCompanySecret = !!CREATE_COMPANY_SECRET;
   const showMarketingPage = !subdomain && allowMultipleCompanies && hasCompanySecret;
 
   return (

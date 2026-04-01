@@ -7,6 +7,7 @@ import fs from 'fs';
 import path from 'path';
 import { DbRow } from './documents-db';
 import { DB_PATH, getDbType } from './db-config';
+import { POSTGRES_URL, DEFAULT_DB_TYPE } from '@/lib/config';
 import { createEmptyDatabase } from '../../scripts/create-empty-db';
 import { Company } from './company-db';
 import { User } from './user-db';
@@ -61,7 +62,7 @@ export async function exportDatabase(dbPath: string = DB_PATH, companyId?: numbe
   const dbType = getDbType();
   const db = dbType === 'sqlite'
     ? await createAdapter({ type: 'sqlite', sqlitePath: dbPath })
-    : await createAdapter({ type: 'postgres', postgresConnectionString: process.env.POSTGRES_URL });
+    : await createAdapter({ type: 'postgres', postgresConnectionString: POSTGRES_URL });
 
   try {
     // Get actual data version from configs table (or 0 if not set)
@@ -183,7 +184,7 @@ export async function importToDatabase(dbPath: string, initData: InitData, compa
 
   const db = dbType === 'sqlite'
     ? await createAdapter({ type: 'sqlite', sqlitePath: dbPath })
-    : await createAdapter({ type: 'postgres', postgresConnectionString: process.env.POSTGRES_URL });
+    : await createAdapter({ type: 'postgres', postgresConnectionString: POSTGRES_URL });
 
   try {
     // Wrap all imports in a transaction for atomicity
@@ -299,7 +300,7 @@ export async function atomicImport(
 
     // For Postgres, ensure schema is up to date (adds any missing columns) before inserting
     if (dbType === 'postgres') {
-      const schemaDb = await createAdapter({ type: 'postgres', postgresConnectionString: process.env.POSTGRES_URL });
+      const schemaDb = await createAdapter({ type: 'postgres', postgresConnectionString: POSTGRES_URL });
       await schemaDb.initializeSchema();
       await schemaDb.close();
     }
@@ -482,7 +483,7 @@ async function atomicImportPostgres(initData: InitData, _targetDbPath: string): 
   console.log('🔧 Ensuring PostgreSQL schema exists...');
   const db = await createAdapter({
     type: 'postgres',
-    postgresConnectionString: process.env.POSTGRES_URL
+    postgresConnectionString: POSTGRES_URL
   });
   await db.initializeSchema();
   await db.close();
@@ -525,7 +526,7 @@ export async function createNewCompany(
   // Hash password
   const passwordHash = await hashPassword(adminPassword);
   const now = new Date().toISOString();
-  const defaultDbType = process.env.DEFAULT_DB_TYPE || 'duckdb';
+  const defaultDbType = DEFAULT_DB_TYPE;
 
   // Deep clone template to avoid mutating the imported object
   const templateContent = JSON.stringify(companyTemplate);
@@ -569,7 +570,7 @@ export async function getNextCompanyId(): Promise<number> {
   const dbType = getDbType();
   const db = dbType === 'sqlite'
     ? await createAdapter({ type: 'sqlite', sqlitePath: DB_PATH })
-    : await createAdapter({ type: 'postgres', postgresConnectionString: process.env.POSTGRES_URL });
+    : await createAdapter({ type: 'postgres', postgresConnectionString: POSTGRES_URL });
 
   try {
     const result = await db.query<{ max_id: number | null }>(

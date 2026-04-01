@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { DuckDBInstance } from '@duckdb/node-api';
 import { getOrCreateDuckDbInstance } from '@/lib/connections/duckdb-registry';
+import { ANALYTICS_DB_DIR, BASE_DUCKDB_DATA_PATH } from '@/lib/config';
 
 // Schema for per-company analytics database
 const SCHEMA_SQL = `
@@ -93,8 +94,8 @@ function toPositional(sql: string): string {
 }
 
 function getAnalyticsDbDir(): string {
-  if (process.env.ANALYTICS_DB_DIR) return process.env.ANALYTICS_DB_DIR;
-  const base = process.env.BASE_DUCKDB_DATA_PATH || '.';
+  if (ANALYTICS_DB_DIR) return ANALYTICS_DB_DIR;
+  const base = BASE_DUCKDB_DATA_PATH;
   return path.join(base, 'data', 'analytics');
 }
 

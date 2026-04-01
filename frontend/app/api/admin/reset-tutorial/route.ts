@@ -14,6 +14,7 @@ import { isAdmin } from '@/lib/auth/role-helpers';
 import { ApiErrors } from '@/lib/api/api-responses';
 import { getAdapter, resetAdapter } from '@/lib/database/adapter/factory';
 import { DEFAULT_STYLES } from '@/lib/branding/whitelabel';
+import { DEFAULT_DB_TYPE } from '@/lib/config';
 import companyTemplate from '@/lib/database/company-template.json';
 
 export const POST = withAuth(async (_request: NextRequest, user) => {
@@ -30,7 +31,7 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
     // Deep clone and apply template substitutions (same pattern as createNewCompany())
     const templateContent = JSON.stringify(companyTemplate);
     const now = new Date().toISOString();
-    const defaultDbType = process.env.DEFAULT_DB_TYPE || 'duckdb';
+    const defaultDbType = DEFAULT_DB_TYPE;
 
     const processedTemplate = templateContent
       .replace(/"{{COMPANY_ID}}"/g, String(companyId))

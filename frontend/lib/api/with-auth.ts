@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser, type EffectiveUser } from '@/lib/auth/auth-helpers';
 import { ApiErrors } from '@/lib/api/api-responses';
+import { CRON_SECRET } from '@/lib/config';
 /**
  * Type for authenticated API route handlers
  * Handler receives the request, authenticated user, and optional route context
@@ -32,7 +33,7 @@ type CronHandler = (request: NextRequest) => Promise<NextResponse>;
  */
 export function withCronAuth(handler: CronHandler) {
   return async (request: NextRequest) => {
-    const cronSecret = process.env.CRON_SECRET;
+    const cronSecret = CRON_SECRET;
     const authHeader = request.headers.get('authorization');
     if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
       // Return 200 to avoid leaking that this endpoint exists or requires auth

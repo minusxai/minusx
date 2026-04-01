@@ -1,3 +1,5 @@
+import { ALLOW_MULTIPLE_COMPANIES } from '@/lib/config';
+
 /**
  * Extract subdomain from hostname
  *
@@ -40,5 +42,5 @@ export function extractSubdomain(hostname: string): string | null {
  */
 export function isSubdomainRoutingEnabled(): boolean {
   // Only enable subdomain routing in multi-tenant mode
-  return process.env.ALLOW_MULTIPLE_COMPANIES === 'true';
+  return ALLOW_MULTIPLE_COMPANIES;
 }

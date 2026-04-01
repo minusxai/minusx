@@ -1,6 +1,7 @@
 import { Pool, PoolClient } from 'pg';
 import { IDatabaseAdapter, ITransactionContext, QueryResult } from './types';
 import { POSTGRES_SCHEMA } from '../postgres-schema';
+import { POSTGRES_URL, POSTGRES_SCHEMA as CONFIG_POSTGRES_SCHEMA } from '@/lib/config';
 
 /**
  * PostgreSQL adapter using node-postgres (pg) with connection pooling
@@ -15,7 +16,7 @@ export class PostgresAdapter implements IDatabaseAdapter {
   constructor(connectionString?: string) {
     this.connectionString =
       connectionString ||
-      process.env.POSTGRES_URL ||
+      POSTGRES_URL ||
       'postgresql://localhost:5432/atlas';
   }
 
@@ -24,7 +25,7 @@ export class PostgresAdapter implements IDatabaseAdapter {
    */
   private getPool(): Pool {
     if (!this.pool) {
-      const schema = process.env.POSTGRES_SCHEMA || 'public';
+      const schema = CONFIG_POSTGRES_SCHEMA;
 
       this.pool = new Pool({
         connectionString: this.connectionString,

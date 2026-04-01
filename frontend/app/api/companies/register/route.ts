@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { CompanyDB } from '@/lib/database/company-db';
 import { createNewCompany } from '@/lib/database/import-export';
+import { CREATE_COMPANY_SECRET, ALLOW_MULTIPLE_COMPANIES } from '@/lib/config';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
 import {
   validateCompanyName,
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate invite code if CREATE_COMPANY_SECRET is set
-    const companySecret = process.env.CREATE_COMPANY_SECRET;
+    const companySecret = CREATE_COMPANY_SECRET;
     if (companySecret) {
       if (!body.inviteCode || body.inviteCode !== companySecret) {
         return ApiErrors.forbidden('Invalid or missing invite code');
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if multiple companies are allowed (default: false)
-    const allowMultipleCompanies = process.env.ALLOW_MULTIPLE_COMPANIES === 'true';
+    const allowMultipleCompanies = ALLOW_MULTIPLE_COMPANIES;
     if (!allowMultipleCompanies) {
       const companyCount = await CompanyDB.count();
       if (companyCount > 0) {

@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const MX_API_BASE_URL = process.env.MX_API_BASE_URL || '';
-const MX_API_KEY = process.env.MX_API_KEY || '';
+import { MX_API_BASE_URL, MX_API_KEY } from '@/lib/config';
 
 export async function GET(
   _request: NextRequest,

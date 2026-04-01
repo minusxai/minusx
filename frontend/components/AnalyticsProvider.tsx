@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { analytics } from '@/lib/analytics';
-import { ANALYTICS_CONFIG } from '@/lib/config';
+import { ANALYTICS_CONFIG } from '@/lib/constants';
 import { useAppSelector } from '@/store/hooks';
 
 export function AnalyticsProvider({ children }: { children: React.ReactNode }) {

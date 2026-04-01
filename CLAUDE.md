@@ -535,6 +535,11 @@ When modifying SQLite schema:
 - `NEXTAUTH_SECRET`: NextAuth secret for session encryption
 - `NEXTAUTH_URL`: NextAuth URL (default: `http://localhost:3000`)
 
+#### Accessing env vars in code
+- **Server-only vars** (secrets, DB URLs, internal flags): import from `frontend/lib/config.ts` — has `import 'server-only'` guard, throws at build time if a client component imports it.
+- **Client-safe vars** (`NEXT_PUBLIC_*` and `NODE_ENV`): import from `frontend/lib/constants.ts` — safe for both server and browser.
+- **Never access `process.env` directly** outside these two files. ESLint enforces this via `no-restricted-syntax`.
+
 ## Key Files Reference
 
 ### Frontend Core Modules

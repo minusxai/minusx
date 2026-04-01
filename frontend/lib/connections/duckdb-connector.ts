@@ -1,6 +1,7 @@
 import 'server-only';
 import * as path from 'path';
 import * as fs from 'fs';
+import { BASE_DUCKDB_DATA_PATH } from '@/lib/config';
 import { NodeConnector, SchemaEntry, QueryResult, TestConnectionResult } from './base';
 import { withDuckDbConnection } from './duckdb-registry';
 
@@ -29,12 +30,12 @@ function makeJsonSafe(rows: Record<string, unknown>[]): Record<string, unknown>[
 export function resolveDuckDbFilePath(filePath: string): string {
   if (path.isAbsolute(filePath)) {
     if (filePath.startsWith('/app') && !fs.existsSync('/app')) {
-      const base = process.env.BASE_DUCKDB_DATA_PATH || '..';
+      const base = BASE_DUCKDB_DATA_PATH;
       return path.resolve(filePath.replace('/app', base));
     }
     return filePath;
   }
-  const base = process.env.BASE_DUCKDB_DATA_PATH || '..';
+  const base = BASE_DUCKDB_DATA_PATH;
   return path.resolve(base, filePath);
 }
 

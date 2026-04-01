@@ -1,8 +1,10 @@
-/**
- * Centralized environment configuration with validation
- */
+import 'server-only';
 
-import type { AnalyticsConfig } from './analytics/types';
+/**
+ * Server-only environment configuration.
+ * Secrets and server-side vars live here — DO NOT import from client components.
+ * For client-safe vars (NEXT_PUBLIC_* and NODE_ENV), use lib/constants.ts instead.
+ */
 
 // Determine environment directly to avoid circular imports
 const IS_DEV = process.env.NODE_ENV !== 'production';
@@ -10,12 +12,21 @@ const IS_TEST = process.env.NODE_ENV === 'test';
 const IS_BROWSER = typeof window !== 'undefined';
 
 interface EnvironmentConfig {
-  BACKEND_URL: string;
   AUTH_URL: string;
   BASE_DUCKDB_DATA_PATH: string;
   NEXTAUTH_SECRET: string;
   ADMIN_PWD: string | undefined;
-  ANALYTICS_CONFIG: AnalyticsConfig;
+  ALLOW_MULTIPLE_COMPANIES: boolean;
+  CREATE_COMPANY_SECRET: string | undefined;
+  DB_TYPE: 'sqlite' | 'postgres';
+  DATABASE_URL: string;
+  POSTGRES_URL: string | undefined;
+  POSTGRES_SCHEMA: string;
+  CRON_SECRET: string | undefined;
+  MX_API_BASE_URL: string;
+  MX_API_KEY: string;
+  ANALYTICS_DB_DIR: string | undefined;
+  DEFAULT_DB_TYPE: string;
 }
 
 const errors: string[] = [];
@@ -42,72 +53,7 @@ function getOptional(value: string | undefined, defaultValue: string): string {
   return value || defaultValue;
 }
 
-function parseAnalyticsConfig(jsonString: string | undefined): AnalyticsConfig {
-  // Default config (analytics disabled)
-  const defaultConfig: AnalyticsConfig = {
-    enabled: false,
-    debug: false,
-    provider: 'noop',
-  };
-
-  if (!jsonString || jsonString.trim() === '') {
-    return defaultConfig;
-  }
-
-  try {
-    const parsed = JSON.parse(jsonString) as Partial<AnalyticsConfig>;
-
-    // Validate required fields
-    if (typeof parsed.enabled !== 'boolean') {
-      console.warn('[Config] ANALYTICS_CONFIG.enabled must be boolean, using default');
-      return defaultConfig;
-    }
-
-    // Validate provider
-    if (parsed.provider && !['mixpanel', 'noop'].includes(parsed.provider)) {
-      console.warn(`[Config] Unknown analytics provider: ${parsed.provider}, using noop`);
-      return { ...defaultConfig, enabled: parsed.enabled };
-    }
-
-    // Validate provider-specific config
-    if (parsed.provider === 'mixpanel') {
-      if (!parsed.mixpanel?.token) {
-        console.warn('[Config] Analytics provider requires token, falling back to noop');
-        return { ...defaultConfig, enabled: false };
-      }
-
-      // Add session recording defaults
-      const sessionRecordingConfig = parsed.mixpanel.sessionRecording
-        ? {
-            enabled: parsed.mixpanel.sessionRecording.enabled || false,
-            sampleRate: parsed.mixpanel.sessionRecording.sampleRate ?? 0.1,
-          }
-        : { enabled: false, sampleRate: 0.1 };
-
-      return {
-        enabled: parsed.enabled,
-        debug: parsed.debug || false,
-        provider: 'mixpanel',
-        mixpanel: {
-          token: parsed.mixpanel.token,
-          sessionRecording: sessionRecordingConfig,
-        },
-      };
-    }
-
-    return {
-      enabled: parsed.enabled,
-      debug: parsed.debug || false,
-      provider: parsed.provider || 'noop',
-    };
-  } catch (error) {
-    console.error('[Config] Failed to parse ANALYTICS_CONFIG:', error);
-    return defaultConfig;
-  }
-}
-
 const config: EnvironmentConfig = {
-  BACKEND_URL: getOptional(process.env.NEXT_PUBLIC_BACKEND_URL, 'http://localhost:8001'),
   AUTH_URL: getOptional(process.env.AUTH_URL, 'http://localhost:3000'),
   BASE_DUCKDB_DATA_PATH: getOptional(process.env.BASE_DUCKDB_DATA_PATH, IS_DEV ? '..' : '.'),
 
@@ -115,7 +61,17 @@ const config: EnvironmentConfig = {
 
   ADMIN_PWD: process.env.ADMIN_PWD,
 
-  ANALYTICS_CONFIG: parseAnalyticsConfig(process.env.NEXT_PUBLIC_ANALYTICS_CONFIG),
+  ALLOW_MULTIPLE_COMPANIES: process.env.ALLOW_MULTIPLE_COMPANIES === 'true',
+  CREATE_COMPANY_SECRET: process.env.CREATE_COMPANY_SECRET,
+  DB_TYPE: getOptional(process.env.DB_TYPE, 'sqlite') as 'sqlite' | 'postgres',
+  DATABASE_URL: getOptional(process.env.DATABASE_URL, 'data/atlas_documents.db'),
+  POSTGRES_URL: process.env.POSTGRES_URL,
+  POSTGRES_SCHEMA: getOptional(process.env.POSTGRES_SCHEMA, 'public'),
+  CRON_SECRET: process.env.CRON_SECRET,
+  MX_API_BASE_URL: getOptional(process.env.MX_API_BASE_URL, ''),
+  MX_API_KEY: getOptional(process.env.MX_API_KEY, ''),
+  ANALYTICS_DB_DIR: process.env.ANALYTICS_DB_DIR,
+  DEFAULT_DB_TYPE: getOptional(process.env.DEFAULT_DB_TYPE, 'duckdb'),
 };
 
 // Skip validation in test mode or browser (client-side)
@@ -141,10 +97,19 @@ if (errors.length > 0 && !IS_TEST && !IS_BROWSER) {
 
 export default config;
 
-// Named exports for backwards compatibility
-export const BACKEND_URL = config.BACKEND_URL;
+// Named exports
 export const AUTH_URL = config.AUTH_URL;
 export const BASE_DUCKDB_DATA_PATH = config.BASE_DUCKDB_DATA_PATH;
 export const NEXTAUTH_SECRET = config.NEXTAUTH_SECRET;
 export const ADMIN_PWD = config.ADMIN_PWD;
-export const ANALYTICS_CONFIG = config.ANALYTICS_CONFIG;
+export const ALLOW_MULTIPLE_COMPANIES = config.ALLOW_MULTIPLE_COMPANIES;
+export const CREATE_COMPANY_SECRET = config.CREATE_COMPANY_SECRET;
+export const DB_TYPE = config.DB_TYPE;
+export const DATABASE_URL = config.DATABASE_URL;
+export const POSTGRES_URL = config.POSTGRES_URL;
+export const POSTGRES_SCHEMA = config.POSTGRES_SCHEMA;
+export const CRON_SECRET = config.CRON_SECRET;
+export const MX_API_BASE_URL = config.MX_API_BASE_URL;
+export const MX_API_KEY = config.MX_API_KEY;
+export const ANALYTICS_DB_DIR = config.ANALYTICS_DB_DIR;
+export const DEFAULT_DB_TYPE = config.DEFAULT_DB_TYPE;
