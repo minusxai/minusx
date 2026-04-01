@@ -10,6 +10,21 @@ import sqlglot
 from sqlglot import exp, ErrorLevel
 
 
+DIALECT_MAP: Dict[str, str] = {
+    'duckdb': 'duckdb',
+    'bigquery': 'bigquery',
+    'postgresql': 'postgres',
+    'csv': 'duckdb',
+    'google-sheets': 'duckdb',
+    'athena': 'presto',
+}
+
+
+def _get_dialect(connection_type: Optional[str]) -> str:
+    """Map a connection type string to a sqlglot read dialect."""
+    return DIALECT_MAP.get(connection_type or '', 'postgres')
+
+
 class CompletionItem(BaseModel):
     """Autocomplete suggestion item (Monaco-compatible format)"""
     label: str
@@ -25,13 +40,15 @@ class AutocompleteRequest(BaseModel):
     cursor_offset: int
     schema_data: List[Dict[str, Any]]
     database_name: Optional[str] = None
+    connection_type: Optional[str] = None
 
 
 def get_completions(
     query: str,
     cursor_offset: int,
     schema_data: List[Dict[str, Any]],
-    database_name: Optional[str] = None
+    database_name: Optional[str] = None,
+    connection_type: Optional[str] = None,
 ) -> List[CompletionItem]:
     """
     Main entry point for autocomplete suggestions.
@@ -52,9 +69,10 @@ def get_completions(
 
     # Phase 1: Error-tolerant parse. Returns a usable AST even for incomplete SQL
     # (e.g. trailing WHERE with no condition). Only fails on empty/blank input.
+    dialect = _get_dialect(connection_type)
     ast = None
     try:
-        ast = sqlglot.parse_one(query, read="postgres", error_level=ErrorLevel.IGNORE)
+        ast = sqlglot.parse_one(query, read=dialect, error_level=ErrorLevel.IGNORE)
     except Exception:
         pass
 

@@ -109,6 +109,7 @@ interface SqlEditorProps {
   schemaData?: DatabaseWithSchema[];  // Database schema for table/column autocomplete
   resolvedReferences?: ResolvedReference[];  // Already loaded references for API autocomplete
   databaseName?: string;  // Database name for API autocomplete
+  connectionType?: string;  // Connection type for dialect-aware autocomplete
   fillHeight?: boolean;  // When true, fills parent container height instead of fixed pixel height
 }
 
@@ -126,6 +127,7 @@ export default function SqlEditor({
   schemaData = [],
   resolvedReferences = [],
   databaseName,
+  connectionType,
   fillHeight = false,
 }: SqlEditorProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode);
@@ -145,6 +147,7 @@ export default function SqlEditor({
   const validationRequestIdRef = useRef(0);
   const validationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const databaseNameRef = useRef(databaseName);
+  const connectionTypeRef = useRef(connectionType);
 
 
   // Keep the ref updated with the latest onRun callback
@@ -173,6 +176,11 @@ export default function SqlEditor({
   useEffect(() => {
     databaseNameRef.current = databaseName;
   }, [databaseName]);
+
+  // Keep connectionType ref updated
+  useEffect(() => {
+    connectionTypeRef.current = connectionType;
+  }, [connectionType]);
 
   // Debounced SQL validation function
   const triggerValidation = (editor: any, monaco: any) => {
@@ -324,7 +332,8 @@ export default function SqlEditor({
               type: 'sql_editor',
               schemaData: currentSchemaData,
               resolvedReferences: resolvedReferences,
-              databaseName: databaseName
+              databaseName: databaseNameRef.current,
+              connectionType: connectionTypeRef.current,
             },
             currentRequestId
           );

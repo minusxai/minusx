@@ -256,6 +256,7 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
           cursor_offset: adjustedCursorOffset,
           schema_data: schemaData,
           database_name: context.databaseName,
+          connection_type: context.connectionType,
         }),
       });
 

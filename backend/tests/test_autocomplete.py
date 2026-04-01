@@ -601,3 +601,159 @@ def test_where_context_simple_two_table_schema():
     assert "user_id" not in column_names
     assert "username" not in column_names
     assert "email" not in column_names
+
+
+# ---------------------------------------------------------------------------
+# Dialect tests
+# One schema, two tables (users + orders). All three dialects must correctly
+# filter columns to only the table referenced in the query.
+# ---------------------------------------------------------------------------
+
+DIALECT_SCHEMA = [
+    {
+        "databaseName": "test_db",
+        "schemas": [
+            {
+                "schema": "public",
+                "tables": [
+                    {
+                        "table": "users",
+                        "columns": [
+                            {"name": "user_id", "type": "int"},
+                            {"name": "email", "type": "varchar"},
+                            {"name": "created_at", "type": "timestamp"},
+                        ]
+                    },
+                    {
+                        "table": "orders",
+                        "columns": [
+                            {"name": "order_id", "type": "int"},
+                            {"name": "amount", "type": "decimal"},
+                            {"name": "status", "type": "varchar"},
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
+]
+
+
+def test_postgresql_dialect_where_filtering():
+    """
+    PostgreSQL dialect: standard double-quoted identifier syntax.
+    Only users columns should appear after WHERE.
+    """
+    query = 'SELECT * FROM "users" WHERE '
+    suggestions = get_completions(query, len(query), DIALECT_SCHEMA, connection_type="postgresql")
+    names = [s.label for s in suggestions]
+
+    assert "user_id" in names
+    assert "email" in names
+    assert "created_at" in names
+
+    assert "order_id" not in names
+    assert "amount" not in names
+    assert "status" not in names
+
+
+def test_duckdb_dialect_where_filtering():
+    """
+    DuckDB dialect: uses duckdb parser instead of postgres.
+    Plain unquoted identifiers; only users columns should appear.
+    """
+    query = "SELECT * FROM users WHERE "
+    suggestions = get_completions(query, len(query), DIALECT_SCHEMA, connection_type="duckdb")
+    names = [s.label for s in suggestions]
+
+    assert "user_id" in names
+    assert "email" in names
+    assert "created_at" in names
+
+    assert "order_id" not in names
+    assert "amount" not in names
+    assert "status" not in names
+
+
+def test_bigquery_dialect_backtick_table_names():
+    """
+    BigQuery dialect: table names wrapped in backticks.
+    Postgres parser cannot handle backtick quoting; bigquery dialect required.
+    Only users columns should appear after WHERE.
+    """
+    query = "SELECT * FROM `users` WHERE "
+    suggestions = get_completions(query, len(query), DIALECT_SCHEMA, connection_type="bigquery")
+    names = [s.label for s in suggestions]
+
+    assert "user_id" in names
+    assert "email" in names
+    assert "created_at" in names
+
+    assert "order_id" not in names
+    assert "amount" not in names
+    assert "status" not in names
+
+
+def test_bigquery_dialect_join_with_backtick_names():
+    """
+    BigQuery dialect: JOIN with backtick-quoted table names.
+    Both joined tables' columns should appear; unjoined table excluded.
+    """
+    schema_with_products = [
+        {
+            "databaseName": "test_db",
+            "schemas": [
+                {
+                    "schema": "public",
+                    "tables": [
+                        {
+                            "table": "users",
+                            "columns": [
+                                {"name": "user_id", "type": "int"},
+                                {"name": "email", "type": "varchar"},
+                            ]
+                        },
+                        {
+                            "table": "orders",
+                            "columns": [
+                                {"name": "order_id", "type": "int"},
+                                {"name": "amount", "type": "decimal"},
+                            ]
+                        },
+                        {
+                            "table": "products",
+                            "columns": [
+                                {"name": "product_id", "type": "int"},
+                                {"name": "price", "type": "decimal"},
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+
+    query = "SELECT  FROM `users` JOIN `orders` ON `users`.user_id = `orders`.order_id WHERE "
+    suggestions = get_completions(query, 7, schema_with_products, connection_type="bigquery")
+    names = [s.label for s in suggestions]
+
+    assert "user_id" in names
+    assert "email" in names
+    assert "order_id" in names
+    assert "amount" in names
+
+    assert "product_id" not in names
+    assert "price" not in names
+
+
+def test_unknown_connection_type_defaults_to_postgres():
+    """
+    Unknown/None connection type should fall back to postgres dialect
+    without error. Standard SQL still works.
+    """
+    query = "SELECT * FROM users WHERE "
+    suggestions = get_completions(query, len(query), DIALECT_SCHEMA, connection_type=None)
+    names = [s.label for s in suggestions]
+
+    assert "user_id" in names
+    assert "order_id" not in names
