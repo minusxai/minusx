@@ -64,10 +64,3 @@ export const SEND_ERRORS_IN_DEV = process.env.NEXT_PUBLIC_SEND_ERRORS_IN_DEV ===
 export const PROTECTED_FILE_PATHS = [
   '/config/users.yml',
 ] as const;
-
-/**
- * Database adapter type — "sqlite" (default) or "postgres".
- * Not a secret; lives here so standalone scripts (create-empty-db, import-db)
- * can read it without hitting the server-only guard in lib/config.ts.
- */
-export const DB_TYPE = (process.env.DB_TYPE as 'sqlite' | 'postgres') ?? 'sqlite';

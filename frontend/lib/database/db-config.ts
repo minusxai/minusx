@@ -3,7 +3,8 @@
  * Provides environment-aware database paths and adapter type
  */
 import path from 'path';
-import { IS_DEV, DB_TYPE } from '../constants';
+import { IS_DEV } from '../constants';
+import { DB_TYPE } from '../config';
 
 /**
  * Get database adapter type.

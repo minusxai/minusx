@@ -21,12 +21,13 @@ RUN npm ci
 # Copy application source
 COPY . .
 
+# Dummy secret satisfies build-time validation; real value is set at runtime via docker-compose
+ENV NEXTAUTH_SECRET=build-placeholder
+
 # Create directories and empty database for build
 RUN mkdir -p data && npm run create-empty-db
 
 # Build Next.js application (generates .next/standalone)
-# Dummy secret satisfies build-time validation; real value is set at runtime via docker-compose
-ENV NEXTAUTH_SECRET=build-placeholder
 # Accept git commit SHA from CI build arg — embedded into the Next.js build by next.config.ts
 ARG GIT_COMMIT_SHA
 ENV GIT_COMMIT_SHA=$GIT_COMMIT_SHA
