@@ -13,7 +13,7 @@ interface PiePlotProps extends ChartProps {
 }
 
 export const PiePlot = (props: PiePlotProps) => {
-  const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns, chartTitle, showChartTitle = true, colorPalette: customPalette } = props
+  const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns, chartTitle, showChartTitle = true, colorPalette: customPalette, styleConfig } = props
   const colorMode = useAppSelector((state) => state.ui.colorMode)
   const { containerRef, containerWidth, containerHeight, chartEvents } = useChartContainer(onChartClick)
 
@@ -43,6 +43,7 @@ export const PiePlot = (props: PiePlotProps) => {
       ...item,
       itemStyle: {
         color: customPalette[index % customPalette.length],
+        ...(styleConfig?.opacity != null ? { opacity: styleConfig.opacity } : {}),
       },
     }))
 

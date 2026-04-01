@@ -21,6 +21,7 @@ interface AxisBuilderProps {
   columnFormats?: Record<string, ColumnFormatConfig>
   onColumnFormatChange?: (column: string, config: ColumnFormatConfig) => void
   children?: React.ReactNode
+  settingsPanel?: React.ReactNode
   axisConfig?: AxisConfig
   onAxisConfigChange?: (config: AxisConfig) => void
   chartType?: string
@@ -186,7 +187,7 @@ const ZoneSettings = ({ axis, axisConfig, onChange }: {
   )
 }
 
-export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnFormatChange, children, axisConfig, onAxisConfigChange, chartType }: AxisBuilderProps) => {
+export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnFormatChange, children, settingsPanel, axisConfig, onAxisConfigChange, chartType }: AxisBuilderProps) => {
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null)
   const [selectedColumnForMobile, setSelectedColumnForMobile] = useState<string | null>(null)
   const isTouchDevice = useIsTouchDevice()
@@ -293,6 +294,7 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
             </DropZone>
           )
         })}
+        {settingsPanel}
       </Box>
 
     </Box>

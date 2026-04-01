@@ -321,6 +321,15 @@ export default function QuestionViewV2({
     });
   };
 
+  const handleTooltipColsChange = (tooltipCols: string[]) => {
+    onChange({
+      vizSettings: {
+        ...content.vizSettings,
+        tooltipCols,
+      }
+    });
+  };
+
   // Handle pivot config change
   const handlePivotConfigChange = (pivotConfig: import('@/lib/types').PivotConfig) => {
     onChange({ vizSettings: { ...content.vizSettings, pivotConfig } });
@@ -331,9 +340,9 @@ export default function QuestionViewV2({
     onChange({ vizSettings: { ...content.vizSettings, columnFormats } });
   };
 
-  // Handle colors change
-  const handleColorsChange = (colors: Record<string, string>) => {
-    onChange({ vizSettings: { ...content.vizSettings, colors } });
+  // Handle shared visual style changes
+  const handleStyleConfigChange = (styleConfig: import('@/lib/types').VisualizationStyleConfig) => {
+    onChange({ vizSettings: { ...content.vizSettings, styleConfig } });
   };
 
   // Handle axis config change (scale type)
@@ -882,9 +891,10 @@ export default function QuestionViewV2({
                 queryEstimatedDurationMs={queryEstimatedDurationMs}
                 onVizTypeChange={handleVizTypeChange}
                 onAxisChange={handleAxisChange}
+                onTooltipColsChange={handleTooltipColsChange}
                 onPivotConfigChange={handlePivotConfigChange}
                 onColumnFormatsChange={handleColumnFormatsChange}
-                onColorsChange={handleColorsChange}
+                onStyleConfigChange={handleStyleConfigChange}
                 onAxisConfigChange={handleAxisConfigChange}
               />
             )}

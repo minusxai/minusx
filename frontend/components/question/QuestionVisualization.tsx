@@ -11,7 +11,7 @@ import { Table } from '@/components/plotx/Table';
 import { ChartBuilder } from '@/components/plotx/ChartBuilder';
 import { parseErrorMessage } from '@/lib/utils/error-parser';
 import { VizTypeSelector } from './VizTypeSelector';
-import type { QuestionContent, QueryResult, VizSettings, PivotConfig, ColumnFormatConfig } from '@/lib/types';
+import type { QuestionContent, QueryResult, VizSettings, PivotConfig, ColumnFormatConfig, VisualizationStyleConfig } from '@/lib/types';
 import { useState, useEffect, useRef } from 'react';
 import { useAppDispatch } from '@/store/hooks';
 import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection } from '@/store/uiSlice';
@@ -39,9 +39,10 @@ interface QuestionVisualizationProps {
   queryEstimatedDurationMs?: number | null;
   onVizTypeChange: (type: VizSettings['type']) => void;
   onAxisChange: (xCols: string[], yCols: string[]) => void;
+  onTooltipColsChange?: (cols: string[]) => void;
   onPivotConfigChange?: (config: PivotConfig) => void;
   onColumnFormatsChange?: (formats: Record<string, ColumnFormatConfig>) => void;
-  onColorsChange?: (colors: Record<string, string>) => void;
+  onStyleConfigChange?: (config: VisualizationStyleConfig) => void;
   onAxisConfigChange?: (config: import('@/lib/types').AxisConfig) => void;
 }
 
@@ -123,9 +124,10 @@ export function QuestionVisualization({
   queryEstimatedDurationMs,
   onVizTypeChange,
   onAxisChange,
+  onTooltipColsChange,
   onPivotConfigChange,
   onColumnFormatsChange,
-  onColorsChange,
+  onStyleConfigChange,
   onAxisConfigChange,
 }: QuestionVisualizationProps) {
   const dispatch = useAppDispatch();
@@ -354,6 +356,8 @@ export function QuestionVisualization({
                       initialXCols={currentState.vizSettings?.xCols ?? undefined}
                       initialYCols={currentState.vizSettings?.yCols ?? undefined}
                       onAxisChange={onAxisChange}
+                      initialTooltipCols={currentState.vizSettings?.tooltipCols ?? undefined}
+                      onTooltipColsChange={onTooltipColsChange}
                       showAxisBuilder={config.viz.showChartBuilder}
                       useCompactView={useCompactLayout}
                       fillHeight={true}
@@ -365,8 +369,11 @@ export function QuestionVisualization({
                       onColumnFormatsChange={onColumnFormatsChange}
                       settingsExpanded={useCompactLayout ? vizSettingsExpanded : undefined}
                       showChartTitle={showChartTitle}
-                      colorOverrides={currentState.vizSettings?.colors ?? undefined}
-                      onColorsChange={onColorsChange}
+                      styleConfig={{
+                        ...(currentState.vizSettings?.styleConfig ?? {}),
+                        ...(currentState.vizSettings?.colors ? { colors: currentState.vizSettings.colors } : {}),
+                      }}
+                      onStyleConfigChange={onStyleConfigChange}
                       axisConfig={currentState.vizSettings?.axisConfig ?? undefined}
                       onAxisConfigChange={onAxisConfigChange}
                     />

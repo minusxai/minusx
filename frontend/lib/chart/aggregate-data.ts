@@ -4,6 +4,7 @@ export interface AggregatedData {
     name: string
     data: number[]
   }>
+  pointMeta?: Record<string, any>[]
 }
 
 // Aggregate data based on X and Y axis selections
@@ -11,7 +12,8 @@ export const aggregateData = (
   rows: Record<string, any>[],
   xAxisColumns: string[],
   yAxisColumns: string[],
-  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo'
+  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo',
+  tooltipColumns: string[] = []
 ): AggregatedData => {
   if (yAxisColumns.length === 0) {
     return { xAxisData: [], series: [] }
@@ -42,7 +44,10 @@ export const aggregateData = (
           return (val !== null && val !== undefined && !isNaN(Number(val))) ? Number(val) : 0
         })
       }))
-      return { xAxisData, series }
+      const pointMeta = rows.map(row => Object.fromEntries(
+        tooltipColumns.map(col => [col, row[col]])
+      ))
+      return { xAxisData, series, pointMeta }
     }
 
     // With split columns: one series per group × Y column, NaN for non-matching rows
@@ -69,7 +74,10 @@ export const aggregateData = (
     }
 
     // xAxisData must have one entry per row (since each row is a data point)
-    return { xAxisData: rows.map(formatX), series }
+    const pointMeta = rows.map(row => Object.fromEntries(
+      tooltipColumns.map(col => [col, row[col]])
+    ))
+    return { xAxisData: rows.map(formatX), series, pointMeta }
   }
 
   // Handle case when no X axis columns (show total aggregation)

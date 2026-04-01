@@ -14,7 +14,7 @@ interface BaseChartProps extends ChartProps {
 }
 
 export const BaseChart = (props: BaseChartProps) => {
-  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, chartType, emptyMessage, additionalOptions, onChartClick, columnFormats, chartTitle, showChartTitle, colorPalette, axisConfig } = props
+  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, pointMeta, tooltipColumns, chartType, emptyMessage, additionalOptions, onChartClick, columnFormats, chartTitle, showChartTitle, colorPalette, axisConfig, styleConfig } = props
   const colorMode = useAppSelector((state) => state.ui.colorMode)
   const { containerRef, containerWidth, containerHeight, chartEvents } = useChartContainer(onChartClick)
   const chartInstanceKey = useMemo(
@@ -42,6 +42,8 @@ export const BaseChart = (props: BaseChartProps) => {
       yAxisLabel,
       yAxisColumns,
       xAxisColumns,
+      pointMeta,
+      tooltipColumns,
       chartType,
       additionalOptions,
       colorMode,
@@ -52,8 +54,9 @@ export const BaseChart = (props: BaseChartProps) => {
       showChartTitle,
       colorPalette,
       axisConfig,
+      styleConfig,
     })
-  }, [xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, chartType, additionalOptions, colorMode, containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle, colorPalette, axisConfig])
+  }, [xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, pointMeta, tooltipColumns, chartType, additionalOptions, colorMode, containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle, colorPalette, axisConfig, styleConfig])
 
   if (!isValidChartData(xAxisData, series)) {
     return (

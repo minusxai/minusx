@@ -20,7 +20,7 @@ interface FunnelPlotProps extends ChartProps {
 }
 
 export const FunnelPlot = (props: FunnelPlotProps) => {
-  const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns, chartTitle, showChartTitle = true, colorPalette: customPalette } = props
+  const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns, chartTitle, showChartTitle = true, colorPalette: customPalette, styleConfig } = props
   const colorMode = useAppSelector((state) => state.ui.colorMode)
   const { containerRef, containerWidth, containerHeight, chartEvents } = useChartContainer(onChartClick)
   const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>('horizontal')
@@ -50,6 +50,7 @@ export const FunnelPlot = (props: FunnelPlotProps) => {
         ...item,
         itemStyle: {
           color: baseColor,
+          ...(styleConfig?.opacity != null ? { opacity: styleConfig.opacity } : {}),
         },
       }
     })
