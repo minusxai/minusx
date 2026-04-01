@@ -23,6 +23,7 @@ interface GenericSelectorProps {
   defaultIcon?: IconType;
   size?: 'sm' | 'md';
   color?: string;  // Used for border and icon
+  label?: string;  // aria-label for the trigger element
 }
 
 export default function GenericSelector({
@@ -35,7 +36,8 @@ export default function GenericSelector({
   singleOptionLabel,
   defaultIcon,
   size = 'sm',
-  color = 'accent.secondary'
+  color = 'accent.secondary',
+  label,
 }: GenericSelectorProps) {
   // Find the selected option to display
   const selectedOption = options.find(opt => opt.value === value);
@@ -115,6 +117,7 @@ export default function GenericSelector({
         borderColor={color}
         bg="bg.panel"
         display={"flex"}
+        aria-label={label}
       >
         <HStack gap={sizeStyles.gap} align="center">
           <Box w={2} h={2} borderRadius="full" bg={color} />
@@ -141,6 +144,7 @@ export default function GenericSelector({
           _hover={{ bg: 'bg.muted', borderColor: color }}
           transition="all 0.2s"
           w="100%"
+          aria-label={label}
         >
           <HStack gap={sizeStyles.gap} justify="space-between">
             <HStack gap={sizeStyles.gap} flex={1} minW={0} overflow="hidden">
