@@ -157,7 +157,8 @@ def _coerce_params_for_asyncpg(params: dict, parameter_types: dict) -> dict:
 
     coerced = {}
     for key, value in params.items():
-        if isinstance(value, str) and parameter_types.get(key) == 'date':
+        declared = parameter_types.get(key)
+        if isinstance(value, str) and declared == 'date':
             if _DATETIME_RE.match(value):
                 try:
                     coerced[key] = datetime.fromisoformat(value)
@@ -170,6 +171,13 @@ def _coerce_params_for_asyncpg(params: dict, parameter_types: dict) -> dict:
                     continue
                 except ValueError:
                     pass
+        elif isinstance(value, str) and declared == 'number':
+            try:
+                n = float(value)
+                coerced[key] = int(n) if n == int(n) else n
+                continue
+            except ValueError:
+                pass
         coerced[key] = value
     return coerced
 
