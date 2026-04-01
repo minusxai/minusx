@@ -1,23 +1,41 @@
-import { withAuth } from '@/lib/api/with-auth';
+import { NextRequest } from 'next/server';
+import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { successResponse, handleApiError } from '@/lib/api/api-responses';
+import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { notifyInternal } from '@/lib/messaging/internal-notifier';
 
 /**
  * POST /api/capture-error
- * Receives frontend error reports and forwards them to the internal Slack channel.
- * The INTERNAL_SLACK_CHANNEL_WEBHOOK env var and GIT_COMMIT_SHA are read server-side only.
+ * Receives frontend error reports.
+ * - Authenticated: publishes ERROR app event (internal Slack + customer error_delivery channels)
+ * - Unauthenticated: calls notifyInternal directly (internal Slack only)
  */
-export const POST = withAuth(async (req, user) => {
+export async function POST(req: NextRequest) {
   try {
     const { source, message, stack, context } = await req.json();
     const src = `frontend:${source ?? 'unknown'}`;
-    const extras: Record<string, string> = {};
-    if (stack) extras['stack'] = String(stack).slice(0, 500);
-    if (context?.url) extras['url'] = String(context.url);
-    if (user?.email) extras['user'] = user.email;
-    await notifyInternal(src, String(message), extras);
+    const ctx: Record<string, unknown> = {
+      ...(stack ? { stack: String(stack).slice(0, 500) } : {}),
+      ...(context?.url ? { url: String(context.url) } : {}),
+    };
+
+    const user = await getEffectiveUser();
+    if (user?.companyId) {
+      ctx['user'] = user.email;
+      appEventRegistry.publish(AppEvents.ERROR, {
+        companyId: user.companyId,
+        mode: user.mode ?? 'org',
+        source: src,
+        message: String(message),
+        context: ctx,
+      });
+    } else {
+      // Not authenticated — report internally only (no companyId for event registry)
+      await notifyInternal(src, String(message), ctx as Record<string, string>);
+    }
+
     return successResponse({ ok: true });
   } catch (e) {
     return handleApiError(e);
   }
-});
+}

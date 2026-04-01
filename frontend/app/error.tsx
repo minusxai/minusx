@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { showAdminToast } from '@/lib/utils/toast-helpers';
 import { isHydrationError } from '@/lib/utils/error-utils';
+import { captureError } from '@/lib/messaging/capture-error';
 import { getStore } from '@/store/store';
 import { selectShowAllErrorToasts } from '@/store/uiSlice';
 import { Box, Button, Text, VStack } from '@chakra-ui/react';
@@ -19,6 +20,11 @@ export default function Error({
   useEffect(() => {
     // Log error to console for debugging
     console.error('Page error:', error);
+
+    // Report to internal Slack (skip hydration noise and dev mode)
+    if (process.env.NODE_ENV !== 'development' && !isHydrationError(error.message)) {
+      void captureError('page-error', error);
+    }
 
     // Suppress hydration errors unless admin has opted into seeing all error toasts
     const showAll = selectShowAllErrorToasts(getStore().getState());
