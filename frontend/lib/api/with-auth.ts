@@ -32,6 +32,7 @@ type CronHandler = (request: NextRequest) => Promise<NextResponse>;
  */
 export function withCronAuth(handler: CronHandler) {
   return async (request: NextRequest) => {
+    // eslint-disable-next-line no-restricted-syntax
     const cronSecret = process.env.CRON_SECRET;
     const authHeader = request.headers.get('authorization');
     if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {

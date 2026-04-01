@@ -1,4 +1,5 @@
 import { createListenerMiddleware, isAnyOf } from '@reduxjs/toolkit';
+import { IS_TEST } from '@/lib/constants';
 import type { RootState, AppDispatch } from './store';
 import {
   createConversation,
@@ -79,7 +80,7 @@ chatListenerMiddleware.startListening({
     abortControllers.set(conversation._id, abortController);
 
     // Use non-streaming endpoint in test environment for simplicity
-    const useStreaming = process.env.NODE_ENV !== 'test';
+    const useStreaming = !IS_TEST;
 
     try {
       if (!useStreaming) {
@@ -246,7 +247,7 @@ chatListenerMiddleware.startListening({
     abortControllers.set(conversation._id, abortController);
 
     // Use non-streaming endpoint in test environment for simplicity
-    const useStreaming = process.env.NODE_ENV !== 'test';
+    const useStreaming = !IS_TEST;
 
     try {
       if (!useStreaming) {
@@ -435,7 +436,7 @@ chatListenerMiddleware.startListening({
     }
 
     // Use non-streaming endpoint in test environment for simplicity
-    const useStreaming = process.env.NODE_ENV !== 'test';
+    const useStreaming = !IS_TEST;
 
     // All tools done - send results to backend
     try {

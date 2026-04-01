@@ -11,7 +11,6 @@ import { getRegisteredToolNames, executeToolCall } from '@/lib/api/tool-handlers
 import { UserInputException, type UserInputProps, type UserInput } from '@/lib/api/user-input-exception';
 import { getStore } from '@/store/store';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { BACKEND_URL } from '@/lib/constants';
 import type { ToolCall, DatabaseWithSchema } from '@/lib/types';
 
 interface DevToolsPanelProps {
@@ -51,7 +50,7 @@ function ToolTester() {
 
   // Fetch tool schemas from Python backend on mount
   useEffect(() => {
-    fetch(`${BACKEND_URL}/api/tools/schema`)
+    fetch('/api/tools/schema')
       .then(res => res.json())
       .then((data: ToolSchema[]) => setToolSchemas(data))
       .catch(() => {}); // silently fail - schemas are optional

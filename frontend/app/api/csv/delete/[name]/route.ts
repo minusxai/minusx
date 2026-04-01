@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { handleApiError, ApiErrors } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
-import { BACKEND_URL } from '@/lib/constants';
+import { BACKEND_URL } from '@/lib/config';
 
 export const DELETE = withAuth(async (request: NextRequest, user, context) => {
   try {

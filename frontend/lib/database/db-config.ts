@@ -4,22 +4,15 @@
  */
 import path from 'path';
 import { IS_DEV } from '../constants';
+import { DB_TYPE as CONFIG_DB_TYPE } from '../config';
 
 /**
- * Get database adapter type
- * Reads from DB_TYPE environment variable on each call, defaults to 'sqlite'
- * Using a getter function ensures tests can override the environment variable
+ * Get database adapter type.
+ * Tests mock this function directly via jest.mock('../db-config').
  */
 export function getDbType(): 'sqlite' | 'postgres' {
-  return (process.env.DB_TYPE as 'sqlite' | 'postgres') || 'sqlite';
+  return CONFIG_DB_TYPE;
 }
-
-/**
- * Database adapter type constant (for convenience)
- * Note: This is evaluated once at module load time.
- * For test flexibility, use getDbType() instead.
- */
-export const DB_TYPE = getDbType();
 
 // Environment-aware database path
 // Production (Docker): /app/data/atlas_documents.db

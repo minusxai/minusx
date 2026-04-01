@@ -16,6 +16,7 @@ import { getDataVersion, getSchemaVersion } from '@/lib/database/config-db';
 import { getTargetVersions } from '@/lib/database/migrations';
 import { DB_PATH, getDbType } from '@/lib/database/db-config';
 import { createAdapter } from '@/lib/database/adapter/factory';
+import { POSTGRES_URL } from '@/lib/config';
 
 export const GET = withAuth(async (request: NextRequest, user) => {
   // Check admin permission
@@ -28,7 +29,7 @@ export const GET = withAuth(async (request: NextRequest, user) => {
     const dbType = getDbType();
     const db = dbType === 'sqlite'
       ? await createAdapter({ type: 'sqlite', sqlitePath: DB_PATH })
-      : await createAdapter({ type: 'postgres', postgresConnectionString: process.env.POSTGRES_URL });
+      : await createAdapter({ type: 'postgres', postgresConnectionString: POSTGRES_URL });
     const currentDataVersion = await getDataVersion(db);
     const currentSchemaVersion = await getSchemaVersion(db);
     await db.close();

@@ -27,7 +27,7 @@ import type {
   DocumentContent
 } from '@/lib/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import * as pythonBackend from '@/lib/backend/python-backend';
+import * as pythonBackend from '@/lib/backend/python-backend.server';
 
 // Mock Node.js connector so schema falls through to getSchemaFromPython mock below
 jest.mock('@/lib/connections', () => ({

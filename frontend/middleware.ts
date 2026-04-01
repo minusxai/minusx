@@ -7,6 +7,8 @@ import { extractSubdomain, isSubdomainRoutingEnabled } from "@/lib/utils/subdoma
 import { CompanyDB } from "@/lib/database/company-db"
 import { DocumentDB } from "@/lib/database/documents-db"
 import { detectOnboardingState } from "@/app/hello-world/onboarding-state"
+import { ALLOW_MULTIPLE_COMPANIES } from "@/lib/config"
+import { IS_DEV } from "@/lib/constants"
 
 export default auth(async (req) => {
   const { pathname } = req.nextUrl
@@ -20,7 +22,7 @@ export default auth(async (req) => {
     subdomainEnabled,
     subdomain,
     pathname,
-    ALLOW_MULTIPLE_COMPANIES: process.env.ALLOW_MULTIPLE_COMPANIES
+    ALLOW_MULTIPLE_COMPANIES
   });
 
   // Check if this is a public access token route (/t/{token})
@@ -75,7 +77,7 @@ export default auth(async (req) => {
       const token = tokenRouteMatch[1];
       response.cookies.set('public-access-token', token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: !IS_DEV,
         sameSite: 'lax',
         path: '/',
         maxAge: 60 * 60 * 24 // 24 hours

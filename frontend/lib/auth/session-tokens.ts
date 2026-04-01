@@ -15,6 +15,8 @@
 import jwt from 'jsonwebtoken';
 import type { Mode } from '@/lib/mode/mode-types';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';
+import { NEXTAUTH_SECRET } from '@/lib/config';
+import { IS_DEV } from '@/lib/constants';
 
 interface SessionTokenPayload {
   companyId: number;
@@ -30,9 +32,9 @@ class SessionTokenManager {
   constructor() {
     // Use NEXTAUTH_SECRET if available (already in .env), otherwise generate a random secret
     // In production, NEXTAUTH_SECRET should always be set
-    this.secret = process.env.NEXTAUTH_SECRET || this.generateSecret();
+    this.secret = NEXTAUTH_SECRET || this.generateSecret();
 
-    if (!process.env.NEXTAUTH_SECRET && process.env.NODE_ENV === 'production') {
+    if (!NEXTAUTH_SECRET && !IS_DEV) {
       console.error('[SessionToken] CRITICAL: NEXTAUTH_SECRET not set in production!');
     }
   }

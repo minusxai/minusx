@@ -18,7 +18,8 @@ import { applyMigrations, getTargetVersions, needsSchemaMigration, MIGRATIONS } 
 import { LATEST_SCHEMA_VERSION } from '@/lib/database/constants';
 import { DB_PATH, getDbType } from '@/lib/database/db-config';
 import { createAdapter } from '@/lib/database/adapter/factory';
-import { BACKEND_URL } from '@/lib/constants';
+import { BACKEND_URL } from '@/lib/config';
+import { POSTGRES_URL } from '@/lib/config';
 import fs from 'fs';
 
 export const POST = withAuth(async (request: NextRequest, user) => {
@@ -51,7 +52,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     // Get current versions
     const db = dbType === 'sqlite'
       ? await createAdapter({ type: 'sqlite', sqlitePath: DB_PATH })
-      : await createAdapter({ type: 'postgres', postgresConnectionString: process.env.POSTGRES_URL });
+      : await createAdapter({ type: 'postgres', postgresConnectionString: POSTGRES_URL });
     const currentDataVersion = await getDataVersion(db);
     const currentSchemaVersion = await getSchemaVersion(db);
     const { dataVersion: targetDataVersion, schemaVersion: targetSchemaVersion } = getTargetVersions();
@@ -129,7 +130,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     // Update version markers
     const newDb = dbType === 'sqlite'
       ? await createAdapter({ type: 'sqlite', sqlitePath: DB_PATH })
-      : await createAdapter({ type: 'postgres', postgresConnectionString: process.env.POSTGRES_URL });
+      : await createAdapter({ type: 'postgres', postgresConnectionString: POSTGRES_URL });
     await setDataVersion(targetDataVersion, newDb);
     await setSchemaVersion(LATEST_SCHEMA_VERSION, newDb);
     await newDb.close();

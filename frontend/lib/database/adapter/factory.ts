@@ -1,5 +1,6 @@
 import { IDatabaseAdapter, DatabaseConfig } from './types';
 import { getDbType } from '../db-config';
+import { POSTGRES_URL } from '@/lib/config';
 
 let currentAdapter: IDatabaseAdapter | null = null;
 
@@ -41,7 +42,7 @@ export async function getAdapter(): Promise<IDatabaseAdapter> {
     } else if (dbType === 'postgres') {
       currentAdapter = await createAdapter({
         type: 'postgres',
-        postgresConnectionString: process.env.POSTGRES_URL
+        postgresConnectionString: POSTGRES_URL
       });
     } else {
       throw new Error(`Unknown database type: ${dbType}`);

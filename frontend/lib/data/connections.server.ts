@@ -13,9 +13,9 @@ import {
   testConnectionOnPython,
   getSchemaFromPython,
   validateConnectionBeforeCreate
-} from '@/lib/backend/python-backend';
-import { BACKEND_URL } from '@/lib/constants';
-import { deleteGoogleSheetsData } from '@/lib/backend/google-sheets';
+} from '@/lib/backend/python-backend.server';
+import { BACKEND_URL } from '@/lib/config';
+import { deleteGoogleSheetsData } from '@/lib/backend/google-sheets.server';
 import { ConnectionContent, DatabaseSchema } from '@/lib/types';
 import {
   IConnectionsDataLayer,

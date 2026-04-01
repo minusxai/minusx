@@ -4,6 +4,7 @@ import { FileType, UserRole } from '@/lib/types';
 import { Mode } from '@/lib/mode/mode-types';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import type { AccessRulesOverride } from '@/lib/branding/whitelabel';
+import { IS_DEV } from '@/lib/constants';
 
 // Base rule type for extensibility
 interface AccessRule {
@@ -73,7 +74,7 @@ let cachedRules: RulesConfig | null = null;
 export function loadAccessRules(): RulesConfig {
   // In development, always reload (no cache) for instant updates
   // In production, use cache for performance
-  if (cachedRules && process.env.NODE_ENV === 'production') {
+  if (cachedRules && !IS_DEV) {
     return cachedRules;
   }
 

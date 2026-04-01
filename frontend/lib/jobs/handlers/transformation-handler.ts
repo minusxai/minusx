@@ -1,5 +1,6 @@
 import 'server-only';
 import { resolveBaseUrl } from '@/lib/jobs/job-utils';
+import { BACKEND_URL } from '@/lib/config';
 import { FilesAPI } from '@/lib/data/files.server';
 import { runQuery } from '@/lib/connections/run-query';
 import { DocumentDB } from '@/lib/database/documents-db';
@@ -75,7 +76,7 @@ export const transformationJobHandler: JobHandler = {
         } catch (err) {
           const raw = err instanceof Error ? err.message : String(err);
           const error = raw === 'fetch failed'
-            ? `Could not reach Python backend (fetch failed). Is the backend running at ${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8001'}?`
+            ? `Could not reach Python backend (fetch failed). Is the backend running at ${BACKEND_URL}?`
             : raw;
           results.push({ questionId, questionName, schema, view, sql, status: 'error', error });
           continue;

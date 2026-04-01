@@ -5,6 +5,7 @@
 
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
+import { NEXTAUTH_SECRET } from '@/lib/config';
 
 /**
  * Generate a random 6-digit OTP
@@ -49,7 +50,7 @@ export interface VerifiedOTPPayload {
  * Expires in 60 seconds — just enough time for signIn() to be called
  */
 export function createVerifiedToken(email: string, companyId: number): string {
-  const secret = process.env.NEXTAUTH_SECRET;
+  const secret = NEXTAUTH_SECRET;
   if (!secret) {
     throw new Error('NEXTAUTH_SECRET is not configured');
   }
@@ -63,7 +64,7 @@ export function createVerifiedToken(email: string, companyId: number): string {
  */
 export function verifyVerifiedToken(token: string): VerifiedOTPPayload | null {
   try {
-    const secret = process.env.NEXTAUTH_SECRET;
+    const secret = NEXTAUTH_SECRET;
     if (!secret) throw new Error('NEXTAUTH_SECRET is not configured');
     const payload = jwt.verify(token, secret) as VerifiedOTPPayload;
     if (!payload.verified) return null;
@@ -78,7 +79,7 @@ export function verifyVerifiedToken(token: string): VerifiedOTPPayload | null {
  * Token expires in 5 minutes
  */
 export function createOTPToken(payload: Omit<OTPPayload, 'exp' | 'nonce'>): string {
-  const secret = process.env.NEXTAUTH_SECRET;
+  const secret = NEXTAUTH_SECRET;
   if (!secret) {
     throw new Error('NEXTAUTH_SECRET is not configured');
   }
@@ -98,7 +99,7 @@ export function createOTPToken(payload: Omit<OTPPayload, 'exp' | 'nonce'>): stri
  */
 export function verifyOTPToken(token: string): OTPPayload | null {
   try {
-    const secret = process.env.NEXTAUTH_SECRET;
+    const secret = NEXTAUTH_SECRET;
     if (!secret) {
       console.error('[verifyOTPToken] NEXTAUTH_SECRET is not configured');
       throw new Error('NEXTAUTH_SECRET is not configured');

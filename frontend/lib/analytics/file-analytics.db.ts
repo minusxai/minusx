@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { DuckDBInstance } from '@duckdb/node-api';
 import { getOrCreateDuckDbInstance } from '@/lib/connections/duckdb-registry';
+import { BASE_DUCKDB_DATA_PATH } from '@/lib/config';
 
 // Schema for per-company analytics database
 const SCHEMA_SQL = `
@@ -93,9 +94,11 @@ function toPositional(sql: string): string {
 }
 
 function getAnalyticsDbDir(): string {
-  if (process.env.ANALYTICS_DB_DIR) return process.env.ANALYTICS_DB_DIR;
-  const base = process.env.BASE_DUCKDB_DATA_PATH || '.';
-  return path.join(base, 'data', 'analytics');
+  // Read at call time (not import time) so tests can override via process.env.ANALYTICS_DB_DIR
+  // eslint-disable-next-line no-restricted-syntax
+  const dir = process.env.ANALYTICS_DB_DIR;
+  if (dir) return dir;
+  return path.join(BASE_DUCKDB_DATA_PATH, 'data', 'analytics');
 }
 
 async function initSchema(instance: DuckDBInstance): Promise<void> {

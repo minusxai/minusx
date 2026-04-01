@@ -5,6 +5,7 @@
 import { getAdapter } from './adapter/factory';
 import { IDatabaseAdapter } from './adapter/types';
 import { BaseEntity } from '@/lib/types';
+import { ALLOW_MULTIPLE_COMPANIES } from '@/lib/config';
 
 /**
  * Company entity
@@ -198,7 +199,7 @@ export class CompanyDB {
    */
   static async getDefaultCompany(db?: IDatabaseAdapter): Promise<Company | null> {
     // Check if multiple companies are allowed (default: false)
-    const allowMultipleCompanies = process.env.ALLOW_MULTIPLE_COMPANIES === 'true';
+    const allowMultipleCompanies = ALLOW_MULTIPLE_COMPANIES;
 
     // Only return default company if in single-tenant mode
     if (allowMultipleCompanies) {
