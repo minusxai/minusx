@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { captureError } from '@/lib/messaging/capture-error';
+import { IS_DEV, IS_TEST, SEND_ERRORS_IN_DEV } from '@/lib/constants';
 import { Box, Button, Text, VStack, ChakraProvider } from '@chakra-ui/react';
 import { system } from '@/lib/ui/theme';
 
@@ -15,8 +16,7 @@ export default function GlobalError({
   useEffect(() => {
     // Log error to console for debugging
     console.error('Global error:', error);
-    const sendInDev = process.env.NEXT_PUBLIC_SEND_ERRORS_IN_DEV === 'true';
-    if (process.env.NODE_ENV !== 'development' || sendInDev) {
+    if (!IS_DEV || IS_TEST || SEND_ERRORS_IN_DEV) {
       void captureError('global-error', error);
     }
   }, [error]);

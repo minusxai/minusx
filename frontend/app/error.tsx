@@ -7,7 +7,7 @@ import { captureError } from '@/lib/messaging/capture-error';
 import { getStore } from '@/store/store';
 import { selectShowAllErrorToasts } from '@/store/uiSlice';
 import { Box, Button, Text, VStack } from '@chakra-ui/react';
-import { IS_DEV } from '@/lib/constants';
+import { IS_DEV, IS_TEST, SEND_ERRORS_IN_DEV } from '@/lib/constants';
 
 export default function Error({
   error,
@@ -23,8 +23,7 @@ export default function Error({
     console.error('Page error:', error);
 
     // Report to bug reporting channel (skip hydration noise; skip dev unless DEBUG flag is on)
-    const sendInDev = process.env.NEXT_PUBLIC_SEND_ERRORS_IN_DEV === 'true';
-    if ((process.env.NODE_ENV !== 'development' || sendInDev) && !isHydrationError(error.message)) {
+    if ((!IS_DEV || IS_TEST || SEND_ERRORS_IN_DEV) && !isHydrationError(error.message)) {
       void captureError('page-error', error);
     }
 

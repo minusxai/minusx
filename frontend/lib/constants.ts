@@ -59,6 +59,8 @@ function parseAnalyticsConfig(jsonString: string | undefined): AnalyticsConfig {
 
 export const ANALYTICS_CONFIG = parseAnalyticsConfig(process.env.NEXT_PUBLIC_ANALYTICS_CONFIG);
 
+export const SEND_ERRORS_IN_DEV = process.env.NEXT_PUBLIC_SEND_ERRORS_IN_DEV === 'true';
+
 export const PROTECTED_FILE_PATHS = [
   '/config/users.yml',
 ] as const;

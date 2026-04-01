@@ -1,5 +1,6 @@
 import 'server-only';
 import type { MessagingWebhook, MessagingWebhookHttp } from '../types';
+import { DEFAULT_EMAIL_WEBHOOK as DEFAULT_EMAIL_WEBHOOK_JSON } from '@/lib/config';
 
 /**
  * SLACK_DEFAULT: hardcoded template.
@@ -17,7 +18,7 @@ const SLACK_DEFAULT_TEMPLATE: MessagingWebhookHttp = {
  * Returns null (send fails) if the env var is not set or invalid — intentional.
  */
 function getEmailDefaultWebhook(): MessagingWebhookHttp | null {
-  const raw = process.env.DEFAULT_EMAIL_WEBHOOK;
+  const raw = DEFAULT_EMAIL_WEBHOOK_JSON;
   if (!raw) {
     console.error('[webhook-resolver] EMAIL_DEFAULT requires DEFAULT_EMAIL_WEBHOOK env var to be set');
     return null;

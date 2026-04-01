@@ -1,5 +1,6 @@
 import 'server-only';
 import { GIT_COMMIT_SHA } from '@/lib/constants';
+import { INTERNAL_SLACK_CHANNEL_WEBHOOK, AUTH_URL } from '@/lib/config';
 
 /**
  * Bug reporting channel notifier for app-level errors.
@@ -11,7 +12,7 @@ export async function notifyInternal(
   message: string,
   extras?: Record<string, string>,
 ): Promise<void> {
-  const webhookUrl = process.env.INTERNAL_SLACK_CHANNEL_WEBHOOK;
+  const webhookUrl = INTERNAL_SLACK_CHANNEL_WEBHOOK;
   if (!webhookUrl) return;
 
   const errObj: Record<string, string> = {
@@ -29,7 +30,7 @@ export async function notifyInternal(
         email_id: extras?.user ?? source,
         created_at: new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, ''),
         err_str: JSON.stringify(errObj),
-        thread_url: process.env.AUTH_URL ?? 'https://minusx.ai',
+        thread_url: AUTH_URL,
       }),
     });
   } catch (e) {
