@@ -4,7 +4,8 @@
  * All tests call CompletionsAPI.getSqlCompletions() which routes:
  *   browser → Next.js /api/autocomplete → Python /api/sql-autocomplete
  *
- * All tests use MXFOOD_SCHEMA (the default company-template dataset).
+ * Schema is loaded from the seeded tutorial database (atlas_documents.db)
+ * rather than hardcoded, so it stays in sync automatically.
  */
 
 import { withPythonBackend } from '@/test/harness/python-backend';
@@ -16,142 +17,34 @@ import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { DatabaseWithSchema } from '@/lib/types';
 
 // ---------------------------------------------------------------------------
-// Schema fixture
-// ---------------------------------------------------------------------------
-
-const MXFOOD_SCHEMA: DatabaseWithSchema[] = [
-  {
-    databaseName: 'mxfood',
-    schemas: [
-      {
-        schema: 'main',
-        tables: [
-          {
-            table: 'orders',
-            columns: [
-              { name: 'order_id',                type: 'BIGINT' },
-              { name: 'user_id',                 type: 'BIGINT' },
-              { name: 'restaurant_id',           type: 'BIGINT' },
-              { name: 'driver_id',               type: 'BIGINT' },
-              { name: 'zone_id',                 type: 'BIGINT' },
-              { name: 'created_at',              type: 'TIMESTAMP' },
-              { name: 'status',                  type: 'VARCHAR' },
-              { name: 'subtotal',                type: 'DOUBLE' },
-              { name: 'delivery_fee',            type: 'DOUBLE' },
-              { name: 'discount_amount',         type: 'DOUBLE' },
-              { name: 'tip_amount',              type: 'DOUBLE' },
-              { name: 'total',                   type: 'DOUBLE' },
-              { name: 'promo_code_id',           type: 'BIGINT' },
-              { name: 'is_subscription_order',   type: 'BOOLEAN' },
-              { name: 'platform',                type: 'VARCHAR' },
-              { name: 'estimated_delivery_mins', type: 'BIGINT' },
-              { name: 'actual_delivery_mins',    type: 'DOUBLE' },
-            ],
-          },
-          {
-            table: 'order_items',
-            columns: [
-              { name: 'order_item_id', type: 'BIGINT' },
-              { name: 'order_id',      type: 'BIGINT' },
-              { name: 'product_id',    type: 'BIGINT' },
-              { name: 'quantity',      type: 'BIGINT' },
-              { name: 'unit_price',    type: 'DOUBLE' },
-              { name: 'total_price',   type: 'DOUBLE' },
-            ],
-          },
-          {
-            table: 'products',
-            columns: [
-              { name: 'product_id',     type: 'BIGINT' },
-              { name: 'restaurant_id',  type: 'BIGINT' },
-              { name: 'subcategory_id', type: 'BIGINT' },
-              { name: 'name',           type: 'VARCHAR' },
-              { name: 'description',    type: 'VARCHAR' },
-              { name: 'price',          type: 'DOUBLE' },
-              { name: 'is_available',   type: 'BOOLEAN' },
-              { name: 'created_at',     type: 'TIMESTAMP' },
-            ],
-          },
-          {
-            table: 'product_subcategories',
-            columns: [
-              { name: 'subcategory_id',   type: 'BIGINT' },
-              { name: 'category_id',      type: 'BIGINT' },
-              { name: 'subcategory_name', type: 'VARCHAR' },
-            ],
-          },
-          {
-            table: 'product_categories',
-            columns: [
-              { name: 'category_id',   type: 'BIGINT' },
-              { name: 'category_name', type: 'VARCHAR' },
-            ],
-          },
-          {
-            table: 'events',
-            columns: [
-              { name: 'event_id',        type: 'BIGINT' },
-              { name: 'user_id',         type: 'BIGINT' },
-              { name: 'session_id',      type: 'VARCHAR' },
-              { name: 'event_name',      type: 'VARCHAR' },
-              { name: 'event_timestamp', type: 'TIMESTAMP' },
-              { name: 'platform',        type: 'VARCHAR' },
-              { name: 'screen_name',     type: 'VARCHAR' },
-              { name: 'properties',      type: 'VARCHAR' },
-            ],
-          },
-          {
-            table: 'users',
-            columns: [
-              { name: 'user_id',             type: 'BIGINT' },
-              { name: 'first_name',          type: 'VARCHAR' },
-              { name: 'last_name',           type: 'VARCHAR' },
-              { name: 'email',               type: 'VARCHAR' },
-              { name: 'phone',               type: 'VARCHAR' },
-              { name: 'created_at',          type: 'TIMESTAMP' },
-              { name: 'zone_id',             type: 'BIGINT' },
-              { name: 'acquisition_channel', type: 'VARCHAR' },
-              { name: 'referred_by_user_id', type: 'DOUBLE' },
-              { name: 'platform',            type: 'VARCHAR' },
-            ],
-          },
-          {
-            table: 'zones',
-            columns: [
-              { name: 'zone_id',                type: 'BIGINT' },
-              { name: 'zone_name',              type: 'VARCHAR' },
-              { name: 'avg_delivery_time_mins', type: 'BIGINT' },
-              { name: 'surge_multiplier',       type: 'DOUBLE' },
-              { name: 'lat_center',             type: 'DOUBLE' },
-              { name: 'lng_center',             type: 'DOUBLE' },
-            ],
-          },
-          {
-            table: 'drivers',
-            columns: [
-              { name: 'driver_id',    type: 'BIGINT' },
-              { name: 'name',         type: 'VARCHAR' },
-              { name: 'zone_id',      type: 'BIGINT' },
-              { name: 'vehicle_type', type: 'VARCHAR' },
-              { name: 'rating',       type: 'DOUBLE' },
-              { name: 'created_at',   type: 'TIMESTAMP' },
-              { name: 'is_active',    type: 'BOOLEAN' },
-            ],
-          },
-        ],
-      },
-    ],
-    updated_at: new Date().toISOString(),
-  },
-];
-
-// ---------------------------------------------------------------------------
 // Harness setup
 // ---------------------------------------------------------------------------
 
+// Schema is populated in customInit from the mxfood connection document.
+let mxfoodSchema: DatabaseWithSchema[] = [];
+
 describe('Autocomplete API — E2E', () => {
   const { getPythonPort } = withPythonBackend();
-  setupTestDb(getTestDbPath('autocomplete_e2e'));
+  setupTestDb(getTestDbPath('autocomplete_e2e'), {
+    withTutorialFiles: true,
+    customInit: async (dbPath) => {
+      const { createAdapter } = await import('@/lib/database/adapter/factory');
+      const db = await createAdapter({ type: 'sqlite', sqlitePath: dbPath });
+      const result = await db.query<{ name: string; content: string }>(
+        `SELECT name, content FROM files WHERE type = 'connection' AND name = 'mxfood' AND company_id = 1 LIMIT 1`,
+        []
+      );
+      await db.close();
+
+      if (result.rows.length === 0) throw new Error('mxfood connection not found in tutorial database');
+      const content = JSON.parse(result.rows[0].content);
+      mxfoodSchema = [{
+        databaseName: result.rows[0].name,
+        schemas: content?.schema?.schemas ?? [],
+        updated_at: content?.schema?.updated_at,
+      }];
+    },
+  });
 
   const mockUser = {
     companyId: 1,
@@ -190,7 +83,7 @@ describe('Autocomplete API — E2E', () => {
         cursorOffset: 7, // after "SELECT "
         context: {
           type: 'sql_editor' as const,
-          schemaData: MXFOOD_SCHEMA,
+          schemaData: mxfoodSchema,
           resolvedReferences: [
             {
               id: 1,
@@ -219,7 +112,7 @@ describe('Autocomplete API — E2E', () => {
         cursorOffset: 7,
         context: {
           type: 'sql_editor' as const,
-          schemaData: MXFOOD_SCHEMA,
+          schemaData: mxfoodSchema,
           resolvedReferences: [
             {
               id: 3,
@@ -256,7 +149,7 @@ describe('Autocomplete API — E2E', () => {
         cursorOffset: 7,
         context: {
           type: 'sql_editor' as const,
-          schemaData: MXFOOD_SCHEMA,
+          schemaData: mxfoodSchema,
           resolvedReferences: [
             {
               id: 1,
@@ -287,7 +180,7 @@ describe('Autocomplete API — E2E', () => {
         cursorOffset: 9, // after "SELECT a."
         context: {
           type: 'sql_editor' as const,
-          schemaData: MXFOOD_SCHEMA,
+          schemaData: mxfoodSchema,
           resolvedReferences: [
             {
               id: 1,
@@ -315,7 +208,7 @@ describe('Autocomplete API — E2E', () => {
         cursorOffset: 9, // after "SELECT r."
         context: {
           type: 'sql_editor' as const,
-          schemaData: MXFOOD_SCHEMA,
+          schemaData: mxfoodSchema,
           resolvedReferences: [
             {
               id: 1,
@@ -344,7 +237,7 @@ describe('Autocomplete API — E2E', () => {
         cursorOffset: 9,
         context: {
           type: 'sql_editor' as const,
-          schemaData: MXFOOD_SCHEMA,
+          schemaData: mxfoodSchema,
           resolvedReferences: [
             {
               id: 3,
@@ -379,7 +272,7 @@ describe('Autocomplete API — E2E', () => {
         cursorOffset: 7,
         context: {
           type: 'sql_editor' as const,
-          schemaData: MXFOOD_SCHEMA,
+          schemaData: mxfoodSchema,
           resolvedReferences: [],
           databaseName: 'mxfood',
           connectionType: 'duckdb',
@@ -399,7 +292,7 @@ describe('Autocomplete API — E2E', () => {
         cursorOffset: 7,
         context: {
           type: 'sql_editor' as const,
-          schemaData: MXFOOD_SCHEMA,
+          schemaData: mxfoodSchema,
           resolvedReferences: [],
           databaseName: 'mxfood',
           connectionType: 'duckdb',
@@ -466,7 +359,7 @@ describe('Autocomplete API — E2E', () => {
         cursorOffset: query.length,
         context: {
           type: 'sql_editor' as const,
-          schemaData: MXFOOD_SCHEMA,
+          schemaData: mxfoodSchema,
           resolvedReferences: [],
           databaseName: 'mxfood',
           connectionType: 'duckdb',
@@ -491,7 +384,7 @@ describe('Autocomplete API — E2E', () => {
         cursorOffset: query.length,
         context: {
           type: 'sql_editor' as const,
-          schemaData: MXFOOD_SCHEMA,
+          schemaData: mxfoodSchema,
           resolvedReferences: [],
           databaseName: 'mxfood',
           connectionType: 'duckdb',
@@ -514,7 +407,7 @@ describe('Autocomplete API — E2E', () => {
         cursorOffset: query.length,
         context: {
           type: 'sql_editor' as const,
-          schemaData: MXFOOD_SCHEMA,
+          schemaData: mxfoodSchema,
           resolvedReferences: [],
           databaseName: 'mxfood',
           connectionType: 'duckdb',
@@ -539,7 +432,7 @@ describe('Autocomplete API — E2E', () => {
         cursorOffset: query.length,
         context: {
           type: 'sql_editor' as const,
-          schemaData: MXFOOD_SCHEMA,
+          schemaData: mxfoodSchema,
           resolvedReferences: [],
           databaseName: 'mxfood',
           connectionType: 'duckdb',
@@ -567,7 +460,7 @@ describe('Autocomplete API — E2E', () => {
         cursorOffset: query.length,
         context: {
           type: 'sql_editor' as const,
-          schemaData: MXFOOD_SCHEMA,
+          schemaData: mxfoodSchema,
           resolvedReferences: [],
           databaseName: 'mxfood',
           connectionType: 'duckdb',
@@ -609,7 +502,7 @@ describe('Autocomplete API — E2E', () => {
         cursorOffset: query.length,
         context: {
           type: 'sql_editor' as const,
-          schemaData: MXFOOD_SCHEMA,
+          schemaData: mxfoodSchema,
           resolvedReferences: [],
           databaseName: 'mxfood',
           connectionType: 'duckdb',
@@ -647,7 +540,7 @@ describe('Autocomplete API — E2E', () => {
         cursorOffset: query.length,
         context: {
           type: 'sql_editor' as const,
-          schemaData: MXFOOD_SCHEMA,
+          schemaData: mxfoodSchema,
           resolvedReferences: [],
           databaseName: 'mxfood',
           connectionType: 'duckdb',
@@ -689,7 +582,7 @@ describe('Autocomplete API — E2E', () => {
         cursorOffset: query.length,
         context: {
           type: 'sql_editor' as const,
-          schemaData: MXFOOD_SCHEMA,
+          schemaData: mxfoodSchema,
           resolvedReferences: [],
           databaseName: 'mxfood',
           connectionType: 'duckdb',
@@ -731,7 +624,7 @@ describe('Autocomplete API — E2E', () => {
         cursorOffset: query.length,
         context: {
           type: 'sql_editor' as const,
-          schemaData: MXFOOD_SCHEMA,
+          schemaData: mxfoodSchema,
           resolvedReferences: [],
           databaseName: 'mxfood',
           connectionType: 'duckdb',
