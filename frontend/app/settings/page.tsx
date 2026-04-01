@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, ReactNode, useMemo } from 'react';
+import { useState, ReactNode, useMemo, Suspense } from 'react';
 import { Box, VStack, Text, Flex, Switch, Button, Heading, Container, Tabs } from '@chakra-ui/react';
 import { LuRefreshCw } from 'react-icons/lu';
 import { ColorModeButton } from '@/components/ui/color-mode';
@@ -120,7 +120,7 @@ function FileTabContent({ path, Container, createFolder, createType }: {
   );
 }
 
-export default function SettingsPage() {
+function SettingsContent() {
   const dispatch = useAppDispatch();
   const askForConfirmation = useAppSelector((state) => state.ui.askForConfirmation);
   const showDebug = useAppSelector((state) => state.ui.showDebug);
@@ -399,5 +399,13 @@ export default function SettingsPage() {
         </Text>
       </Container>
     </Box>
+  );
+}
+
+export default function SettingsPage() {
+  return (
+    <Suspense>
+      <SettingsContent />
+    </Suspense>
   );
 }
