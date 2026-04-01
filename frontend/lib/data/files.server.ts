@@ -357,6 +357,17 @@ class FilesDataLayerServer implements IFilesDataLayer {
       }
     }
 
+    // Validate parent folder exists (single SQL check — no loop, no auto-creation)
+    if (!options?.createPath) {
+      const parentPath = finalPath.substring(0, finalPath.lastIndexOf('/'));
+      if (parentPath) {
+        const parent = await DocumentDB.getByPath(parentPath, user.companyId);
+        if (!parent || parent.type !== 'folder') {
+          throw new UserFacingError(`Cannot create file: parent folder '${parentPath}' does not exist`);
+        }
+      }
+    }
+
     // Handle createPath option: create parent directories as folder types
     if (options?.createPath) {
       const pathSegments = finalPath.split('/').filter(Boolean);
@@ -477,6 +488,16 @@ class FilesDataLayerServer implements IFilesDataLayer {
     const negativeSaveRefs = references.filter(id => id < 0);
     if (negativeSaveRefs.length > 0) {
       throw new Error(`Cannot save file ${id}: references contain unsaved virtual IDs [${negativeSaveRefs.join(', ')}]`);
+    }
+
+    // Validate parent folder exists when path is changing (single SQL check — no loop)
+    const newParentPath = path.substring(0, path.lastIndexOf('/'));
+    const oldParentPath = existingFile.path.substring(0, existingFile.path.lastIndexOf('/'));
+    if (newParentPath && newParentPath !== oldParentPath) {
+      const parent = await DocumentDB.getByPath(newParentPath, user.companyId);
+      if (!parent || parent.type !== 'folder') {
+        throw new UserFacingError(`Cannot save file: parent folder '${newParentPath}' does not exist`);
+      }
     }
 
     // Phase 6: Server is dumb - just saves what client sends (no extraction)

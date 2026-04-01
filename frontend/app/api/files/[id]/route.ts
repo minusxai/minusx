@@ -110,6 +110,16 @@ export const PATCH = withAuth(async (
       }
       const oldPath = file.path;
 
+      // Validate parent folder exists when path is changing (single SQL check — no loop)
+      const newParentPath = path.substring(0, path.lastIndexOf('/'));
+      const oldParentPath = oldPath.substring(0, oldPath.lastIndexOf('/'));
+      if (newParentPath && newParentPath !== oldParentPath) {
+        const parent = await DocumentDB.getByPath(newParentPath, user.companyId);
+        if (!parent || parent.type !== 'folder') {
+          return ApiErrors.badRequest(`Parent folder '${newParentPath}' does not exist`);
+        }
+      }
+
       if (file.type === 'folder' && oldPath !== path) {
         // Step 1: Fetch all descendants (metadata only, no content)
         const descendants = await DocumentDB.listAll(user.companyId, undefined, [oldPath], -1, false);
