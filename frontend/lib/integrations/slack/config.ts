@@ -16,7 +16,7 @@ function getConfiguredAuthUrl(): string | null {
   return process.env.AUTH_URL?.trim() || null;
 }
 
-function isPublicSlackBaseUrl(url: string | null): boolean {
+export function isPublicSlackBaseUrl(url: string | null): boolean {
   if (!url) {
     return false;
   }
@@ -34,21 +34,30 @@ function isPublicSlackBaseUrl(url: string | null): boolean {
   }
 }
 
+export function getSlackBaseUrl(baseUrlOverride?: string | null): string | null {
+  const override = baseUrlOverride?.trim() || null;
+  if (override) {
+    return override;
+  }
+
+  return getConfiguredAuthUrl();
+}
+
 export function getSlackSigningSecret(): string | null {
   return process.env.SLACK_SIGNING_SECRET?.trim() || null;
 }
 
-export function getSlackCapabilities() {
-  const authUrl = getConfiguredAuthUrl();
-  const hasPublicBaseUrl = isPublicSlackBaseUrl(authUrl);
+export function getSlackCapabilities(baseUrlOverride?: string | null) {
+  const baseUrl = getSlackBaseUrl(baseUrlOverride);
+  const hasPublicBaseUrl = isPublicSlackBaseUrl(baseUrl);
 
   return {
     selfHostedEnabled: hasPublicBaseUrl,
-    baseUrl: AUTH_URL,
+    baseUrl: hasPublicBaseUrl ? baseUrl : AUTH_URL,
   };
 }
 
-export function buildSlackManifest(appName: string) {
+export function buildSlackManifest(appName: string, baseUrl: string = AUTH_URL) {
   return {
     display_information: {
       name: appName,
@@ -73,7 +82,7 @@ export function buildSlackManifest(appName: string) {
     },
     settings: {
       event_subscriptions: {
-        request_url: `${AUTH_URL}/api/integrations/slack/events`,
+        request_url: `${baseUrl}/api/integrations/slack/events`,
         bot_events: ['app_mention', 'message.im'],
       },
       interactivity: {

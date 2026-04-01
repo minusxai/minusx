@@ -11,6 +11,7 @@ interface ManualInstallRequest {
   botToken?: string;
   signingSecret?: string;
   name?: string;
+  baseUrl?: string;
 }
 
 export const POST = withAuth(async (request: NextRequest, user) => {
@@ -18,13 +19,20 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     return ApiErrors.forbidden('Only admins can manage Slack bots');
   }
 
-  const capabilities = getSlackCapabilities();
+  let body: ManualInstallRequest | undefined;
+
+  try {
+    body = await request.json() as ManualInstallRequest;
+  } catch {
+    return ApiErrors.validationError('Invalid request body');
+  }
+
+  const capabilities = getSlackCapabilities(body.baseUrl);
   if (!capabilities.selfHostedEnabled) {
-    return ApiErrors.forbidden('Set AUTH_URL to a public HTTPS URL before configuring Slack');
+    return ApiErrors.forbidden('Set a public HTTPS URL before configuring Slack');
   }
 
   try {
-    const body = await request.json() as ManualInstallRequest;
     const botToken = body.botToken?.trim();
     const signingSecret = body.signingSecret?.trim();
 

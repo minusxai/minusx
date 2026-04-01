@@ -10,14 +10,15 @@ export const GET = withAuth(async (_request: NextRequest, user) => {
     return ApiErrors.forbidden('Only admins can manage Slack bots');
   }
 
-  const capabilities = getSlackCapabilities();
+  const baseUrl = _request.nextUrl.searchParams.get('baseUrl');
+  const capabilities = getSlackCapabilities(baseUrl);
   if (!capabilities.selfHostedEnabled) {
-    return ApiErrors.forbidden('Set AUTH_URL to a public HTTPS URL before generating the Slack manifest');
+    return ApiErrors.forbidden('Set a public HTTPS URL before generating the Slack manifest');
   }
 
   const { config } = await getConfigs(user);
   const appName = `${config.branding.agentName || 'MinusX'} Slack Bot`;
-  const manifest = buildSlackManifest(appName);
+  const manifest = buildSlackManifest(appName, capabilities.baseUrl ?? undefined);
 
   return new NextResponse(JSON.stringify(manifest, null, 2), {
     status: 200,

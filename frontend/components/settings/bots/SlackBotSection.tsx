@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Box, Button, HStack, Input, Text, VStack, Heading, Badge } from '@chakra-ui/react';
 import { LuBot, LuTrash2, LuExternalLink, LuShieldCheck } from 'react-icons/lu';
 import { useConfigs, reloadConfigs } from '@/lib/hooks/useConfigs';
@@ -8,6 +8,8 @@ import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import { toaster } from '@/components/ui/toaster';
 import type { SlackBotConfig } from '@/lib/types';
 import { AUTH_URL } from '@/lib/constants';
+
+const SLACK_BASE_URL_STORAGE_KEY = 'slack-base-url';
 
 function maskToken(token: string): string {
   if (token.length <= 8) {
@@ -25,35 +27,33 @@ function maskSecret(secret: string): string {
 
 export function SlackBotSection() {
   const { config } = useConfigs();
-  const [botName, setBotName] = useState('');
+  const [baseUrl, setBaseUrl] = useState(AUTH_URL);
   const [botToken, setBotToken] = useState('');
   const [signingSecret, setSigningSecret] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeletingTeamId, setIsDeletingTeamId] = useState<string | null>(null);
-  const hasPublicAuthUrl = useMemo(() => {
-    try {
-      const parsed = new URL(AUTH_URL);
-      const hostname = parsed.hostname.toLowerCase();
-      return (
-        parsed.protocol === 'https:' &&
-        hostname !== 'localhost' &&
-        hostname !== '127.0.0.1' &&
-        hostname !== '0.0.0.0'
-      );
-    } catch {
-      return false;
-    }
-  }, []);
 
   const slackBots = useMemo(
     () => (config.bots ?? []).filter((bot): bot is SlackBotConfig => bot.type === 'slack'),
     [config.bots],
   );
 
+  useEffect(() => {
+    const savedBaseUrl = window.localStorage.getItem(SLACK_BASE_URL_STORAGE_KEY)?.trim();
+    if (savedBaseUrl) {
+      setBaseUrl(savedBaseUrl);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(SLACK_BASE_URL_STORAGE_KEY, baseUrl.trim());
+  }, [baseUrl]);
+
   const handleOpenManifest = () => {
     void (async () => {
       try {
-        const response = await fetch('/api/integrations/slack/manifest', {
+        const query = new URLSearchParams({ baseUrl: baseUrl.trim() });
+        const response = await fetch(`/api/integrations/slack/manifest?${query.toString()}`, {
           method: 'GET',
           credentials: 'include',
         });
@@ -92,15 +92,14 @@ export function SlackBotSection() {
         method: 'POST',
         skipCache: true,
         body: JSON.stringify({
+          baseUrl: baseUrl.trim(),
           botToken: botToken.trim(),
           signingSecret: signingSecret.trim(),
-          name: botName.trim(),
         }),
       });
 
       setBotToken('');
       setSigningSecret('');
-      setBotName('');
       await reloadConfigs();
       toaster.create({
         title: 'Slack bot saved',
@@ -154,73 +153,66 @@ export function SlackBotSection() {
         Configure workspace bots backed by company config. Slack is the first bot type; future bot integrations can reuse this surface.
       </Text>
 
-      {!hasPublicAuthUrl && (
-        <Box borderWidth="1px" borderColor="border" borderRadius="md" p={4}>
-          <Text fontSize="sm" fontFamily="mono">
-            Slack bot install is disabled on this instance. Set <code>AUTH_URL</code> to a public HTTPS URL first.
+      <Box borderWidth="1px" borderColor="border" borderRadius="md" p={4}>
+        <VStack align="stretch" gap={3}>
+          <Text fontSize="sm" fontWeight="medium" fontFamily="mono">Slack</Text>
+          <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+            Slack messages run as the matching MinusX user by email. If a Slack user email does not exist in this company, the bot will reply with a configuration error.
           </Text>
-        </Box>
-      )}
-
-      {hasPublicAuthUrl && (
-        <Box borderWidth="1px" borderColor="border" borderRadius="md" p={4}>
-          <VStack align="stretch" gap={3}>
-            <Text fontSize="sm" fontWeight="medium" fontFamily="mono">Slack</Text>
-            <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-              Slack messages run as the matching MinusX user by email. If a Slack user email does not exist in this company, the bot will reply with a configuration error.
+          <Box>
+            <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Instance URL</Text>
+            <Input
+              aria-label="Slack public base URL"
+              size="sm"
+              fontFamily="mono"
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              placeholder="https://your-ngrok-url"
+            />
+            <Text fontSize="xs" color="fg.subtle" fontFamily="mono" mt={1}>
+              Used for Slack manifest generation and validation. Defaults from <code>AUTH_URL</code>, but you can override it here for ngrok.
             </Text>
+          </Box>
 
-            <VStack align="stretch" gap={2}>
-              <HStack justify="space-between">
-                <Text fontSize="xs" color="fg.muted" fontFamily="mono">Self-hosted manifest flow</Text>
-                <Button aria-label="Create Slack app from manifest" size="xs" variant="outline" onClick={handleOpenManifest}>
-                  <LuExternalLink size={12} />
-                  Create Slack App
-                </Button>
-              </HStack>
-              <Box>
-                <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Bot name (optional)</Text>
-                <Input
-                  aria-label="Slack bot name"
-                  size="sm"
-                  fontFamily="mono"
-                  value={botName}
-                  onChange={(e) => setBotName(e.target.value)}
-                  placeholder="Slack"
-                />
-              </Box>
-              <Box>
-                <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Bot token</Text>
-                <Input
-                  aria-label="Slack bot token"
-                  size="sm"
-                  type="password"
-                  fontFamily="mono"
-                  value={botToken}
-                  onChange={(e) => setBotToken(e.target.value)}
-                  placeholder="xoxb-..."
-                />
-              </Box>
-              <Box>
-                <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Signing secret</Text>
-                <Input
-                  aria-label="Slack signing secret"
-                  size="sm"
-                  type="password"
-                  fontFamily="mono"
-                  value={signingSecret}
-                  onChange={(e) => setSigningSecret(e.target.value)}
-                  placeholder="Paste from Slack Basic Information"
-                />
-              </Box>
-              <Button aria-label="Save self-hosted Slack bot" size="sm" alignSelf="flex-start" onClick={handleManualInstall} loading={isSubmitting}>
-                <LuShieldCheck size={14} />
-                Save Self-Hosted Bot
+          <VStack align="stretch" gap={2}>
+            <HStack justify="space-between">
+              <Text fontSize="xs" color="fg.muted" fontFamily="mono">Self-hosted manifest flow</Text>
+              <Button aria-label="Create Slack app from manifest" size="xs" variant="outline" onClick={handleOpenManifest}>
+                <LuExternalLink size={12} />
+                Create Slack App
               </Button>
-            </VStack>
+            </HStack>
+            <Box>
+              <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Bot token</Text>
+              <Input
+                aria-label="Slack bot token"
+                size="sm"
+                type="password"
+                fontFamily="mono"
+                value={botToken}
+                onChange={(e) => setBotToken(e.target.value)}
+                placeholder="xoxb-..."
+              />
+            </Box>
+            <Box>
+              <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Signing secret</Text>
+              <Input
+                aria-label="Slack signing secret"
+                size="sm"
+                type="password"
+                fontFamily="mono"
+                value={signingSecret}
+                onChange={(e) => setSigningSecret(e.target.value)}
+                placeholder="Paste from Slack Basic Information"
+              />
+            </Box>
+            <Button aria-label="Save self-hosted Slack bot" size="sm" alignSelf="flex-start" onClick={handleManualInstall} loading={isSubmitting}>
+              <LuShieldCheck size={14} />
+              Save Self-Hosted Bot
+            </Button>
           </VStack>
-        </Box>
-      )}
+        </VStack>
+      </Box>
 
       <VStack align="stretch" gap={2}>
         {slackBots.length === 0 ? (
