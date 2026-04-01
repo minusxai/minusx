@@ -26,22 +26,14 @@ let mxfoodSchema: DatabaseWithSchema[] = [];
 describe('Autocomplete API — E2E', () => {
   const { getPythonPort } = withPythonBackend();
   setupTestDb(getTestDbPath('autocomplete_e2e'), {
-    withTutorialFiles: true,
-    customInit: async (dbPath) => {
-      const { createAdapter } = await import('@/lib/database/adapter/factory');
-      const db = await createAdapter({ type: 'sqlite', sqlitePath: dbPath });
-      const result = await db.query<{ name: string; content: string }>(
-        `SELECT name, content FROM files WHERE type = 'connection' AND name = 'mxfood' AND company_id = 1 LIMIT 1`,
-        []
-      );
-      await db.close();
-
-      if (result.rows.length === 0) throw new Error('mxfood connection not found in tutorial database');
-      const content = JSON.parse(result.rows[0].content);
+    customInit: async () => {
+      // Load schema from the committed fixture (exported from mxfood.duckdb).
+      // Update with: python3 -c "import json,sqlite3; ..." > test/fixtures/mxfood-connection.json
+      const fixture = await import('@/test/fixtures/mxfood-connection.json');
       mxfoodSchema = [{
-        databaseName: result.rows[0].name,
-        schemas: content?.schema?.schemas ?? [],
-        updated_at: content?.schema?.updated_at,
+        databaseName: fixture.name,
+        schemas: fixture.schema?.schemas ?? [],
+        updated_at: fixture.schema?.updated_at,
       }];
     },
   });
