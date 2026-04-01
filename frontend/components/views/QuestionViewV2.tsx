@@ -35,6 +35,7 @@ import { syncParametersWithSQL } from '@/lib/sql/sql-params';
 import { syncReferencesWithSQL } from '@/lib/sql/sql-references';
 import { useAvailableQuestions } from '@/lib/hooks/useAvailableQuestions';
 import { useContext as useSchemaContext } from '@/lib/hooks/useContext';
+import { useConnections } from '@/lib/hooks/useConnections';
 import JsonEditor from '../slides/JsonEditor';
 import { QuestionVisualization } from '../question/QuestionVisualization';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -111,6 +112,8 @@ export default function QuestionViewV2({
 
   // Get schema data for SQL autocomplete
   const { databases: schemaData } = useSchemaContext(filePath || '/org');
+  const { connections } = useConnections();
+  const connectionType = content.database_name ? connections[content.database_name]?.metadata?.type : undefined;
 
   // SQL editor collapsed state — persisted in Redux per question so it survives navigation.
   // Default: open in page mode, collapsed in toolcall/embedded mode.
@@ -645,6 +648,7 @@ export default function QuestionViewV2({
                         query: (r.question!.content as QuestionContent).query
                       }))}
                     databaseName={content.database_name}
+                    connectionType={connectionType}
                     fillHeight={!useCompactLayout}
                   />
                 )}

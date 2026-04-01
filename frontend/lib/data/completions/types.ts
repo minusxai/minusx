@@ -51,6 +51,7 @@ export interface SqlCompletionsOptions {
     schemaData?: DatabaseWithSchema[];
     resolvedReferences?: ResolvedReference[];
     databaseName?: string;
+    connectionType?: string;
   };
 }
 

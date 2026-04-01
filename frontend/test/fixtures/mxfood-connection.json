@@ -1,0 +1,701 @@
+{
+  "name": "mxfood",
+  "schema": {
+    "schemas": [
+      {
+        "schema": "main",
+        "tables": [
+          {
+            "table": "ad_campaigns",
+            "columns": [
+              {
+                "name": "campaign_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "channel_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "campaign_name",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "start_date",
+                "type": "DATE"
+              },
+              {
+                "name": "end_date",
+                "type": "DATE"
+              },
+              {
+                "name": "daily_budget",
+                "type": "DOUBLE"
+              },
+              {
+                "name": "target_audience",
+                "type": "VARCHAR"
+              }
+            ]
+          },
+          {
+            "table": "ad_spend",
+            "columns": [
+              {
+                "name": "spend_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "campaign_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "date",
+                "type": "DATE"
+              },
+              {
+                "name": "impressions",
+                "type": "BIGINT"
+              },
+              {
+                "name": "clicks",
+                "type": "BIGINT"
+              },
+              {
+                "name": "installs",
+                "type": "BIGINT"
+              },
+              {
+                "name": "spend",
+                "type": "DOUBLE"
+              }
+            ]
+          },
+          {
+            "table": "attribution",
+            "columns": [
+              {
+                "name": "attribution_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "user_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "campaign_id",
+                "type": "DOUBLE"
+              },
+              {
+                "name": "channel_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "attributed_at",
+                "type": "TIMESTAMP"
+              },
+              {
+                "name": "click_id",
+                "type": "VARCHAR"
+              }
+            ]
+          },
+          {
+            "table": "deliveries",
+            "columns": [
+              {
+                "name": "delivery_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "order_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "driver_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "assigned_at",
+                "type": "TIMESTAMP"
+              },
+              {
+                "name": "picked_up_at",
+                "type": "TIMESTAMP"
+              },
+              {
+                "name": "delivered_at",
+                "type": "TIMESTAMP"
+              },
+              {
+                "name": "delivery_rating",
+                "type": "BIGINT"
+              },
+              {
+                "name": "delivery_notes",
+                "type": "VARCHAR"
+              }
+            ]
+          },
+          {
+            "table": "drivers",
+            "columns": [
+              {
+                "name": "driver_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "name",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "zone_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "vehicle_type",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "rating",
+                "type": "DOUBLE"
+              },
+              {
+                "name": "created_at",
+                "type": "TIMESTAMP"
+              },
+              {
+                "name": "is_active",
+                "type": "BOOLEAN"
+              }
+            ]
+          },
+          {
+            "table": "events",
+            "columns": [
+              {
+                "name": "event_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "user_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "session_id",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "event_name",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "event_timestamp",
+                "type": "TIMESTAMP"
+              },
+              {
+                "name": "platform",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "screen_name",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "properties",
+                "type": "VARCHAR"
+              }
+            ]
+          },
+          {
+            "table": "marketing_channels",
+            "columns": [
+              {
+                "name": "channel_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "channel_name",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "channel_type",
+                "type": "VARCHAR"
+              }
+            ]
+          },
+          {
+            "table": "order_items",
+            "columns": [
+              {
+                "name": "product_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "quantity",
+                "type": "BIGINT"
+              },
+              {
+                "name": "unit_price",
+                "type": "DOUBLE"
+              },
+              {
+                "name": "total_price",
+                "type": "DOUBLE"
+              },
+              {
+                "name": "order_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "order_item_id",
+                "type": "BIGINT"
+              }
+            ]
+          },
+          {
+            "table": "orders",
+            "columns": [
+              {
+                "name": "user_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "restaurant_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "driver_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "zone_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "created_at",
+                "type": "TIMESTAMP"
+              },
+              {
+                "name": "status",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "subtotal",
+                "type": "DOUBLE"
+              },
+              {
+                "name": "delivery_fee",
+                "type": "DOUBLE"
+              },
+              {
+                "name": "discount_amount",
+                "type": "DOUBLE"
+              },
+              {
+                "name": "tip_amount",
+                "type": "DOUBLE"
+              },
+              {
+                "name": "total",
+                "type": "DOUBLE"
+              },
+              {
+                "name": "promo_code_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "is_subscription_order",
+                "type": "BOOLEAN"
+              },
+              {
+                "name": "platform",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "estimated_delivery_mins",
+                "type": "BIGINT"
+              },
+              {
+                "name": "actual_delivery_mins",
+                "type": "DOUBLE"
+              },
+              {
+                "name": "order_id",
+                "type": "BIGINT"
+              }
+            ]
+          },
+          {
+            "table": "product_categories",
+            "columns": [
+              {
+                "name": "category_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "category_name",
+                "type": "VARCHAR"
+              }
+            ]
+          },
+          {
+            "table": "product_subcategories",
+            "columns": [
+              {
+                "name": "subcategory_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "category_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "subcategory_name",
+                "type": "VARCHAR"
+              }
+            ]
+          },
+          {
+            "table": "products",
+            "columns": [
+              {
+                "name": "product_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "restaurant_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "subcategory_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "name",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "description",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "price",
+                "type": "DOUBLE"
+              },
+              {
+                "name": "is_available",
+                "type": "BOOLEAN"
+              },
+              {
+                "name": "created_at",
+                "type": "TIMESTAMP"
+              }
+            ]
+          },
+          {
+            "table": "promo_codes",
+            "columns": [
+              {
+                "name": "promo_code_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "code",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "discount_type",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "discount_value",
+                "type": "BIGINT"
+              },
+              {
+                "name": "min_order_value",
+                "type": "BIGINT"
+              },
+              {
+                "name": "max_uses",
+                "type": "BIGINT"
+              },
+              {
+                "name": "max_uses_per_user",
+                "type": "BIGINT"
+              },
+              {
+                "name": "valid_from",
+                "type": "TIMESTAMP"
+              },
+              {
+                "name": "valid_until",
+                "type": "TIMESTAMP"
+              },
+              {
+                "name": "is_first_order_only",
+                "type": "BOOLEAN"
+              }
+            ]
+          },
+          {
+            "table": "promo_usage",
+            "columns": [
+              {
+                "name": "usage_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "promo_code_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "user_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "order_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "used_at",
+                "type": "TIMESTAMP"
+              },
+              {
+                "name": "discount_applied",
+                "type": "DOUBLE"
+              }
+            ]
+          },
+          {
+            "table": "restaurants",
+            "columns": [
+              {
+                "name": "restaurant_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "name",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "zone_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "cuisine_type",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "price_tier",
+                "type": "BIGINT"
+              },
+              {
+                "name": "rating",
+                "type": "DOUBLE"
+              },
+              {
+                "name": "is_promoted",
+                "type": "BOOLEAN"
+              },
+              {
+                "name": "created_at",
+                "type": "TIMESTAMP"
+              },
+              {
+                "name": "is_active",
+                "type": "BOOLEAN"
+              }
+            ]
+          },
+          {
+            "table": "subscription_plans",
+            "columns": [
+              {
+                "name": "plan_id",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "plan_name",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "monthly_price",
+                "type": "DOUBLE"
+              },
+              {
+                "name": "free_delivery_threshold",
+                "type": "DOUBLE"
+              },
+              {
+                "name": "discount_percent",
+                "type": "BIGINT"
+              }
+            ]
+          },
+          {
+            "table": "support_tickets",
+            "columns": [
+              {
+                "name": "ticket_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "user_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "order_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "category",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "priority",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "status",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "created_at",
+                "type": "TIMESTAMP"
+              },
+              {
+                "name": "resolved_at",
+                "type": "TIMESTAMP"
+              },
+              {
+                "name": "resolution_type",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "refund_amount",
+                "type": "DOUBLE"
+              }
+            ]
+          },
+          {
+            "table": "user_subscriptions",
+            "columns": [
+              {
+                "name": "subscription_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "user_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "plan_id",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "started_at",
+                "type": "TIMESTAMP"
+              },
+              {
+                "name": "ended_at",
+                "type": "TIMESTAMP"
+              },
+              {
+                "name": "status",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "billing_cycle",
+                "type": "VARCHAR"
+              }
+            ]
+          },
+          {
+            "table": "users",
+            "columns": [
+              {
+                "name": "user_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "first_name",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "last_name",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "email",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "phone",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "created_at",
+                "type": "TIMESTAMP"
+              },
+              {
+                "name": "zone_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "acquisition_channel",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "referred_by_user_id",
+                "type": "DOUBLE"
+              },
+              {
+                "name": "platform",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "segment",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "will_order",
+                "type": "BOOLEAN"
+              }
+            ]
+          },
+          {
+            "table": "zones",
+            "columns": [
+              {
+                "name": "zone_id",
+                "type": "BIGINT"
+              },
+              {
+                "name": "zone_name",
+                "type": "VARCHAR"
+              },
+              {
+                "name": "avg_delivery_time_mins",
+                "type": "BIGINT"
+              },
+              {
+                "name": "surge_multiplier",
+                "type": "DOUBLE"
+              },
+              {
+                "name": "lat_center",
+                "type": "DOUBLE"
+              },
+              {
+                "name": "lng_center",
+                "type": "DOUBLE"
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "updated_at": "2026-03-27T18:16:32.185Z"
+  }
+}

@@ -147,14 +147,18 @@ class CompletionsDataLayerClient implements ICompletionsDataLayer {
       }
     };
 
-    // Cache the result
-    this.sqlCompletionsCache.set(cacheKey, result);
+    // Only cache non-empty results — empty results may indicate a transient
+    // backend error (e.g. Python not yet started) and should not be served
+    // as stale cache hits on the next request.
+    if (result.suggestions.length > 0) {
+      this.sqlCompletionsCache.set(cacheKey, result);
 
-    // Limit cache size (keep last 50 entries for SQL - smaller cache)
-    if (this.sqlCompletionsCache.size > 50) {
-      const firstKey = this.sqlCompletionsCache.keys().next().value;
-      if (firstKey) {
-        this.sqlCompletionsCache.delete(firstKey);
+      // Limit cache size (keep last 50 entries for SQL - smaller cache)
+      if (this.sqlCompletionsCache.size > 50) {
+        const firstKey = this.sqlCompletionsCache.keys().next().value;
+        if (firstKey) {
+          this.sqlCompletionsCache.delete(firstKey);
+        }
       }
     }
 

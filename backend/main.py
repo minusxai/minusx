@@ -512,7 +512,8 @@ async def sql_autocomplete(request: AutocompleteRequest):
             request.query,
             request.cursor_offset,
             request.schema_data,
-            request.database_name
+            request.database_name,
+            request.connection_type,
         )
         return {"suggestions": [s.dict() for s in suggestions]}
     except Exception as e:

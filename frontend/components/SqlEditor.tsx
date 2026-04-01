@@ -109,6 +109,7 @@ interface SqlEditorProps {
   schemaData?: DatabaseWithSchema[];  // Database schema for table/column autocomplete
   resolvedReferences?: ResolvedReference[];  // Already loaded references for API autocomplete
   databaseName?: string;  // Database name for API autocomplete
+  connectionType?: string;  // Connection type for dialect-aware autocomplete
   fillHeight?: boolean;  // When true, fills parent container height instead of fixed pixel height
 }
 
@@ -126,6 +127,7 @@ export default function SqlEditor({
   schemaData = [],
   resolvedReferences = [],
   databaseName,
+  connectionType,
   fillHeight = false,
 }: SqlEditorProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode);
@@ -145,6 +147,7 @@ export default function SqlEditor({
   const validationRequestIdRef = useRef(0);
   const validationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const databaseNameRef = useRef(databaseName);
+  const connectionTypeRef = useRef(connectionType);
 
 
   // Keep the ref updated with the latest onRun callback
@@ -173,6 +176,11 @@ export default function SqlEditor({
   useEffect(() => {
     databaseNameRef.current = databaseName;
   }, [databaseName]);
+
+  // Keep connectionType ref updated
+  useEffect(() => {
+    connectionTypeRef.current = connectionType;
+  }, [connectionType]);
 
   // Debounced SQL validation function
   const triggerValidation = (editor: any, monaco: any) => {
@@ -324,7 +332,8 @@ export default function SqlEditor({
               type: 'sql_editor',
               schemaData: currentSchemaData,
               resolvedReferences: resolvedReferences,
-              databaseName: databaseName
+              databaseName: databaseNameRef.current,
+              connectionType: connectionTypeRef.current,
             },
             currentRequestId
           );
@@ -339,6 +348,12 @@ export default function SqlEditor({
             const wordMatch = textUntilPosition.match(/(\w*)$/);
             const partial = wordMatch ? wordMatch[1] : '';
 
+            // When insert_text starts with ', ' the Python backend detected a
+            // "trailing space after column in a list clause" situation.  We must
+            // expand the range one character back to consume that trailing space so
+            // the result is "…col, next" instead of "…col , next".
+            const commaPrefix = (item.insert_text as string).startsWith(', ');
+
             return {
               label: {
                 label: item.label,
@@ -350,7 +365,7 @@ export default function SqlEditor({
               sortText: item.sort_text,
               range: {
                 startLineNumber: position.lineNumber,
-                startColumn: position.column - partial.length,
+                startColumn: position.column - partial.length - (commaPrefix ? 1 : 0),
                 endLineNumber: position.lineNumber,
                 endColumn: position.column
               }

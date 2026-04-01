@@ -10,6 +10,21 @@ import sqlglot
 from sqlglot import exp, ErrorLevel
 
 
+DIALECT_MAP: Dict[str, str] = {
+    'duckdb': 'duckdb',
+    'bigquery': 'bigquery',
+    'postgresql': 'postgres',
+    'csv': 'duckdb',
+    'google-sheets': 'duckdb',
+    'athena': 'presto',
+}
+
+
+def _get_dialect(connection_type: Optional[str]) -> str:
+    """Map a connection type string to a sqlglot read dialect."""
+    return DIALECT_MAP.get(connection_type or '', 'postgres')
+
+
 class CompletionItem(BaseModel):
     """Autocomplete suggestion item (Monaco-compatible format)"""
     label: str
@@ -25,13 +40,15 @@ class AutocompleteRequest(BaseModel):
     cursor_offset: int
     schema_data: List[Dict[str, Any]]
     database_name: Optional[str] = None
+    connection_type: Optional[str] = None
 
 
 def get_completions(
     query: str,
     cursor_offset: int,
     schema_data: List[Dict[str, Any]],
-    database_name: Optional[str] = None
+    database_name: Optional[str] = None,
+    connection_type: Optional[str] = None,
 ) -> List[CompletionItem]:
     """
     Main entry point for autocomplete suggestions.
@@ -52,9 +69,10 @@ def get_completions(
 
     # Phase 1: Error-tolerant parse. Returns a usable AST even for incomplete SQL
     # (e.g. trailing WHERE with no condition). Only fails on empty/blank input.
+    dialect = _get_dialect(connection_type)
     ast = None
     try:
-        ast = sqlglot.parse_one(query, read="postgres", error_level=ErrorLevel.IGNORE)
+        ast = sqlglot.parse_one(query, read=dialect, error_level=ErrorLevel.IGNORE)
     except Exception:
         pass
 
@@ -70,30 +88,70 @@ def get_completions(
         elif is_table_context and schema_data:
             return get_all_tables_unfiltered(schema_data)
         else:
-            return get_keyword_completions()
+            return []
 
     # Determine completion context (check dot notation first)
     if is_dot_context:
         return get_dot_completions(ast, schema_data, text_before_cursor)
     elif is_column_context:
-        return get_column_completions(ast, schema_data, text_before_cursor)
+        suggestions = get_column_completions(ast, schema_data, text_before_cursor)
+        if needs_comma_prefix(text_before_cursor):
+            for s in suggestions:
+                s.insert_text = ', ' + s.insert_text
+        return suggestions
     elif is_table_context:
         return get_table_completions(ast, schema_data)
     else:
-        return get_keyword_completions()
+        return []
 
 
 def needs_column_completion(text: str) -> bool:
     """Check if cursor is in column completion context"""
     patterns = [
-        r'\bSELECT\s+\w*$',
-        r'\bWHERE\s+\w*$',
-        r'\bGROUP\s+BY\s+\w*$',
-        r'\bORDER\s+BY\s+\w*$',
-        r'\bON\s+\w*$',
-        r',\s*\w*$',
+        r'\bSELECT(\s+\w*)?$',
+        r'\bWHERE(\s+\w+)*(\s+\w*)?$',
+        # `(\s+\w+)*` allows already-typed columns ("GROUP BY season ") before
+        # the optional final partial token — without it a trailing space after
+        # a column name would fall through to keyword completions.
+        r'\bGROUP\s+BY(\s+\w+)*(\s+\w*)?$',
+        r'\bORDER\s+BY(\s+\w+)*(\s+\w*)?$',
+        r'\bHAVING(\s+\w*)?$',
+        r'\bON(\s+\w*)?$',
+        r'\bLIKE\s+\w*$',
+        r'\bNOT\s+LIKE\s+\w*$',
+        # Boolean operators in WHERE/HAVING — WHERE a=1 OR | / AND |
+        r'\bOR\s+\w*$',
+        r'\bAND\s+\w*$',
+        # Also handle trailing space after a comma-separated item ("col1, col2 ")
+        r',\s*\w*\s*$',
     ]
     return any(re.search(p, text, re.IGNORECASE) for p in patterns)
+
+
+def needs_comma_prefix(text: str) -> bool:
+    """
+    Returns True when cursor is after 'CLAUSE col ' (a typed column/alias + trailing
+    space, no trailing comma) inside a SELECT / GROUP BY / ORDER BY list.
+    In that case the next completion must be prefixed with ', ' to produce valid SQL.
+
+    Examples:
+      "GROUP BY batch_year "       → True   (would produce "…batch_year season" otherwise)
+      "GROUP BY batch_year, "      → False  (comma already present)
+      "GROUP BY "                  → False  (first item — clause_tail has no word yet)
+      "ORDER BY total_orders "     → True
+      "WHERE status "              → False  (WHERE is not a comma-list clause)
+    """
+    # Find the LAST SELECT / GROUP BY / ORDER BY keyword before the cursor
+    matches = list(re.finditer(r'\b(SELECT|GROUP\s+BY|ORDER\s+BY)\b', text, re.IGNORECASE))
+    if not matches:
+        return False
+    clause_tail = text[matches[-1].end():]
+    # If a FROM / WHERE / HAVING / JOIN appears after, cursor is not inside the list
+    if re.search(r'\b(FROM|WHERE|HAVING|JOIN)\b', clause_tail, re.IGNORECASE):
+        return False
+    # clause_tail must contain at least one typed word followed by trailing space,
+    # and must NOT end with a comma (comma means the separator is already present).
+    return bool(re.search(r'\w\s+$', clause_tail)) and not bool(re.search(r',\s*$', clause_tail))
 
 
 def needs_table_completion(text: str) -> bool:
@@ -119,11 +177,25 @@ def get_column_completions(
     suggestions = []
     idx = 0
 
-    # Get CTE info first
+    # SELECT aliases come first — highest locality for ORDER BY / GROUP BY / HAVING
+    alias_labels: set[str] = set()
+    for alias in extract_select_aliases(ast):
+        if alias.lower() not in alias_labels:
+            suggestions.append(CompletionItem(
+                label=alias,
+                kind="alias",
+                detail="  (SELECT alias)",
+                insert_text=alias,
+                sort_text=str(idx).zfill(5)
+            ))
+            idx += 1
+            alias_labels.add(alias.lower())
+
+    # Get CTE info
     cte_columns = extract_cte_columns(ast)
     cte_names_lower = [name.lower() for name in cte_columns.keys()]
 
-    # Only add schema table columns if they're not shadowed by CTEs
+    # Schema table columns (skip if shadowed by a CTE or already present as an alias)
     for db in schema_data:
         for schema in db.get("schemas", []):
             for table in schema.get("tables", []):
@@ -138,29 +210,31 @@ def get_column_completions(
                     continue
 
                 for col in table.get("columns", []):
-                    suggestions.append(CompletionItem(
-                        label=col["name"],
-                        kind="column",
-                        detail=f"  {table_name}",
-                        documentation=f"Column from {schema['schema']}.{table_name}",
-                        insert_text=col["name"],
-                        sort_text=str(idx).zfill(5)
-                    ))
+                    if col["name"].lower() not in alias_labels:
+                        suggestions.append(CompletionItem(
+                            label=col["name"],
+                            kind="column",
+                            detail=f"  {table_name}",
+                            documentation=f"Column from {schema['schema']}.{table_name}",
+                            insert_text=col["name"],
+                            sort_text=str(idx).zfill(5)
+                        ))
                     idx += 1
 
-    # Include CTE columns
+    # CTE columns
     for cte_name, columns in cte_columns.items():
         if tables_in_scope and cte_name.lower() not in [t.lower() for t in tables_in_scope]:
             continue
         for col_name in columns:
-            suggestions.append(CompletionItem(
-                label=col_name,
-                kind="cte",
-                detail=f"  {cte_name} (CTE)",
-                documentation=f"Column from CTE {cte_name}",
-                insert_text=col_name,
-                sort_text=str(idx).zfill(5)
-            ))
+            if col_name.lower() not in alias_labels:
+                suggestions.append(CompletionItem(
+                    label=col_name,
+                    kind="cte",
+                    detail=f"  {cte_name} (CTE)",
+                    documentation=f"Column from CTE {cte_name}",
+                    insert_text=col_name,
+                    sort_text=str(idx).zfill(5)
+                ))
             idx += 1
 
     return suggestions
@@ -357,19 +431,6 @@ def get_schema_dot_completions_fallback(
     return []
 
 
-def get_keyword_completions() -> List[CompletionItem]:
-    """Get common SQL keyword suggestions"""
-    keywords = ["SELECT", "FROM", "WHERE", "JOIN", "GROUP BY", "ORDER BY", "HAVING", "LIMIT"]
-    return [
-        CompletionItem(
-            label=kw,
-            kind="keyword",
-            insert_text=kw,
-            sort_text=str(i).zfill(5)
-        )
-        for i, kw in enumerate(keywords)
-    ]
-
 
 def get_all_columns_unfiltered(schema_data: List[Dict[str, Any]]) -> List[CompletionItem]:
     """Get all columns from all tables (used when SQL parsing fails)"""
@@ -528,6 +589,20 @@ def extract_cte_names(ast: exp.Expression) -> List[str]:
             cte_names.append(node.alias)
 
     return cte_names
+
+
+def extract_select_aliases(ast: exp.Expression) -> List[str]:
+    """
+    Extract aliases defined in the SELECT clause of the main query.
+    These are valid targets in ORDER BY, GROUP BY, and HAVING even without
+    schema data — sqlglot gives us this for free from the AST.
+    """
+    aliases = []
+    if isinstance(ast, exp.Select):
+        for expr in ast.expressions:
+            if isinstance(expr, exp.Alias) and expr.alias:
+                aliases.append(expr.alias)
+    return aliases
 
 
 def extract_cte_columns(ast: exp.Expression) -> Dict[str, List[str]]:
