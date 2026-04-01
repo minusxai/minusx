@@ -1018,6 +1018,62 @@ export const MIGRATIONS: MigrationEntry[] = [
     },
     description: 'Migrate alert files: questionId + AlertCondition → tests: Test[]',
   },
+  {
+    dataVersion: 24,
+    schemaVersion: undefined,
+    dataMigration: (data: InitData) => {
+      // For each stored config document:
+      // 1. Replace the old default Slack HTTP webhook template with the SLACK_DEFAULT keyword
+      // 2. Add EMAIL_DEFAULT keyword for email_alert and email_otp if not already configured
+      //
+      // Only operates on the messaging.webhooks array when it is explicitly stored in the DB.
+      // Config docs with no messaging section are unaffected — they get DEFAULT_CONFIG at load time.
+
+      for (const companyData of data.companies as CompanyData[]) {
+        for (const doc of companyData.documents) {
+          if (doc.type !== 'config') continue;
+          const content = doc.content as any;
+          if (!content || !Array.isArray(content?.messaging?.webhooks)) continue;
+
+          const webhooks: any[] = content.messaging.webhooks;
+          let changed = false;
+
+          // 1. Replace old default Slack HTTP template with SLACK_DEFAULT keyword
+          for (let i = 0; i < webhooks.length; i++) {
+            const w = webhooks[i];
+            if (
+              w.type === 'slack_alert' &&
+              w.url === '{{SLACK_WEBHOOK}}' &&
+              w.method === 'POST' &&
+              w.body === '{{SLACK_PROPERTIES}}'
+            ) {
+              webhooks[i] = { type: 'slack_alert', keyword: 'SLACK_DEFAULT' };
+              changed = true;
+            }
+          }
+
+          // 2. Add EMAIL_DEFAULT for email_alert if missing
+          if (!webhooks.some((w: any) => w.type === 'email_alert')) {
+            webhooks.push({ type: 'email_alert', keyword: 'EMAIL_DEFAULT' });
+            changed = true;
+          }
+
+          // 3. Add EMAIL_DEFAULT for email_otp if missing
+          if (!webhooks.some((w: any) => w.type === 'email_otp')) {
+            webhooks.push({ type: 'email_otp', keyword: 'EMAIL_DEFAULT' });
+            changed = true;
+          }
+
+          if (changed) {
+            console.log(`  [V24] ${doc.path}: Migrated webhook config to keyword format`);
+          }
+        }
+      }
+
+      return data;
+    },
+    description: 'Replace old Slack HTTP template with SLACK_DEFAULT keyword; add EMAIL_DEFAULT keyword for missing email_alert and email_otp webhooks in stored config docs',
+  },
 ];
 
 /**

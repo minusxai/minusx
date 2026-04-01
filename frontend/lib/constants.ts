@@ -11,6 +11,12 @@ export const IS_DEV = process.env.NODE_ENV !== 'production';
 export const APP_VERSION = '0.1.0';
 
 /**
+ * Git commit SHA — embedded at build time by next.config.ts (via env: { GIT_COMMIT_SHA }).
+ * Available on both client and server. Falls back to 'unknown' if not set.
+ */
+export const GIT_COMMIT_SHA = process.env.GIT_COMMIT_SHA ?? 'unknown';
+
+/**
  * Backend URLs
  * These use NEXT_PUBLIC_ prefix so they're available on both client and server
  */

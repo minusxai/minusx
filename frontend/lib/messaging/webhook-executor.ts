@@ -3,7 +3,7 @@
  * Supports template variable substitution in headers and body
  */
 
-import { MessagingWebhook } from '../types';
+import { MessagingWebhook, MessagingWebhookHttp } from '../types';
 import { substituteVariables } from './template-variables';
 
 export interface WebhookResult {
@@ -21,7 +21,7 @@ export interface WebhookResult {
  * @returns Result indicating success or failure
  */
 export async function executeWebhook(
-  webhook: MessagingWebhook,
+  webhook: MessagingWebhookHttp,
   variables: Record<string, string>,
 ): Promise<WebhookResult> {
   try {
@@ -89,7 +89,7 @@ export async function executeWebhook(
  * Send a phone alert message via a configured phone_alert webhook
  */
 export async function sendPhoneAlertViaWebhook(
-  webhook: MessagingWebhook,
+  webhook: MessagingWebhookHttp,
   to: string,
   body: string,
   extras?: { title?: string; desc?: string; link?: string; summary?: string }
@@ -112,7 +112,7 @@ export async function sendPhoneAlertViaWebhook(
  * @param body - Email body
  */
 export async function sendEmailViaWebhook(
-  webhook: MessagingWebhook,
+  webhook: MessagingWebhookHttp,
   to: string,
   subject: string,
   body: string
@@ -126,7 +126,7 @@ export async function sendEmailViaWebhook(
  * {{SLACK_MESSAGE}} is substituted within channel properties values before sending.
  */
 export async function sendSlackViaWebhook(
-  webhook: MessagingWebhook,
+  webhook: MessagingWebhookHttp,
   text: string,
   channelData: { webhook_url: string; properties?: Record<string, unknown> }
 ): Promise<WebhookResult> {
@@ -147,6 +147,7 @@ export async function sendSlackViaWebhook(
  * @returns Array of error messages (empty if valid)
  */
 export function validateWebhook(webhook: MessagingWebhook): string[] {
+  if ('keyword' in webhook) return [];
   const errors: string[] = [];
 
   // Validate URL

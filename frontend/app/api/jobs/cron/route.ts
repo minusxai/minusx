@@ -20,6 +20,7 @@ import { JOB_DEFINITIONS } from '@/lib/jobs/job-definitions';
 import { JOB_HANDLERS } from '@/lib/jobs/job-registry';
 import { getConfigsByCompanyId } from '@/lib/data/configs.server';
 import { sendEmailViaWebhook, sendPhoneAlertViaWebhook } from '@/lib/messaging/webhook-executor';
+import { resolveWebhook } from '@/lib/messaging/webhook-resolver.server';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import type { AlertContent, MessageAttemptLog, RunFileContent, RunMessageRecord } from '@/lib/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
@@ -192,8 +193,10 @@ async function runForCompany(
         await FilesAPI.saveFile(runFileId, runFileName, runFilePath, successContent, [jobFile.id], user);
 
         const { config } = await getConfigsByCompanyId(user.companyId, user.mode);
-        const emailWebhook = config.messaging?.webhooks?.find(w => w.type === 'email_alert');
-        const phoneAlertWebhook = config.messaging?.webhooks?.find(w => w.type === 'phone_alert');
+        const _emailRaw = config.messaging?.webhooks?.find(w => w.type === 'email_alert');
+        const emailWebhook = _emailRaw ? resolveWebhook(_emailRaw) : null;
+        const _phoneRaw = config.messaging?.webhooks?.find(w => w.type === 'phone_alert');
+        const phoneAlertWebhook = _phoneRaw ? resolveWebhook(_phoneRaw) : null;
         for (const msg of messages) {
           try {
             if (msg.type === 'email_alert') {
