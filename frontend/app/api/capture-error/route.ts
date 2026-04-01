@@ -7,8 +7,8 @@ import { notifyInternal } from '@/lib/messaging/internal-notifier';
 /**
  * POST /api/capture-error
  * Receives frontend error reports.
- * - Authenticated: publishes ERROR app event (internal Slack + customer error_delivery channels)
- * - Unauthenticated: calls notifyInternal directly (internal Slack only)
+ * - Authenticated: publishes ERROR app event (bug reporting channel + customer error_delivery channels)
+ * - Unauthenticated: calls notifyInternal directly (bug reporting channel only)
  */
 export async function POST(req: NextRequest) {
   try {

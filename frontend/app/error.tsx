@@ -21,8 +21,9 @@ export default function Error({
     // Log error to console for debugging
     console.error('Page error:', error);
 
-    // Report to internal Slack (skip hydration noise and dev mode)
-    if (process.env.NODE_ENV !== 'development' && !isHydrationError(error.message)) {
+    // Report to bug reporting channel (skip hydration noise; skip dev unless DEBUG flag is on)
+    const sendInDev = process.env.NEXT_PUBLIC_SEND_ERRORS_IN_DEV === 'true';
+    if ((process.env.NODE_ENV !== 'development' || sendInDev) && !isHydrationError(error.message)) {
       void captureError('page-error', error);
     }
 

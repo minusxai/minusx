@@ -1,6 +1,6 @@
 /**
- * Client-side utility for reporting frontend errors to the internal bug reporting channel.
- * Calls POST /api/capture-error, which forwards to the internal Slack channel server-side.
+ * Client-side utility for reporting frontend errors to the bug reporting channel.
+ * Calls POST /api/capture-error, which forwards to the bug reporting channel server-side.
  * Safe for client imports — no server-only code here.
  */
 export async function captureError(

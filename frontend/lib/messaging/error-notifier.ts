@@ -7,7 +7,7 @@ import type { AppEventPayloads } from '@/lib/app-event-registry/events';
 import type { Mode } from '@/lib/mode/mode-types';
 
 export async function notifyErrorEvent(payload: AppEventPayloads['error']): Promise<void> {
-  // Always notify internal channel (independent of company config, fire-and-forget)
+  // Always notify bug reporting channel (independent of company config, fire-and-forget)
   void notifyInternal(payload.source, payload.message);
   const { config } = await getConfigsByCompanyId(payload.companyId, payload.mode as Mode | undefined);
   const recipients = config.error_delivery ?? [];

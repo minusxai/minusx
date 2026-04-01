@@ -2,7 +2,7 @@ import 'server-only';
 import { GIT_COMMIT_SHA } from '@/lib/constants';
 
 /**
- * Internal Slack channel notifier for app-level bug reporting.
+ * Bug reporting channel notifier for app-level errors.
  * Completely independent of company config — uses INTERNAL_SLACK_CHANNEL_WEBHOOK env var directly.
  * Never exposed to clients. Never re-uses any company-configured webhook.
  */
@@ -27,8 +27,9 @@ export async function notifyInternal(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         email_id: extras?.user ?? source,
-        created_at: new Date().toISOString(),
+        created_at: new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, ''),
         err_str: JSON.stringify(errObj),
+        thread_url: process.env.AUTH_URL ?? 'https://minusx.ai',
       }),
     });
   } catch (e) {

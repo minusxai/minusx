@@ -1,5 +1,5 @@
 """
-Internal Slack channel notifier for app-level bug reporting.
+Bug channel notifier for app-level bug reporting.
 Completely independent of company config — uses INTERNAL_SLACK_CHANNEL_WEBHOOK env var directly.
 Never re-uses any company-configured webhook.
 """
@@ -32,8 +32,9 @@ async def notify_internal(source: str, message: str, extras: dict | None = None)
     err_obj = {'source': source, 'message': message, 'commit': _GIT_COMMIT_SHA, **(extras or {})}
     payload = {
         'email_id': (extras or {}).get('user', source),
-        'created_at': datetime.now(timezone.utc).isoformat(),
+        'created_at': datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
         'err_str': json.dumps(err_obj),
+        'thread_url': os.environ.get('AUTH_URL', 'https://minusx.ai'),
     }
 
     try:
