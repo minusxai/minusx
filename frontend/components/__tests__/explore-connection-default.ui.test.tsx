@@ -182,14 +182,11 @@ describe('Explore page: database selector defaults to first connection', () => {
       { store: testStore }
     );
 
-    // Database selector should show first connection name — NOT "No connection"
-    await waitFor(
-      () => {
-        const selector = screen.getByLabelText('Database selector');
-        expect(selector).toHaveTextContent('sales_db');
-      },
-      { timeout: 5000 }
-    );
+    // Database selector should show first connection name — NOT "No connection".
+    // No explicit timeout: RTL default (1000ms) is enough — this resolves in < 200ms.
+    await waitFor(() => {
+      expect(screen.getByLabelText('Database selector')).toHaveTextContent('sales_db');
+    });
   });
 
   it('auto-selects first schema-loaded connection when first connection has no schema', async () => {
@@ -216,14 +213,11 @@ describe('Explore page: database selector defaults to first connection', () => {
     );
 
     // Should select 'has_schema_db_1' (first WITH schema), NOT show "No connection"
-    await waitFor(
-      () => {
-        const selector = screen.getByLabelText('Database selector');
-        expect(selector).toHaveTextContent('has_schema_db_1');
-        expect(selector).not.toHaveTextContent('No connection');
-      },
-      { timeout: 5000 }
-    );
+    await waitFor(() => {
+      const selector = screen.getByLabelText('Database selector');
+      expect(selector).toHaveTextContent('has_schema_db_1');
+      expect(selector).not.toHaveTextContent('No connection');
+    });
   });
 
   it('auto-selects first connection when connections arrive after render (SSR timeout scenario)', async () => {
@@ -248,12 +242,8 @@ describe('Explore page: database selector defaults to first connection', () => {
     );
 
     // After connections arrive, selector should auto-select the first connection
-    await waitFor(
-      () => {
-        const selector = screen.getByLabelText('Database selector');
-        expect(selector).toHaveTextContent('sales_db');
-      },
-      { timeout: 5000 }
-    );
+    await waitFor(() => {
+      expect(screen.getByLabelText('Database selector')).toHaveTextContent('sales_db');
+    });
   });
 });

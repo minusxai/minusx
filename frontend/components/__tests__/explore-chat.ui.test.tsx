@@ -293,12 +293,11 @@ describe('Explore page: submit question → agent responds → see answer → to
       await waitFor(
         () => expect(mockRouterPush).toHaveBeenCalledWith(
           expect.stringMatching(/^\/explore\/\d+$/)
-        ),
-        { timeout: 5000 }
+        )
       );
 
       // Final answer from <answer> block is visible in the DOM
-      const answerBlock = await screen.findByLabelText('Answer block', {}, { timeout: 5000 });
+      const answerBlock = await screen.findByLabelText('Answer block');
       expect(answerBlock).toHaveTextContent(/the answer is 42/i);
 
       // "Show Thinking" button is present; thinking block is hidden by default
