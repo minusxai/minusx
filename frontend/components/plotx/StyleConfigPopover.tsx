@@ -11,7 +11,7 @@ interface StyleConfigPopoverProps {
   styleConfig?: VisualizationStyleConfig
   numSeries: number
   onChange: (config: VisualizationStyleConfig) => void
-  displayMode?: 'auto' | 'button'
+  displayMode?: 'auto' | 'button' | 'inline'
 }
 
 const HEX_TO_KEY = Object.fromEntries(Object.entries(CHART_COLORS).map(([k, v]) => [v, k]))
@@ -216,7 +216,7 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
     </VStack>
   )
 
-  const showInline = displayMode === 'auto' && containerWidth >= 220
+  const showInline = displayMode === 'inline' || (displayMode === 'auto' && containerWidth >= 220)
 
   return (
     <Box position="relative" ref={containerRef} width="100%" display="flex" alignItems="center" justifyContent="center">

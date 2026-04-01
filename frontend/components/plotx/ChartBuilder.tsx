@@ -477,41 +477,23 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
           chartType={chartType}
           settingsPanel={onStyleConfigChange ? (
             <Box
-              flex="1"
               width="100%"
-              alignSelf="stretch"
-              p={2}
-              pt={3}
+              p={3}
               bg="bg.surface"
               borderRadius="md"
               border="2px dashed"
               borderColor="border.muted"
-              position="relative"
               minH="44px"
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
             >
-              <Box
-                position="absolute"
-                top={-2.5}
-                left={2}
-                bg="bg.muted"
-                px={1.5}
-                borderRadius="sm"
-                border="1px dashed"
-                borderColor="border.muted"
-                pointerEvents="none"
-              >
-                <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
-                  Style
-                </Text>
-              </Box>
+              <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={2}>
+                Style
+              </Text>
               <StyleConfigPopover
                 chartType={chartType}
                 styleConfig={styleConfig}
                 numSeries={aggregatedData.series.length}
                 onChange={onStyleConfigChange}
+                displayMode="inline"
               />
             </Box>
           ) : undefined}

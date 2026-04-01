@@ -1,8 +1,7 @@
 'use client'
 
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { Box, HStack, VStack, Text } from '@chakra-ui/react'
-import { LuSettings2 } from 'react-icons/lu'
 import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } from './AxisComponents'
 import type { ColumnFormatConfig, AxisConfig } from '@/lib/types'
 
@@ -27,8 +26,7 @@ interface AxisBuilderProps {
   chartType?: string
 }
 
-// Popover for axis settings (scale + min/max)
-const AxisSettingsPopover = ({ axis, axisConfig, onChange }: {
+const AxisSettingsPanel = ({ axis, axisConfig, onChange }: {
   axis: 'x' | 'y'
   axisConfig: AxisConfig
   onChange: (config: AxisConfig) => void
@@ -53,9 +51,20 @@ const AxisSettingsPopover = ({ axis, axisConfig, onChange }: {
   }
 
   return (
-    <VStack align="stretch" gap={2.5} p={2.5} minW="160px">
-      {/* Scale */}
+    <VStack
+      align="stretch"
+      gap={2.5}
+      p={3}
+      bg="bg.surface"
+      borderRadius="md"
+      border="2px dashed"
+      borderColor="border.muted"
+      minW={0}
+    >
       <Box>
+        <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={2}>
+          {axis === 'x' ? 'X Axis' : 'Y Axis'}
+        </Text>
         <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
           Scale
         </Text>
@@ -84,8 +93,6 @@ const AxisSettingsPopover = ({ axis, axisConfig, onChange }: {
           ))}
         </HStack>
       </Box>
-
-      {/* Min / Max */}
       <HStack gap={2}>
         <Box flex={1}>
           <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
@@ -124,72 +131,10 @@ const AxisSettingsPopover = ({ axis, axisConfig, onChange }: {
   )
 }
 
-// Settings icon + popover for a drop zone
-const ZoneSettings = ({ axis, axisConfig, onChange }: {
-  axis: 'x' | 'y'
-  axisConfig: AxisConfig
-  onChange: (config: AxisConfig) => void
-}) => {
-  const [showPopover, setShowPopover] = useState(false)
-  const popoverRef = useRef<HTMLDivElement>(null)
-  const buttonRef = useRef<HTMLDivElement>(null)
-
-  const scaleKey = axis === 'x' ? 'xScale' : 'yScale'
-  const minKey = axis === 'x' ? 'xMin' : 'yMin'
-  const maxKey = axis === 'x' ? 'xMax' : 'yMax'
-  const hasConfig = (axisConfig[scaleKey] && axisConfig[scaleKey] !== 'linear')
-    || axisConfig[minKey] != null || axisConfig[maxKey] != null
-
-  useEffect(() => {
-    if (!showPopover) return
-    const handler = (e: MouseEvent) => {
-      if (
-        popoverRef.current && !popoverRef.current.contains(e.target as Node) &&
-        buttonRef.current && !buttonRef.current.contains(e.target as Node)
-      ) {
-        setShowPopover(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [showPopover])
-
-  return (
-    <Box position="relative" display="inline-flex" ref={buttonRef}>
-      <Box
-        as="button"
-        onClick={(e: React.MouseEvent) => { e.stopPropagation(); setShowPopover(!showPopover) }}
-        color={hasConfig ? 'accent.teal' : 'fg.subtle'}
-        _hover={{ color: 'accent.teal' }}
-        transition="color 0.2s"
-        aria-label={`${axis.toUpperCase()} axis settings`}
-      >
-        <LuSettings2 size={11} />
-      </Box>
-      {showPopover && (
-        <Box
-          ref={popoverRef}
-          position="absolute"
-          top="100%"
-          left={0}
-          mt={1}
-          bg="bg.panel"
-          border="1px solid"
-          borderColor="border.muted"
-          borderRadius="md"
-          boxShadow="md"
-          zIndex={20}
-        >
-          <AxisSettingsPopover axis={axis} axisConfig={axisConfig} onChange={onChange} />
-        </Box>
-      )}
-    </Box>
-  )
-}
-
 export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnFormatChange, children, settingsPanel, axisConfig, onAxisConfigChange, chartType }: AxisBuilderProps) => {
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null)
   const [selectedColumnForMobile, setSelectedColumnForMobile] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'fields' | 'settings'>('fields')
   const isTouchDevice = useIsTouchDevice()
 
   // Compute assigned columns from all zones
@@ -222,16 +167,25 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
     setSelectedColumnForMobile(null)
   }, [draggedColumn, selectedColumnForMobile])
 
-  // Determine which zones get axis settings (X axis for scatter only, Y axis always)
-  const getZoneAxis = (label: string): 'x' | 'y' | null => {
-    if (label === 'X Axis' && chartType === 'scatter') return 'x'
-    if (label === 'Y Axis') return 'y'
-    return null
+  const showXAxisSettings = chartType === 'scatter' && !!onAxisConfigChange
+  const showYAxisSettings = !!onAxisConfigChange
+  const hasSettingsTab = showXAxisSettings || showYAxisSettings || !!settingsPanel
+
+  const tabButtonStyles = {
+    px: 2.5,
+    py: 1,
+    borderRadius: 'md',
+    fontSize: '2xs',
+    fontFamily: 'mono',
+    fontWeight: '700',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    border: '1px solid',
+    transition: 'all 0.15s',
   }
 
   return (
     <Box display="flex" flexDirection="column" gap={4} width="100%" p={3} bg="bg.canvas" borderBottom="1px solid" borderColor="border.muted">
-      {/* Column palette */}
       <HStack gap={2} flexWrap="wrap" justifyContent="space-between">
         <HStack gap={2} flexWrap="wrap">
           {columns.map(col => (
@@ -252,7 +206,6 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
         {children}
       </HStack>
 
-      {/* Mobile instruction */}
       {isTouchDevice && selectedColumnForMobile && (
         <Box p={2} bg="accent.teal/10" borderRadius="md" textAlign="center">
           <Text fontSize="xs" fontWeight="600" color="accent.teal">
@@ -261,57 +214,91 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
         </Box>
       )}
 
-      {/* Drop zones */}
-      <Box display="flex" gap={3} alignItems="stretch" minWidth={0}>
-        {zones.map(zone => {
-          const axis = getZoneAxis(zone.label)
-          const zoneFlex = zone.label === 'X Axis' || zone.label === 'Y Axis' ? 2 : 1
-          return (
-            <Box key={zone.label} minW={0} flex={zoneFlex} display="flex" alignItems="stretch">
-              <DropZone
-                label={zone.label}
-                onDrop={() => handleZoneDrop(zone)}
-                isTouchDevice={isTouchDevice}
-                labelExtra={axis && onAxisConfigChange ? (
-                  <ZoneSettings axis={axis} axisConfig={axisConfig ?? {}} onChange={onAxisConfigChange} />
-                ) : undefined}
-              >
-                <HStack gap={1.5} flexWrap="wrap" minW={0} width="100%">
-                  {zone.items.map(item => (
-                    <ZoneChip
-                      key={item.column}
-                      column={item.column}
-                      type={resolveColumnType(item.column, columns, types)}
-                      onRemove={() => zone.onRemove(item.column)}
-                      extra={item.extra}
-                      formatConfig={columnFormats?.[item.column]}
-                      onFormatChange={onColumnFormatChange ? (config) => onColumnFormatChange(item.column, config) : undefined}
-                    />
-                  ))}
-                </HStack>
-                {zone.items.length === 0 && (
-                  <Text
-                    fontSize="xs"
-                    color="fg.subtle"
-                    fontStyle="italic"
-                    maxWidth="100%"
-                    overflow="hidden"
-                    textOverflow="ellipsis"
-                    whiteSpace="nowrap"
-                  >
-                    {zone.emptyText || 'Drop columns here'}
-                  </Text>
-                )}
-              </DropZone>
-            </Box>
-          )
-        })}
-        {settingsPanel && (
-          <Box minW={0} flex={1} display="flex" alignItems="stretch">
-            {settingsPanel}
+      {hasSettingsTab && (
+        <HStack gap={2} justify="flex-end">
+          <Box
+            as="button"
+            {...tabButtonStyles}
+            bg={activeTab === 'fields' ? 'accent.teal' : 'bg.surface'}
+            color={activeTab === 'fields' ? 'white' : 'fg.subtle'}
+            borderColor={activeTab === 'fields' ? 'accent.teal' : 'border.muted'}
+            onClick={() => setActiveTab('fields')}
+          >
+            Fields
           </Box>
-        )}
-      </Box>
+          <Box
+            as="button"
+            {...tabButtonStyles}
+            bg={activeTab === 'settings' ? 'accent.teal' : 'bg.surface'}
+            color={activeTab === 'settings' ? 'white' : 'fg.subtle'}
+            borderColor={activeTab === 'settings' ? 'accent.teal' : 'border.muted'}
+            onClick={() => setActiveTab('settings')}
+          >
+            Settings
+          </Box>
+        </HStack>
+      )}
+
+      {(!hasSettingsTab || activeTab === 'fields') && (
+        <Box display="flex" gap={3} alignItems="stretch" minWidth={0}>
+          {zones.map(zone => {
+            const zoneFlex = zone.label === 'X Axis' || zone.label === 'Y Axis' ? 2 : 1
+            return (
+              <Box key={zone.label} minW={0} flex={zoneFlex} display="flex" alignItems="stretch">
+                <DropZone
+                  label={zone.label}
+                  onDrop={() => handleZoneDrop(zone)}
+                  isTouchDevice={isTouchDevice}
+                >
+                  <HStack gap={1.5} flexWrap="wrap" minW={0} width="100%">
+                    {zone.items.map(item => (
+                      <ZoneChip
+                        key={item.column}
+                        column={item.column}
+                        type={resolveColumnType(item.column, columns, types)}
+                        onRemove={() => zone.onRemove(item.column)}
+                        extra={item.extra}
+                        formatConfig={columnFormats?.[item.column]}
+                        onFormatChange={onColumnFormatChange ? (config) => onColumnFormatChange(item.column, config) : undefined}
+                      />
+                    ))}
+                  </HStack>
+                  {zone.items.length === 0 && (
+                    <Text
+                      fontSize="xs"
+                      color="fg.subtle"
+                      fontStyle="italic"
+                      maxWidth="100%"
+                      overflow="hidden"
+                      textOverflow="ellipsis"
+                      whiteSpace="nowrap"
+                    >
+                      {zone.emptyText || 'Drop columns here'}
+                    </Text>
+                  )}
+                </DropZone>
+              </Box>
+            )
+          })}
+        </Box>
+      )}
+
+      {hasSettingsTab && activeTab === 'settings' && (
+        <Box
+          display="grid"
+          gridTemplateColumns="repeat(auto-fit, minmax(220px, 1fr))"
+          gap={3}
+          minWidth={0}
+        >
+          {showXAxisSettings && onAxisConfigChange && (
+            <AxisSettingsPanel axis="x" axisConfig={axisConfig ?? {}} onChange={onAxisConfigChange} />
+          )}
+          {showYAxisSettings && onAxisConfigChange && (
+            <AxisSettingsPanel axis="y" axisConfig={axisConfig ?? {}} onChange={onAxisConfigChange} />
+          )}
+          {settingsPanel}
+        </Box>
+      )}
 
     </Box>
   )
