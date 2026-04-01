@@ -38,6 +38,10 @@ export type Xcols = string[] | null;
  */
 export type Ycols = string[] | null;
 /**
+ * additional columns to show in chart tooltips without changing grouping or series structure
+ */
+export type Tooltipcols = string[] | null;
+/**
  * dimension columns for row headers
  */
 export type Rows = string[];
@@ -128,9 +132,23 @@ export type Prefix = string | null;
  */
 export type Suffix = string | null;
 /**
- * color overrides mapping series index to color key (e.g. {'0': 'danger', '2': 'warning'}). Only overridden indices are stored.
+ * color overrides mapping series index to color key (e.g. {'0': 'danger', '2': 'warning'}).
  */
 export type Colors = {
+  [k: string]: string;
+} | null;
+/**
+ * series opacity from 0.1 to 1.0
+ */
+export type Opacity = number | null;
+/**
+ * point marker size for charts that render markers, such as scatter and line
+ */
+export type Markersize = number | null;
+/**
+ * deprecated legacy color overrides. Use styleConfig.colors instead.
+ */
+export type Colors1 = {
   [k: string]: string;
 } | null;
 export type AxisScale = "linear" | "log";
@@ -224,12 +242,17 @@ export interface VizSettings {
   type: VisualizationType;
   xCols?: Xcols;
   yCols?: Ycols;
+  tooltipCols?: Tooltipcols;
   /**
    * pivot table configuration (only used when type is 'pivot')
    */
   pivotConfig?: PivotConfig | null;
   columnFormats?: Columnformats;
-  colors?: Colors;
+  /**
+   * shared visual styling for the chart, such as colors, opacity, and marker size.
+   */
+  styleConfig?: VisualizationStyleConfig | null;
+  colors?: Colors1;
   /**
    * axis configuration for scale type (linear or log). Only set when user explicitly requests log scale.
    */
@@ -275,6 +298,14 @@ export interface ColumnFormatConfig {
   dateFormat?: Dateformat;
   prefix?: Prefix;
   suffix?: Suffix;
+}
+/**
+ * Shared visual styling controls for charts.
+ */
+export interface VisualizationStyleConfig {
+  colors?: Colors;
+  opacity?: Opacity;
+  markerSize?: Markersize;
 }
 /**
  * Per-axis configuration for scale type and range.

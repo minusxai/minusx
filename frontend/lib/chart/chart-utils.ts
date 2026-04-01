@@ -1,11 +1,12 @@
 import type { EChartsOption } from 'echarts'
 import { withMinusXTheme } from './echarts-theme'
-import type { ColumnFormatConfig, AxisConfig } from '@/lib/types'
+import type { ColumnFormatConfig, AxisConfig, VisualizationStyleConfig } from '@/lib/types'
 
 // Chart props interface
 export interface ChartProps {
   xAxisData: string[]
   series: Array<{ name: string; data: number[] }>
+  pointMeta?: Record<string, any>[]
   height?: number | string
   xAxisLabel?: string
   yAxisLabel?: string
@@ -13,10 +14,12 @@ export interface ChartProps {
   onChartClick?: (params: unknown) => void  // ECharts click event handler for drill-down
   columnFormats?: Record<string, ColumnFormatConfig>
   xAxisColumns?: string[]  // Actual X-axis column names (for format config lookup)
+  tooltipColumns?: string[]
   chartTitle?: string  // Title shown in chart and included in downloads
   showChartTitle?: boolean  // Whether to show title in chart (always shown in downloads)
   colorPalette: string[]  // Effective color palette (hex values)
   axisConfig?: AxisConfig  // Axis scale config (linear/log)
+  styleConfig?: VisualizationStyleConfig
 }
 
 // Calculate axis label interval based on data length, container width, and max label length after truncation
@@ -344,6 +347,8 @@ interface BaseChartConfig {
   yAxisLabel?: string
   yAxisColumns?: string[]
   xAxisColumns?: string[]
+  pointMeta?: Record<string, any>[]
+  tooltipColumns?: string[]
   chartType: 'line' | 'bar' | 'area' | 'scatter' | 'combo'
   additionalOptions?: Partial<EChartsOption>
   colorMode?: 'light' | 'dark'
@@ -354,16 +359,21 @@ interface BaseChartConfig {
   showChartTitle?: boolean
   colorPalette: string[]
   axisConfig?: AxisConfig
+  styleConfig?: VisualizationStyleConfig
 }
 
 export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
-  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig } = config
+  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, pointMeta, tooltipColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig, styleConfig } = config
   const xScaleType = axisConfig?.xScale ?? 'linear'
   const yScaleType = axisConfig?.yScale ?? 'linear'
   const xMin = axisConfig?.xMin ?? undefined
   const xMax = axisConfig?.xMax ?? undefined
   const yMin = axisConfig?.yMin ?? undefined
   const yMax = axisConfig?.yMax ?? undefined
+  const tooltipKeyColor = 'var(--chakra-colors-fg-muted)'
+  const tooltipValueColor = 'var(--chakra-colors-fg-default)'
+  const seriesOpacity = styleConfig?.opacity
+  const markerSize = styleConfig?.markerSize
   const logMajorGridColor = colorMode === 'dark' ? 'rgba(208, 215, 222, 0.8)' : 'rgba(48, 54, 61, 0.8)'
   const logMinorGridColor = colorMode === 'dark' ? 'rgba(208, 215, 222, 0.5)' : 'rgba(48, 54, 61, 0.5)'
 
@@ -431,8 +441,11 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
       type: seriesType as 'line' | 'bar' | 'scatter',
       data: type === 'scatter'
         ? series[index].data
-            .map((y, i) => [Number(xAxisData[i]), y] as [number, number])
-            .filter(([x, y]) => (
+            .map((y, i) => ({
+              value: [Number(xAxisData[i]), y] as [number, number],
+              tooltipMeta: pointMeta?.[i],
+            }))
+            .filter(({ value: [x, y] }) => (
               isFinite(x)
               && isFinite(y)
               && (xScaleType !== 'log' || x > 0)
@@ -441,6 +454,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         : series[index].data,
       itemStyle: {
         color: palette[index % palette.length],
+        ...(seriesOpacity != null ? { opacity: seriesOpacity } : {}),
       },
       ...(useDualYAxis && { yAxisIndex: yAxisAssignments[index] }),
     }
@@ -450,9 +464,9 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         return {
           ...baseConfig,
           symbol: 'circle',
-          symbolSize: 5,
+          symbolSize: markerSize ?? 5,
           showSymbol: true,
-          lineStyle: { opacity: 0.95 },
+          lineStyle: { opacity: seriesOpacity ?? 0.95 },
         }
       case 'bar':
         return {
@@ -465,7 +479,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           symbol: 'none',
           showSymbol: false,
           stack: 'total',
-          areaStyle: {},
+          areaStyle: seriesOpacity != null ? { opacity: seriesOpacity } : {},
         }
       case 'combo':
         if (index === 0) {
@@ -474,7 +488,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
             type: 'bar' as const,
             itemStyle: {
               ...baseConfig.itemStyle,
-              opacity: 0.5,
+              opacity: seriesOpacity ?? 0.5,
             },
           }
         }
@@ -483,15 +497,15 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           type: 'line' as const,
           z: 10,
           symbol: 'circle',
-          symbolSize: 6,
+          symbolSize: markerSize ?? 6,
           showSymbol: true,
           showAllSymbol: true,
-          lineStyle: { opacity: 0.95, width: 2 },
+          lineStyle: { opacity: seriesOpacity ?? 0.95, width: 2 },
         }
       case 'scatter':
         return {
           ...baseConfig,
-          symbolSize: 8,
+          symbolSize: markerSize ?? 8,
         }
       default:
         return baseConfig
@@ -535,6 +549,26 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
     const combined = seriesOnAxis.join(', ')
     return wrapAxisName(combined, maxAxisNameLength)
   }
+
+  const legendData = useDualYAxis
+    ? series
+        .map((s, idx) => ({
+          name: `${s.name} (${yAxisAssignments[idx] === 0 ? 'L' : 'R'})`,
+          axis: yAxisAssignments[idx],
+          itemStyle: {
+            color: palette[idx % palette.length],
+            opacity: 1,
+          },
+        }))
+        .sort((a, b) => a.axis - b.axis)
+        .map(({ axis, ...item }) => item)
+    : series.map((s, idx) => ({
+        name: s.name,
+        itemStyle: {
+          color: palette[idx % palette.length],
+          opacity: 1,
+        },
+      }))
 
   // Build Y-axis configuration (single or dual)
   const yAxisType = yScaleType === 'log' ? 'log' as const : 'value' as const
@@ -649,6 +683,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
 
   // Use the estimated interval (could refine further but this is good enough)
   const labelInterval = estimatedInterval
+  const getColumnDisplayName = (col: string) => columnFormats?.[col]?.alias || col
 
   // Helper to generate and download CSV from chart data
   const downloadCsv = () => {
@@ -698,13 +733,50 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           hideDelay: 100,
           transitionDuration: 0.2,
           formatter: (params: any) => {
-            const [x, y] = params.data
+            const point = params.data?.value ? params.data : { value: params.data, tooltipMeta: undefined }
+            const [x, y] = point.value
             const formattedX = formatLargeNumber(x)
             const scatterCfg = columnFormats?.[params.seriesName]
             const scatterPrefix = scatterCfg?.prefix || yPrefix
             const scatterSuffix = scatterCfg?.suffix || ySuffix
             const formattedY = typeof y === 'number' ? applyPrefixSuffix(formatWithScale(y, yScale), scatterPrefix, scatterSuffix) : y
-            return `${params.seriesName}<br/>${xAxisLabel || 'X'}: ${formattedX}<br/>${yAxisLabel || 'Y'}: ${formattedY}`
+            let groupingPart = String(params.seriesName ?? '')
+            if ((yAxisColumns?.length ?? 0) > 1) {
+              for (const yCol of yAxisColumns ?? []) {
+                if (groupingPart.endsWith(` - ${yCol}`)) {
+                  groupingPart = groupingPart.slice(0, -(` - ${yCol}`.length))
+                  break
+                }
+              }
+            }
+
+            const groupingRows = (xAxisColumns ?? [])
+              .slice(1)
+              .map((col, index) => ({
+                key: getColumnDisplayName(col),
+                value: groupingPart.split(' | ')[index],
+              }))
+              .filter(row => row.value !== undefined && row.value !== '')
+
+            const extraRows = (tooltipColumns ?? [])
+              .filter(col => point.tooltipMeta && point.tooltipMeta[col] !== undefined)
+              .map(col => ({
+                key: getColumnDisplayName(col),
+                value: String(point.tooltipMeta[col]),
+              }))
+
+            const rows = [
+              ...groupingRows,
+              { key: xAxisLabel || 'X', value: formattedX },
+              { key: yAxisLabel || 'Y', value: String(formattedY) },
+              ...extraRows,
+            ]
+
+            const rowHtml = rows
+              .map(row => `<tr><td style="padding:2px 12px 2px 0;color:${tooltipKeyColor}">${row.key}</td><td style="padding:2px 0;text-align:right;font-weight:600;color:${tooltipValueColor}">${row.value}</td></tr>`)
+              .join('')
+
+            return `<table style="width:100%;border-collapse:collapse">${rowHtml}</table>`
           },
         }
       : {
@@ -735,16 +807,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           },
         },
     legend: {
-      data: useDualYAxis
-        ? // Sort legend: all L-axis items first, then R-axis items
-          series
-            .map((s, idx) => ({
-              name: `${s.name} (${yAxisAssignments[idx] === 0 ? 'L' : 'R'})`,
-              axis: yAxisAssignments[idx],
-            }))
-            .sort((a, b) => a.axis - b.axis) // Sort by axis (0=L first, 1=R second)
-            .map(item => item.name)
-        : series.map(s => s.name),
+      data: legendData,
       top: chartTitle && showChartTitle ? 30 : 10,
       orient: 'horizontal',
       type: 'scroll',

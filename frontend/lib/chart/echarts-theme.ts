@@ -22,6 +22,8 @@ export const CHART_COLORS = {
   wisteria: '#8e44ad',     // Wisteria (dark purple)
   sunflower: '#f1c40f',    // Sun Flower (yellow)
   carrot: '#e67e22',       // Carrot (dark orange)
+  silver: '#bdc3c7',       // Silver (light gray)
+
 }
 
 // Color palette for multi-series charts
@@ -36,6 +38,7 @@ export const COLOR_PALETTE = [
   CHART_COLORS.peterRiver, // 8. Light Blue
   CHART_COLORS.wisteria,   // 9. Dark Purple
   CHART_COLORS.carrot,     // 10. Dark Orange
+  CHART_COLORS.silver      // 11. Silver (light gray)
 ]
 
 // Ordered keys for UI display
