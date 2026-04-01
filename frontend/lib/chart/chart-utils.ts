@@ -24,6 +24,35 @@ export interface ChartProps {
   exportBranding?: Partial<CompanyBranding>
 }
 
+const hexToRgb = (color: string): { r: number; g: number; b: number } | null => {
+  const normalized = color.trim()
+  const hex = normalized.startsWith('#') ? normalized.slice(1) : normalized
+
+  if (hex.length === 3 && /^[0-9a-f]{3}$/i.test(hex)) {
+    return {
+      r: parseInt(hex[0] + hex[0], 16),
+      g: parseInt(hex[1] + hex[1], 16),
+      b: parseInt(hex[2] + hex[2], 16),
+    }
+  }
+
+  if (hex.length === 6 && /^[0-9a-f]{6}$/i.test(hex)) {
+    return {
+      r: parseInt(hex.slice(0, 2), 16),
+      g: parseInt(hex.slice(2, 4), 16),
+      b: parseInt(hex.slice(4, 6), 16),
+    }
+  }
+
+  return null
+}
+
+const withAlpha = (color: string, alpha: number): string => {
+  const rgb = hexToRgb(color)
+  if (!rgb) return color
+  return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`
+}
+
 // Calculate axis label interval based on data length, container width, and max label length after truncation
 export const calculateAxisInterval = (
   dataLength: number,
@@ -655,12 +684,28 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           stack: 'total',
         }
       case 'area':
+        const areaColor = palette[index % palette.length]
+        const bottomOpacity = seriesOpacity ?? 0.5
+        const topOpacity = bottomOpacity * 0.5
+
         return {
           ...baseConfig,
           symbol: 'none',
           showSymbol: false,
           stack: 'total',
-          areaStyle: seriesOpacity != null ? { opacity: seriesOpacity } : {},
+          areaStyle: {
+            color: {
+              type: 'linear',
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
+              colorStops: [
+                { offset: 0, color: withAlpha(areaColor, bottomOpacity) },
+                { offset: 1, color: withAlpha(areaColor, topOpacity) },
+              ],
+            },
+          },
         }
       case 'combo':
         if (index === 0) {
