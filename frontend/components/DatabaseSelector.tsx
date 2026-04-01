@@ -49,6 +49,7 @@ export default function DatabaseSelector({
       defaultIcon={LuDatabase}
       size={size}
       color="accent.primary"
+      label="Database selector"
     />
   );
 }

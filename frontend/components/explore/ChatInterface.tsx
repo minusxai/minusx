@@ -91,7 +91,11 @@ export default function ChatInterface({
   // Auto-select database when context loads (if none selected) — intentional setState in effect
   useEffect(() => {
     if (!selectedDatabase && databases.length > 0) {
-      const autoSelected = selectDatabase(databases, null);
+      // Prefer databases with schemas loaded: ChatInput filters allowedDatabaseNames by
+      // schemas.length > 0, so auto-selecting a schema-less DB would make the selector show
+      // "No connection" because that DB isn't in the options list.
+      const dbsWithSchemas = databases.filter(db => db.schemas.length > 0);
+      const autoSelected = selectDatabase(dbsWithSchemas.length > 0 ? dbsWithSchemas : databases, null);
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedDatabase(autoSelected);
     }
