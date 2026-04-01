@@ -219,7 +219,7 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
   const showInline = displayMode === 'auto' && containerWidth >= 220
 
   return (
-    <Box position="relative" ref={containerRef} width="100%">
+    <Box position="relative" ref={containerRef} width="100%" display="flex" alignItems="center" justifyContent="center">
       {showInline ? (
         renderContent(true)
       ) : (
@@ -241,7 +241,7 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
           >
             <LuPalette size={12} />
             <Text fontSize="2xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em">
-              Style
+              Options
             </Text>
           </HStack>
 
