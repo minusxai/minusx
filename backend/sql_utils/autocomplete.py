@@ -94,7 +94,11 @@ def get_completions(
     if is_dot_context:
         return get_dot_completions(ast, schema_data, text_before_cursor)
     elif is_column_context:
-        return get_column_completions(ast, schema_data, text_before_cursor)
+        suggestions = get_column_completions(ast, schema_data, text_before_cursor)
+        if needs_comma_prefix(text_before_cursor):
+            for s in suggestions:
+                s.insert_text = ', ' + s.insert_text
+        return suggestions
     elif is_table_context:
         return get_table_completions(ast, schema_data)
     else:
@@ -105,7 +109,7 @@ def needs_column_completion(text: str) -> bool:
     """Check if cursor is in column completion context"""
     patterns = [
         r'\bSELECT(\s+\w*)?$',
-        r'\bWHERE(\s+\w*)?$',
+        r'\bWHERE(\s+\w+)*(\s+\w*)?$',
         # `(\s+\w+)*` allows already-typed columns ("GROUP BY season ") before
         # the optional final partial token — without it a trailing space after
         # a column name would fall through to keyword completions.
@@ -115,10 +119,39 @@ def needs_column_completion(text: str) -> bool:
         r'\bON(\s+\w*)?$',
         r'\bLIKE\s+\w*$',
         r'\bNOT\s+LIKE\s+\w*$',
+        # Boolean operators in WHERE/HAVING — WHERE a=1 OR | / AND |
+        r'\bOR\s+\w*$',
+        r'\bAND\s+\w*$',
         # Also handle trailing space after a comma-separated item ("col1, col2 ")
         r',\s*\w*\s*$',
     ]
     return any(re.search(p, text, re.IGNORECASE) for p in patterns)
+
+
+def needs_comma_prefix(text: str) -> bool:
+    """
+    Returns True when cursor is after 'CLAUSE col ' (a typed column/alias + trailing
+    space, no trailing comma) inside a SELECT / GROUP BY / ORDER BY list.
+    In that case the next completion must be prefixed with ', ' to produce valid SQL.
+
+    Examples:
+      "GROUP BY batch_year "       → True   (would produce "…batch_year season" otherwise)
+      "GROUP BY batch_year, "      → False  (comma already present)
+      "GROUP BY "                  → False  (first item — clause_tail has no word yet)
+      "ORDER BY total_orders "     → True
+      "WHERE status "              → False  (WHERE is not a comma-list clause)
+    """
+    # Find the LAST SELECT / GROUP BY / ORDER BY keyword before the cursor
+    matches = list(re.finditer(r'\b(SELECT|GROUP\s+BY|ORDER\s+BY)\b', text, re.IGNORECASE))
+    if not matches:
+        return False
+    clause_tail = text[matches[-1].end():]
+    # If a FROM / WHERE / HAVING / JOIN appears after, cursor is not inside the list
+    if re.search(r'\b(FROM|WHERE|HAVING|JOIN)\b', clause_tail, re.IGNORECASE):
+        return False
+    # clause_tail must contain at least one typed word followed by trailing space,
+    # and must NOT end with a comma (comma means the separator is already present).
+    return bool(re.search(r'\w\s+$', clause_tail)) and not bool(re.search(r',\s*$', clause_tail))
 
 
 def needs_table_completion(text: str) -> bool:

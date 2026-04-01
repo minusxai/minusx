@@ -312,44 +312,131 @@ describe('Autocomplete API — E2E', () => {
   });
 
   // -------------------------------------------------------------------------
-  // Clause / operator completion regressions
+  // Clause / operator completion sweep
   //
-  // Each test exercises a specific cursor-position variant to guard against
-  // needs_column_completion() regex regressions:
-  //   - "ORDER BY"  (no trailing space)       → must return columns
-  //   - "ORDER BY " (trailing space)          → must return columns
-  //   - "GROUP BY"  (no trailing space)       → must return columns
-  //   - "GROUP BY col " (col + trailing sp.)  → must return columns [was bugged]
-  //   - "WHERE col LIKE " (LIKE operator)     → must return columns [was bugged]
-  //   - complex aggregation ORDER BY aliases  → must include SELECT aliases
+  // One parametric test walks every meaningful cursor position through a single
+  // full query: SELECT → WHERE → WHERE col → LIKE → GROUP BY → GROUP BY col →
+  // ORDER BY → ORDER BY col.  For each position we assert:
+  //   - mustContain: columns / aliases that MUST appear (wrong if absent)
+  //   - mustNotContain: columns from unrelated tables (wrong if present)
+  //   - mustBeNonEmpty: suggestions array must not be empty
+  //
+  // Regressions covered:
+  //   "WHERE col "    → was returning []  (pattern only handled one token after WHERE)
+  //   "WHERE col LIKE " → was returning []  (no LIKE pattern)
+  //   "GROUP BY col " → was returning []  (same multi-token issue)
+  //   "ORDER BY col " → was returning []  (same)
+  //   fallback context → was returning keywords, now returns []
   // -------------------------------------------------------------------------
 
-  describe('ORDER BY / GROUP BY regressions', () => {
-    // Shared query: weekly orders summary
-    const weeklyQuery = [
+  describe('Clause completion sweep', () => {
+    // Full query that exercises every clause type in one shot.
+    const query = [
       'SELECT',
-      "  DATE_TRUNC('week', created_at) AS week,",
-      '  COUNT(*) AS orders,',
+      '  platform,',
+      '  status,',
+      '  COUNT(*) AS total_orders,',
       '  SUM(total) AS revenue',
       'FROM orders',
-      "GROUP BY DATE_TRUNC('week', created_at)",
+      "WHERE status LIKE 'A%'",
+      'GROUP BY platform, status ',
+      'ORDER BY total_orders DESC',
     ].join('\n');
 
-    // Shared query: daily sessions (events)
-    const dailySessionsQuery = [
-      'SELECT',
-      '  DATE(event_timestamp) AS date,',
-      '  platform,',
-      '  COUNT(DISTINCT session_id) AS total_sessions',
-      'FROM events',
-      "WHERE event_timestamp >= '2025-12-01'",
-    ].join('\n');
+    // Columns that must appear at every column-context position (in scope = orders table)
+    const ordersColumns = ['status', 'platform', 'total', 'order_id', 'created_at'];
+    // Aliases defined in SELECT
+    const aliases = ['total_orders', 'revenue'];
+    // Columns from tables NOT referenced — must never appear
+    const outsideColumns = ['event_id', 'first_name', 'zone_name', 'vehicle_type'];
 
-    test('ORDER BY (no trailing space) returns columns, not keywords', async () => {
-      const query = weeklyQuery + '\nORDER BY';
+    // Locate cursor by finding exactly where a substring ends in the query
+    const after = (marker: string) => {
+      const idx = query.indexOf(marker);
+      if (idx === -1) throw new Error(`Marker not found in query: "${marker}"`);
+      return idx + marker.length;
+    };
+
+    const cases: Array<{ desc: string; cursor: number; mustContain: string[]; mustNotContain: string[] }> = [
+      {
+        desc: 'SELECT + trailing space',
+        cursor: after('SELECT\n  '),
+        mustContain: ordersColumns,
+        mustNotContain: outsideColumns,
+      },
+      {
+        desc: 'WHERE + trailing space',
+        cursor: after('WHERE '),
+        mustContain: ordersColumns,
+        mustNotContain: outsideColumns,
+      },
+      {
+        desc: 'WHERE col + trailing space — regression: was returning []',
+        cursor: after('WHERE status '),
+        mustContain: ordersColumns,
+        mustNotContain: outsideColumns,
+      },
+      {
+        desc: 'WHERE col LIKE + trailing space — regression: was returning []',
+        cursor: after("WHERE status LIKE "),
+        mustContain: ordersColumns,
+        mustNotContain: outsideColumns,
+      },
+      {
+        desc: 'GROUP BY + no trailing space',
+        cursor: after('GROUP BY'),
+        mustContain: [...ordersColumns, ...aliases],
+        mustNotContain: outsideColumns,
+      },
+      {
+        desc: 'GROUP BY + trailing space',
+        cursor: after('GROUP BY '),
+        mustContain: [...ordersColumns, ...aliases],
+        mustNotContain: outsideColumns,
+      },
+      {
+        desc: 'GROUP BY first col, + trailing space (comma)',
+        cursor: after('GROUP BY platform, '),
+        mustContain: [...ordersColumns, ...aliases],
+        mustNotContain: outsideColumns,
+      },
+      {
+        desc: 'GROUP BY last col + trailing space — regression: was returning []',
+        cursor: after('GROUP BY platform, status '),
+        mustContain: [...ordersColumns, ...aliases],
+        mustNotContain: outsideColumns,
+      },
+      {
+        desc: 'ORDER BY + no trailing space',
+        cursor: after('ORDER BY'),
+        mustContain: [...ordersColumns, ...aliases],
+        mustNotContain: outsideColumns,
+      },
+      {
+        desc: 'ORDER BY + trailing space',
+        cursor: after('ORDER BY '),
+        mustContain: [...ordersColumns, ...aliases],
+        mustNotContain: outsideColumns,
+      },
+      {
+        desc: 'ORDER BY col + trailing space — regression: was returning []',
+        cursor: after('ORDER BY total_orders '),
+        mustContain: [...ordersColumns, ...aliases],
+        mustNotContain: outsideColumns,
+      },
+      {
+        desc: 'aliases rank before base columns in ORDER BY',
+        cursor: after('ORDER BY '),
+        mustContain: ['total_orders', 'revenue'],    // aliases first by sort_text
+        mustNotContain: outsideColumns,
+        // validated separately below via sort order check
+      },
+    ];
+
+    test.each(cases)('$desc', async ({ cursor, mustContain, mustNotContain }) => {
       const result = await CompletionsAPI.getSqlCompletions({
         query,
-        cursorOffset: query.length,
+        cursorOffset: cursor,
         context: {
           type: 'sql_editor' as const,
           schemaData: mxfoodSchema,
@@ -361,20 +448,19 @@ describe('Autocomplete API — E2E', () => {
 
       expect(result.suggestions.length).toBeGreaterThan(0);
       const labels = result.suggestions.map((s: any) => s.label);
-      const kinds  = Object.fromEntries(result.suggestions.map((s: any) => [s.label, s.kind]));
 
-      expect(labels).toContain('week');      // SELECT alias
-      expect(labels).toContain('orders');    // SELECT alias
-      expect(labels).toContain('revenue');   // SELECT alias
-      expect(labels).toContain('status');    // base column
-      expect(kinds['status']).not.toBe('keyword');
+      for (const col of mustContain) {
+        expect(labels).toContain(col);
+      }
+      for (const col of mustNotContain) {
+        expect(labels).not.toContain(col);
+      }
     });
 
-    test('ORDER BY (trailing space) returns columns, not keywords', async () => {
-      const query = weeklyQuery + '\nORDER BY ';
+    test('aliases sort before base columns', async () => {
       const result = await CompletionsAPI.getSqlCompletions({
         query,
-        cursorOffset: query.length,
+        cursorOffset: after('ORDER BY '),
         context: {
           type: 'sql_editor' as const,
           schemaData: mxfoodSchema,
@@ -384,125 +470,53 @@ describe('Autocomplete API — E2E', () => {
         },
       });
 
-      expect(result.suggestions.length).toBeGreaterThan(0);
-      const labels = result.suggestions.map((s: any) => s.label);
-
-      expect(labels).toContain('week');
-      expect(labels).toContain('orders');
-      expect(labels).toContain('revenue');
-      expect(labels).toContain('status');
-    });
-
-    test('GROUP BY (no trailing space) returns columns, not keywords', async () => {
-      const query = dailySessionsQuery + '\nGROUP BY';
-      const result = await CompletionsAPI.getSqlCompletions({
-        query,
-        cursorOffset: query.length,
-        context: {
-          type: 'sql_editor' as const,
-          schemaData: mxfoodSchema,
-          resolvedReferences: [],
-          databaseName: 'mxfood',
-          connectionType: 'duckdb',
-        },
-      });
-
-      expect(result.suggestions.length).toBeGreaterThan(0);
-      const labels = result.suggestions.map((s: any) => s.label);
-
-      expect(labels).toContain('date');           // SELECT alias
-      expect(labels).toContain('total_sessions'); // SELECT alias
-      expect(labels).toContain('platform');       // base column + SELECT alias
-      expect(labels).toContain('event_id');       // base column
-    });
-
-    test('GROUP BY col (trailing space) returns columns — regression: was returning keywords', async () => {
-      // Bug: needs_column_completion() matched only up to one token after GROUP BY.
-      // "GROUP BY platform " (word + trailing space) fell through to keyword completions.
-      const query = dailySessionsQuery + '\nGROUP BY platform ';
-      const result = await CompletionsAPI.getSqlCompletions({
-        query,
-        cursorOffset: query.length,
-        context: {
-          type: 'sql_editor' as const,
-          schemaData: mxfoodSchema,
-          resolvedReferences: [],
-          databaseName: 'mxfood',
-          connectionType: 'duckdb',
-        },
-      });
-
-      expect(result.suggestions.length).toBeGreaterThan(0);
-      const labels = result.suggestions.map((s: any) => s.label);
-      const kinds  = Object.fromEntries(result.suggestions.map((s: any) => [s.label, s.kind]));
-
-      // Must return column/alias suggestions, not only SQL keywords
-      const nonKeyword = labels.filter((l: string) => kinds[l] !== 'keyword');
-      expect(nonKeyword.length).toBeGreaterThan(0);
-
-      expect(labels).toContain('date');
-      expect(labels).toContain('total_sessions');
-      expect(labels).toContain('event_id');
-    });
-
-    test('WHERE col LIKE (trailing space) returns columns — regression: was returning keywords', async () => {
-      // Bug: no pattern for LIKE operator, so "WHERE status LIKE " fell through to keywords.
-      const query = 'SELECT order_id, status FROM orders WHERE status LIKE ';
-      const result = await CompletionsAPI.getSqlCompletions({
-        query,
-        cursorOffset: query.length,
-        context: {
-          type: 'sql_editor' as const,
-          schemaData: mxfoodSchema,
-          resolvedReferences: [],
-          databaseName: 'mxfood',
-          connectionType: 'duckdb',
-        },
-      });
-
-      expect(result.suggestions.length).toBeGreaterThan(0);
-      const labels = result.suggestions.map((s: any) => s.label);
-      const kinds  = Object.fromEntries(result.suggestions.map((s: any) => [s.label, s.kind]));
-
-      const nonKeyword = labels.filter((l: string) => kinds[l] !== 'keyword');
-      expect(nonKeyword.length).toBeGreaterThan(0);
-
-      expect(labels).toContain('status');
-      expect(labels).toContain('order_id');
-    });
-
-    test('complex aggregation ORDER BY — SELECT aliases rank before base columns', async () => {
-      // question 25 "Daily Sessions" extended with ORDER BY
-      const query = dailySessionsQuery + '\nGROUP BY date, platform\nORDER BY d';
-      const result = await CompletionsAPI.getSqlCompletions({
-        query,
-        cursorOffset: query.length,
-        context: {
-          type: 'sql_editor' as const,
-          schemaData: mxfoodSchema,
-          resolvedReferences: [],
-          databaseName: 'mxfood',
-          connectionType: 'duckdb',
-        },
-      });
-
-      expect(result.suggestions.length).toBeGreaterThan(0);
-      const labels = result.suggestions.map((s: any) => s.label);
-      const kinds  = Object.fromEntries(result.suggestions.map((s: any) => [s.label, s.kind]));
-
-      // SELECT aliases must appear
-      expect(labels).toContain('date');
-      expect(labels).toContain('platform');
-      expect(labels).toContain('total_sessions');
-
-      // Base events columns must appear
-      expect(labels).toContain('event_id');
-      expect(labels).toContain('event_timestamp');
-
-      // Aliases should sort before base columns (lower sort_text index)
-      const aliasIdx   = result.suggestions.findIndex((s: any) => s.label === 'date');
-      const columnIdx  = result.suggestions.findIndex((s: any) => s.label === 'event_id');
+      const aliasIdx  = result.suggestions.findIndex((s: any) => s.label === 'total_orders');
+      const columnIdx = result.suggestions.findIndex((s: any) => s.label === 'order_id');
+      expect(aliasIdx).toBeGreaterThan(-1);
+      expect(columnIdx).toBeGreaterThan(-1);
       expect(aliasIdx).toBeLessThan(columnIdx);
+    });
+
+    test('insert_text has ", " prefix after typed col + trailing space to prevent missing comma', async () => {
+      // "ORDER BY total_orders " — cursor after a word + space: next item must be ", col"
+      const result = await CompletionsAPI.getSqlCompletions({
+        query,
+        cursorOffset: after('ORDER BY total_orders '),
+        context: {
+          type: 'sql_editor' as const,
+          schemaData: mxfoodSchema,
+          resolvedReferences: [],
+          databaseName: 'mxfood',
+          connectionType: 'duckdb',
+        },
+      });
+
+      expect(result.suggestions.length).toBeGreaterThan(0);
+      // Every insert_text must start with ', ' so Monaco can delete the trailing space
+      // and produce "…total_orders, revenue" instead of "…total_orders revenue".
+      for (const s of result.suggestions) {
+        expect((s as any).insert_text).toMatch(/^, /);
+      }
+    });
+
+    test('insert_text has NO ", " prefix when cursor is right after keyword (first item in list)', async () => {
+      // "ORDER BY " — cursor right after keyword + space: first item, no comma needed
+      const result = await CompletionsAPI.getSqlCompletions({
+        query,
+        cursorOffset: after('ORDER BY '),
+        context: {
+          type: 'sql_editor' as const,
+          schemaData: mxfoodSchema,
+          resolvedReferences: [],
+          databaseName: 'mxfood',
+          connectionType: 'duckdb',
+        },
+      });
+
+      expect(result.suggestions.length).toBeGreaterThan(0);
+      for (const s of result.suggestions) {
+        expect((s as any).insert_text).not.toMatch(/^, /);
+      }
     });
   });
 
@@ -628,6 +642,7 @@ describe('Autocomplete API — E2E', () => {
     });
 
     test('GROUP BY on FROM events — events columns and SELECT aliases returned (question 25)', async () => {
+
       const query = [
         'SELECT',
         '  DATE(event_timestamp) as date,',
@@ -666,6 +681,106 @@ describe('Autocomplete API — E2E', () => {
       expect(labels).not.toContain('status');
       expect(labels).not.toContain('zone_name');
       expect(labels).not.toContain('vehicle_type');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Backward truncation sweep
+  //
+  // Strategy: one complete mxfood query; each test case truncates it right
+  // after a clause keyword/column/operator so the cursor is always at the END
+  // of the shorter string — exactly what the editor sends when the user pauses
+  // mid-clause.
+  //
+  // Regressions covered:
+  //   "ORDER BY col ASC, "   → was returning []
+  //   "GROUP BY col, col "   → was returning [] (multi-token fix)
+  //   "WHERE col "           → was returning []
+  //   "WHERE col LIKE "      → was returning []
+  //   "WHERE … OR "          → was returning [] (OR pattern added)
+  // -------------------------------------------------------------------------
+
+  describe('Backward truncation sweep', () => {
+    const fullQuery = [
+      'SELECT',
+      '  platform,',
+      '  status,',
+      '  COUNT(*) AS total_orders,',
+      '  SUM(total) AS revenue',
+      'FROM orders',
+      "WHERE status LIKE 'A%' OR platform = 'web'",
+      'GROUP BY platform, status',
+      'ORDER BY total_orders DESC, revenue ASC',
+    ].join('\n');
+
+    // Truncate fullQuery right AFTER `marker` (plus optional `append`).
+    // Cursor is always at the very end of the resulting string.
+    const truncateAfter = (marker: string, append = ''): { query: string; cursor: number } => {
+      const idx = fullQuery.indexOf(marker);
+      if (idx === -1) throw new Error(`Marker not found in fullQuery: "${marker}"`);
+      const q = fullQuery.substring(0, idx + marker.length) + append;
+      return { query: q, cursor: q.length };
+    };
+
+    const baseCols  = ['status', 'platform', 'total', 'order_id', 'created_at'];
+    const aliases   = ['total_orders', 'revenue'];
+
+    const cases: Array<{ desc: string; query: string; cursor: number; mustContain: string[] }> = [
+      // --- ORDER BY (walk backward through columns) ---
+      { desc: 'ORDER BY + trailing space',
+        ...truncateAfter('ORDER BY '),
+        mustContain: [...baseCols, ...aliases] },
+      { desc: 'ORDER BY first col + trailing space',
+        ...truncateAfter('ORDER BY total_orders '),
+        mustContain: [...baseCols, ...aliases] },
+      { desc: 'ORDER BY first col DESC, + trailing space — regression',
+        ...truncateAfter('ORDER BY total_orders DESC, '),
+        mustContain: [...baseCols, ...aliases] },
+
+      // --- GROUP BY ---
+      { desc: 'GROUP BY + trailing space',
+        ...truncateAfter('GROUP BY '),
+        mustContain: [...baseCols, ...aliases] },
+      { desc: 'GROUP BY first col, + trailing space',
+        ...truncateAfter('GROUP BY platform, '),
+        mustContain: [...baseCols, ...aliases] },
+      { desc: 'GROUP BY last col + trailing space — regression',
+        ...truncateAfter('GROUP BY platform, status', ' '),
+        mustContain: [...baseCols, ...aliases] },
+
+      // --- WHERE ---
+      { desc: 'WHERE + trailing space',
+        ...truncateAfter('WHERE '),
+        mustContain: baseCols },
+      { desc: 'WHERE col + trailing space — regression',
+        ...truncateAfter('WHERE status '),
+        mustContain: baseCols },
+      { desc: 'WHERE col LIKE + trailing space — regression',
+        ...truncateAfter("WHERE status LIKE "),
+        mustContain: baseCols },
+      { desc: "WHERE col LIKE 'val' OR + trailing space — regression",
+        ...truncateAfter("WHERE status LIKE 'A%' OR "),
+        mustContain: baseCols },
+    ];
+
+    test.each(cases)('$desc', async ({ query, cursor, mustContain }) => {
+      const result = await CompletionsAPI.getSqlCompletions({
+        query,
+        cursorOffset: cursor,
+        context: {
+          type: 'sql_editor' as const,
+          schemaData: mxfoodSchema,
+          resolvedReferences: [],
+          databaseName: 'mxfood',
+          connectionType: 'duckdb',
+        },
+      });
+
+      expect(result.suggestions.length).toBeGreaterThan(0);
+      const labels = result.suggestions.map((s: any) => s.label);
+      for (const col of mustContain) {
+        expect(labels).toContain(col);
+      }
     });
   });
 });

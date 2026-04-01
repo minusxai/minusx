@@ -348,6 +348,12 @@ export default function SqlEditor({
             const wordMatch = textUntilPosition.match(/(\w*)$/);
             const partial = wordMatch ? wordMatch[1] : '';
 
+            // When insert_text starts with ', ' the Python backend detected a
+            // "trailing space after column in a list clause" situation.  We must
+            // expand the range one character back to consume that trailing space so
+            // the result is "…col, next" instead of "…col , next".
+            const commaPrefix = (item.insert_text as string).startsWith(', ');
+
             return {
               label: {
                 label: item.label,
@@ -359,7 +365,7 @@ export default function SqlEditor({
               sortText: item.sort_text,
               range: {
                 startLineNumber: position.lineNumber,
-                startColumn: position.column - partial.length,
+                startColumn: position.column - partial.length - (commaPrefix ? 1 : 0),
                 endLineNumber: position.lineNumber,
                 endColumn: position.column
               }
