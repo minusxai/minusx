@@ -106,11 +106,15 @@ def needs_column_completion(text: str) -> bool:
     patterns = [
         r'\bSELECT(\s+\w*)?$',
         r'\bWHERE(\s+\w*)?$',
-        r'\bGROUP\s+BY(\s+\w*)?$',
-        r'\bORDER\s+BY(\s+\w*)?$',
+        # `(\s+\w+)*` allows already-typed columns ("GROUP BY season ") before
+        # the optional final partial token — without it a trailing space after
+        # a column name would fall through to keyword completions.
+        r'\bGROUP\s+BY(\s+\w+)*(\s+\w*)?$',
+        r'\bORDER\s+BY(\s+\w+)*(\s+\w*)?$',
         r'\bHAVING(\s+\w*)?$',
         r'\bON(\s+\w*)?$',
-        r',\s*\w*$',
+        # Also handle trailing space after a comma-separated item ("col1, col2 ")
+        r',\s*\w*\s*$',
     ]
     return any(re.search(p, text, re.IGNORECASE) for p in patterns)
 
