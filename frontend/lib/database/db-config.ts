@@ -3,15 +3,14 @@
  * Provides environment-aware database paths and adapter type
  */
 import path from 'path';
-import { IS_DEV } from '../constants';
-import { DB_TYPE as CONFIG_DB_TYPE } from '../config';
+import { IS_DEV, DB_TYPE } from '../constants';
 
 /**
  * Get database adapter type.
  * Tests mock this function directly via jest.mock('../db-config').
  */
 export function getDbType(): 'sqlite' | 'postgres' {
-  return CONFIG_DB_TYPE;
+  return DB_TYPE;
 }
 
 // Environment-aware database path

@@ -18,7 +18,6 @@ interface EnvironmentConfig {
   ADMIN_PWD: string | undefined;
   ALLOW_MULTIPLE_COMPANIES: boolean;
   CREATE_COMPANY_SECRET: string | undefined;
-  DB_TYPE: 'sqlite' | 'postgres';
   DATABASE_URL: string;
   POSTGRES_URL: string | undefined;
   POSTGRES_SCHEMA: string;
@@ -66,7 +65,6 @@ const config: EnvironmentConfig = {
 
   ALLOW_MULTIPLE_COMPANIES: process.env.ALLOW_MULTIPLE_COMPANIES === 'true',
   CREATE_COMPANY_SECRET: process.env.CREATE_COMPANY_SECRET,
-  DB_TYPE: getOptional(process.env.DB_TYPE, 'sqlite') as 'sqlite' | 'postgres',
   DATABASE_URL: getOptional(process.env.DATABASE_URL, 'data/atlas_documents.db'),
   POSTGRES_URL: process.env.POSTGRES_URL,
   POSTGRES_SCHEMA: getOptional(process.env.POSTGRES_SCHEMA, 'public'),
@@ -110,7 +108,6 @@ export const NEXTAUTH_SECRET = config.NEXTAUTH_SECRET;
 export const ADMIN_PWD = config.ADMIN_PWD;
 export const ALLOW_MULTIPLE_COMPANIES = config.ALLOW_MULTIPLE_COMPANIES;
 export const CREATE_COMPANY_SECRET = config.CREATE_COMPANY_SECRET;
-export const DB_TYPE = config.DB_TYPE;
 export const DATABASE_URL = config.DATABASE_URL;
 export const POSTGRES_URL = config.POSTGRES_URL;
 export const POSTGRES_SCHEMA = config.POSTGRES_SCHEMA;
