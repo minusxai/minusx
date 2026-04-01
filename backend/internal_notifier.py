@@ -26,15 +26,18 @@ async def notify_internal(source: str, message: str, extras: dict | None = None)
     if not webhook_url:
         return
 
-    commit_sha = _GIT_COMMIT_SHA
-    lines = [f'*[{source}]* {message}']
-    if extras:
-        for k, v in extras.items():
-            lines.append(f'• *{k}*: {v}')
-    lines.append(f'commit: `{commit_sha}`')
+    import json
+    from datetime import datetime, timezone
+
+    err_obj = {'source': source, 'message': message, 'commit': _GIT_COMMIT_SHA, **(extras or {})}
+    payload = {
+        'email_id': (extras or {}).get('user', source),
+        'created_at': datetime.now(timezone.utc).isoformat(),
+        'err_str': json.dumps(err_obj),
+    }
 
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            await client.post(webhook_url, json={'text': '\n'.join(lines)})
+            await client.post(webhook_url, json=payload)
     except Exception as e:
         logger.error(f'[internal-notifier] Failed to send internal notification: {e}')

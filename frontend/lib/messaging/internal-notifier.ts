@@ -14,18 +14,22 @@ export async function notifyInternal(
   const webhookUrl = process.env.INTERNAL_SLACK_CHANNEL_WEBHOOK;
   if (!webhookUrl) return;
 
-  const commitSha = GIT_COMMIT_SHA;
-  const lines: string[] = [
-    `*[${source}]* ${message}`,
-    ...(extras ? Object.entries(extras).map(([k, v]) => `• *${k}*: ${v}`) : []),
-    `commit: \`${commitSha}\``,
-  ];
+  const errObj: Record<string, string> = {
+    source,
+    message,
+    commit: GIT_COMMIT_SHA,
+    ...(extras ?? {}),
+  };
 
   try {
     await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: lines.join('\n') }),
+      body: JSON.stringify({
+        email_id: extras?.user ?? source,
+        created_at: new Date().toISOString(),
+        err_str: JSON.stringify(errObj),
+      }),
     });
   } catch (e) {
     console.error('[internal-notifier] Failed to send internal notification:', e);
