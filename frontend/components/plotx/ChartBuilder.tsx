@@ -103,17 +103,17 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
 
   // Auto-select columns: always derived from props so agent edits immediately take effect
   const xAxisColumns = useMemo<string[]>(() => {
-    if (initialXCols && initialXCols.length > 0) {
+    if (initialXCols !== undefined) {
       const validCols = initialXCols.filter(col => columns.includes(col))
-      if (validCols.length > 0) return validCols
+      if (validCols.length > 0 || initialXCols.length === 0) return validCols
     }
     return groupedColumns.dates.length > 0 ? [groupedColumns.dates[0]] : []
   }, [initialXCols, columns, groupedColumns])
 
   const yAxisColumns = useMemo<string[]>(() => {
-    if (initialYCols && initialYCols.length > 0) {
+    if (initialYCols !== undefined) {
       const validCols = initialYCols.filter(col => columns.includes(col))
-      if (validCols.length > 0) return validCols
+      if (validCols.length > 0 || initialYCols.length === 0) return validCols
     }
     return groupedColumns.numbers.length > 0 ? [groupedColumns.numbers[0]] : []
   }, [initialYCols, columns, groupedColumns])
