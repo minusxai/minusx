@@ -57,22 +57,17 @@ export const alertJobHandler: JobHandler = {
       const { config } = await getConfigsByCompanyId(user.companyId, user.mode);
       const agentName = config.branding.agentName;
 
-      // Build summary from failed tests
-      const failSummary = failedTests.map(r => {
-        const label = r.test.label ?? (r.test.type === 'llm' && r.test.subject.type === 'llm' ? r.test.subject.prompt : 'Test');
-        return r.error ? `${label}: ${r.error}` : `${label}: ${r.actualValue} (expected ${r.expectedValue})`;
+      const failSummary = failedTests.map((r, i) => {
+        const label = r.test.label ?? `Test ${i + 1}`;
+        return r.error ? `${label}: ${r.error}` : `${label}: got ${r.actualValue}, expected ${r.test.operator} ${r.expectedValue}`;
       }).join('; ');
 
       const plainText = `Alert "${alertName}" triggered. ${failedTests.length}/${testResults.length} test(s) failed. ${failSummary}`;
 
-      // Build email HTML — pass a summary value for display
       const emailHtml = buildAlertEmailHtml({
         alertName,
-        actualValue: failedTests.length,
-        operator: '>',
-        threshold: 0,
-        column: undefined,
-        questionName: `${failedTests.length}/${testResults.length} tests failed`,
+        failedTests,
+        totalTests: testResults.length,
         alertLink,
         agentName,
       });
