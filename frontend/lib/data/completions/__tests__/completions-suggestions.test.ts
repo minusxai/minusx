@@ -19,7 +19,7 @@ jest.mock('@/lib/connections', () => ({
 }));
 
 // Mock schema introspection to return test schema
-jest.mock('@/lib/backend/python-backend', () => ({
+jest.mock('@/lib/backend/python-backend.server', () => ({
   getSchemaFromPython: jest.fn().mockResolvedValue({
     schemas: [
       {
