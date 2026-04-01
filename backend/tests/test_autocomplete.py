@@ -603,6 +603,158 @@ def test_where_context_simple_two_table_schema():
     assert "email" not in column_names
 
 
+def test_select_aliases_available_for_order_by():
+    """
+    Regression: ORDER BY completion with a complex DuckDB aggregation query.
+
+    Uses the exact schema and query from a real user report where
+    {"suggestions":[]} was returned despite schema_data being populated.
+
+    The aliases (batch_year, season, active, etc.) are defined in the SELECT
+    clause and must always appear in ORDER BY suggestions — they are extracted
+    from the AST and require no schema lookup.
+
+    Connection type is 'csv', which maps to the DuckDB dialect internally.
+    """
+    # Exact schema from the reported payload
+    yc_schema = [{
+        "databaseName": "yc_companies",
+        "schemas": [{
+            "schema": "main",
+            "tables": [{
+                "table": "t_2024_05_11_yc_companies",
+                "columns": [
+                    {"name": "company_id",       "type": "BIGINT"},
+                    {"name": "company_name",      "type": "VARCHAR"},
+                    {"name": "short_description", "type": "VARCHAR"},
+                    {"name": "long_description",  "type": "VARCHAR"},
+                    {"name": "batch",             "type": "VARCHAR"},
+                    {"name": "status",            "type": "VARCHAR"},
+                    {"name": "tags",              "type": "VARCHAR"},
+                    {"name": "location",          "type": "VARCHAR"},
+                    {"name": "country",           "type": "VARCHAR"},
+                    {"name": "year_founded",      "type": "DOUBLE"},
+                    {"name": "num_founders",      "type": "BIGINT"},
+                    {"name": "founders_names",    "type": "VARCHAR"},
+                    {"name": "team_size",         "type": "DOUBLE"},
+                    {"name": "website",           "type": "VARCHAR"},
+                    {"name": "cb_url",            "type": "VARCHAR"},
+                    {"name": "linkedin_url",      "type": "VARCHAR"},
+                ]
+            }]
+        }]
+    }]
+
+    # Exact query from the reported payload (cursorOffset 647 = end of query)
+    query = (
+        "SELECT\n"
+        "    batch,\n"
+        "    TRY_CAST('20' || SUBSTRING(batch, 2, 2) AS INTEGER) AS batch_year,\n"
+        "    SUBSTRING(batch, 1, 1) AS season,\n"
+        "    COUNT(*) AS total_companies,\n"
+        "    COUNT(CASE WHEN status = 'Active'   THEN 1 END) AS active,\n"
+        "    COUNT(CASE WHEN status = 'Acquired' THEN 1 END) AS acquired,\n"
+        "    COUNT(CASE WHEN status = 'Public'   THEN 1 END) AS public_co,\n"
+        "    COUNT(CASE WHEN status = 'Inactive' THEN 1 END) AS inactive,\n"
+        "    ROUND(100.0 * COUNT(CASE WHEN status IN ('Acquired', 'Public') THEN 1 END) / COUNT(*), 1) AS exit_rate_pct\n"
+        "FROM t_2024_05_11_yc_companies\n"
+        "WHERE batch LIKE 'S%' OR batch LIKE 'W%'\n"
+        "GROUP BY batch, batch_year, season\n"
+        "ORDER BY A"
+    )
+    assert len(query) == 647, f"Query length mismatch: {len(query)}"
+
+    suggestions = get_completions(query, 647, yc_schema,
+                                  database_name="yc_companies",
+                                  connection_type="csv")
+    labels = [s.label for s in suggestions]
+
+    # Schema columns from t_2024_05_11_yc_companies must appear
+    assert "batch" in labels,   "base column 'batch' must appear"
+    assert "status" in labels,  "base column 'status' must appear"
+
+    # SELECT aliases must appear — even when the FROM table is not in schema_data,
+    # aliases are extracted from the AST and require no schema lookup
+    assert "batch_year"      in labels, "alias 'batch_year' must appear in ORDER BY"
+    assert "season"          in labels, "alias 'season' must appear in ORDER BY"
+    assert "total_companies" in labels, "alias 'total_companies' must appear"
+    assert "active"          in labels, "alias 'active' must appear"
+    assert "acquired"        in labels, "alias 'acquired' must appear"
+    assert "public_co"       in labels, "alias 'public_co' must appear"
+    assert "inactive"        in labels, "alias 'inactive' must appear"
+    assert "exit_rate_pct"   in labels, "alias 'exit_rate_pct' must appear"
+
+    # No columns from unrelated tables should be injected
+    assert "user_id" not in labels
+    assert "order_id" not in labels
+
+
+def test_select_aliases_also_present_when_schema_data_populated():
+    """
+    When schema_data has the FROM table, ORDER BY should show both
+    the table's base columns AND any SELECT aliases from the query.
+
+    Uses a realistic e-commerce schema to validate that aliases don't
+    shadow real columns of the same name (deduplication).
+    """
+    ecommerce_schema = [{
+        "databaseName": "shop",
+        "schemas": [{
+            "schema": "public",
+            "tables": [
+                {
+                    "table": "orders",
+                    "columns": [
+                        {"name": "order_id",    "type": "BIGINT"},
+                        {"name": "customer_id", "type": "BIGINT"},
+                        {"name": "amount",      "type": "DECIMAL"},
+                        {"name": "status",      "type": "VARCHAR"},
+                        {"name": "created_at",  "type": "TIMESTAMP"},
+                    ]
+                },
+                {
+                    "table": "customers",
+                    "columns": [
+                        {"name": "customer_id", "type": "BIGINT"},
+                        {"name": "email",       "type": "VARCHAR"},
+                        {"name": "region",      "type": "VARCHAR"},
+                    ]
+                }
+            ]
+        }]
+    }]
+
+    query = (
+        "SELECT\n"
+        "    status,\n"
+        "    COUNT(*) AS order_count,\n"
+        "    SUM(amount) AS total_revenue,\n"
+        "    AVG(amount) AS avg_order_value\n"
+        "FROM orders\n"
+        "GROUP BY status\n"
+        "ORDER BY "
+    )
+
+    suggestions = get_completions(query, len(query), ecommerce_schema,
+                                  database_name="shop", connection_type="postgresql")
+    labels = [s.label for s in suggestions]
+
+    # Base columns from 'orders' (only the joined table — 'customers' is not referenced)
+    assert "order_id"   in labels
+    assert "amount"     in labels
+    assert "status"     in labels
+    assert "created_at" in labels
+
+    # Unjoined table must not appear
+    assert "email"   not in labels
+    assert "region"  not in labels
+
+    # SELECT aliases also visible for ORDER BY
+    assert "order_count"     in labels
+    assert "total_revenue"   in labels
+    assert "avg_order_value" in labels
+
+
 # ---------------------------------------------------------------------------
 # Dialect tests
 # One schema, two tables (users + orders). All three dialects must correctly

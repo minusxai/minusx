@@ -353,4 +353,143 @@ describe('Autocomplete API - Phase 2 E2E Tests', () => {
       expect(Array.isArray(result.suggestions)).toBe(true);
     });
   });
+
+  describe('Part C: Real-world DuckDB query — ORDER BY alias completion', () => {
+    /**
+     * Regression for the bug where {"suggestions":[]} was returned for a complex
+     * DuckDB aggregation query with SELECT aliases typed at ORDER BY.
+     *
+     * Exact payload captured from the user's Network tab:
+     *   cursorOffset: 647 (end of query)
+     *   connectionType: "csv"  (maps to DuckDB dialect)
+     *   schemaData: yc_companies DB with t_2024_05_11_yc_companies table (16 cols)
+     *
+     * Expected behavior:
+     *   - Base columns from the FROM table (batch, status, …) appear
+     *   - SELECT aliases (batch_year, season, active, …) appear — always valid in ORDER BY
+     *   - Zero suggestions is a bug
+     */
+    const ycSchema: DatabaseWithSchema[] = [
+      {
+        databaseName: 'yc_companies',
+        schemas: [
+          {
+            schema: 'main',
+            tables: [
+              {
+                table: 't_2024_05_11_yc_companies',
+                columns: [
+                  { name: 'company_id',       type: 'BIGINT' },
+                  { name: 'company_name',      type: 'VARCHAR' },
+                  { name: 'short_description', type: 'VARCHAR' },
+                  { name: 'long_description',  type: 'VARCHAR' },
+                  { name: 'batch',             type: 'VARCHAR' },
+                  { name: 'status',            type: 'VARCHAR' },
+                  { name: 'tags',              type: 'VARCHAR' },
+                  { name: 'location',          type: 'VARCHAR' },
+                  { name: 'country',           type: 'VARCHAR' },
+                  { name: 'year_founded',      type: 'DOUBLE' },
+                  { name: 'num_founders',      type: 'BIGINT' },
+                  { name: 'founders_names',    type: 'VARCHAR' },
+                  { name: 'team_size',         type: 'DOUBLE' },
+                  { name: 'website',           type: 'VARCHAR' },
+                  { name: 'cb_url',            type: 'VARCHAR' },
+                  { name: 'linkedin_url',      type: 'VARCHAR' },
+                ],
+              },
+            ],
+          },
+        ],
+        updated_at: new Date().toISOString(),
+      },
+    ];
+
+    const ycQuery = [
+      'SELECT',
+      '    batch,',
+      "    TRY_CAST('20' || SUBSTRING(batch, 2, 2) AS INTEGER) AS batch_year,",
+      '    SUBSTRING(batch, 1, 1) AS season,',
+      '    COUNT(*) AS total_companies,',
+      "    COUNT(CASE WHEN status = 'Active'   THEN 1 END) AS active,",
+      "    COUNT(CASE WHEN status = 'Acquired' THEN 1 END) AS acquired,",
+      "    COUNT(CASE WHEN status = 'Public'   THEN 1 END) AS public_co,",
+      "    COUNT(CASE WHEN status = 'Inactive' THEN 1 END) AS inactive,",
+      "    ROUND(100.0 * COUNT(CASE WHEN status IN ('Acquired', 'Public') THEN 1 END) / COUNT(*), 1) AS exit_rate_pct",
+      'FROM t_2024_05_11_yc_companies',
+      "WHERE batch LIKE 'S%' OR batch LIKE 'W%'",
+      'GROUP BY batch, batch_year, season',
+      'ORDER BY A',
+    ].join('\n');
+
+    test('Test 7: ORDER BY on complex DuckDB aggregation — base columns and SELECT aliases both returned', async () => {
+      const result = await CompletionsAPI.getSqlCompletions({
+        query: ycQuery,
+        cursorOffset: 647, // End of query — matches the exact reported payload
+        context: {
+          type: 'sql_editor' as const,
+          schemaData: ycSchema,
+          resolvedReferences: [],
+          databaseName: 'yc_companies',
+          connectionType: 'csv', // csv → DuckDB dialect
+        },
+      });
+
+      expect(Array.isArray(result.suggestions)).toBe(true);
+      expect(result.suggestions.length).toBeGreaterThan(0);
+
+      const labels = result.suggestions.map((s: any) => s.label);
+
+      // Base columns from the FROM table must appear
+      expect(labels).toContain('batch');
+      expect(labels).toContain('status');
+      expect(labels).toContain('company_id');
+
+      // SELECT aliases must appear — they are valid ORDER BY targets
+      expect(labels).toContain('batch_year');
+      expect(labels).toContain('season');
+      expect(labels).toContain('total_companies');
+      expect(labels).toContain('active');
+      expect(labels).toContain('acquired');
+      expect(labels).toContain('public_co');
+      expect(labels).toContain('inactive');
+      expect(labels).toContain('exit_rate_pct');
+
+      // Zero suggestions is the regression we are guarding against
+      expect(labels.length).toBeGreaterThanOrEqual(10);
+    });
+
+    test('Test 8: WHERE clause on same query — only base table columns, not aliases', async () => {
+      // Cursor after WHERE — base columns are the right suggestions, not ORDER BY aliases
+      const queryUpToWhere = ycQuery.substring(
+        0,
+        ycQuery.indexOf('\nGROUP BY') > 0
+          ? ycQuery.lastIndexOf('WHERE') + 'WHERE '.length
+          : ycQuery.length
+      );
+
+      const result = await CompletionsAPI.getSqlCompletions({
+        query: ycQuery, // Full query
+        cursorOffset: ycQuery.indexOf("WHERE batch LIKE") + 'WHERE '.length,
+        context: {
+          type: 'sql_editor' as const,
+          schemaData: ycSchema,
+          resolvedReferences: [],
+          databaseName: 'yc_companies',
+          connectionType: 'csv',
+        },
+      });
+
+      expect(Array.isArray(result.suggestions)).toBe(true);
+      const labels = result.suggestions.map((s: any) => s.label);
+
+      // Base columns from FROM table must appear
+      expect(labels).toContain('batch');
+      expect(labels).toContain('status');
+      expect(labels).toContain('company_name');
+
+      // Must NOT show columns from tables not in query
+      expect(labels).not.toContain('user_id');
+      expect(labels).not.toContain('order_id');
+    });
+  });
 });

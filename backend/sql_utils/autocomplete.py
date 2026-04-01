@@ -181,6 +181,21 @@ def get_column_completions(
             ))
             idx += 1
 
+    # Always include SELECT aliases — valid in ORDER BY, GROUP BY, HAVING
+    # regardless of whether the FROM table is present in schema_data.
+    existing_labels = {s.label.lower() for s in suggestions}
+    for alias in extract_select_aliases(ast):
+        if alias.lower() not in existing_labels:
+            suggestions.append(CompletionItem(
+                label=alias,
+                kind="alias",
+                detail="  (SELECT alias)",
+                insert_text=alias,
+                sort_text=str(idx).zfill(5)
+            ))
+            idx += 1
+            existing_labels.add(alias.lower())
+
     return suggestions
 
 
@@ -546,6 +561,20 @@ def extract_cte_names(ast: exp.Expression) -> List[str]:
             cte_names.append(node.alias)
 
     return cte_names
+
+
+def extract_select_aliases(ast: exp.Expression) -> List[str]:
+    """
+    Extract aliases defined in the SELECT clause of the main query.
+    These are valid targets in ORDER BY, GROUP BY, and HAVING even without
+    schema data — sqlglot gives us this for free from the AST.
+    """
+    aliases = []
+    if isinstance(ast, exp.Select):
+        for expr in ast.expressions:
+            if isinstance(expr, exp.Alias) and expr.alias:
+                aliases.append(expr.alias)
+    return aliases
 
 
 def extract_cte_columns(ast: exp.Expression) -> Dict[str, List[str]]:
