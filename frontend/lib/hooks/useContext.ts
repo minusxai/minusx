@@ -46,11 +46,9 @@ export function useContext(path: string, version?: number): ContextInfo {
   const loadedContext = useFile(contextFile?.id, { skip: !contextFile })?.fileState;
   const contextLoading = contextFile ? (!loadedContext || loadedContext.loading) : false;
 
-  // 3. Get connections for fallback (when no context exists)
-  //    useConnections handles loading, caching, and ensures connections are available
-  const { connections: connectionsMap, loading: connectionsLoading } = useConnections({
-    skip: !!contextFile
-  });
+  // 3. Always load connections — used as fallback when context is absent, loading, or has no databases.
+  //    Connections are TTL-cached (10hr) and already in Redux after first load, so this is cheap.
+  const { connections: connectionsMap, loading: connectionsLoading } = useConnections();
 
   // 4. Get current user for published version resolution
   const currentUser = useAppSelector(state => state.auth.user);
