@@ -27,7 +27,8 @@ export async function runQuery(
   databaseName: string,
   query: string,
   params: Record<string, string | number>,
-  user: EffectiveUser
+  user: EffectiveUser,
+  parameterTypes?: Record<string, 'text' | 'number' | 'date'>
 ): Promise<QueryResult> {
   const connPath = resolvePath(user.mode, `/database/${databaseName}`);
   const connFile = await DocumentDB.getByPath(connPath, user.companyId);
@@ -43,7 +44,7 @@ export async function runQuery(
   // Fall back to Python backend (handles all non-Node types, and unknown connections)
   const response = await pythonBackendFetch('/api/execute-query', {
     method: 'POST',
-    body: JSON.stringify({ query, parameters: params, database_name: databaseName }),
+    body: JSON.stringify({ query, parameters: params, database_name: databaseName, ...(parameterTypes && { parameter_types: parameterTypes }) }),
   });
 
   if (!response.ok) {

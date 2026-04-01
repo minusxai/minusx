@@ -11,7 +11,7 @@
  * - Shows old results while editing query
  * - Background refetch for stale data
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectMergedContent, setEphemeral, type FileId } from '@/store/filesSlice';
 import { selectProposedQuery } from '@/store/uiSlice';
@@ -53,6 +53,12 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
     references: mergedContent?.references || []
   };
 
+  // Build a name→type map from the declared parameters so asyncpg can coerce date strings
+  const parameterTypes = useMemo(() => {
+    if (!mergedContent?.parameters?.length) return undefined;
+    return Object.fromEntries(mergedContent.parameters.map(p => [p.name, p.type])) as Record<string, 'text' | 'number' | 'date'>;
+  }, [mergedContent?.parameters]);
+
   // Ref-based guard: ensures we auto-execute exactly once per mount with the *current*
   // mergedContent (which includes persistableChanges). This means every fresh mount —
   // whether on the file page, inside a dashboard, or in the PublishModal right-pane —
@@ -86,7 +92,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
     queryToExecute.params,
     queryToExecute.database,
     queryToExecute.references,
-    { skip: !queryToExecute.query }  // Skip if no query
+    { skip: !queryToExecute.query, parameterTypes }  // Skip if no query
   );
 
   // Phase 3: Update current state handler - uses editFile from file-state.ts

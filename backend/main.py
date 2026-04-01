@@ -10,7 +10,7 @@ import json
 import asyncio
 import logging
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date as date_type
 from typing import Dict, Any, Optional, List, Callable
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -58,6 +58,7 @@ app.add_middleware(
 class QueryRequest(BaseModel):
     query: str
     parameters: dict = {}
+    parameter_types: dict = {}  # Optional: { param_name: 'text' | 'number' | 'date' }
     database_name: str = "default"
     session_token: Optional[str] = None  # Session token for internal API auth
     # NOTE: connection_type and connection_config are NO LONGER needed!
@@ -141,6 +142,38 @@ async def root():
     return {"message": "MinusX BI Backend API", "status": "running"}
 
 
+def _coerce_params_for_asyncpg(params: dict, parameter_types: dict) -> dict:
+    """
+    asyncpg is strict about Python types: a string like '2026-03-01' is not
+    accepted for a date/timestamp column — it must be datetime.date or
+    datetime.datetime.
+
+    Uses the explicit parameter_types dict (e.g. {'start_date': 'date'}) sent
+    by the frontend so coercion is exact — no name heuristics, no false positives.
+    """
+    import re
+    _DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
+    _DATETIME_RE = re.compile(r'^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}')
+
+    coerced = {}
+    for key, value in params.items():
+        if isinstance(value, str) and parameter_types.get(key) == 'date':
+            if _DATETIME_RE.match(value):
+                try:
+                    coerced[key] = datetime.fromisoformat(value)
+                    continue
+                except ValueError:
+                    pass
+            if _DATE_RE.match(value):
+                try:
+                    coerced[key] = date_type.fromisoformat(value)
+                    continue
+                except ValueError:
+                    pass
+        coerced[key] = value
+    return coerced
+
+
 def _get_dialect_for_connection(conn_type: str) -> str:
     """
     Map connection type to sqlglot dialect for query parsing.
@@ -221,7 +254,8 @@ async def execute_sql_query(query_request: QueryRequest, request: Request):
             # True async execution (PostgreSQL)
             async with engine.connect() as connection:
                 if query_request.parameters:
-                    result = await connection.execute(text(safe_query), query_request.parameters)
+                    coerced_params = _coerce_params_for_asyncpg(query_request.parameters, query_request.parameter_types)
+                    result = await connection.execute(text(safe_query), coerced_params)
                 else:
                     result = await connection.execute(text(safe_query))
                 print(f"[PYTHON] Query execution took {(time.time() - exec_start) * 1000:.2f}ms")

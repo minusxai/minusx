@@ -84,7 +84,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     const parseStart = Date.now();
     const body = await request.json();
     console.log(`[QUERY API] JSON parse took ${Date.now() - parseStart}ms`);
-    const { database_name, query, parameters, references } = body;
+    const { database_name, query, parameters, references, parameterTypes } = body;
 
     // Convert parameters to Record<string, string | number | null> for backend
     // Handle both array format (QuestionParameter[]) and object format (Record<string, any>)
@@ -148,7 +148,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       const { sql: resolvedQuery, params: resolvedParams } = await applyNoneParams(finalQuery, paramValues);
 
       const queryStart = Date.now();
-      const result = await runQuery(database_name, resolvedQuery, resolvedParams, user);
+      const result = await runQuery(database_name, resolvedQuery, resolvedParams, user, parameterTypes);
       const durationMs = Date.now() - queryStart;
 
       // Populate server-side cache
