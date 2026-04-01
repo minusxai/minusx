@@ -690,12 +690,13 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
 
         return {
           ...baseConfig,
+          type: 'line' as const,
           symbol: 'none',
           showSymbol: false,
           stack: 'total',
           areaStyle: {
             color: {
-              type: 'linear',
+              type: 'linear' as const,
               x: 0,
               y: 0,
               x2: 0,
