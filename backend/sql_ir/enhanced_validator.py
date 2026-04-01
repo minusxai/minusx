@@ -395,7 +395,7 @@ def compare_sql_ast(sql1: str, sql2: str, dialect: str = "postgres") -> SQLCompa
         transpiled_sql1 = sqlglot.transpile(sql1, read="bigquery", write=dialect)[0]
         ast1_bq = sqlglot.parse_one(transpiled_sql1, read=dialect)
         try:
-            from sqlglot.optimizer import optimize as _opt
+            from sqlglot.optimizer import optimize as _opt  # noqa: PLC0415
             ast1_bq_opt = _opt(ast1_bq, dialect=dialect)
         except Exception:
             ast1_bq_opt = ast1_bq

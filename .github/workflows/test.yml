@@ -28,6 +28,10 @@ jobs:
         working-directory: ./backend
         run: uv sync --all-extras
 
+      - name: Lint Python
+        working-directory: ./backend
+        run: uv run ruff check .
+
       - name: Run Python tests
         working-directory: ./backend
         run: uv run pytest
@@ -65,6 +69,10 @@ jobs:
       - name: Validate (typecheck + lint)
         working-directory: ./frontend
         run: npm run validate
+
+      - name: Lint Python
+        working-directory: ./backend
+        run: uv run ruff check .
 
       - name: Run frontend tests
         working-directory: ./frontend

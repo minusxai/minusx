@@ -1,7 +1,8 @@
+import datetime
+
+
 def infer_type_from_value(value) -> str:
     """Infer SQL type from Python value."""
-    import datetime
-
     if value is None:
         return 'NULL'
     elif isinstance(value, bool):

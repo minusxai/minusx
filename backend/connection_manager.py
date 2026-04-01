@@ -99,7 +99,7 @@ class ConnectionManager:
         config = connection_data['config']
 
         # Import here to avoid circular dependency
-        from connectors import get_async_connector
+        from connectors import get_async_connector  # noqa: PLC0415
 
         # Create and validate connection
         connector = get_async_connector(name, conn_type, config)
@@ -123,7 +123,7 @@ class ConnectionManager:
             return self._connections[name]
 
         # Import here to avoid circular dependency
-        from connectors import get_async_connector
+        from connectors import get_async_connector  # noqa: PLC0415
 
         # Create new connection
         connector = get_async_connector(name, conn_type, config)

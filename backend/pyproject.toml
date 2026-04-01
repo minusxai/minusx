@@ -50,4 +50,12 @@ dev-dependencies = [
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
     "moto[athena,s3,glue]>=5.0.0",
+    "ruff>=0.9.0",
 ]
+
+[tool.ruff.lint]
+# E402: module-level import not at top of file
+# PLC0415: import not at top-level of file (inside functions/classes)
+select = ["E402", "PLC0415"]
+# Exclude test files and scripts — local imports are common for test isolation
+exclude = ["tests/**", "scripts/**"]

@@ -3,9 +3,11 @@ Bug channel notifier for app-level bug reporting.
 Completely independent of company config — uses INTERNAL_SLACK_CHANNEL_WEBHOOK env var directly.
 Never re-uses any company-configured webhook.
 """
+import json
 import os
 import logging
 import subprocess
+from datetime import datetime, timezone
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -25,9 +27,6 @@ async def notify_internal(source: str, message: str, extras: dict | None = None)
     webhook_url = os.environ.get('INTERNAL_SLACK_CHANNEL_WEBHOOK')
     if not webhook_url:
         return
-
-    import json
-    from datetime import datetime, timezone
 
     err_obj = {'source': source, 'message': message, 'commit': _GIT_COMMIT_SHA, **(extras or {})}
     payload = {

@@ -90,11 +90,11 @@ class TestAgent(AnalystAgent):
 
     async def run(self) -> dict:
         """Same loop as AnalystAgent but stops after submit is called."""
-        from tasks.chat_thread_processor import tool_calls_to_agent_calls
-        from tasks.llm.client import allm_request as real_allm_request
-        from tasks.llm.models import ALLMRequest, LlmSettings, UserInfo
-        from tasks.llm.config import ANALYST_V2_MODEL
-        from .agent import allm_request
+        from tasks.chat_thread_processor import tool_calls_to_agent_calls  # noqa: PLC0415
+        from tasks.llm.client import allm_request as real_allm_request  # noqa: PLC0415
+        from tasks.llm.models import ALLMRequest, LlmSettings, UserInfo  # noqa: PLC0415
+        from tasks.llm.config import ANALYST_V2_MODEL  # noqa: PLC0415
+        from .agent import allm_request  # noqa: PLC0415
 
         thread_history = self._get_history()
         base_messages = [self._get_system_message()] + thread_history + [self._get_user_message()]

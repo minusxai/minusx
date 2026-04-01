@@ -19,6 +19,8 @@ Storage Structure (same as CSV):
 
 import re
 import io
+import shutil
+import tempfile
 import httpx
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
@@ -201,9 +203,6 @@ async def process_google_sheets_import(
         ValueError: If URL is invalid or sheet is not accessible
         RuntimeError: If processing fails
     """
-    import tempfile
-    import shutil
-
     # Parse spreadsheet ID from URL
     spreadsheet_id = parse_spreadsheet_id(spreadsheet_url)
     print(f"[Google Sheets] Processing spreadsheet: {spreadsheet_id}")

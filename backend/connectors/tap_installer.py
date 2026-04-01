@@ -4,6 +4,7 @@ Dynamic tap/target installer with virtual environment isolation.
 Handles installation of Singer taps and targets on-demand, creating isolated
 virtual environments to avoid dependency conflicts.
 """
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -108,7 +109,6 @@ class TapInstaller:
             logger.error(f"[TapInstaller] Installation failed: {e.stderr}")
             # Cleanup failed installation
             if venv_path.exists():
-                import shutil
                 shutil.rmtree(venv_path)
             raise RuntimeError(f"Failed to install {package_name}: {e.stderr}")
 
@@ -144,8 +144,6 @@ class TapInstaller:
         Args:
             package_name: Optional package name to clear (clears all if None)
         """
-        import shutil
-
         if package_name is None:
             # Clear all
             if self.taps_dir.exists():
