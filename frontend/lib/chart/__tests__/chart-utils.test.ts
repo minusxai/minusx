@@ -23,8 +23,8 @@ describe('buildChartOption scatter log axis', () => {
     expect(xAxis.splitLine).toMatchObject({
       show: true,
       lineStyle: {
-        color: 'rgba(48, 54, 61, 0.95)',
-        type: 'solid',
+        color: 'rgba(208, 215, 222, 0.8)',
+        type: 'dashed',
         opacity: 0.45,
         width: 1,
       },
@@ -36,17 +36,17 @@ describe('buildChartOption scatter log axis', () => {
     expect(xAxis.minorSplitLine).toMatchObject({
       show: true,
       lineStyle: {
-        color: 'rgba(48, 54, 61, 0.6)',
+        color: 'rgba(208, 215, 222, 0.5)',
         type: 'dashed',
         opacity: 0.45,
         width: 1,
       },
     })
     expect(scatterSeries.data).toEqual([
-      [0.5, 1100],
-      [1, 1200],
-      [30, 1300],
-      [150, 1400],
+      { value: [0.5, 1100], tooltipMeta: undefined },
+      { value: [1, 1200], tooltipMeta: undefined },
+      { value: [30, 1300], tooltipMeta: undefined },
+      { value: [150, 1400], tooltipMeta: undefined },
     ])
   })
 })
