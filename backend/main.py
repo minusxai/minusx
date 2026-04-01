@@ -4,6 +4,9 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ConfigDict
 from database import infer_type_from_value
 from sqlalchemy import text
+import os
+import re
+import time
 import threading
 import uuid
 import json
@@ -22,24 +25,24 @@ logger = logging.getLogger(__name__)
 # Load environment variables from .env file
 load_dotenv()
 
-from connection_manager import connection_manager
-from connectors import get_async_connector
-from pipelines.executor import PipelineExecutor
-from pipelines.tap_tester import test_tap
-from processors import process_csv_upload, delete_csv_connection
-from processors import process_google_sheets_import, delete_google_sheets_connection
-from sql_utils.limit_enforcer import enforce_query_limit
-from sql_utils.validator import validate_sql as validate_sql_syntax
-from sql_utils.column_inferrer import infer_columns
-from sql_utils.autocomplete import get_completions, AutocompleteRequest, get_mention_completions, MentionItem
-from sql_ir import parse_sql_to_ir, ir_to_sql, any_ir_to_sql, UnsupportedSQLError, QueryIR, CompoundQueryIR
+from connection_manager import connection_manager  # noqa: E402
+from connectors import get_async_connector  # noqa: E402
+from pipelines.executor import PipelineExecutor  # noqa: E402
+from pipelines.tap_tester import test_tap  # noqa: E402
+from processors import process_csv_upload, delete_csv_connection  # noqa: E402
+from processors import process_google_sheets_import, delete_google_sheets_connection  # noqa: E402
+from sql_utils.limit_enforcer import enforce_query_limit  # noqa: E402
+from sql_utils.validator import validate_sql as validate_sql_syntax  # noqa: E402
+from sql_utils.column_inferrer import infer_columns  # noqa: E402
+from sql_utils.autocomplete import get_completions, AutocompleteRequest, get_mention_completions, MentionItem  # noqa: E402
+from sql_ir import parse_sql_to_ir, ir_to_sql, any_ir_to_sql, UnsupportedSQLError, QueryIR, CompoundQueryIR  # noqa: E402
 
 # Import orchestration components
-from tasks import Orchestrator, AgentCall, UserInputException
-from tasks.orchestrator import ConversationLog
-from tasks.conversation import get_latest_root, update_log_with_completed_tool_calls, get_pending_tool_calls, get_completed_tool_calls
-from tasks.types import ChatCompletionToolMessageParamMX, ChatCompletionMessageToolCallParamMX, CompletedToolCallsMXWithRunId
-from internal_notifier import notify_internal
+from tasks import Orchestrator, AgentCall, UserInputException  # noqa: E402
+from tasks.orchestrator import ConversationLog  # noqa: E402
+from tasks.conversation import get_latest_root, update_log_with_completed_tool_calls, get_pending_tool_calls, get_completed_tool_calls  # noqa: E402
+from tasks.types import ChatCompletionToolMessageParamMX, ChatCompletionMessageToolCallParamMX, CompletedToolCallsMXWithRunId  # noqa: E402
+from internal_notifier import notify_internal  # noqa: E402
 
 app = FastAPI(title="MinusX BI Backend")
 
@@ -162,7 +165,6 @@ def _coerce_params_for_asyncpg(params: dict, parameter_types: dict) -> dict:
     Uses the explicit parameter_types dict (e.g. {'start_date': 'date'}) sent
     by the frontend so coercion is exact — no name heuristics, no false positives.
     """
-    import re
     _DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
     _DATETIME_RE = re.compile(r'^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}')
 
@@ -228,7 +230,6 @@ async def execute_sql_query(query_request: QueryRequest, request: Request):
     Returns:
         QueryResponse with columns and rows
     """
-    import time
     start_time = time.time()
     print(f"[PYTHON] Start execute-query for database: {query_request.database_name}")
 
@@ -383,7 +384,6 @@ async def initialize_connection(name: str, conn: ConnectionInitialize):
         raise
     except Exception as e:
         print(f"[Connection Init Error] Failed to initialize '{name}': {str(e)}")
-        import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -504,7 +504,6 @@ async def get_connection_schema(name: str, conn: ConnectionInitialize):
         raise
     except Exception as e:
         print(f"[get_connection_schema] Error fetching schema for '{name}': {str(e)}")
-        import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -529,7 +528,6 @@ async def sql_autocomplete(request: AutocompleteRequest):
         return {"suggestions": [s.dict() for s in suggestions]}
     except Exception as e:
         logger.error(f"Autocomplete error: {e}")
-        import traceback
         traceback.print_exc()
         return {"suggestions": []}
 
@@ -590,7 +588,6 @@ async def chat_mentions(request: MentionRequest):
         return {"suggestions": [s.dict() for s in suggestions]}
     except Exception as e:
         logger.error(f"Mention error: {e}")
-        import traceback
         traceback.print_exc()
         return {"suggestions": []}
 
@@ -1239,7 +1236,7 @@ def extract_llm_calls_from_log_diff(log_diff: ConversationLog) -> Dict[str, LLMC
     Returns:
         Dictionary mapping llm_call_id to detailed call information
     """
-    from tasks.orchestrator import TaskDebugLog
+    from tasks.orchestrator import TaskDebugLog  # noqa: PLC0415
 
     llm_calls: Dict[str, LLMCallDetail] = {}
 
@@ -1268,7 +1265,7 @@ def extract_llm_calls_from_log_diff(log_diff: ConversationLog) -> Dict[str, LLMC
 @app.get("/api/tools/schema")
 async def get_tool_schemas():
     """Return OpenAI function schemas for all registered tools (dev tool tester)."""
-    from tasks.llm.client import describe_tool
+    from tasks.llm.client import describe_tool  # noqa: PLC0415
     schemas = []
     for _name, agent_cls in Orchestrator._agent_registry.items():
         try:
@@ -1324,7 +1321,6 @@ async def chat(request: ConversationRequest):
         )
 
         # In production, send generic error; in dev, send detailed error
-        import os
         is_production = os.getenv("ENVIRONMENT") == "production"
 
         return ConversationResponse(
@@ -1461,7 +1457,6 @@ async def chat_stream(request: ConversationRequest):
             )
 
             # In production, send generic error; in dev, send detailed error
-            import os
             is_production = os.getenv("ENVIRONMENT") == "production"
 
             error_event = {
