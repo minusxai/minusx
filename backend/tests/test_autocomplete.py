@@ -909,3 +909,444 @@ def test_unknown_connection_type_defaults_to_postgres():
 
     assert "user_id" in names
     assert "order_id" not in names
+
+
+# ---------------------------------------------------------------------------
+# mxfood schema — extracted verbatim from
+#   frontend/lib/database/company-template.json (fullSchema section)
+#
+# These tests use the real default schema and real question SQL queries from
+# the company template.  Each test takes a query from the template, truncates
+# it at a meaningful cursor position, and asserts that autocomplete returns
+# exactly the right columns — only from tables actually referenced in that
+# query fragment.
+# ---------------------------------------------------------------------------
+
+MXFOOD_SCHEMA = [
+    {
+        "databaseName": "mxfood",
+        "schemas": [
+            {
+                "schema": "main",
+                "tables": [
+                    {
+                        "table": "orders",
+                        "columns": [
+                            {"name": "order_id",                "type": "BIGINT"},
+                            {"name": "user_id",                 "type": "BIGINT"},
+                            {"name": "restaurant_id",           "type": "BIGINT"},
+                            {"name": "driver_id",               "type": "BIGINT"},
+                            {"name": "zone_id",                 "type": "BIGINT"},
+                            {"name": "created_at",              "type": "TIMESTAMP"},
+                            {"name": "status",                  "type": "VARCHAR"},
+                            {"name": "subtotal",                "type": "DOUBLE"},
+                            {"name": "delivery_fee",            "type": "DOUBLE"},
+                            {"name": "discount_amount",         "type": "DOUBLE"},
+                            {"name": "tip_amount",              "type": "DOUBLE"},
+                            {"name": "total",                   "type": "DOUBLE"},
+                            {"name": "promo_code_id",           "type": "BIGINT"},
+                            {"name": "is_subscription_order",   "type": "BOOLEAN"},
+                            {"name": "platform",                "type": "VARCHAR"},
+                            {"name": "estimated_delivery_mins", "type": "BIGINT"},
+                            {"name": "actual_delivery_mins",    "type": "DOUBLE"},
+                        ],
+                    },
+                    {
+                        "table": "order_items",
+                        "columns": [
+                            {"name": "order_item_id", "type": "BIGINT"},
+                            {"name": "order_id",      "type": "BIGINT"},
+                            {"name": "product_id",    "type": "BIGINT"},
+                            {"name": "quantity",      "type": "BIGINT"},
+                            {"name": "unit_price",    "type": "DOUBLE"},
+                            {"name": "total_price",   "type": "DOUBLE"},
+                        ],
+                    },
+                    {
+                        "table": "products",
+                        "columns": [
+                            {"name": "product_id",     "type": "BIGINT"},
+                            {"name": "restaurant_id",  "type": "BIGINT"},
+                            {"name": "subcategory_id", "type": "BIGINT"},
+                            {"name": "name",           "type": "VARCHAR"},
+                            {"name": "description",    "type": "VARCHAR"},
+                            {"name": "price",          "type": "DOUBLE"},
+                            {"name": "is_available",   "type": "BOOLEAN"},
+                            {"name": "created_at",     "type": "TIMESTAMP"},
+                        ],
+                    },
+                    {
+                        "table": "product_subcategories",
+                        "columns": [
+                            {"name": "subcategory_id",   "type": "BIGINT"},
+                            {"name": "category_id",      "type": "BIGINT"},
+                            {"name": "subcategory_name", "type": "VARCHAR"},
+                        ],
+                    },
+                    {
+                        "table": "product_categories",
+                        "columns": [
+                            {"name": "category_id",   "type": "BIGINT"},
+                            {"name": "category_name", "type": "VARCHAR"},
+                        ],
+                    },
+                    {
+                        "table": "events",
+                        "columns": [
+                            {"name": "event_id",        "type": "BIGINT"},
+                            {"name": "user_id",         "type": "BIGINT"},
+                            {"name": "session_id",      "type": "VARCHAR"},
+                            {"name": "event_name",      "type": "VARCHAR"},
+                            {"name": "event_timestamp", "type": "TIMESTAMP"},
+                            {"name": "platform",        "type": "VARCHAR"},
+                            {"name": "screen_name",     "type": "VARCHAR"},
+                            {"name": "properties",      "type": "VARCHAR"},
+                        ],
+                    },
+                    {
+                        "table": "users",
+                        "columns": [
+                            {"name": "user_id",             "type": "BIGINT"},
+                            {"name": "first_name",          "type": "VARCHAR"},
+                            {"name": "last_name",           "type": "VARCHAR"},
+                            {"name": "email",               "type": "VARCHAR"},
+                            {"name": "phone",               "type": "VARCHAR"},
+                            {"name": "created_at",          "type": "TIMESTAMP"},
+                            {"name": "zone_id",             "type": "BIGINT"},
+                            {"name": "acquisition_channel", "type": "VARCHAR"},
+                            {"name": "referred_by_user_id", "type": "DOUBLE"},
+                            {"name": "platform",            "type": "VARCHAR"},
+                        ],
+                    },
+                    {
+                        "table": "zones",
+                        "columns": [
+                            {"name": "zone_id",                "type": "BIGINT"},
+                            {"name": "zone_name",              "type": "VARCHAR"},
+                            {"name": "avg_delivery_time_mins", "type": "BIGINT"},
+                            {"name": "surge_multiplier",       "type": "DOUBLE"},
+                            {"name": "lat_center",             "type": "DOUBLE"},
+                            {"name": "lng_center",             "type": "DOUBLE"},
+                        ],
+                    },
+                    {
+                        "table": "drivers",
+                        "columns": [
+                            {"name": "driver_id",    "type": "BIGINT"},
+                            {"name": "name",         "type": "VARCHAR"},
+                            {"name": "zone_id",      "type": "BIGINT"},
+                            {"name": "vehicle_type", "type": "VARCHAR"},
+                            {"name": "rating",       "type": "DOUBLE"},
+                            {"name": "created_at",   "type": "TIMESTAMP"},
+                            {"name": "is_active",    "type": "BOOLEAN"},
+                        ],
+                    },
+                ],
+            }
+        ],
+    }
+]
+
+
+def test_order_by_no_space_returns_columns_not_keywords():
+    """
+    Regression: cursor right after typing "ORDER BY" (no trailing space).
+
+    The failing payload has cursorOffset=645 and query ending with "ORDER BY"
+    (no space).  The regex ORDER-BY-space-word requires at least one
+    whitespace after BY, so needs_column_completion returns False and the
+    engine falls through to keyword suggestions instead of columns.
+
+    Expected: column + alias suggestions.
+    Must NOT return: only SQL keywords (SELECT, FROM, …).
+    Must NOT return: empty.
+    """
+    # Exact failing query from user payload — ends with "ORDER BY" (no space, no letter)
+    query = (
+        "SELECT\n"
+        "    batch,\n"
+        "    TRY_CAST('20' || SUBSTRING(batch, 2, 2) AS INTEGER) AS batch_year,\n"
+        "    SUBSTRING(batch, 1, 1) AS season,\n"
+        "    COUNT(*) AS total_companies,\n"
+        "    COUNT(CASE WHEN status = 'Active'   THEN 1 END) AS active,\n"
+        "    COUNT(CASE WHEN status = 'Acquired' THEN 1 END) AS acquired,\n"
+        "    COUNT(CASE WHEN status = 'Public'   THEN 1 END) AS public_co,\n"
+        "    COUNT(CASE WHEN status = 'Inactive' THEN 1 END) AS inactive,\n"
+        "    ROUND(100.0 * COUNT(CASE WHEN status IN ('Acquired', 'Public') THEN 1 END) / COUNT(*), 1) AS exit_rate_pct\n"
+        "FROM t_2024_05_11_yc_companies\n"
+        "WHERE batch LIKE 'S%' OR batch LIKE 'W%'\n"
+        "GROUP BY batch, batch_year, season\n"
+        "ORDER BY"
+    )
+    assert len(query) == 645
+
+    schema_data = [{"databaseName": "yc_companies", "schemas": [{"schema": "main", "tables": [{"table": "t_2024_05_11_yc_companies", "columns": [
+        {"name": "company_id",       "type": "BIGINT"},
+        {"name": "company_name",     "type": "VARCHAR"},
+        {"name": "batch",            "type": "VARCHAR"},
+        {"name": "status",           "type": "VARCHAR"},
+        {"name": "year_founded",     "type": "DOUBLE"},
+    ]}]}]}]
+
+    suggestions = get_completions(query, 645, schema_data,
+                                  database_name="yc_companies", connection_type="csv")
+    labels = [s.label for s in suggestions]
+    kinds  = {s.label: s.kind for s in suggestions}
+
+    # Column + alias suggestions must appear
+    assert "batch"          in labels, "schema column 'batch' must appear"
+    assert "status"         in labels, "schema column 'status' must appear"
+    assert "batch_year"     in labels, "alias 'batch_year' must appear"
+    assert "season"         in labels, "alias 'season' must appear"
+    assert "total_companies" in labels, "alias 'total_companies' must appear"
+
+    # Must NOT degrade to SQL-keyword-only results
+    assert kinds.get("batch") != "keyword", "columns must not be kind=keyword"
+    # All-keyword result means the column context was missed
+    non_keyword = [l for l in labels if kinds[l] != "keyword"]
+    assert len(non_keyword) > 0, "at least one non-keyword suggestion required"
+
+
+def test_order_by_trailing_space_yc_query():
+    """
+    Regression: cursor after "ORDER BY " (one trailing space, no letter typed yet).
+    cursorOffset=646, query ends with "ORDER BY " — exact browser-reported failing payload.
+
+    The old regex ORDER-BY-space-word matched this case already (space satisfies \\s+,
+    word matches empty). The new regex also matches. This test is a guard against future
+    regressions.
+    """
+    query = (
+        "SELECT\n"
+        "    batch,\n"
+        "    TRY_CAST('20' || SUBSTRING(batch, 2, 2) AS INTEGER) AS batch_year,\n"
+        "    SUBSTRING(batch, 1, 1) AS season,\n"
+        "    COUNT(*) AS total_companies,\n"
+        "    COUNT(CASE WHEN status = 'Active'   THEN 1 END) AS active,\n"
+        "    COUNT(CASE WHEN status = 'Acquired' THEN 1 END) AS acquired,\n"
+        "    COUNT(CASE WHEN status = 'Public'   THEN 1 END) AS public_co,\n"
+        "    COUNT(CASE WHEN status = 'Inactive' THEN 1 END) AS inactive,\n"
+        "    ROUND(100.0 * COUNT(CASE WHEN status IN ('Acquired', 'Public') THEN 1 END) / COUNT(*), 1) AS exit_rate_pct\n"
+        "FROM t_2024_05_11_yc_companies\n"
+        "WHERE batch LIKE 'S%' OR batch LIKE 'W%'\n"
+        "GROUP BY batch, batch_year, season\n"
+        "ORDER BY "  # trailing space, NO letter
+    )
+    assert len(query) == 646, f"Expected 646, got {len(query)}"
+
+    schema_data = [{"databaseName": "yc_companies", "schemas": [{"schema": "main", "tables": [
+        {"table": "t_2024_05_11_yc_companies", "columns": [
+            {"name": "company_id",   "type": "BIGINT"},
+            {"name": "company_name", "type": "VARCHAR"},
+            {"name": "batch",        "type": "VARCHAR"},
+            {"name": "status",       "type": "VARCHAR"},
+            {"name": "year_founded", "type": "DOUBLE"},
+        ]}
+    ]}]}]
+
+    suggestions = get_completions(query, 646, schema_data,
+                                  database_name="yc_companies", connection_type="csv")
+    labels = [s.label for s in suggestions]
+
+    assert len(suggestions) > 0,       "suggestions must not be empty"
+    assert "batch"           in labels, "base column 'batch' missing"
+    assert "status"          in labels, "base column 'status' missing"
+    assert "batch_year"      in labels, "alias 'batch_year' missing"
+    assert "season"          in labels, "alias 'season' missing"
+    assert "total_companies" in labels, "alias 'total_companies' missing"
+    assert "active"          in labels, "alias 'active' missing"
+    assert "exit_rate_pct"   in labels, "alias 'exit_rate_pct' missing"
+
+
+def test_group_by_no_space_returns_columns():
+    """
+    Same regex bug for GROUP BY: cursor right after typing "GROUP BY" with
+    no trailing space must still trigger column context.
+    """
+    query = (
+        "SELECT status, COUNT(*) as cnt "
+        "FROM orders "
+        "GROUP BY"
+    )
+    schema_data = [{"databaseName": "db", "schemas": [{"schema": "public", "tables": [
+        {"table": "orders", "columns": [
+            {"name": "order_id", "type": "int"},
+            {"name": "status",   "type": "varchar"},
+            {"name": "total",    "type": "decimal"},
+        ]}
+    ]}]}]
+
+    suggestions = get_completions(query, len(query), schema_data)
+    labels = [s.label for s in suggestions]
+
+    assert "order_id" in labels, "orders.order_id must appear"
+    assert "status"   in labels, "orders.status must appear"
+    assert "cnt"      in labels, "alias 'cnt' must appear for GROUP BY"
+
+    non_keyword = [s for s in suggestions if s.kind != "keyword"]
+    assert len(non_keyword) > 0, "GROUP BY no-space must return columns, not only keywords"
+
+
+def test_mxfood_orders_where_clause_filters_to_orders_columns():
+    """
+    Real mxfood query (question 17 — "Total Monthly Orders") truncated at WHERE.
+
+    The schema contains 9 tables (orders, events, users, zones, drivers, …).
+    Only orders is referenced in the FROM clause, so only orders columns should
+    appear after WHERE.  Columns unique to other tables must be excluded.
+    """
+    # Question 17 query, extended with a WHERE clause (cursor at end)
+    query = (
+        "SELECT DATE_TRUNC('month', created_at) as month, COUNT(*) as orders "
+        "FROM orders WHERE "
+    )
+
+    suggestions = get_completions(query, len(query), MXFOOD_SCHEMA,
+                                  database_name="mxfood", connection_type="duckdb")
+    labels = [s.label for s in suggestions]
+
+    # orders columns must appear
+    assert "status"      in labels, "orders.status"
+    assert "total"       in labels, "orders.total"
+    assert "created_at"  in labels, "orders.created_at"
+    assert "order_id"    in labels, "orders.order_id"
+    assert "subtotal"    in labels, "orders.subtotal"
+    assert "delivery_fee" in labels, "orders.delivery_fee"
+
+    # columns unique to non-referenced tables must not appear
+    assert "first_name"   not in labels, "users.first_name must be excluded"
+    assert "zone_name"    not in labels, "zones.zone_name must be excluded"
+    assert "session_id"   not in labels, "events.session_id must be excluded"
+    assert "vehicle_type" not in labels, "drivers.vehicle_type must be excluded"
+
+
+def test_mxfood_orders_order_by_includes_select_aliases():
+    """
+    Real mxfood query (question 14 — "Weekly Orders and Revenue") with ORDER BY
+    at the cursor.
+
+    SELECT aliases week, orders, revenue are valid ORDER BY targets.
+    They must appear alongside the base orders columns.
+    Non-referenced tables (users, zones, …) must be excluded.
+    """
+    # Question 14 query with ORDER BY column removed (cursor at end)
+    query = (
+        "SELECT \n"
+        "  DATE_TRUNC('week', created_at) as week,\n"
+        "  COUNT(*) as orders,\n"
+        "  SUM(total) as revenue\n"
+        "FROM orders\n"
+        "GROUP BY DATE_TRUNC('week', created_at)\n"
+        "ORDER BY "
+    )
+
+    suggestions = get_completions(query, len(query), MXFOOD_SCHEMA,
+                                  database_name="mxfood", connection_type="duckdb")
+    labels = [s.label for s in suggestions]
+
+    # Base orders columns
+    assert "status"     in labels, "orders.status"
+    assert "total"      in labels, "orders.total"
+    assert "created_at" in labels, "orders.created_at"
+    assert "order_id"   in labels, "orders.order_id"
+
+    # SELECT aliases must be valid ORDER BY targets
+    assert "week"    in labels, "alias 'week' must appear in ORDER BY context"
+    assert "orders"  in labels, "alias 'orders' must appear in ORDER BY context"
+    assert "revenue" in labels, "alias 'revenue' must appear in ORDER BY context"
+
+    # Non-referenced tables excluded
+    assert "first_name"   not in labels
+    assert "zone_name"    not in labels
+    assert "session_id"   not in labels
+    assert "vehicle_type" not in labels
+
+
+def test_mxfood_five_table_join_where_shows_all_joined_columns():
+    """
+    Real mxfood query (question 15 — "Weekly Revenue by Product Category"):
+    five-table JOIN truncated after the JOIN chain with cursor at WHERE.
+
+    All 5 joined tables' columns must be visible; the 4 non-joined tables
+    in the schema (users, zones, drivers, events) must not appear.
+    """
+    # Question 15 query, truncated after the JOIN chain (WHERE condition removed)
+    query = (
+        "SELECT \n"
+        "  DATE_TRUNC('week', o.created_at) as week_start,\n"
+        "  pc.category_name,\n"
+        "  SUM(oi.total_price) as revenue\n"
+        "FROM orders o\n"
+        "JOIN order_items oi ON o.order_id = oi.order_id\n"
+        "JOIN products p ON oi.product_id = p.product_id\n"
+        "JOIN product_subcategories ps ON p.subcategory_id = ps.subcategory_id\n"
+        "JOIN product_categories pc ON ps.category_id = pc.category_id\n"
+        "WHERE "
+    )
+
+    suggestions = get_completions(query, len(query), MXFOOD_SCHEMA,
+                                  database_name="mxfood", connection_type="duckdb")
+    labels = [s.label for s in suggestions]
+
+    # From orders (aliased as o)
+    assert "status"           in labels, "orders.status"
+    assert "total"            in labels, "orders.total"
+    # From order_items (aliased as oi)
+    assert "unit_price"       in labels, "order_items.unit_price"
+    assert "quantity"         in labels, "order_items.quantity"
+    assert "total_price"      in labels, "order_items.total_price"
+    # From products (aliased as p)
+    assert "price"            in labels, "products.price"
+    assert "is_available"     in labels, "products.is_available"
+    # From product_subcategories (aliased as ps)
+    assert "subcategory_name" in labels, "product_subcategories.subcategory_name"
+    # From product_categories (aliased as pc)
+    assert "category_name"    in labels, "product_categories.category_name"
+
+    # Non-joined tables must not appear
+    assert "first_name"   not in labels, "users.first_name must be excluded"
+    assert "zone_name"    not in labels, "zones.zone_name must be excluded"
+    assert "session_id"   not in labels, "events.session_id must be excluded"
+    assert "vehicle_type" not in labels, "drivers.vehicle_type must be excluded"
+
+
+def test_mxfood_events_group_by_includes_select_aliases():
+    """
+    Real mxfood query (question 25 — "Daily Sessions") truncated at GROUP BY.
+
+    FROM events — only events columns should appear (orders.status, users.first_name,
+    etc. must not).  SELECT aliases date and total_sessions are valid GROUP BY
+    targets and must also appear.
+    """
+    # Question 25 query, GROUP BY columns removed (cursor at end)
+    query = (
+        "SELECT \n"
+        "  DATE(event_timestamp) as date,\n"
+        "  platform,\n"
+        "  COUNT(DISTINCT session_id) as total_sessions\n"
+        "FROM events\n"
+        "WHERE event_timestamp >= '2025-12-01'\n"
+        "GROUP BY "
+    )
+
+    suggestions = get_completions(query, len(query), MXFOOD_SCHEMA,
+                                  database_name="mxfood", connection_type="duckdb")
+    labels = [s.label for s in suggestions]
+
+    # events columns must appear
+    assert "event_id"        in labels, "events.event_id"
+    assert "session_id"      in labels, "events.session_id"
+    assert "event_name"      in labels, "events.event_name"
+    assert "event_timestamp" in labels, "events.event_timestamp"
+    assert "screen_name"     in labels, "events.screen_name"
+    assert "properties"      in labels, "events.properties"
+
+    # SELECT aliases valid in GROUP BY context
+    assert "date"           in labels, "alias 'date' must appear"
+    assert "total_sessions" in labels, "alias 'total_sessions' must appear"
+
+    # Non-referenced tables excluded
+    assert "first_name"   not in labels, "users.first_name must be excluded"
+    assert "status"       not in labels, "orders.status must be excluded"
+    assert "zone_name"    not in labels, "zones.zone_name must be excluded"
+    assert "vehicle_type" not in labels, "drivers.vehicle_type must be excluded"

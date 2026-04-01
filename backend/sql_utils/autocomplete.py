@@ -104,11 +104,12 @@ def get_completions(
 def needs_column_completion(text: str) -> bool:
     """Check if cursor is in column completion context"""
     patterns = [
-        r'\bSELECT\s+\w*$',
-        r'\bWHERE\s+\w*$',
-        r'\bGROUP\s+BY\s+\w*$',
-        r'\bORDER\s+BY\s+\w*$',
-        r'\bON\s+\w*$',
+        r'\bSELECT(\s+\w*)?$',
+        r'\bWHERE(\s+\w*)?$',
+        r'\bGROUP\s+BY(\s+\w*)?$',
+        r'\bORDER\s+BY(\s+\w*)?$',
+        r'\bHAVING(\s+\w*)?$',
+        r'\bON(\s+\w*)?$',
         r',\s*\w*$',
     ]
     return any(re.search(p, text, re.IGNORECASE) for p in patterns)
@@ -137,11 +138,25 @@ def get_column_completions(
     suggestions = []
     idx = 0
 
-    # Get CTE info first
+    # SELECT aliases come first — highest locality for ORDER BY / GROUP BY / HAVING
+    alias_labels: set[str] = set()
+    for alias in extract_select_aliases(ast):
+        if alias.lower() not in alias_labels:
+            suggestions.append(CompletionItem(
+                label=alias,
+                kind="alias",
+                detail="  (SELECT alias)",
+                insert_text=alias,
+                sort_text=str(idx).zfill(5)
+            ))
+            idx += 1
+            alias_labels.add(alias.lower())
+
+    # Get CTE info
     cte_columns = extract_cte_columns(ast)
     cte_names_lower = [name.lower() for name in cte_columns.keys()]
 
-    # Only add schema table columns if they're not shadowed by CTEs
+    # Schema table columns (skip if shadowed by a CTE or already present as an alias)
     for db in schema_data:
         for schema in db.get("schemas", []):
             for table in schema.get("tables", []):
@@ -156,45 +171,32 @@ def get_column_completions(
                     continue
 
                 for col in table.get("columns", []):
-                    suggestions.append(CompletionItem(
-                        label=col["name"],
-                        kind="column",
-                        detail=f"  {table_name}",
-                        documentation=f"Column from {schema['schema']}.{table_name}",
-                        insert_text=col["name"],
-                        sort_text=str(idx).zfill(5)
-                    ))
+                    if col["name"].lower() not in alias_labels:
+                        suggestions.append(CompletionItem(
+                            label=col["name"],
+                            kind="column",
+                            detail=f"  {table_name}",
+                            documentation=f"Column from {schema['schema']}.{table_name}",
+                            insert_text=col["name"],
+                            sort_text=str(idx).zfill(5)
+                        ))
                     idx += 1
 
-    # Include CTE columns
+    # CTE columns
     for cte_name, columns in cte_columns.items():
         if tables_in_scope and cte_name.lower() not in [t.lower() for t in tables_in_scope]:
             continue
         for col_name in columns:
-            suggestions.append(CompletionItem(
-                label=col_name,
-                kind="cte",
-                detail=f"  {cte_name} (CTE)",
-                documentation=f"Column from CTE {cte_name}",
-                insert_text=col_name,
-                sort_text=str(idx).zfill(5)
-            ))
+            if col_name.lower() not in alias_labels:
+                suggestions.append(CompletionItem(
+                    label=col_name,
+                    kind="cte",
+                    detail=f"  {cte_name} (CTE)",
+                    documentation=f"Column from CTE {cte_name}",
+                    insert_text=col_name,
+                    sort_text=str(idx).zfill(5)
+                ))
             idx += 1
-
-    # Always include SELECT aliases — valid in ORDER BY, GROUP BY, HAVING
-    # regardless of whether the FROM table is present in schema_data.
-    existing_labels = {s.label.lower() for s in suggestions}
-    for alias in extract_select_aliases(ast):
-        if alias.lower() not in existing_labels:
-            suggestions.append(CompletionItem(
-                label=alias,
-                kind="alias",
-                detail="  (SELECT alias)",
-                insert_text=alias,
-                sort_text=str(idx).zfill(5)
-            ))
-            idx += 1
-            existing_labels.add(alias.lower())
 
     return suggestions
 

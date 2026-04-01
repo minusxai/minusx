@@ -458,6 +458,50 @@ describe('Autocomplete API - Phase 2 E2E Tests', () => {
       expect(labels.length).toBeGreaterThanOrEqual(10);
     });
 
+    test('Test 13: ORDER BY trailing space (no letter) — exact failing browser payload', async () => {
+      // Exact payload: cursorOffset=646, query ends "ORDER BY " (space, no letter typed)
+      // Reported bug: {"suggestions":[]} at network level despite Python returning 11.
+      const ycQueryTrailingSpace = [
+        'SELECT',
+        '    batch,',
+        "    TRY_CAST('20' || SUBSTRING(batch, 2, 2) AS INTEGER) AS batch_year,",
+        '    SUBSTRING(batch, 1, 1) AS season,',
+        '    COUNT(*) AS total_companies,',
+        "    COUNT(CASE WHEN status = 'Active'   THEN 1 END) AS active,",
+        "    COUNT(CASE WHEN status = 'Acquired' THEN 1 END) AS acquired,",
+        "    COUNT(CASE WHEN status = 'Public'   THEN 1 END) AS public_co,",
+        "    COUNT(CASE WHEN status = 'Inactive' THEN 1 END) AS inactive,",
+        "    ROUND(100.0 * COUNT(CASE WHEN status IN ('Acquired', 'Public') THEN 1 END) / COUNT(*), 1) AS exit_rate_pct",
+        'FROM t_2024_05_11_yc_companies',
+        "WHERE batch LIKE 'S%' OR batch LIKE 'W%'",
+        'GROUP BY batch, batch_year, season',
+        'ORDER BY ',  // trailing space — NO letter
+      ].join('\n');
+
+      const result = await CompletionsAPI.getSqlCompletions({
+        query: ycQueryTrailingSpace,
+        cursorOffset: ycQueryTrailingSpace.length,  // 646
+        context: {
+          type: 'sql_editor' as const,
+          schemaData: ycSchema,
+          resolvedReferences: [],
+          databaseName: 'yc_companies',
+          connectionType: 'csv',
+        },
+      });
+
+      expect(Array.isArray(result.suggestions)).toBe(true);
+      expect(result.suggestions.length).toBeGreaterThan(0);
+
+      const labels = result.suggestions.map((s: any) => s.label);
+      expect(labels).toContain('batch');
+      expect(labels).toContain('status');
+      expect(labels).toContain('batch_year');
+      expect(labels).toContain('season');
+      expect(labels).toContain('active');
+      expect(labels).toContain('exit_rate_pct');
+    });
+
     test('Test 8: WHERE clause on same query — only base table columns, not aliases', async () => {
       // Cursor after WHERE — base columns are the right suggestions, not ORDER BY aliases
       const queryUpToWhere = ycQuery.substring(
@@ -490,6 +534,316 @@ describe('Autocomplete API - Phase 2 E2E Tests', () => {
       // Must NOT show columns from tables not in query
       expect(labels).not.toContain('user_id');
       expect(labels).not.toContain('order_id');
+    });
+  });
+
+  /**
+   * Part D: mxfood default schema — real queries from company-template.json
+   *
+   * Each test takes an actual question SQL query from the default dataset,
+   * truncates it at a meaningful cursor position, and asserts that only the
+   * columns from the tables actually referenced in that query fragment are
+   * returned.  The MXFOOD_SCHEMA below is extracted verbatim from
+   * frontend/lib/database/company-template.json (fullSchema section).
+   */
+  describe('Part D: mxfood default schema — real queries', () => {
+    const mxfoodSchema: DatabaseWithSchema[] = [
+      {
+        databaseName: 'mxfood',
+        schemas: [
+          {
+            schema: 'main',
+            tables: [
+              {
+                table: 'orders',
+                columns: [
+                  { name: 'order_id',                type: 'BIGINT' },
+                  { name: 'user_id',                 type: 'BIGINT' },
+                  { name: 'restaurant_id',           type: 'BIGINT' },
+                  { name: 'driver_id',               type: 'BIGINT' },
+                  { name: 'zone_id',                 type: 'BIGINT' },
+                  { name: 'created_at',              type: 'TIMESTAMP' },
+                  { name: 'status',                  type: 'VARCHAR' },
+                  { name: 'subtotal',                type: 'DOUBLE' },
+                  { name: 'delivery_fee',            type: 'DOUBLE' },
+                  { name: 'discount_amount',         type: 'DOUBLE' },
+                  { name: 'tip_amount',              type: 'DOUBLE' },
+                  { name: 'total',                   type: 'DOUBLE' },
+                  { name: 'promo_code_id',           type: 'BIGINT' },
+                  { name: 'is_subscription_order',   type: 'BOOLEAN' },
+                  { name: 'platform',                type: 'VARCHAR' },
+                  { name: 'estimated_delivery_mins', type: 'BIGINT' },
+                  { name: 'actual_delivery_mins',    type: 'DOUBLE' },
+                ],
+              },
+              {
+                table: 'order_items',
+                columns: [
+                  { name: 'order_item_id', type: 'BIGINT' },
+                  { name: 'order_id',      type: 'BIGINT' },
+                  { name: 'product_id',    type: 'BIGINT' },
+                  { name: 'quantity',      type: 'BIGINT' },
+                  { name: 'unit_price',    type: 'DOUBLE' },
+                  { name: 'total_price',   type: 'DOUBLE' },
+                ],
+              },
+              {
+                table: 'products',
+                columns: [
+                  { name: 'product_id',     type: 'BIGINT' },
+                  { name: 'restaurant_id',  type: 'BIGINT' },
+                  { name: 'subcategory_id', type: 'BIGINT' },
+                  { name: 'name',           type: 'VARCHAR' },
+                  { name: 'description',    type: 'VARCHAR' },
+                  { name: 'price',          type: 'DOUBLE' },
+                  { name: 'is_available',   type: 'BOOLEAN' },
+                  { name: 'created_at',     type: 'TIMESTAMP' },
+                ],
+              },
+              {
+                table: 'product_subcategories',
+                columns: [
+                  { name: 'subcategory_id',   type: 'BIGINT' },
+                  { name: 'category_id',      type: 'BIGINT' },
+                  { name: 'subcategory_name', type: 'VARCHAR' },
+                ],
+              },
+              {
+                table: 'product_categories',
+                columns: [
+                  { name: 'category_id',   type: 'BIGINT' },
+                  { name: 'category_name', type: 'VARCHAR' },
+                ],
+              },
+              {
+                table: 'events',
+                columns: [
+                  { name: 'event_id',        type: 'BIGINT' },
+                  { name: 'user_id',         type: 'BIGINT' },
+                  { name: 'session_id',      type: 'VARCHAR' },
+                  { name: 'event_name',      type: 'VARCHAR' },
+                  { name: 'event_timestamp', type: 'TIMESTAMP' },
+                  { name: 'platform',        type: 'VARCHAR' },
+                  { name: 'screen_name',     type: 'VARCHAR' },
+                  { name: 'properties',      type: 'VARCHAR' },
+                ],
+              },
+              {
+                table: 'users',
+                columns: [
+                  { name: 'user_id',             type: 'BIGINT' },
+                  { name: 'first_name',          type: 'VARCHAR' },
+                  { name: 'last_name',           type: 'VARCHAR' },
+                  { name: 'email',               type: 'VARCHAR' },
+                  { name: 'phone',               type: 'VARCHAR' },
+                  { name: 'created_at',          type: 'TIMESTAMP' },
+                  { name: 'zone_id',             type: 'BIGINT' },
+                  { name: 'acquisition_channel', type: 'VARCHAR' },
+                  { name: 'referred_by_user_id', type: 'DOUBLE' },
+                  { name: 'platform',            type: 'VARCHAR' },
+                ],
+              },
+              {
+                table: 'zones',
+                columns: [
+                  { name: 'zone_id',                type: 'BIGINT' },
+                  { name: 'zone_name',              type: 'VARCHAR' },
+                  { name: 'avg_delivery_time_mins', type: 'BIGINT' },
+                  { name: 'surge_multiplier',       type: 'DOUBLE' },
+                  { name: 'lat_center',             type: 'DOUBLE' },
+                  { name: 'lng_center',             type: 'DOUBLE' },
+                ],
+              },
+              {
+                table: 'drivers',
+                columns: [
+                  { name: 'driver_id',    type: 'BIGINT' },
+                  { name: 'name',         type: 'VARCHAR' },
+                  { name: 'zone_id',      type: 'BIGINT' },
+                  { name: 'vehicle_type', type: 'VARCHAR' },
+                  { name: 'rating',       type: 'DOUBLE' },
+                  { name: 'created_at',   type: 'TIMESTAMP' },
+                  { name: 'is_active',    type: 'BOOLEAN' },
+                ],
+              },
+            ],
+          },
+        ],
+        updated_at: new Date().toISOString(),
+      },
+    ];
+
+    test('Test 9: WHERE on FROM orders — only orders columns returned (question 17)', async () => {
+      // question 17 "Total Monthly Orders" extended with WHERE cursor
+      const query =
+        "SELECT DATE_TRUNC('month', created_at) as month, COUNT(*) as orders " +
+        'FROM orders WHERE ';
+
+      const result = await CompletionsAPI.getSqlCompletions({
+        query,
+        cursorOffset: query.length,
+        context: {
+          type: 'sql_editor' as const,
+          schemaData: mxfoodSchema,
+          resolvedReferences: [],
+          databaseName: 'mxfood',
+          connectionType: 'duckdb',
+        },
+      });
+
+      expect(Array.isArray(result.suggestions)).toBe(true);
+      const labels = result.suggestions.map((s: any) => s.label);
+
+      // orders columns must appear
+      expect(labels).toContain('status');
+      expect(labels).toContain('total');
+      expect(labels).toContain('created_at');
+      expect(labels).toContain('order_id');
+      expect(labels).toContain('subtotal');
+
+      // columns from non-referenced tables must not appear
+      expect(labels).not.toContain('first_name');    // users
+      expect(labels).not.toContain('zone_name');     // zones
+      expect(labels).not.toContain('session_id');    // events
+      expect(labels).not.toContain('vehicle_type');  // drivers
+    });
+
+    test('Test 10: ORDER BY on FROM orders — base columns and SELECT aliases returned (question 14)', async () => {
+      // question 14 "Weekly Orders and Revenue" with ORDER BY column removed (cursor at end)
+      const query = [
+        'SELECT ',
+        "  DATE_TRUNC('week', created_at) as week,",
+        '  COUNT(*) as orders,',
+        '  SUM(total) as revenue',
+        'FROM orders',
+        "GROUP BY DATE_TRUNC('week', created_at)",
+        'ORDER BY ',
+      ].join('\n');
+
+      const result = await CompletionsAPI.getSqlCompletions({
+        query,
+        cursorOffset: query.length,
+        context: {
+          type: 'sql_editor' as const,
+          schemaData: mxfoodSchema,
+          resolvedReferences: [],
+          databaseName: 'mxfood',
+          connectionType: 'duckdb',
+        },
+      });
+
+      expect(Array.isArray(result.suggestions)).toBe(true);
+      const labels = result.suggestions.map((s: any) => s.label);
+
+      // Base orders columns
+      expect(labels).toContain('status');
+      expect(labels).toContain('total');
+      expect(labels).toContain('created_at');
+
+      // SELECT aliases are valid ORDER BY targets
+      expect(labels).toContain('week');
+      expect(labels).toContain('orders');
+      expect(labels).toContain('revenue');
+
+      // Non-referenced tables excluded
+      expect(labels).not.toContain('first_name');
+      expect(labels).not.toContain('zone_name');
+      expect(labels).not.toContain('session_id');
+      expect(labels).not.toContain('vehicle_type');
+    });
+
+    test('Test 11: WHERE on 5-table JOIN — all joined tables visible, others excluded (question 15)', async () => {
+      // question 15 "Weekly Revenue by Product Category", truncated after JOIN chain
+      const query = [
+        'SELECT ',
+        "  DATE_TRUNC('week', o.created_at) as week_start,",
+        '  pc.category_name,',
+        '  SUM(oi.total_price) as revenue',
+        'FROM orders o',
+        'JOIN order_items oi ON o.order_id = oi.order_id',
+        'JOIN products p ON oi.product_id = p.product_id',
+        'JOIN product_subcategories ps ON p.subcategory_id = ps.subcategory_id',
+        'JOIN product_categories pc ON ps.category_id = pc.category_id',
+        'WHERE ',
+      ].join('\n');
+
+      const result = await CompletionsAPI.getSqlCompletions({
+        query,
+        cursorOffset: query.length,
+        context: {
+          type: 'sql_editor' as const,
+          schemaData: mxfoodSchema,
+          resolvedReferences: [],
+          databaseName: 'mxfood',
+          connectionType: 'duckdb',
+        },
+      });
+
+      expect(Array.isArray(result.suggestions)).toBe(true);
+      const labels = result.suggestions.map((s: any) => s.label);
+
+      // All 5 joined tables' columns must be in scope
+      expect(labels).toContain('status');           // orders
+      expect(labels).toContain('total');            // orders
+      expect(labels).toContain('unit_price');       // order_items
+      expect(labels).toContain('quantity');         // order_items
+      expect(labels).toContain('total_price');      // order_items
+      expect(labels).toContain('price');            // products
+      expect(labels).toContain('is_available');     // products
+      expect(labels).toContain('subcategory_name'); // product_subcategories
+      expect(labels).toContain('category_name');    // product_categories
+
+      // Non-joined tables must not appear
+      expect(labels).not.toContain('first_name');    // users
+      expect(labels).not.toContain('zone_name');     // zones
+      expect(labels).not.toContain('session_id');    // events
+      expect(labels).not.toContain('vehicle_type');  // drivers
+    });
+
+    test('Test 12: GROUP BY on FROM events — events columns and SELECT aliases returned (question 25)', async () => {
+      // question 25 "Daily Sessions", GROUP BY columns removed (cursor at end)
+      const query = [
+        'SELECT ',
+        '  DATE(event_timestamp) as date,',
+        '  platform,',
+        '  COUNT(DISTINCT session_id) as total_sessions',
+        'FROM events',
+        "WHERE event_timestamp >= '2025-12-01'",
+        'GROUP BY ',
+      ].join('\n');
+
+      const result = await CompletionsAPI.getSqlCompletions({
+        query,
+        cursorOffset: query.length,
+        context: {
+          type: 'sql_editor' as const,
+          schemaData: mxfoodSchema,
+          resolvedReferences: [],
+          databaseName: 'mxfood',
+          connectionType: 'duckdb',
+        },
+      });
+
+      expect(Array.isArray(result.suggestions)).toBe(true);
+      const labels = result.suggestions.map((s: any) => s.label);
+
+      // events columns must appear
+      expect(labels).toContain('event_id');
+      expect(labels).toContain('session_id');
+      expect(labels).toContain('event_name');
+      expect(labels).toContain('event_timestamp');
+      expect(labels).toContain('screen_name');
+      expect(labels).toContain('properties');
+
+      // SELECT aliases are valid GROUP BY targets
+      expect(labels).toContain('date');
+      expect(labels).toContain('total_sessions');
+
+      // Non-referenced tables excluded
+      expect(labels).not.toContain('first_name');    // users
+      expect(labels).not.toContain('status');        // orders
+      expect(labels).not.toContain('zone_name');     // zones
+      expect(labels).not.toContain('vehicle_type');  // drivers
     });
   });
 });
