@@ -67,6 +67,7 @@ const hasStyleConfig = (config?: VisualizationStyleConfig) =>
     (config.colors && Object.keys(config.colors).length > 0)
     || config.opacity != null
     || config.markerSize != null
+    || config.stacked != null
   )
 
 export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange, displayMode = 'auto' }: StyleConfigPopoverProps) => {
@@ -78,8 +79,10 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
   const popoverRef = useRef<HTMLDivElement>(null)
 
   const supportsMarkerSize = chartType === 'scatter' || chartType === 'line' || chartType === 'combo'
+  const supportsStacking = chartType === 'bar' || chartType === 'area'
   const seriesCount = useMemo(() => Math.min(Math.max(numSeries, 1), COLOR_PALETTE.length), [numSeries])
   const selectedOpacity = styleConfig?.opacity == null ? 1 : styleConfig.opacity
+  const isStacked = styleConfig?.stacked ?? true
 
   useEffect(() => {
     if (!showPopover) return
@@ -117,8 +120,10 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
   const emitConfig = (next: VisualizationStyleConfig) => {
     const normalized: VisualizationStyleConfig = {}
     if (next.colors && Object.keys(next.colors).length > 0) normalized.colors = next.colors
-    if (next.opacity != null) normalized.opacity = next.opacity
+    if (next.opacity === 1) normalized.opacity = null
+    else if (next.opacity != null) normalized.opacity = next.opacity
     if (next.markerSize != null) normalized.markerSize = next.markerSize
+    if (next.stacked != null) normalized.stacked = next.stacked
     onChange(normalized)
   }
 
@@ -210,6 +215,22 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
                 {label}
               </ChoicePill>
             ))}
+          </HStack>
+        </Box>
+      )}
+
+      {supportsStacking && (
+        <Box>
+          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+            Stacking
+          </Text>
+          <HStack gap={1} flexWrap="wrap">
+            <ChoicePill selected={isStacked} onClick={() => emitConfig({ ...(styleConfig ?? {}), stacked: true })}>
+              Stacked
+            </ChoicePill>
+            <ChoicePill selected={!isStacked} onClick={() => emitConfig({ ...(styleConfig ?? {}), stacked: false })}>
+              Separate
+            </ChoicePill>
           </HStack>
         </Box>
       )}

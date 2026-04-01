@@ -146,6 +146,10 @@ export type Opacity = number | null;
  */
 export type Markersize = number | null;
 /**
+ * whether bar and area series should be stacked. Defaults to true for those chart types.
+ */
+export type Stacked = boolean | null;
+/**
  * deprecated legacy color overrides. Use styleConfig.colors instead.
  */
 export type Colors1 = {
@@ -306,6 +310,7 @@ export interface VisualizationStyleConfig {
   colors?: Colors;
   opacity?: Opacity;
   markerSize?: Markersize;
+  stacked?: Stacked;
 }
 /**
  * Per-axis configuration for scale type and range.

@@ -91,6 +91,7 @@ class VisualizationStyleConfig(BaseModel):
     colors: Optional[Dict[str, str]] = Field(None, description="color overrides mapping series index to color key (e.g. {'0': 'danger', '2': 'warning'}).")
     opacity: Optional[float] = Field(None, description="series opacity from 0.1 to 1.0")
     markerSize: Optional[int] = Field(None, description="point marker size for charts that render markers, such as scatter and line")
+    stacked: Optional[bool] = Field(None, description="whether bar and area series should be stacked. Defaults to true for those chart types.")
 
 class VisualizationSettings(BaseModel):
     """visualization settings"""

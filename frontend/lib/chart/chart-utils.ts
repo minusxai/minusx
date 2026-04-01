@@ -584,6 +584,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   const tooltipValueColor = 'var(--chakra-colors-fg-default)'
   const seriesOpacity = styleConfig?.opacity
   const markerSize = styleConfig?.markerSize
+  const isStacked = styleConfig?.stacked ?? true
   const logMajorGridColor = colorMode === 'dark' ? 'rgba(208, 215, 222, 0.8)' : 'rgba(48, 54, 61, 0.8)'
   const logMinorGridColor = colorMode === 'dark' ? 'rgba(208, 215, 222, 0.5)' : 'rgba(48, 54, 61, 0.5)'
 
@@ -681,7 +682,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
       case 'bar':
         return {
           ...baseConfig,
-          stack: 'total',
+          ...(isStacked ? { stack: 'total' } : {}),
         }
       case 'area':
         const areaColor = palette[index % palette.length]
@@ -693,7 +694,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           type: 'line' as const,
           symbol: 'none',
           showSymbol: false,
-          stack: 'total',
+          ...(isStacked ? { stack: 'total' } : {}),
           areaStyle: {
             color: {
               type: 'linear' as const,
