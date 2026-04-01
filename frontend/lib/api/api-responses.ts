@@ -6,6 +6,7 @@
 import { NextResponse } from 'next/server';
 import { ApiResponse, ErrorCode, ErrorCodes } from './api-types';
 import { UserFacingError, FileExistsError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
+import { notifyInternal } from '@/lib/messaging/internal-notifier';
 
 /**
  * Create a success response
@@ -153,7 +154,8 @@ export function handleApiError(error: unknown): NextResponse<ApiResponse> {
       return ApiErrors.validationError(error.message);
     }
 
-    // Generic internal error
+    // Generic internal error — report to internal Slack
+    void notifyInternal('api:500', error.message, { stack: (error.stack ?? '').slice(0, 500) });
     return errorResponse(
       ErrorCodes.INTERNAL_ERROR,
       error.message,
@@ -161,6 +163,7 @@ export function handleApiError(error: unknown): NextResponse<ApiResponse> {
     );
   }
 
-  // Unknown error type
+  // Unknown error type — report to internal Slack
+  void notifyInternal('api:500', 'Unknown error type thrown in API route');
   return ApiErrors.internalError('An unexpected error occurred');
 }
