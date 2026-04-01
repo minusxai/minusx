@@ -94,6 +94,7 @@
                     "type": "config",
                     "content": {
                         "name": "config",
+                        "setupWizard": { "status": "complete" },
                         "branding": {
                             "displayName": "Demo Mode"
                         },
@@ -1682,6 +1683,7 @@
                     "path": "/internals/configs/config",
                     "type": "config",
                     "content": {
+                        "setupWizard": { "status": "complete" },
                         "branding": {
                             "displayName": "Internals"
                         },

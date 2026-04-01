@@ -1085,7 +1085,6 @@ export const MIGRATIONS: MigrationEntry[] = [
         for (const doc of companyData.documents) {
           if (doc.type !== 'config') continue;
           if (!doc.path.endsWith('/configs/config')) continue;
-          if (doc.path.startsWith('/tutorial/')) continue;
           const content = doc.content as any;
           if (!content) continue;
           if (!content.setupWizard) {
