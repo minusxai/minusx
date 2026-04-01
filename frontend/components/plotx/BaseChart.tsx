@@ -14,9 +14,21 @@ interface BaseChartProps extends ChartProps {
 }
 
 export const BaseChart = (props: BaseChartProps) => {
-  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, chartType, emptyMessage, additionalOptions, onChartClick, columnFormats, chartTitle, showChartTitle, colorPalette } = props
+  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, pointMeta, tooltipColumns, chartType, emptyMessage, additionalOptions, onChartClick, columnFormats, chartTitle, showChartTitle, colorPalette, axisConfig, styleConfig, exportBranding } = props
   const colorMode = useAppSelector((state) => state.ui.colorMode)
   const { containerRef, containerWidth, containerHeight, chartEvents } = useChartContainer(onChartClick)
+  const chartInstanceKey = useMemo(
+    () => JSON.stringify({
+      chartType,
+      xScale: axisConfig?.xScale ?? 'linear',
+      yScale: axisConfig?.yScale ?? 'linear',
+      xMin: axisConfig?.xMin ?? null,
+      xMax: axisConfig?.xMax ?? null,
+      yMin: axisConfig?.yMin ?? null,
+      yMax: axisConfig?.yMax ?? null,
+    }),
+    [chartType, axisConfig]
+  )
 
   const option: EChartsOption = useMemo(() => {
     if (!isValidChartData(xAxisData, series)) {
@@ -30,6 +42,8 @@ export const BaseChart = (props: BaseChartProps) => {
       yAxisLabel,
       yAxisColumns,
       xAxisColumns,
+      pointMeta,
+      tooltipColumns,
       chartType,
       additionalOptions,
       colorMode,
@@ -39,8 +53,11 @@ export const BaseChart = (props: BaseChartProps) => {
       chartTitle,
       showChartTitle,
       colorPalette,
+      axisConfig,
+      styleConfig,
+      exportBranding,
     })
-  }, [xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, chartType, additionalOptions, colorMode, containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle, colorPalette])
+  }, [xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, pointMeta, tooltipColumns, chartType, additionalOptions, colorMode, containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle, colorPalette, axisConfig, styleConfig, exportBranding])
 
   if (!isValidChartData(xAxisData, series)) {
     return (
@@ -53,6 +70,7 @@ export const BaseChart = (props: BaseChartProps) => {
   return (
     <Box ref={containerRef} width="100%" height={props.height || '100%'} flex="1" minHeight="300px" overflow="visible">
       <EChart
+        key={chartInstanceKey}
         option={option}
         style={{ width: '100%', height: '100%', minHeight: '300px' }}
         chartSettings={{ useCoarsePointer: true, renderer: 'canvas' }}

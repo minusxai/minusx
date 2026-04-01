@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useMemo } from 'react'
-import { Box, VStack, Text } from '@chakra-ui/react'
+import { Box, HStack, VStack, Text } from '@chakra-ui/react'
 import { LinePlot } from './LinePlot'
 import { BarPlot } from './BarPlot'
 import { AreaPlot } from './AreaPlot'
@@ -20,9 +20,10 @@ import { AxisBuilder, type AxisZone } from './AxisBuilder'
 import { resolveColumnType } from './AxisComponents'
 import { aggregateData } from '@/lib/chart/aggregate-data'
 import { aggregatePivotData, computeFormulas, getUniqueTopLevelRowValues, getUniqueTopLevelColumnValues, getUniqueRowValuesAtLevel } from '@/lib/chart/pivot-utils'
-import type { PivotConfig, ColumnFormatConfig } from '@/lib/types'
+import type { PivotConfig, ColumnFormatConfig, AxisConfig, VisualizationStyleConfig } from '@/lib/types'
 import { getEffectiveColorPalette } from '@/lib/chart/echarts-theme'
-import { ColorPicker } from './ColorPicker'
+import { StyleConfigPopover } from './StyleConfigPopover'
+import type { CompanyBranding } from '@/lib/branding/whitelabel'
 
 interface ChartBuilderProps {
   columns: string[]
@@ -41,10 +42,15 @@ interface ChartBuilderProps {
   databaseName?: string
   initialColumnFormats?: Record<string, ColumnFormatConfig>
   onColumnFormatsChange?: (formats: Record<string, ColumnFormatConfig>) => void
+  initialTooltipCols?: string[]
+  onTooltipColsChange?: (cols: string[]) => void
   settingsExpanded?: boolean
   showChartTitle?: boolean
-  colorOverrides?: Record<string, string> | null
-  onColorsChange?: (colors: Record<string, string>) => void
+  styleConfig?: VisualizationStyleConfig
+  onStyleConfigChange?: (config: VisualizationStyleConfig) => void
+  axisConfig?: AxisConfig
+  onAxisConfigChange?: (config: AxisConfig) => void
+  exportBranding?: Partial<CompanyBranding>
 }
 
 interface GroupedColumns {
@@ -53,8 +59,8 @@ interface GroupedColumns {
   categories: string[]
 }
 
-export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true, colorOverrides, onColorsChange }: ChartBuilderProps) => {
-  const colorPalette = useMemo(() => getEffectiveColorPalette(colorOverrides), [colorOverrides])
+export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, exportBranding }: ChartBuilderProps) => {
+  const colorPalette = useMemo(() => getEffectiveColorPalette(styleConfig?.colors), [styleConfig?.colors])
 
   // Group columns by type
   const groupedColumns: GroupedColumns = useMemo(() => {
@@ -101,23 +107,29 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
 
   // Auto-select columns: always derived from props so agent edits immediately take effect
   const xAxisColumns = useMemo<string[]>(() => {
-    if (initialXCols && initialXCols.length > 0) {
+    if (initialXCols !== undefined) {
       const validCols = initialXCols.filter(col => columns.includes(col))
-      if (validCols.length > 0) return validCols
+      if (validCols.length > 0 || initialXCols.length === 0) return validCols
     }
     return groupedColumns.dates.length > 0 ? [groupedColumns.dates[0]] : []
   }, [initialXCols, columns, groupedColumns])
 
   const yAxisColumns = useMemo<string[]>(() => {
-    if (initialYCols && initialYCols.length > 0) {
+    if (initialYCols !== undefined) {
       const validCols = initialYCols.filter(col => columns.includes(col))
-      if (validCols.length > 0) return validCols
+      if (validCols.length > 0 || initialYCols.length === 0) return validCols
     }
     return groupedColumns.numbers.length > 0 ? [groupedColumns.numbers[0]] : []
   }, [initialYCols, columns, groupedColumns])
 
   // Column format config — always derived from props
   const columnFormats = useMemo<Record<string, ColumnFormatConfig>>(() => initialColumnFormats ?? {}, [initialColumnFormats])
+  const tooltipColumns = useMemo<string[]>(() => {
+    if (initialTooltipCols !== undefined) {
+      return initialTooltipCols.filter(col => columns.includes(col))
+    }
+    return []
+  }, [initialTooltipCols, columns])
 
   const handleColumnFormatChange = useCallback((column: string, config: ColumnFormatConfig) => {
     const isEmpty = !config.alias && config.decimalPoints === undefined && !config.dateFormat && !config.prefix && !config.suffix
@@ -195,6 +207,16 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     onAxisChange?.(xAxisColumns, yAxisColumns.filter(c => c !== column))
   }, [yAxisColumns, xAxisColumns, onAxisChange])
 
+  const handleDropTooltip = useCallback((col: string) => {
+    if (!tooltipColumns.includes(col)) {
+      onTooltipColsChange?.([...tooltipColumns, col])
+    }
+  }, [tooltipColumns, onTooltipColsChange])
+
+  const removeFromTooltip = useCallback((column: string) => {
+    onTooltipColsChange?.(tooltipColumns.filter(c => c !== column))
+  }, [tooltipColumns, onTooltipColsChange])
+
   // Build axis zones for AxisBuilder
   const chartZones: AxisZone[] = useMemo(() => [
     {
@@ -211,12 +233,19 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
       onDrop: handleDropY,
       onRemove: removeFromY,
     },
-  ], [xAxisColumns, yAxisColumns, handleDropX, handleDropY, removeFromX, removeFromY])
+    {
+      label: 'Tooltip',
+      items: tooltipColumns.map(col => ({ column: col })),
+      emptyText: 'Extra fields for hover details',
+      onDrop: handleDropTooltip,
+      onRemove: removeFromTooltip,
+    },
+  ], [xAxisColumns, yAxisColumns, tooltipColumns, handleDropX, handleDropY, handleDropTooltip, removeFromX, removeFromY, removeFromTooltip])
 
   // Aggregate data
   const aggregatedData = useMemo(() => {
-    return aggregateData(rows, xAxisColumns, yAxisColumns, chartType)
-  }, [rows, xAxisColumns, yAxisColumns, chartType])
+    return aggregateData(rows, xAxisColumns, yAxisColumns, chartType, tooltipColumns)
+  }, [rows, xAxisColumns, yAxisColumns, chartType, tooltipColumns])
 
   // Compute axis mapping for multi-X-column charts (needed for drill-down click handler)
   const axisMapping = useMemo(() => {
@@ -437,15 +466,54 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     <Box display="flex" flexDirection="column" gap={0} height={'100%'} width="100%">
       {/* Axis Builder (column palette + drop zones) */}
       {showAxisBuilder && (!useCompactView || settingsExpandedProp) && (
-        <AxisBuilder columns={columns} types={types} zones={chartZones} columnFormats={columnFormats} onColumnFormatChange={handleColumnFormatChange}>
-          {onColorsChange && (
-            <ColorPicker
-              colorOverrides={colorOverrides ?? {}}
-              numSeries={aggregatedData.series.length}
-              onChange={onColorsChange}
-            />
-          )}
-        </AxisBuilder>
+        <AxisBuilder
+          columns={columns}
+          types={types}
+          zones={chartZones}
+          columnFormats={columnFormats}
+          onColumnFormatChange={handleColumnFormatChange}
+          axisConfig={axisConfig}
+          onAxisConfigChange={onAxisConfigChange}
+          chartType={chartType}
+          settingsPanel={onStyleConfigChange ? (
+            <Box
+              flex="0 0 120px"
+              alignSelf="stretch"
+              p={2}
+              pt={3}
+              bg="bg.surface"
+              borderRadius="md"
+              border="2px dashed"
+              borderColor="border.muted"
+              position="relative"
+              minH="44px"
+              display="flex"
+              alignItems="center"
+              justifyContent="center"
+            >
+              <Box
+                position="absolute"
+                top={-2.5}
+                left={2}
+                bg="bg.muted"
+                px={1.5}
+                borderRadius="sm"
+                border="1px dashed"
+                borderColor="border.muted"
+              >
+                <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
+                  Style
+                </Text>
+              </Box>
+              <StyleConfigPopover
+                chartType={chartType}
+                styleConfig={styleConfig}
+                numSeries={aggregatedData.series.length}
+                onChange={onStyleConfigChange}
+              />
+            </Box>
+          ) : undefined}
+        />
       )}
 
       {/* Chart Area */}
@@ -490,6 +558,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       xAxisLabel: getDisplayName(xAxisColumns[0]),
                       yAxisLabel: buildYAxisLabel(yAxisColumns),
                       xAxisColumns,
+                      pointMeta: aggregatedData.pointMeta,
+                      tooltipColumns,
                       columnFormats,
                       yAxisColumns,
                       height: useCompactView && !fillHeight ? 300 : undefined,
@@ -497,6 +567,9 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       chartTitle,
                       showChartTitle,
                       colorPalette,
+                      axisConfig,
+                      styleConfig,
+                      exportBranding,
                     }
                     if (chartType === 'trend') return <TrendPlot series={aggregatedData.series} columnFormats={columnFormats} yAxisColumns={yAxisColumns} xAxisColumns={xAxisColumns} />
                     const plotMap = { line: LinePlot, bar: BarPlot, combo: ComboPlot, area: AreaPlot, scatter: ScatterPlot, funnel: FunnelPlot, pie: PiePlot, waterfall: WaterfallPlot } as const

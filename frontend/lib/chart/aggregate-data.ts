@@ -4,6 +4,7 @@ export interface AggregatedData {
     name: string
     data: number[]
   }>
+  pointMeta?: Record<string, any>[]
 }
 
 // Aggregate data based on X and Y axis selections
@@ -11,10 +12,72 @@ export const aggregateData = (
   rows: Record<string, any>[],
   xAxisColumns: string[],
   yAxisColumns: string[],
-  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo'
+  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo',
+  tooltipColumns: string[] = []
 ): AggregatedData => {
   if (yAxisColumns.length === 0) {
     return { xAxisData: [], series: [] }
+  }
+
+  // Scatter plots: no aggregation, each row is a raw data point
+  // Extra X columns (beyond the first) act as split/grouping variables
+  if (chartType === 'scatter') {
+    const xCol = xAxisColumns[0] // primary X axis (numeric)
+    const groupingCols = xAxisColumns.slice(1) // split variables
+
+    const formatX = (row: Record<string, any>) => {
+      if (!xCol) return ''
+      const val = row[xCol]
+      if (val instanceof Date) {
+        return val.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      }
+      return String(val ?? '')
+    }
+
+    // No split columns: one series per Y column, all rows included
+    if (groupingCols.length === 0) {
+      const xAxisData = xCol ? rows.map(formatX) : rows.map((_, i) => String(i))
+      const series = yAxisColumns.map(yCol => ({
+        name: yCol,
+        data: rows.map(row => {
+          const val = row[yCol]
+          return (val !== null && val !== undefined && !isNaN(Number(val))) ? Number(val) : 0
+        })
+      }))
+      const pointMeta = rows.map(row => Object.fromEntries(
+        tooltipColumns.map(col => [col, row[col]])
+      ))
+      return { xAxisData, series, pointMeta }
+    }
+
+    // With split columns: one series per group × Y column, NaN for non-matching rows
+    const groups = new Set<string>()
+    rows.forEach(row => {
+      groups.add(groupingCols.map(col => String(row[col] ?? '')).join(' | '))
+    })
+
+    const series: Array<{ name: string; data: number[] }> = []
+
+    for (const group of groups) {
+      for (const yCol of yAxisColumns) {
+        const seriesName = yAxisColumns.length > 1 ? `${group} - ${yCol}` : group
+        series.push({
+          name: seriesName,
+          data: rows.map(row => {
+            const rowGroup = groupingCols.map(col => String(row[col] ?? '')).join(' | ')
+            if (rowGroup !== group) return NaN
+            const val = row[yCol]
+            return (val !== null && val !== undefined && !isNaN(Number(val))) ? Number(val) : NaN
+          })
+        })
+      }
+    }
+
+    // xAxisData must have one entry per row (since each row is a data point)
+    const pointMeta = rows.map(row => Object.fromEntries(
+      tooltipColumns.map(col => [col, row[col]])
+    ))
+    return { xAxisData: rows.map(formatX), series, pointMeta }
   }
 
   // Handle case when no X axis columns (show total aggregation)

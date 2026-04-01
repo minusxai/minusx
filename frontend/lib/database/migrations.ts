@@ -1058,6 +1058,12 @@ export function fixData(data: InitData): InitData {
         if (viz?.type === 'pivot' && viz.pivotConfig == null) {
           viz.pivotConfig = { rows: [], columns: [], values: [] };
         }
+        if (viz?.colors && !viz?.styleConfig?.colors) {
+          viz.styleConfig = {
+            ...(viz.styleConfig ?? {}),
+            colors: viz.colors,
+          };
+        }
       }
     }
   }

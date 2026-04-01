@@ -1,11 +1,13 @@
 import type { EChartsOption } from 'echarts'
 import { withMinusXTheme } from './echarts-theme'
-import type { ColumnFormatConfig } from '@/lib/types'
+import type { ColumnFormatConfig, AxisConfig, VisualizationStyleConfig } from '@/lib/types'
+import { getBrandLogoUrl, type CompanyBranding } from '@/lib/branding/whitelabel'
 
 // Chart props interface
 export interface ChartProps {
   xAxisData: string[]
   series: Array<{ name: string; data: number[] }>
+  pointMeta?: Record<string, any>[]
   height?: number | string
   xAxisLabel?: string
   yAxisLabel?: string
@@ -13,9 +15,13 @@ export interface ChartProps {
   onChartClick?: (params: unknown) => void  // ECharts click event handler for drill-down
   columnFormats?: Record<string, ColumnFormatConfig>
   xAxisColumns?: string[]  // Actual X-axis column names (for format config lookup)
+  tooltipColumns?: string[]
   chartTitle?: string  // Title shown in chart and included in downloads
   showChartTitle?: boolean  // Whether to show title in chart (always shown in downloads)
   colorPalette: string[]  // Effective color palette (hex values)
+  axisConfig?: AxisConfig  // Axis scale config (linear/log)
+  styleConfig?: VisualizationStyleConfig
+  exportBranding?: Partial<CompanyBranding>
 }
 
 // Calculate axis label interval based on data length, container width, and max label length after truncation
@@ -174,42 +180,220 @@ export const getTimestamp = () => {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
 }
 
-// Build toolbox configuration for charts (PNG + CSV download)
-export const buildToolbox = (
-  colorMode: 'light' | 'dark',
-  downloadCsv: () => void,
+const loadImage = (src: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
+  const image = new Image()
+  image.crossOrigin = 'anonymous'
+  image.onload = () => resolve(image)
+  image.onerror = reject
+  image.src = src
+})
+
+const fitTextToWidth = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number) => {
+  if (ctx.measureText(text).width <= maxWidth) return text
+
+  const ellipsis = '...'
+  for (let i = text.length - 1; i > 0; i--) {
+    const candidate = `${text.slice(0, i).trimEnd()}${ellipsis}`
+    if (ctx.measureText(candidate).width <= maxWidth) {
+      return candidate
+    }
+  }
+
+  return ellipsis
+}
+
+const getExportTitleSegments = (title: string, colorMode: 'light' | 'dark') => {
+  const connectorColors = {
+    vs: colorMode === 'dark' ? '#4ec9b0' : '#0f766e',
+    split: colorMode === 'dark' ? '#f6ad55' : '#b45309',
+  }
+
+  const segments: Array<{ text: string; color: string }> = []
+  const splitByToken = ' split by '
+  const vsToken = ' vs '
+
+  const splitIndex = title.indexOf(splitByToken)
+  const mainTitle = splitIndex >= 0 ? title.slice(0, splitIndex) : title
+  const splitSuffix = splitIndex >= 0 ? title.slice(splitIndex + splitByToken.length) : ''
+
+  const vsIndex = mainTitle.indexOf(vsToken)
+  if (vsIndex >= 0) {
+    const left = mainTitle.slice(0, vsIndex)
+    const right = mainTitle.slice(vsIndex + vsToken.length)
+    if (left) segments.push({ text: left, color: 'currentColor' })
+    segments.push({ text: ' vs ', color: connectorColors.vs })
+    if (right) segments.push({ text: right, color: 'currentColor' })
+  } else if (mainTitle) {
+    segments.push({ text: mainTitle, color: 'currentColor' })
+  }
+
+  if (splitIndex >= 0) {
+    segments.push({ text: ' split by ', color: connectorColors.split })
+    if (splitSuffix) {
+      segments.push({ text: splitSuffix, color: 'currentColor' })
+    }
+  }
+
+  return segments
+}
+
+const composeChartExportUrl = async ({
+  chartDataUrl,
+  chartTitle,
+  colorMode,
+  branding,
+}: {
+  chartDataUrl: string
   chartTitle?: string
-) => ({
+  colorMode: 'light' | 'dark'
+  branding?: Partial<CompanyBranding>
+}) => {
+  const chartImage = await loadImage(chartDataUrl)
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return chartDataUrl
+
+  const theme = colorMode === 'dark'
+    ? {
+        background: '#161b22',
+        border: 'rgba(230, 237, 243, 0.14)',
+        title: '#f0f6fc',
+      }
+    : {
+        background: '#ffffff',
+        border: 'rgba(13, 17, 23, 0.10)',
+        title: '#0d1117',
+      }
+
+  let logoImage: HTMLImageElement | null = null
+  try {
+    const logoUrl = getBrandLogoUrl(branding, colorMode)
+    logoImage = await loadImage(logoUrl)
+  } catch {
+    logoImage = null
+  }
+
+  const hasHeader = Boolean(chartTitle)
+  const headerHeight = hasHeader ? 92 : 0
+  const horizontalPadding = 36
+  const footerPadding = 24
+  const logoSize = logoImage ? 34 : 0
+  const maxTextWidth = chartImage.width - horizontalPadding * 2
+
+  canvas.width = chartImage.width
+  canvas.height = chartImage.height + headerHeight
+
+  ctx.fillStyle = theme.background
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+  if (hasHeader) {
+    ctx.strokeStyle = theme.border
+    ctx.lineWidth = 1
+    ctx.beginPath()
+    ctx.moveTo(0, headerHeight)
+    ctx.lineTo(canvas.width, headerHeight)
+    ctx.stroke()
+
+    const titleText = chartTitle?.trim() || ''
+    const titleSegments = getExportTitleSegments(titleText, colorMode)
+    ctx.font = '700 28px JetBrains Mono, Consolas, Monaco, Courier New, monospace'
+    ctx.textBaseline = 'middle'
+    ctx.textAlign = 'left'
+
+    const totalWidth = titleSegments.reduce((sum, segment) => {
+      const measuredText = fitTextToWidth(ctx, segment.text, maxTextWidth)
+      return sum + ctx.measureText(measuredText).width
+    }, 0)
+
+    let cursorX = Math.max(horizontalPadding, (canvas.width - totalWidth) / 2)
+    const titleY = headerHeight / 2
+
+    for (const segment of titleSegments) {
+      const segmentText = fitTextToWidth(ctx, segment.text, maxTextWidth)
+      ctx.fillStyle = segment.color === 'currentColor' ? theme.title : segment.color
+      ctx.fillText(segmentText, cursorX, titleY)
+      cursorX += ctx.measureText(segmentText).width
+    }
+  }
+
+  ctx.drawImage(chartImage, 0, headerHeight, chartImage.width, chartImage.height)
+
+  if (logoImage) {
+    const logoX = canvas.width - footerPadding - logoSize
+    const logoY = canvas.height - footerPadding - logoSize
+    ctx.drawImage(logoImage, logoX, logoY, logoSize, logoSize)
+  }
+
+  return canvas.toDataURL('image/png')
+}
+
+interface ChartToolboxConfig {
+  colorMode: 'light' | 'dark'
+  downloadCsv: () => void
+  chartTitle?: string
+  exportBranding?: Partial<CompanyBranding>
+}
+
+// Build toolbox configuration for charts (PNG + CSV download)
+export const buildToolbox = ({
+  colorMode,
+  downloadCsv,
+  chartTitle,
+  exportBranding,
+}: ChartToolboxConfig) => ({
   feature: {
     mySaveAsImage: {
       show: true,
       title: '',
       icon: `image://data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${colorMode === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10l-3.1-3.1a2 2 0 0 0-2.814.014L6 21"/><path d="m14 19 3 3v-5.5"/><path d="m17 22 3-3"/><circle cx="9" cy="9" r="2"/></svg>`)}`,
       onclick: function (this: { ecModel: { scheduler: { ecInstance: any } } }) {
-        const chart = this.ecModel?.scheduler?.ecInstance
-        if (!chart) return
+        void (async () => {
+          const chart = this.ecModel?.scheduler?.ecInstance
+          if (!chart) return
 
-        // Temporarily show title and shift legend down for export
-        const hasHiddenTitle = chartTitle && chart.getOption()?.title?.[0]?.show === false
-        if (hasHiddenTitle) {
-          chart.setOption({ title: { show: true }, legend: { top: 35 } }, false)
-        }
+          const option = chart.getOption?.() ?? {}
+          const currentTitle = Array.isArray(option.title) ? option.title[0] : option.title
+          const currentLegend = Array.isArray(option.legend) ? option.legend[0] : option.legend
+          const titleWasVisible = Boolean(chartTitle && currentTitle && currentTitle.show !== false)
+          const originalLegendTop = currentLegend?.top
 
-        const url = chart.getDataURL({
-          type: 'png',
-          pixelRatio: 2,
-          backgroundColor: colorMode === 'dark' ? '#1a1a1a' : '#ffffff',
-        })
+          if (titleWasVisible) {
+            chart.setOption({
+              title: { show: false },
+              ...(currentLegend ? { legend: { top: 10 } } : {}),
+            }, false)
+          }
 
-        // Restore hidden title and legend position
-        if (hasHiddenTitle) {
-          chart.setOption({ title: { show: false }, legend: { top: 10 } }, false)
-        }
+          try {
+            const chartUrl = chart.getDataURL({
+              type: 'png',
+              pixelRatio: 2,
+              backgroundColor: colorMode === 'dark' ? '#161b22' : '#ffffff',
+              excludeComponents: ['toolbox'],
+            })
 
-        const link = document.createElement('a')
-        link.href = url
-        link.download = `chart-${getTimestamp()}.png`
-        link.click()
+            const exportUrl = await composeChartExportUrl({
+              chartDataUrl: chartUrl,
+              chartTitle,
+              colorMode,
+              branding: exportBranding,
+            })
+
+            const link = document.createElement('a')
+            link.href = exportUrl
+            link.download = `chart-${getTimestamp()}.png`
+            link.click()
+          } finally {
+            if (titleWasVisible) {
+              chart.setOption({
+                title: { show: currentTitle?.show ?? true },
+                ...(currentLegend
+                  ? { legend: { top: originalLegendTop ?? 35 } }
+                  : {}),
+              }, false)
+            }
+          }
+        })()
       },
     },
     myDownloadCsv: {
@@ -343,6 +527,8 @@ interface BaseChartConfig {
   yAxisLabel?: string
   yAxisColumns?: string[]
   xAxisColumns?: string[]
+  pointMeta?: Record<string, any>[]
+  tooltipColumns?: string[]
   chartType: 'line' | 'bar' | 'area' | 'scatter' | 'combo'
   additionalOptions?: Partial<EChartsOption>
   colorMode?: 'light' | 'dark'
@@ -352,16 +538,55 @@ interface BaseChartConfig {
   chartTitle?: string
   showChartTitle?: boolean
   colorPalette: string[]
+  axisConfig?: AxisConfig
+  styleConfig?: VisualizationStyleConfig
+  exportBranding?: Partial<CompanyBranding>
 }
 
 export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
-  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette } = config
+  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, pointMeta, tooltipColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig, styleConfig, exportBranding } = config
+  const xScaleType = axisConfig?.xScale ?? 'linear'
+  const yScaleType = axisConfig?.yScale ?? 'linear'
+  const xMin = axisConfig?.xMin ?? undefined
+  const xMax = axisConfig?.xMax ?? undefined
+  const yMin = axisConfig?.yMin ?? undefined
+  const yMax = axisConfig?.yMax ?? undefined
+  const tooltipKeyColor = 'var(--chakra-colors-fg-muted)'
+  const tooltipValueColor = 'var(--chakra-colors-fg-default)'
+  const seriesOpacity = styleConfig?.opacity
+  const markerSize = styleConfig?.markerSize
+  const logMajorGridColor = colorMode === 'dark' ? 'rgba(208, 215, 222, 0.8)' : 'rgba(48, 54, 61, 0.8)'
+  const logMinorGridColor = colorMode === 'dark' ? 'rgba(208, 215, 222, 0.5)' : 'rgba(48, 54, 61, 0.5)'
 
   // Resolve format configs for axes
   const { xDateFormat, yPrefix, ySuffix } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
 
   // Determine consistent Y-axis scale across all series
   const yScale = getNumberScale(series)
+
+  const positiveScatterXValues = chartType === 'scatter'
+    ? xAxisData
+        .map(value => Number(value))
+        .filter(value => isFinite(value) && value > 0)
+    : []
+  const positiveScatterYValues = chartType === 'scatter'
+    ? series
+        .flatMap(s => s.data)
+        .filter((value): value is number => isFinite(value) && value > 0)
+    : []
+
+  const getLogExtent = (values: number[]): { min?: number; max?: number } => {
+    if (values.length === 0) return {}
+
+    const min = Math.min(...values)
+    const max = Math.max(...values)
+
+    if (min === max) {
+      return { min: min / 10, max: max * 10 }
+    }
+
+    return { min, max }
+  }
 
   // Determine if we need dual Y-axes
   // Only use dual Y-axis when there are 2+ Y-axis columns (distinct metrics)
@@ -396,10 +621,21 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
       name: seriesName,
       type: seriesType as 'line' | 'bar' | 'scatter',
       data: type === 'scatter'
-        ? series[index].data.map((y, i) => [xAxisData[i], y])
+        ? series[index].data
+            .map((y, i) => ({
+              value: [Number(xAxisData[i]), y] as [number, number],
+              tooltipMeta: pointMeta?.[i],
+            }))
+            .filter(({ value: [x, y] }) => (
+              isFinite(x)
+              && isFinite(y)
+              && (xScaleType !== 'log' || x > 0)
+              && (yScaleType !== 'log' || y > 0)
+            ))
         : series[index].data,
       itemStyle: {
         color: palette[index % palette.length],
+        ...(seriesOpacity != null ? { opacity: seriesOpacity } : {}),
       },
       ...(useDualYAxis && { yAxisIndex: yAxisAssignments[index] }),
     }
@@ -409,9 +645,9 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         return {
           ...baseConfig,
           symbol: 'circle',
-          symbolSize: 5,
+          symbolSize: markerSize ?? 5,
           showSymbol: true,
-          lineStyle: { opacity: 0.95 },
+          lineStyle: { opacity: seriesOpacity ?? 0.95 },
         }
       case 'bar':
         return {
@@ -424,7 +660,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           symbol: 'none',
           showSymbol: false,
           stack: 'total',
-          areaStyle: {},
+          areaStyle: seriesOpacity != null ? { opacity: seriesOpacity } : {},
         }
       case 'combo':
         if (index === 0) {
@@ -433,7 +669,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
             type: 'bar' as const,
             itemStyle: {
               ...baseConfig.itemStyle,
-              opacity: 0.5,
+              opacity: seriesOpacity ?? 0.5,
             },
           }
         }
@@ -442,15 +678,15 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           type: 'line' as const,
           z: 10,
           symbol: 'circle',
-          symbolSize: 6,
+          symbolSize: markerSize ?? 6,
           showSymbol: true,
           showAllSymbol: true,
-          lineStyle: { opacity: 0.95, width: 2 },
+          lineStyle: { opacity: seriesOpacity ?? 0.95, width: 2 },
         }
       case 'scatter':
         return {
           ...baseConfig,
-          symbolSize: 8,
+          symbolSize: markerSize ?? 8,
         }
       default:
         return baseConfig
@@ -495,32 +731,89 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
     return wrapAxisName(combined, maxAxisNameLength)
   }
 
+  const legendData = useDualYAxis
+    ? series
+        .map((s, idx) => ({
+          name: `${s.name} (${yAxisAssignments[idx] === 0 ? 'L' : 'R'})`,
+          axis: yAxisAssignments[idx],
+          itemStyle: {
+            color: palette[idx % palette.length],
+            opacity: 1,
+          },
+        }))
+        .sort((a, b) => a.axis - b.axis)
+        .map(({ axis, ...item }) => item)
+    : series.map((s, idx) => ({
+        name: s.name,
+        itemStyle: {
+          color: palette[idx % palette.length],
+          opacity: 1,
+        },
+      }))
+
   // Build Y-axis configuration (single or dual)
+  const yAxisType = yScaleType === 'log' ? 'log' as const : 'value' as const
+  const yExtraProps = yScaleType === 'log'
+    ? {
+        logBase: 10,
+        minorTick: { show: true, splitNumber: 9 },
+        splitLine: {
+          show: true,
+          lineStyle: {
+            color: logMajorGridColor,
+            type: 'dashed' as const,
+            opacity: 0.45,
+            width: 1,
+          },
+        },
+        minorSplitLine: {
+          show: true,
+          lineStyle: {
+            color: logMinorGridColor,
+            type: 'dashed' as const,
+            opacity: 0.45,
+            width: 1,
+          },
+        },
+      }
+    : {}
+  const yAxisFormatter = (value: number) =>
+    applyPrefixSuffix(formatWithScale(value, yScale), yPrefix, ySuffix)
+  const yLogRangeProps = yScaleType === 'log' && (yMin === undefined || yMax === undefined)
+    ? getLogExtent(positiveScatterYValues)
+    : {}
+  const yRangeProps = {
+    ...(yMin !== undefined ? { min: yMin } : {}),
+    ...(yMax !== undefined ? { max: yMax } : {}),
+  }
   const yAxisConfig = useDualYAxis
     ? [
         {
-          type: 'value' as const,
-          name: getAxisName(0), // Left axis shows names of series on left
+          type: yAxisType,
+          name: getAxisName(0),
           position: 'left' as const,
-          axisLabel: {
-            formatter: (value: number) => applyPrefixSuffix(formatWithScale(value, yScale), yPrefix, ySuffix),
-          },
+          ...yExtraProps,
+          ...yLogRangeProps,
+          ...yRangeProps,
+          axisLabel: { formatter: yAxisFormatter },
         },
         {
-          type: 'value' as const,
-          name: getAxisName(1), // Right axis shows names of series on right
+          type: yAxisType,
+          name: getAxisName(1),
           position: 'right' as const,
-          axisLabel: {
-            formatter: (value: number) => applyPrefixSuffix(formatWithScale(value, yScale), yPrefix, ySuffix),
-          },
+          ...yExtraProps,
+          ...yLogRangeProps,
+          ...yRangeProps,
+          axisLabel: { formatter: yAxisFormatter },
         },
       ]
     : {
-        type: 'value' as const,
+        type: yAxisType,
         name: wrapAxisName(yAxisLabel, maxAxisNameLength),
-        axisLabel: {
-          formatter: (value: number) => applyPrefixSuffix(formatWithScale(value, yScale), yPrefix, ySuffix),
-        },
+        ...yExtraProps,
+        ...yLogRangeProps,
+        ...yRangeProps,
+        axisLabel: { formatter: yAxisFormatter },
       }
 
   // Step 1: Detect date data characteristics for smart formatting
@@ -571,6 +864,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
 
   // Use the estimated interval (could refine further but this is good enough)
   const labelInterval = estimatedInterval
+  const getColumnDisplayName = (col: string) => columnFormats?.[col]?.alias || col
 
   // Helper to generate and download CSV from chart data
   const downloadCsv = () => {
@@ -609,7 +903,12 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
 
   const baseOption: EChartsOption = {
     ...(chartTitle ? { title: { text: chartTitle, left: 'center', top: 5, show: showChartTitle } } : {}),
-    toolbox: buildToolbox(colorMode, downloadCsv, chartTitle),
+    toolbox: buildToolbox({
+      colorMode,
+      downloadCsv,
+      chartTitle,
+      exportBranding,
+    }),
     tooltip: chartType === 'scatter'
       ? {
           trigger: 'item',
@@ -620,13 +919,50 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           hideDelay: 100,
           transitionDuration: 0.2,
           formatter: (params: any) => {
-            const [x, y] = params.data
-            const formattedX = x
+            const point = params.data?.value ? params.data : { value: params.data, tooltipMeta: undefined }
+            const [x, y] = point.value
+            const formattedX = formatLargeNumber(x)
             const scatterCfg = columnFormats?.[params.seriesName]
             const scatterPrefix = scatterCfg?.prefix || yPrefix
             const scatterSuffix = scatterCfg?.suffix || ySuffix
             const formattedY = typeof y === 'number' ? applyPrefixSuffix(formatWithScale(y, yScale), scatterPrefix, scatterSuffix) : y
-            return `${params.seriesName}<br/>${xAxisLabel || 'X'}: ${formattedX}<br/>${yAxisLabel || 'Y'}: ${formattedY}`
+            let groupingPart = String(params.seriesName ?? '')
+            if ((yAxisColumns?.length ?? 0) > 1) {
+              for (const yCol of yAxisColumns ?? []) {
+                if (groupingPart.endsWith(` - ${yCol}`)) {
+                  groupingPart = groupingPart.slice(0, -(` - ${yCol}`.length))
+                  break
+                }
+              }
+            }
+
+            const groupingRows = (xAxisColumns ?? [])
+              .slice(1)
+              .map((col, index) => ({
+                key: getColumnDisplayName(col),
+                value: groupingPart.split(' | ')[index],
+              }))
+              .filter(row => row.value !== undefined && row.value !== '')
+
+            const extraRows = (tooltipColumns ?? [])
+              .filter(col => point.tooltipMeta && point.tooltipMeta[col] !== undefined)
+              .map(col => ({
+                key: getColumnDisplayName(col),
+                value: String(point.tooltipMeta[col]),
+              }))
+
+            const rows = [
+              ...groupingRows,
+              { key: xAxisLabel || 'X', value: formattedX },
+              { key: yAxisLabel || 'Y', value: String(formattedY) },
+              ...extraRows,
+            ]
+
+            const rowHtml = rows
+              .map(row => `<tr><td style="padding:2px 12px 2px 0;color:${tooltipKeyColor}">${row.key}</td><td style="padding:2px 0;text-align:right;font-weight:600;color:${tooltipValueColor}">${row.value}</td></tr>`)
+              .join('')
+
+            return `<table style="width:100%;border-collapse:collapse">${rowHtml}</table>`
           },
         }
       : {
@@ -657,68 +993,86 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           },
         },
     legend: {
-      data: useDualYAxis
-        ? // Sort legend: all L-axis items first, then R-axis items
-          series
-            .map((s, idx) => ({
-              name: `${s.name} (${yAxisAssignments[idx] === 0 ? 'L' : 'R'})`,
-              axis: yAxisAssignments[idx],
-            }))
-            .sort((a, b) => a.axis - b.axis) // Sort by axis (0=L first, 1=R second)
-            .map(item => item.name)
-        : series.map(s => s.name),
+      data: legendData,
       top: chartTitle && showChartTitle ? 30 : 10,
       orient: 'horizontal',
       type: 'scroll',
       pageIconSize: 10, // Smaller navigation buttons
       pageTextStyle: {fontSize: 10},
     },
-    xAxis: {
-      type: 'category',
-      data: xAxisData,
-      name: xAxisLabel,
-      ...(chartType !== 'bar' && chartType !== 'combo' && { boundaryGap: false }),
-      axisLabel: {
-        interval: labelInterval, // Use pre-calculated interval based on truncated label length
-        rotate: 0, // Keep labels horizontal by default
-        formatter: (value: string) => {
-          // Use explicit date format if configured
-          if (xDateFormat) {
-            return formatDateValue(value, xDateFormat)
-          }
+    xAxis: chartType === 'scatter'
+      ? {
+          type: (xScaleType === 'log' ? 'log' : 'value') as 'log' | 'value',
+          name: xAxisLabel,
+          ...(xScaleType === 'log' ? {
+            logBase: 10,
+            minorTick: { show: true, splitNumber: 9 },
+            splitLine: {
+              show: true,
+              lineStyle: {
+                color: logMajorGridColor,
+                type: 'dashed' as const,
+                opacity: 0.45,
+                width: 1,
+              },
+            },
+            minorSplitLine: {
+              show: true,
+              lineStyle: {
+                color: logMinorGridColor,
+                type: 'dashed' as const,
+                opacity: 0.45,
+                width: 1,
+              },
+            },
+            ...(xMin === undefined || xMax === undefined ? getLogExtent(positiveScatterXValues) : {}),
+          } : {}),
+          ...(xMin !== undefined ? { min: xMin } : {}),
+          ...(xMax !== undefined ? { max: xMax } : {}),
+          axisLabel: {
+            formatter: (value: number) => formatLargeNumber(value),
+          },
+        }
+      : {
+          type: 'category' as const,
+          data: xAxisData,
+          name: xAxisLabel,
+          ...(chartType !== 'bar' && chartType !== 'combo' && { boundaryGap: false }),
+          axisLabel: {
+            interval: labelInterval,
+            rotate: 0,
+            formatter: (value: string) => {
+              if (xDateFormat) {
+                return formatDateValue(value, xDateFormat)
+              }
 
-          // Try to parse as date and format based on available space
-          // Priority when space is tight: Year > Month > Day
-          const date = new Date(value)
-          if (!isNaN(date.getTime()) && /^\d{4}-\d{2}-\d{2}/.test(value) && dateFormatNeeds) {
-            const month = date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })
-            const day = date.getUTCDate()
-            const year = date.getUTCFullYear()
-            const shortYear = (year % 100).toString().padStart(2, '0')
-            const pad = (n: number) => n.toString().padStart(2, '0')
-            const { needsDay } = dateFormatNeeds
+              const date = new Date(value)
+              if (!isNaN(date.getTime()) && /^\d{4}-\d{2}-\d{2}/.test(value) && dateFormatNeeds) {
+                const month = date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })
+                const day = date.getUTCDate()
+                const year = date.getUTCFullYear()
+                const shortYear = (year % 100).toString().padStart(2, '0')
+                const pad = (n: number) => n.toString().padStart(2, '0')
+                const { needsDay } = dateFormatNeeds
 
-            // Always try to show year first (most important), then month, then day
-            // Only drop components when space is insufficient
-            if (maxLabelLength >= 9 && needsDay) {
-              return `${year}-${month}-${pad(day)}` // "2024-Sep-01" - full detail
-            } else if (maxLabelLength >= 6) {
-              return `${month}'${shortYear}` // "Sep'24" - drop day, keep year+month
-            } else if (maxLabelLength >= 3) {
-              return `${year}` // "2024" - full year
-            }
-            return month // "Sep" - fallback
-          }
+                if (maxLabelLength >= 9 && needsDay) {
+                  return `${year}-${month}-${pad(day)}`
+                } else if (maxLabelLength >= 6) {
+                  return `${month}'${shortYear}`
+                } else if (maxLabelLength >= 3) {
+                  return `${year}`
+                }
+                return month
+              }
 
-          // Dynamically truncate long labels based on available space
-          if (value.length > maxLabelLength) {
-            return value.slice(0, maxLabelLength - 1) + '…'
-          }
-          return value
+              if (value.length > maxLabelLength) {
+                return value.slice(0, maxLabelLength - 1) + '…'
+              }
+              return value
+            },
+          },
+          ...(chartType === 'line' && { splitLine: { show: false } }),
         },
-      },
-      ...(chartType === 'line' && { splitLine: { show: false } }),
-    },
     yAxis: yAxisConfig,
     series: chartSeries,
   }

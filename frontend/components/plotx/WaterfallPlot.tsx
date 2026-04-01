@@ -13,7 +13,7 @@ interface WaterfallPlotProps extends ChartProps {
 }
 
 export const WaterfallPlot = (props: WaterfallPlotProps) => {
-  const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns, chartTitle, showChartTitle = true, colorPalette: customPalette } = props
+  const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns, chartTitle, showChartTitle = true, colorPalette: customPalette, styleConfig, exportBranding } = props
   const colorMode = useAppSelector((state) => state.ui.colorMode)
   const { containerRef, containerWidth, containerHeight, chartEvents } = useChartContainer(onChartClick)
 
@@ -94,7 +94,12 @@ export const WaterfallPlot = (props: WaterfallPlotProps) => {
 
     const baseOption: EChartsOption = {
       ...(chartTitle ? { title: { text: chartTitle, left: 'center', top: 5, show: showChartTitle } } : {}),
-      toolbox: buildToolbox(colorMode, downloadCsv, chartTitle),
+      toolbox: buildToolbox({
+        colorMode,
+        downloadCsv,
+        chartTitle,
+        exportBranding,
+      }),
       tooltip: {
         trigger: 'axis',
         appendToBody: true,
@@ -143,21 +148,30 @@ export const WaterfallPlot = (props: WaterfallPlotProps) => {
           name: 'Increase',
           type: 'bar',
           stack: 'waterfall',
-          itemStyle: { color: increaseColor },
+          itemStyle: {
+            color: increaseColor,
+            ...(styleConfig?.opacity != null ? { opacity: styleConfig.opacity } : {}),
+          },
           data: increaseData,
         },
         {
           name: 'Decrease',
           type: 'bar',
           stack: 'waterfall',
-          itemStyle: { color: decreaseColor },
+          itemStyle: {
+            color: decreaseColor,
+            ...(styleConfig?.opacity != null ? { opacity: styleConfig.opacity } : {}),
+          },
           data: decreaseData,
         },
         {
           name: 'Total',
           type: 'bar',
           stack: 'waterfall',
-          itemStyle: { color: customPalette[1 % customPalette.length] },
+          itemStyle: {
+            color: customPalette[1 % customPalette.length],
+            ...(styleConfig?.opacity != null ? { opacity: styleConfig.opacity } : {}),
+          },
           data: totalData,
         },
       ],
@@ -165,7 +179,7 @@ export const WaterfallPlot = (props: WaterfallPlotProps) => {
     }
 
     return withMinusXTheme(baseOption, colorMode)
-  }, [xAxisData, series, colorMode, containerWidth, containerHeight, fmtName, fmtValue])
+  }, [xAxisData, series, colorMode, containerWidth, containerHeight, fmtName, fmtValue, chartTitle, showChartTitle, customPalette, styleConfig, exportBranding, yScale, yPrefix, ySuffix])
 
   if (xColCount > 1) {
     return <ChartError message="Waterfall charts support only a single X-axis column. Remove extra columns from the X axis to continue." />
