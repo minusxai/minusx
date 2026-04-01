@@ -20,6 +20,28 @@ describe('buildChartOption scatter log axis', () => {
     expect(xAxis.type).toBe('log')
     expect(xAxis.min).toBe(0.5)
     expect(xAxis.max).toBe(150)
+    expect(xAxis.splitLine).toMatchObject({
+      show: true,
+      lineStyle: {
+        color: 'rgba(48, 54, 61, 0.95)',
+        type: 'solid',
+        opacity: 0.45,
+        width: 1,
+      },
+    })
+    expect(xAxis.minorTick).toMatchObject({
+      show: true,
+      splitNumber: 9,
+    })
+    expect(xAxis.minorSplitLine).toMatchObject({
+      show: true,
+      lineStyle: {
+        color: 'rgba(48, 54, 61, 0.6)',
+        type: 'dashed',
+        opacity: 0.45,
+        width: 1,
+      },
+    })
     expect(scatterSeries.data).toEqual([
       [0.5, 1100],
       [1, 1200],

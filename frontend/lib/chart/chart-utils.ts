@@ -364,6 +364,8 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   const xMax = axisConfig?.xMax ?? undefined
   const yMin = axisConfig?.yMin ?? undefined
   const yMax = axisConfig?.yMax ?? undefined
+  const logMajorGridColor = colorMode === 'dark' ? 'rgba(208, 215, 222, 0.8)' : 'rgba(48, 54, 61, 0.8)'
+  const logMinorGridColor = colorMode === 'dark' ? 'rgba(208, 215, 222, 0.5)' : 'rgba(48, 54, 61, 0.5)'
 
   // Resolve format configs for axes
   const { xDateFormat, yPrefix, ySuffix } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
@@ -539,8 +541,25 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   const yExtraProps = yScaleType === 'log'
     ? {
         logBase: 10,
-        minorTick: { show: true },
-        minorSplitLine: { show: true, lineStyle: { type: 'dashed' as const, opacity: 0.3 } },
+        minorTick: { show: true, splitNumber: 9 },
+        splitLine: {
+          show: true,
+          lineStyle: {
+            color: logMajorGridColor,
+            type: 'dashed' as const,
+            opacity: 0.45,
+            width: 1,
+          },
+        },
+        minorSplitLine: {
+          show: true,
+          lineStyle: {
+            color: logMinorGridColor,
+            type: 'dashed' as const,
+            opacity: 0.45,
+            width: 1,
+          },
+        },
       }
     : {}
   const yAxisFormatter = (value: number) =>
@@ -738,8 +757,25 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           name: xAxisLabel,
           ...(xScaleType === 'log' ? {
             logBase: 10,
-            minorTick: { show: true },
-            minorSplitLine: { show: true, lineStyle: { type: 'dashed' as const, opacity: 0.3 } },
+            minorTick: { show: true, splitNumber: 9 },
+            splitLine: {
+              show: true,
+              lineStyle: {
+                color: logMajorGridColor,
+                type: 'dashed' as const,
+                opacity: 0.45,
+                width: 1,
+              },
+            },
+            minorSplitLine: {
+              show: true,
+              lineStyle: {
+                color: logMinorGridColor,
+                type: 'dashed' as const,
+                opacity: 0.45,
+                width: 1,
+              },
+            },
             ...(xMin === undefined || xMax === undefined ? getLogExtent(positiveScatterXValues) : {}),
           } : {}),
           ...(xMin !== undefined ? { min: xMin } : {}),
