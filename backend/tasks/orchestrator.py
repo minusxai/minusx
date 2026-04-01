@@ -12,7 +12,6 @@ from pydantic.fields import FieldInfo
 from pydantic_core import PydanticUndefined
 
 from .debug_context import TaskDebug, LLMDebug, get_task_debug, set_task_debug
-from .utils.helpers import short_hash
 
 
 def generate_unique_tool_call_id() -> str:

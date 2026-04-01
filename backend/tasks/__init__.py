@@ -17,11 +17,11 @@ from .orchestrator import (
 from .debug_context import TaskDebug, TaskDebugLevel, LLMDebug, set_task_debug, get_task_debug
 from .types import ChatCompletionMessageParamMX, ChatCompletionMessageToolCallParamMX, ChatCompletionToolMessageParamMX
 
-# Import test agents to register them
-from . import test_agents
+# Import test agents to register them (side-effect: registers agents in registry)
+from . import test_agents  # noqa: F401
 
-# Import minusx analyst agent to register it
-from .agents import analyst
+# Import minusx analyst agent to register it (side-effect: registers agents in registry)
+from .agents import analyst  # noqa: F401
 
 # Rebuild ALLMRequest model now that Tool is defined
 # This resolves the forward reference in ALLMRequest.tools: List[Type["Tool"]]

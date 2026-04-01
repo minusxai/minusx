@@ -56,6 +56,6 @@ dev-dependencies = [
 [tool.ruff.lint]
 # E402: module-level import not at top of file
 # PLC0415: import not at top-level of file (inside functions/classes)
-select = ["E402", "PLC0415"]
+select = ["E402", "F401", "PLC0415"]
 # Exclude test files and scripts — local imports are common for test isolation
 exclude = ["tests/**", "scripts/**"]

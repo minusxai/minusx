@@ -2,7 +2,6 @@
 Maps MinusX database connections to Singer target configurations.
 """
 import tempfile
-import json
 from typing import Dict, Any
 from pathlib import Path
 from config import BASE_DUCKDB_DATA_PATH

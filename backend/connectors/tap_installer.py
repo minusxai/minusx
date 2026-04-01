@@ -8,8 +8,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional, Tuple
-import json
+from typing import Optional
 import logging
 
 logger = logging.getLogger(__name__)

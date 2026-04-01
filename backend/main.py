@@ -34,8 +34,8 @@ from processors import process_google_sheets_import, delete_google_sheets_connec
 from sql_utils.limit_enforcer import enforce_query_limit  # noqa: E402
 from sql_utils.validator import validate_sql as validate_sql_syntax  # noqa: E402
 from sql_utils.column_inferrer import infer_columns  # noqa: E402
-from sql_utils.autocomplete import get_completions, AutocompleteRequest, get_mention_completions, MentionItem  # noqa: E402
-from sql_ir import parse_sql_to_ir, ir_to_sql, any_ir_to_sql, UnsupportedSQLError, QueryIR, CompoundQueryIR  # noqa: E402
+from sql_utils.autocomplete import get_completions, AutocompleteRequest, get_mention_completions  # noqa: E402
+from sql_ir import parse_sql_to_ir, any_ir_to_sql, UnsupportedSQLError  # noqa: E402
 
 # Import orchestration components
 from tasks import Orchestrator, AgentCall, UserInputException  # noqa: E402
