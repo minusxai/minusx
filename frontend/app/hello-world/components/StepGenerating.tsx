@@ -23,9 +23,10 @@ interface StepGeneratingProps {
   connectionName: string;
   contextFileId: number;
   greeting?: string;
+  onComplete?: () => Promise<void>;
 }
 
-export default function StepGenerating({ connectionName, contextFileId, greeting }: StepGeneratingProps) {
+export default function StepGenerating({ connectionName, contextFileId, greeting, onComplete }: StepGeneratingProps) {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const reduxState = useAppSelector(state => state);
@@ -147,11 +148,12 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     setShowTrace(true);
   }, [dispatch, connectionName, virtualDashboardId, reduxState, hasStarted, databases, contextDocs]);
 
-  // Publish all dirty files and navigate to the dashboard
+  // Publish all dirty files, mark wizard complete, and navigate to the dashboard
   const handleGoToDashboard = useCallback(async () => {
     if (!virtualDashboardId) return;
     try {
       await publishAll();
+      if (onComplete) await onComplete();
       const freshState = getStore().getState();
       const allFiles = Object.values(freshState.files.files);
       const dashboard = allFiles.find(f => f.type === 'dashboard' && f.id > 0 && f.name === 'Getting Started');
@@ -164,15 +166,16 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
       console.error('[StepGenerating] Publish failed:', err);
       router.push('/');
     }
-  }, [virtualDashboardId, router]);
+  }, [virtualDashboardId, router, onComplete]);
 
-  /** Skip: interrupt agent, discard virtual files, go to /new/dashboard */
-  const handleSkip = useCallback(() => {
+  /** Skip: interrupt agent, mark wizard complete, go to /new/dashboard */
+  const handleSkip = useCallback(async () => {
     if (activeConvId) {
       dispatch(interruptChat({ conversationID: activeConvId }));
     }
+    if (onComplete) await onComplete();
     router.push('/new/dashboard');
-  }, [activeConvId, dispatch, router]);
+  }, [activeConvId, dispatch, router, onComplete]);
 
   const isDone = !isGenerating && hasStarted;
 

@@ -125,6 +125,20 @@ export function validateCompanyConfig(content: unknown): content is Partial<Comp
     }
   }
 
+  // If setupWizard exists, validate its structure
+  if (config.setupWizard !== undefined) {
+    if (
+      typeof config.setupWizard !== 'object' ||
+      config.setupWizard === null ||
+      !['pending', 'complete'].includes((config.setupWizard as any).status)
+    ) {
+      return false;
+    }
+    for (const field of Object.keys(config.setupWizard)) {
+      if (field !== 'status') return false;
+    }
+  }
+
   return true;
 }
 
@@ -180,6 +194,23 @@ function validateAccessRulesOverride(accessRules: unknown): accessRules is Acces
   }
 
   return true;
+}
+
+/**
+ * Deep-merge two partial configs for server-side partial update support.
+ * Incoming fields override base fields; missing incoming fields keep base values.
+ * Nested objects (branding, links) are deep-merged so partial nested updates don't wipe sibling fields.
+ */
+export function mergePartialConfigs(
+  base: Partial<CompanyConfig>,
+  incoming: Partial<CompanyConfig>
+): Partial<CompanyConfig> {
+  return {
+    ...base,
+    ...incoming,
+    branding: incoming.branding ? { ...(base.branding || {}), ...incoming.branding } : base.branding,
+    links: incoming.links ? { ...(base.links || {}), ...incoming.links } : base.links,
+  };
 }
 
 class ConfigsDataLayerServer {

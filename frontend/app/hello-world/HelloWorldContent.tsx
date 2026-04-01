@@ -1,13 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { Box, Heading, Text, Flex, HStack, Icon, VStack } from '@chakra-ui/react';
-import { LuPlay, LuDatabase, LuSparkles, LuArrowLeft, LuCheck } from 'react-icons/lu';
-import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { LuPlay, LuDatabase, LuSparkles, LuCheck } from 'react-icons/lu';
+import { useAppDispatch } from '@/store/hooks';
 import { setLeftSidebarCollapsed } from '@/store/uiSlice';
 import { setNavigation, setActiveVirtualId } from '@/store/navigationSlice';
 import { switchMode } from '@/lib/mode/mode-utils';
-import { useRouter, useSearchParams } from 'next/navigation';
 import {
   pulseKeyframes,
   sparkleKeyframes,
@@ -17,46 +16,20 @@ import {
 } from '@/lib/ui/animations';
 import {
   type WizardStep,
-  type OnboardingState,
-  readStateFromURL,
-  buildSearchParams,
-  detectStepFromSystemState,
   STEP_LABELS,
 } from './onboarding-state';
-import { useConnections } from '@/lib/hooks/useConnections';
-import { useContexts } from '@/lib/hooks/useContexts';
-import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
-import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import StepConnection from './components/StepConnection';
 import StepContext from './components/StepContext';
 import StepGenerating from './components/StepGenerating';
-import StepComplete from './components/StepComplete';
-import { useConfigs } from '@/lib/hooks/useConfigs';
+import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
+import { useAppSelector } from '@/store/hooks';
 
 const TYPEWRITER_SPEED = 35; // ms per character
 
 export function HelloWorldContent() {
   const dispatch = useAppDispatch();
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const user = useAppSelector(state => state.auth.user);
-  const { connections, loading: connectionsLoading } = useConnections({ skip: false });
-  const { contexts, loading: contextsLoading } = useContexts({ skip: false });
-  const homeFolder = user ? resolveHomeFolderSync(user.mode, user.home_folder || '') : '/org';
-  const questionsCriteria = useMemo(
-    () => ({ type: 'question' as const, paths: [homeFolder], depth: -1 }),
-    [homeFolder]
-  );
-  const { files: questions, loading: questionsLoading } = useFilesByCriteria({
-    criteria: questionsCriteria,
-    partial: true,
-    skip: false,
-  });
-  const orb1Ref = useRef<HTMLDivElement>(null);
-  const orb2Ref = useRef<HTMLDivElement>(null);
-  const orb3Ref = useRef<HTMLDivElement>(null);
 
-  // Build greeting with user name
   const { config } = useConfigs();
   const agentName = config.branding.agentName;
   const userName = user?.name?.split(' ')[0] || '';
@@ -64,56 +37,15 @@ export function HelloWorldContent() {
   const greetingLine2 = `I'm ${agentName}. Let's get you set up.`;
   const fullGreeting = `${greetingLine1}\n${greetingLine2}`;
 
-  // Adapt Redux connections to the { id, name }[] shape used by onboarding-state
-  const connectionList = useMemo(() =>
-    Object.entries(connections).map(([name]) => ({ id: 0, name })),
-    [connections]
-  );
+  const orb1Ref = useRef<HTMLDivElement>(null);
+  const orb2Ref = useRef<HTMLDivElement>(null);
+  const orb3Ref = useRef<HTMLDivElement>(null);
 
-  // Only run onboarding detection in org mode
-  const effectiveMode = user?.mode || 'org';
-  const isOrgMode = effectiveMode === 'org';
-
-  // Determine initial state: always auto-advance to match system state
-  const initialState = useMemo(() => {
-    const urlState = readStateFromURL(searchParams);
-    if (!isOrgMode) return urlState;
-    if (connectionsLoading || contextsLoading || questionsLoading) return urlState;
-    const systemState = detectStepFromSystemState(connectionList, contexts, questions);
-    // Use whichever is further along (don't go backwards)
-    const stepOrder: WizardStep[] = ['welcome', 'connection', 'context', 'generating', 'complete'];
-    const urlIdx = stepOrder.indexOf(urlState.step);
-    const sysIdx = stepOrder.indexOf(systemState.step);
-    return sysIdx > urlIdx ? systemState : urlState;
-  }, [searchParams, connectionList, contexts, questions, connectionsLoading, contextsLoading, questionsLoading, isOrgMode]);
-
-  const [step, setStep] = useState<WizardStep>(initialState.step);
-  const [connectionId, setConnectionId] = useState<number | null>(initialState.connectionId);
-  const [connectionName, setConnectionName] = useState<string | null>(initialState.connectionName);
-  const [contextFileId, setContextFileId] = useState<number | null>(initialState.contextFileId);
-
-  // Push state to URL when it changes
-  const pushState = useCallback((newState: OnboardingState) => {
-    const params = buildSearchParams(newState);
-    const url = params ? `/hello-world?${params}` : '/hello-world';
-    router.replace(url);
-  }, [router]);
-
-  // Sync state from initialState on first load only.
-  // Once the user interacts (clicks connect/back/etc), don't override their navigation.
-  const hasUserNavigated = useRef(false);
-  const hasSyncedOnce = useRef(false);
-  useEffect(() => {
-    if (hasUserNavigated.current || hasSyncedOnce.current) return;
-    // Only sync if initialState is different from the default welcome state
-    if (initialState.step !== 'welcome') {
-      hasSyncedOnce.current = true;
-      setStep(initialState.step);
-      setConnectionId(initialState.connectionId);
-      setConnectionName(initialState.connectionName);
-      setContextFileId(initialState.contextFileId);
-    }
-  }, [initialState]);
+  // Wizard step — managed purely in local state (no URL params)
+  const [step, setStep] = useState<WizardStep>('welcome');
+  const [connectionId, setConnectionId] = useState<number | null>(null);
+  const [connectionName, setConnectionName] = useState<string | null>(null);
+  const [contextFileId, setContextFileId] = useState<number | null>(null);
 
   // Typewriter state
   const [displayedText, setDisplayedText] = useState('');
@@ -147,7 +79,7 @@ export function HelloWorldContent() {
     return () => { clearInterval(i1); clearInterval(i2); clearInterval(i3); };
   }, [moveOrb]);
 
-  // Typewriter effect (#1, #2)
+  // Typewriter effect
   useEffect(() => {
     if (step !== 'welcome') return;
     let i = 0;
@@ -163,50 +95,32 @@ export function HelloWorldContent() {
     return () => clearInterval(interval);
   }, [step, fullGreeting]);
 
-  // Wizard handlers - push state to URL on each transition (#8)
+  // Mark wizard complete in config — called by StepGenerating before navigating away
+  const handleComplete = useCallback(async () => {
+    try {
+      await updateConfig({ setupWizard: { status: 'complete' } });
+    } catch (err) {
+      console.error('[HelloWorldContent] Failed to mark onboarding complete:', err);
+      // Don't block navigation
+    }
+  }, []);
+
+  // Wizard transition handlers
   const handleConnectionComplete = useCallback((id: number, name: string) => {
-    hasUserNavigated.current = true;
     setConnectionId(id);
     setConnectionName(name);
     setStep('context');
-    pushState({ step: 'context', connectionId: id, connectionName: name, contextFileId: null });
-  }, [pushState]);
+  }, []);
 
   const handleContextComplete = useCallback((fileId: number) => {
-    hasUserNavigated.current = true;
     setContextFileId(fileId);
     setStep('generating');
-    pushState({ step: 'generating', connectionId, connectionName, contextFileId: fileId });
-  }, [pushState, connectionId, connectionName]);
+  }, []);
 
-  const handleBack = useCallback(() => {
-    hasUserNavigated.current = true;
-    if (step === 'connection') {
-      setStep('welcome');
-      pushState({ step: 'welcome', connectionId: null, connectionName: null, contextFileId: null });
-    } else if (step === 'context') {
-      setStep('connection');
-      pushState({ step: 'connection', connectionId, connectionName, contextFileId: null });
-    } else if (step === 'generating') {
-      setStep('context');
-      pushState({ step: 'context', connectionId, connectionName, contextFileId });
-    } else if (step === 'complete') {
-      setStep('generating');
-      pushState({ step: 'generating', connectionId, connectionName, contextFileId });
-    }
-  }, [step, pushState, connectionId, connectionName, contextFileId]);
-
-  const handleStartConnection = useCallback(() => {
-    hasUserNavigated.current = true;
-    setStep('connection');
-    pushState({ step: 'connection', connectionId: null, connectionName: null, contextFileId: null });
-  }, [pushState]);
+  const handleStartConnection = useCallback(() => setStep('connection'), []);
 
   const handleRequestChat = useCallback((fileId: number) => {
     setContextFileId(fileId);
-    // Set navigation to fake a "new context" page so selectAppState resolves to this virtual file.
-    // EditFile checks selectAppState → navigation.pathname to verify you're on the right page.
-    // Use /new/context with virtualId param so computePathState resolves the virtual file.
     dispatch(setNavigation({ pathname: '/new/context', searchParams: { virtualId: String(fileId) } }));
     dispatch(setActiveVirtualId(fileId));
   }, [dispatch]);
@@ -261,14 +175,14 @@ export function HelloWorldContent() {
       {/* ─── WELCOME PHASE ─── */}
       {step === 'welcome' && (
         <VStack position="relative" zIndex={1} textAlign="center" maxW="700px" w="100%" gap={0}>
-          {/* Agent greeting — fixed height so cards don't shift it (#3) */}
+          {/* Agent greeting — fixed height so cards don't shift it */}
           <VStack gap={4} h="240px" justify="center">
             {/* Sparkle icon */}
             <Box css={{ animation: 'sparkle 2s ease-in-out infinite' }}>
               <Icon as={LuSparkles} boxSize={8} color="accent.teal" />
             </Box>
 
-            {/* Typewriter text — each line separate (#2) */}
+            {/* Typewriter text — each line separate */}
             <VStack gap={0}>
               {displayedLines.map((line, idx) => (
                 <Heading
@@ -306,7 +220,7 @@ export function HelloWorldContent() {
             )}
           </VStack>
 
-          {/* Choice cards — Connect left, Demo right (#4) */}
+          {/* Choice cards — Connect left, Demo right */}
           <Box minH="200px">
             {cardsVisible && (
               <Flex
@@ -314,7 +228,7 @@ export function HelloWorldContent() {
                 gap={6}
                 justifyContent="center"
               >
-                {/* Connect Your Data — LEFT (#4) */}
+                {/* Connect Your Data — LEFT */}
                 <Box
                   className="hw-border-card"
                   position="relative"
@@ -351,7 +265,7 @@ export function HelloWorldContent() {
                   </Box>
                 </Box>
 
-                {/* Try Demo — RIGHT (#4) */}
+                {/* Try Demo — RIGHT */}
                 <Box
                   className="hw-border-card"
                   position="relative"
@@ -488,10 +402,8 @@ export function HelloWorldContent() {
                 connectionName={connectionName}
                 contextFileId={contextFileId!}
                 greeting="Step 3: Let's build your first dashboard."
+                onComplete={handleComplete}
               />
-            )}
-            {step === 'complete' && (
-              <StepComplete />
             )}
           </Box>
         </Box>

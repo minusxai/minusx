@@ -5,8 +5,7 @@ import { CURRENT_TOKEN_VERSION } from "@/lib/auth/auth-constants"
 import { isValidMode } from "@/lib/mode/mode-types"
 import { extractSubdomain, isSubdomainRoutingEnabled } from "@/lib/utils/subdomain"
 import { CompanyDB } from "@/lib/database/company-db"
-import { DocumentDB } from "@/lib/database/documents-db"
-import { detectOnboardingState } from "@/app/hello-world/onboarding-state"
+import { getConfigsByCompanyId } from "@/lib/data/configs.server"
 import { ALLOW_MULTIPLE_COMPANIES } from "@/lib/config"
 import { IS_DEV } from "@/lib/constants"
 
@@ -160,25 +159,24 @@ export default auth(async (req) => {
     },
   });
 
-  // Onboarding detection: runs on /, /p/org*, and /hello-world (without step param)
-  // Routes users to the correct onboarding step if setup is incomplete.
+  // Onboarding detection: runs on / and /hello-world when in org mode.
+  // Redirects to /hello-world if setupWizard is not complete.
   const isHomePath = pathname === '/' || pathname === '/p/org';
-// const isHomePath = pathname === '/';
-  const isHelloWorldWithoutStep = pathname === '/hello-world' && !req.nextUrl.searchParams.get('step');
+  const isHelloWorldPath = pathname === '/hello-world';
   const effectiveMode = (mode && isValidMode(mode)) ? mode : 'org';
 
-  if ((isHomePath || isHelloWorldWithoutStep) && effectiveMode === 'org' && req.auth.user?.companyId) {
+  if ((isHomePath || isHelloWorldPath) && effectiveMode === 'org' && req.auth.user?.companyId) {
     try {
       const companyId = req.auth.user.companyId;
-      const connections = await DocumentDB.listAll(companyId, 'connection', ['/org'], -1, false);
-      const contexts = await DocumentDB.listAll(companyId, 'context', ['/org'], -1, false);
-      const questions = await DocumentDB.listAll(companyId, 'question', ['/org'], -1, false);
-      const dashboards = await DocumentDB.listAll(companyId, 'dashboard', ['/org'], -1, false);
-      const { needsOnboarding, redirectPath } = detectOnboardingState(connections, contexts, questions, dashboards);
-      const currentPath = pathname + (req.nextUrl.search || '');
-      if (needsOnboarding && redirectPath && redirectPath !== currentPath) {
+      const { config } = await getConfigsByCompanyId(companyId, effectiveMode);
+      const isComplete = config.setupWizard?.status === 'complete';
+      if (!isComplete) {
         const protocol = req.headers.get('x-forwarded-proto') || 'https';
-        return NextResponse.redirect(new URL(`${protocol}://${hostname}${redirectPath}`));
+        const redirectPath = '/hello-world';
+        const currentPath = pathname + (req.nextUrl.search || '');
+        if (redirectPath !== currentPath) {
+          return NextResponse.redirect(new URL(`${protocol}://${hostname}${redirectPath}`));
+        }
       }
     } catch (e) {
       console.error('[Middleware] Onboarding detection failed:', e);

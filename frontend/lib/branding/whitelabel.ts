@@ -6,6 +6,10 @@
 import type { FileType } from '@/lib/ui/file-metadata';
 import type { UserRole, ConfigChannel, MessagingWebhook, AlertRecipient } from '@/lib/types';
 
+export interface SetupWizard {
+  status: 'pending' | 'complete';
+}
+
 /**
  * Per-role file type access override
  * Each field, if specified, completely replaces the default from rules.json
@@ -51,6 +55,7 @@ export interface CompanyConfig {
   city?: string;  // Optional city identifier for agent context
   thinkingPhrases?: string[];  // Optional custom thinking phrases for AI indicator
   accessRules?: AccessRulesOverride;  // Per-company file type access overrides (overrides rules.json)
+  setupWizard?: SetupWizard;
   // Future: theme, features, etc.
 }
 
@@ -76,7 +81,8 @@ export const DEFAULT_CONFIG: CompanyConfig = {
       { type: 'email_alert', keyword: 'EMAIL_DEFAULT' },
       { type: 'slack_alert', keyword: 'SLACK_DEFAULT' },
     ]
-  }
+  },
+  setupWizard: { status: 'pending' },
 };
 
 /**
@@ -123,6 +129,7 @@ export function mergeConfig(
       ? overrides.thinkingPhrases
       : defaults.thinkingPhrases,
     accessRules: overrides.accessRules ?? defaults.accessRules,
+    setupWizard: overrides.setupWizard ?? defaults.setupWizard,
     // Future: merge other config sections
   };
 }

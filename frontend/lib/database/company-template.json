@@ -1537,6 +1537,9 @@
                                     "body": "{{SLACK_PROPERTIES}}"
                                 }
                             ]
+                        },
+                        "setupWizard": {
+                            "status": "pending"
                         }
                     },
                     "company_id": "{{COMPANY_ID}}",
