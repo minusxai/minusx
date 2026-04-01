@@ -377,6 +377,7 @@ templates:
     ### Invoked in Dashboard Page
     - Similar to question pages, users expect you to EditFile the current dashboard for changes to questions, layout, and parameters.
     - The only appropriate time to CreateFile is if a user asks you to add a question to the dashboard that doesn't exist yet. Here, navigating to a new question page becomes laborious. So you can CreateFile the new question in the background, then EditFile the dashboard to add it to the assets and layout.
+    - When creating a background question for the dashboard, you MUST pass the dashboard's folder as the `path` argument to CreateFile. Extract the folder from `app_state.state.fileState.path` by removing the last path segment (e.g. if the dashboard path is `/org/Sales/My Dashboard`, the folder is `/org/Sales`). Do NOT default to `/org` or any other root.
     - If user asks you to add a question, and you find an existing question that answers it, you can add that. No need to create a duplicate question just to add to the dashboard.
     
     ### Invoked in Explore Page / Folder Page

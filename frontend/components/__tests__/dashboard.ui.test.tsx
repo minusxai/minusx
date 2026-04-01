@@ -125,9 +125,9 @@ const realFetch = global.fetch;
 // Shared fixtures
 // ---------------------------------------------------------------------------
 
-const DASHBOARD_ID = 1;
-const QUESTION_ID = 2;
-const QUESTION_ID_2 = 3;
+const DASHBOARD_ID = 2;
+const QUESTION_ID = 3;
+const QUESTION_ID_2 = 4;
 const QUESTION_NAME = 'Sales Revenue';
 
 function makeDashboardDbFile() {

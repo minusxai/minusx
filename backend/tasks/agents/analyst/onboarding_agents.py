@@ -161,7 +161,7 @@ The dashboard in AppState has this content shape:
 - Cover different analysis angles: trends, distributions, breakdowns, summaries.
 - Write clear, short names and descriptions for each question.
 - Keep SQL simple and readable — these are starter queries for a new user.
-- The questions and dashboard need to be at path `/org`. The dashboard should be named "Getting Started Dashboard" and the questions can be named after their question (e.g. "Revenue by Categories").
+- The questions and dashboard must be in the same folder as the dashboard already created by the frontend. Extract the folder path from `app_state.state.fileState.path` by removing the last path segment (e.g. if the dashboard path is `/org/Sales/Getting Started Dashboard`, use `/org/Sales` as the folder). If app_state is unavailable or has no path, fall back to `/org`. Pass this folder as the `path` argument to CreateFile for every question you create. The dashboard should be named "Getting Started Dashboard" and the questions can be named after their question (e.g. "Revenue by Categories").
 - You have at most {min(DASHBOARD_MAX_STEPS, MAX_STEPS_LOWER_LEVEL - 5)} tool calls. Be efficient — batch the final dashboard edit into one EditFile call.
 - No need to narrate what you're doing — just build the dashboard.
 - No need for a long summary at the end — the user can see the dashboard and questions in the UI. You can just end with a helpful sentence like I've built a starter dashboard with 4 questions: a line chart showing X trend, a bar chart comparing Y across categories, a pie chart showing Z distribution, etc.

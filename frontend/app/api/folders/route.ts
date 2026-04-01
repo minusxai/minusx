@@ -21,6 +21,12 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     // Construct full path (keep folder name as-is, no slugification)
     const fullPath = `${parentPath}/${folderName}`.replace(/\/+/g, '/'); // normalize multiple slashes
 
+    // Validate parent folder exists (single SQL check — no loop)
+    const parentExists = await DocumentDB.getByPath(parentPath, user.companyId);
+    if (!parentExists || parentExists.type !== 'folder') {
+      return ApiErrors.badRequest(`Parent folder '${parentPath}' does not exist`);
+    }
+
     // Check if folder already exists at this path
     const existing = await DocumentDB.getByPath(fullPath, user.companyId);
     if (existing) {
