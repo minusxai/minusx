@@ -230,7 +230,7 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
   }
 
   return (
-    <Box display="flex" flexDirection="column" gap={3} width="100%" p={3} bg="bg.canvas" borderBottom="1px solid" borderColor="border.muted">
+    <Box display="flex" flexDirection="column" gap={4} width="100%" p={3} bg="bg.canvas" borderBottom="1px solid" borderColor="border.muted">
       {/* Column palette */}
       <HStack gap={2} flexWrap="wrap" justifyContent="space-between">
         <HStack gap={2} flexWrap="wrap">
@@ -262,39 +262,55 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
       )}
 
       {/* Drop zones */}
-      <Box display="flex" flexDirection="row" gap={3}>
+      <Box display="flex" gap={3} alignItems="stretch" minWidth={0}>
         {zones.map(zone => {
           const axis = getZoneAxis(zone.label)
+          const zoneFlex = zone.label === 'X Axis' || zone.label === 'Y Axis' ? 2 : 1
           return (
-            <DropZone
-              key={zone.label}
-              label={zone.label}
-              onDrop={() => handleZoneDrop(zone)}
-              isTouchDevice={isTouchDevice}
-              labelExtra={axis && onAxisConfigChange ? (
-                <ZoneSettings axis={axis} axisConfig={axisConfig ?? {}} onChange={onAxisConfigChange} />
-              ) : undefined}
-            >
-              <HStack gap={1.5} flexWrap="wrap">
-                {zone.items.map(item => (
-                  <ZoneChip
-                    key={item.column}
-                    column={item.column}
-                    type={resolveColumnType(item.column, columns, types)}
-                    onRemove={() => zone.onRemove(item.column)}
-                    extra={item.extra}
-                    formatConfig={columnFormats?.[item.column]}
-                    onFormatChange={onColumnFormatChange ? (config) => onColumnFormatChange(item.column, config) : undefined}
-                  />
-                ))}
-              </HStack>
-              {zone.items.length === 0 && (
-                <Text fontSize="xs" color="fg.subtle" fontStyle="italic">{zone.emptyText || 'Drop columns here'}</Text>
-              )}
-            </DropZone>
+            <Box key={zone.label} minW={0} flex={zoneFlex} display="flex" alignItems="stretch">
+              <DropZone
+                label={zone.label}
+                onDrop={() => handleZoneDrop(zone)}
+                isTouchDevice={isTouchDevice}
+                labelExtra={axis && onAxisConfigChange ? (
+                  <ZoneSettings axis={axis} axisConfig={axisConfig ?? {}} onChange={onAxisConfigChange} />
+                ) : undefined}
+              >
+                <HStack gap={1.5} flexWrap="wrap" minW={0} width="100%">
+                  {zone.items.map(item => (
+                    <ZoneChip
+                      key={item.column}
+                      column={item.column}
+                      type={resolveColumnType(item.column, columns, types)}
+                      onRemove={() => zone.onRemove(item.column)}
+                      extra={item.extra}
+                      formatConfig={columnFormats?.[item.column]}
+                      onFormatChange={onColumnFormatChange ? (config) => onColumnFormatChange(item.column, config) : undefined}
+                    />
+                  ))}
+                </HStack>
+                {zone.items.length === 0 && (
+                  <Text
+                    fontSize="xs"
+                    color="fg.subtle"
+                    fontStyle="italic"
+                    maxWidth="100%"
+                    overflow="hidden"
+                    textOverflow="ellipsis"
+                    whiteSpace="nowrap"
+                  >
+                    {zone.emptyText || 'Drop columns here'}
+                  </Text>
+                )}
+              </DropZone>
+            </Box>
           )
         })}
-        {settingsPanel}
+        {settingsPanel && (
+          <Box minW={0} flex={1} display="flex" alignItems="stretch">
+            {settingsPanel}
+          </Box>
+        )}
       </Box>
 
     </Box>

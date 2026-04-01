@@ -477,7 +477,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
           chartType={chartType}
           settingsPanel={onStyleConfigChange ? (
             <Box
-              flex="0 0 120px"
+              flex="1"
+              width="100%"
               alignSelf="stretch"
               p={2}
               pt={3}
@@ -500,6 +501,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                 borderRadius="sm"
                 border="1px dashed"
                 borderColor="border.muted"
+                pointerEvents="none"
               >
                 <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
                   Style
