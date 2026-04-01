@@ -7,7 +7,7 @@ import { LuPlus, LuChevronDown, LuRefreshCw, LuSparkles, LuPin, LuShare2, LuExpa
 import type { LoadError } from '@/lib/types/errors';
 import type { Attachment } from '@/lib/types';
 import { AppState } from '@/lib/appState';
-import ChatInput from './ChatInput';
+import dynamic from 'next/dynamic';
 import ThinkingIndicator from './ThinkingIndicator';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { createConversation, sendMessage, updateAgentArgs, interruptChat, selectOptionalConversation, setActiveConversation, selectActiveTempConversation, generateVirtualConversationId } from '@/store/chatSlice';
@@ -29,6 +29,11 @@ import { isAdmin } from '@/lib/auth/role-helpers';
 import ToolCallListModal from './ToolCallListModal';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 
+// next/dynamic with ssr:false prevents pdfjs-dist (browser-only, uses DOMMatrix at module init)
+// from being evaluated during SSR prerendering. This is an intentional SSR boundary, not a
+// circular dependency workaround.
+// eslint-disable-next-line no-restricted-syntax
+const ChatInput = dynamic(() => import('./ChatInput'), { ssr: false });
 
 interface ChatInterfaceProps {
   conversationId?: number;  // Optional file ID: if provided, load existing conversation
