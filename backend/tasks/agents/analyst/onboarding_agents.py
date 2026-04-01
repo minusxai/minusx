@@ -2,9 +2,8 @@
 
 import json
 import time
-from typing import Optional, List
 from tasks import register_agent
-from tasks.llm.config import MAX_STEPS_LOWER_LEVEL, ANALYST_V2_MODEL, ONBOARDING_MODEL
+from tasks.llm.config import MAX_STEPS_LOWER_LEVEL, ANALYST_V2_MODEL
 from tasks.llm.models import LlmSettings
 from .agent import AnalystAgent
 from .tools import SearchDBSchema, EditFile, ExecuteQuery, CreateFile

@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
 from typing import List, Dict, Any
-import asyncio
 import time
 
 

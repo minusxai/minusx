@@ -1,6 +1,6 @@
 from .base import DatabaseConnector
 from . import register_connector
-from sqlalchemy import create_engine, inspect, text, event
+from sqlalchemy import create_engine, text, event
 from pathlib import Path
 from config import resolve_duckdb_path
 

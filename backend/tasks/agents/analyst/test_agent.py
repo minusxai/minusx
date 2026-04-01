@@ -1,6 +1,6 @@
 """TestAgent - Eval runner agent for context quality testing."""
 
-from typing import Optional, List
+from typing import Optional
 from tasks import register_agent
 from tasks.llm.config import MAX_STEPS_LOWER_LEVEL
 from .agent import AnalystAgent
@@ -91,7 +91,6 @@ class TestAgent(AnalystAgent):
     async def run(self) -> dict:
         """Same loop as AnalystAgent but stops after submit is called."""
         from tasks.chat_thread_processor import tool_calls_to_agent_calls  # noqa: PLC0415
-        from tasks.llm.client import allm_request as real_allm_request  # noqa: PLC0415
         from tasks.llm.models import ALLMRequest, LlmSettings, UserInfo  # noqa: PLC0415
         from tasks.llm.config import ANALYST_V2_MODEL  # noqa: PLC0415
         from .agent import allm_request  # noqa: PLC0415

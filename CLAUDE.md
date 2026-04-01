@@ -32,7 +32,11 @@ npm run generate-types     # Regenerate frontend/lib/types.gen.ts from Pydantic 
 ```bash
 cd backend
 uv run uvicorn main:app --reload --reload-include='*.yaml' --port 8001    # Start backend server
+uv run ruff check .    # Lint (use this to validate code)
+uv run pytest          # Run tests
 ```
+
+**IMPORTANT: Always use `uv run ruff check .` to quickly verify Python code correctness before committing.**
 
 The backend runs at http://localhost:8001 and handles:
 - SQL query execution (`POST /api/execute-query`)

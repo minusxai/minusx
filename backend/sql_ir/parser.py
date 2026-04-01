@@ -17,7 +17,7 @@ from .ir_types import (
     OrderByClause,
     CTE,
 )
-from .validator import UnsupportedSQLError, validate_sql_features
+from .validator import UnsupportedSQLError
 from .enhanced_validator import validate_sql_for_gui, compare_sql_ast
 from .generator import ir_to_sql, compound_ir_to_sql
 

@@ -5,7 +5,6 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool
 from urllib.parse import quote_plus
 import boto3
-import json
 
 
 class AthenaConnector(DatabaseConnector):
