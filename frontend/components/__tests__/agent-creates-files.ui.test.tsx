@@ -223,7 +223,7 @@ describe('Agent creates files via chat', () => {
     expect(createdQuestion).toBeDefined();
 
     // Component reflects the new question
-    await screen.findByLabelText('Total Revenue', {}, { timeout: 5000 });
+    await screen.findByLabelText('Total Revenue');
 
     // Both LLM turns were consumed
     expect((await mockServer.getCalls()).length).toBeGreaterThanOrEqual(2);

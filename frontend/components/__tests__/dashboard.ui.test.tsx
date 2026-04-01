@@ -101,6 +101,7 @@ import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { publishAll } from '@/lib/api/file-state';
 import type { DashboardContent } from '@/lib/types.gen';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
+import { waitForReduxState } from '@/test/helpers/redux-wait';
 import FileHeader from '@/components/FileHeader';
 import DashboardContainerV2 from '@/components/containers/DashboardContainerV2';
 
@@ -484,19 +485,23 @@ describe('Add question to existing dashboard and save', () => {
 
     // Dashboard is in edit mode with no questions — QuestionBrowserPanel is shown
     // inline. Wait for the panel to populate, find the question card, click Add.
-    const questionCard = await screen.findByLabelText(QUESTION_NAME, {}, { timeout: 5000 });
+    const questionCard = await screen.findByLabelText(QUESTION_NAME);
     const addButton = within(questionCard).getByLabelText('Add to dashboard');
     await user.click(addButton);
 
     // Redux: dashboard is now dirty with the new asset
-    await waitFor(() => {
-      const fileState = testStore.getState().files.files[DASHBOARD_ID];
-      const merged = {
-        ...(fileState.content as DashboardContent),
-        ...(fileState.persistableChanges as Partial<DashboardContent> | undefined),
-      };
-      expect(merged.assets?.some(a => (a as { id: number }).id === QUESTION_ID)).toBe(true);
-    }, { timeout: 3000 });
+    await waitForReduxState(
+      testStore,
+      state => {
+        const fileState = state.files.files[DASHBOARD_ID];
+        const merged = {
+          ...(fileState.content as DashboardContent),
+          ...(fileState.persistableChanges as Partial<DashboardContent> | undefined),
+        };
+        return merged.assets?.some(a => (a as { id: number }).id === QUESTION_ID) ?? false;
+      },
+      v => v === true
+    );
 
     // "Save" button is now enabled
     const publishBtn = screen.getByLabelText('Save');
@@ -504,10 +509,11 @@ describe('Add question to existing dashboard and save', () => {
     await user.click(publishBtn);
 
     // After save: clearEdits fires → persistableChanges is empty
-    await waitFor(() => {
-      const fileState = testStore.getState().files.files[DASHBOARD_ID];
-      expect(Object.keys(fileState.persistableChanges ?? {})).toHaveLength(0);
-    }, { timeout: 5000 });
+    await waitForReduxState(
+      testStore,
+      state => Object.keys(state.files.files[DASHBOARD_ID].persistableChanges ?? {}),
+      keys => keys.length === 0
+    );
 
     // DB read-back: batch-save route returns full DbFile → setFile replaces content in Redux.
     // Asserting here is equivalent to reading the DB row directly.
@@ -966,9 +972,10 @@ describe('Combined flow: new dashboard with question from scratch', () => {
       pathname: '/new/dashboard',
       searchParams: { virtualId: String(DASH_VID), folder: '/org' },
     }));
-    await waitFor(
-      () => expect(testStore.getState().files.files[DASH_VID]).toBeDefined(),
-      { timeout: 5000 }
+    await waitForReduxState(
+      testStore,
+      state => state.files.files[DASH_VID],
+      v => v !== undefined
     );
 
     // New dashboards open in edit mode — QuestionBrowserPanel is visible
@@ -980,18 +987,22 @@ describe('Combined flow: new dashboard with question from scratch', () => {
 
     // QuestionBrowserPanel loads questions (mocked GET /api/files?type=question)
     // and renders each as an article.  Click "Add to dashboard" on the real question.
-    const card = await screen.findByLabelText(QUESTION_NAME, {}, { timeout: 5000 });
+    const card = await screen.findByLabelText(QUESTION_NAME);
     await user.click(within(card).getByLabelText('Add to dashboard'));
 
     // Virtual dashboard is now dirty — real question linked
-    await waitFor(() => {
-      const dash = testStore.getState().files.files[DASH_VID];
-      const merged = {
-        ...(dash.content as DashboardContent),
-        ...(dash.persistableChanges as Partial<DashboardContent> | undefined),
-      };
-      expect(merged.assets?.some(a => (a as { id: number }).id === QUESTION_ID)).toBe(true);
-    }, { timeout: 3000 });
+    await waitForReduxState(
+      testStore,
+      state => {
+        const dash = state.files.files[DASH_VID];
+        const merged = {
+          ...(dash.content as DashboardContent),
+          ...(dash.persistableChanges as Partial<DashboardContent> | undefined),
+        };
+        return merged.assets?.some(a => (a as { id: number }).id === QUESTION_ID) ?? false;
+      },
+      v => v === true
+    );
 
     // publishAll: only the virtual dashboard needs batch-create (real question is not dirty)
     await act(async () => { await publishAll(); });
@@ -1023,9 +1034,10 @@ describe('Combined flow: new dashboard with question from scratch', () => {
       pathname: '/new/dashboard',
       searchParams: { folder: '/org' },
     }));
-    await waitFor(
-      () => expect(testStore.getState().files.files[DASH_VID]).toBeDefined(),
-      { timeout: 5000 }
+    await waitForReduxState(
+      testStore,
+      state => state.files.files[DASH_VID],
+      v => v !== undefined
     );
 
     testStore.dispatch(setDashboardEditMode({ fileId: DASH_VID, editMode: true }));
@@ -1033,13 +1045,13 @@ describe('Combined flow: new dashboard with question from scratch', () => {
 
     // QuestionBrowserPanel is visible in edit mode — click "Create New Question".
     // This opens the real CreateQuestionModal (Portal + Dialog stubs make it render inline).
-    const createBtn = await screen.findByLabelText('Create New Question', {}, { timeout: 5000 });
+    const createBtn = await screen.findByLabelText('Create New Question');
     await user.click(createBtn);
 
     // Wait for CreateQuestionModalContainer to finish loading:
     //   createVirtualFile() → dispatch(setFile) → useFile(vid) returns → loading clears
     //   → real name input appears.
-    const nameInput = await screen.findByLabelText('Question name', {}, { timeout: 8000 });
+    const nameInput = await screen.findByLabelText('Question name');
 
     // Q_VID is now in Redux — createVirtualFile dispatched setFile before resolving
     expect(testStore.getState().files.files[Q_VID]).toBeDefined();
@@ -1053,14 +1065,18 @@ describe('Combined flow: new dashboard with question from scratch', () => {
     await user.click(within(dialog).getByLabelText('Add'));
 
     // Virtual dashboard now has virtual question in its assets
-    await waitFor(() => {
-      const dash = testStore.getState().files.files[DASH_VID];
-      const merged = {
-        ...(dash.content as DashboardContent),
-        ...(dash.persistableChanges as Partial<DashboardContent> | undefined),
-      };
-      expect(merged.assets?.some(a => (a as { id: number }).id === Q_VID)).toBe(true);
-    }, { timeout: 3000 });
+    await waitForReduxState(
+      testStore,
+      state => {
+        const dash = state.files.files[DASH_VID];
+        const merged = {
+          ...(dash.content as DashboardContent),
+          ...(dash.persistableChanges as Partial<DashboardContent> | undefined),
+        };
+        return merged.assets?.some(a => (a as { id: number }).id === Q_VID) ?? false;
+      },
+      v => v === true
+    );
 
     // publishAll: question first (no deps → level 1), dashboard second (refs Q_VID → level 2)
     await act(async () => { await publishAll(); });
@@ -1571,20 +1587,26 @@ describe('Multiple questions in dashboard', () => {
     await user.click(removeBtns[0]);
 
     // One question removed → merged assets has exactly 1 entry
-    await waitFor(() => {
-      const dash = testStore.getState().files.files[DASHBOARD_ID];
-      const merged = {
-        ...(dash.content as DashboardContent),
-        ...(dash.persistableChanges as Partial<DashboardContent> | undefined),
-      } as DashboardContent;
-      expect(merged.assets).toHaveLength(1);
-    }, { timeout: 3000 });
+    await waitForReduxState(
+      testStore,
+      state => {
+        const dash = state.files.files[DASHBOARD_ID];
+        const merged = {
+          ...(dash.content as DashboardContent),
+          ...(dash.persistableChanges as Partial<DashboardContent> | undefined),
+        } as DashboardContent;
+        return merged.assets?.length ?? 0;
+      },
+      len => len === 1
+    );
 
     // Publish and verify DB round-trip via Redux content
     await user.click(screen.getByLabelText('Save'));
-    await waitFor(() => {
-      expect(Object.keys(testStore.getState().files.files[DASHBOARD_ID].persistableChanges ?? {})).toHaveLength(0);
-    }, { timeout: 5000 });
+    await waitForReduxState(
+      testStore,
+      state => Object.keys(state.files.files[DASHBOARD_ID].persistableChanges ?? {}),
+      keys => keys.length === 0
+    );
 
     const savedContent = testStore.getState().files.files[DASHBOARD_ID].content as DashboardContent;
     expect(savedContent.assets).toHaveLength(1);
@@ -1666,7 +1688,7 @@ describe('Dashboard parameter merging', () => {
     await waitFor(() => {
       expect(screen.getAllByLabelText('start_date')).toHaveLength(1);
       expect(screen.getAllByLabelText('region')).toHaveLength(1);
-    }, { timeout: 5000 });
+    });
   });
 
   it('parameterValues submitted via setEdit persist in dashboard content after publishAll', async () => {
