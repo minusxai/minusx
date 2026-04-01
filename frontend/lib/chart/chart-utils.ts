@@ -371,6 +371,30 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   // Determine consistent Y-axis scale across all series
   const yScale = getNumberScale(series)
 
+  const positiveScatterXValues = chartType === 'scatter'
+    ? xAxisData
+        .map(value => Number(value))
+        .filter(value => isFinite(value) && value > 0)
+    : []
+  const positiveScatterYValues = chartType === 'scatter'
+    ? series
+        .flatMap(s => s.data)
+        .filter((value): value is number => isFinite(value) && value > 0)
+    : []
+
+  const getLogExtent = (values: number[]): { min?: number; max?: number } => {
+    if (values.length === 0) return {}
+
+    const min = Math.min(...values)
+    const max = Math.max(...values)
+
+    if (min === max) {
+      return { min: min / 10, max: max * 10 }
+    }
+
+    return { min, max }
+  }
+
   // Determine if we need dual Y-axes
   // Only use dual Y-axis when there are 2+ Y-axis columns (distinct metrics)
   // NOT when there are multiple series from the same metric due to splits
@@ -406,7 +430,12 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
       data: type === 'scatter'
         ? series[index].data
             .map((y, i) => [Number(xAxisData[i]), y] as [number, number])
-            .filter(([x, y]) => isFinite(x) && isFinite(y))
+            .filter(([x, y]) => (
+              isFinite(x)
+              && isFinite(y)
+              && (xScaleType !== 'log' || x > 0)
+              && (yScaleType !== 'log' || y > 0)
+            ))
         : series[index].data,
       itemStyle: {
         color: palette[index % palette.length],
@@ -516,6 +545,9 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
     : {}
   const yAxisFormatter = (value: number) =>
     applyPrefixSuffix(formatWithScale(value, yScale), yPrefix, ySuffix)
+  const yLogRangeProps = yScaleType === 'log' && (yMin === undefined || yMax === undefined)
+    ? getLogExtent(positiveScatterYValues)
+    : {}
   const yRangeProps = {
     ...(yMin !== undefined ? { min: yMin } : {}),
     ...(yMax !== undefined ? { max: yMax } : {}),
@@ -527,6 +559,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           name: getAxisName(0),
           position: 'left' as const,
           ...yExtraProps,
+          ...yLogRangeProps,
           ...yRangeProps,
           axisLabel: { formatter: yAxisFormatter },
         },
@@ -535,6 +568,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           name: getAxisName(1),
           position: 'right' as const,
           ...yExtraProps,
+          ...yLogRangeProps,
           ...yRangeProps,
           axisLabel: { formatter: yAxisFormatter },
         },
@@ -543,6 +577,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         type: yAxisType,
         name: wrapAxisName(yAxisLabel, maxAxisNameLength),
         ...yExtraProps,
+        ...yLogRangeProps,
         ...yRangeProps,
         axisLabel: { formatter: yAxisFormatter },
       }
@@ -705,6 +740,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
             logBase: 10,
             minorTick: { show: true },
             minorSplitLine: { show: true, lineStyle: { type: 'dashed' as const, opacity: 0.3 } },
+            ...(xMin === undefined || xMax === undefined ? getLogExtent(positiveScatterXValues) : {}),
           } : {}),
           ...(xMin !== undefined ? { min: xMin } : {}),
           ...(xMax !== undefined ? { max: xMax } : {}),
