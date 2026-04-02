@@ -419,7 +419,7 @@ export class DocumentDB {
          name = CASE WHEN id = $1 THEN $2 ELSE name END,
          path = CASE
            WHEN id = $1 THEN $3
-           ELSE $3 || substring(path from length($4) + 1)
+           ELSE $3 || substr(path, length($4) + 1)
          END,
          updated_at = CURRENT_TIMESTAMP
        WHERE company_id = $5 AND id IN (${placeholders})`,

@@ -17,14 +17,16 @@ import {
   BatchCreateInput,
   BatchCreateFileResult,
   BatchSaveFileInput,
-  BatchSaveFileResult
+  BatchSaveFileResult,
+  MoveFileInput,
+  MoveFileResult
 } from './types';
 import { canAccessFile } from './helpers/permissions';
 import { extractReferenceIds, extractAllReferenceIds } from './helpers/references';
 import { UserFacingError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
 import { validateFileState } from '@/lib/validation/content-validators';
 import { PROTECTED_FILE_PATHS } from '@/lib/constants';
-import { canAccessFileType, canCreateFileType, validateFileLocation } from '@/lib/auth/access-rules';
+import { canAccessFileType, canCreateFileType, validateFileLocation, canDeleteFileType } from '@/lib/auth/access-rules';
 import type { AccessRulesOverride } from '@/lib/branding/whitelabel';
 import { getConfigsByCompanyId } from './configs.server';
 import { resolvePath, resolveHomeFolderSync, isFileTypeAllowedInPath, resolveHomeFolder } from '@/lib/mode/path-resolver';
@@ -764,6 +766,62 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
     return { data: results };
   }
+
+  async moveFile(input: MoveFileInput, user: EffectiveUser): Promise<MoveFileResult> {
+    const { id, name, newPath } = input;
+
+    const file = await DocumentDB.getById(id, user.companyId);
+    if (!file) {
+      throw new FileNotFoundError(id);
+    }
+
+    if (!canDeleteFileType(file.type)) {
+      throw new AccessPermissionError(`Cannot move file of type: ${file.type}`);
+    }
+
+    const oldPath = file.path;
+
+    // Validate destination parent folder exists
+    const newParentPath = newPath.substring(0, newPath.lastIndexOf('/'));
+    const oldParentPath = oldPath.substring(0, oldPath.lastIndexOf('/'));
+    if (newParentPath && newParentPath !== oldParentPath) {
+      const parent = await DocumentDB.getByPath(newParentPath, user.companyId);
+      if (!parent || parent.type !== 'folder') {
+        throw new UserFacingError(`Parent folder '${newParentPath}' does not exist`);
+      }
+    }
+
+    if (file.type === 'folder' && oldPath !== newPath) {
+      // Fetch all descendants (metadata only)
+      const descendants = await DocumentDB.listAll(user.companyId, undefined, [oldPath], -1, false);
+
+      // Check move permission on every descendant
+      const blocked = descendants.filter(f => !canDeleteFileType(f.type));
+      if (blocked.length > 0) {
+        throw new AccessPermissionError(
+          `Cannot move folder: contains ${blocked.length} file(s) of protected type(s): ${[...new Set(blocked.map(f => f.type))].join(', ')}`
+        );
+      }
+
+      const descendantIds = descendants.map(f => f.id);
+      await DocumentDB.moveFolderAndChildren(id, descendantIds, oldPath, newPath, name, user.companyId);
+    } else {
+      const success = await DocumentDB.updateMetadata(id, name, newPath, user.companyId);
+      if (!success) {
+        throw new FileNotFoundError(id);
+      }
+    }
+
+    return { id, name, path: newPath, oldPath };
+  }
+
+  async batchMoveFiles(inputs: MoveFileInput[], user: EffectiveUser): Promise<MoveFileResult[]> {
+    const results: MoveFileResult[] = [];
+    for (const input of inputs) {
+      results.push(await this.moveFile(input, user));
+    }
+    return results;
+  }
 }
 
 // Export singleton instance - PREFER using this
@@ -780,3 +838,5 @@ export const loadFileByPath = FilesAPI.loadFileByPath.bind(FilesAPI);
 export const getTemplate = FilesAPI.getTemplate.bind(FilesAPI);
 export const batchCreateFiles = FilesAPI.batchCreateFiles.bind(FilesAPI);
 export const batchSaveFiles = FilesAPI.batchSaveFiles.bind(FilesAPI);
+export const moveFile = FilesAPI.moveFile.bind(FilesAPI);
+export const batchMoveFiles = FilesAPI.batchMoveFiles.bind(FilesAPI);

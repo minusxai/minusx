@@ -2,6 +2,28 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+---
+
+## ⚠️ PRIMARY WORKING STYLE: TEST-DRIVEN DEVELOPMENT
+
+**This is non-negotiable. Every feature and refactor MUST follow one of these two flows.**
+
+### New features — Red → Green
+1. **Write the test first.** It must fail (red) before any implementation exists.
+2. **Run it and confirm it fails.** Never skip this step — a test that never fails proves nothing.
+3. **Implement the feature** until the test passes (green).
+4. **Run the full suite** to confirm nothing regressed.
+
+### Refactoring — Blue → Red → Blue
+1. **Write (or identify) tests that cover the existing behaviour.** They must pass (blue).
+2. **Remove or break the old implementation.** Run the tests and confirm they now fail (red). This proves the tests actually guard the behaviour.
+3. **Re-implement using the new approach** until all tests pass again (blue).
+4. **Run the full suite** to confirm nothing regressed.
+
+> If you skip the red step, you cannot trust the test. A green test that was never red is not a test — it's decoration.
+
+---
+
 ## Project Overview
 
 MinusX is an agentic, file-system based BI Tool that combines:

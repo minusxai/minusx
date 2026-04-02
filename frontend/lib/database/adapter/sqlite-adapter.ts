@@ -60,10 +60,28 @@ export class SqliteAdapter implements IDatabaseAdapter {
   }
 
   /**
-   * Translate $1, $2, ... to ?, ?, ...
+   * Translate $1, $2, ... to ?, ?, ... and expand params to match.
+   *
+   * PostgreSQL allows reusing the same $N multiple times in a query (each
+   * reference points to the same parameter). SQLite's ? is purely positional —
+   * each ? is a separate slot. This method expands the params array so that
+   * every ? gets the correct value, even when $N appears multiple times.
+   *
+   * Example: `WHERE id = $1 AND name != $1` with params=[42]
+   *   → `WHERE id = ? AND name != ?` with expandedParams=[42, 42]
    */
-  private translateParams(sql: string): string {
-    return sql.replace(/\$\d+/g, '?');
+  private translateParams(sql: string, params: any[]): [string, any[]] {
+    // If no $N placeholders exist, SQL already uses ? or has no params — pass through unchanged.
+    if (!/\$\d+/.test(sql)) {
+      return [sql, params];
+    }
+    // Translate $1, $2, ... → ? and expand params to handle repeated references.
+    const expandedParams: any[] = [];
+    const translatedSql = sql.replace(/\$(\d+)/g, (_, numStr) => {
+      expandedParams.push(params[parseInt(numStr, 10) - 1]);
+      return '?';
+    });
+    return [translatedSql, expandedParams];
   }
 
   /**
@@ -72,7 +90,7 @@ export class SqliteAdapter implements IDatabaseAdapter {
    */
   async query<T = any>(sql: string, params: any[] = []): Promise<QueryResult<T>> {
     const db = this.getConnection();
-    const translatedSql = this.translateParams(sql);
+    const [translatedSql, expandedParams] = this.translateParams(sql, params);
 
     try {
       const stmt = db.prepare(translatedSql);
@@ -83,14 +101,14 @@ export class SqliteAdapter implements IDatabaseAdapter {
 
       if (isSelect) {
         // Use .all() for SELECT statements
-        const rows = stmt.all(...params) as T[];
+        const rows = stmt.all(...expandedParams) as T[];
         return {
           rows,
           rowCount: rows.length
         };
       } else {
         // Use .run() for INSERT/UPDATE/DELETE statements
-        const result = stmt.run(...params);
+        const result = stmt.run(...expandedParams);
         return {
           rows: [] as T[],
           rowCount: result.changes

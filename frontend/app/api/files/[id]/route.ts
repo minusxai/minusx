@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { successResponse, handleApiError, ApiErrors } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
-import { loadFile, saveFile, ConflictError } from '@/lib/data/files.server';
+import { loadFile, saveFile, moveFile, ConflictError } from '@/lib/data/files.server';
 import { validateFileId } from '@/lib/data/helpers/validation';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { canDeleteFileType } from '@/lib/auth/access-rules';
@@ -104,45 +104,8 @@ export const PATCH = withAuth(async (
 
     // Metadata-only update: name/path only, content untouched
     if (content === undefined) {
-      const file = await DocumentDB.getById(id, user.companyId);
-      if (!file) {
-        return ApiErrors.notFound('File');
-      }
-      const oldPath = file.path;
-
-      // Validate parent folder exists when path is changing (single SQL check — no loop)
-      const newParentPath = path.substring(0, path.lastIndexOf('/'));
-      const oldParentPath = oldPath.substring(0, oldPath.lastIndexOf('/'));
-      if (newParentPath && newParentPath !== oldParentPath) {
-        const parent = await DocumentDB.getByPath(newParentPath, user.companyId);
-        if (!parent || parent.type !== 'folder') {
-          return ApiErrors.badRequest(`Parent folder '${newParentPath}' does not exist`);
-        }
-      }
-
-      if (file.type === 'folder' && oldPath !== path) {
-        // Step 1: Fetch all descendants (metadata only, no content)
-        const descendants = await DocumentDB.listAll(user.companyId, undefined, [oldPath], -1, false);
-
-        // Step 2: Check move permission on every descendant
-        const blocked = descendants.filter(f => !canDeleteFileType(f.type));
-        if (blocked.length > 0) {
-          return ApiErrors.forbidden(
-            `Cannot move folder: contains ${blocked.length} file(s) of protected type(s): ${[...new Set(blocked.map(f => f.type))].join(', ')}`
-          );
-        }
-
-        // Step 3: Atomic update — only the exact IDs we checked
-        const descendantIds = descendants.map(f => f.id);
-        await DocumentDB.moveFolderAndChildren(id, descendantIds, oldPath, path, name, user.companyId);
-      } else {
-        const success = await DocumentDB.updateMetadata(id, name, path, user.companyId);
-        if (!success) {
-          return ApiErrors.notFound('File');
-        }
-      }
-
-      return successResponse({ id, name, path, oldPath });
+      const result = await moveFile({ id, name, newPath: path }, user);
+      return successResponse(result);
     }
 
     // Full save: update name, path, and content

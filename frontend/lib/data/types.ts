@@ -140,3 +140,22 @@ export interface BatchSaveFileInput {
 export interface BatchSaveFileResult {
   data: DbFile[];
 }
+
+/**
+ * Input for moveFile operation
+ */
+export interface MoveFileInput {
+  id: number;
+  name: string;
+  newPath: string;
+}
+
+/**
+ * Result for moveFile operation
+ */
+export interface MoveFileResult {
+  id: number;
+  name: string;
+  path: string;
+  oldPath: string;
+}
