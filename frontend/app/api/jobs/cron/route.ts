@@ -140,6 +140,16 @@ async function runForCompany(
         ? (content as AlertContent).schedule!.cron!
         : null;
       const prevFire = cronExpr ? getPrevFireTime(cronExpr, now) : null;
+
+      // Skip if the last scheduled fire time was more than 30 minutes ago.
+      // This tolerates scheduler delays (e.g. GHA queue) while preventing stale
+      // daily/weekly jobs from firing hours after their scheduled time.
+      const MAX_CRON_DELAY_MS = 60 * 60 * 1000;
+      if (prevFire && now.getTime() - prevFire.getTime() > MAX_CRON_DELAY_MS) {
+        skipped++;
+        continue;
+      }
+
       const windowStart = prevFire ?? new Date(now.getTime() - 60_000);
       const { runId, isNewRun } = await JobRunsDB.findOrCreate({
         job_id: jobId,
