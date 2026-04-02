@@ -16,6 +16,7 @@ import { executeWebhook, sendEmailViaWebhook } from '@/lib/messaging/webhook-exe
 import { resolveWebhook } from '@/lib/messaging/webhook-resolver.server';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
 import { UserState } from '@/lib/types';
+import { buildOTPEmailHtml } from '@/lib/messaging/otp-email-html';
 
 export async function POST(request: NextRequest) {
   try {
@@ -64,11 +65,14 @@ export async function POST(request: NextRequest) {
         otpHash,
       });
 
+      const agentName = config.branding.agentName;
+      const emailHtml = buildOTPEmailHtml({ otp, agentName });
+
       const result = await sendEmailViaWebhook(
         webhook,
         user.email,
-        'Your login code',
-        `Your login code is: ${otp}`
+        `Your ${agentName} Login Code`,
+        emailHtml
       );
 
       if (!result.success) {

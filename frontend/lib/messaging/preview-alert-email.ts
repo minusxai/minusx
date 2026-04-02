@@ -1,12 +1,14 @@
 /**
- * Generate a preview HTML file for the alert email template.
+ * Generate preview HTML files for email templates.
  * Run: npx tsx lib/messaging/preview-alert-email.ts
- * Output: /tmp/alert-email-preview.html
+ * Output: /tmp/alert-email-preview.html, /tmp/otp-email-preview.html
  */
 import { writeFileSync } from 'fs';
 import { buildAlertEmailHtml } from './alert-email-html';
+import { buildOTPEmailHtml } from './otp-email-html';
 
-const html = buildAlertEmailHtml({
+// --- Alert email preview ---
+const alertHtml = buildAlertEmailHtml({
   alertName: 'Revenue Drop — Weekly GMV',
   failedTests: [
     {
@@ -27,5 +29,14 @@ const html = buildAlertEmailHtml({
   agentName: 'MinusX',
 });
 
-writeFileSync('/tmp/alert-email-preview.html', html);
+writeFileSync('/tmp/alert-email-preview.html', alertHtml);
 console.log('Written to /tmp/alert-email-preview.html');
+
+// --- OTP email preview ---
+const otpHtml = buildOTPEmailHtml({
+  otp: '384291',
+  agentName: 'MinusX',
+});
+
+writeFileSync('/tmp/otp-email-preview.html', otpHtml);
+console.log('Written to /tmp/otp-email-preview.html');
