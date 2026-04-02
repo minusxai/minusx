@@ -50,6 +50,7 @@ export default auth(async (req) => {
     pathname.startsWith('/api/auth') ||
     pathname.startsWith('/api/internal') ||
     pathname.startsWith('/api/companies/register') ||
+    pathname.startsWith('/api/integrations/slack/events') ||
     pathname === '/api/health' ||
     pathname === '/api/jobs/cron'
   ) {
