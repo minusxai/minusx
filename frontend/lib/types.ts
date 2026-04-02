@@ -287,6 +287,36 @@ export type ConfigChannel =
   | { type: 'email'; name: string; address: string }
   | { type: 'phone'; name: string; address: string };
 
+export interface SlackBotConfig {
+  type: 'slack';
+  name: string;
+  install_mode: 'manifest_manual';
+  bot_token: string;
+  signing_secret?: string;
+  team_id?: string;
+  team_name?: string;
+  bot_user_id?: string;
+  app_id?: string;
+  enterprise_id?: string;
+  installed_at?: string;
+  installed_by?: string;
+  enabled?: boolean;
+  scopes?: string[];
+}
+
+export type ConfigBot = SlackBotConfig;
+
+export interface SlackThreadContent extends BaseFileContent {
+  teamId: string;
+  channelId: string;
+  threadTs: string;
+  conversationId: number;
+  participants: string[];
+  messageCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ConfigContent extends BaseFileContent {
   branding?: {
     logoLight?: string;
@@ -305,6 +335,7 @@ export interface ConfigContent extends BaseFileContent {
   };
   channels?: ConfigChannel[];
   error_delivery?: AlertRecipient[];
+  bots?: ConfigBot[];
   // Future: other config sections can be added here
 }
 

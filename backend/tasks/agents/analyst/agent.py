@@ -224,6 +224,35 @@ class AnalystAgent(Agent):
 
 
 @register_agent
+class SlackAgent(AnalystAgent):
+    """AnalystAgent variant tuned for Slack conversations.
+
+    Uses a read/query-focused subset of tools and a concise response style
+    suitable for chat messages.
+    """
+
+    def _get_system_message(self) -> dict:
+        base = super()._get_system_message()["content"]
+        slack_addendum = """
+
+## Slack Execution Mode
+- You are replying inside Slack, not the web app.
+- Keep responses concise and readable in chat.
+- Do not tell the user to click UI elements, navigate pages, or review drafts in the app unless absolutely necessary.
+- If the request is ambiguous, ask a direct question in your answer instead of using Clarify.
+- Only use tools that are actually available in this Slack mode.
+- Prefer answering analytically over making file edits.
+""".strip()
+        return {"role": "system", "content": f"{base}\n\n{slack_addendum}"}
+
+    def _get_available_tools(self):
+        """Slack uses a read/query-focused subset of Analyst tools."""
+        if len(self.tool_thread) >= MAX_STEPS_LOWER_LEVEL - 5:
+            return []
+        return [ReadFiles, ExecuteQuery, SearchDBSchema, SearchFiles]
+
+
+@register_agent
 class ReportAgent(Agent):
     """
     Report Agent that runs report analyses and generates a summary.

@@ -132,6 +132,7 @@ const eslintConfig = defineConfig([
     files: [
       "lib/data/*.server.ts",
       "lib/database/**",
+      "lib/integrations/**",
       "scripts/**",
       "**/*.test.ts",
       "**/*.test.tsx",

@@ -4,7 +4,7 @@
  */
 
 import type { FileType } from '@/lib/ui/file-metadata';
-import type { UserRole, ConfigChannel, MessagingWebhook, AlertRecipient } from '@/lib/types';
+import type { UserRole, ConfigChannel, MessagingWebhook, AlertRecipient, ConfigBot } from '@/lib/types';
 
 export interface SetupWizard {
   status: 'pending' | 'complete';
@@ -60,6 +60,7 @@ export interface CompanyConfig {
   thinkingPhrases?: string[];  // Optional custom thinking phrases for AI indicator
   accessRules?: AccessRulesOverride;  // Per-company file type access overrides (overrides rules.json)
   setupWizard?: SetupWizard;
+  bots?: ConfigBot[];
   // Future: theme, features, etc.
 }
 
@@ -134,6 +135,7 @@ export function mergeConfig(
       : defaults.thinkingPhrases,
     accessRules: overrides.accessRules ?? defaults.accessRules,
     setupWizard: overrides.setupWizard ?? defaults.setupWizard,
+    bots: overrides.bots ?? defaults.bots,
     // Future: merge other config sections
   };
 }

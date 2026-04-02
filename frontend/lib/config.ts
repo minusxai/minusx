@@ -30,6 +30,7 @@ interface EnvironmentConfig {
   BACKEND_URL: string;
   INTERNAL_SLACK_CHANNEL_WEBHOOK: string | undefined;
   DEFAULT_EMAIL_WEBHOOK: string | undefined;
+  SLACK_SIGNING_SECRET: string | undefined;
 }
 
 const errors: string[] = [];
@@ -78,6 +79,7 @@ const config: EnvironmentConfig = {
   BACKEND_URL: getOptional(process.env.NEXT_PUBLIC_BACKEND_URL, 'http://localhost:8001'),
   INTERNAL_SLACK_CHANNEL_WEBHOOK: process.env.INTERNAL_SLACK_CHANNEL_WEBHOOK,
   DEFAULT_EMAIL_WEBHOOK: process.env.DEFAULT_EMAIL_WEBHOOK,
+  SLACK_SIGNING_SECRET: process.env.SLACK_SIGNING_SECRET,
 };
 
 // Skip validation in test mode or browser (client-side)
@@ -122,3 +124,4 @@ export const DEFAULT_DB_TYPE = config.DEFAULT_DB_TYPE;
 export const BACKEND_URL = config.BACKEND_URL;
 export const INTERNAL_SLACK_CHANNEL_WEBHOOK = config.INTERNAL_SLACK_CHANNEL_WEBHOOK;
 export const DEFAULT_EMAIL_WEBHOOK = config.DEFAULT_EMAIL_WEBHOOK;
+export const SLACK_SIGNING_SECRET = config.SLACK_SIGNING_SECRET;

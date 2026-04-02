@@ -128,6 +128,29 @@ export function canDeleteVersion(content: ContextContent, version: number): bool
 }
 
 /**
+ * Find the nearest context path to a given base path.
+ * Returns the most specific ancestor path from the provided list,
+ * or the first path if none are ancestors.
+ */
+export function findNearestContextPath(
+  contextPaths: string[],
+  basePath: string,
+): string | null {
+  if (contextPaths.length === 0) return null;
+
+  // Find all paths that are ancestors of basePath (or equal to it)
+  const ancestors = contextPaths.filter((p) => basePath.startsWith(p));
+
+  if (ancestors.length > 0) {
+    // Return longest match (most specific ancestor)
+    return ancestors.reduce((best, p) => (p.length > best.length ? p : best));
+  }
+
+  // No ancestor found — return first available context
+  return contextPaths[0];
+}
+
+/**
  * Get next available version number
  * Returns max version + 1
  */

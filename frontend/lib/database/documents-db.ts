@@ -20,7 +20,7 @@ export interface DbRow {
   id: number;  // Phase 2: Integer ID
   name: string;
   path: string;
-  type: 'question' | 'folder' | 'dashboard' | 'notebook' | 'presentation' | 'report' | 'connection' | 'context' | 'users' | 'conversation' | 'session' | 'config';
+  type: 'question' | 'folder' | 'dashboard' | 'notebook' | 'presentation' | 'report' | 'connection' | 'context' | 'users' | 'conversation' | 'session' | 'config' | 'slack_thread';
   content: string; // JSON string
   file_references: string;  // Phase 6: JSON array of referenced file IDs (renamed from "references" to avoid SQL keyword)
   company_id: number;
