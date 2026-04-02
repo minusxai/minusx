@@ -1,9 +1,10 @@
 import 'server-only';
-import { DocumentDB } from '@/lib/database/documents-db';
+import { FilesAPI } from '@/lib/data/files.server';
 import { getConfigsByCompanyId, getRawConfigByCompanyId, saveConfigByCompanyId } from '@/lib/data/configs.server';
 import { CompanyDB } from '@/lib/database/company-db';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { VALID_MODES, type Mode } from '@/lib/mode/mode-types';
+import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ConfigBot, ConfigContent, SlackBotConfig, SlackThreadContent } from '@/lib/types';
 
 // ============================================================================
@@ -90,13 +91,13 @@ export async function findSlackInstallationByTeam(
 }
 
 // ============================================================================
-// Thread bindings — one DocumentDB file per Slack thread
+// Thread bindings — one file per Slack thread
 //
 // Path: /logs/slack/{teamId}/{channelId}-{sanitizedThreadTs}
 // Type: 'slack_thread'
 //
-// Each thread is a first-class file: has an integer ID, proper path, and
-// standard permissions. No monolithic runtime-state blob.
+// Same pattern as conversation files in /logs/conversations/.
+// Created via FilesAPI so permissions and path creation are handled uniformly.
 // ============================================================================
 
 function sanitizeTs(ts: string): string {
@@ -108,43 +109,45 @@ function threadFilePath(mode: Mode, teamId: string, channelId: string, threadTs:
 }
 
 export async function getThreadConversationId(
-  companyId: number,
-  mode: Mode,
+  user: EffectiveUser,
   teamId: string,
   channelId: string,
   threadTs: string,
 ): Promise<number | null> {
-  const path = threadFilePath(mode, teamId, channelId, threadTs);
-  const file = await DocumentDB.getByPath(path, companyId);
-  if (!file) return null;
-  return (file.content as SlackThreadContent).conversationId ?? null;
+  const path = threadFilePath(user.mode, teamId, channelId, threadTs);
+  try {
+    const result = await FilesAPI.loadFileByPath(path, user);
+    return (result.data.content as SlackThreadContent).conversationId ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function setThreadConversationId(
-  companyId: number,
-  mode: Mode,
+  user: EffectiveUser,
   teamId: string,
   channelId: string,
   threadTs: string,
   conversationId: number,
   participantEmail: string,
 ): Promise<void> {
-  const path = threadFilePath(mode, teamId, channelId, threadTs);
+  const path = threadFilePath(user.mode, teamId, channelId, threadTs);
   const now = new Date().toISOString();
-  const existing = await DocumentDB.getByPath(path, companyId);
 
-  if (existing) {
-    const prev = existing.content as SlackThreadContent;
+  try {
+    const result = await FilesAPI.loadFileByPath(path, user);
+    const prev = result.data.content as SlackThreadContent;
     const participants = [...new Set([...prev.participants, participantEmail])];
-    await DocumentDB.update(
-      existing.id,
-      existing.name,
+    await FilesAPI.saveFile(
+      result.data.id,
+      result.data.name,
       path,
       { ...prev, conversationId, participants, messageCount: prev.messageCount + 1, updatedAt: now } as any,
       [],
-      companyId,
+      user,
     );
-  } else {
+  } catch {
+    // Thread file doesn't exist yet — create it (same pattern as conversations)
     const name = `slack-${channelId}-${now.slice(0, 10)}`;
     const content: SlackThreadContent = {
       teamId,
@@ -156,7 +159,10 @@ export async function setThreadConversationId(
       createdAt: now,
       updatedAt: now,
     };
-    await DocumentDB.create(name, path, 'slack_thread', content as any, [], companyId);
+    await FilesAPI.createFile(
+      { name, path, type: 'slack_thread', content: content as any, options: { createPath: true } },
+      user,
+    );
   }
 }
 
@@ -177,7 +183,6 @@ const MAX_DEDUP_SIZE = 500;
 export function reserveSlackEvent(eventId: string): boolean {
   if (processedEventIds.has(eventId)) return false;
   if (processedEventIds.size >= MAX_DEDUP_SIZE) {
-    // Evict the oldest entry (insertion order)
     const first = processedEventIds.values().next().value;
     if (first !== undefined) processedEventIds.delete(first);
   }

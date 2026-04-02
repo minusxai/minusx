@@ -113,8 +113,7 @@ export async function processSlackEvent(
 
     const teamId = installation.bot.team_id ?? getTeamId(payload) ?? '';
     const conversationId = await getThreadConversationId(
-      installation.companyId,
-      installation.mode,
+      effectiveUser,
       teamId,
       ev.channel,
       threadTs,
@@ -131,8 +130,7 @@ export async function processSlackEvent(
     });
 
     await setThreadConversationId(
-      installation.companyId,
-      installation.mode,
+      effectiveUser,
       teamId,
       ev.channel,
       threadTs,

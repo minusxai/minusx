@@ -1,6 +1,5 @@
 import 'server-only';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { DocumentDB } from '@/lib/database/documents-db';
 import { FilesAPI } from '@/lib/data/files.server';
 import { listAllConnections } from '@/lib/data/connections.server';
 import { findNearestContextPath } from '@/lib/context/context-utils';
@@ -39,7 +38,7 @@ export async function buildSlackAgentArgs(user: EffectiveUser): Promise<{
   try {
     const modePath = resolvePath(user.mode, '/');
     const effectiveHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder || '');
-    const contextFiles = await DocumentDB.listAll(user.companyId, 'context', [modePath], -1, false);
+    const { data: contextFiles } = await FilesAPI.getFiles({ type: 'context', paths: [modePath], depth: -1 }, user);
     const nearestContextPath = findNearestContextPath(
       contextFiles.map((file) => file.path),
       effectiveHomeFolder,
