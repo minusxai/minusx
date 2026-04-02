@@ -6,7 +6,7 @@
 import { DbFile, ConnectionContent, DatabaseSchema } from '@/lib/types';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { getSchemaFromPython } from '@/lib/backend/python-backend.server';
-import { DocumentDB } from '@/lib/database/documents-db';
+import { updateCachedSchema } from '@/lib/data/connections.server';
 import { CustomLoader } from './types';
 import { getNodeConnector } from '@/lib/connections';
 
@@ -80,18 +80,7 @@ export const connectionLoader: CustomLoader = async (file: DbFile, user: Effecti
 
   // Update file in database with fresh schema
   try {
-    const updatedContent = {
-      ...content,
-      schema: freshSchema
-    };
-    await DocumentDB.update(
-      file.id,
-      file.name,
-      file.path,
-      updatedContent,
-      file.references,
-      user.companyId
-    );
+    await updateCachedSchema(file.id, file.name, file.path, freshSchema, file.references, user.companyId);
     console.log(`[connectionLoader] Schema saved to database for ${file.name}`);
   } catch (error) {
     console.error(`[connectionLoader] Failed to save schema for ${file.name}:`, error);

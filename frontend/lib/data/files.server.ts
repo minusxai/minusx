@@ -39,6 +39,16 @@ import { selectDatabase } from '@/lib/utils/database-selector';
 import { getFileAnalyticsSummary, getFilesAnalyticsSummary, getConversationAnalytics } from '@/lib/analytics/file-analytics.server';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 
+/**
+ * Resolves direct child IDs for a folder path.
+ * Injected into extractReferenceIds to break the circular import that would
+ * arise if references.ts imported FilesAPI directly.
+ */
+const resolveChildIds = async (folderPath: string, companyId: number): Promise<number[]> => {
+  const children = await DocumentDB.listAll(companyId, undefined, [folderPath], 1, false);
+  return children.map(c => c.id);
+};
+
 export class ConflictError extends Error {
   currentFile: DbFile;
   constructor(currentFile: DbFile) {
@@ -95,7 +105,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
 
     const refStart = Date.now();
-    const refIds = await extractReferenceIds(file);
+    const refIds = await extractReferenceIds(file, resolveChildIds);
     const isConversation = file.type === 'conversation';
     const [references, analytics, conversationAnalytics] = await Promise.all([
       refIds.length > 0 ? DocumentDB.getByIds(refIds, user.companyId) : Promise.resolve([]),
@@ -165,8 +175,8 @@ class FilesDataLayerServer implements IFilesDataLayer {
     const folderFiles = filteredFiles.filter(f => f.type === 'folder');
     const contentFiles = filteredFiles.filter(f => f.type !== 'folder');
     const [folderRefIdArrays, contentRefIdArrays] = await Promise.all([
-      Promise.all(folderFiles.map(f => extractReferenceIds(f))),
-      Promise.all(contentFiles.map(f => extractReferenceIds(f))),
+      Promise.all(folderFiles.map(f => extractReferenceIds(f, resolveChildIds))),
+      Promise.all(contentFiles.map(f => extractReferenceIds(f, resolveChildIds))),
     ]);
     const folderRefIds = new Set(folderRefIdArrays.flat());
     const uniqueRefIds = [...new Set([...folderRefIdArrays.flat(), ...contentRefIdArrays.flat()])];
@@ -246,7 +256,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
       name: file.name,
       path: file.path,
       type: file.type,
-      references: await extractReferenceIds(file),
+      references: await extractReferenceIds(file, resolveChildIds),
       created_at: file.created_at,
       updated_at: file.updated_at,
       company_id: file.company_id,

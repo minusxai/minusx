@@ -253,6 +253,25 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
     }
   }
 
+  /**
+   * Persist a freshly-fetched schema back to a connection file.
+   * Called exclusively by connection-loader.ts as a background cache write.
+   * Bypasses full editFile overhead (no permission checks, no events).
+   */
+  async updateCachedSchema(
+    id: number,
+    name: string,
+    path: string,
+    schema: DatabaseSchema,
+    references: number[],
+    companyId: number
+  ): Promise<void> {
+    const conn = await DocumentDB.getById(id, companyId);
+    if (!conn) return;
+    const updatedContent: ConnectionContent = { ...(conn.content as ConnectionContent), schema };
+    await DocumentDB.update(id, name, path, updatedContent, references, companyId);
+  }
+
   async test(name: string, user: EffectiveUser): Promise<{ success: boolean; message: string }> {
     const connectionPath = resolvePath(user.mode, `/database/${name}`);
     const conn = await DocumentDB.getByPath(connectionPath, user.companyId);
@@ -284,3 +303,4 @@ export const createConnection = ConnectionsAPI.create.bind(ConnectionsAPI);
 export const updateConnection = ConnectionsAPI.update.bind(ConnectionsAPI);
 export const deleteConnection = ConnectionsAPI.delete.bind(ConnectionsAPI);
 export const testConnection = ConnectionsAPI.test.bind(ConnectionsAPI);
+export const updateCachedSchema = ConnectionsAPI.updateCachedSchema.bind(ConnectionsAPI);
