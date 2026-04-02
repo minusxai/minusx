@@ -1,6 +1,7 @@
 import { useMemo, useRef, useEffect } from 'react'
 import '@/lib/chart/echarts-init'
 import { init, getInstanceByDom } from 'echarts/core'
+import type { EChartsType } from 'echarts/core'
 import type { EChartsOption, SetOptionOpts } from 'echarts'
 import { debounce } from 'lodash'
 
@@ -11,6 +12,7 @@ interface EChartProps extends React.HTMLAttributes<HTMLDivElement> {
   style?: React.CSSProperties
   loading?: boolean
   events?: Record<string, (param: any) => void>
+  onChartUpdate?: (chart: EChartsType) => void
 }
 
 /**
@@ -26,6 +28,7 @@ export const EChart = ({
   style = { width: '100%', height: '100%', minHeight: '300px', display: "flex", justifyContent: "center" },
   loading = false,
   events = {},
+  onChartUpdate,
   ...props
 }: EChartProps) => {
   const chartRef = useRef<HTMLDivElement>(null)
@@ -48,6 +51,7 @@ export const EChart = ({
 
     // Initialize chart
     const chart = init(chartRef.current, null, chartSettings)
+    onChartUpdate?.(chart)
 
     // Set up event listeners
     for (const [key, handler] of Object.entries(events)) {
@@ -70,7 +74,7 @@ export const EChart = ({
       resizeObserver.unobserve(currentRef)
       resizeObserver.disconnect()
     }
-  }, [])
+  }, [chartSettings, events, onChartUpdate, resizeChart])
 
   useEffect(() => {
     // Re-render chart when option changes
@@ -78,9 +82,10 @@ export const EChart = ({
       const chart = getInstanceByDom(chartRef.current)
       if (chart && option) {
         chart.setOption(option, optionSettings)
+        onChartUpdate?.(chart)
       }
     }
-  }, [option, optionSettings])
+  }, [onChartUpdate, option, optionSettings])
 
   return <div ref={chartRef} style={style} {...props} />
 }

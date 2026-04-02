@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useMemo } from 'react'
 import { Box, HStack, VStack, Text } from '@chakra-ui/react'
+import { LuChevronDown, LuChevronRight } from 'react-icons/lu'
 import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } from './AxisComponents'
 import type { ColumnFormatConfig, AxisConfig } from '@/lib/types'
 
@@ -20,7 +21,8 @@ interface AxisBuilderProps {
   columnFormats?: Record<string, ColumnFormatConfig>
   onColumnFormatChange?: (column: string, config: ColumnFormatConfig) => void
   children?: React.ReactNode
-  settingsPanel?: React.ReactNode
+  stylePanel?: React.ReactNode
+  annotationPanel?: React.ReactNode
   axisConfig?: AxisConfig
   onAxisConfigChange?: (config: AxisConfig) => void
   chartType?: string
@@ -37,6 +39,7 @@ const AxisSettingsPanel = ({ axis, axisConfig, onChange }: {
   const currentScale = axisConfig[scaleKey] ?? 'linear'
   const currentMin = axisConfig[minKey]
   const currentMax = axisConfig[maxKey]
+  const currentTitle = axis === 'y' ? axisConfig.yTitle ?? '' : ''
 
   const inputStyle = {
     fontSize: '12px',
@@ -51,20 +54,26 @@ const AxisSettingsPanel = ({ axis, axisConfig, onChange }: {
   }
 
   return (
-    <VStack
-      align="stretch"
-      gap={2.5}
-      p={3}
-      bg="bg.surface"
-      borderRadius="md"
-      border="2px dashed"
-      borderColor="border.muted"
-      minW={0}
-    >
+    <VStack align="stretch" gap={2.5} minW={0}>
+      {axis === 'y' && (
+        <Box>
+          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+            Title
+          </Text>
+          <input
+            type="text"
+            placeholder="auto"
+            value={currentTitle}
+            onChange={(e) => {
+              const value = e.target.value
+              onChange({ ...axisConfig, yTitle: value || null })
+            }}
+            onClick={(e) => e.stopPropagation()}
+            style={inputStyle}
+          />
+        </Box>
+      )}
       <Box>
-        <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={2}>
-          {axis === 'x' ? 'X Axis' : 'Y Axis'}
-        </Text>
         <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
           Scale
         </Text>
@@ -131,10 +140,16 @@ const AxisSettingsPanel = ({ axis, axisConfig, onChange }: {
   )
 }
 
-export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnFormatChange, children, settingsPanel, axisConfig, onAxisConfigChange, chartType }: AxisBuilderProps) => {
+export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnFormatChange, children, stylePanel, annotationPanel, axisConfig, onAxisConfigChange, chartType }: AxisBuilderProps) => {
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null)
   const [selectedColumnForMobile, setSelectedColumnForMobile] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'fields' | 'settings'>('fields')
+  const [collapsedPanels, setCollapsedPanels] = useState<Record<string, boolean>>({
+    xAxis: false,
+    yAxis: false,
+    style: false,
+    annotations: false,
+  })
   const isTouchDevice = useIsTouchDevice()
 
   // Compute assigned columns from all zones
@@ -169,7 +184,7 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
 
   const showXAxisSettings = chartType === 'scatter' && !!onAxisConfigChange
   const showYAxisSettings = !!onAxisConfigChange
-  const hasSettingsTab = showXAxisSettings || showYAxisSettings || !!settingsPanel
+  const hasSettingsTab = showXAxisSettings || showYAxisSettings || !!stylePanel || !!annotationPanel
 
   const tabButtonStyles = {
     px: 2.5,
@@ -182,6 +197,48 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
     letterSpacing: '0.05em',
     border: '1px solid',
     transition: 'all 0.15s',
+  }
+
+  const togglePanel = (key: 'xAxis' | 'yAxis' | 'style' | 'annotations') => {
+    setCollapsedPanels(prev => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  const renderSettingsCard = (title: string, panelKey: 'xAxis' | 'yAxis' | 'style' | 'annotations', children: React.ReactNode) => {
+    const collapsed = collapsedPanels[panelKey]
+    return (
+      <VStack
+        align="stretch"
+        gap={collapsed ? 0 : 2.5}
+        p={3}
+        bg="bg.surface"
+        borderRadius="md"
+        border="2px dashed"
+        borderColor="border.muted"
+        minW={0}
+      >
+        <HStack justify="space-between" align="center">
+          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
+            {title}
+          </Text>
+          <button
+            onClick={() => togglePanel(panelKey)}
+            aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
+            style={{
+              color: 'var(--chakra-colors-fg-subtle)',
+              background: 'transparent',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+            }}
+          >
+            {collapsed ? <LuChevronRight size={14} /> : <LuChevronDown size={14} />}
+          </button>
+        </HStack>
+        {!collapsed && children}
+      </VStack>
+    )
   }
 
   return (
@@ -284,19 +341,31 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
       )}
 
       {hasSettingsTab && activeTab === 'settings' && (
-        <Box
-          display="grid"
-          gridTemplateColumns="repeat(auto-fit, minmax(220px, 1fr))"
-          gap={3}
-          minWidth={0}
-        >
-          {showXAxisSettings && onAxisConfigChange && (
-            <AxisSettingsPanel axis="x" axisConfig={axisConfig ?? {}} onChange={onAxisConfigChange} />
-          )}
-          {showYAxisSettings && onAxisConfigChange && (
-            <AxisSettingsPanel axis="y" axisConfig={axisConfig ?? {}} onChange={onAxisConfigChange} />
-          )}
-          {settingsPanel}
+        <Box display="grid" gridTemplateColumns="minmax(240px, 1.1fr) minmax(280px, 1fr)" gap={3} minWidth={0}>
+          <VStack align="stretch" gap={3} minW={0}>
+            {showXAxisSettings && onAxisConfigChange && (
+              renderSettingsCard('X Axis', 'xAxis',
+                <AxisSettingsPanel axis="x" axisConfig={axisConfig ?? {}} onChange={onAxisConfigChange} />
+              )
+            )}
+            {showYAxisSettings && onAxisConfigChange && (
+              renderSettingsCard('Y Axis', 'yAxis',
+                <AxisSettingsPanel axis="y" axisConfig={axisConfig ?? {}} onChange={onAxisConfigChange} />
+              )
+            )}
+          </VStack>
+          <VStack align="stretch" gap={3} minW={0}>
+            {stylePanel ? (
+              renderSettingsCard('Style', 'style',
+                stylePanel
+              )
+            ) : null}
+            {annotationPanel ? (
+              renderSettingsCard('Annotations', 'annotations',
+                annotationPanel
+              )
+            ) : null}
+          </VStack>
         </Box>
       )}
 

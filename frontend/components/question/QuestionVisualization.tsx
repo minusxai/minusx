@@ -11,7 +11,7 @@ import { Table } from '@/components/plotx/Table';
 import { ChartBuilder } from '@/components/plotx/ChartBuilder';
 import { parseErrorMessage } from '@/lib/utils/error-parser';
 import { VizTypeSelector } from './VizTypeSelector';
-import type { QuestionContent, QueryResult, VizSettings, PivotConfig, ColumnFormatConfig, VisualizationStyleConfig } from '@/lib/types';
+import type { QuestionContent, QueryResult, VizSettings, PivotConfig, ColumnFormatConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types';
 import { useState, useEffect, useRef } from 'react';
 import { useAppDispatch } from '@/store/hooks';
 import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection } from '@/store/uiSlice';
@@ -44,6 +44,7 @@ interface QuestionVisualizationProps {
   onColumnFormatsChange?: (formats: Record<string, ColumnFormatConfig>) => void;
   onStyleConfigChange?: (config: VisualizationStyleConfig) => void;
   onAxisConfigChange?: (config: import('@/lib/types').AxisConfig) => void;
+  onAnnotationsChange?: (annotations: ChartAnnotation[]) => void;
 }
 
 function QueryLoadingIndicator({ estimatedDurationMs }: { estimatedDurationMs?: number | null }) {
@@ -129,6 +130,7 @@ export function QuestionVisualization({
   onColumnFormatsChange,
   onStyleConfigChange,
   onAxisConfigChange,
+  onAnnotationsChange,
 }: QuestionVisualizationProps) {
   const dispatch = useAppDispatch();
   const { config: appConfig } = useConfigs();
@@ -376,6 +378,8 @@ export function QuestionVisualization({
                       onStyleConfigChange={onStyleConfigChange}
                       axisConfig={currentState.vizSettings?.axisConfig ?? undefined}
                       onAxisConfigChange={onAxisConfigChange}
+                      annotations={currentState.vizSettings?.annotations ?? undefined}
+                      onAnnotationsChange={onAnnotationsChange}
                       exportBranding={appConfig.branding}
                     />
                   </Box>

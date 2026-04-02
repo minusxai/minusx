@@ -1,6 +1,7 @@
 import type { EChartsOption } from 'echarts'
+import type { EChartsType } from 'echarts/core'
 import { withMinusXTheme } from './echarts-theme'
-import type { ColumnFormatConfig, AxisConfig, VisualizationStyleConfig } from '@/lib/types'
+import type { ColumnFormatConfig, AxisConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types'
 import { getBrandLogoUrl, type CompanyBranding } from '@/lib/branding/whitelabel'
 
 // Chart props interface
@@ -21,7 +22,21 @@ export interface ChartProps {
   colorPalette: string[]  // Effective color palette (hex values)
   axisConfig?: AxisConfig  // Axis scale config (linear/log)
   styleConfig?: VisualizationStyleConfig
+  annotations?: ChartAnnotation[]
   exportBranding?: Partial<CompanyBranding>
+}
+
+interface AnnotationGraphicsConfig {
+  chart: EChartsType
+  xAxisData: string[]
+  series: Array<{ name: string; data: number[] }>
+  chartType: string
+  xAxisColumns?: string[]
+  yAxisColumns?: string[]
+  columnFormats?: Record<string, ColumnFormatConfig>
+  annotations?: ChartAnnotation[]
+  colorMode?: 'light' | 'dark'
+  colorPalette: string[]
 }
 
 const hexToRgb = (color: string): { r: number; g: number; b: number } | null => {
@@ -51,6 +66,39 @@ const withAlpha = (color: string, alpha: number): string => {
   const rgb = hexToRgb(color)
   if (!rgb) return color
   return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`
+}
+
+const wrapAnnotationText = (text: string, maxCharsPerLine = 24, maxLines = 3): string[] => {
+  const words = text.trim().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return ['']
+
+  const lines: string[] = []
+  let current = ''
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word
+    if (next.length <= maxCharsPerLine) {
+      current = next
+      continue
+    }
+
+    if (current) lines.push(current)
+    current = word
+
+    if (lines.length === maxLines - 1) break
+  }
+
+  if (lines.length < maxLines && current) {
+    lines.push(current)
+  }
+
+  const consumedLength = lines.join(' ').length
+  if (consumedLength < text.trim().length && lines.length > 0) {
+    const lastIndex = lines.length - 1
+    lines[lastIndex] = `${lines[lastIndex].slice(0, Math.max(0, maxCharsPerLine - 1))}…`
+  }
+
+  return lines
 }
 
 // Calculate axis label interval based on data length, container width, and max label length after truncation
@@ -202,6 +250,233 @@ export const isValidChartData = (xAxisData?: string[], series?: Array<{ name: st
   return !!(xAxisData && xAxisData.length > 0 && series && series.length > 0)
 }
 
+export const buildAnnotationGraphics = ({
+  chart,
+  xAxisData,
+  series,
+  chartType,
+  xAxisColumns,
+  yAxisColumns,
+  columnFormats,
+  annotations,
+  colorMode = 'dark',
+  colorPalette,
+}: AnnotationGraphicsConfig): EChartsOption['graphic'] => {
+  if (!annotations || annotations.length === 0) return []
+  if (!['line', 'bar', 'area', 'scatter'].includes(chartType)) return []
+  if ((xAxisColumns?.length ?? 0) !== 1) return []
+
+  const ecModel = (chart as any).getModel?.()
+  const gridComponent = ecModel?.getComponent?.('grid', 0)
+  const rect = gridComponent?.coordinateSystem?.getRect?.()
+  if (!rect) return []
+
+  const plotLeft = rect.x
+  const plotTop = rect.y
+  const plotRight = rect.x + rect.width
+  const plotBottom = rect.y + rect.height
+  const plotHeight = rect.height
+  const useDualYAxis = needsDualYAxis(series)
+  const yAxisAssignments = useDualYAxis ? assignSeriesToAxes(series, yAxisColumns) : series.map(() => 0)
+  const getColumnDisplayName = (col: string) => columnFormats?.[col]?.alias || col
+  const getSeriesDisplayName = (seriesName: string): string => {
+    const axisMatch = seriesName.match(/^(.*) \(([LR])\)$/)
+    const baseName = axisMatch ? axisMatch[1] : seriesName
+    const axisSuffix = axisMatch ? ` (${axisMatch[2]})` : ''
+
+    for (const yCol of yAxisColumns ?? []) {
+      const rawSuffix = ` - ${yCol}`
+      if (baseName.endsWith(rawSuffix)) {
+        return `${baseName.slice(0, -rawSuffix.length)} - ${getColumnDisplayName(yCol)}${axisSuffix}`
+      }
+    }
+
+    return `${getColumnDisplayName(baseName)}${axisSuffix}`
+  }
+
+  const topRowOccupancy: Array<Array<{ left: number; right: number }>> = []
+  const bottomRowOccupancy: Array<Array<{ left: number; right: number }>> = []
+  const labelGap = 8
+  const rowHeight = 48
+  const bandPadding = 8
+  const maxBandRows = Math.max(1, Math.min(4, Math.floor((plotHeight * 0.35) / rowHeight)))
+  const lineColor = colorMode === 'dark' ? 'rgba(139, 148, 158, 0.7)' : 'rgba(87, 96, 106, 0.75)'
+  const labelFill = colorMode === 'dark' ? 'rgba(22, 27, 34, 0.94)' : 'rgba(255, 255, 255, 0.96)'
+  const labelStroke = colorMode === 'dark' ? 'rgba(48, 54, 61, 0.9)' : 'rgba(208, 215, 222, 0.95)'
+  const labelText = colorMode === 'dark' ? '#E6EDF3' : '#0D1117'
+
+  const findOpenRow = (
+    occupancy: Array<Array<{ left: number; right: number }>>,
+    left: number,
+    width: number
+  ): number | null => {
+    for (let rowIndex = 0; rowIndex < maxBandRows; rowIndex++) {
+      const row = occupancy[rowIndex] ?? []
+      const overlaps = row.some(rectItem => !(left + width + labelGap <= rectItem.left || left - labelGap >= rectItem.right))
+      if (!overlaps) {
+        return rowIndex
+      }
+    }
+
+    return null
+  }
+
+  const annotationsWithPixels = annotations
+    .slice(0, 8)
+    .map((annotation: ChartAnnotation) => {
+      if (!annotation.series) return null
+
+      const matchedSeriesIndex = series.findIndex(item => (
+        item.name === annotation.series
+        || getSeriesDisplayName(item.name) === annotation.series
+      ))
+      if (matchedSeriesIndex === -1) return null
+
+      const seriesMatch = series[matchedSeriesIndex]
+      const matchingIndices = xAxisData
+        .map((item, index) => ({ item, index }))
+        .filter(({ item }) => String(item) === String(annotation.x))
+        .map(({ index }) => index)
+
+      let pointIndex: number | null = null
+      let pointY: number | null = null
+      for (const index of matchingIndices) {
+        const candidate = seriesMatch.data[index]
+        if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+          pointIndex = index
+          pointY = candidate
+          break
+        }
+      }
+
+      if (pointIndex == null || pointY == null) return null
+
+      const finder = {
+        xAxisIndex: 0,
+        yAxisIndex: yAxisAssignments[matchedSeriesIndex] ?? 0,
+      }
+
+      const pixel = chart.convertToPixel(
+        finder,
+        chartType === 'scatter' ? [Number(annotation.x), pointY] : [annotation.x, pointY]
+      )
+
+      if (!Array.isArray(pixel) || !Number.isFinite(pixel[0]) || !Number.isFinite(pixel[1])) {
+        return null
+      }
+
+      return {
+        annotation,
+        xPixel: pixel[0],
+        pointYPixel: pixel[1],
+        seriesIndex: matchedSeriesIndex,
+      }
+    })
+    .filter((item): item is { annotation: ChartAnnotation; xPixel: number; pointYPixel: number; seriesIndex: number } => item !== null)
+    .sort((a, b) => a.xPixel - b.xPixel)
+
+  return annotationsWithPixels.flatMap(({ annotation, xPixel, pointYPixel, seriesIndex }, index) => {
+    const lines = wrapAnnotationText(annotation.text, 24, 3)
+    const width = Math.max(96, Math.min(180, Math.max(...lines.map(line => line.length), 0) * 7 + 16))
+    const height = 12 + lines.length * 14
+
+    const left = Math.min(plotRight - width, Math.max(plotLeft, xPixel - width / 2))
+    const preferBottom = pointYPixel < plotTop + plotHeight * 0.42
+    const primaryBand = preferBottom ? 'bottom' : 'top'
+    const primaryRow = findOpenRow(primaryBand === 'top' ? topRowOccupancy : bottomRowOccupancy, left, width)
+    const secondaryBand = primaryBand === 'top' ? 'bottom' : 'top'
+    const secondaryRow = primaryRow == null
+      ? findOpenRow(secondaryBand === 'top' ? topRowOccupancy : bottomRowOccupancy, left, width)
+      : null
+
+    const band = primaryRow != null ? primaryBand : secondaryBand
+    const rowIndex = primaryRow ?? secondaryRow ?? 0
+    const occupancy = band === 'top' ? topRowOccupancy : bottomRowOccupancy
+    if (!occupancy[rowIndex]) occupancy[rowIndex] = []
+    occupancy[rowIndex].push({ left, right: left + width })
+
+    const top = band === 'top'
+      ? plotTop + bandPadding + rowIndex * rowHeight
+      : plotBottom - bandPadding - height - rowIndex * rowHeight
+    const leaderStartY = band === 'top' ? top + height + 4 : top - 4
+    const leaderEndY = Math.min(plotBottom, Math.max(plotTop, pointYPixel))
+
+    const graphics: any[] = [
+      {
+        type: 'line',
+        silent: true,
+        z: 100,
+        zlevel: 10,
+        shape: {
+          x1: xPixel,
+          y1: leaderStartY,
+          x2: xPixel,
+          y2: leaderEndY,
+        },
+        style: {
+          stroke: lineColor,
+          lineDash: [4, 4],
+          lineWidth: 1,
+        },
+      },
+      {
+        type: 'rect',
+        silent: true,
+        z: 101,
+        zlevel: 10,
+        shape: {
+          x: left,
+          y: top,
+          width,
+          height,
+          r: 6,
+        },
+        style: {
+          fill: labelFill,
+          stroke: labelStroke,
+          lineWidth: 1,
+          shadowBlur: 2,
+          shadowColor: 'rgba(0, 0, 0, 0.12)',
+        },
+      },
+      {
+        type: 'text',
+        silent: true,
+        z: 102,
+        zlevel: 10,
+        style: {
+          x: left + 8,
+          y: top + 7,
+          text: lines.join('\n'),
+          fill: labelText,
+          font: '11px JetBrains Mono, Consolas, Monaco, Courier New, monospace',
+          lineHeight: 14,
+          width: width - 16,
+          overflow: 'break',
+        },
+      },
+      {
+        type: 'circle',
+        silent: true,
+        z: 103,
+        zlevel: 10,
+        shape: {
+          cx: xPixel,
+          cy: leaderEndY,
+          r: 3,
+        },
+        style: {
+          fill: colorPalette[(seriesIndex ?? index) % colorPalette.length],
+          stroke: labelFill,
+          lineWidth: 1,
+        },
+      },
+    ]
+
+    return graphics
+  })
+}
+
 // Generate timestamp string for file names (e.g., "2024-01-15-143052")
 export const getTimestamp = () => {
   const now = new Date()
@@ -307,6 +582,7 @@ const composeChartExportUrl = async ({
   const horizontalPadding = 36
   const footerPadding = 24
   const logoSize = logoImage ? 34 : 0
+  const footerAgentName = branding?.agentName?.trim() || ''
   const maxTextWidth = chartImage.width - horizontalPadding * 2
 
   canvas.width = chartImage.width
@@ -351,6 +627,23 @@ const composeChartExportUrl = async ({
     const logoX = canvas.width - footerPadding - logoSize
     const logoY = canvas.height - footerPadding - logoSize
     ctx.drawImage(logoImage, logoX, logoY, logoSize, logoSize)
+  }
+
+  if (footerAgentName) {
+    ctx.font = '700 46px JetBrains Mono, Consolas, Monaco, Courier New, monospace'
+    ctx.textBaseline = 'middle'
+    ctx.textAlign = 'right'
+    ctx.fillStyle = colorMode === 'dark' ? '#FFFFFF' : 'rgba(13, 17, 23, 0.78)'
+
+    const textRight = logoImage
+      ? canvas.width - footerPadding - logoSize - 10
+      : canvas.width - footerPadding
+    const textY = logoImage
+      ? canvas.height - footerPadding - logoSize / 2
+      : canvas.height - footerPadding - 23
+    const maxFooterTextWidth = Math.max(80, canvas.width - horizontalPadding * 2 - logoSize - 12)
+    const footerText = fitTextToWidth(ctx, footerAgentName, maxFooterTextWidth)
+    ctx.fillText(footerText, textRight, textY)
   }
 
   return canvas.toDataURL('image/png')
@@ -569,11 +862,12 @@ interface BaseChartConfig {
   colorPalette: string[]
   axisConfig?: AxisConfig
   styleConfig?: VisualizationStyleConfig
+  annotations?: ChartAnnotation[]
   exportBranding?: Partial<CompanyBranding>
 }
 
 export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
-  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, pointMeta, tooltipColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig, styleConfig, exportBranding } = config
+  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, pointMeta, tooltipColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig, styleConfig, annotations, exportBranding } = config
   const xScaleType = axisConfig?.xScale ?? 'linear'
   const yScaleType = axisConfig?.yScale ?? 'linear'
   const xMin = axisConfig?.xMin ?? undefined
@@ -623,6 +917,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   // NOT when there are multiple series from the same metric due to splits
   const useDualYAxis = chartType === 'line' && yAxisColumns && yAxisColumns.length >= 2 && series.length > 1 && needsDualYAxis(series)
   const yAxisAssignments = useDualYAxis ? assignSeriesToAxes(series, yAxisColumns) : series.map(() => 0)
+  const resolvedYAxisLabel = axisConfig?.yTitle?.trim() || yAxisLabel
 
   // Calculate max length for Y-axis names based on available height
   // Y-axis text is vertical (rotated 90°), so available space = chart height - grid padding
@@ -871,9 +1166,9 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           axisLabel: { formatter: yAxisFormatter },
         },
       ]
-    : {
+      : {
         type: yAxisType,
-        name: wrapAxisName(yAxisLabel, maxAxisNameLength),
+        name: wrapAxisName(resolvedYAxisLabel, maxAxisNameLength),
         ...yExtraProps,
         ...yLogRangeProps,
         ...yRangeProps,
@@ -1016,7 +1311,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
             const rows = [
               ...groupingRows,
               { key: xAxisLabel || 'X', value: formattedX },
-              { key: yAxisLabel || 'Y', value: String(formattedY) },
+              { key: resolvedYAxisLabel || 'Y', value: String(formattedY) },
               ...extraRows,
             ]
 

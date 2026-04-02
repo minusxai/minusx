@@ -77,6 +77,7 @@ class AxisConfig(BaseModel):
     xMax: Optional[float] = Field(None, description="explicit X-axis maximum value")
     yMin: Optional[float] = Field(None, description="explicit Y-axis minimum value")
     yMax: Optional[float] = Field(None, description="explicit Y-axis maximum value")
+    yTitle: Optional[str] = Field(None, description="optional Y-axis title override for charts with a single Y axis")
 
 class ColumnFormatConfig(BaseModel):
     """Per-column display formatting. Only set when the user explicitly asks to change formatting."""
@@ -93,6 +94,12 @@ class VisualizationStyleConfig(BaseModel):
     markerSize: Optional[int] = Field(None, description="point marker size for charts that render markers, such as scatter and line")
     stacked: Optional[bool] = Field(None, description="whether bar and area series should be stacked. Defaults to true for those chart types.")
 
+class ChartAnnotation(BaseModel):
+    """A chart annotation anchored to an existing chart x value and series with a short text label."""
+    x: Union[str, float] = Field(..., description="X-axis value to anchor the annotation to")
+    series: Optional[str] = Field(None, description="series name to anchor the annotation to")
+    text: str = Field(..., description="annotation label text")
+
 class VisualizationSettings(BaseModel):
     """visualization settings"""
     type: VisualizationType = Field(..., description="type of the visualization (default is table)")
@@ -102,6 +109,7 @@ class VisualizationSettings(BaseModel):
     pivotConfig: Optional[PivotConfig] = Field(None, description="pivot table configuration (only used when type is 'pivot')")
     columnFormats: Optional[Dict[str, ColumnFormatConfig]] = Field(None, description="per-column display formatting keyed by column name. Only set when user asks to rename columns, change decimal places, or change date format. Good defaults are applied automatically.")
     styleConfig: Optional[VisualizationStyleConfig] = Field(None, description="shared visual styling for the chart, such as colors, opacity, and marker size.")
+    annotations: Optional[List[ChartAnnotation]] = Field(None, description="annotations for cartesian charts. Each annotation specifies x, series, and text.")
     colors: Optional[Dict[str, str]] = Field(None, description="deprecated legacy color overrides. Use styleConfig.colors instead.")
     axisConfig: Optional[AxisConfig] = Field(None, description="axis configuration for scale type (linear or log). Only set when user explicitly requests log scale.")
     model_config = {

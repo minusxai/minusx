@@ -23,7 +23,9 @@ import { aggregatePivotData, computeFormulas, getUniqueTopLevelRowValues, getUni
 import type { PivotConfig, ColumnFormatConfig, AxisConfig, VisualizationStyleConfig } from '@/lib/types'
 import { getEffectiveColorPalette } from '@/lib/chart/echarts-theme'
 import { StyleConfigPopover } from './StyleConfigPopover'
+import { AnnotationEditor } from './AnnotationEditor'
 import type { CompanyBranding } from '@/lib/branding/whitelabel'
+import type { ChartAnnotation } from '@/lib/types'
 
 interface ChartBuilderProps {
   columns: string[]
@@ -50,6 +52,8 @@ interface ChartBuilderProps {
   onStyleConfigChange?: (config: VisualizationStyleConfig) => void
   axisConfig?: AxisConfig
   onAxisConfigChange?: (config: AxisConfig) => void
+  annotations?: ChartAnnotation[]
+  onAnnotationsChange?: (annotations: ChartAnnotation[]) => void
   exportBranding?: Partial<CompanyBranding>
 }
 
@@ -59,7 +63,7 @@ interface GroupedColumns {
   categories: string[]
 }
 
-export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, exportBranding }: ChartBuilderProps) => {
+export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, annotations, onAnnotationsChange, exportBranding }: ChartBuilderProps) => {
   const colorPalette = useMemo(() => getEffectiveColorPalette(styleConfig?.colors), [styleConfig?.colors])
 
   // Group columns by type
@@ -130,6 +134,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     }
     return []
   }, [initialTooltipCols, columns])
+  const supportsAnnotations = ['line', 'bar', 'area', 'scatter'].includes(chartType) && xAxisColumns.length === 1
 
   const handleColumnFormatChange = useCallback((column: string, config: ColumnFormatConfig) => {
     const isEmpty = !config.alias && config.decimalPoints === undefined && !config.dateFormat && !config.prefix && !config.suffix
@@ -162,26 +167,33 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     const names = cols.map(getDisplayName)
     if (cols.length === 1) return names[0]
 
-    const maxLength = 60
-    const separator = ' | '
-    let label = names[0]
-    let includedCount = 1
+    const tokenize = (value: string) => value
+      .split(/\s+/)
+      .map(token => token.trim())
+      .filter(Boolean)
 
-    for (let i = 1; i < names.length; i++) {
-      const remaining = names.length - includedCount - 1
-      const suffix = remaining > 0 ? `${separator}(+ ${remaining} other metric${remaining > 1 ? 's' : ''})` : ''
-      const candidate = `${label}${separator}${names[i]}`
+    const firstTokens = tokenize(names[0])
+    let commonTokens = [...firstTokens]
 
-      if (candidate.length + suffix.length > maxLength) break
-      label = candidate
-      includedCount++
+    for (const name of names.slice(1)) {
+      const tokens = tokenize(name)
+      let shared = 0
+      while (shared < commonTokens.length && shared < tokens.length && commonTokens[shared] === tokens[shared]) {
+        shared++
+      }
+      commonTokens = commonTokens.slice(0, shared)
+      if (commonTokens.length === 0) break
     }
 
-    const excluded = names.length - includedCount
-    if (excluded > 0) {
-      label += `${separator}(+ ${excluded} other metric${excluded > 1 ? 's' : ''})`
-    }
-    return label
+    let commonLabel = commonTokens.join(' ').trim()
+    commonLabel = commonLabel.replace(/[\s(|,-]+$/, '').trim()
+
+    if (commonLabel.length >= 6) return commonLabel
+
+    const firstName = names[0]
+    const remaining = names.length - 1
+    if (remaining === 0) return firstName
+    return `${firstName} (+${remaining})`
   }, [getDisplayName])
 
   // Handle drop on X axis
@@ -475,27 +487,23 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
           axisConfig={axisConfig}
           onAxisConfigChange={onAxisConfigChange}
           chartType={chartType}
-          settingsPanel={onStyleConfigChange ? (
-            <Box
-              width="100%"
-              p={3}
-              bg="bg.surface"
-              borderRadius="md"
-              border="2px dashed"
-              borderColor="border.muted"
-              minH="44px"
-            >
-              <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={2}>
-                Style
-              </Text>
-              <StyleConfigPopover
-                chartType={chartType}
-                styleConfig={styleConfig}
-                numSeries={aggregatedData.series.length}
-                onChange={onStyleConfigChange}
-                displayMode="inline"
-              />
-            </Box>
+          stylePanel={onStyleConfigChange ? (
+            <StyleConfigPopover
+              chartType={chartType}
+              styleConfig={styleConfig}
+              numSeries={aggregatedData.series.length}
+              onChange={onStyleConfigChange}
+              displayMode="inline"
+            />
+          ) : undefined}
+          annotationPanel={onAnnotationsChange ? (
+            <AnnotationEditor
+              annotations={annotations}
+              onChange={onAnnotationsChange}
+              enabled={supportsAnnotations}
+              xOptions={aggregatedData.xAxisData}
+              seriesOptions={aggregatedData.series.map(item => item.name)}
+            />
           ) : undefined}
         />
       )}
@@ -553,6 +561,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       colorPalette,
                       axisConfig,
                       styleConfig,
+                      annotations,
                       exportBranding,
                     }
                     if (chartType === 'trend') return <TrendPlot series={aggregatedData.series} columnFormats={columnFormats} yAxisColumns={yAxisColumns} xAxisColumns={xAxisColumns} />
