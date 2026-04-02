@@ -9,6 +9,7 @@ import { setAskForConfirmation, setShowDebug, setShowJson, setShowAllErrorToasts
 import RecordingControl from '@/components/RecordingControl';
 import DataManagementSection from '@/components/DataManagementSection';
 import { ChannelsSection } from '@/components/settings/ChannelsSection';
+import { SlackIntegration } from '@/components/settings/integrations/SlackIntegration';
 import UsersContent from '@/components/UsersContent';
 import ConfigContainerV2 from '@/components/containers/ConfigContainerV2';
 import StylesContainerV2 from '@/components/containers/StylesContainerV2';
@@ -24,7 +25,7 @@ import { useSearchParams } from 'next/navigation';
 import { useFileByPath } from '@/lib/hooks/file-state-hooks';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 
-type TabId = 'general' | 'dev' | 'data' | 'users' | 'configs' | 'styles' | 'messaging';
+type TabId = 'general' | 'dev' | 'data' | 'users' | 'configs' | 'styles' | 'messaging' | 'integrations';
 
 interface SettingEntry {
   tab: TabId;
@@ -324,6 +325,19 @@ function SettingsContent() {
   const tabs: TabEntry[] = useMemo(() => [
     { id: 'general', label: 'General' },
     { id: 'users', label: 'Users', visible: isAdmin, custom: <UsersContent /> },
+    {
+      id: 'integrations',
+      label: 'Integrations',
+      visible: isAdmin,
+      custom: (
+        <VStack align="stretch" gap={3}>
+          <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+            Connect external services to your MinusX workspace.
+          </Text>
+          <SlackIntegration />
+        </VStack>
+      ),
+    },
     {
       id: 'messaging',
       label: 'Messaging',

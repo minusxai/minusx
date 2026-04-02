@@ -191,7 +191,8 @@ export const FILE_TYPE_METADATA = {
     category: 'misc',
     supported: true,
     h: 'none',
-  }
+  },
+
 } as const satisfies Record<string, FileTypeMetadata>;
 
 /**

@@ -295,6 +295,38 @@ export async function getConfigsByCompanyId(companyId: number, mode: Mode = DEFA
 }
 
 /**
+ * Get the raw (unmerged) config content from the database.
+ * Returns an empty object if no config document exists.
+ * Used by integrations that need to read/write specific config fields.
+ */
+export async function getRawConfigByCompanyId(companyId: number, mode: Mode = DEFAULT_MODE): Promise<Partial<CompanyConfig>> {
+  try {
+    const configPath = resolvePath(mode, '/configs/config');
+    const doc = await DocumentDB.getByPath(configPath, companyId);
+    if (doc && doc.content && typeof doc.content === 'object') {
+      return doc.content as Partial<CompanyConfig>;
+    }
+  } catch {
+    // no-op — fall through to empty config
+  }
+  return {};
+}
+
+/**
+ * Save a partial config back to the database.
+ * Creates the document if it does not exist, updates it otherwise.
+ */
+export async function saveConfigByCompanyId(companyId: number, mode: Mode, content: Partial<CompanyConfig>): Promise<void> {
+  const configPath = resolvePath(mode, '/configs/config');
+  const existing = await DocumentDB.getByPath(configPath, companyId);
+  if (existing) {
+    await DocumentDB.update(existing.id, existing.name, configPath, content as any, [], companyId);
+  } else {
+    await DocumentDB.create('config', configPath, 'config', content as any, [], companyId);
+  }
+}
+
+/**
  * Load styles.css for a company
  * @private
  */

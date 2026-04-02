@@ -32,16 +32,44 @@ jest.mock('@/auth', () => ({
 }));
 
 // Mock auth helpers with default test user
-jest.mock('@/lib/auth/auth-helpers', () => ({
-  getEffectiveUser: jest.fn().mockResolvedValue({
-    userId: 1,
-    email: 'test@example.com',
-    name: 'Test User',
-    role: 'admin',
-    companyId: 1,
-    companyName: 'test-company',
-    home_folder: '/org',
-    mode: 'org',
-  }),
-  isAdmin: jest.fn().mockReturnValue(true),
-}));
+jest.mock('@/lib/auth/auth-helpers', () => {
+  // Use actual DB modules so getCompanyUserEffectiveUser works with real test DBs
+  const { UserDB } = jest.requireActual('@/lib/database/user-db');
+  const { CompanyDB } = jest.requireActual('@/lib/database/company-db');
+  return {
+    getEffectiveUser: jest.fn().mockResolvedValue({
+      userId: 1,
+      email: 'test@example.com',
+      name: 'Test User',
+      role: 'admin',
+      companyId: 1,
+      companyName: 'test-company',
+      home_folder: '/org',
+      mode: 'org',
+    }),
+    isAdmin: jest.fn().mockReturnValue(true),
+    shouldRefreshToken: jest.fn().mockReturnValue(false),
+    isTokenOutdated: jest.fn().mockReturnValue(false),
+    getCompanyUserEffectiveUser: async (
+      companyId: number,
+      email: string,
+      mode: string,
+    ) => {
+      const [user, company] = await Promise.all([
+        UserDB.getByEmailAndCompany(email, companyId),
+        CompanyDB.getById(companyId),
+      ]);
+      if (!user) return null;
+      return {
+        userId: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        home_folder: user.home_folder,
+        companyId,
+        companyName: company?.name,
+        mode,
+      };
+    },
+  };
+});

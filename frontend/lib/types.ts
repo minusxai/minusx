@@ -287,6 +287,26 @@ export type ConfigChannel =
   | { type: 'email'; name: string; address: string }
   | { type: 'phone'; name: string; address: string };
 
+export interface SlackBotConfig {
+  type: 'slack';
+  name: string;
+  install_mode: 'manifest_manual';
+  bot_token: string;
+  signing_secret?: string;
+  team_id?: string;
+  team_name?: string;
+  bot_user_id?: string;
+  app_id?: string;
+  enterprise_id?: string;
+  installed_at?: string;
+  installed_by?: string;
+  enabled?: boolean;
+  scopes?: string[];
+}
+
+export type ConfigBot = SlackBotConfig;
+
+
 export interface ConfigContent extends BaseFileContent {
   branding?: {
     logoLight?: string;
@@ -305,6 +325,7 @@ export interface ConfigContent extends BaseFileContent {
   };
   channels?: ConfigChannel[];
   error_delivery?: AlertRecipient[];
+  bots?: ConfigBot[];
   // Future: other config sections can be added here
 }
 
@@ -1007,6 +1028,14 @@ export interface OrchestrationTask {
 /**
  * Conversation metadata
  */
+export interface ConversationSource {
+  type: 'slack';
+  teamId: string;
+  channelId: string;
+  threadTs: string;
+  channelName?: string;  // resolved display name, e.g. "general"
+}
+
 export interface ConversationMetadata {
   userId: string;
   name: string;  // Auto-generated from first user message (truncated to 50 chars)
@@ -1014,6 +1043,7 @@ export interface ConversationMetadata {
   updatedAt: string;
   logLength?: number;  // Track log length for conflict detection
   forkedFrom?: number;  // Track conversation lineage (file ID of parent)
+  source?: ConversationSource;  // Set when conversation originates from an external integration
 }
 
 /**

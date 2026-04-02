@@ -227,3 +227,30 @@ export const getEffectiveUser = cache(async (): Promise<EffectiveUser | null> =>
     mode,
   };
 });
+
+/**
+ * Look up a MinusX user by (companyId, email) and build an EffectiveUser.
+ * Used by background integrations (e.g. Slack bot) that have no HTTP session.
+ * Returns null if the user is not registered in this company.
+ */
+export async function getCompanyUserEffectiveUser(
+  companyId: number,
+  email: string,
+  mode: Mode,
+): Promise<EffectiveUser | null> {
+  const [user, company] = await Promise.all([
+    UserDB.getByEmailAndCompany(email, companyId),
+    CompanyDB.getById(companyId),
+  ]);
+  if (!user) return null;
+  return {
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    home_folder: user.home_folder,
+    companyId,
+    companyName: company?.name,
+    mode,
+  };
+}
