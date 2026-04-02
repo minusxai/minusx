@@ -18,6 +18,26 @@ export async function reloadConfigs(): Promise<void> {
   }
 }
 
+/**
+ * Partially update company config.
+ * POSTs a partial config to the server (server merges with existing stored content),
+ * then updates Redux with the returned full config — no extra round-trip needed.
+ */
+export async function updateConfig(partial: Partial<CompanyConfig>): Promise<void> {
+  const response = await fetchWithCache<{ success: boolean; data: { config: CompanyConfig } }>(
+    '/api/configs',
+    {
+      method: 'POST',
+      skipCache: true,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(partial),
+    }
+  );
+  if (response.data?.config) {
+    getStore().dispatch(setConfigs({ config: response.data.config }));
+  }
+}
+
 export interface UseConfigsOptions {
   skip?: boolean;
 }

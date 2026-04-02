@@ -72,6 +72,21 @@ const eslintConfig = defineConfig([
       "import-x/no-cycle": ["error", { ignoreExternal: true }],
       // Enforce all imports at the top of the file before any other code
       "import-x/first": "error",
+      // Prevent direct DocumentDB imports outside the data layer.
+      // Use lib/data/* functions instead. Allowed paths are whitelisted below.
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@/lib/database/documents-db",
+              message:
+                "Do not import DocumentDB outside the data layer. Use functions from lib/data/** instead. " +
+                "Allowed: lib/data/**, lib/database/**, lib/connections/**, lib/tools/**, lib/jobs/**, lib/auth/**, scripts/**, app/api/**, app/t/**, middleware.ts.",
+            },
+          ],
+        },
+      ],
       // Prevent inline/dynamic imports (code smell indicating circular dependencies)
       // Enforce process.env access only through lib/config.ts or lib/constants.ts
       "no-restricted-syntax": ["error", ...BASE_RESTRICTED_SYNTAX],
@@ -109,6 +124,29 @@ const eslintConfig = defineConfig([
       "import-x/first": "off",
       "no-restricted-syntax": "off",
       "@typescript-eslint/no-require-imports": "off",
+    },
+  },
+  // Allow DocumentDB in the data layer, tool handlers, job handlers, API routes, scripts, and tests.
+  // Everything outside these paths must go through lib/data/* functions.
+  {
+    files: [
+      "lib/data/**",
+      "lib/database/**",
+      "lib/connections/**",
+      "lib/tools/**",
+      "lib/jobs/**",
+      "lib/auth/**",
+      "scripts/**",
+      "app/api/**",
+      "app/t/**",
+      "middleware.ts",
+      "**/*.test.ts",
+      "**/*.test.tsx",
+      "**/__tests__/**",
+      "**/__mocks__/**",
+    ],
+    rules: {
+      "no-restricted-imports": "off",
     },
   },
 ]);

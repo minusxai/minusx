@@ -1074,6 +1074,28 @@ export const MIGRATIONS: MigrationEntry[] = [
     },
     description: 'Replace old Slack HTTP template with SLACK_DEFAULT keyword; add EMAIL_DEFAULT keyword for missing email_alert and email_otp webhooks in stored config docs',
   },
+  {
+    dataVersion: 25,
+    schemaVersion: undefined,
+    dataMigration: (data: InitData) => {
+      // Mark all existing org/internals config docs as onboarding complete.
+      // Existing companies have already completed onboarding (they have real data).
+      // New companies get setupWizard.status = 'pending' from company-template.json instead.
+      for (const companyData of data.companies as CompanyData[]) {
+        for (const doc of companyData.documents) {
+          if (doc.type !== 'config') continue;
+          if (!doc.path.endsWith('/configs/config')) continue;
+          const content = doc.content as any;
+          if (!content) continue;
+          if (!content.setupWizard) {
+            content.setupWizard = { status: 'complete' };
+          }
+        }
+      }
+      return data;
+    },
+    description: 'Set setupWizard.status = "complete" on all existing /org/configs/config documents (existing companies have already completed onboarding)',
+  },
 ];
 
 /**

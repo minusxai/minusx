@@ -6,14 +6,8 @@ import {
   Heading, Separator,
 } from '@chakra-ui/react';
 import { LuPlus, LuTrash2, LuChevronDown, LuChevronUp, LuSave } from 'react-icons/lu';
-import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { updateFileContent } from '@/store/filesSlice';
-import { useConfigs, reloadConfigs } from '@/lib/hooks/useConfigs';
-import { useFileByPath } from '@/lib/hooks/file-state-hooks';
-import { resolvePath } from '@/lib/mode/path-resolver';
-import { FilesAPI } from '@/lib/data/files';
-import type { ConfigChannel, ConfigContent } from '@/lib/types';
-import type { Mode } from '@/lib/mode/mode-types';
+import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
+import type { ConfigChannel } from '@/lib/types';
 
 // ─── channel-type metadata ───────────────────────────────────────────────────
 
@@ -182,17 +176,11 @@ function ChannelRow({ channel, onChange, onDelete, initiallyExpanded = false }: 
 // ─── main section ─────────────────────────────────────────────────────────────
 
 export function ChannelsSection() {
-  const dispatch = useAppDispatch();
-  const user = useAppSelector(state => state.auth.user);
   const { config } = useConfigs();
-
-  const configPath = user ? resolvePath(user.mode as Mode, '/configs/config') : null;
-  const { file: configFile, loading: fileLoading } = useFileByPath(configPath);
 
   const [channels, setChannels] = useState<ConfigChannel[]>([]);
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // Sync from config on load (only when not dirty — avoid clobbering edits)
@@ -214,26 +202,10 @@ export function ChannelsSection() {
   };
 
   const handleSave = async () => {
-    if (!configPath) return;
     setIsSaving(true);
     setSaveError(null);
     try {
-      const currentContent = (configFile?.fileState.content ?? {}) as ConfigContent;
-      const newContent: ConfigContent = { ...currentContent, channels };
-
-      if (configFile && typeof configFile.fileState.id === 'number') {
-        await FilesAPI.saveFile(configFile.fileState.id, configFile.fileState.name, configFile.fileState.path, newContent, []);
-        dispatch(updateFileContent({ id: configFile.fileState.id, file: { ...configFile.fileState, content: newContent } }));
-      } else {
-        await FilesAPI.createFile({ name: 'config', path: configPath, type: 'config', content: newContent, references: [] });
-      }
-
-      setIsSyncing(true);
-      try {
-        await reloadConfigs();
-      } finally {
-        setIsSyncing(false);
-      }
+      await updateConfig({ channels });
       setIsDirty(false);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Save failed');
@@ -262,9 +234,7 @@ export function ChannelsSection() {
 
       <Separator />
 
-      {fileLoading ? (
-        <Text fontSize="sm" color="fg.muted" fontFamily="mono">Loading...</Text>
-      ) : channels.length === 0 ? (
+      {channels.length === 0 ? (
         <Text fontSize="sm" color="fg.muted" fontFamily="mono">No channels configured. Add one above.</Text>
       ) : (
         <VStack align="stretch" gap={2}>
@@ -284,11 +254,8 @@ export function ChannelsSection() {
         </VStack>
       )}
 
-      {(isDirty || isSyncing) && (
+      {isDirty && (
         <HStack justify="flex-end" gap={3}>
-          {isSyncing && (
-            <Text fontSize="xs" color="fg.muted" fontFamily="mono">Syncing config...</Text>
-          )}
           {saveError && <Text fontSize="xs" color="accent.danger" fontFamily="mono">{saveError}</Text>}
           {isDirty && (
             <Button
@@ -296,7 +263,7 @@ export function ChannelsSection() {
               colorPalette="teal"
               onClick={handleSave}
               loading={isSaving}
-              disabled={isSaving || isSyncing}
+              disabled={isSaving}
             >
               <LuSave />
               Save

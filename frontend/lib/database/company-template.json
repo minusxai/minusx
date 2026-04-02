@@ -94,6 +94,7 @@
                     "type": "config",
                     "content": {
                         "name": "config",
+                        "setupWizard": { "status": "complete" },
                         "branding": {
                             "displayName": "Demo Mode"
                         },
@@ -1537,6 +1538,9 @@
                                     "body": "{{SLACK_PROPERTIES}}"
                                 }
                             ]
+                        },
+                        "setupWizard": {
+                            "status": "pending"
                         }
                     },
                     "company_id": "{{COMPANY_ID}}",
@@ -1679,6 +1683,7 @@
                     "path": "/internals/configs/config",
                     "type": "config",
                     "content": {
+                        "setupWizard": { "status": "complete" },
                         "branding": {
                             "displayName": "Internals"
                         },

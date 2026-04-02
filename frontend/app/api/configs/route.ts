@@ -1,10 +1,11 @@
 import { NextRequest } from 'next/server';
-import { getConfigs, validateCompanyConfig } from '@/lib/data/configs.server';
+import { getConfigs, validateCompanyConfig, mergePartialConfigs } from '@/lib/data/configs.server';
 import { successResponse, handleApiError, ApiErrors } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
 import { DocumentDB } from '@/lib/database/documents-db';
 import { revalidateTag } from 'next/cache';
 import { resolvePath } from '@/lib/mode/path-resolver';
+import type { CompanyConfig } from '@/lib/branding/whitelabel';
 
 /**
  * GET /api/configs
@@ -38,22 +39,35 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     // Check if config already exists
     const existing = await DocumentDB.getByPath(configPath, user.companyId);
 
+    // Load existing stored content for partial merge support.
+    // Do NOT gate on validateCompanyConfig here — existing content may have fields
+    // from older schemas or direct edits. We still want to preserve them in the merge.
+    // Only the incoming body is validated (above).
+    let existingContent: Partial<CompanyConfig> = {};
+    if (existing?.content && typeof existing.content === 'object') {
+      existingContent = existing.content as Partial<CompanyConfig>;
+    }
+
+    // Deep-merge incoming partial body onto existing stored content
+    const mergedContent = mergePartialConfigs(existingContent, body);
+
     let id: number;
     if (existing) {
-      // Update existing config (cast to any since config content structure differs from BaseFileContent)
-      await DocumentDB.update(existing.id, 'config.json', configPath, body as any, [], user.companyId);  // Phase 6: Configs have no references
+      await DocumentDB.update(existing.id, 'config.json', configPath, mergedContent as any, [], user.companyId);
       id = existing.id;
     } else {
-      // Create new config (cast to any since config content structure differs from BaseFileContent)
-      id = await DocumentDB.create('config.json', configPath, 'config', body as any, [], user.companyId);  // Phase 6: Configs have no references
+      id = await DocumentDB.create('config.json', configPath, 'config', mergedContent as any, [], user.companyId);
     }
 
     // Invalidate cache
     revalidateTag('configs', 'default');
 
+    // Return full merged config so client can update Redux without a second round-trip
+    const { config } = await getConfigs(user);
     return successResponse({
       message: 'Config saved successfully',
-      id
+      id,
+      config,
     });
   } catch (error) {
     return handleApiError(error);

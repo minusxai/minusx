@@ -125,6 +125,22 @@ export function validateCompanyConfig(content: unknown): content is Partial<Comp
     }
   }
 
+  // If setupWizard exists, validate its structure
+  if (config.setupWizard !== undefined) {
+    const sw = config.setupWizard as any;
+    if (typeof sw !== 'object' || sw === null) return false;
+    if (!['pending', 'complete'].includes(sw.status)) return false;
+    const VALID_STEPS = ['welcome', 'connection', 'context', 'generating'];
+    if (sw.step !== undefined && !VALID_STEPS.includes(sw.step)) return false;
+    if (sw.connectionId !== undefined && typeof sw.connectionId !== 'number') return false;
+    if (sw.connectionName !== undefined && typeof sw.connectionName !== 'string') return false;
+    if (sw.contextFileId !== undefined && typeof sw.contextFileId !== 'number') return false;
+    const VALID_FIELDS = new Set(['status', 'step', 'connectionId', 'connectionName', 'contextFileId']);
+    for (const field of Object.keys(sw)) {
+      if (!VALID_FIELDS.has(field)) return false;
+    }
+  }
+
   return true;
 }
 
@@ -180,6 +196,23 @@ function validateAccessRulesOverride(accessRules: unknown): accessRules is Acces
   }
 
   return true;
+}
+
+/**
+ * Deep-merge two partial configs for server-side partial update support.
+ * Incoming fields override base fields; missing incoming fields keep base values.
+ * Nested objects (branding, links) are deep-merged so partial nested updates don't wipe sibling fields.
+ */
+export function mergePartialConfigs(
+  base: Partial<CompanyConfig>,
+  incoming: Partial<CompanyConfig>
+): Partial<CompanyConfig> {
+  return {
+    ...base,
+    ...incoming,
+    branding: incoming.branding ? { ...(base.branding || {}), ...incoming.branding } : base.branding,
+    links: incoming.links ? { ...(base.links || {}), ...incoming.links } : base.links,
+  };
 }
 
 class ConfigsDataLayerServer {
