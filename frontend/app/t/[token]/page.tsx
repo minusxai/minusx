@@ -8,7 +8,7 @@
  */
 
 import { Box, Text, Center, Container, Heading, VStack } from '@chakra-ui/react';
-import { AccessTokenDB } from '@/lib/database/documents-db';
+import { AccessTokensAPI } from '@/lib/data/access-tokens.server';
 import { loadFile } from '@/lib/data/files.server';
 import { getEffectiveUserFromToken } from '@/lib/auth/auth-helpers';
 import FileView from '@/components/FileView';
@@ -25,7 +25,7 @@ export default async function PublicFilePage({ params }: PublicFilePageProps) {
   const { token } = await params;
 
   // Load and validate token
-  const accessToken = await AccessTokenDB.getByToken(token);
+  const accessToken = await AccessTokensAPI.getByToken(token);
 
   if (!accessToken) {
     return (
@@ -43,7 +43,7 @@ export default async function PublicFilePage({ params }: PublicFilePageProps) {
   }
 
   // Validate token (active and not expired)
-  const validation = AccessTokenDB.validateToken(accessToken);
+  const validation = AccessTokensAPI.validateToken(accessToken);
 
   if (!validation.isValid) {
     return (

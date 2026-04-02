@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
-import { AccessTokenDB } from '@/lib/database/documents-db';
+import { AccessTokensAPI } from '@/lib/data/access-tokens.server';
 import { FilesAPI } from '@/lib/data/files.server';
 import { AccessTokenCreate } from '@/lib/types';
 import { isAdmin } from '@/lib/auth/role-helpers';
@@ -43,7 +43,7 @@ export const POST = withAuth(async (
     await FilesAPI.loadFile(body.file_id, user);
 
     // Create token
-    const token = await AccessTokenDB.create(
+    const token = await AccessTokensAPI.create(
       body.file_id,
       body.view_as_user_id,
       user.companyId,
@@ -88,7 +88,7 @@ export const GET = withAuth(async (
       return ApiErrors.validationError('fileId query parameter is required');
     }
 
-    const tokens = await AccessTokenDB.listByFileId(parseInt(fileId), user.companyId);
+    const tokens = await AccessTokensAPI.listByFileId(parseInt(fileId), user.companyId);
 
     return successResponse(tokens);
   } catch (error) {
