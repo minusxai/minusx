@@ -9,7 +9,7 @@ import { setAskForConfirmation, setShowDebug, setShowJson, setShowAllErrorToasts
 import RecordingControl from '@/components/RecordingControl';
 import DataManagementSection from '@/components/DataManagementSection';
 import { ChannelsSection } from '@/components/settings/ChannelsSection';
-import { SlackBotSection } from '@/components/settings/bots/SlackBotSection';
+import { SlackIntegration } from '@/components/settings/integrations/SlackIntegration';
 import UsersContent from '@/components/UsersContent';
 import ConfigContainerV2 from '@/components/containers/ConfigContainerV2';
 import StylesContainerV2 from '@/components/containers/StylesContainerV2';
@@ -25,7 +25,7 @@ import { useSearchParams } from 'next/navigation';
 import { useFileByPath } from '@/lib/hooks/file-state-hooks';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 
-type TabId = 'general' | 'dev' | 'data' | 'users' | 'configs' | 'styles' | 'messaging' | 'bots';
+type TabId = 'general' | 'dev' | 'data' | 'users' | 'configs' | 'styles' | 'messaging' | 'integrations';
 
 interface SettingEntry {
   tab: TabId;
@@ -326,13 +326,16 @@ function SettingsContent() {
     { id: 'general', label: 'General' },
     { id: 'users', label: 'Users', visible: isAdmin, custom: <UsersContent /> },
     {
-      id: 'bots',
-      label: 'Bots',
+      id: 'integrations',
+      label: 'Integrations',
       visible: isAdmin,
       custom: (
-        <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
-          <SlackBotSection />
-        </Box>
+        <VStack align="stretch" gap={3}>
+          <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+            Connect external services to your MinusX workspace.
+          </Text>
+          <SlackIntegration />
+        </VStack>
       ),
     },
     {
