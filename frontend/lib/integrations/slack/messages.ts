@@ -90,5 +90,9 @@ export function extractSlackReplyFromLog(log: ConversationLogEntry[]): string | 
     }
   }
 
+  console.warn(
+    '[Slack] extractSlackReplyFromLog: could not find reply. Last entries:',
+    log.slice(-3).map((e) => ({ type: e._type, hasResult: !!((e as unknown) as Record<string, unknown>).result })),
+  );
   return null;
 }

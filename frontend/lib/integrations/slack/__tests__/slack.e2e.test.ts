@@ -348,15 +348,26 @@ describe('Slack Bot Integration', () => {
       );
       expect(postedMessages).toHaveLength(1);
 
-      // Only ONE conversation file should exist at the Slack path (no slack_thread files)
+      // Only ONE conversation file should exist at the Slack path
       const { createAdapter } = await import('@/lib/database/adapter/factory');
       const db = await createAdapter({ type: 'sqlite', sqlitePath: TEST_DB_PATH });
       const { rows } = await db.query<{ cnt: number }>(
         `SELECT COUNT(*) AS cnt FROM files WHERE company_id = 1 AND type = 'conversation' AND path LIKE '%/logs/slack/%'`,
         [],
       );
-      await db.close();
       expect(rows[0].cnt).toBe(1);
+
+      // The conversation log must contain entries from BOTH messages — proves history
+      // was appended rather than the file being reset on the follow-up.
+      const { rows: [fileRow] } = await db.query<{ content: string }>(
+        `SELECT content FROM files WHERE company_id = 1 AND type = 'conversation' AND path LIKE '%/logs/slack/%' LIMIT 1`,
+        [],
+      );
+      await db.close();
+      const content = JSON.parse(fileRow.content) as { log: unknown[] };
+      // First message produces at least 2 log entries (task + task_result);
+      // second message appends at least 2 more — so minimum 4 total.
+      expect(content.log.length).toBeGreaterThanOrEqual(4);
     }, 120000);
 
     it('event dedup: the same event_id is processed only once', async () => {
