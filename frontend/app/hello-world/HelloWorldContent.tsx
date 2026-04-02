@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { Box, Heading, Text, Flex, HStack, Icon, VStack } from '@chakra-ui/react';
 import { LuPlay, LuDatabase, LuSparkles, LuCheck } from 'react-icons/lu';
 import { useAppDispatch } from '@/store/hooks';
@@ -23,7 +23,7 @@ import StepConnection from './components/StepConnection';
 import StepContext from './components/StepContext';
 import StepGenerating from './components/StepGenerating';
 import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
-import { useConnections } from '@/lib/hooks/useConnections';
+import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { useAppSelector } from '@/store/hooks';
 
 const TYPEWRITER_SPEED = 35; // ms per character
@@ -34,8 +34,9 @@ export function HelloWorldContent() {
   const user = useAppSelector(state => state.auth.user);
 
   const { config } = useConfigs();
-  const { connections } = useConnections();
-  const hasConnections = Object.keys(connections).length > 0;
+  const connectionCriteria = useMemo(() => ({ type: 'connection' as const }), []);
+  const { files: connectionFiles } = useFilesByCriteria({ criteria: connectionCriteria, partial: true });
+  const hasConnections = connectionFiles.length > 0;
   const agentName = config.branding.agentName;
   const userName = user?.name?.split(' ')[0] || '';
   const greetingLine1 = userName ? `Hi ${userName}!` : 'Hi!';
@@ -148,6 +149,13 @@ export function HelloWorldContent() {
     await handleComplete();
     router.replace('/');
   }, [handleComplete, router]);
+
+  // Skip Step 1 by reusing the first existing connection
+  const handleSkipConnection = useCallback(() => {
+    const first = connectionFiles[0];
+    if (!first) return;
+    handleConnectionComplete(first.id as number, first.name);
+  }, [connectionFiles, handleConnectionComplete]);
 
   const handleRequestChat = useCallback((fileId: number) => {
     setContextFileId(fileId);
@@ -441,7 +449,7 @@ export function HelloWorldContent() {
                     cursor="pointer"
                     textDecoration="underline"
                     _hover={{ color: 'fg.default' }}
-                    onClick={handleSkipToHome}
+                    onClick={handleSkipConnection}
                   >
                     I've already connected my data →
                   </Text>
