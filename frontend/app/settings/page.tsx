@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, ReactNode, useMemo, Suspense } from 'react';
+import { useState, ReactNode, useMemo, Suspense, useCallback } from 'react';
 import { Box, VStack, Text, Flex, Switch, Button, Heading, Container, Tabs } from '@chakra-ui/react';
 import { LuRefreshCw } from 'react-icons/lu';
 import { ColorModeButton } from '@/components/ui/color-mode';
@@ -21,7 +21,7 @@ import Breadcrumb from '@/components/Breadcrumb';
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import { API } from '@/lib/api/declarations';
 import { captureError } from '@/lib/messaging/capture-error';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useFileByPath } from '@/lib/hooks/file-state-hooks';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 
@@ -134,8 +134,19 @@ function SettingsContent() {
   const showAdvanced = useAppSelector((state) => state.ui.showAdvanced);
 
   const searchParams = useSearchParams();
-  const initialTab = (searchParams?.get('tab') as TabId) || 'general';
-  const [activeTab, setActiveTab] = useState<TabId>(initialTab);
+  const router = useRouter();
+  const pathname = usePathname();
+  const activeTab: TabId = (searchParams?.get('tab') as TabId) || 'general';
+  const setActiveTab = useCallback((tab: TabId) => {
+    const params = new URLSearchParams(searchParams?.toString() || '');
+    if (tab === 'general') {
+      params.delete('tab');
+    } else {
+      params.set('tab', tab);
+    }
+    const qs = params.toString();
+    router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false });
+  }, [searchParams, router, pathname]);
 
   const mode = user?.mode || 'org';
 
