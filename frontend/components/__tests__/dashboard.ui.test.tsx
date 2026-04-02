@@ -46,20 +46,6 @@ jest.mock('@/components/modals/CreateQuestionModal', () => {
   };
 });
 
-jest.mock('@/lib/auth/auth-helpers', () => ({
-  getEffectiveUser: jest.fn().mockResolvedValue({
-    userId: 1,
-    email: 'test@example.com',
-    name: 'Test User',
-    role: 'admin',
-    companyId: 1,
-    companyName: 'test-company',
-    home_folder: '/org',
-    mode: 'org',
-  }),
-  isAdmin: jest.fn().mockReturnValue(true),
-}));
-
 jest.mock('@/lib/database/db-config', () => {
   const path = require('path');
   return {
@@ -101,7 +87,7 @@ import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { publishAll } from '@/lib/api/file-state';
 import type { DashboardContent } from '@/lib/types.gen';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
-import { waitForReduxState } from '@/test/helpers/redux-wait';
+import { waitForReduxState, waitForConversationFinished } from '@/test/helpers/redux-wait';
 import FileHeader from '@/components/FileHeader';
 import DashboardContainerV2 from '@/components/containers/DashboardContainerV2';
 
@@ -255,26 +241,6 @@ function AutoPublishUserInput() {
   });
 
   return null;
-}
-
-/** Wait for a conversation to reach FINISHED, tracking forks to real IDs. */
-async function waitForConversationFinished(
-  getState: () => RootState,
-  virtualConvId: number
-): Promise<number> {
-  let realConvId = virtualConvId;
-  await waitFor(
-    () => {
-      const temp = selectConversation(getState(), virtualConvId);
-      if (temp?.forkedConversationID) {
-        realConvId = temp.forkedConversationID;
-      }
-      const conv = selectConversation(getState(), realConvId);
-      expect(conv?.executionState).toBe('FINISHED');
-    },
-    { timeout: 40000 }
-  );
-  return realConvId;
 }
 
 /**

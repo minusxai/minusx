@@ -14,6 +14,8 @@
 
 import type { Store } from '@reduxjs/toolkit';
 import type { RootState } from '@/store/store';
+import { waitFor } from '@testing-library/react';
+import { selectConversation } from '@/store/chatSlice';
 
 /**
  * Wait for a Redux state condition, resolving as soon as any dispatch
@@ -32,6 +34,33 @@ import type { RootState } from '@/store/store';
  *   file => file !== undefined && !file.loading,
  * );
  */
+/**
+ * Wait for a conversation to reach FINISHED state, tracking fork chains
+ * (virtual conversation ID → real file ID) along the way.
+ *
+ * @param getState      - Thunk that returns the current RootState
+ * @param virtualConvId - The virtual (negative) or initial conversation ID to track
+ * @returns             - The real conversation ID once FINISHED
+ */
+export async function waitForConversationFinished(
+  getState: () => RootState,
+  virtualConvId: number,
+): Promise<number> {
+  let realConvId = virtualConvId;
+  await waitFor(
+    () => {
+      const temp = selectConversation(getState(), virtualConvId);
+      if (temp?.forkedConversationID) {
+        realConvId = temp.forkedConversationID;
+      }
+      const conv = selectConversation(getState(), realConvId);
+      expect(conv?.executionState).toBe('FINISHED');
+    },
+    { timeout: 40000 }
+  );
+  return realConvId;
+}
+
 export function waitForReduxState<T>(
   store: Store,
   selector: (state: RootState) => T,

@@ -33,18 +33,6 @@ jest.mock('@/store/store', () => ({
   getStore: () => testStore
 }));
 
-// Mock auth system to return test user
-jest.mock('@/lib/auth/auth-helpers', () => ({
-  getEffectiveUser: jest.fn().mockResolvedValue({
-    userId: 1,
-    email: 'test@example.com',
-    companyId: 1,
-    role: 'admin' as const,
-    mode: 'org' as const,
-    homeFolderResolved: '/org'
-  })
-}));
-
 describe('editFile - Question Editing Flow', () => {
   const dbPath = getTestDbPath('edit_file');
   const companyId = 1;

@@ -34,6 +34,7 @@ import { publishAll } from '@/lib/api/file-state';
 import type { Mode } from '@/lib/mode/mode-types';
 import { POST as batchCreateHandler } from '@/app/api/files/batch-create/route';
 import { POST as batchSaveHandler } from '@/app/api/files/batch-save/route';
+import { setupMockFetch } from '@/test/harness/mock-fetch';
 
 // ---------------------------------------------------------------------------
 // Jest module mocks — hoisted to top of file by Jest
@@ -55,22 +56,6 @@ let testStore: any;
 jest.mock('@/store/store', () => ({
   get store() { return testStore; },
   getStore: () => testStore
-}));
-
-// Override the global jest.setup.ts mock so we get mode:'org' and home_folder:'/org'
-// (matches read-write-e2e.test.ts pattern)
-jest.mock('@/lib/auth/auth-helpers', () => ({
-  getEffectiveUser: jest.fn().mockResolvedValue({
-    userId: 1,
-    email: 'test@example.com',
-    name: 'Test User',
-    role: 'admin',
-    companyId: 1,
-    companyName: 'test-company',
-    home_folder: '/org',
-    mode: 'org'
-  }),
-  isAdmin: jest.fn().mockReturnValue(true)
 }));
 
 // ---------------------------------------------------------------------------
@@ -112,45 +97,21 @@ describe('publishAll E2E', () => {
   let question1Id: number;
   let question2Id: number;
   let dashboardId: number;
-  let mockFetch: jest.SpyInstance;
+
+  // Route batch API calls to real Next.js handlers (no Python backend needed)
+  const mockFetch = setupMockFetch({
+    getPythonPort: () => 0,
+    interceptors: [
+      { includesUrl: ['/api/files/batch-create'], handler: batchCreateHandler },
+      { includesUrl: ['/api/files/batch-save'], handler: batchSaveHandler },
+    ],
+  });
 
   // -------------------------------------------------------------------------
-  // DB + fetch mock setup (once per describe block)
+  // DB setup (once per describe block)
   // -------------------------------------------------------------------------
 
   beforeAll(async () => {
-    const { NextRequest } = require('next/server');
-
-    mockFetch = jest.spyOn(global, 'fetch').mockImplementation(
-      async (url: string | Request | URL, init?: any) => {
-        const urlStr = url.toString();
-
-        if (urlStr.includes('/api/files/batch-create')) {
-          const req = new NextRequest('http://localhost:3000/api/files/batch-create', {
-            method: 'POST',
-            body: init?.body,
-            headers: { 'Content-Type': 'application/json' }
-          });
-          const res = await batchCreateHandler(req);
-          const data = await res.json();
-          return { ok: res.status === 200, status: res.status, json: async () => data } as Response;
-        }
-
-        if (urlStr.includes('/api/files/batch-save')) {
-          const req = new NextRequest('http://localhost:3000/api/files/batch-save', {
-            method: 'POST',
-            body: init?.body,
-            headers: { 'Content-Type': 'application/json' }
-          });
-          const res = await batchSaveHandler(req);
-          const data = await res.json();
-          return { ok: res.status === 200, status: res.status, json: async () => data } as Response;
-        }
-
-        throw new Error(`Unmocked fetch call: ${urlStr}`);
-      }
-    );
-
     await initTestDatabase(dbPath);
     const companyId = 1;
 
@@ -208,7 +169,6 @@ describe('publishAll E2E', () => {
   });
 
   afterAll(async () => {
-    mockFetch.mockRestore();
     await cleanupTestDatabase(dbPath);
   });
 
