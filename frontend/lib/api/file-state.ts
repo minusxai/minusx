@@ -1062,19 +1062,8 @@ export async function deleteFile(options: DeleteFileOptions): Promise<void> {
  * - Force-reloads the new parent folder (adds file to its listing)
  */
 export async function moveFile(fileId: number, name: string, newPath: string): Promise<void> {
-  const response = await fetch(`/api/files/${fileId}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, path: newPath }),
-  });
-
-  if (!response.ok) {
-    const body = await response.json();
-    throw new Error(body.error?.message || 'Failed to move file');
-  }
-
-  const { data } = await response.json();
-  const { oldPath } = data as { id: number; name: string; path: string; oldPath: string };
+  const data = await FilesAPI.moveFile({ id: fileId, name, newPath });
+  const { oldPath } = data;
 
   // Update the file's metadata in Redux
   const state = getStore().getState();
@@ -1105,21 +1094,9 @@ export async function moveFile(fileId: number, name: string, newPath: string): P
  * Move multiple files to a destination folder in a single API call.
  */
 export async function batchMoveFiles(files: Array<{ id: number; name: string }>, destFolder: string): Promise<void> {
-  const response = await fetch('/api/files/batch-move', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      files: files.map(f => ({ id: f.id, name: f.name, destFolder })),
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.json();
-    throw new Error(body.error?.message || 'Failed to move files');
-  }
-
-  const { data } = await response.json();
-  const results = data as Array<{ id: number; name: string; path: string; oldPath: string }>;
+  const results = await FilesAPI.batchMoveFiles(
+    files.map(f => ({ id: f.id, name: f.name, newPath: `${destFolder}/${f.name}` }))
+  );
 
   // Batch-update Redux state for all moved files
   const state = getStore().getState();

@@ -590,6 +590,11 @@ export async function POST(req: NextRequest) {
 
 - `frontend/lib/api/file-state.ts` - **CORE: Centralized file operations** — the only place file fetching, editing, saving, deleting, folder loading, and query execution logic should live. Key exports: `loadFiles`, `readFiles`, `readFolder`, `editFile`, `publishFile`, `deleteFile`, `getQueryResult`, `createVirtualFile`.
 - `frontend/lib/hooks/file-state-hooks.ts` - **CORE: React hooks** wrapping `file-state.ts` — the only hooks components should use for file/query data. Key exports: `useFile`, `useFolder`, `useFileByPath`, `useFilesByCriteria`, `useQueryResult`.
+
+**FilesAPI dual-implementation pattern:** A shared interface defines the contract for all file CRUD operations. There is a client implementation (HTTP calls) and a server implementation (direct DB access), both exported as `FilesAPI` from their respective modules. `file-state.ts` uses the client `FilesAPI` and adds Redux state management on top. **When adding a new file operation, add it to the interface and implement it in both client and server.** Never bypass `FilesAPI` with raw `fetch` calls.
+
+> **⚠️ `DocumentDB` should only be used inside the server-side `FilesAPI` implementation.** Do not call `DocumentDB` directly from API routes, tool handlers, job handlers, or anywhere else — go through `FilesAPI` instead. Direct `DocumentDB` usage outside the data layer is a code smell.
+
 - `frontend/lib/database/documents-db.ts` - SQLite CRUD operations
 - `frontend/lib/types.ts` - TypeScript interfaces. Imports shared types from `types.gen.ts`; defines frontend-only types and extends generated ones (e.g. `QuestionContent` adds `queryResultId`)
 - `frontend/lib/types.gen.ts` - **Generated file — do not edit by hand.** Regenerate with `cd frontend && npm run generate-types` after changing Pydantic models in `backend/tasks/agents/analyst/file_schema.py`

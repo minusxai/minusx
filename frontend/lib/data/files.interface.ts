@@ -1,5 +1,5 @@
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { LoadFileResult, LoadFilesResult, GetFilesOptions, GetFilesResult, SaveFileResult, CreateFileInput, CreateFileResult, GetTemplateOptions, GetTemplateResult, BatchCreateInput, BatchCreateFileResult, BatchSaveFileInput, BatchSaveFileResult } from './types';
+import { LoadFileResult, LoadFilesResult, GetFilesOptions, GetFilesResult, SaveFileResult, CreateFileInput, CreateFileResult, GetTemplateOptions, GetTemplateResult, BatchCreateInput, BatchCreateFileResult, BatchSaveFileInput, BatchSaveFileResult, MoveFileInput, MoveFileResult } from './types';
 import { BaseFileContent, FileType } from '@/lib/types';
 import { LoaderOptions } from './loaders/types';
 
@@ -65,5 +65,15 @@ export interface IFilesDataLayer {
    * Batch-save multiple existing files in a single operation.
    */
   batchSaveFiles(inputs: BatchSaveFileInput[], user: EffectiveUser): Promise<BatchSaveFileResult>;
+
+  /**
+   * Move a single file or folder (and its descendants) to a new path.
+   */
+  moveFile(input: MoveFileInput, user: EffectiveUser): Promise<MoveFileResult>;
+
+  /**
+   * Move multiple files/folders in a single operation.
+   */
+  batchMoveFiles(inputs: MoveFileInput[], user: EffectiveUser): Promise<MoveFileResult[]>;
 
 }
