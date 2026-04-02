@@ -130,7 +130,7 @@ async function runForCompany(
 
       if (jobDef.job_type === 'alert') {
         const alert = content as AlertContent;
-        if (!alert.schedule?.cron || !isCronDue(alert.schedule.cron, now)) { skipped++; continue; }
+        if (!alert.schedule?.cron) { skipped++; continue; }
         if (!alert.tests || alert.tests.length === 0) { skipped++; continue; }
       }
 
