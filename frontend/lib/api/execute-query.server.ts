@@ -11,15 +11,18 @@ import { ExecuteQueryInput, ExecuteQueryDetails, QueryResult } from '@/lib/types
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import { compressQueryResult } from '@/lib/api/file-state';
 import type { ServerToolResult } from '@/app/api/chat/orchestrator';
+import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
 /**
  * ExecuteQuery implementation
  *
  * @param input - Query, connection, and parameters
+ * @param userOverride - Optional user for contexts without an HTTP session (e.g., MCP, cron jobs)
  * @returns Query result with columns, types, rows
  */
 export async function executeQuery(
-  input: ExecuteQueryInput
+  input: ExecuteQueryInput,
+  userOverride?: EffectiveUser
 ): Promise<ServerToolResult> {
   const { query, connectionId, parameters = {} } = input;
 
@@ -32,7 +35,7 @@ export async function executeQuery(
         parameters,
         database_name: connectionId,
       }),
-    });
+    }, userOverride);
 
     const data = await response.json();
 

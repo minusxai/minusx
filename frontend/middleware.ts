@@ -43,12 +43,15 @@ export default auth(async (req) => {
     );
   }
 
-  // Allow access to public routes, auth API, internal API (Python backend), registration API, and health check
+  // Allow access to public routes, auth API, internal API (Python backend), registration API, health check, MCP + OAuth
   if (
     isPublicRoute ||
     pathname.startsWith('/api/auth') ||
     pathname.startsWith('/api/internal') ||
     pathname.startsWith('/api/companies/register') ||
+    pathname.startsWith('/api/mcp') ||
+    pathname.startsWith('/oauth') ||
+    pathname.startsWith('/.well-known/oauth') ||
     pathname === '/api/health' ||
     pathname === '/api/jobs/cron'
   ) {
@@ -106,7 +109,7 @@ export default auth(async (req) => {
   // Check if user is authenticated
   if (!req.auth) {
     // Redirect to login with return URL (preserve subdomain from Host header)
-    const protocol = req.headers.get('x-forwarded-proto') || 'https';
+    const protocol = (req.headers.get('x-forwarded-proto') || 'https').split(',')[0].trim();
     const loginUrl = new URL(`${protocol}://${hostname}/login`);
     loginUrl.searchParams.set('callbackUrl', pathname);
     return NextResponse.redirect(loginUrl);
@@ -120,7 +123,7 @@ export default auth(async (req) => {
       currentVersion: CURRENT_TOKEN_VERSION,
       email: req.auth.user?.email
     });
-    const protocol = req.headers.get('x-forwarded-proto') || 'https';
+    const protocol = (req.headers.get('x-forwarded-proto') || 'https').split(',')[0].trim();
     const loginUrl = new URL(`${protocol}://${hostname}/login`);
     loginUrl.searchParams.set('callbackUrl', pathname);
     return NextResponse.redirect(loginUrl);
@@ -172,7 +175,7 @@ export default auth(async (req) => {
       const { config } = await getConfigsByCompanyId(companyId, effectiveMode);
       const isComplete = config.setupWizard?.status === 'complete';
       if (!isComplete) {
-        const protocol = req.headers.get('x-forwarded-proto') || 'https';
+        const protocol = (req.headers.get('x-forwarded-proto') || 'https').split(',')[0].trim();
         const redirectUrl = new URL(`${protocol}://${hostname}/hello-world`);
         if (mode && mode !== 'org') redirectUrl.searchParams.set('mode', mode);
         const currentPath = pathname + (req.nextUrl.search || '');
@@ -195,7 +198,7 @@ export default auth(async (req) => {
       : (user?.home_folder ? `/p/${effectiveMode}/${user.home_folder}` : `/p/${effectiveMode}`)  // Non-admin: mode + relative path
 
     // Construct URL preserving subdomain from Host header
-    const protocol = req.headers.get('x-forwarded-proto') || 'https';
+    const protocol = (req.headers.get('x-forwarded-proto') || 'https').split(',')[0].trim();
     const homeUrl = new URL(`${protocol}://${hostname}${homeHref}`);
 
     // Preserve as_user parameter when redirecting to home
