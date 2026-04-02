@@ -104,7 +104,7 @@ export async function GET() {
     const filesResult = await FilesAPI.getFiles({
       type: 'conversation',
       paths: [conversationsPath],
-      depth: 2,
+      depth: 2,  // covers direct children + one subfolder (e.g. slack-* files)
     }, user);
 
     // Parse and summarize conversations

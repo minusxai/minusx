@@ -102,12 +102,6 @@ function isAccessibleSystemPath(path: string, user: EffectiveUser): boolean {
     return true;
   }
 
-  // Slack thread log folder (shared across all users in the workspace)
-  const slackLogsFolder = resolvePath(user.mode, '/logs/slack');
-  if (path.startsWith(slackLogsFolder + '/')) {
-    return true;
-  }
-
   return false;
 }
 

@@ -352,7 +352,7 @@ describe('Slack Bot Integration', () => {
       const { createAdapter } = await import('@/lib/database/adapter/factory');
       const db = await createAdapter({ type: 'sqlite', sqlitePath: TEST_DB_PATH });
       const { rows } = await db.query<{ cnt: number }>(
-        `SELECT COUNT(*) AS cnt FROM files WHERE company_id = 1 AND type = 'conversation' AND path LIKE '%/logs/slack/%'`,
+        `SELECT COUNT(*) AS cnt FROM files WHERE company_id = 1 AND type = 'conversation' AND path LIKE '%/logs/conversations/%/slack-%'`,
         [],
       );
       expect(rows[0].cnt).toBe(1);
@@ -360,7 +360,7 @@ describe('Slack Bot Integration', () => {
       // The conversation log must contain entries from BOTH messages — proves history
       // was appended rather than the file being reset on the follow-up.
       const { rows: [fileRow] } = await db.query<{ content: string }>(
-        `SELECT content FROM files WHERE company_id = 1 AND type = 'conversation' AND path LIKE '%/logs/slack/%' LIMIT 1`,
+        `SELECT content FROM files WHERE company_id = 1 AND type = 'conversation' AND path LIKE '%/logs/conversations/%/slack-%' LIMIT 1`,
         [],
       );
       await db.close();

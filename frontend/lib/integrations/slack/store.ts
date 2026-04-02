@@ -104,8 +104,8 @@ function sanitizeTs(ts: string): string {
   return ts.replace(/\./g, '-');
 }
 
-function threadFilePath(mode: Mode, teamId: string, channelId: string, threadTs: string): string {
-  return resolvePath(mode, `/logs/slack/${teamId}/${channelId}-${sanitizeTs(threadTs)}`);
+function threadFilePath(mode: Mode, userId: string, teamId: string, channelId: string, threadTs: string): string {
+  return resolvePath(mode, `/logs/conversations/${userId}/slack-${teamId}-${channelId}-${sanitizeTs(threadTs)}`);
 }
 
 export async function getOrCreateSlackConversationId(
@@ -115,14 +115,14 @@ export async function getOrCreateSlackConversationId(
   threadTs: string,
   channelName?: string,
 ): Promise<number> {
-  const path = threadFilePath(user.mode, teamId, channelId, threadTs);
+  const userId = user.userId?.toString() || user.email;
+  const path = threadFilePath(user.mode, userId, teamId, channelId, threadTs);
   try {
     const result = await FilesAPI.loadFileByPath(path, user);
     return result.data.id;
   } catch {
-    // First message in this thread — create an empty conversation file at the Slack path
+    // First message in this thread — create the conversation file
     const now = new Date().toISOString();
-    const userId = user.userId?.toString() || user.email;
     const name = `slack-${channelId}-${now.slice(0, 10)}`;
     const source: ConversationSource = { type: 'slack', teamId, channelId, threadTs, ...(channelName && { channelName }) };
     const initialContent: ConversationFileContent = {
