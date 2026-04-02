@@ -4,6 +4,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import { Box, Heading, Text, Flex, HStack, Icon, VStack } from '@chakra-ui/react';
 import { LuPlay, LuDatabase, LuSparkles, LuCheck } from 'react-icons/lu';
 import { useAppDispatch } from '@/store/hooks';
+import { useRouter } from '@/lib/navigation/use-navigation';
 import { setLeftSidebarCollapsed } from '@/store/uiSlice';
 import { setNavigation, setActiveVirtualId } from '@/store/navigationSlice';
 import { switchMode } from '@/lib/mode/mode-utils';
@@ -22,15 +23,19 @@ import StepConnection from './components/StepConnection';
 import StepContext from './components/StepContext';
 import StepGenerating from './components/StepGenerating';
 import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
+import { useConnections } from '@/lib/hooks/useConnections';
 import { useAppSelector } from '@/store/hooks';
 
 const TYPEWRITER_SPEED = 35; // ms per character
 
 export function HelloWorldContent() {
   const dispatch = useAppDispatch();
+  const router = useRouter();
   const user = useAppSelector(state => state.auth.user);
 
   const { config } = useConfigs();
+  const { connections } = useConnections();
+  const hasConnections = Object.keys(connections).length > 0;
   const agentName = config.branding.agentName;
   const userName = user?.name?.split(' ')[0] || '';
   const greetingLine1 = userName ? `Hi ${userName}!` : 'Hi!';
@@ -41,11 +46,12 @@ export function HelloWorldContent() {
   const orb2Ref = useRef<HTMLDivElement>(null);
   const orb3Ref = useRef<HTMLDivElement>(null);
 
-  // Wizard step — managed purely in local state (no URL params)
-  const [step, setStep] = useState<WizardStep>('welcome');
-  const [connectionId, setConnectionId] = useState<number | null>(null);
-  const [connectionName, setConnectionName] = useState<string | null>(null);
-  const [contextFileId, setContextFileId] = useState<number | null>(null);
+  // Wizard step — initialized from config (persisted across refreshes), then managed locally
+  const savedWizard = config.setupWizard;
+  const [step, setStep] = useState<WizardStep>(() => savedWizard?.step ?? 'welcome');
+  const [connectionId, setConnectionId] = useState<number | null>(() => savedWizard?.connectionId ?? null);
+  const [connectionName, setConnectionName] = useState<string | null>(() => savedWizard?.connectionName ?? null);
+  const [contextFileId, setContextFileId] = useState<number | null>(() => savedWizard?.contextFileId ?? null);
 
   // Typewriter state
   const [displayedText, setDisplayedText] = useState('');
@@ -118,6 +124,11 @@ export function HelloWorldContent() {
   }, []);
 
   const handleStartConnection = useCallback(() => setStep('connection'), []);
+
+  const handleSkipToHome = useCallback(async () => {
+    await handleComplete();
+    router.replace('/');
+  }, [handleComplete, router]);
 
   const handleRequestChat = useCallback((fileId: number) => {
     setContextFileId(fileId);
@@ -222,6 +233,21 @@ export function HelloWorldContent() {
 
           {/* Choice cards — Connect left, Demo right */}
           <Box minH="200px">
+            {cardsVisible && hasConnections && (
+              <Text
+                fontSize="sm"
+                color="fg.muted"
+                fontFamily="mono"
+                mb={4}
+                cursor="pointer"
+                textDecoration="underline"
+                _hover={{ color: 'fg.default' }}
+                onClick={handleSkipToHome}
+                css={{ animation: 'fadeInUp 0.5s ease-out forwards', opacity: 0 }}
+              >
+                I've already connected my data →
+              </Text>
+            )}
             {cardsVisible && (
               <Flex
                 direction={{ base: 'column', md: 'row' }}

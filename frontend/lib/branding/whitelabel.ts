@@ -8,6 +8,10 @@ import type { UserRole, ConfigChannel, MessagingWebhook, AlertRecipient } from '
 
 export interface SetupWizard {
   status: 'pending' | 'complete';
+  step?: 'welcome' | 'connection' | 'context' | 'generating';
+  connectionId?: number;
+  connectionName?: string;
+  contextFileId?: number;
 }
 
 /**

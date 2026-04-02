@@ -127,15 +127,17 @@ export function validateCompanyConfig(content: unknown): content is Partial<Comp
 
   // If setupWizard exists, validate its structure
   if (config.setupWizard !== undefined) {
-    if (
-      typeof config.setupWizard !== 'object' ||
-      config.setupWizard === null ||
-      !['pending', 'complete'].includes((config.setupWizard as any).status)
-    ) {
-      return false;
-    }
-    for (const field of Object.keys(config.setupWizard)) {
-      if (field !== 'status') return false;
+    const sw = config.setupWizard as any;
+    if (typeof sw !== 'object' || sw === null) return false;
+    if (!['pending', 'complete'].includes(sw.status)) return false;
+    const VALID_STEPS = ['welcome', 'connection', 'context', 'generating'];
+    if (sw.step !== undefined && !VALID_STEPS.includes(sw.step)) return false;
+    if (sw.connectionId !== undefined && typeof sw.connectionId !== 'number') return false;
+    if (sw.connectionName !== undefined && typeof sw.connectionName !== 'string') return false;
+    if (sw.contextFileId !== undefined && typeof sw.contextFileId !== 'number') return false;
+    const VALID_FIELDS = new Set(['status', 'step', 'connectionId', 'connectionName', 'contextFileId']);
+    for (const field of Object.keys(sw)) {
+      if (!VALID_FIELDS.has(field)) return false;
     }
   }
 
