@@ -15,10 +15,9 @@ import { reloadFile } from '@/lib/api/file-state';
 import { reloadConfigs } from '@/lib/hooks/useConfigs';
 import ConfigEditor from '@/components/config/ConfigEditor';
 import { ConfigContent } from '@/lib/types';
-import { useMemo, useCallback, useState } from 'react';
+import { useMemo, useCallback, useState, useEffect } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { FilesAPI } from '@/lib/data/files';
-import { slugify } from '@/lib/slug-utils';
 import { type FileViewMode } from '@/lib/ui/fileComponents';
 
 interface ConfigContainerV2Props {
@@ -60,10 +59,10 @@ export default function ConfigContainerV2({
   const handleSave = useCallback(async () => {
     if (!file || !currentContent) return;
 
-    const effectiveName = file.metadataChanges?.name ?? file.name;
-    const folderPath = file.path.substring(0, file.path.lastIndexOf('/')) || '/configs';
-    const slug = slugify(effectiveName);
-    const newPath = file.metadataChanges?.path ?? `${folderPath}/${slug}`;
+    // Config files have fixed system names/paths — never recompute via slug.
+    // Slugifying 'config.json' → 'configjson' would move the file and break path lookups.
+    const effectiveName = file.name;
+    const newPath = file.path;
 
     dispatch(setSaving({ id: fileId, saving: true }));
 
@@ -110,6 +109,15 @@ export default function ConfigContainerV2({
   const handleRevert = useCallback(() => {
     if (typeof fileId === 'number') {
       reloadFile({ fileId });
+    }
+  }, [fileId]);
+
+  // Always reload from DB on mount — config may have been updated via updateConfig
+  // (e.g. from ChannelsSection) which writes to DB but only updates configsSlice, not filesSlice.
+  // Silent reload keeps the stale content visible while fresh data arrives in the background.
+  useEffect(() => {
+    if (typeof fileId === 'number' && fileId > 0) {
+      reloadFile({ fileId, silent: true });
     }
   }, [fileId]);
 

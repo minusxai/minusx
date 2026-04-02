@@ -426,6 +426,7 @@ function SettingsContent() {
           onValueChange={(details) => setActiveTab(details.value as TabId)}
           variant="line"
           colorPalette="teal"
+          unmountOnExit
         >
           <Tabs.List mb={6}>
             {visibleTabs.map((tab) => (
