@@ -153,12 +153,13 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   // Build chart title from axis columns using aliases
   const chartTitle = useMemo(() => {
     if (yAxisColumns.length === 0 && xAxisColumns.length === 0) return undefined
-    const yPart = yAxisColumns.map(getDisplayName).join(', ')
+    const yTitleOverride = axisConfig?.yTitle?.trim()
+    const yPart = yTitleOverride || yAxisColumns.map(getDisplayName).join(', ')
     const xPart = xAxisColumns.length > 0 ? getDisplayName(xAxisColumns[0]) : ''
     const splitPart = xAxisColumns.length > 1 ? xAxisColumns.slice(1).map(getDisplayName).join(', ') : ''
     const parts = [yPart, xPart && `vs ${xPart}`, splitPart && `split by ${splitPart}`].filter(Boolean).join(' ')
     return parts || undefined
-  }, [xAxisColumns, yAxisColumns, getDisplayName])
+  }, [axisConfig?.yTitle, xAxisColumns, yAxisColumns, getDisplayName])
 
   // Build a y-axis label that fits on ~1 line (~40 chars),
   // showing as many column names as fit and "(and X other metrics)" for the rest

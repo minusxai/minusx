@@ -630,7 +630,7 @@ const composeChartExportUrl = async ({
   }
 
   if (footerAgentName) {
-    ctx.font = '700 46px JetBrains Mono, Consolas, Monaco, Courier New, monospace'
+    ctx.font = '700 36px JetBrains Mono, Consolas, Monaco, Courier New, monospace'
     ctx.textBaseline = 'middle'
     ctx.textAlign = 'right'
     ctx.fillStyle = colorMode === 'dark' ? '#FFFFFF' : 'rgba(13, 17, 23, 0.78)'
