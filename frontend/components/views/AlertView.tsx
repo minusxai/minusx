@@ -8,6 +8,7 @@ import { LuPlay, LuClock, LuBell, LuMail, LuGripVertical, LuHistory, LuFlaskConi
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
 import { SchedulePicker } from '@/components/shared/SchedulePicker';
 import { StatusBanner } from '@/components/shared/StatusBanner';
+import { RunNowHeader, type RunOptions } from '@/components/shared/RunNowHeader';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { useAppSelector } from '@/store/hooks';
 import { selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
@@ -25,7 +26,7 @@ interface AlertViewProps {
   selectedRunId?: number | null;
 
   onChange: (updates: Partial<AlertContent>) => void;
-  onCheckNow: (options?: { force?: boolean; send?: boolean }) => Promise<void>;
+  onRunNow: (opts: RunOptions) => Promise<void>;
   onSelectRun?: (runId: number | null) => void;
 }
 
@@ -39,14 +40,12 @@ export default function AlertView({
   runs = [],
   selectedRunId,
   onChange,
-  onCheckNow,
+  onRunNow,
   onSelectRun
 }: AlertViewProps) {
   const editMode = useAppSelector(state => selectFileEditMode(state, fileId));
   const activeTab = useAppSelector(state => selectFileViewMode(state, fileId));
   const isDirty = useAppSelector(state => selectIsDirty(state, fileId));
-  const [forceRun, setForceRun] = useState(false);
-  const [sendNotifications, setSendNotifications] = useState(true);
 
   // Resizable panel state
   const [leftPanelWidth, setLeftPanelWidth] = useState(50);
@@ -288,84 +287,17 @@ export default function AlertView({
             borderColor="border.muted"
           >
             {/* Run Header */}
-            <Flex
-              justify="space-between"
-              align="center"
-              px={4}
-              py={3}
-              borderBottomWidth="1px"
-              borderColor="border.muted"
-              gap={2}
-            >
-              <HStack flex={1} gap={2}>
-                <LuHistory size={16} />
-                <Text fontWeight="600" fontSize="sm">Alert History</Text>
-                {runs.length > 0 && (
-                  <Box flex={1} maxW="200px">
-                    <SelectRoot
-                      collection={runsCollection}
-                      value={selectedRunId ? [selectedRunId.toString()] : []}
-                      onValueChange={(e) => onSelectRun?.(e.value[0] ? parseInt(e.value[0], 10) : null)}
-                      size="sm"
-                    >
-                      <SelectTrigger>
-                        <SelectValueText placeholder="Select run..." />
-                      </SelectTrigger>
-                      <Portal>
-                        <SelectPositioner>
-                          <SelectContent>
-                            {runsCollection.items.map((item) => (
-                              <SelectItem key={item.value} item={item}>
-                                {item.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </SelectPositioner>
-                      </Portal>
-                    </SelectRoot>
-                  </Box>
-                )}
-              </HStack>
-              <HStack gap={3}>
-                <HStack gap={1.5}>
-                  <Switch.Root
-                    size="sm"
-                    checked={forceRun}
-                    onCheckedChange={(e: CheckedChangeDetails) => setForceRun(e.checked)}
-                    colorPalette="orange"
-                  >
-                    <Switch.HiddenInput />
-                    <Switch.Control>
-                      <Switch.Thumb />
-                    </Switch.Control>
-                  </Switch.Root>
-                  <Text fontSize="xs" color="fg.muted">Force</Text>
-                </HStack>
-                <HStack gap={1.5}>
-                  <Switch.Root
-                    size="sm"
-                    checked={sendNotifications}
-                    onCheckedChange={(e: CheckedChangeDetails) => setSendNotifications(e.checked)}
-                    colorPalette="teal"
-                  >
-                    <Switch.HiddenInput />
-                    <Switch.Control>
-                      <Switch.Thumb />
-                    </Switch.Control>
-                  </Switch.Root>
-                  <Text fontSize="xs" color="fg.muted">Send</Text>
-                </HStack>
-                <Button
-                  onClick={() => onCheckNow({ force: forceRun, send: sendNotifications })}
-                  disabled={(isRunning && !forceRun) || isDirty || !alert.tests?.length}
-                  size="sm"
-                  colorPalette="teal"
-                >
-                  <LuPlay size={14} />
-                  {isRunning ? 'Checking...' : 'Check Now'}
-                </Button>
-              </HStack>
-            </Flex>
+            <RunNowHeader
+              title="Alert History"
+              runs={runs}
+              selectedRunId={selectedRunId}
+              onSelectRun={onSelectRun}
+              isRunning={isRunning}
+              disabled={isDirty || !alert.tests?.length}
+              onRunNow={onRunNow}
+              buttonLabel="Check Now"
+              runningLabel="Checking..."
+            />
 
             {/* Run Content */}
             <Box flex={1} overflow="auto" p={4}>

@@ -13,6 +13,7 @@ import { ContextContent, DatabaseContext, WhitelistItem, ContextVersion, Publish
 import { SchedulePicker } from '@/components/shared/SchedulePicker';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
 import { StatusBanner } from '@/components/shared/StatusBanner';
+import { RunNowHeader, type RunOptions } from '@/components/shared/RunNowHeader';
 import TestList from '../test/TestList';
 import ContextRunView from '../views/ContextRunView';
 import type { JobRun } from '@/lib/types';
@@ -58,7 +59,7 @@ interface ContextEditorV2Props {
   runs?: JobRun[];
   isRunning?: boolean;
   selectedRunId?: number | null;
-  onRunAll?: () => void;
+  onRunAll?: (opts: RunOptions) => void;
   onSelectRun?: (runId: number | null) => void;
 }
 
@@ -1122,39 +1123,16 @@ export default function ContextEditorV2({
                 borderRadius="md"
                 p={3}
               >
-                <HStack mb={3} justify="space-between">
-                  <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="wider" color="fg.muted">Run History</Text>
-                  <HStack gap={2}>
-                    {runs.length > 0 && (
-                      <NativeSelect.Root size="xs" width="200px">
-                        <NativeSelect.Field
-                          value={selectedRunId ? selectedRunId.toString() : ''}
-                          onChange={(e) => onSelectRun?.(e.target.value ? parseInt(e.target.value, 10) : null)}
-                        >
-                          <option value="">Latest run</option>
-                          {runs.map(r => (
-                            <option key={r.id} value={r.id.toString()}>
-                              {new Date(r.created_at).toLocaleString()}
-                            </option>
-                          ))}
-                        </NativeSelect.Field>
-                        <NativeSelect.Indicator />
-                      </NativeSelect.Root>
-                    )}
-                    {onRunAll && (
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        onClick={onRunAll}
-                        loading={isRunning}
-                        loadingText="Running…"
-                        disabled={!content.evals?.length}
-                      >
-                        Run all
-                      </Button>
-                    )}
-                  </HStack>
-                </HStack>
+                <RunNowHeader
+                  title="Run History"
+                  runs={runs ?? []}
+                  selectedRunId={selectedRunId}
+                  onSelectRun={onSelectRun}
+                  isRunning={!!isRunning}
+                  disabled={!content.evals?.length}
+                  onRunNow={(opts) => onRunAll?.(opts)}
+                  buttonLabel="Run all"
+                />
                 {evalsSelectedRun?.output_file_id ? (
                   <ContextRunView fileId={evalsSelectedRun.output_file_id} />
                 ) : runs.length === 0 ? (

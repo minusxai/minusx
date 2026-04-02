@@ -396,7 +396,7 @@ export default function ContextContainerV2({
         runs={runs}
         isRunning={isRunning}
         selectedRunId={selectedRunId}
-        onRunAll={() => triggerRun()}
+        onRunAll={(opts) => triggerRun(opts)}
         onSelectRun={selectRun}
       />
 

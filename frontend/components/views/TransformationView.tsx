@@ -14,6 +14,7 @@ import TestList from '@/components/test/TestList';
 import { SchedulePicker } from '@/components/shared/SchedulePicker';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
 import { StatusBanner } from '@/components/shared/StatusBanner';
+import { RunNowHeader, type RunOptions } from '@/components/shared/RunNowHeader';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
 import { useContext } from '@/lib/hooks/useContext';
 import { useFile } from '@/lib/hooks/file-state-hooks';
@@ -28,7 +29,8 @@ interface TransformationViewProps {
   runs?: JobRun[];
   selectedRunId?: number | null;
   onChange: (updates: Partial<TransformationContent>) => void;
-  onRunNow: (runMode?: 'full' | 'test_only') => Promise<void>;
+  onRunNow: (opts: RunOptions) => Promise<void>;
+  onTestOnly: (opts: RunOptions) => Promise<void>;
   onSelectRun?: (runId: number | null) => void;
 }
 
@@ -328,6 +330,7 @@ export default function TransformationView({
   selectedRunId,
   onChange,
   onRunNow,
+  onTestOnly,
   onSelectRun,
 }: TransformationViewProps) {
   const editMode = useAppSelector(state => selectFileEditMode(state, fileId));
@@ -606,76 +609,18 @@ export default function TransformationView({
             borderColor="border.muted"
           >
             {/* Run Header */}
-            <Flex
-              justify="space-between"
-              align="center"
-              px={4}
-              py={3}
-              borderBottomWidth="1px"
-              borderColor="border.muted"
-              gap={2}
-            >
-              <HStack flex={1} gap={2}>
-                <LuHistory size={16} />
-                <Text fontWeight="600" fontSize="sm">Run History</Text>
-                {runs.length > 0 && (
-                  <Box flex={1} maxW="200px">
-                    <SelectRoot
-                      collection={runsCollection}
-                      value={selectedRunId ? [selectedRunId.toString()] : []}
-                      onValueChange={(e) => onSelectRun?.(e.value[0] ? parseInt(e.value[0], 10) : null)}
-                      size="sm"
-                    >
-                      <SelectTrigger>
-                        <SelectValueText placeholder="Select run..." />
-                      </SelectTrigger>
-                      <Portal>
-                        <SelectPositioner>
-                          <SelectContent>
-                            {runsCollection.items.map((item) => (
-                              <SelectItem key={item.value} item={item}>
-                                {item.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </SelectPositioner>
-                      </Portal>
-                    </SelectRoot>
-                  </Box>
-                )}
-              </HStack>
-              <HStack gap={2}>
-                {schemaRefreshing && (
-                  <Text fontSize="xs" color="fg.muted" fontStyle="italic">Refreshing schema...</Text>
-                )}
-                {selectedRun?.output_file_id && (
-                  <Link href={preserveParams(`/f/${selectedRun.output_file_id}`)}>
-                    <Button size="sm" variant="ghost" colorPalette="gray">
-                      <LuExternalLink size={14} />
-                    </Button>
-                  </Link>
-                )}
-                <Button
-                  onClick={() => onRunNow('test_only')}
-                  disabled={!canRun}
-                  size="sm"
-                  variant="outline"
-                  colorPalette="gray"
-                >
-                  <LuPlay size={14} />
-                  {isRunning ? 'Running...' : 'Test Only'}
-                </Button>
-                <Button
-                  onClick={() => onRunNow('full')}
-                  disabled={!canRun}
-                  size="sm"
-                  colorPalette="teal"
-                >
-                  <LuPlay size={14} />
-                  {isRunning ? 'Running...' : 'Run Now'}
-                </Button>
-              </HStack>
-            </Flex>
+            <RunNowHeader
+              title="Run History"
+              runs={runs}
+              selectedRunId={selectedRunId}
+              onSelectRun={onSelectRun}
+              isRunning={isRunning}
+              disabled={!canRun}
+              onRunNow={onRunNow}
+              onTestOnly={onTestOnly}
+              schemaRefreshing={schemaRefreshing}
+              externalLinkId={selectedRun?.output_file_id ?? undefined}
+            />
 
             {/* Run Content */}
             <Box flex={1} overflow="auto" p={4}>
