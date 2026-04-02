@@ -8,6 +8,7 @@
 import { BACKEND_URL } from '@/lib/config';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { sessionTokenManager } from '@/lib/auth/session-tokens';
+import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
 /**
  * Fetch wrapper for Python backend API calls
@@ -15,6 +16,7 @@ import { sessionTokenManager } from '@/lib/auth/session-tokens';
  *
  * @param endpoint - API endpoint path (e.g., '/api/chat', '/api/execute-query')
  * @param options - Standard fetch options (method, body, etc.)
+ * @param userOverride - Optional user to use instead of reading from session (needed in cron/job contexts with no HTTP session)
  * @returns Response from Python backend
  *
  * @example
@@ -25,10 +27,11 @@ import { sessionTokenManager } from '@/lib/auth/session-tokens';
  */
 export async function pythonBackendFetch(
   endpoint: string,
-  options: Omit<RequestInit, 'headers'> & { headers?: Record<string, string> } = {}
+  options: Omit<RequestInit, 'headers'> & { headers?: Record<string, string> } = {},
+  userOverride?: EffectiveUser | null
 ): Promise<Response> {
-  // Auto-fetch effective user (server-side only)
-  const user = await getEffectiveUser();
+  // Use provided user or fall back to session-based user
+  const user = userOverride ?? await getEffectiveUser();
 
   // Build headers
   const requestHeaders: Record<string, string> = {

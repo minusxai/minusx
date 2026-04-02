@@ -45,7 +45,7 @@ export async function runQuery(
   const response = await pythonBackendFetch('/api/execute-query', {
     method: 'POST',
     body: JSON.stringify({ query, parameters: params, database_name: databaseName, ...(parameterTypes && { parameter_types: parameterTypes }) }),
-  });
+  }, user);
 
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
