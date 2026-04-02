@@ -173,10 +173,11 @@ export default auth(async (req) => {
       const isComplete = config.setupWizard?.status === 'complete';
       if (!isComplete) {
         const protocol = req.headers.get('x-forwarded-proto') || 'https';
-        const redirectPath = '/hello-world';
+        const redirectUrl = new URL(`${protocol}://${hostname}/hello-world`);
+        if (mode && mode !== 'org') redirectUrl.searchParams.set('mode', mode);
         const currentPath = pathname + (req.nextUrl.search || '');
-        if (redirectPath !== currentPath) {
-          return NextResponse.redirect(new URL(`${protocol}://${hostname}${redirectPath}`));
+        if (redirectUrl.pathname + redirectUrl.search !== currentPath) {
+          return NextResponse.redirect(redirectUrl);
         }
       }
     } catch (e) {

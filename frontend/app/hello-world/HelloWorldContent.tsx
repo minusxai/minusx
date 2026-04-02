@@ -7,7 +7,7 @@ import { useAppDispatch } from '@/store/hooks';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { setLeftSidebarCollapsed } from '@/store/uiSlice';
 import { setNavigation, setActiveVirtualId } from '@/store/navigationSlice';
-import { switchMode } from '@/lib/mode/mode-utils';
+import { switchMode, preserveModeParam } from '@/lib/mode/mode-utils';
 import {
   pulseKeyframes,
   sparkleKeyframes,
@@ -147,7 +147,7 @@ export function HelloWorldContent() {
 
   const handleSkipToHome = useCallback(async () => {
     await handleComplete();
-    router.replace('/');
+    router.replace(preserveModeParam('/'));
   }, [handleComplete, router]);
 
   // Skip Step 1 by reusing the first existing connection

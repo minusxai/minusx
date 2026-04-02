@@ -5,6 +5,7 @@ import { useRouter } from '@/lib/navigation/use-navigation';
 import { useAppSelector } from '@/store/hooks';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
+import { preserveModeParam } from '@/lib/mode/mode-utils';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 
 /**
@@ -32,7 +33,7 @@ export default function Home() {
     // Onboarding check — config-driven, applies to any mode.
     // Tutorial/internals default to 'complete' so they never redirect.
     if (config.setupWizard?.status !== 'complete') {
-      router.replace('/hello-world');
+      router.replace(preserveModeParam('/hello-world'));
       return;
     }
 

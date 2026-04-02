@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { Box, VStack, HStack, Text, Heading, Button, Icon, Collapsible, Input } from '@chakra-ui/react';
 import { LuSparkles, LuRocket, LuLayoutDashboard, LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import { useRouter } from '@/lib/navigation/use-navigation';
+import { preserveModeParam } from '@/lib/mode/mode-utils';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { createConversation, selectActiveConversation, selectConversation, interruptChat, generateVirtualConversationId } from '@/store/chatSlice';
 import { setNavigation, setActiveVirtualId } from '@/store/navigationSlice';
@@ -158,13 +159,13 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
       const allFiles = Object.values(freshState.files.files);
       const dashboard = allFiles.find(f => f.type === 'dashboard' && f.id > 0 && f.name === 'Getting Started');
       if (dashboard) {
-        router.push(`/f/${dashboard.id}`);
+        router.push(preserveModeParam(`/f/${dashboard.id}`));
       } else {
-        router.push('/');
+        router.push(preserveModeParam('/'));
       }
     } catch (err) {
       console.error('[StepGenerating] Publish failed:', err);
-      router.push('/');
+      router.push(preserveModeParam('/'));
     }
   }, [virtualDashboardId, router, onComplete]);
 
@@ -174,7 +175,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
       dispatch(interruptChat({ conversationID: activeConvId }));
     }
     if (onComplete) await onComplete();
-    router.push('/new/dashboard');
+    router.push(preserveModeParam('/new/dashboard'));
   }, [activeConvId, dispatch, router, onComplete]);
 
   const isDone = !isGenerating && hasStarted;
