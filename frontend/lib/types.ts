@@ -306,16 +306,6 @@ export interface SlackBotConfig {
 
 export type ConfigBot = SlackBotConfig;
 
-export interface SlackThreadContent extends BaseFileContent {
-  teamId: string;
-  channelId: string;
-  threadTs: string;
-  conversationId: number;
-  participants: string[];
-  messageCount: number;
-  createdAt: string;
-  updatedAt: string;
-}
 
 export interface ConfigContent extends BaseFileContent {
   branding?: {
@@ -1038,6 +1028,14 @@ export interface OrchestrationTask {
 /**
  * Conversation metadata
  */
+export interface ConversationSource {
+  type: 'slack';
+  teamId: string;
+  channelId: string;
+  threadTs: string;
+  channelName?: string;  // resolved display name, e.g. "general"
+}
+
 export interface ConversationMetadata {
   userId: string;
   name: string;  // Auto-generated from first user message (truncated to 50 chars)
@@ -1045,6 +1043,7 @@ export interface ConversationMetadata {
   updatedAt: string;
   logLength?: number;  // Track log length for conflict detection
   forkedFrom?: number;  // Track conversation lineage (file ID of parent)
+  source?: ConversationSource;  // Set when conversation originates from an external integration
 }
 
 /**

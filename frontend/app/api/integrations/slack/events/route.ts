@@ -7,10 +7,9 @@ import { buildSlackAgentArgs } from '@/lib/integrations/slack/context';
 import { extractSlackReplyFromLog, normalizeSlackPrompt } from '@/lib/integrations/slack/messages';
 import {
   findSlackInstallationByTeam,
-  getThreadConversationId,
+  getOrCreateSlackConversationId,
   markSlackEventDone,
   reserveSlackEvent,
-  setThreadConversationId,
   type SlackInstallationMatch,
 } from '@/lib/integrations/slack/store';
 
@@ -112,7 +111,7 @@ export async function processSlackEvent(
     }
 
     const teamId = installation.bot.team_id ?? getTeamId(payload) ?? '';
-    const conversationId = await getThreadConversationId(
+    const conversationId = await getOrCreateSlackConversationId(
       effectiveUser,
       teamId,
       ev.channel,
@@ -128,15 +127,6 @@ export async function processSlackEvent(
       userMessage,
       conversationId,
     });
-
-    await setThreadConversationId(
-      effectiveUser,
-      teamId,
-      ev.channel,
-      threadTs,
-      result.conversationId,
-      slackEmail,
-    );
 
     const reply =
       extractSlackReplyFromLog(result.log) ??

@@ -192,14 +192,7 @@ export const FILE_TYPE_METADATA = {
     supported: true,
     h: 'none',
   },
-  slack_thread: {
-    label: 'Slack Thread',
-    icon: LuFileText,
-    color: 'fg.muted',
-    category: 'misc',
-    supported: false,
-    h: 'none',
-  },
+
 } as const satisfies Record<string, FileTypeMetadata>;
 
 /**

@@ -5,7 +5,7 @@ import { CompanyDB } from '@/lib/database/company-db';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { VALID_MODES, type Mode } from '@/lib/mode/mode-types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import type { ConfigBot, ConfigContent, SlackBotConfig, SlackThreadContent } from '@/lib/types';
+import type { ConfigBot, ConfigContent, ConversationFileContent, ConversationSource, SlackBotConfig } from '@/lib/types';
 
 // ============================================================================
 // Bot config CRUD — lives in /org/configs/config (per-company config file)
@@ -91,13 +91,13 @@ export async function findSlackInstallationByTeam(
 }
 
 // ============================================================================
-// Thread bindings — one file per Slack thread
+// Thread conversation — one conversation file per Slack thread
 //
 // Path: /logs/slack/{teamId}/{channelId}-{sanitizedThreadTs}
-// Type: 'slack_thread'
+// Type: 'conversation'
 //
-// Same pattern as conversation files in /logs/conversations/.
-// Created via FilesAPI so permissions and path creation are handled uniformly.
+// On first message the file is pre-created (empty log), so runChatOrchestration
+// always receives a real conversationId and appends to the same file on follow-ups.
 // ============================================================================
 
 function sanitizeTs(ts: string): string {
@@ -108,61 +108,32 @@ function threadFilePath(mode: Mode, teamId: string, channelId: string, threadTs:
   return resolvePath(mode, `/logs/slack/${teamId}/${channelId}-${sanitizeTs(threadTs)}`);
 }
 
-export async function getThreadConversationId(
+export async function getOrCreateSlackConversationId(
   user: EffectiveUser,
   teamId: string,
   channelId: string,
   threadTs: string,
-): Promise<number | null> {
+  channelName?: string,
+): Promise<number> {
   const path = threadFilePath(user.mode, teamId, channelId, threadTs);
   try {
     const result = await FilesAPI.loadFileByPath(path, user);
-    return (result.data.content as SlackThreadContent).conversationId ?? null;
+    return result.data.id;
   } catch {
-    return null;
-  }
-}
-
-export async function setThreadConversationId(
-  user: EffectiveUser,
-  teamId: string,
-  channelId: string,
-  threadTs: string,
-  conversationId: number,
-  participantEmail: string,
-): Promise<void> {
-  const path = threadFilePath(user.mode, teamId, channelId, threadTs);
-  const now = new Date().toISOString();
-
-  try {
-    const result = await FilesAPI.loadFileByPath(path, user);
-    const prev = result.data.content as SlackThreadContent;
-    const participants = [...new Set([...prev.participants, participantEmail])];
-    await FilesAPI.saveFile(
-      result.data.id,
-      result.data.name,
-      path,
-      { ...prev, conversationId, participants, messageCount: prev.messageCount + 1, updatedAt: now } as any,
-      [],
-      user,
-    );
-  } catch {
-    // Thread file doesn't exist yet — create it (same pattern as conversations)
+    // First message in this thread — create an empty conversation file at the Slack path
+    const now = new Date().toISOString();
+    const userId = user.userId?.toString() || user.email;
     const name = `slack-${channelId}-${now.slice(0, 10)}`;
-    const content: SlackThreadContent = {
-      teamId,
-      channelId,
-      threadTs,
-      conversationId,
-      participants: [participantEmail],
-      messageCount: 1,
-      createdAt: now,
-      updatedAt: now,
+    const source: ConversationSource = { type: 'slack', teamId, channelId, threadTs, ...(channelName && { channelName }) };
+    const initialContent: ConversationFileContent = {
+      metadata: { userId, name, createdAt: now, updatedAt: now, logLength: 0, source },
+      log: [],
     };
-    await FilesAPI.createFile(
-      { name, path, type: 'slack_thread', content: content as any, options: { createPath: true } },
+    const result = await FilesAPI.createFile(
+      { name, path, type: 'conversation', content: initialContent as any, options: { createPath: true } },
       user,
     );
+    return result.data.id;
   }
 }
 

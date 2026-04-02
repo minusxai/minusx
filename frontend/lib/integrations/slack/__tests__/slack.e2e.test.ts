@@ -348,11 +348,11 @@ describe('Slack Bot Integration', () => {
       );
       expect(postedMessages).toHaveLength(1);
 
-      // Only ONE slack_thread file should exist for this channel+threadTs combination
+      // Only ONE conversation file should exist at the Slack path (no slack_thread files)
       const { createAdapter } = await import('@/lib/database/adapter/factory');
       const db = await createAdapter({ type: 'sqlite', sqlitePath: TEST_DB_PATH });
       const { rows } = await db.query<{ cnt: number }>(
-        `SELECT COUNT(*) AS cnt FROM files WHERE company_id = 1 AND type = 'slack_thread'`,
+        `SELECT COUNT(*) AS cnt FROM files WHERE company_id = 1 AND type = 'conversation' AND path LIKE '%/logs/slack/%'`,
         [],
       );
       await db.close();
