@@ -139,11 +139,11 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
   // Track collapsed sections — dashboard always open, others closed unless they're the only section
   const [collapsedSections, setCollapsedSections] = useState<Set<SectionKey>>(new Set(['question', '_other']));
 
-  // If there's only one section, ensure it's open
-  const onlySection = sections.length === 1 ? sections[0].key : null;
-  const effectiveCollapsed = onlySection
-    ? new Set([...collapsedSections].filter(k => k !== onlySection))
-    : collapsedSections;
+  // If no folder/dashboard sections exist, force-open the remaining sections
+  const hasPrimarySections = sections.some(s => s.key === 'folder' || s.key === 'dashboard');
+  const effectiveCollapsed = hasPrimarySections
+    ? collapsedSections
+    : new Set([...collapsedSections].filter(k => !sections.some(s => s.key === k)));
   const toggleSection = (key: SectionKey) => {
     setCollapsedSections(prev => {
       const next = new Set(prev);
