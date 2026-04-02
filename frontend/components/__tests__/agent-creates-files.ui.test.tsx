@@ -24,21 +24,6 @@
  * setupMockFetch matches on startsWithUrl: ['/api/chat'] to handle these relative calls.
  */
 
-// Must be hoisted before any module imports
-jest.mock('@/lib/auth/auth-helpers', () => ({
-  getEffectiveUser: jest.fn().mockResolvedValue({
-    userId: 1,
-    email: 'test@example.com',
-    name: 'Test User',
-    role: 'admin',
-    companyId: 1,
-    companyName: 'test-company',
-    home_folder: '/org',
-    mode: 'org',
-  }),
-  isAdmin: jest.fn().mockReturnValue(true),
-}));
-
 jest.mock('@/lib/database/db-config', () => {
   const path = require('path');
   return {
@@ -57,6 +42,7 @@ import type { RootState } from '@/store/store';
 import { createConversation, sendMessage, selectConversation } from '@/store/chatSlice';
 import { useAppSelector } from '@/store/hooks';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
+import { waitForConversationFinished } from '@/test/helpers/redux-wait';
 
 import { withPythonBackend } from '@/test/harness/python-backend';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
@@ -105,26 +91,6 @@ async function templateInterceptor(urlStr: string, init?: RequestInit): Promise<
     } as Response;
   }
   return null;
-}
-
-/** Wait for a conversation to reach FINISHED, tracking forks to real IDs. */
-async function waitForConversationFinished(
-  getState: () => RootState,
-  virtualConvId: number
-): Promise<number> {
-  let realConvId = virtualConvId;
-  await waitFor(
-    () => {
-      const temp = selectConversation(getState(), virtualConvId);
-      if (temp?.forkedConversationID) {
-        realConvId = temp.forkedConversationID;
-      }
-      const conv = selectConversation(getState(), realConvId);
-      expect(conv?.executionState).toBe('FINISHED');
-    },
-    { timeout: 40000 }
-  );
-  return realConvId;
 }
 
 // ============================================================================

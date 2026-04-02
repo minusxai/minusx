@@ -39,21 +39,6 @@ jest.mock('@/lib/database/db-config', () => {
 
 const TEST_DB_PATH = getTestDbPath('job_runs_e2e');
 
-// ─── Auth mock ────────────────────────────────────────────────────────────────
-jest.mock('@/lib/auth/auth-helpers', () => ({
-  getEffectiveUser: jest.fn().mockResolvedValue({
-    userId: 1,
-    email: 'test@example.com',
-    name: 'Test User',
-    role: 'admin',
-    companyId: 1,
-    companyName: 'test-company',
-    home_folder: '/org',
-    mode: 'org',
-  }),
-  isAdmin: jest.fn().mockReturnValue(true),
-}));
-
 // ─── Query execution mock (no Python backend needed) ─────────────────────────
 // Mocked pythonBackendFetch returns a single row with value=150 for any query.
 jest.mock('@/lib/api/python-backend-client', () => ({

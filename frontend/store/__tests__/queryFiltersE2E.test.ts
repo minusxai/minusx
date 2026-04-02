@@ -32,20 +32,6 @@ jest.mock('@/store/store', () => ({
   getStore: () => testStore,
 }));
 
-jest.mock('@/lib/auth/auth-helpers', () => ({
-  getEffectiveUser: jest.fn().mockResolvedValue({
-    userId: 1,
-    email: 'test@example.com',
-    name: 'Test User',
-    role: 'admin',
-    companyId: 1,
-    companyName: 'test-company',
-    home_folder: '/org',
-    mode: 'org',
-  }),
-  isAdmin: jest.fn().mockReturnValue(true),
-}));
-
 // pythonBackendFetch spy — lets us assert what params reach Python
 jest.mock('@/lib/api/python-backend-client', () => ({
   pythonBackendFetch: jest.fn(),

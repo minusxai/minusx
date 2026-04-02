@@ -12,20 +12,6 @@
 // Hoisted mocks — must appear before any import statements
 // ---------------------------------------------------------------------------
 
-jest.mock('@/lib/auth/auth-helpers', () => ({
-  getEffectiveUser: jest.fn().mockResolvedValue({
-    userId: 1,
-    email: 'test@example.com',
-    name: 'Test User',
-    role: 'admin',
-    companyId: 1,
-    companyName: 'test-company',
-    home_folder: '/org',
-    mode: 'org',
-  }),
-  isAdmin: jest.fn().mockReturnValue(true),
-}));
-
 jest.mock('@/lib/database/db-config', () => {
   const path = require('path');
   return {

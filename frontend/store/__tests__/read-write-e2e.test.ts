@@ -24,6 +24,8 @@ import { GET as fileGetHandler, PATCH as filePatchHandler } from '@/app/api/file
 import { GET as filesListGetHandler } from '@/app/api/files/route';
 import { readFilesByCriteria } from '@/lib/api/file-state';
 import { selectContextFromPath } from '@/store/filesSlice';
+import { NextRequest } from 'next/server';
+import { setupMockFetch } from '@/test/harness/mock-fetch';
 
 // Mock db-config to use test database
 jest.mock('@/lib/database/db-config', () => {
@@ -43,21 +45,6 @@ jest.mock('@/store/store', () => ({
     return testStore;
   },
   getStore: () => testStore
-}));
-
-// Mock auth system to return test user
-jest.mock('@/lib/auth/auth-helpers', () => ({
-  getEffectiveUser: jest.fn().mockResolvedValue({
-    userId: 1,
-    email: 'test@example.com',
-    name: 'Test User',
-    role: 'admin',
-    companyId: 1,
-    companyName: 'test-company',
-    home_folder: '/org',
-    mode: 'org'
-  }),
-  isAdmin: jest.fn().mockReturnValue(true)
 }));
 
 // Mock python-backend-client to return realistic test data (no real Python backend in tests)
@@ -141,115 +128,65 @@ describe('Phase 1: Unified File System API E2E', () => {
   let store: ReturnType<typeof configureStore>;
   let questionId: number;
   let dashboardId: number;
-  let mockFetch: jest.SpyInstance;
+
+  // Route API calls to real Next.js handlers (no Python backend needed)
+  setupMockFetch({
+    getPythonPort: () => 0,
+    additionalInterceptors: [
+      async (urlStr, init) => {
+        const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;
+
+        if (urlStr.includes('/api/query') && !urlStr.includes('execute-query')) {
+          const req = new NextRequest('http://localhost:3000/api/query', {
+            method: init?.method || 'POST', body: init?.body,
+            headers: { ...init?.headers, 'x-company-id': '1', 'x-user-id': '1' }
+          });
+          const res = await queryPostHandler(req);
+          return { ok: res.status === 200, status: res.status, json: async () => res.json() } as Response;
+        }
+
+        if (urlStr.match(/\/api\/files(\?|$)/) && (!init?.method || init?.method === 'GET')) {
+          const req = new NextRequest(fullUrl, {
+            method: 'GET', headers: { ...init?.headers, 'x-company-id': '1', 'x-user-id': '1' }
+          });
+          const res = await filesListGetHandler(req);
+          return { ok: res.status === 200, status: res.status, json: async () => res.json() } as Response;
+        }
+
+        if (urlStr.match(/\/api\/files\/\d+(\?|$)/) && (init?.method === 'PATCH' || init?.method === 'PUT')) {
+          const fileId = urlStr.match(/\/api\/files\/(\d+)/)?.[1];
+          const req = new NextRequest(fullUrl, {
+            method: 'PATCH', body: init?.body,
+            headers: { ...init?.headers, 'x-company-id': '1', 'x-user-id': '1' }
+          });
+          const res = await filePatchHandler(req, { params: Promise.resolve({ id: fileId! }) });
+          return { ok: res.status === 200, status: res.status, json: async () => res.json() } as Response;
+        }
+
+        if (urlStr.match(/\/api\/files\/\d+(\?|$)/) && (!init?.method || init?.method === 'GET')) {
+          const fileId = urlStr.match(/\/api\/files\/(\d+)/)?.[1];
+          const req = new NextRequest(fullUrl, {
+            method: 'GET', headers: { 'x-company-id': '1', 'x-user-id': '1' }
+          });
+          const res = await fileGetHandler(req, { params: Promise.resolve({ id: fileId! }) });
+          return { ok: res.status === 200, status: res.status, json: async () => res.json() } as Response;
+        }
+
+        if (urlStr.includes('/api/files/batch') && !urlStr.includes('batch-save')) {
+          const req = new NextRequest('http://localhost:3000/api/files/batch', {
+            method: init?.method || 'POST', body: init?.body,
+            headers: { ...init?.headers, 'x-company-id': '1', 'x-user-id': '1' }
+          });
+          const res = await batchPostHandler(req);
+          return { ok: res.status === 200, status: res.status, json: async () => res.json() } as Response;
+        }
+
+        return null;
+      }
+    ],
+  });
 
   beforeAll(async () => {
-    // Set up mock fetch to route API calls to real handlers
-    const { NextRequest } = require('next/server');
-    mockFetch = jest.spyOn(global, 'fetch').mockImplementation(async (url: string | Request | URL, init?: any) => {
-      const urlStr = url.toString();
-
-      // Route /api/query calls to real query handler
-      if (urlStr.includes('/api/query') && !urlStr.includes('execute-query')) {
-        const request = new NextRequest('http://localhost:3000/api/query', {
-          method: init?.method || 'POST',
-          body: init?.body,
-          headers: {
-            ...init?.headers,
-            'x-company-id': '1',  // Add company ID for auth
-            'x-user-id': '1'
-          }
-        });
-        const response = await queryPostHandler(request);
-        const data = await response.json();
-        return {
-          ok: response.status === 200,
-          status: response.status,
-          json: async () => data
-        } as Response;
-      }
-
-      // Route GET /api/files (list, no ID) — e.g. /api/files?type=context&depth=-1
-      if (urlStr.match(/\/api\/files(\?|$)/) && (!init?.method || init?.method === 'GET')) {
-        const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;
-        const request = new NextRequest(fullUrl, {
-          method: 'GET',
-          headers: { ...init?.headers, 'x-company-id': '1', 'x-user-id': '1' }
-        });
-        const response = await filesListGetHandler(request);
-        const data = await response.json();
-        return { ok: response.status === 200, status: response.status, json: async () => data } as Response;
-      }
-
-      // Route /api/files/[id] PATCH/PUT calls to real handler (for updating single file)
-      if (urlStr.match(/\/api\/files\/\d+(\?|$)/) && (init?.method === 'PATCH' || init?.method === 'PUT')) {
-        const fileId = urlStr.match(/\/api\/files\/(\d+)/)?.[1];
-        const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;
-        const request = new NextRequest(fullUrl, {
-          method: 'PATCH',
-          body: init?.body,
-          headers: {
-            ...init?.headers,
-            'x-company-id': '1',
-            'x-user-id': '1'
-          }
-        });
-        const response = await filePatchHandler(request, { params: { id: fileId! } });
-        const data = await response.json();
-        return {
-          ok: response.status === 200,
-          status: response.status,
-          json: async () => data
-        } as Response;
-      }
-
-      // Route /api/files/[id] GET calls to real handler (for loading single file)
-      // Must come before batch check to avoid being caught by it
-      // Matches /api/files/123 or /api/files/123?params
-      if (urlStr.match(/\/api\/files\/\d+(\?|$)/) && (!init?.method || init?.method === 'GET')) {
-        const fileId = urlStr.match(/\/api\/files\/(\d+)/)?.[1];
-        // Preserve query parameters if they exist
-        const fullUrl = urlStr.startsWith('http') ? urlStr : `http://localhost:3000${urlStr}`;
-        const request = new NextRequest(fullUrl, {
-          method: 'GET',
-          headers: {
-            'x-company-id': '1',
-            'x-user-id': '1'
-          }
-        });
-        const response = await fileGetHandler(request, { params: { id: fileId! } });
-        const data = await response.json();
-        return {
-          ok: response.status === 200,
-          status: response.status,
-          json: async () => data
-        } as Response;
-      }
-
-      // Route /api/files/batch calls to real handler (for loading multiple files)
-      if (urlStr.includes('/api/files/batch') && !urlStr.includes('batch-save')) {
-        const request = new NextRequest('http://localhost:3000/api/files/batch', {
-          method: init?.method || 'POST',
-          body: init?.body,
-          headers: {
-            ...init?.headers,
-            'x-company-id': '1',
-            'x-user-id': '1'
-          }
-        });
-        const response = await batchPostHandler(request);
-        const data = await response.json();
-        return {
-          ok: response.status === 200,
-          status: response.status,
-          json: async () => data
-        } as Response;
-      }
-
-
-      throw new Error(`Unmocked fetch call to ${urlStr}`);
-    });
-
     // Initialize test database
     await initTestDatabase(dbPath);
     // Create test data
@@ -323,7 +260,6 @@ describe('Phase 1: Unified File System API E2E', () => {
   });
 
   afterAll(async () => {
-    mockFetch.mockRestore();
     await cleanupTestDatabase(dbPath);
   });
 
