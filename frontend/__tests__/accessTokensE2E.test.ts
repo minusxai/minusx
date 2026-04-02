@@ -575,6 +575,11 @@ describe('Access Tokens E2E - Public File Sharing', () => {
       const { createAdapter } = await import('@/lib/database/adapter/factory');
       const db = await createAdapter({ type: 'sqlite', sqlitePath: getTestDbPath('access_tokens') });
       const { extractReferenceIds } = require('@/lib/data/helpers/references');
+      const { DocumentDB } = require('@/lib/database/documents-db');
+      const childResolver = async (folderPath: string, companyId: number) => {
+        const children = await DocumentDB.listAll(companyId, undefined, [folderPath], 1, false);
+        return children.map((c: { id: number }) => c.id);
+      };
 
       // STEP 1: Load folder file (use composite key)
       const folderResult = await db.query('SELECT * FROM files WHERE company_id = $1 AND id = $2', [TEST_COMPANY_ID, TEST_FOLDER_ID]);
@@ -595,7 +600,7 @@ describe('Access Tokens E2E - Public File Sharing', () => {
       };
 
       // STEP 3: Extract reference IDs (folder children)
-      const refIds = await extractReferenceIds(dbFile);
+      const refIds = await extractReferenceIds(dbFile, childResolver);
 
       // STEP 4: Verify all folder children are returned (before filtering)
       // Note: OUTSIDE_FOLDER_QUESTION_ID is NOT in this folder (it's in /admin/)

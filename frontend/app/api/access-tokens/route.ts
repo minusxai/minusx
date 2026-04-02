@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
-import { AccessTokenDB } from '@/lib/database/documents-db';
-import { DocumentDB } from '@/lib/database/documents-db';
+import { AccessTokensAPI } from '@/lib/data/access-tokens.server';
+import { FilesAPI } from '@/lib/data/files.server';
 import { AccessTokenCreate } from '@/lib/types';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { AUTH_URL } from '@/lib/config';
@@ -40,13 +40,10 @@ export const POST = withAuth(async (
     }
 
     // Verify file exists and belongs to same company
-    const file = await DocumentDB.getById(body.file_id, user.companyId);
-    if (!file) {
-      return ApiErrors.notFound('File');
-    }
+    await FilesAPI.loadFile(body.file_id, user);
 
     // Create token
-    const token = await AccessTokenDB.create(
+    const token = await AccessTokensAPI.create(
       body.file_id,
       body.view_as_user_id,
       user.companyId,
@@ -91,7 +88,7 @@ export const GET = withAuth(async (
       return ApiErrors.validationError('fileId query parameter is required');
     }
 
-    const tokens = await AccessTokenDB.listByFileId(parseInt(fileId), user.companyId);
+    const tokens = await AccessTokensAPI.listByFileId(parseInt(fileId), user.companyId);
 
     return successResponse(tokens);
   } catch (error) {

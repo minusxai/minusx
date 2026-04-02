@@ -1,12 +1,19 @@
-import { DbFile, DocumentContent, isFileReference } from '@/lib/types';
-import { DocumentDB } from '@/lib/database/documents-db';
+import 'server-only';
+import { DbFile } from '@/lib/types';
+
+export type ChildIdResolver = (folderPath: string, companyId: number) => Promise<number[]>;
 
 /**
  * Extract reference IDs from a file (Phase 6: Reads from cached references column)
  * For dashboards, presentations, notebooks, reports, questions - return cached references from DB
- * For folders - extract IDs of direct children (files whose path starts with folder path)
+ * For folders - delegates to resolveChildIds (injected by caller) to avoid circular imports
+ *
+ * @param resolveChildIds - Required for folder files. Provided by files.server.ts using DocumentDB.
  */
-export async function extractReferenceIds(file: DbFile): Promise<number[]> {
+export async function extractReferenceIds(
+  file: DbFile,
+  resolveChildIds: ChildIdResolver
+): Promise<number[]> {
   // Phase 6: For document types, return cached references from DB column
   if (
     file.type === 'dashboard' ||
@@ -23,12 +30,11 @@ export async function extractReferenceIds(file: DbFile): Promise<number[]> {
     const folderPath = file.path;
     const companyId = file.company_id!;  // Always present in DB queries (NOT NULL column)
 
-    // Use optimized path filtering with depth=1 for direct children only
-    // Phase 6: Pass includeContent: false for performance (only need IDs)
-    const children = await DocumentDB.listAll(companyId, undefined, [folderPath], 1, false);
+    // Delegate to injected resolver (implemented in files.server.ts using DocumentDB)
+    const childIds = await resolveChildIds(folderPath, companyId);
 
     // Filter out the folder itself
-    return children.filter(f => f.id !== file.id).map(f => f.id);
+    return childIds.filter(id => id !== file.id);
   }
 
   return [];
@@ -37,8 +43,11 @@ export async function extractReferenceIds(file: DbFile): Promise<number[]> {
 /**
  * Extract all unique reference IDs from multiple files
  */
-export async function extractAllReferenceIds(files: DbFile[]): Promise<number[]> {
-  const allRefIdsArrays = await Promise.all(files.map(file => extractReferenceIds(file)));
+export async function extractAllReferenceIds(
+  files: DbFile[],
+  resolveChildIds: ChildIdResolver
+): Promise<number[]> {
+  const allRefIdsArrays = await Promise.all(files.map(file => extractReferenceIds(file, resolveChildIds)));
   const allRefIds = allRefIdsArrays.flat();
   return [...new Set(allRefIds)];
 }

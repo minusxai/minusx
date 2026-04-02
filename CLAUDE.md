@@ -2,6 +2,28 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+---
+
+## ⚠️ PRIMARY WORKING STYLE: TEST-DRIVEN DEVELOPMENT
+
+**This is non-negotiable. Every feature and refactor MUST follow one of these two flows.**
+
+### New features — Red → Green
+1. **Write the test first.** It must fail (red) before any implementation exists.
+2. **Run it and confirm it fails.** Never skip this step — a test that never fails proves nothing.
+3. **Implement the feature** until the test passes (green).
+4. **Run the full suite** to confirm nothing regressed.
+
+### Refactoring — Blue → Red → Blue
+1. **Write (or identify) tests that cover the existing behaviour.** They must pass (blue).
+2. **Remove or break the old implementation.** Run the tests and confirm they now fail (red). This proves the tests actually guard the behaviour.
+3. **Re-implement using the new approach** until all tests pass again (blue).
+4. **Run the full suite** to confirm nothing regressed.
+
+> If you skip the red step, you cannot trust the test. A green test that was never red is not a test — it's decoration.
+
+---
+
 ## Project Overview
 
 MinusX is an agentic, file-system based BI Tool that combines:
@@ -568,6 +590,11 @@ export async function POST(req: NextRequest) {
 
 - `frontend/lib/api/file-state.ts` - **CORE: Centralized file operations** — the only place file fetching, editing, saving, deleting, folder loading, and query execution logic should live. Key exports: `loadFiles`, `readFiles`, `readFolder`, `editFile`, `publishFile`, `deleteFile`, `getQueryResult`, `createVirtualFile`.
 - `frontend/lib/hooks/file-state-hooks.ts` - **CORE: React hooks** wrapping `file-state.ts` — the only hooks components should use for file/query data. Key exports: `useFile`, `useFolder`, `useFileByPath`, `useFilesByCriteria`, `useQueryResult`.
+
+**FilesAPI dual-implementation pattern:** A shared interface defines the contract for all file CRUD operations. There is a client implementation (HTTP calls) and a server implementation (direct DB access), both exported as `FilesAPI` from their respective modules. `file-state.ts` uses the client `FilesAPI` and adds Redux state management on top. **When adding a new file operation, add it to the interface and implement it in both client and server.** Never bypass `FilesAPI` with raw `fetch` calls.
+
+> **⚠️ `DocumentDB` should only be used inside the server-side `FilesAPI` implementation.** Do not call `DocumentDB` directly from API routes, tool handlers, job handlers, or anywhere else — go through `FilesAPI` instead. Direct `DocumentDB` usage outside the data layer is a code smell.
+
 - `frontend/lib/database/documents-db.ts` - SQLite CRUD operations
 - `frontend/lib/types.ts` - TypeScript interfaces. Imports shared types from `types.gen.ts`; defines frontend-only types and extends generated ones (e.g. `QuestionContent` adds `queryResultId`)
 - `frontend/lib/types.gen.ts` - **Generated file — do not edit by hand.** Regenerate with `cd frontend && npm run generate-types` after changing Pydantic models in `backend/tasks/agents/analyst/file_schema.py`

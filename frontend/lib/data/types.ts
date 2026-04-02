@@ -140,3 +140,30 @@ export interface BatchSaveFileInput {
 export interface BatchSaveFileResult {
   data: DbFile[];
 }
+
+/**
+ * Result for deleteFile operation
+ */
+export interface DeleteFileResult {
+  id: number;
+  deletedCount: number;  // 1 for files, 1+descendants for folders
+}
+
+/**
+ * Input for moveFile operation
+ */
+export interface MoveFileInput {
+  id: number;
+  name: string;
+  newPath: string;
+}
+
+/**
+ * Result for moveFile operation
+ */
+export interface MoveFileResult {
+  id: number;
+  name: string;
+  path: string;
+  oldPath: string;
+}

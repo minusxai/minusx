@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
-import { AccessTokenDB } from '@/lib/database/documents-db';
+import { AccessTokensAPI } from '@/lib/data/access-tokens.server';
 import { isAdmin } from '@/lib/auth/role-helpers';
 
 /**
@@ -39,7 +39,7 @@ export const DELETE = withAuth(async (
     }
 
     // Revoke token (sets is_active = false)
-    const success = await AccessTokenDB.revoke(token, user.companyId);
+    const success = await AccessTokensAPI.revoke(token, user.companyId);
 
     if (!success) {
       return ApiErrors.notFound('Token');
@@ -96,7 +96,7 @@ export const PATCH = withAuth(async (
     }
 
     // Update expiration
-    const success = await AccessTokenDB.updateExpiration(token, user.companyId, body.expires_at);
+    const success = await AccessTokensAPI.updateExpiration(token, user.companyId, body.expires_at);
 
     if (!success) {
       return ApiErrors.notFound('Token');

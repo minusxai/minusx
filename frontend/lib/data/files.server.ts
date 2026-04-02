@@ -17,14 +17,17 @@ import {
   BatchCreateInput,
   BatchCreateFileResult,
   BatchSaveFileInput,
-  BatchSaveFileResult
+  BatchSaveFileResult,
+  MoveFileInput,
+  MoveFileResult,
+  DeleteFileResult
 } from './types';
 import { canAccessFile } from './helpers/permissions';
 import { extractReferenceIds, extractAllReferenceIds } from './helpers/references';
 import { UserFacingError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
 import { validateFileState } from '@/lib/validation/content-validators';
 import { PROTECTED_FILE_PATHS } from '@/lib/constants';
-import { canAccessFileType, canCreateFileType, validateFileLocation } from '@/lib/auth/access-rules';
+import { canAccessFileType, canCreateFileType, validateFileLocation, canDeleteFileType } from '@/lib/auth/access-rules';
 import type { AccessRulesOverride } from '@/lib/branding/whitelabel';
 import { getConfigsByCompanyId } from './configs.server';
 import { resolvePath, resolveHomeFolderSync, isFileTypeAllowedInPath, resolveHomeFolder } from '@/lib/mode/path-resolver';
@@ -35,6 +38,16 @@ import { computeSchemaFromDatabases } from './loaders/context-loader-utils';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import { getFileAnalyticsSummary, getFilesAnalyticsSummary, getConversationAnalytics } from '@/lib/analytics/file-analytics.server';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
+
+/**
+ * Resolves direct child IDs for a folder path.
+ * Injected into extractReferenceIds to break the circular import that would
+ * arise if references.ts imported FilesAPI directly.
+ */
+const resolveChildIds = async (folderPath: string, companyId: number): Promise<number[]> => {
+  const children = await DocumentDB.listAll(companyId, undefined, [folderPath], 1, false);
+  return children.map(c => c.id);
+};
 
 export class ConflictError extends Error {
   currentFile: DbFile;
@@ -92,7 +105,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
 
     const refStart = Date.now();
-    const refIds = await extractReferenceIds(file);
+    const refIds = await extractReferenceIds(file, resolveChildIds);
     const isConversation = file.type === 'conversation';
     const [references, analytics, conversationAnalytics] = await Promise.all([
       refIds.length > 0 ? DocumentDB.getByIds(refIds, user.companyId) : Promise.resolve([]),
@@ -162,8 +175,8 @@ class FilesDataLayerServer implements IFilesDataLayer {
     const folderFiles = filteredFiles.filter(f => f.type === 'folder');
     const contentFiles = filteredFiles.filter(f => f.type !== 'folder');
     const [folderRefIdArrays, contentRefIdArrays] = await Promise.all([
-      Promise.all(folderFiles.map(f => extractReferenceIds(f))),
-      Promise.all(contentFiles.map(f => extractReferenceIds(f))),
+      Promise.all(folderFiles.map(f => extractReferenceIds(f, resolveChildIds))),
+      Promise.all(contentFiles.map(f => extractReferenceIds(f, resolveChildIds))),
     ]);
     const folderRefIds = new Set(folderRefIdArrays.flat());
     const uniqueRefIds = [...new Set([...folderRefIdArrays.flat(), ...contentRefIdArrays.flat()])];
@@ -243,7 +256,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
       name: file.name,
       path: file.path,
       type: file.type,
-      references: await extractReferenceIds(file),
+      references: await extractReferenceIds(file, resolveChildIds),
       created_at: file.created_at,
       updated_at: file.updated_at,
       company_id: file.company_id,
@@ -764,6 +777,114 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
     return { data: results };
   }
+
+  async deleteFile(id: number, user: EffectiveUser): Promise<DeleteFileResult> {
+    const file = await DocumentDB.getById(id, user.companyId);
+    if (!file) {
+      throw new FileNotFoundError(id);
+    }
+
+    if (!canDeleteFileType(file.type)) {
+      throw new AccessPermissionError(
+        `Files of type '${file.type}' cannot be deleted. They are critical system files.`
+      );
+    }
+
+    if (!isAdmin(user.role)) {
+      const resolvedHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder);
+      if (!file.path.startsWith(resolvedHomeFolder)) {
+        throw new AccessPermissionError('You can only delete files in your home folder');
+      }
+    }
+
+    let deletedCount: number;
+    if (file.type === 'folder') {
+      const descendants = await DocumentDB.listAll(user.companyId, undefined, [file.path], -1, false);
+      const undeletable = descendants.filter(f => !canDeleteFileType(f.type));
+      if (undeletable.length > 0) {
+        throw new AccessPermissionError(
+          `Cannot delete folder: contains ${undeletable.length} file(s) of undeletable type(s): ${[...new Set(undeletable.map(f => f.type))].join(', ')}`
+        );
+      }
+      const allIds = [...descendants.map(f => f.id), id];
+      deletedCount = await DocumentDB.deleteByIds(allIds, user.companyId);
+    } else {
+      deletedCount = await DocumentDB.deleteByIds([id], user.companyId);
+      if (deletedCount === 0) {
+        throw new FileNotFoundError(id);
+      }
+    }
+
+    appEventRegistry.publish(AppEvents.FILE_DELETED, {
+      fileId: id,
+      fileType: file.type,
+      filePath: file.path,
+      fileName: file.name,
+      userId: user.userId,
+      userEmail: user.email,
+      userRole: user.role,
+      companyId: user.companyId,
+      mode: user.mode,
+    });
+
+    return { id, deletedCount };
+  }
+
+  async moveFile(input: MoveFileInput, user: EffectiveUser): Promise<MoveFileResult> {
+    const { id, name, newPath } = input;
+
+    const file = await DocumentDB.getById(id, user.companyId);
+    if (!file) {
+      throw new FileNotFoundError(id);
+    }
+
+    if (!canDeleteFileType(file.type)) {
+      throw new AccessPermissionError(`Cannot move file of type: ${file.type}`);
+    }
+
+    const oldPath = file.path;
+
+    // Validate destination parent folder exists
+    const newParentPath = newPath.substring(0, newPath.lastIndexOf('/'));
+    const oldParentPath = oldPath.substring(0, oldPath.lastIndexOf('/'));
+    if (newParentPath && newParentPath !== oldParentPath) {
+      const parent = await DocumentDB.getByPath(newParentPath, user.companyId);
+      if (!parent || parent.type !== 'folder') {
+        throw new UserFacingError(`Parent folder '${newParentPath}' does not exist`);
+      }
+    }
+
+    if (file.type === 'folder' && oldPath !== newPath) {
+      // Fetch all descendants (metadata only)
+      const descendants = await DocumentDB.listAll(user.companyId, undefined, [oldPath], -1, false);
+
+      // Check move permission on every descendant
+      const blocked = descendants.filter(f => !canDeleteFileType(f.type));
+      if (blocked.length > 0) {
+        throw new AccessPermissionError(
+          `Cannot move folder: contains ${blocked.length} file(s) of protected type(s): ${[...new Set(blocked.map(f => f.type))].join(', ')}`
+        );
+      }
+
+      const descendantIds = descendants.map(f => f.id);
+      await DocumentDB.moveFolderAndChildren(id, descendantIds, oldPath, newPath, name, user.companyId);
+    } else {
+      const success = await DocumentDB.updateMetadata(id, name, newPath, user.companyId);
+      if (!success) {
+        throw new FileNotFoundError(id);
+      }
+    }
+
+    return { id, name, path: newPath, oldPath };
+  }
+
+  async batchMoveFiles(inputs: MoveFileInput[], user: EffectiveUser): Promise<MoveFileResult[]> {
+    const results: MoveFileResult[] = [];
+    for (const input of inputs) {
+      results.push(await this.moveFile(input, user));
+    }
+    return results;
+  }
 }
 
 // Export singleton instance - PREFER using this
@@ -780,3 +901,6 @@ export const loadFileByPath = FilesAPI.loadFileByPath.bind(FilesAPI);
 export const getTemplate = FilesAPI.getTemplate.bind(FilesAPI);
 export const batchCreateFiles = FilesAPI.batchCreateFiles.bind(FilesAPI);
 export const batchSaveFiles = FilesAPI.batchSaveFiles.bind(FilesAPI);
+export const moveFile = FilesAPI.moveFile.bind(FilesAPI);
+export const batchMoveFiles = FilesAPI.batchMoveFiles.bind(FilesAPI);
+export const deleteFile = FilesAPI.deleteFile.bind(FilesAPI);

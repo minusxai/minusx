@@ -224,6 +224,37 @@ class ConfigsDataLayerServer {
     return this._loadConfigsByCompanyId(user.companyId, user.mode);
   }
 
+  /**
+   * Save (create or update) company config.
+   * Merges incoming partial config onto existing stored content.
+   * Returns the new document ID and the merged config.
+   */
+  async saveConfig(
+    incoming: Partial<CompanyConfig>,
+    user: EffectiveUser
+  ): Promise<{ id: number; config: CompanyConfig }> {
+    const configPath = resolvePath(user.mode, '/configs/config');
+    const existing = await DocumentDB.getByPath(configPath, user.companyId);
+
+    let existingContent: Partial<CompanyConfig> = {};
+    if (existing?.content && typeof existing.content === 'object') {
+      existingContent = existing.content as Partial<CompanyConfig>;
+    }
+
+    const mergedContent = mergePartialConfigs(existingContent, incoming);
+
+    let id: number;
+    if (existing) {
+      await DocumentDB.update(existing.id, 'config.json', configPath, mergedContent as any, [], user.companyId);
+      id = existing.id;
+    } else {
+      id = await DocumentDB.create('config.json', configPath, 'config', mergedContent as any, [], user.companyId);
+    }
+
+    const { config } = await this._loadConfigsByCompanyId(user.companyId, user.mode);
+    return { id, config };
+  }
+
   private async _loadConfigsByCompanyId(companyId: number, mode: Mode = DEFAULT_MODE): Promise<GetConfigsResult> {
     try {
       // Load from database
@@ -253,6 +284,7 @@ class ConfigsDataLayerServer {
 
 export const ConfigsAPI = new ConfigsDataLayerServer();
 export const getConfigs = ConfigsAPI.getConfig.bind(ConfigsAPI);
+export const saveConfig = ConfigsAPI.saveConfig.bind(ConfigsAPI);
 
 /**
  * Get configs by company ID directly

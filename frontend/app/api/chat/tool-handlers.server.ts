@@ -5,12 +5,12 @@
  * Each tool calls registerTool() to make itself available for execution.
  */
 
-import { DocumentDB } from '@/lib/database/documents-db';
 import { connectionLoader } from '@/lib/data/loaders/connection-loader';
 import { ConnectionContent } from '@/lib/types';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { FilesAPI } from '@/lib/data/files.server';
+import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { FrontendToolException } from './frontend-tool-exception';
 import { registerTool, registerToolFallback } from './orchestrator';
 import { JSONPath } from 'jsonpath-plus';
@@ -257,14 +257,10 @@ registerTool('SearchDBSchema', async (args, user) => {
 
   // Load connection file with cached schema (via loader)
   const connectionPath = resolvePath(user.mode, `/database/${connection_id}`);
-  const connectionFile = await DocumentDB.getByPath(connectionPath, user.companyId);
-
-  if (!connectionFile) {
-    throw new Error(`Connection '${connection_id}' not found`);
-  }
+  const connectionFile = await FilesAPI.loadFileByPath(connectionPath, user);
 
   // Apply connection loader to get schema (cached or fresh)
-  const loadedConnection = await connectionLoader(connectionFile, user);
+  const loadedConnection = await connectionLoader(connectionFile.data, user);
   const content = loadedConnection.content as ConnectionContent;
   const schemaData = content.schema || { schemas: [], updated_at: new Date().toISOString() };
 
@@ -345,10 +341,9 @@ registerTool('ExecuteQuery', async (args, user) => {
   const { query, connectionId, parameters = {} } = args;
 
   // Look up connection type; if Node.js handles it, bypass Python entirely
-  const connPath = resolvePath(user.mode, `/database/${connectionId}`);
-  const connFile = await DocumentDB.getByPath(connPath, user.companyId);
-  if (connFile?.content) {
-    const { type, config } = connFile.content as ConnectionContent;
+  const connData = await ConnectionsAPI.getByName(connectionId, user).catch(() => null);
+  if (connData) {
+    const { type, config } = connData.connection;
     const connector = getNodeConnector(connectionId, type, config);
     if (connector) {
       const result = await connector.query(query, parameters);
@@ -383,10 +378,10 @@ registerTool('ExecuteQuery', async (args, user) => {
  */
 registerToolFallback('ReadFiles', async (args, user) => {
   const { fileIds } = args as { fileIds: number[] };
-  const files = await Promise.all(
-    fileIds.map(id => DocumentDB.getById(id, user.companyId))
+  const fileResults = await Promise.all(
+    fileIds.map(id => FilesAPI.loadFile(id, user).catch(() => null))
   );
-  const validFiles = files.filter((f): f is NonNullable<typeof f> => f != null);
+  const validFiles = fileResults.filter((r): r is NonNullable<typeof r> => r != null).map(r => r.data);
   return {
     content: { success: true, files: validFiles.map(f => dbFileToCompressedAugmented(f)) },
     details: { success: true },

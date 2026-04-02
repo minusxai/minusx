@@ -81,8 +81,8 @@ const eslintConfig = defineConfig([
             {
               name: "@/lib/database/documents-db",
               message:
-                "Do not import DocumentDB outside the data layer. Use functions from lib/data/** instead. " +
-                "Allowed: lib/data/**, lib/database/**, lib/connections/**, lib/tools/**, lib/jobs/**, lib/auth/**, scripts/**, app/api/**, app/t/**, middleware.ts.",
+                "Do not import DocumentDB outside the data layer. Use FilesAPI, ConnectionsAPI, or ConfigsAPI from lib/data/** instead. " +
+                "DocumentDB is only allowed in lib/data/**, lib/database/**, scripts/**, and test files.",
             },
           ],
         },
@@ -126,24 +126,18 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-require-imports": "off",
     },
   },
-  // Allow DocumentDB in the data layer, tool handlers, job handlers, API routes, scripts, and tests.
-  // Everything outside these paths must go through lib/data/* functions.
+  // Allow DocumentDB only inside the server-side data layer implementations and database module.
+  // Loaders, helpers, and client-side data code must go through FilesAPI/ConnectionsAPI/ConfigsAPI.
   {
     files: [
-      "lib/data/**",
+      "lib/data/*.server.ts",
       "lib/database/**",
-      "lib/connections/**",
-      "lib/tools/**",
-      "lib/jobs/**",
-      "lib/auth/**",
       "scripts/**",
-      "app/api/**",
-      "app/t/**",
-      "middleware.ts",
       "**/*.test.ts",
       "**/*.test.tsx",
       "**/__tests__/**",
       "**/__mocks__/**",
+      "test/**",
     ],
     rules: {
       "no-restricted-imports": "off",
