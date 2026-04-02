@@ -13,6 +13,7 @@ import { getStore } from '@/store/store';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { sparkleKeyframes, pulseKeyframes, cursorBlinkKeyframes } from '@/lib/ui/animations';
 import { useContext } from '@/lib/hooks/useContext';
+import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import ChatInterface from '@/components/explore/ChatInterface';
 import type { CompletedToolCall } from '@/lib/types';
 
@@ -32,9 +33,11 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
   const dispatch = useAppDispatch();
   const reduxState = useAppSelector(state => state);
   const showDebug = useAppSelector(state => state.ui.showDebug);
+  const user = useAppSelector(state => state.auth.user);
+  const modeRoot = resolveHomeFolderSync(user?.mode ?? 'org', user?.home_folder ?? '');
 
   // Load context (schema + docs) from the saved context file
-  const contextInfo = useContext('/org/context');
+  const contextInfo = useContext(`${modeRoot}/context`);
   const { databases, documentation: contextDocs } = contextInfo;
 
   const [isGenerating, setIsGenerating] = useState(false);
@@ -80,7 +83,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
             layout: { columns: 12, items: [] },
           },
           name: 'Getting Started',
-          path: '/org/Getting Started',
+          path: `${modeRoot}/Getting Started`,
         },
       });
       setVirtualDashboardId(vId);
