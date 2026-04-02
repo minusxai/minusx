@@ -430,7 +430,23 @@ export function HelloWorldContent() {
             css={{ animation: 'fadeInUp 0.4s ease-out forwards' }}
           >
             {step === 'connection' && (
-              <StepConnection onComplete={handleConnectionComplete} greeting={`Step 1: Let's connect your data.`} />
+              <>
+                <StepConnection onComplete={handleConnectionComplete} greeting={`Step 1: Let's connect your data.`} />
+                {hasConnections && (
+                  <Text
+                    mt={4}
+                    fontSize="sm"
+                    color="fg.muted"
+                    fontFamily="mono"
+                    cursor="pointer"
+                    textDecoration="underline"
+                    _hover={{ color: 'fg.default' }}
+                    onClick={handleSkipToHome}
+                  >
+                    I've already connected my data →
+                  </Text>
+                )}
+              </>
             )}
             {step === 'context' && connectionName && (
               <StepContext
