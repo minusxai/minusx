@@ -142,6 +142,14 @@ export interface BatchSaveFileResult {
 }
 
 /**
+ * Result for deleteFile operation
+ */
+export interface DeleteFileResult {
+  id: number;
+  deletedCount: number;  // 1 for files, 1+descendants for folders
+}
+
+/**
  * Input for moveFile operation
  */
 export interface MoveFileInput {

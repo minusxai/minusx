@@ -1,6 +1,6 @@
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { IFilesDataLayer } from './files.interface';
-import { LoadFileResult, LoadFilesResult, GetFilesOptions, GetFilesResult, SaveFileResult, CreateFileInput, CreateFileResult, GetTemplateOptions, GetTemplateResult, BatchCreateInput, BatchCreateFileResult, BatchSaveFileInput, BatchSaveFileResult, MoveFileInput, MoveFileResult } from './types';
+import { LoadFileResult, LoadFilesResult, GetFilesOptions, GetFilesResult, SaveFileResult, CreateFileInput, CreateFileResult, GetTemplateOptions, GetTemplateResult, BatchCreateInput, BatchCreateFileResult, BatchSaveFileInput, BatchSaveFileResult, MoveFileInput, MoveFileResult, DeleteFileResult } from './types';
 import { FileExistsError, AccessPermissionError, FileNotFoundError, SerializedError, deserializeError } from '@/lib/errors';
 import { BaseFileContent, DbFile, FileType } from '@/lib/types';
 
@@ -217,6 +217,20 @@ class FilesDataLayerClient implements IFilesDataLayer {
 
     const json = await res.json();
     return { data: json.data };
+  }
+
+  async deleteFile(id: number, user?: EffectiveUser): Promise<DeleteFileResult> {
+    const res = await fetch(`${API_BASE}/api/files/${id}`, { method: 'DELETE' });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      const errorMessage = errorData.error?.message || errorData.message || errorData.error || `Failed to delete file ${id}: ${res.statusText}`;
+      if (res.status === 404) throw new FileNotFoundError(id);
+      throw new Error(errorMessage);
+    }
+
+    const json = await res.json();
+    return json.data as DeleteFileResult;
   }
 
   async moveFile(input: MoveFileInput, user?: EffectiveUser): Promise<MoveFileResult> {

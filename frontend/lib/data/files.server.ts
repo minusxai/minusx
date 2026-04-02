@@ -19,7 +19,8 @@ import {
   BatchSaveFileInput,
   BatchSaveFileResult,
   MoveFileInput,
-  MoveFileResult
+  MoveFileResult,
+  DeleteFileResult
 } from './types';
 import { canAccessFile } from './helpers/permissions';
 import { extractReferenceIds, extractAllReferenceIds } from './helpers/references';
@@ -767,6 +768,58 @@ class FilesDataLayerServer implements IFilesDataLayer {
     return { data: results };
   }
 
+  async deleteFile(id: number, user: EffectiveUser): Promise<DeleteFileResult> {
+    const file = await DocumentDB.getById(id, user.companyId);
+    if (!file) {
+      throw new FileNotFoundError(id);
+    }
+
+    if (!canDeleteFileType(file.type)) {
+      throw new AccessPermissionError(
+        `Files of type '${file.type}' cannot be deleted. They are critical system files.`
+      );
+    }
+
+    if (!isAdmin(user.role)) {
+      const resolvedHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder);
+      if (!file.path.startsWith(resolvedHomeFolder)) {
+        throw new AccessPermissionError('You can only delete files in your home folder');
+      }
+    }
+
+    let deletedCount: number;
+    if (file.type === 'folder') {
+      const descendants = await DocumentDB.listAll(user.companyId, undefined, [file.path], -1, false);
+      const undeletable = descendants.filter(f => !canDeleteFileType(f.type));
+      if (undeletable.length > 0) {
+        throw new AccessPermissionError(
+          `Cannot delete folder: contains ${undeletable.length} file(s) of undeletable type(s): ${[...new Set(undeletable.map(f => f.type))].join(', ')}`
+        );
+      }
+      const allIds = [...descendants.map(f => f.id), id];
+      deletedCount = await DocumentDB.deleteByIds(allIds, user.companyId);
+    } else {
+      deletedCount = await DocumentDB.deleteByIds([id], user.companyId);
+      if (deletedCount === 0) {
+        throw new FileNotFoundError(id);
+      }
+    }
+
+    appEventRegistry.publish(AppEvents.FILE_DELETED, {
+      fileId: id,
+      fileType: file.type,
+      filePath: file.path,
+      fileName: file.name,
+      userId: user.userId,
+      userEmail: user.email,
+      userRole: user.role,
+      companyId: user.companyId,
+      mode: user.mode,
+    });
+
+    return { id, deletedCount };
+  }
+
   async moveFile(input: MoveFileInput, user: EffectiveUser): Promise<MoveFileResult> {
     const { id, name, newPath } = input;
 
@@ -840,3 +893,4 @@ export const batchCreateFiles = FilesAPI.batchCreateFiles.bind(FilesAPI);
 export const batchSaveFiles = FilesAPI.batchSaveFiles.bind(FilesAPI);
 export const moveFile = FilesAPI.moveFile.bind(FilesAPI);
 export const batchMoveFiles = FilesAPI.batchMoveFiles.bind(FilesAPI);
+export const deleteFile = FilesAPI.deleteFile.bind(FilesAPI);

@@ -1,15 +1,14 @@
 import { NextRequest } from 'next/server';
-import { DocumentDB } from '@/lib/database/documents-db';
-import { FolderContent } from '@/lib/types';
+import { FilesAPI } from '@/lib/data/files.server';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
+import { UserFacingError } from '@/lib/errors';
 
 export const POST = withAuth(async (request: NextRequest, user) => {
   try {
     const body = await request.json();
     const { folderName, parentPath } = body;
 
-    // Validate inputs
     if (!folderName || typeof folderName !== 'string' || !folderName.trim()) {
       return ApiErrors.validationError('Folder name is required');
     }
@@ -18,34 +17,21 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       return ApiErrors.validationError('Parent path is required');
     }
 
-    // Construct full path (keep folder name as-is, no slugification)
-    const fullPath = `${parentPath}/${folderName}`.replace(/\/+/g, '/'); // normalize multiple slashes
+    const fullPath = `${parentPath}/${folderName}`.replace(/\/+/g, '/');
 
-    // Validate parent folder exists (single SQL check — no loop)
-    const parentExists = await DocumentDB.getByPath(parentPath, user.companyId);
-    if (!parentExists || parentExists.type !== 'folder') {
-      return ApiErrors.badRequest(`Parent folder '${parentPath}' does not exist`);
-    }
-
-    // Check if folder already exists at this path
-    const existing = await DocumentDB.getByPath(fullPath, user.companyId);
-    if (existing) {
-      return ApiErrors.conflict('A folder or file already exists at this path');
-    }
-
-    // Create folder entry (name is in file metadata, not content)
-    const content: FolderContent = {
-      description: ''
-    };
-
-    const id = await DocumentDB.create(folderName, fullPath, 'folder', content, [], user.companyId);  // Phase 6: Folders have no references
-
-    return successResponse({
-      id,
+    const result = await FilesAPI.createFile({
+      name: folderName,
       path: fullPath,
-      name: folderName
-    }, 201);
+      type: 'folder',
+      content: { description: '' },
+      references: [],
+    }, user);
+
+    return successResponse({ id: result.data.id, path: fullPath, name: folderName }, 201);
   } catch (error) {
+    if (error instanceof UserFacingError) {
+      return ApiErrors.badRequest(error.message);
+    }
     return handleApiError(error);
   }
 });

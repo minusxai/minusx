@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { DocumentDB } from '@/lib/database/documents-db';
 import { handleApiError } from '@/lib/api/api-responses';
-import type { ConnectionContent } from '@/lib/types';
+import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { sessionTokenManager } from '@/lib/auth/session-tokens';
-import { resolvePath } from '@/lib/mode/path-resolver';
 
 // Force Node.js runtime (required for better-sqlite3)
 export const runtime = 'nodejs';
@@ -50,26 +48,20 @@ export async function GET(
 
     const { companyId, mode } = tokenData;
 
-    // Find connection by name with company_id filtering (multi-tenant isolation)
-    const connectionPath = resolvePath(mode, `/database/${name}`);
-    const connection = await DocumentDB.getByPath(connectionPath, companyId);
-
-    if (!connection) {
-      return NextResponse.json(
-        { error: `Connection '${name}' not found for company ${companyId}` },
-        { status: 404 }
-      );
-    }
-
-
-    const connectionContent = connection.content as ConnectionContent;
+    // Use ConnectionsAPI to load connection by name (handles path resolution internally)
+    const user = { companyId, mode, userId: 0, email: '', role: 'admin' as const, home_folder: '', name: '', companyName: '' };
+    const { connection } = await ConnectionsAPI.getByName(name, user);
 
     // Return connection config for Python backend
     return NextResponse.json({
-      type: connectionContent.type,
-      config: connectionContent.config
+      type: connection.type,
+      config: connection.config
     });
   } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes('not found')) {
+      return NextResponse.json({ error: msg }, { status: 404 });
+    }
     console.error('[Internal API] Error fetching connection config:', error);
     return handleApiError(error);
   }

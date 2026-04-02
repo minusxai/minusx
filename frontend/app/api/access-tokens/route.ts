@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
 import { AccessTokenDB } from '@/lib/database/documents-db';
-import { DocumentDB } from '@/lib/database/documents-db';
+import { FilesAPI } from '@/lib/data/files.server';
 import { AccessTokenCreate } from '@/lib/types';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { AUTH_URL } from '@/lib/config';
@@ -40,10 +40,7 @@ export const POST = withAuth(async (
     }
 
     // Verify file exists and belongs to same company
-    const file = await DocumentDB.getById(body.file_id, user.companyId);
-    if (!file) {
-      return ApiErrors.notFound('File');
-    }
+    await FilesAPI.loadFile(body.file_id, user);
 
     // Create token
     const token = await AccessTokenDB.create(

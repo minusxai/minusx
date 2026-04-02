@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
-import { DocumentDB } from '@/lib/database/documents-db';
+import { FilesAPI } from '@/lib/data/files.server';
 import { runQuery } from '@/lib/connections/run-query';
 import { createServerRunner } from '@/lib/tests/server';
 import { EvalItem, BinaryAssertion, NumberAssertion, DatabaseWithSchema, QuestionContent, ConversationLogEntry, Test } from '@/lib/types';
@@ -59,8 +59,9 @@ export async function POST(request: NextRequest) {
     // Build app_state from eval_item.app_state
     let app_state: Record<string, unknown> | null = null;
     if (eval_item.app_state.type === 'file') {
-      const file = await DocumentDB.getById(eval_item.app_state.file_id, user.companyId);
-      if (file) {
+      const fileResult = await FilesAPI.loadFile(eval_item.app_state.file_id, user).catch(() => null);
+      if (fileResult) {
+        const file = fileResult.data;
         app_state = {
           type: 'file',
           file: { id: file.id, name: file.name, path: file.path, type: file.type, content: file.content }
@@ -212,15 +213,15 @@ export async function POST(request: NextRequest) {
     // Resolve expected value: from question_id (run its query, take first cell) or static answer
     let expected = assertion.answer;
     if (assertion.question_id) {
-      const qFile = await DocumentDB.getById(assertion.question_id, user.companyId);
-      if (!qFile) {
+      const qFileResult = await FilesAPI.loadFile(assertion.question_id, user).catch(() => null);
+      if (!qFileResult) {
         return NextResponse.json({
           passed: false,
           details: { error: `Question file ${assertion.question_id} not found` },
           log: allCompletedFromPython,
         } as EvalRunResponse);
       }
-      const qContent = qFile.content as QuestionContent;
+      const qContent = qFileResult.data.content as QuestionContent;
       const qResult = await runQuery(qContent.database_name, qContent.query, {}, user);
       if (!qResult.rows.length || !qResult.columns.length) {
         return NextResponse.json({

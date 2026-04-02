@@ -2,12 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { revalidateTag } from 'next/cache';
 import { successResponse, handleApiError, ApiErrors } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
-import { loadFile, saveFile, moveFile, ConflictError } from '@/lib/data/files.server';
+import { loadFile, saveFile, moveFile, deleteFile, ConflictError } from '@/lib/data/files.server';
 import { validateFileId } from '@/lib/data/helpers/validation';
-import { DocumentDB } from '@/lib/database/documents-db';
-import { canDeleteFileType } from '@/lib/auth/access-rules';
-import { isAdmin } from '@/lib/auth/role-helpers';
-import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 
 // Route segment config: optimize for API routes
@@ -143,61 +139,8 @@ export const DELETE = withAuth(async (
     const { id: idStr } = await params;
     const id = validateFileId(idStr);
 
-    // Check access before allowing delete
-    const file = await DocumentDB.getById(id, user.companyId);
-    if (!file) {
-      return ApiErrors.notFound('File');
-    }
-
-    // Check if file type can be deleted (blocks config/styles universally)
-    if (!canDeleteFileType(file.type)) {
-      return ApiErrors.forbidden(
-        `Files of type '${file.type}' cannot be deleted. They are critical system files.`
-      );
-    }
-
-    // Check if non-admin is trying to delete file outside their home folder
-    if (!isAdmin(user.role)) {
-      const resolvedHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder);
-      if (!file.path.startsWith(resolvedHomeFolder)) {
-        return ApiErrors.forbidden('You can only delete files in your home folder');
-      }
-    }
-
-    // If it's a folder, check all descendants are deletable before removing anything
-    if (file.type === 'folder') {
-      const descendants = await DocumentDB.listAll(user.companyId, undefined, [file.path], -1, false);
-      const undeletable = descendants.filter(f => !canDeleteFileType(f.type));
-      if (undeletable.length > 0) {
-        return ApiErrors.forbidden(
-          `Cannot delete folder: contains ${undeletable.length} file(s) of undeletable type(s): ${[...new Set(undeletable.map(f => f.type))].join(', ')}`
-        );
-      }
-      const allIds = [...descendants.map(f => f.id), id];
-      await DocumentDB.deleteByIds(allIds, user.companyId);
-      console.log(`[DELETE] Deleted folder "${file.name}" and ${descendants.length} items inside it`);
-    } else {
-      // Delete the non-folder file itself
-      const deletedCount = await DocumentDB.deleteByIds([id], user.companyId);
-      if (deletedCount === 0) {
-        return ApiErrors.notFound('File');
-      }
-    }
-
-    // Track deleted event (fire-and-forget)
-    appEventRegistry.publish(AppEvents.FILE_DELETED, {
-      fileId: id,
-      fileType: file.type,
-      filePath: file.path,
-      fileName: file.name,
-      userId: user.userId,
-      userEmail: user.email,
-      userRole: user.role,
-      companyId: user.companyId,
-      mode: user.mode,
-    });
-
-    return successResponse({ message: 'File deleted successfully' });
+    const result = await deleteFile(id, user);
+    return successResponse({ message: 'File deleted successfully', ...result });
   } catch (error) {
     return handleApiError(error);
   }

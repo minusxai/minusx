@@ -2,13 +2,11 @@ import 'server-only';
 import { resolveBaseUrl } from '@/lib/jobs/job-utils';
 import { BACKEND_URL } from '@/lib/config';
 import { FilesAPI } from '@/lib/data/files.server';
+import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { runQuery } from '@/lib/connections/run-query';
-import { DocumentDB } from '@/lib/database/documents-db';
-import { resolvePath } from '@/lib/mode/path-resolver';
 import { createServerRunner } from '@/lib/tests/server';
 import type { JobHandler } from '../job-registry';
 import type {
-  ConnectionContent,
   JobHandlerResult,
   JobRunnerInput,
   QuestionContent,
@@ -52,18 +50,14 @@ export const transformationJobHandler: JobHandler = {
         }
 
         // Check connection type — DuckDB is read-only, cannot create views
-        const connPath = resolvePath(user.mode, `/database/${question.database_name}`);
-        const connFile = await DocumentDB.getByPath(connPath, user.companyId);
-        if (connFile?.content) {
-          const connectionType = (connFile.content as ConnectionContent).type;
-          if (connectionType === 'duckdb') {
-            results.push({ questionId, questionName, schema, view, sql, status: 'error', error: 'DuckDB connections do not support transformations (read-only).' });
-            continue;
-          }
+        const connData = await ConnectionsAPI.getByName(question.database_name, user).catch(() => null);
+        const connectionType = connData?.connection.type ?? null;
+        if (connectionType === 'duckdb') {
+          results.push({ questionId, questionName, schema, view, sql, status: 'error', error: 'DuckDB connections do not support transformations (read-only).' });
+          continue;
         }
 
         // Build DDL using CREATE OR REPLACE VIEW for idempotent execution
-        const connectionType = connFile?.content ? (connFile.content as ConnectionContent).type : null;
         if (connectionType === 'bigquery') {
           sql = `CREATE OR REPLACE VIEW \`${schema}\`.\`${view}\` AS\n${question.query}`;
         } else {

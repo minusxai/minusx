@@ -1,9 +1,7 @@
 import 'server-only';
-import { DocumentDB } from '@/lib/database/documents-db';
-import { resolvePath } from '@/lib/mode/path-resolver';
+import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { getNodeConnector } from '@/lib/connections';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
-import type { ConnectionContent } from '@/lib/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
 export interface QueryResult {
@@ -30,11 +28,10 @@ export async function runQuery(
   user: EffectiveUser,
   parameterTypes?: Record<string, 'text' | 'number' | 'date'>
 ): Promise<QueryResult> {
-  const connPath = resolvePath(user.mode, `/database/${databaseName}`);
-  const connFile = await DocumentDB.getByPath(connPath, user.companyId);
-
-  if (connFile?.content) {
-    const { type, config } = connFile.content as ConnectionContent;
+  // Try Node.js connector first (DuckDB, CSV, Google Sheets)
+  const connData = await ConnectionsAPI.getByName(databaseName, user).catch(() => null);
+  if (connData) {
+    const { type, config } = connData.connection;
     const connector = getNodeConnector(databaseName, type, config);
     if (connector) {
       return connector.query(query, params);
