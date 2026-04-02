@@ -349,6 +349,10 @@ export default function QuestionViewV2({
     onChange({ vizSettings: { ...content.vizSettings, styleConfig } });
   };
 
+  const handleAnnotationsChange = (annotations: import('@/lib/types').ChartAnnotation[]) => {
+    onChange({ vizSettings: { ...content.vizSettings, annotations } });
+  };
+
   // Handle axis config change (scale type)
   const handleAxisConfigChange = (axisConfig: import('@/lib/types').AxisConfig) => {
     onChange({ vizSettings: { ...content.vizSettings, axisConfig } });
@@ -905,6 +909,7 @@ export default function QuestionViewV2({
                 onColumnFormatsChange={handleColumnFormatsChange}
                 onStyleConfigChange={handleStyleConfigChange}
                 onAxisConfigChange={handleAxisConfigChange}
+                onAnnotationsChange={handleAnnotationsChange}
               />
             )}
           </Box>

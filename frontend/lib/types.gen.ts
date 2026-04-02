@@ -146,6 +146,26 @@ export type Opacity = number | null;
  */
 export type Markersize = number | null;
 /**
+ * whether bar and area series should be stacked. Defaults to true for those chart types.
+ */
+export type Stacked = boolean | null;
+/**
+ * annotations for cartesian charts. Each annotation specifies x, series, and text.
+ */
+export type Annotations = ChartAnnotation[] | null;
+/**
+ * X-axis value to anchor the annotation to
+ */
+export type X = string | number;
+/**
+ * series name to anchor the annotation to
+ */
+export type Series = string | null;
+/**
+ * annotation label text
+ */
+export type Text = string;
+/**
  * deprecated legacy color overrides. Use styleConfig.colors instead.
  */
 export type Colors1 = {
@@ -168,6 +188,10 @@ export type Ymin = number | null;
  * explicit Y-axis maximum value
  */
 export type Ymax = number | null;
+/**
+ * optional Y-axis title override for charts with a single Y axis
+ */
+export type Ytitle = string | null;
 export type Parameters = QuestionParameter[] | null;
 export type Name2 = string;
 export type ParameterType = "text" | "number" | "date";
@@ -203,7 +227,7 @@ export type Assets = (FileReference | InlineAsset)[];
 export type Columns1 = number | null;
 export type Items = DashboardLayoutItem[] | null;
 export type Id6 = number;
-export type X = number;
+export type X1 = number;
 export type Y = number;
 /**
  * width in grid units (min 2)
@@ -252,6 +276,7 @@ export interface VizSettings {
    * shared visual styling for the chart, such as colors, opacity, and marker size.
    */
   styleConfig?: VisualizationStyleConfig | null;
+  annotations?: Annotations;
   colors?: Colors1;
   /**
    * axis configuration for scale type (linear or log). Only set when user explicitly requests log scale.
@@ -306,6 +331,15 @@ export interface VisualizationStyleConfig {
   colors?: Colors;
   opacity?: Opacity;
   markerSize?: Markersize;
+  stacked?: Stacked;
+}
+/**
+ * A chart annotation anchored to an existing chart x value and series with a short text label.
+ */
+export interface ChartAnnotation {
+  x: X;
+  series?: Series;
+  text: Text;
 }
 /**
  * Per-axis configuration for scale type and range.
@@ -323,6 +357,7 @@ export interface AxisConfig {
   xMax?: Xmax;
   yMin?: Ymin;
   yMax?: Ymax;
+  yTitle?: Ytitle;
 }
 export interface QuestionParameter {
   name: Name2;
@@ -380,7 +415,7 @@ export interface DashboardLayout {
 }
 export interface DashboardLayoutItem {
   id: Id6;
-  x: X;
+  x: X1;
   y: Y;
   w: W;
   h: H;

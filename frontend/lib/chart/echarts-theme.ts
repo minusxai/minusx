@@ -23,7 +23,7 @@ export const CHART_COLORS = {
   sunflower: '#f1c40f',    // Sun Flower (yellow)
   carrot: '#e67e22',       // Carrot (dark orange)
   silver: '#bdc3c7',       // Silver (light gray)
-
+  moonlight: '#34495e',     // Midnight Blue (dark gray)
 }
 
 // Color palette for multi-series charts
@@ -31,14 +31,11 @@ export const COLOR_PALETTE = [
   CHART_COLORS.teal,       // 1. Teal
   CHART_COLORS.primary,    // 2. Blue
   CHART_COLORS.danger,     // 3. Red
-  CHART_COLORS.warning,    // 4. Orange
+  CHART_COLORS.sunflower,    // 4. Yellow
   CHART_COLORS.purple,     // 5. Purple
-  CHART_COLORS.success,    // 6. Green
-  CHART_COLORS.turquoise,  // 7. Turquoise
-  CHART_COLORS.peterRiver, // 8. Light Blue
-  CHART_COLORS.wisteria,   // 9. Dark Purple
-  CHART_COLORS.carrot,     // 10. Dark Orange
-  CHART_COLORS.silver      // 11. Silver (light gray)
+  CHART_COLORS.carrot,     // 6. Dark Orange
+  CHART_COLORS.silver,     // 7. Silver (light gray)
+  CHART_COLORS.moonlight   // 8. Midnight Blue (dark gray)
 ]
 
 // Ordered keys for UI display

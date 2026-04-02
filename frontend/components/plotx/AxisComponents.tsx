@@ -117,6 +117,7 @@ export const DropZone = ({ label, onDrop, isTouchDevice, children, labelExtra }:
       borderColor={isDragOver ? 'accent.teal' : 'border.muted'}
       position="relative"
       minH="44px"
+      minW={0}
       overflow="visible"
       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setIsDragOver(true) }}
       onDragLeave={() => setIsDragOver(false)}
@@ -147,7 +148,9 @@ export const DropZone = ({ label, onDrop, isTouchDevice, children, labelExtra }:
         </Text>
         {labelExtra}
       </HStack>
-      {children}
+      <Box minW={0} width="100%">
+        {children}
+      </Box>
     </VStack>
   )
 }
@@ -344,7 +347,7 @@ export const ZoneChip = ({ column, type, onRemove, extra, formatConfig, onFormat
   }, [onFormatChange])
 
   return (
-    <Box position="relative" ref={chipRef}>
+    <Box position="relative" ref={chipRef} minW={0} maxW="100%" flex="0 1 auto">
       <HStack
         gap={1.5}
         px={2}
@@ -354,9 +357,20 @@ export const ZoneChip = ({ column, type, onRemove, extra, formatConfig, onFormat
         border="1px solid"
         borderColor={hasFormat ? 'accent.teal' : 'border.muted'}
         minWidth={0}
+        maxWidth="100%"
+        overflow="hidden"
       >
         <Box as={Icon} fontSize="sm" color={color} flexShrink={0} />
-        <Text fontSize="xs" fontFamily="mono" color="fg.default" whiteSpace="nowrap">
+        <Text
+          fontSize="xs"
+          fontFamily="mono"
+          color="fg.default"
+          whiteSpace="nowrap"
+          flex="1"
+          minW={0}
+          overflow="hidden"
+          textOverflow="ellipsis"
+        >
           {displayName}
         </Text>
         {extra}

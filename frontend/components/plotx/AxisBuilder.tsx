@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { Box, HStack, VStack, Text } from '@chakra-ui/react'
-import { LuSettings2 } from 'react-icons/lu'
+import { LuChevronDown, LuChevronRight } from 'react-icons/lu'
 import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } from './AxisComponents'
 import type { ColumnFormatConfig, AxisConfig } from '@/lib/types'
 
@@ -21,14 +21,14 @@ interface AxisBuilderProps {
   columnFormats?: Record<string, ColumnFormatConfig>
   onColumnFormatChange?: (column: string, config: ColumnFormatConfig) => void
   children?: React.ReactNode
-  settingsPanel?: React.ReactNode
+  stylePanel?: React.ReactNode
+  annotationPanel?: React.ReactNode
   axisConfig?: AxisConfig
   onAxisConfigChange?: (config: AxisConfig) => void
   chartType?: string
 }
 
-// Popover for axis settings (scale + min/max)
-const AxisSettingsPopover = ({ axis, axisConfig, onChange }: {
+const AxisSettingsPanel = ({ axis, axisConfig, onChange }: {
   axis: 'x' | 'y'
   axisConfig: AxisConfig
   onChange: (config: AxisConfig) => void
@@ -39,6 +39,7 @@ const AxisSettingsPopover = ({ axis, axisConfig, onChange }: {
   const currentScale = axisConfig[scaleKey] ?? 'linear'
   const currentMin = axisConfig[minKey]
   const currentMax = axisConfig[maxKey]
+  const currentTitle = axis === 'y' ? axisConfig.yTitle ?? '' : ''
 
   const inputStyle = {
     fontSize: '12px',
@@ -53,8 +54,25 @@ const AxisSettingsPopover = ({ axis, axisConfig, onChange }: {
   }
 
   return (
-    <VStack align="stretch" gap={2.5} p={2.5} minW="160px">
-      {/* Scale */}
+    <VStack align="stretch" gap={2.5} minW={0}>
+      {axis === 'y' && (
+        <Box>
+          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+            Title
+          </Text>
+          <input
+            type="text"
+            placeholder="auto"
+            value={currentTitle}
+            onChange={(e) => {
+              const value = e.target.value
+              onChange({ ...axisConfig, yTitle: value || null })
+            }}
+            onClick={(e) => e.stopPropagation()}
+            style={inputStyle}
+          />
+        </Box>
+      )}
       <Box>
         <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
           Scale
@@ -84,8 +102,6 @@ const AxisSettingsPopover = ({ axis, axisConfig, onChange }: {
           ))}
         </HStack>
       </Box>
-
-      {/* Min / Max */}
       <HStack gap={2}>
         <Box flex={1}>
           <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
@@ -124,72 +140,16 @@ const AxisSettingsPopover = ({ axis, axisConfig, onChange }: {
   )
 }
 
-// Settings icon + popover for a drop zone
-const ZoneSettings = ({ axis, axisConfig, onChange }: {
-  axis: 'x' | 'y'
-  axisConfig: AxisConfig
-  onChange: (config: AxisConfig) => void
-}) => {
-  const [showPopover, setShowPopover] = useState(false)
-  const popoverRef = useRef<HTMLDivElement>(null)
-  const buttonRef = useRef<HTMLDivElement>(null)
-
-  const scaleKey = axis === 'x' ? 'xScale' : 'yScale'
-  const minKey = axis === 'x' ? 'xMin' : 'yMin'
-  const maxKey = axis === 'x' ? 'xMax' : 'yMax'
-  const hasConfig = (axisConfig[scaleKey] && axisConfig[scaleKey] !== 'linear')
-    || axisConfig[minKey] != null || axisConfig[maxKey] != null
-
-  useEffect(() => {
-    if (!showPopover) return
-    const handler = (e: MouseEvent) => {
-      if (
-        popoverRef.current && !popoverRef.current.contains(e.target as Node) &&
-        buttonRef.current && !buttonRef.current.contains(e.target as Node)
-      ) {
-        setShowPopover(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [showPopover])
-
-  return (
-    <Box position="relative" display="inline-flex" ref={buttonRef}>
-      <Box
-        as="button"
-        onClick={(e: React.MouseEvent) => { e.stopPropagation(); setShowPopover(!showPopover) }}
-        color={hasConfig ? 'accent.teal' : 'fg.subtle'}
-        _hover={{ color: 'accent.teal' }}
-        transition="color 0.2s"
-        aria-label={`${axis.toUpperCase()} axis settings`}
-      >
-        <LuSettings2 size={11} />
-      </Box>
-      {showPopover && (
-        <Box
-          ref={popoverRef}
-          position="absolute"
-          top="100%"
-          left={0}
-          mt={1}
-          bg="bg.panel"
-          border="1px solid"
-          borderColor="border.muted"
-          borderRadius="md"
-          boxShadow="md"
-          zIndex={20}
-        >
-          <AxisSettingsPopover axis={axis} axisConfig={axisConfig} onChange={onChange} />
-        </Box>
-      )}
-    </Box>
-  )
-}
-
-export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnFormatChange, children, settingsPanel, axisConfig, onAxisConfigChange, chartType }: AxisBuilderProps) => {
+export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnFormatChange, children, stylePanel, annotationPanel, axisConfig, onAxisConfigChange, chartType }: AxisBuilderProps) => {
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null)
   const [selectedColumnForMobile, setSelectedColumnForMobile] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'fields' | 'settings'>('fields')
+  const [collapsedPanels, setCollapsedPanels] = useState<Record<string, boolean>>({
+    xAxis: false,
+    yAxis: false,
+    style: false,
+    annotations: false,
+  })
   const isTouchDevice = useIsTouchDevice()
 
   // Compute assigned columns from all zones
@@ -222,16 +182,67 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
     setSelectedColumnForMobile(null)
   }, [draggedColumn, selectedColumnForMobile])
 
-  // Determine which zones get axis settings (X axis for scatter only, Y axis always)
-  const getZoneAxis = (label: string): 'x' | 'y' | null => {
-    if (label === 'X Axis' && chartType === 'scatter') return 'x'
-    if (label === 'Y Axis') return 'y'
-    return null
+  const showXAxisSettings = chartType === 'scatter' && !!onAxisConfigChange
+  const showYAxisSettings = !!onAxisConfigChange
+  const hasSettingsTab = showXAxisSettings || showYAxisSettings || !!stylePanel || !!annotationPanel
+
+  const tabButtonStyles = {
+    px: 2.5,
+    py: 1,
+    borderRadius: 'md',
+    fontSize: '2xs',
+    fontFamily: 'mono',
+    fontWeight: '700',
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.05em',
+    border: '1px solid',
+    transition: 'all 0.15s',
+  }
+
+  const togglePanel = (key: 'xAxis' | 'yAxis' | 'style' | 'annotations') => {
+    setCollapsedPanels(prev => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  const renderSettingsCard = (title: string, panelKey: 'xAxis' | 'yAxis' | 'style' | 'annotations', children: React.ReactNode) => {
+    const collapsed = collapsedPanels[panelKey]
+    return (
+      <VStack
+        align="stretch"
+        gap={collapsed ? 0 : 2.5}
+        p={3}
+        bg="bg.surface"
+        borderRadius="md"
+        border="2px dashed"
+        borderColor="border.muted"
+        minW={0}
+      >
+        <HStack justify="space-between" align="center">
+          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
+            {title}
+          </Text>
+          <button
+            onClick={() => togglePanel(panelKey)}
+            aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
+            style={{
+              color: 'var(--chakra-colors-fg-subtle)',
+              background: 'transparent',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+            }}
+          >
+            {collapsed ? <LuChevronRight size={14} /> : <LuChevronDown size={14} />}
+          </button>
+        </HStack>
+        {!collapsed && children}
+      </VStack>
+    )
   }
 
   return (
-    <Box display="flex" flexDirection="column" gap={3} width="100%" p={3} bg="bg.canvas" borderBottom="1px solid" borderColor="border.muted">
-      {/* Column palette */}
+    <Box display="flex" flexDirection="column" gap={4} width="100%" p={3} bg="bg.canvas" borderBottom="1px solid" borderColor="border.muted">
       <HStack gap={2} flexWrap="wrap" justifyContent="space-between">
         <HStack gap={2} flexWrap="wrap">
           {columns.map(col => (
@@ -252,7 +263,6 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
         {children}
       </HStack>
 
-      {/* Mobile instruction */}
       {isTouchDevice && selectedColumnForMobile && (
         <Box p={2} bg="accent.teal/10" borderRadius="md" textAlign="center">
           <Text fontSize="xs" fontWeight="600" color="accent.teal">
@@ -261,41 +271,103 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
         </Box>
       )}
 
-      {/* Drop zones */}
-      <Box display="flex" flexDirection="row" gap={3}>
-        {zones.map(zone => {
-          const axis = getZoneAxis(zone.label)
-          return (
-            <DropZone
-              key={zone.label}
-              label={zone.label}
-              onDrop={() => handleZoneDrop(zone)}
-              isTouchDevice={isTouchDevice}
-              labelExtra={axis && onAxisConfigChange ? (
-                <ZoneSettings axis={axis} axisConfig={axisConfig ?? {}} onChange={onAxisConfigChange} />
-              ) : undefined}
-            >
-              <HStack gap={1.5} flexWrap="wrap">
-                {zone.items.map(item => (
-                  <ZoneChip
-                    key={item.column}
-                    column={item.column}
-                    type={resolveColumnType(item.column, columns, types)}
-                    onRemove={() => zone.onRemove(item.column)}
-                    extra={item.extra}
-                    formatConfig={columnFormats?.[item.column]}
-                    onFormatChange={onColumnFormatChange ? (config) => onColumnFormatChange(item.column, config) : undefined}
-                  />
-                ))}
-              </HStack>
-              {zone.items.length === 0 && (
-                <Text fontSize="xs" color="fg.subtle" fontStyle="italic">{zone.emptyText || 'Drop columns here'}</Text>
-              )}
-            </DropZone>
-          )
-        })}
-        {settingsPanel}
-      </Box>
+      {hasSettingsTab && (
+        <HStack gap={2} justify="flex-end">
+          <Box
+            as="button"
+            {...tabButtonStyles}
+            bg={activeTab === 'fields' ? 'accent.teal' : 'bg.surface'}
+            color={activeTab === 'fields' ? 'white' : 'fg.subtle'}
+            borderColor={activeTab === 'fields' ? 'accent.teal' : 'border.muted'}
+            onClick={() => setActiveTab('fields')}
+          >
+            Fields
+          </Box>
+          <Box
+            as="button"
+            {...tabButtonStyles}
+            bg={activeTab === 'settings' ? 'accent.teal' : 'bg.surface'}
+            color={activeTab === 'settings' ? 'white' : 'fg.subtle'}
+            borderColor={activeTab === 'settings' ? 'accent.teal' : 'border.muted'}
+            onClick={() => setActiveTab('settings')}
+          >
+            Settings
+          </Box>
+        </HStack>
+      )}
+
+      {(!hasSettingsTab || activeTab === 'fields') && (
+        <Box display="flex" gap={3} alignItems="stretch" minWidth={0}>
+          {zones.map(zone => {
+            const zoneFlex = zone.label === 'X Axis' || zone.label === 'Y Axis' ? 2 : 1
+            return (
+              <Box key={zone.label} minW={0} flex={zoneFlex} display="flex" alignItems="stretch">
+                <DropZone
+                  label={zone.label}
+                  onDrop={() => handleZoneDrop(zone)}
+                  isTouchDevice={isTouchDevice}
+                >
+                  <HStack gap={1.5} flexWrap="wrap" minW={0} width="100%">
+                    {zone.items.map(item => (
+                      <ZoneChip
+                        key={item.column}
+                        column={item.column}
+                        type={resolveColumnType(item.column, columns, types)}
+                        onRemove={() => zone.onRemove(item.column)}
+                        extra={item.extra}
+                        formatConfig={columnFormats?.[item.column]}
+                        onFormatChange={onColumnFormatChange ? (config) => onColumnFormatChange(item.column, config) : undefined}
+                      />
+                    ))}
+                  </HStack>
+                  {zone.items.length === 0 && (
+                    <Text
+                      fontSize="xs"
+                      color="fg.subtle"
+                      fontStyle="italic"
+                      maxWidth="100%"
+                      overflow="hidden"
+                      textOverflow="ellipsis"
+                      whiteSpace="nowrap"
+                    >
+                      {zone.emptyText || 'Drop columns here'}
+                    </Text>
+                  )}
+                </DropZone>
+              </Box>
+            )
+          })}
+        </Box>
+      )}
+
+      {hasSettingsTab && activeTab === 'settings' && (
+        <Box display="grid" gridTemplateColumns="minmax(240px, 1.1fr) minmax(280px, 1fr)" gap={3} minWidth={0}>
+          <VStack align="stretch" gap={3} minW={0}>
+            {showXAxisSettings && onAxisConfigChange && (
+              renderSettingsCard('X Axis', 'xAxis',
+                <AxisSettingsPanel axis="x" axisConfig={axisConfig ?? {}} onChange={onAxisConfigChange} />
+              )
+            )}
+            {showYAxisSettings && onAxisConfigChange && (
+              renderSettingsCard('Y Axis', 'yAxis',
+                <AxisSettingsPanel axis="y" axisConfig={axisConfig ?? {}} onChange={onAxisConfigChange} />
+              )
+            )}
+          </VStack>
+          <VStack align="stretch" gap={3} minW={0}>
+            {stylePanel ? (
+              renderSettingsCard('Style', 'style',
+                stylePanel
+              )
+            ) : null}
+            {annotationPanel ? (
+              renderSettingsCard('Annotations', 'annotations',
+                annotationPanel
+              )
+            ) : null}
+          </VStack>
+        </Box>
+      )}
 
     </Box>
   )

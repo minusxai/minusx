@@ -15,6 +15,7 @@ import {
   GridComponent,      // xAxis / yAxis grid
   LegendComponent,    // legend: { data: [...] }
   ToolboxComponent,   // toolbox: { feature: { ... } } (PNG + CSV download)
+  GraphicComponent,   // graphic: [...] custom annotation overlays
 } from 'echarts/components';
 
 // Features for label layout (pie outside labels) and animated transitions
@@ -34,6 +35,7 @@ echarts.use([
   GridComponent,
   LegendComponent,
   ToolboxComponent,
+  GraphicComponent,
   LabelLayout,
   UniversalTransition,
   CanvasRenderer,

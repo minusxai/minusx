@@ -11,10 +11,11 @@ interface StyleConfigPopoverProps {
   styleConfig?: VisualizationStyleConfig
   numSeries: number
   onChange: (config: VisualizationStyleConfig) => void
+  displayMode?: 'auto' | 'button' | 'inline'
 }
 
 const HEX_TO_KEY = Object.fromEntries(Object.entries(CHART_COLORS).map(([k, v]) => [v, k]))
-const OPACITY_OPTIONS = [0.25, 0.4, 0.6, 0.8, 1]
+const OPACITY_OPTIONS = [0.25, 0.5, 0.75, 1]
 const MARKER_SIZE_OPTIONS = [
   { label: 'xs', value: 4 },
   { label: 'sm', value: 8 },
@@ -66,16 +67,22 @@ const hasStyleConfig = (config?: VisualizationStyleConfig) =>
     (config.colors && Object.keys(config.colors).length > 0)
     || config.opacity != null
     || config.markerSize != null
+    || config.stacked != null
   )
 
-export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange }: StyleConfigPopoverProps) => {
+export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange, displayMode = 'auto' }: StyleConfigPopoverProps) => {
   const [showPopover, setShowPopover] = useState(false)
   const [activeSeriesIndex, setActiveSeriesIndex] = useState<number | null>(null)
+  const [containerWidth, setContainerWidth] = useState(0)
+  const containerRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLDivElement>(null)
   const popoverRef = useRef<HTMLDivElement>(null)
 
   const supportsMarkerSize = chartType === 'scatter' || chartType === 'line' || chartType === 'combo'
+  const supportsStacking = chartType === 'bar' || chartType === 'area'
   const seriesCount = useMemo(() => Math.min(Math.max(numSeries, 1), COLOR_PALETTE.length), [numSeries])
+  const selectedOpacity = styleConfig?.opacity == null ? 1 : styleConfig.opacity
+  const isStacked = styleConfig?.stacked ?? true
 
   useEffect(() => {
     if (!showPopover) return
@@ -93,11 +100,30 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
     return () => document.removeEventListener('mousedown', handler)
   }, [showPopover])
 
+  useEffect(() => {
+    if (displayMode !== 'auto' || !containerRef.current) return
+
+    const node = containerRef.current
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (entry) {
+        setContainerWidth(entry.contentRect.width)
+      }
+    })
+
+    observer.observe(node)
+    setContainerWidth(node.getBoundingClientRect().width)
+
+    return () => observer.disconnect()
+  }, [displayMode])
+
   const emitConfig = (next: VisualizationStyleConfig) => {
     const normalized: VisualizationStyleConfig = {}
     if (next.colors && Object.keys(next.colors).length > 0) normalized.colors = next.colors
-    if (next.opacity != null && next.opacity !== 1) normalized.opacity = next.opacity
+    if (next.opacity === 1) normalized.opacity = null
+    else if (next.opacity != null) normalized.opacity = next.opacity
     if (next.markerSize != null) normalized.markerSize = next.markerSize
+    if (next.stacked != null) normalized.stacked = next.stacked
     onChange(normalized)
   }
 
@@ -113,114 +139,146 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
     emitConfig({ ...(styleConfig ?? {}), colors: nextColors })
   }
 
-  return (
-    <Box position="relative" ref={buttonRef}>
-      <HStack
-        as="button"
-        gap={1}
-        px={2}
-        py={1}
-        borderRadius="md"
-        border="1px solid"
-        borderColor={hasStyleConfig(styleConfig) ? 'accent.teal' : 'border.muted'}
-        bg={hasStyleConfig(styleConfig) ? 'accent.teal/10' : 'bg.surface'}
-        color={hasStyleConfig(styleConfig) ? 'accent.teal' : 'fg.subtle'}
-        _hover={{ borderColor: 'accent.teal', color: 'accent.teal' }}
-        transition="all 0.15s"
-        onClick={() => setShowPopover(prev => !prev)}
-      >
-        <LuPalette size={12} />
-        <Text fontSize="2xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em">
-          Style
+  const renderContent = (inline: boolean) => (
+    <VStack
+      align="stretch"
+      p={inline ? 0 : 3}
+      width={inline ? '100%' : '280px'}
+      maxHeight={inline ? undefined : '320px'}
+      overflowY={inline ? 'visible' : 'auto'}
+      gap={inline ? 2 : 3}
+      bg={inline ? 'transparent' : 'bg.panel'}
+      border={inline ? 'none' : '1px solid'}
+      borderColor="border.muted"
+      borderRadius={inline ? 'none' : 'md'}
+      boxShadow={inline ? 'none' : 'md'}
+    >
+      <Box>
+        <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+          Colors
         </Text>
-      </HStack>
-
-      {showPopover && (
-        <VStack
-          ref={popoverRef}
-          position="absolute"
-          top="100%"
-          right={0}
-          mt={1}
-          align="stretch"
-          p={3}
-          width="280px"
-          maxHeight="320px"
-          overflowY="auto"
-          gap={3}
-          bg="bg.panel"
-          border="1px solid"
-          borderColor="border.muted"
-          borderRadius="md"
-          boxShadow="md"
-          zIndex={20}
-        >
-          <Box>
-            <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
-              Colors
-            </Text>
-            <HStack gap={1.5} mb={2} flexWrap="wrap">
-              {Array.from({ length: seriesCount }, (_, i) => (
+        <HStack gap={1.5} mb={activeSeriesIndex !== null ? 1.5 : 0} flexWrap="wrap">
+          {Array.from({ length: seriesCount }, (_, i) => (
+            <Circle
+              key={i}
+              color={getSeriesColor(i)}
+              size="14px"
+              selected={activeSeriesIndex === i}
+              onClick={() => setActiveSeriesIndex(activeSeriesIndex === i ? null : i)}
+            />
+          ))}
+        </HStack>
+        {activeSeriesIndex !== null && (
+          <VStack align="stretch" gap={1.5}>
+            <HStack justify="space-between">
+              <Text fontSize="xs" fontFamily="mono" color="fg.subtle">{`Series ${activeSeriesIndex + 1}`}</Text>
+              <ChoicePill selected={!styleConfig?.colors?.[String(activeSeriesIndex)]} onClick={() => handleColorChange(activeSeriesIndex, undefined)}>
+                auto
+              </ChoicePill>
+            </HStack>
+            <HStack gap={1.5} flexWrap="wrap">
+              {COLOR_PALETTE.map(hex => (
                 <Circle
-                  key={i}
-                  color={getSeriesColor(i)}
-                  size="14px"
-                  selected={activeSeriesIndex === i}
-                  onClick={() => setActiveSeriesIndex(activeSeriesIndex === i ? null : i)}
+                  key={`${activeSeriesIndex}-${hex}`}
+                  color={hex}
+                  size={inline ? '16px' : '20px'}
+                  selected={getSeriesColor(activeSeriesIndex) === hex}
+                  onClick={() => handleColorChange(activeSeriesIndex, hex)}
                 />
               ))}
             </HStack>
-            {activeSeriesIndex !== null && (
-              <VStack align="stretch" gap={1.5}>
-                <HStack justify="space-between">
-                  <Text fontSize="xs" fontFamily="mono" color="fg.subtle">{`Series ${activeSeriesIndex + 1}`}</Text>
-                  <ChoicePill selected={!styleConfig?.colors?.[String(activeSeriesIndex)]} onClick={() => handleColorChange(activeSeriesIndex, undefined)}>
-                    auto
-                  </ChoicePill>
-                </HStack>
-                <HStack gap={1.5} flexWrap="wrap">
-                  {COLOR_PALETTE.map(hex => (
-                    <Circle
-                      key={`${activeSeriesIndex}-${hex}`}
-                      color={hex}
-                      size="20px"
-                      selected={getSeriesColor(activeSeriesIndex) === hex}
-                      onClick={() => handleColorChange(activeSeriesIndex, hex)}
-                    />
-                  ))}
-                </HStack>
-              </VStack>
-            )}
-          </Box>
+          </VStack>
+        )}
+      </Box>
 
-          <Box>
-            <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
-              Opacity
+      <Box>
+        <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+          Opacity
+        </Text>
+        <HStack gap={1} flexWrap="wrap">
+          {OPACITY_OPTIONS.map(value => (
+            <ChoicePill key={value} selected={selectedOpacity === value} onClick={() => emitConfig({ ...(styleConfig ?? {}), opacity: value })}>
+              {Math.round(value * 100)}%
+            </ChoicePill>
+          ))}
+        </HStack>
+      </Box>
+
+      {supportsMarkerSize && (
+        <Box>
+          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+            Marker
+          </Text>
+          <HStack gap={1} flexWrap="wrap">
+            {MARKER_SIZE_OPTIONS.map(({ label, value }) => (
+              <ChoicePill key={label} selected={(styleConfig?.markerSize ?? (chartType === 'scatter' ? 8 : chartType === 'combo' ? 6 : 5)) === value} onClick={() => emitConfig({ ...(styleConfig ?? {}), markerSize: value })}>
+                {label}
+              </ChoicePill>
+            ))}
+          </HStack>
+        </Box>
+      )}
+
+      {supportsStacking && (
+        <Box>
+          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+            Stacking
+          </Text>
+          <HStack gap={1} flexWrap="wrap">
+            <ChoicePill selected={isStacked} onClick={() => emitConfig({ ...(styleConfig ?? {}), stacked: true })}>
+              Stacked
+            </ChoicePill>
+            <ChoicePill selected={!isStacked} onClick={() => emitConfig({ ...(styleConfig ?? {}), stacked: false })}>
+              Separate
+            </ChoicePill>
+          </HStack>
+        </Box>
+      )}
+    </VStack>
+  )
+
+  const showInline = displayMode === 'inline' || (displayMode === 'auto' && containerWidth >= 220)
+
+  return (
+    <Box position="relative" ref={containerRef} width="100%" display="flex" alignItems="center" justifyContent="center">
+      {showInline ? (
+        renderContent(true)
+      ) : (
+        <>
+          <HStack
+            ref={buttonRef}
+            as="button"
+            gap={1}
+            px={2}
+            py={1}
+            borderRadius="md"
+            border="1px solid"
+            borderColor={hasStyleConfig(styleConfig) ? 'accent.teal' : 'border.muted'}
+            bg={hasStyleConfig(styleConfig) ? 'accent.teal/10' : 'bg.surface'}
+            color={hasStyleConfig(styleConfig) ? 'accent.teal' : 'fg.subtle'}
+            _hover={{ borderColor: 'accent.teal', color: 'accent.teal' }}
+            transition="all 0.15s"
+            onClick={() => setShowPopover(prev => !prev)}
+          >
+            <LuPalette size={12} />
+            <Text fontSize="2xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em">
+              Options
             </Text>
-            <HStack gap={1} flexWrap="wrap">
-              {OPACITY_OPTIONS.map(value => (
-                <ChoicePill key={value} selected={(styleConfig?.opacity ?? 1) === value} onClick={() => emitConfig({ ...(styleConfig ?? {}), opacity: value })}>
-                  {Math.round(value * 100)}%
-                </ChoicePill>
-              ))}
-            </HStack>
-          </Box>
+          </HStack>
 
-          {supportsMarkerSize && (
-            <Box>
-              <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
-                Marker Size
-              </Text>
-              <HStack gap={1} flexWrap="wrap">
-                {MARKER_SIZE_OPTIONS.map(({ label, value }) => (
-                  <ChoicePill key={label} selected={(styleConfig?.markerSize ?? (chartType === 'scatter' ? 8 : chartType === 'combo' ? 6 : 5)) === value} onClick={() => emitConfig({ ...(styleConfig ?? {}), markerSize: value })}>
-                    {label}
-                  </ChoicePill>
-                ))}
-              </HStack>
+          {showPopover && (
+            <Box
+              ref={popoverRef}
+              position="absolute"
+              top="100%"
+              right={0}
+              mt={1}
+              zIndex={20}
+            >
+              {renderContent(false)}
             </Box>
           )}
-        </VStack>
+        </>
       )}
     </Box>
   )
