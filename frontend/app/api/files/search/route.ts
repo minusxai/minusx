@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
+import { handleApiError } from '@/lib/api/api-responses';
 import { searchFilesInFolder } from '@/lib/search/file-search';
 import { FileType } from '@/lib/types';
 
@@ -76,12 +77,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
   } catch (error) {
     console.error('[Search API] Error:', error);
-    return NextResponse.json(
-      {
-        error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error'
-      },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 }

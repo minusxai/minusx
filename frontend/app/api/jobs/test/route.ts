@@ -109,6 +109,7 @@ export async function POST(request: NextRequest) {
 
       if (!response.ok) {
         const errText = await response.text();
+        // eslint-disable-next-line no-restricted-syntax -- must return EvalRunResponse shape for eval harness
         return NextResponse.json({ passed: false, error: `Agent error: ${errText}` } as EvalRunResponse, { status: 500 });
       }
 
@@ -243,6 +244,7 @@ export async function POST(request: NextRequest) {
 
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
+    // eslint-disable-next-line no-restricted-syntax -- must return EvalRunResponse shape for eval harness
     return NextResponse.json({ passed: false, error: msg } as EvalRunResponse, { status: 500 });
   }
 }

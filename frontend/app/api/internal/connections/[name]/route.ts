@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DocumentDB } from '@/lib/database/documents-db';
+import { handleApiError } from '@/lib/api/api-responses';
 import type { ConnectionContent } from '@/lib/types';
 import { sessionTokenManager } from '@/lib/auth/session-tokens';
 import { resolvePath } from '@/lib/mode/path-resolver';
@@ -70,9 +71,6 @@ export async function GET(
     });
   } catch (error) {
     console.error('[Internal API] Error fetching connection config:', error);
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 }

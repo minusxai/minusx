@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { appendEvents, RRWebEvent } from '@/lib/recordings';
+import { handleApiError } from '@/lib/api/api-responses';
 
 /**
  * POST /api/recordings/[id]/events
@@ -45,10 +46,6 @@ export async function POST(
     return NextResponse.json(result);
 
   } catch (error: any) {
-    console.error('[POST /api/recordings/[id]/events] Error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Failed to append events' },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 }

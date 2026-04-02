@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
+import { handleApiError } from '@/lib/api/api-responses';
 import { createRecording } from '@/lib/recordings';
 import { FilesAPI } from '@/lib/data/files.server';
 import { SessionRecordingFileContent, FileType } from '@/lib/types';
@@ -30,10 +31,7 @@ export async function POST(request: NextRequest) {
 
   } catch (error: any) {
     console.error('[POST /api/recordings] Error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Failed to create recording' },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 }
 
@@ -104,9 +102,6 @@ export async function GET(request: NextRequest) {
 
   } catch (error: any) {
     console.error('[GET /api/recordings] Error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Failed to list recordings' },
-      { status: 500 }
-    );
+    return handleApiError(error);
   }
 }

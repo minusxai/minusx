@@ -17,6 +17,7 @@ import {
 } from './chatSlice';
 import { UserInputException } from '@/lib/api/user-input-exception';
 import { generateUniqueId } from '@/lib/utils/id-generator';
+import { captureError } from '@/lib/messaging/capture-error';
 
 // AbortController registry for managing conversation interruption
 // Key is conversation._id (stable internal ID that never changes)
@@ -216,6 +217,7 @@ chatListenerMiddleware.startListening({
       }
 
       console.error('[chatListener] Error in createConversation:', error);
+      void captureError('chatListener:createConversation', error, { conversationID: String(conversationID) });
       listenerApi.dispatch(setError({
         conversationID,
         error: error.message || 'Failed to send message'
@@ -399,6 +401,8 @@ chatListenerMiddleware.startListening({
       }
 
     } catch (error: any) {
+      if (error.name === 'AbortError') return;
+      void captureError('chatListener:sendMessage', error, { conversationID: String(conversationID) });
       listenerApi.dispatch(setError({
         conversationID,
         error: error.message || 'Unknown error'
@@ -590,6 +594,8 @@ chatListenerMiddleware.startListening({
       }
 
     } catch (error: any) {
+      if (error.name === 'AbortError') return;
+      void captureError('chatListener:completeToolCall', error, { conversationID: String(conversationID) });
       listenerApi.dispatch(setError({
         conversationID,
         error: error.message || 'Unknown error'

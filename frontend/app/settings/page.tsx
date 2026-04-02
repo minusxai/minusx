@@ -19,6 +19,7 @@ import { switchMode } from '@/lib/mode/mode-utils';
 import Breadcrumb from '@/components/Breadcrumb';
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import { API } from '@/lib/api/declarations';
+import { captureError } from '@/lib/messaging/capture-error';
 import { useSearchParams } from 'next/navigation';
 import { useFileByPath } from '@/lib/hooks/file-state-hooks';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
@@ -128,6 +129,7 @@ function SettingsContent() {
   const showAllErrorToasts = useAppSelector((state) => state.ui.showAllErrorToasts);
   const user = useAppSelector((state) => state.auth.user);
   const [isClearing, setIsClearing] = useState(false);
+  const [isTestingError, setIsTestingError] = useState(false);
   const showAdvanced = useAppSelector((state) => state.ui.showAdvanced);
 
   const searchParams = useSearchParams();
@@ -168,6 +170,41 @@ function SettingsContent() {
       });
     } finally {
       setIsClearing(false);
+    }
+  };
+
+  const handleTestError = async () => {
+    setIsTestingError(true);
+    try {
+      const res = await fetch('/api/test-error', { method: 'POST' });
+      if (!res.ok) {
+        const text = await res.text();
+        const err = new Error(`Server returned ${res.status}: ${text}`);
+        await captureError('settings:testError:frontend', err, { status: res.status });
+        toaster.create({
+          title: 'Test error triggered',
+          description: `Backend 500 logged. Frontend error also captured (status ${res.status}).`,
+          type: 'success',
+          duration: 5000,
+        });
+      } else {
+        toaster.create({
+          title: 'Unexpected success',
+          description: 'Expected a 500 but got a success response.',
+          type: 'warning',
+          duration: 5000,
+        });
+      }
+    } catch (error) {
+      await captureError('settings:testError:network', error);
+      toaster.create({
+        title: 'Network error captured',
+        description: 'A network-level error occurred and was captured.',
+        type: 'error',
+        duration: 5000,
+      });
+    } finally {
+      setIsTestingError(false);
     }
   };
 
@@ -270,7 +307,18 @@ function SettingsContent() {
         </Button>
       ),
     },
-  ], [askForConfirmation, showDebug, showJson, showAllErrorToasts, showDebugOption, isClearing, user?.mode, dispatch, handleClearCache, showAdvanced, isAdmin]);
+    {
+      tab: 'dev',
+      title: 'Test Error Capture',
+      description: 'Trigger a backend 500 and a frontend error to verify the error reporting pipeline',
+      control: (
+        <Button size="sm" variant="outline" colorPalette="red" onClick={handleTestError} loading={isTestingError} disabled={isTestingError}>
+          Trigger
+        </Button>
+      ),
+      visible: showDebugOption,
+    },
+  ], [askForConfirmation, showDebug, showJson, showAllErrorToasts, showDebugOption, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, showAdvanced, isAdmin]);
 
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [

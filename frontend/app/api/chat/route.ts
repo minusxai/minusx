@@ -294,6 +294,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // eslint-disable-next-line no-restricted-syntax -- must return ChatResponse shape; AppEvents.ERROR above reports to bug channel
     return NextResponse.json(
       {
         conversationID: body?.conversationID || 0,
