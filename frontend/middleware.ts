@@ -15,7 +15,8 @@ export default auth(async (req) => {
   // Extract subdomain from hostname (no async lookup - keep middleware fast)
   const hostname = req.headers.get('host') || '';
   const subdomainEnabled = isSubdomainRoutingEnabled();
-  const subdomain = subdomainEnabled ? extractSubdomain(hostname) : null;
+  const devSubdomainParam = IS_DEV ? req.nextUrl.searchParams.get('subdomain') : null;
+  const subdomain = devSubdomainParam ?? (subdomainEnabled ? extractSubdomain(hostname) : null);
   console.log('[Middleware]', {
     hostname,
     subdomainEnabled,
@@ -108,7 +109,8 @@ export default auth(async (req) => {
     // Redirect to login with return URL (preserve subdomain from Host header)
     const protocol = req.headers.get('x-forwarded-proto') || 'https';
     const loginUrl = new URL(`${protocol}://${hostname}/login`);
-    loginUrl.searchParams.set('callbackUrl', pathname);
+    loginUrl.searchParams.set('callbackUrl', pathname + req.nextUrl.search);
+    if (devSubdomainParam) loginUrl.searchParams.set('subdomain', devSubdomainParam);
     return NextResponse.redirect(loginUrl);
   }
 
@@ -122,7 +124,8 @@ export default auth(async (req) => {
     });
     const protocol = req.headers.get('x-forwarded-proto') || 'https';
     const loginUrl = new URL(`${protocol}://${hostname}/login`);
-    loginUrl.searchParams.set('callbackUrl', pathname);
+    loginUrl.searchParams.set('callbackUrl', pathname + req.nextUrl.search);
+    if (devSubdomainParam) loginUrl.searchParams.set('subdomain', devSubdomainParam);
     return NextResponse.redirect(loginUrl);
   }
 

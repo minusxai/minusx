@@ -53,7 +53,8 @@ export function getSlackCapabilities(baseUrlOverride?: string | null) {
   };
 }
 
-export function buildSlackManifest(appName: string, baseUrl: string = AUTH_URL) {
+export function buildSlackManifest(appName: string, baseUrl: string = AUTH_URL, devSubdomain?: string) {
+  const subdomainSuffix = devSubdomain ? `?subdomain=${encodeURIComponent(devSubdomain)}` : '';
   return {
     display_information: {
       name: appName,
@@ -78,7 +79,7 @@ export function buildSlackManifest(appName: string, baseUrl: string = AUTH_URL) 
     },
     settings: {
       event_subscriptions: {
-        request_url: `${baseUrl}/api/integrations/slack/events`,
+        request_url: `${baseUrl}/api/integrations/slack/events${subdomainSuffix}`,
         bot_events: ['app_mention', 'message.im'],
       },
       interactivity: {
