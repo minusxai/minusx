@@ -36,11 +36,11 @@ export function HelloWorldContent() {
   const { config } = useConfigs();
   const connectionCriteria = useMemo(() => ({ type: 'connection' as const }), []);
   const { files: connectionFiles } = useFilesByCriteria({ criteria: connectionCriteria, partial: true });
-  const hasConnections = connectionFiles.length > 0;
+  const hasConnections = connectionFiles.some(f => (f.id as number) > 0);
 
   const contextCriteria = useMemo(() => ({ type: 'context' as const }), []);
   const { files: contextFiles } = useFilesByCriteria({ criteria: contextCriteria, partial: true });
-  const hasContexts = contextFiles.length > 0;
+  const hasContexts = contextFiles.some(f => (f.id as number) > 0);
   const agentName = config.branding.agentName;
   const userName = user?.name?.split(' ')[0] || '';
   const greetingLine1 = userName ? `Hi ${userName}!` : 'Hi!';
