@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 import { execSync } from "child_process";
 
 function readGitCommitSha(): string {
-  if (process.env.GIT_COMMIT_SHA) return process.env.GIT_COMMIT_SHA;
+  if (process.env.GIT_COMMIT_SHA) return process.env.GIT_COMMIT_SHA.slice(0, 8);
   try {
     return execSync("git rev-parse HEAD").toString().trim().slice(0, 8);
   } catch {

@@ -29,6 +29,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        GIT_COMMIT_SHA: ${GIT_COMMIT_SHA:-}
     container_name: minusx-frontend
     restart: unless-stopped
     ports:
