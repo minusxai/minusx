@@ -10,7 +10,8 @@ import 'server-only';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { DocumentDB } from '@/lib/database/documents-db';
+import { FilesAPI } from '@/lib/data/files.server';
+import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { connectionLoader } from '@/lib/data/loaders/connection-loader';
 import { ConnectionContent } from '@/lib/types';
 import { resolvePath } from '@/lib/mode/path-resolver';
@@ -42,7 +43,7 @@ export function createMcpServer(user: EffectiveUser): McpServer {
     },
     async ({ connection_id, query }) => {
       const connectionPath = resolvePath(user.mode, `/database/${connection_id}`);
-      const connectionFile = await DocumentDB.getByPath(connectionPath, user.companyId);
+      const connectionFile = await FilesAPI.loadFileByPath(connectionPath, user).catch(() => null);
 
       if (!connectionFile) {
         return {
@@ -50,7 +51,7 @@ export function createMcpServer(user: EffectiveUser): McpServer {
         };
       }
 
-      const loadedConnection = await connectionLoader(connectionFile, user);
+      const loadedConnection = await connectionLoader(connectionFile.data, user);
       const content = loadedConnection.content as ConnectionContent;
       const schemaData = content.schema || { schemas: [], updated_at: new Date().toISOString() };
 
@@ -76,11 +77,9 @@ export function createMcpServer(user: EffectiveUser): McpServer {
       const params: Record<string, string | number> = parameters || {};
 
       // Try Node.js connector first (DuckDB) to avoid Python's exclusive file lock
-      const connPath = resolvePath(user.mode, `/database/${connection_id}`);
-      const connFile = await DocumentDB.getByPath(connPath, user.companyId);
-
-      if (connFile?.content) {
-        const { type, config } = connFile.content as ConnectionContent;
+      const connData = await ConnectionsAPI.getByName(connection_id, user).catch(() => null);
+      if (connData) {
+        const { type, config } = connData.connection;
         const connector = getNodeConnector(connection_id, type, config);
         if (connector) {
           const result = await connector.query(query, params);
