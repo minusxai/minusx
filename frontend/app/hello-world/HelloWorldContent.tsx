@@ -101,6 +101,20 @@ export function HelloWorldContent() {
     return () => clearInterval(interval);
   }, [step, fullGreeting]);
 
+  // Persist wizard step to config so it survives page refresh
+  const persistStep = useCallback(async (
+    nextStep: WizardStep,
+    extras?: { connectionId?: number; connectionName?: string; contextFileId?: number }
+  ) => {
+    try {
+      await updateConfig({
+        setupWizard: { status: 'pending', step: nextStep, ...extras },
+      });
+    } catch (err) {
+      console.error('[HelloWorldContent] Failed to persist wizard step:', err);
+    }
+  }, []);
+
   // Mark wizard complete in config — called by StepGenerating before navigating away
   const handleComplete = useCallback(async () => {
     try {
@@ -116,14 +130,19 @@ export function HelloWorldContent() {
     setConnectionId(id);
     setConnectionName(name);
     setStep('context');
-  }, []);
+    persistStep('context', { connectionId: id, connectionName: name });
+  }, [persistStep]);
 
   const handleContextComplete = useCallback((fileId: number) => {
     setContextFileId(fileId);
     setStep('generating');
-  }, []);
+    persistStep('generating', { connectionId: connectionId ?? undefined, connectionName: connectionName ?? undefined, contextFileId: fileId });
+  }, [persistStep, connectionId, connectionName]);
 
-  const handleStartConnection = useCallback(() => setStep('connection'), []);
+  const handleStartConnection = useCallback(() => {
+    setStep('connection');
+    persistStep('connection');
+  }, [persistStep]);
 
   const handleSkipToHome = useCallback(async () => {
     await handleComplete();
