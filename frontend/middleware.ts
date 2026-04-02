@@ -50,7 +50,8 @@ export default auth(async (req) => {
     pathname.startsWith('/api/auth') ||
     pathname.startsWith('/api/internal') ||
     pathname.startsWith('/api/companies/register') ||
-    pathname === '/api/health'
+    pathname === '/api/health' ||
+    pathname === '/api/jobs/cron'
   ) {
     // Create modified request headers with subdomain
     const requestHeaders = new Headers(req.headers);
