@@ -126,11 +126,11 @@ const eslintConfig = defineConfig([
       "@typescript-eslint/no-require-imports": "off",
     },
   },
-  // Allow DocumentDB only inside the data layer and database module.
-  // All other code must go through lib/data/* (FilesAPI, ConnectionsAPI, ConfigsAPI).
+  // Allow DocumentDB only inside the server-side data layer implementations and database module.
+  // Loaders, helpers, and client-side data code must go through FilesAPI/ConnectionsAPI/ConfigsAPI.
   {
     files: [
-      "lib/data/**",
+      "lib/data/*.server.ts",
       "lib/database/**",
       "scripts/**",
       "**/*.test.ts",
