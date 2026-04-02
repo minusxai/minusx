@@ -37,6 +37,10 @@ export function HelloWorldContent() {
   const connectionCriteria = useMemo(() => ({ type: 'connection' as const }), []);
   const { files: connectionFiles } = useFilesByCriteria({ criteria: connectionCriteria, partial: true });
   const hasConnections = connectionFiles.length > 0;
+
+  const contextCriteria = useMemo(() => ({ type: 'context' as const }), []);
+  const { files: contextFiles } = useFilesByCriteria({ criteria: contextCriteria, partial: true });
+  const hasContexts = contextFiles.length > 0;
   const agentName = config.branding.agentName;
   const userName = user?.name?.split(' ')[0] || '';
   const greetingLine1 = userName ? `Hi ${userName}!` : 'Hi!';
@@ -150,12 +154,19 @@ export function HelloWorldContent() {
     router.replace(preserveModeParam('/'));
   }, [handleComplete, router]);
 
-  // Skip Step 1 by reusing the first existing connection
+  // Skip Step 1 by reusing the first existing connection → advance to Step 2
   const handleSkipConnection = useCallback(() => {
     const first = connectionFiles[0];
     if (!first) return;
     handleConnectionComplete(first.id as number, first.name);
   }, [connectionFiles, handleConnectionComplete]);
+
+  // Skip Step 2 by reusing the first existing context file → advance to Step 3
+  const handleSkipContext = useCallback(() => {
+    const first = contextFiles[0];
+    if (!first) return;
+    handleContextComplete(first.id as number);
+  }, [contextFiles, handleContextComplete]);
 
   const handleRequestChat = useCallback((fileId: number) => {
     setContextFileId(fileId);
@@ -269,7 +280,7 @@ export function HelloWorldContent() {
                 cursor="pointer"
                 textDecoration="underline"
                 _hover={{ color: 'fg.default' }}
-                onClick={handleSkipToHome}
+                onClick={handleSkipConnection}
                 css={{ animation: 'fadeInUp 0.5s ease-out forwards', opacity: 0 }}
               >
                 I've already connected my data →
@@ -457,14 +468,30 @@ export function HelloWorldContent() {
               </>
             )}
             {step === 'context' && connectionName && (
-              <StepContext
-                connectionName={connectionName}
-                connectionId={connectionId!}
-                onComplete={handleContextComplete}
-                onRequestChat={handleRequestChat}
-                onContextCreated={handleRequestChat}
-                greeting="Step 2: Let's add some context."
-              />
+              <>
+                <StepContext
+                  connectionName={connectionName}
+                  connectionId={connectionId!}
+                  onComplete={handleContextComplete}
+                  onRequestChat={handleRequestChat}
+                  onContextCreated={handleRequestChat}
+                  greeting="Step 2: Let's add some context."
+                />
+                {hasContexts && (
+                  <Text
+                    mt={4}
+                    fontSize="sm"
+                    color="fg.muted"
+                    fontFamily="mono"
+                    cursor="pointer"
+                    textDecoration="underline"
+                    _hover={{ color: 'fg.default' }}
+                    onClick={handleSkipContext}
+                  >
+                    I've already added context →
+                  </Text>
+                )}
+              </>
             )}
             {step === 'generating' && connectionName && (
               <StepGenerating
