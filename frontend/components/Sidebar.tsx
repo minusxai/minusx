@@ -259,7 +259,7 @@ export default function Sidebar() {
             icon={homeItem.icon}
             label={homeItem.label}
             isCollapsed={isCollapsed}
-            isActive={pathname === homeItem.href}
+            isActive={pathname === homeItem.href || pathname.startsWith('/p/')}
           />
 
           {navSections.map((section) => (
