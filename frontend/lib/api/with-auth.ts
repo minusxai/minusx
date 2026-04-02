@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser, type EffectiveUser } from '@/lib/auth/auth-helpers';
 import { ApiErrors } from '@/lib/api/api-responses';
+import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 /**
  * Type for authenticated API route handlers
  * Handler receives the request, authenticated user, and optional route context
@@ -63,6 +64,17 @@ export function withAuth(handler: AuthHandler) {
 
     console.log(`[AUTH] Total auth check took ${Date.now() - authStart}ms`);
     // User is authenticated and authorized, proceed to handler
-    return handler(request, user, context);
+    try {
+      return await handler(request, user, context);
+    } catch (e) {
+      appEventRegistry.publish(AppEvents.ERROR, {
+        companyId: user.companyId,
+        mode: user.mode ?? 'org',
+        source: `server:${request.nextUrl.pathname}`,
+        message: e instanceof Error ? e.message : String(e),
+        context: { user: user.email, ...(user.companyName ? { company: user.companyName } : {}) },
+      });
+      throw e;
+    }
   };
 }

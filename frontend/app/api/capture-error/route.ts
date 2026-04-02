@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
     const user = await getEffectiveUser();
     if (user?.companyId) {
       ctx['user'] = user.email;
+      if (user.companyName) ctx['company'] = user.companyName;
       appEventRegistry.publish(AppEvents.ERROR, {
         companyId: user.companyId,
         mode: user.mode ?? 'org',
