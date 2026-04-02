@@ -9,6 +9,7 @@ import { preserveParams } from '@/lib/navigation/url-utils';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
 import { SchedulePicker } from '@/components/shared/SchedulePicker';
 import { StatusBanner } from '@/components/shared/StatusBanner';
+import { RunNowHeader, type RunOptions } from '@/components/shared/RunNowHeader';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import Markdown from '@/components/Markdown';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
@@ -30,7 +31,7 @@ interface ReportViewProps {
   runFileId?: number;
 
   onChange: (updates: Partial<ReportContent>) => void;
-  onRunNow: () => Promise<void>;
+  onRunNow: (opts: RunOptions) => Promise<void>;
   onSelectRun?: (runId: number | null) => void;
 }
 
@@ -540,54 +541,16 @@ export default function ReportView({
             borderColor="border.muted"
           >
             {/* Run Header */}
-            <Flex
-              justify="space-between"
-              align="center"
-              px={4}
-              py={3}
-              borderBottomWidth="1px"
-              borderColor="border.muted"
-              gap={2}
-            >
-              <HStack flex={1} gap={2}>
-                <LuHistory size={16} />
-                <Text fontWeight="600" fontSize="sm">Report Runs</Text>
-                {runs.length > 0 && (
-                  <Box flex={1} maxW="200px">
-                    <SelectRoot
-                      collection={runsCollection}
-                      value={selectedRunId ? [selectedRunId.toString()] : []}
-                      onValueChange={(e) => onSelectRun?.(e.value[0] ? parseInt(e.value[0], 10) : null)}
-                      size="sm"
-                    >
-                      <SelectTrigger>
-                        <SelectValueText placeholder="Select run..." />
-                      </SelectTrigger>
-                      <Portal>
-                        <SelectPositioner>
-                          <SelectContent>
-                            {runsCollection.items.map((item) => (
-                              <SelectItem key={item.value} item={item}>
-                                {item.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </SelectPositioner>
-                      </Portal>
-                    </SelectRoot>
-                  </Box>
-                )}
-              </HStack>
-              <Button
-                onClick={onRunNow}
-                disabled={isRunning || isDirty || !report.references?.length}
-                size="sm"
-                colorPalette="teal"
-              >
-                <LuPlay size={14} />
-                {isRunning ? 'Running...' : 'Run Now'}
-              </Button>
-            </Flex>
+            <RunNowHeader
+              title="Report Runs"
+              runs={runs}
+              selectedRunId={selectedRunId}
+              onSelectRun={onSelectRun}
+              isRunning={isRunning}
+              disabled={isDirty || !report.references?.length}
+              onRunNow={onRunNow}
+              externalLinkId={runFileId}
+            />
 
             {/* Run Content */}
             <Box flex={1} overflow="auto" p={4}>

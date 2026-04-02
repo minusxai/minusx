@@ -15,6 +15,7 @@ import { editFile } from '@/lib/api/file-state';
 import { useJobRuns } from '@/lib/hooks/job-runs-hooks';
 import TransformationView from '@/components/views/TransformationView';
 import type { TransformationContent } from '@/lib/types';
+import type { RunOptions } from '@/components/shared/RunNowHeader';
 import { useCallback, useState } from 'react';
 import { type FileViewMode } from '@/lib/ui/fileComponents';
 
@@ -40,8 +41,8 @@ export default function TransformationContainerV2({ fileId }: TransformationCont
 
   const connectionIds = useAppSelector(selectConnectionIds, shallowEqual);
 
-  const handleRunNow = useCallback(async (runMode?: 'full' | 'test_only') => {
-    await trigger({ run_mode: runMode });
+  const handleRunNow = useCallback(async (opts: RunOptions) => {
+    await trigger({ run_mode: 'full', ...opts });
     // Refresh connection schemas client-side after run completes
     setSchemaRefreshing(true);
     try {
@@ -58,6 +59,10 @@ export default function TransformationContainerV2({ fileId }: TransformationCont
       setSchemaRefreshing(false);
     }
   }, [trigger, connectionIds, dispatch]);
+
+  const handleTestOnly = useCallback(async (opts: RunOptions) => {
+    await trigger({ run_mode: 'test_only', ...opts });
+  }, [trigger]);
 
   if (fileLoading || !file || !mergedContent) {
     return <Box p={4}>Loading transformation...</Box>;
@@ -76,6 +81,7 @@ export default function TransformationContainerV2({ fileId }: TransformationCont
       selectedRunId={selectedRunId}
       onChange={handleChange}
       onRunNow={handleRunNow}
+      onTestOnly={handleTestOnly}
       onSelectRun={selectRun}
     />
   );

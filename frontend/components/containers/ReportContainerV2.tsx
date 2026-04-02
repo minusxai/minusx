@@ -12,6 +12,7 @@ import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile } from '@/lib/api/file-state';
 import ReportView from '@/components/views/ReportView';
 import { ReportContent, RunFileContent } from '@/lib/types';
+import type { RunOptions } from '@/components/shared/RunNowHeader';
 import { useJobRuns } from '@/lib/hooks/job-runs-hooks';
 import { useCallback } from 'react';
 import { type FileViewMode } from '@/lib/ui/fileComponents';
@@ -41,8 +42,8 @@ export default function ReportContainerV2({ fileId }: ReportContainerV2Props) {
     editFile({ fileId: typeof fileId === 'number' ? fileId : -1, changes: { content: updates } });
   }, [fileId]);
 
-  const handleRunNow = useCallback(async () => {
-    await trigger();
+  const handleRunNow = useCallback(async (opts: RunOptions) => {
+    await trigger(opts);
   }, [trigger]);
 
   const handleSelectRun = useCallback((runId: number | null) => {

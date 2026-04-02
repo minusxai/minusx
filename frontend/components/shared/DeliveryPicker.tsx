@@ -27,7 +27,12 @@ function DropdownMenu({ containerRef, options, onSelect }: {
     const el = containerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    setPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    const DROPDOWN_MAX_H = 220;
+    const spaceBelow = window.innerHeight - rect.bottom - 8;
+    const top = spaceBelow >= DROPDOWN_MAX_H
+      ? rect.bottom + 4
+      : Math.max(8, rect.top - DROPDOWN_MAX_H - 4);
+    setPos({ top, left: rect.left, width: rect.width });
   }, [containerRef]);
 
   useEffect(() => {
