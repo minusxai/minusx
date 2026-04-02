@@ -114,8 +114,20 @@ export default function ConfigContainerV2({
   }, [fileId]);
 
   // Show loading state while file is loading
-  if (fileLoading || !file || !currentContent) {
+  if (fileLoading) {
     return <div>Loading config...</div>;
+  }
+
+  // Load finished but no content — fetch failed (e.g. server error after metadata-only pre-load)
+  if (!file || !currentContent) {
+    return (
+      <div style={{ padding: '16px', textAlign: 'center' }}>
+        <div style={{ color: 'var(--chakra-colors-fg-muted)', marginBottom: '8px' }}>
+          {file?.loadError?.message ?? 'Failed to load config.'}
+        </div>
+        <button onClick={handleRevert} style={{ cursor: 'pointer' }}>Retry</button>
+      </div>
+    );
   }
 
   return (

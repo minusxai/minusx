@@ -39,9 +39,12 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     // Check if config already exists
     const existing = await DocumentDB.getByPath(configPath, user.companyId);
 
-    // Load existing stored content for partial merge support
+    // Load existing stored content for partial merge support.
+    // Do NOT gate on validateCompanyConfig here — existing content may have fields
+    // from older schemas or direct edits. We still want to preserve them in the merge.
+    // Only the incoming body is validated (above).
     let existingContent: Partial<CompanyConfig> = {};
-    if (existing?.content && validateCompanyConfig(existing.content)) {
+    if (existing?.content && typeof existing.content === 'object') {
       existingContent = existing.content as Partial<CompanyConfig>;
     }
 
