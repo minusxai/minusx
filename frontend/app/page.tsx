@@ -29,8 +29,9 @@ export default function Home() {
 
     const effectiveMode = user.mode || 'org';
 
-    // Onboarding check (org mode only)
-    if (effectiveMode === 'org' && config.setupWizard?.status !== 'complete') {
+    // Onboarding check — config-driven, applies to any mode.
+    // Tutorial/internals default to 'complete' so they never redirect.
+    if (config.setupWizard?.status !== 'complete') {
       router.replace('/hello-world');
       return;
     }

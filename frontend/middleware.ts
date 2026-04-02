@@ -159,13 +159,14 @@ export default auth(async (req) => {
     },
   });
 
-  // Onboarding detection: runs on / and /hello-world when in org mode.
+  // Onboarding detection: runs on / and /hello-world for any mode.
   // Redirects to /hello-world if setupWizard is not complete.
+  // Behavior is fully config-driven — tutorial/internals default to 'complete' so they never redirect.
   const isHomePath = pathname === '/' || pathname === '/p/org';
   const isHelloWorldPath = pathname === '/hello-world';
   const effectiveMode = (mode && isValidMode(mode)) ? mode : 'org';
 
-  if ((isHomePath || isHelloWorldPath) && effectiveMode === 'org' && req.auth.user?.companyId) {
+  if ((isHomePath || isHelloWorldPath) && req.auth.user?.companyId) {
     try {
       const companyId = req.auth.user.companyId;
       const { config } = await getConfigsByCompanyId(companyId, effectiveMode);
