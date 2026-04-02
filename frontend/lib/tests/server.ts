@@ -184,7 +184,7 @@ async function executeLLMTest(
         method: 'POST',
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(120000),
-      });
+      }, user);
       if (!response.ok) {
         const errText = await response.text();
         return { test, passed: false, error: `Agent error: ${errText}`, log: allCompletedFromPython };
