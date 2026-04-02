@@ -51,16 +51,13 @@ export default function EditFileDisplay({ toolCallTuple, showThinking }: Display
 
   const { fileId } = args;
 
-  // Get file info from Redux store
-  const fileInfo = useAppSelector(state => {
-    if (fileId === undefined) return null;
-    const file = state.files.files[fileId];
-    if (!file) return null;
-    return {
-      name: file.name || null,
-      type: (file.type || null) as FileType | null,
-    };
-  });
+  // Get file info from Redux store — select primitives separately to avoid new object references
+  const fileName = useAppSelector(state =>
+    fileId !== undefined ? (state.files.files[fileId]?.name ?? null) : null
+  );
+  const fileType = useAppSelector(state =>
+    fileId !== undefined ? ((state.files.files[fileId]?.type ?? null) as FileType | null) : null
+  );
 
   const { success, error, diff } = contentToDetails<EditFileDetails>(toolMessage);
 
@@ -102,8 +99,8 @@ export default function EditFileDisplay({ toolCallTuple, showThinking }: Display
     ? `/f/${fileId}${mode ? `?mode=${mode}` : ''}`
     : undefined;
 
-  const displayName = fileInfo?.name || (fileId !== undefined ? `#${fileId}` : 'file');
-  const meta = fileInfo?.type ? getFileTypeMetadata(fileInfo.type) : null;
+  const displayName = fileName || (fileId !== undefined ? `#${fileId}` : 'file');
+  const meta = fileType ? getFileTypeMetadata(fileType) : null;
   const FileIcon = meta?.icon;
 
   // Parse diff for display

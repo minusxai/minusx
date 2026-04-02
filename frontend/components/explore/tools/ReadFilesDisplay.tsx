@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { HStack, Text, Icon, GridItem } from '@chakra-ui/react';
 import { LuCheck, LuX, LuBookOpen } from 'react-icons/lu';
 import { DisplayProps, contentToDetails } from '@/lib/types';
@@ -26,17 +27,17 @@ export default function ReadFilesDisplay({ toolCallTuple, showThinking }: Displa
 
   const fileIds: number[] = args.fileIds || [];
 
-  // Get file info from Redux store
-  const fileInfos = useAppSelector(state => {
-    return fileIds.map(id => {
-      const file = state.files.files[id];
-      return {
-        id,
-        name: file?.name || null,
-        type: (file?.type || null) as FileType | null,
-      };
-    });
-  });
+  // Select the stable files dictionary; derive the array with useMemo to avoid new object
+  // references in the selector (which would cause Redux to warn about unnecessary re-renders)
+  const filesDict = useAppSelector(state => state.files.files);
+  const fileInfos = useMemo(() =>
+    fileIds.map(id => ({
+      id,
+      name: filesDict[id]?.name ?? null,
+      type: (filesDict[id]?.type ?? null) as FileType | null,
+    })),
+    [fileIds, filesDict]
+  );
 
   const { success } = contentToDetails(toolMessage);
 
