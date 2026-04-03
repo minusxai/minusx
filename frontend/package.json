@@ -28,6 +28,8 @@
     "@lexical/utils": "^0.40.0",
     "@monaco-editor/react": "^4.7.0",
     "@reduxjs/toolkit": "^2.11.0",
+    "@tanstack/react-table": "^8.21.3",
+    "@tanstack/react-virtual": "^3.13.23",
     "@types/js-yaml": "^4.0.9",
     "@types/pg": "^8.16.0",
     "ajv": "^6.14.0",
