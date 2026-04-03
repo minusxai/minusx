@@ -362,10 +362,24 @@ describe('Slack Bot Integration', () => {
         installation,
       );
       expect(postedMessages).toHaveLength(1);
+      expect(postedMessages[0].text).toBe('Sales are up 12%.');
 
       // Second message — same thread, different ts
       postedMessages.length = 0;
       await getLLMMockServer!().configure({
+        // Use validateRequest to assert the Python backend received the follow-up text,
+        // not the first message. This is the core of Bug #1: if the agent reads
+        // ev.thread_ts's root message instead of ev.text, the messages array would end
+        // with 'sales?' rather than 'and last week?'.
+        validateRequest: (req) => {
+          const msgs = req.messages ?? [];
+          const lastUserMsg = [...msgs].reverse().find(m => m.role === 'user');
+          if (!lastUserMsg?.content?.includes('and last week?')) {
+            throw new Error(
+              `Expected last user message to contain "and last week?" but got: ${lastUserMsg?.content}`,
+            );
+          }
+        },
         response: { content: 'Last week they were up 8%.', role: 'assistant', finish_reason: 'stop' },
         usage: USAGE,
       });
@@ -374,6 +388,9 @@ describe('Slack Bot Integration', () => {
         installation,
       );
       expect(postedMessages).toHaveLength(1);
+      // Reply must be the second response, not the first — proves the agent read
+      // the follow-up message, not the thread root.
+      expect(postedMessages[0].text).toBe('Last week they were up 8%.');
 
       // Only ONE conversation file should exist at the Slack path
       const { createAdapter } = await import('@/lib/database/adapter/factory');
