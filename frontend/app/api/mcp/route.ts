@@ -12,7 +12,8 @@ import { NextRequest } from 'next/server';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { authenticateOAuthRequest } from '@/lib/mcp/auth';
-import { createMcpServer } from './server';
+import { createMcpServer } from '@/lib/mcp/server';
+import { McpSessionLogger } from '@/lib/mcp/session-logger';
 
 // ---------------------------------------------------------------------------
 // Session store (in-memory, survives HMR via globalThis)
@@ -21,6 +22,7 @@ import { createMcpServer } from './server';
 interface McpSession {
   transport: WebStandardStreamableHTTPServerTransport;
   server: McpServer;
+  logger: McpSessionLogger;
 }
 
 const sessions: Map<string, McpSession> = (
@@ -100,15 +102,28 @@ export async function POST(request: NextRequest): Promise<Response> {
     return addCorsHeaders(await session.transport.handleRequest(request));
   }
 
-  // New session (initialize request) — create server + transport
-  const server = createMcpServer(user);
+  // New session — create server + transport + logger.
+  // Use a mutable ref so the onToolCall closure can access the logger
+  // after onsessioninitialized sets it (the SDK assigns session IDs asynchronously).
+  const sessionRef: { logger: McpSessionLogger | null } = { logger: null };
+
+  const server = createMcpServer(user, (tool, args, result) => {
+    sessionRef.logger?.logToolCall(tool, args, result);
+  });
+
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: () => crypto.randomUUID(),
     onsessioninitialized: (id: string) => {
-      sessions.set(id, { transport, server });
+      const logger = new McpSessionLogger(id, user);
+      sessionRef.logger = logger;
+      sessions.set(id, { transport, server, logger });
     },
     onsessionclosed: (id: string) => {
-      sessions.delete(id);
+      const session = sessions.get(id);
+      if (session) {
+        void session.logger.flush(); // fire-and-forget — must not block the close
+        sessions.delete(id);
+      }
     },
   });
 
@@ -135,15 +150,14 @@ export async function GET(request: NextRequest): Promise<Response> {
 }
 
 // ---------------------------------------------------------------------------
-// DELETE — session termination
+// DELETE — session termination (triggers onsessionclosed → logger.flush)
 // ---------------------------------------------------------------------------
 
 export async function DELETE(request: NextRequest): Promise<Response> {
   const sessionId = request.headers.get('mcp-session-id');
   if (sessionId && sessions.has(sessionId)) {
     const session = sessions.get(sessionId)!;
-    await session.server.close();
-    sessions.delete(sessionId);
+    await session.server.close(); // SDK calls onsessionclosed, which flushes + removes
   }
   return new Response(null, { status: 204, headers: CORS_HEADERS });
 }

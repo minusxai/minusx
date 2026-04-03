@@ -20,12 +20,17 @@ import { executeQuery as execQuery } from '@/lib/api/execute-query.server';
 import { getNodeConnector } from '@/lib/connections';
 import { compressQueryResult } from '@/lib/api/file-state';
 
+export type McpToolCallResult = { content: Array<{ type: 'text'; text: string }> };
+export type OnToolCall = (tool: string, args: Record<string, unknown>, result: McpToolCallResult) => void;
+
 /**
  * Create an MCP server instance bound to a specific user.
  * Each MCP session gets its own server so tool handlers have access
  * to the user's connections, contexts, and permissions.
+ *
+ * @param onToolCall - Optional callback invoked after each tool completes (used for session logging).
  */
-export function createMcpServer(user: EffectiveUser): McpServer {
+export function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCall): McpServer {
   const server = new McpServer({
     name: 'minusx',
     version: '1.0.0',
@@ -46,19 +51,23 @@ export function createMcpServer(user: EffectiveUser): McpServer {
       const connectionFile = await FilesAPI.loadFileByPath(connectionPath, user).catch(() => null);
 
       if (!connectionFile) {
-        return {
+        const result: McpToolCallResult = {
           content: [{ type: 'text' as const, text: JSON.stringify({ error: `Connection '${connection_id}' not found` }) }],
         };
+        onToolCall?.('SearchDBSchema', { connection_id, query }, result);
+        return result;
       }
 
       const loadedConnection = await connectionLoader(connectionFile.data, user);
       const content = loadedConnection.content as ConnectionContent;
       const schemaData = content.schema || { schemas: [], updated_at: new Date().toISOString() };
 
-      const result = await searchDatabaseSchema(schemaData.schemas, query);
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result) }],
+      const searchResult = await searchDatabaseSchema(schemaData.schemas, query);
+      const result: McpToolCallResult = {
+        content: [{ type: 'text' as const, text: JSON.stringify(searchResult) }],
       };
+      onToolCall?.('SearchDBSchema', { connection_id, query }, result);
+      return result;
     }
   );
 
@@ -82,24 +91,28 @@ export function createMcpServer(user: EffectiveUser): McpServer {
         const { type, config } = connData.connection;
         const connector = getNodeConnector(connection_id, type, config);
         if (connector) {
-          const result = await connector.query(query, params);
-          const compressed = compressQueryResult(result);
-          return {
+          const queryResult = await connector.query(query, params);
+          const compressed = compressQueryResult(queryResult);
+          const result: McpToolCallResult = {
             content: [{ type: 'text' as const, text: JSON.stringify({ success: true, data: compressed }) }],
           };
+          onToolCall?.('ExecuteQuery', { query, connection_id, parameters }, result);
+          return result;
         }
       }
 
       // Fall through to Python backend for postgresql, bigquery, etc.
-      const result = await execQuery({
+      const execResult = await execQuery({
         query,
         connectionId: connection_id,
         parameters: params,
       }, user);
 
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result.content) }],
+      const result: McpToolCallResult = {
+        content: [{ type: 'text' as const, text: JSON.stringify(execResult.content) }],
       };
+      onToolCall?.('ExecuteQuery', { query, connection_id, parameters }, result);
+      return result;
     }
   );
 
