@@ -45,7 +45,7 @@ export default function PathPage({ params }: PathPageProps) {
   const fullPath = '/' + pathSegments.join('/');
 
   // Load folder into Redux (populates pathIndex, uses TTL cache)
-  const { files: folderFiles, loading: folderLoading } = useFolder(fullPath);
+  useFolder(fullPath);
 
   // Client-side permission check for folder access
   useEffect(() => {
