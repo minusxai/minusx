@@ -63,10 +63,10 @@ export const DrillDownCard = ({ drillDown, onClose, sql, databaseName }: DrillDo
     const whereClauses = Object.entries(drillDown.filters).map(([col, val]) => {
       const colType = drillDown.filterTypes?.[col]
       if (colType === 'number') {
-        return `\`${col}\` = ${String(val)}`
+        return `"${col}" = ${String(val)}`
       }
       const escapedVal = String(val).replace(/'/g, "''")
-      return `\`${col}\` = '${escapedVal}'`
+      return `"${col}" = '${escapedVal}'`
     })
     const whereClause = whereClauses.length > 0 ? `\nWHERE ${whereClauses.join('\n  AND ')}` : ''
     const cteSql = `WITH base AS (\n${sql}\n)\nSELECT * FROM base${whereClause}`
@@ -181,7 +181,7 @@ export const DrillDownCard = ({ drillDown, onClose, sql, databaseName }: DrillDo
             onClick={handleSeeRecords}
           >
             <LuTable />
-            See Records
+            See Similar Records
           </Button>
         )}
         <HStack gap={1}>
