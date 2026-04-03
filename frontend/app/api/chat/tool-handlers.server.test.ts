@@ -3,7 +3,7 @@
  * Tests the core search logic with realistic schema data
  */
 
-import { searchDatabaseSchema } from './tool-handlers.server';
+import { searchDatabaseSchema } from '@/lib/search/schema-search';
 
 // Sample schema data mimicking DuckDB AdventureWorks structure
 const mockSchemas = [
@@ -105,8 +105,8 @@ describe('searchDatabaseSchema', () => {
     expect(topResult.relevantResults.length).toBeGreaterThan(0);
 
     // Should have location information showing where matches were found
-    const hasTableMatch = topResult.relevantResults.some(r => r.field === 'table');
-    const hasColumnMatch = topResult.relevantResults.some(r => r.field === 'column');
+    const hasTableMatch = topResult.relevantResults.some((r: { field: string }) => r.field === 'table');
+    const hasColumnMatch = topResult.relevantResults.some((r: { field: string }) => r.field === 'column');
     expect(hasTableMatch || hasColumnMatch).toBe(true);
 
     // Location should be in format: "schema.table" or "schema.table.column"
