@@ -22,6 +22,7 @@ import {
 import StepConnection from './components/StepConnection';
 import StepContext from './components/StepContext';
 import StepGenerating from './components/StepGenerating';
+import StepComplete from './components/StepComplete';
 import { useConfigs, updateConfig } from '@/lib/hooks/useConfigs';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { useAppSelector } from '@/store/hooks';
@@ -53,6 +54,7 @@ export function HelloWorldContent() {
 
   // Wizard step — initialized from config (persisted across refreshes), then managed locally
   const savedWizard = config.setupWizard;
+  const isComplete = savedWizard?.status === 'complete';
   const [step, setStep] = useState<WizardStep>(() => savedWizard?.step ?? 'welcome');
   const [connectionId, setConnectionId] = useState<number | null>(() => savedWizard?.connectionId ?? null);
   const [connectionName, setConnectionName] = useState<string | null>(() => savedWizard?.connectionName ?? null);
@@ -174,7 +176,7 @@ export function HelloWorldContent() {
     dispatch(setActiveVirtualId(fileId));
   }, [dispatch]);
 
-  const isWizard = step !== 'welcome';
+  const isWizard = step !== 'welcome' || isComplete;
 
   // Split displayed text into lines for rendering
   const displayedLines = displayedText.split('\n');
@@ -222,7 +224,7 @@ export function HelloWorldContent() {
       <Box ref={orb3Ref} className="hw-orb hw-orb-3" position="absolute" w="250px" h="250px" borderRadius="full" bg="accent.teal" opacity={0.18} filter="blur(70px)" zIndex={0} pointerEvents="none" />
 
       {/* ─── WELCOME PHASE ─── */}
-      {step === 'welcome' && (
+      {step === 'welcome' && !isComplete && (
         <VStack position="relative" zIndex={1} textAlign="center" maxW="700px" w="100%" gap={0}>
           {/* Agent greeting — fixed height so cards don't shift it */}
           <VStack gap={4} h="240px" justify="center">
@@ -371,8 +373,24 @@ export function HelloWorldContent() {
         </VStack>
       )}
 
+      {/* ─── COMPLETE PHASE ─── */}
+      {isComplete && (
+        <Box position="relative" zIndex={1} w="100%" maxW="1060px" mx="auto">
+          <Box
+            bg="bg.surface"
+            border="1px solid"
+            borderColor="border.default"
+            borderRadius="xl"
+            p={{ base: 6, md: 10 }}
+            css={{ animation: 'fadeInUp 0.4s ease-out forwards' }}
+          >
+            <StepComplete />
+          </Box>
+        </Box>
+      )}
+
       {/* ─── WIZARD PHASE ─── */}
-      {isWizard && (
+      {isWizard && !isComplete && (
         <Box position="relative" zIndex={1} w="100%" maxW="1060px" mx="auto">
           {/* Top bar */}
           <Flex
