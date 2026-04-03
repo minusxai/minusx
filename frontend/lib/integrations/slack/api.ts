@@ -60,9 +60,10 @@ export async function postSlackMessage(
     channel: string;
     text: string;
     thread_ts?: string;
+    blocks?: unknown[];
   },
-): Promise<void> {
-  const result = await slackApiFetch<Record<string, never>>('chat.postMessage', {
+): Promise<{ ts: string }> {
+  const result = await slackApiFetch<{ ts: string }>('chat.postMessage', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -74,6 +75,8 @@ export async function postSlackMessage(
   if (!result.ok) {
     throw new Error(`Slack chat.postMessage failed: ${result.error}`);
   }
+
+  return { ts: result.ts };
 }
 
 export async function getSlackUserEmail(token: string, userId: string): Promise<string | null> {
@@ -90,6 +93,83 @@ export async function getSlackUserEmail(token: string, userId: string): Promise<
   }
 
   return result.user?.profile?.email?.trim() || null;
+}
+
+export async function publishHomeView(
+  token: string,
+  userId: string,
+  view: unknown,
+): Promise<void> {
+  const result = await slackApiFetch<Record<string, never>>('views.publish', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ user_id: userId, view }),
+  });
+  if (!result.ok) {
+    console.warn(`[Slack] views.publish failed: ${result.error}`);
+  }
+}
+
+export async function getConversationHistory(
+  token: string,
+  channel: string,
+  limit: number = 1,
+): Promise<{ messages: Array<{ bot_id?: string; text?: string }> }> {
+  const query = new URLSearchParams({ channel, limit: limit.toString() });
+  const result = await slackApiFetch<{ messages: Array<{ bot_id?: string; text?: string }> }>(
+    `conversations.history?${query.toString()}`,
+    {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+  if (!result.ok) {
+    throw new Error(`Slack conversations.history failed: ${result.error}`);
+  }
+  return { messages: result.messages ?? [] };
+}
+
+export async function addReaction(
+  token: string,
+  channel: string,
+  timestamp: string,
+  emoji: string,
+): Promise<void> {
+  const result = await slackApiFetch<Record<string, never>>('reactions.add', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ channel, timestamp, name: emoji }),
+  });
+  // Silently ignore "already_reacted" errors
+  if (!result.ok && result.error !== 'already_reacted') {
+    console.warn(`[Slack] reactions.add failed: ${result.error}`);
+  }
+}
+
+export async function removeReaction(
+  token: string,
+  channel: string,
+  timestamp: string,
+  emoji: string,
+): Promise<void> {
+  const result = await slackApiFetch<Record<string, never>>('reactions.remove', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ channel, timestamp, name: emoji }),
+  });
+  // Silently ignore "no_reaction" errors
+  if (!result.ok && result.error !== 'no_reaction') {
+    console.warn(`[Slack] reactions.remove failed: ${result.error}`);
+  }
 }
 
 export function verifySlackRequestSignature(input: {

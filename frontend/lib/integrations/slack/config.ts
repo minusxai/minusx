@@ -8,6 +8,7 @@ export const SLACK_BOT_SCOPES = [
   'groups:history',
   'im:history',
   'mpim:history',
+  'reactions:write',
   'users:read',
   'users:read.email',
 ] as const;
@@ -58,12 +59,13 @@ export function buildSlackManifest(appName: string, baseUrl: string = AUTH_URL, 
   return {
     display_information: {
       name: appName,
-      description: 'Talk directly to the MinusX agent from Slack.',
-      background_color: '#0f172a',
+      description: `Talk directly to ${appName} agent from Slack.`,
+      long_description: `${appName} is an Agentic Business Intelligence platform built for native AI interop. Ask questions in plain English across all your data, use agents to dig through dashboards and questions, and get answers you can understand and trust.`,
+      background_color: '#0D1117',
     },
     features: {
       app_home: {
-        home_tab_enabled: false,
+        home_tab_enabled: true,
         messages_tab_enabled: true,
         messages_tab_read_only_enabled: false,
       },
@@ -80,10 +82,11 @@ export function buildSlackManifest(appName: string, baseUrl: string = AUTH_URL, 
     settings: {
       event_subscriptions: {
         request_url: `${baseUrl}/api/integrations/slack/events${subdomainSuffix}`,
-        bot_events: ['app_mention', 'message.im'],
+        bot_events: ['app_mention', 'message.im', 'app_home_opened'],
       },
       interactivity: {
-        is_enabled: false,
+        is_enabled: true,
+        request_url: `${baseUrl}/api/integrations/slack/interact${subdomainSuffix}`,
       },
       org_deploy_enabled: false,
       socket_mode_enabled: false,
