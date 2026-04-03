@@ -5,6 +5,7 @@ import { getSlackUserEmail, postSlackMessage, verifySlackRequestSignature } from
 import { getSlackSigningSecret } from '@/lib/integrations/slack/config';
 import { buildSlackAgentArgs } from '@/lib/integrations/slack/context';
 import { extractSlackReplyFromLog, normalizeSlackPrompt } from '@/lib/integrations/slack/messages';
+import { buildWelcomeBlocks, shouldSendWelcome } from '@/lib/integrations/slack/welcome';
 import {
   findSlackInstallationByTeam,
   getOrCreateSlackConversationId,
@@ -31,6 +32,7 @@ export interface SlackEventEnvelope {
     channel_type?: string;
     thread_ts?: string;
     ts?: string;
+    tab?: string;
   };
 }
 
@@ -41,6 +43,7 @@ function getTeamId(payload: SlackEventEnvelope): string | null {
 function isSupportedEvent(payload: SlackEventEnvelope): boolean {
   const ev = payload.event;
   if (!ev?.type) return false;
+  if (ev.type === 'app_home_opened') return true;
   if (ev.subtype || ev.bot_id) return false;
   if (ev.type === 'app_mention') return true;
   return ev.type === 'message' && ev.channel_type === 'im';
@@ -67,6 +70,22 @@ export async function processSlackEvent(
   if (eventId && !reserveSlackEvent(eventId)) return;
 
   try {
+    // Handle app_home_opened — send welcome message on first visit
+    if (ev?.type === 'app_home_opened' && ev.tab === 'messages') {
+      const teamId = installation.bot.team_id ?? getTeamId(payload) ?? '';
+      if (ev.user && teamId && shouldSendWelcome(teamId, ev.user)) {
+        const appName = installation.config.branding?.agentName || 'MinusX';
+        const { text, blocks } = buildWelcomeBlocks(appName);
+        await postSlackMessage(installation.bot.bot_token, {
+          channel: ev.channel || ev.user,
+          text,
+          blocks,
+        });
+      }
+      if (eventId) markSlackEventDone(eventId);
+      return;
+    }
+
     if (!ev?.channel || !ev.ts || !ev.text) return;
 
     const userMessage = normalizeSlackPrompt(ev.text, installation.bot.bot_user_id);

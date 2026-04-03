@@ -81,10 +81,11 @@ export function buildSlackManifest(appName: string, baseUrl: string = AUTH_URL, 
     settings: {
       event_subscriptions: {
         request_url: `${baseUrl}/api/integrations/slack/events${subdomainSuffix}`,
-        bot_events: ['app_mention', 'message.im'],
+        bot_events: ['app_mention', 'message.im', 'app_home_opened'],
       },
       interactivity: {
-        is_enabled: false,
+        is_enabled: true,
+        request_url: `${baseUrl}/api/integrations/slack/interact${subdomainSuffix}`,
       },
       org_deploy_enabled: false,
       socket_mode_enabled: false,

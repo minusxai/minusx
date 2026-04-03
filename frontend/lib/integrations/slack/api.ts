@@ -60,9 +60,10 @@ export async function postSlackMessage(
     channel: string;
     text: string;
     thread_ts?: string;
+    blocks?: unknown[];
   },
-): Promise<void> {
-  const result = await slackApiFetch<Record<string, never>>('chat.postMessage', {
+): Promise<{ ts: string }> {
+  const result = await slackApiFetch<{ ts: string }>('chat.postMessage', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -74,6 +75,8 @@ export async function postSlackMessage(
   if (!result.ok) {
     throw new Error(`Slack chat.postMessage failed: ${result.error}`);
   }
+
+  return { ts: result.ts };
 }
 
 export async function getSlackUserEmail(token: string, userId: string): Promise<string | null> {
