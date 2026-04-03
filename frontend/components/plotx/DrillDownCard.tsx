@@ -6,6 +6,7 @@ import { LuSend, LuTable, LuClipboard, LuCheck } from 'react-icons/lu'
 import { useAppDispatch } from '@/store/hooks'
 import { setSidebarPendingMessage, setRightSidebarCollapsed, setActiveSidebarSection } from '@/store/uiSlice'
 import { useConfigs } from '@/lib/hooks/useConfigs'
+import { buildDrillDownSql } from './drilldown-utils'
 
 export interface DrillDownState {
   filters: Record<string, string>
@@ -60,16 +61,7 @@ export const DrillDownCard = ({ drillDown, onClose, sql, databaseName }: DrillDo
   // Build CTE SQL and open in new tab
   const handleSeeRecords = useCallback(() => {
     if (!drillDown || !sql) return
-    const whereClauses = Object.entries(drillDown.filters).map(([col, val]) => {
-      const colType = drillDown.filterTypes?.[col]
-      if (colType === 'number') {
-        return `\`${col}\` = ${String(val)}`
-      }
-      const escapedVal = String(val).replace(/'/g, "''")
-      return `\`${col}\` = '${escapedVal}'`
-    })
-    const whereClause = whereClauses.length > 0 ? `\nWHERE ${whereClauses.join('\n  AND ')}` : ''
-    const cteSql = `WITH base AS (\n${sql}\n)\nSELECT * FROM base${whereClause}`
+    const cteSql = buildDrillDownSql(sql, drillDown.filters, drillDown.filterTypes ?? {})
     const params = new URLSearchParams()
     if (databaseName) params.set('databaseName', databaseName)
     const utf8Bytes = new TextEncoder().encode(cteSql)
@@ -181,7 +173,7 @@ export const DrillDownCard = ({ drillDown, onClose, sql, databaseName }: DrillDo
             onClick={handleSeeRecords}
           >
             <LuTable />
-            See Records
+            See Similar Records
           </Button>
         )}
         <HStack gap={1}>

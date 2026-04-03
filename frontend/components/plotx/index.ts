@@ -1,5 +1,6 @@
 export { EChart } from './EChart'
 export { Table } from './Table'
+export { TableV2 } from './TableV2'
 export { LinePlot } from './LinePlot'
 export { BarPlot } from './BarPlot'
 export { AreaPlot } from './AreaPlot'

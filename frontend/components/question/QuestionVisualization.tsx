@@ -8,6 +8,7 @@
 import { Box, HStack, VStack, Text, Spinner, Button, IconButton } from '@chakra-ui/react';
 import { LuRocket, LuWrench, LuSettings, LuChevronDown, LuChevronUp } from 'react-icons/lu';
 import { Table } from '@/components/plotx/Table';
+import { TableV2 } from '@/components/plotx/TableV2';
 import { ChartBuilder } from '@/components/plotx/ChartBuilder';
 import { parseErrorMessage } from '@/lib/utils/error-parser';
 import { VizTypeSelector } from './VizTypeSelector';
@@ -336,7 +337,7 @@ export function QuestionVisualization({
               <>
                 {currentState?.vizSettings?.type === 'table' && (
                   <Box flex="1" minHeight="0" overflow="hidden" display="flex" width={"100%"} alignItems={"stretch"} flexDirection={"column"}>
-                    <Table columns={data.columns} types={data.types} rows={data.rows} sql={currentState?.query} databaseName={currentState?.database_name} />
+                    <TableV2 columns={data.columns} types={data.types} rows={data.rows} sql={currentState?.query} databaseName={currentState?.database_name} />
                   </Box>
                 )}
                 {(currentState?.vizSettings?.type === 'line' ||
