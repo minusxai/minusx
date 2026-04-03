@@ -48,15 +48,13 @@ export async function GET(
 
     const { companyId, mode } = tokenData;
 
-    // Use ConnectionsAPI to load connection by name (handles path resolution internally)
-    const user = { companyId, mode, userId: 0, email: '', role: 'admin' as const, home_folder: '', name: '', companyName: '' };
-    const { connection } = await ConnectionsAPI.getByName(name, user);
+    // Use getRawByName — this is a trusted internal endpoint (JWT-protected, Python-only).
+    // getSafeConfig() must NOT be applied here; Python needs the full credentials
+    // (e.g. service_account_json for BigQuery) to execute queries.
+    const { type, config } = await ConnectionsAPI.getRawByName(name, companyId, mode);
 
-    // Return connection config for Python backend
-    return NextResponse.json({
-      type: connection.type,
-      config: connection.config
-    });
+    // Return full connection config for Python backend
+    return NextResponse.json({ type, config });
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     if (msg.includes('not found')) {

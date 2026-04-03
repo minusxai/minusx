@@ -28,6 +28,7 @@ import {
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { getSafeConfig, validateConnectionName, RESERVED_NAMES, validateDuckDbFilePath } from './helpers/connections';
 import { resolvePath } from '@/lib/mode/path-resolver';
+import { Mode } from '@/lib/mode/mode-types';
 import { getNodeConnector } from '@/lib/connections';
 
 class ConnectionsDataLayerServer implements IConnectionsDataLayer {
@@ -95,6 +96,22 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
         updated_at: conn.updated_at
       }
     };
+  }
+
+  /**
+   * Get connection with raw (unfiltered) config — for trusted internal server-to-server use only.
+   * Never expose this to clients; it returns sensitive credentials like service_account_json.
+   */
+  async getRawByName(name: string, companyId: number, mode: Mode): Promise<{ type: string; config: Record<string, any> }> {
+    const connectionPath = resolvePath(mode, `/database/${name}`);
+    const conn = await DocumentDB.getByPath(connectionPath, companyId);
+
+    if (!conn) {
+      throw new Error(`Connection '${name}' not found`);
+    }
+
+    const content = conn.content as ConnectionContent;
+    return { type: content.type, config: content.config };
   }
 
   async create(input: CreateConnectionInput, user: EffectiveUser): Promise<CreateConnectionResult> {
