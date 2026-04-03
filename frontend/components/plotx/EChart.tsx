@@ -33,6 +33,10 @@ export const EChart = ({
 }: EChartProps) => {
   const chartRef = useRef<HTMLDivElement>(null)
 
+  // Stable ref so init effect doesn't need onChartUpdate as a dependency
+  const onChartUpdateRef = useRef(onChartUpdate)
+  useEffect(() => { onChartUpdateRef.current = onChartUpdate })
+
   // Debounce resize event so it only fires periodically instead of constantly
   const resizeChart = useMemo(
     () =>
@@ -51,7 +55,7 @@ export const EChart = ({
 
     // Initialize chart
     const chart = init(chartRef.current, null, chartSettings)
-    onChartUpdate?.(chart)
+    onChartUpdateRef.current?.(chart)
 
     // Set up event listeners
     for (const [key, handler] of Object.entries(events)) {
@@ -74,7 +78,7 @@ export const EChart = ({
       resizeObserver.unobserve(currentRef)
       resizeObserver.disconnect()
     }
-  }, [chartSettings, events, onChartUpdate, resizeChart])
+  }, [chartSettings, events, resizeChart])
 
   useEffect(() => {
     // Re-render chart when option changes
@@ -82,10 +86,10 @@ export const EChart = ({
       const chart = getInstanceByDom(chartRef.current)
       if (chart && option) {
         chart.setOption(option, optionSettings)
-        onChartUpdate?.(chart)
+        onChartUpdateRef.current?.(chart)
       }
     }
-  }, [onChartUpdate, option, optionSettings])
+  }, [option, optionSettings])
 
   return <div ref={chartRef} style={style} {...props} />
 }

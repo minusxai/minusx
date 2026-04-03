@@ -7,6 +7,8 @@ import { buildAnnotationGraphics, buildChartOption, isValidChartData, type Chart
 import type { EChartsOption } from 'echarts'
 import type { EChartsType } from 'echarts/core'
 
+const CHART_SETTINGS = { useCoarsePointer: true, renderer: 'canvas' as const }
+
 interface BaseChartProps extends ChartProps {
   chartType: 'line' | 'bar' | 'area' | 'scatter' | 'combo'
   emptyMessage?: string
@@ -23,12 +25,8 @@ export const BaseChart = (props: BaseChartProps) => {
       chartType,
       xScale: axisConfig?.xScale ?? 'linear',
       yScale: axisConfig?.yScale ?? 'linear',
-      xMin: axisConfig?.xMin ?? null,
-      xMax: axisConfig?.xMax ?? null,
-      yMin: axisConfig?.yMin ?? null,
-      yMax: axisConfig?.yMax ?? null,
     }),
-    [chartType, axisConfig]
+    [chartType, axisConfig?.xScale, axisConfig?.yScale]
   )
 
   const option: EChartsOption = useMemo(() => {
@@ -95,7 +93,7 @@ export const BaseChart = (props: BaseChartProps) => {
         key={chartInstanceKey}
         option={option}
         style={{ width: '100%', height: '100%', minHeight: '300px' }}
-        chartSettings={{ useCoarsePointer: true, renderer: 'canvas' }}
+        chartSettings={CHART_SETTINGS}
         events={chartEvents}
         onChartUpdate={handleChartUpdate}
       />
