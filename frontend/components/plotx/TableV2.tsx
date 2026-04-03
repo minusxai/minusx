@@ -354,7 +354,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
               cursor: 'pointer',
             },
             '& .table-v2-cell:hover': {
-              background: 'var(--chakra-colors-bg-muted)',
+              background: 'var(--chakra-colors-bg-emphasized)',
             },
           }}
         >
@@ -730,7 +730,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
         {/* Left: Stats, Columns, Filters */}
         <HStack gap={3}>
           <Button
-            size="xs"
+            size="2xs"
             variant={showStats ? 'solid' : 'outline'}
             bg={showStats ? 'accent.teal' : 'bg.muted'}
             color={showStats ? 'white' : undefined}
@@ -744,7 +744,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
           <Menu.Root closeOnSelect={false}>
             <Menu.Trigger asChild>
               <Button
-                size="xs"
+                size="2xs"
                 variant="outline"
                 bg="bg.muted"
                 borderColor="border.default"
@@ -858,7 +858,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
             }
           </Text>
           <Button
-            size="xs"
+            size="2xs"
             variant="outline"
             bg="bg.muted"
             borderColor="border.default"
