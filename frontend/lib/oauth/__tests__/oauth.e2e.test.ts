@@ -51,6 +51,45 @@ function pkce(): { verifier: string; challenge: string } {
   return { verifier, challenge };
 }
 
+/** Insert an auth code row directly with a custom expires_at (for expiry tests) */
+async function insertExpiredCode(overrides: {
+  code?: string;
+  expiresAt: string;
+  challenge: string;
+}): Promise<string> {
+  const code = overrides.code ?? randomBytes(24).toString('hex');
+  const db = await createAdapter({ type: 'sqlite', sqlitePath: DB_PATH });
+  await db.query(
+    `INSERT INTO oauth_authorization_codes
+      (code, company_id, user_id, redirect_uri, code_challenge, code_challenge_method, scope, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [code, COMPANY_ID, USER_ID, REDIRECT_URI, overrides.challenge, 'S256', null, overrides.expiresAt]
+  );
+  await db.close();
+  await resetAdapter();
+  return code;
+}
+
+/** Insert a token row directly with custom timestamps (for expiry tests) */
+async function insertExpiredToken(overrides: {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: string;
+  refreshExpiresAt: string;
+}): Promise<void> {
+  const accessHash = createHash('sha256').update(overrides.accessToken).digest('hex');
+  const refreshHash = createHash('sha256').update(overrides.refreshToken).digest('hex');
+  const db = await createAdapter({ type: 'sqlite', sqlitePath: DB_PATH });
+  await db.query(
+    `INSERT INTO oauth_tokens
+      (token_hash, refresh_token_hash, company_id, user_id, scope, expires_at, refresh_expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [accessHash, refreshHash, COMPANY_ID, USER_ID, null, overrides.expiresAt, overrides.refreshExpiresAt]
+  );
+  await db.close();
+  await resetAdapter();
+}
+
 // ---------------------------------------------------------------------------
 // Suite setup / teardown
 // ---------------------------------------------------------------------------
@@ -159,6 +198,15 @@ describe('OAuthCodeDB', () => {
       const result = await OAuthCodeDB.consume(code, REDIRECT_URI, verifier);
       expect(result!.scope).toBeNull();
     });
+
+    it('returns null for an expired code', async () => {
+      const { verifier, challenge } = pkce();
+      const pastTimestamp = new Date(Date.now() - 60 * 1000).toISOString(); // 1 minute ago
+      const code = await insertExpiredCode({ expiresAt: pastTimestamp, challenge });
+
+      const result = await OAuthCodeDB.consume(code, REDIRECT_URI, verifier);
+      expect(result).toBeNull();
+    });
   });
 
   describe('cleanupExpired', () => {
@@ -236,6 +284,17 @@ describe('OAuthTokenDB', () => {
       const result = await OAuthTokenDB.validateAccessToken(accessToken);
       expect(result!.scope).toBeNull();
     });
+
+    it('returns null for an expired access token', async () => {
+      const accessToken = randomBytes(32).toString('hex');
+      const refreshToken = randomBytes(32).toString('hex');
+      const pastTimestamp = new Date(Date.now() - 3600 * 1000).toISOString(); // expired 1h ago
+      const futureTimestamp = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
+      await insertExpiredToken({ accessToken, refreshToken, expiresAt: pastTimestamp, refreshExpiresAt: futureTimestamp });
+
+      const result = await OAuthTokenDB.validateAccessToken(accessToken);
+      expect(result).toBeNull();
+    });
   });
 
   describe('revoke', () => {
@@ -295,6 +354,17 @@ describe('OAuthTokenDB', () => {
       expect(result).toBeNull();
     });
 
+    it('returns null for an expired refresh token', async () => {
+      const accessToken = randomBytes(32).toString('hex');
+      const refreshToken = randomBytes(32).toString('hex');
+      const futureAccessExpiry = new Date(Date.now() + 3600 * 1000).toISOString();
+      const pastRefreshExpiry = new Date(Date.now() - 24 * 3600 * 1000).toISOString(); // expired yesterday
+      await insertExpiredToken({ accessToken, refreshToken, expiresAt: futureAccessExpiry, refreshExpiresAt: pastRefreshExpiry });
+
+      const result = await OAuthTokenDB.refresh(refreshToken);
+      expect(result).toBeNull();
+    });
+
     it('preserves scope through the refresh cycle', async () => {
       const original = await OAuthTokenDB.create(COMPANY_ID, USER_ID, 'read:schema');
       const refreshed = await OAuthTokenDB.refresh(original.refreshToken);
@@ -314,14 +384,35 @@ describe('OAuthTokenDB', () => {
       await expect(OAuthTokenDB.cleanupExpired()).resolves.toBeUndefined();
     });
 
-    it('removes revoked tokens', async () => {
+    it('deletes revoked token rows from the database', async () => {
       const { accessToken } = await OAuthTokenDB.create(COMPANY_ID, USER_ID);
       await OAuthTokenDB.revoke(accessToken);
+
+      // Verify row exists before cleanup
+      const hash = createHash('sha256').update(accessToken).digest('hex');
+      const dbBefore = await createAdapter({ type: 'sqlite', sqlitePath: DB_PATH });
+      const before = await dbBefore.query('SELECT COUNT(*) as cnt FROM oauth_tokens WHERE token_hash = $1', [hash]);
+      await dbBefore.close();
+      await resetAdapter();
+      expect((before.rows[0] as { cnt: number }).cnt).toBe(1);
+
       await OAuthTokenDB.cleanupExpired();
 
-      // Validating a revoked token was already returning null; cleanup just removes the row
+      // Row should be gone after cleanup
+      const dbAfter = await createAdapter({ type: 'sqlite', sqlitePath: DB_PATH });
+      const after = await dbAfter.query('SELECT COUNT(*) as cnt FROM oauth_tokens WHERE token_hash = $1', [hash]);
+      await dbAfter.close();
+      await resetAdapter();
+      expect((after.rows[0] as { cnt: number }).cnt).toBe(0);
+    });
+
+    it('leaves active tokens untouched', async () => {
+      const { accessToken } = await OAuthTokenDB.create(COMPANY_ID, USER_ID);
+      await OAuthTokenDB.cleanupExpired();
+
+      // Active token should still validate
       const result = await OAuthTokenDB.validateAccessToken(accessToken);
-      expect(result).toBeNull();
+      expect(result).not.toBeNull();
     });
   });
 });
