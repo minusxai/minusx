@@ -10,6 +10,7 @@ import RecordingControl from '@/components/RecordingControl';
 import DataManagementSection from '@/components/DataManagementSection';
 import { ChannelsSection } from '@/components/settings/ChannelsSection';
 import { SlackIntegration } from '@/components/settings/integrations/SlackIntegration';
+import { McpIntegration } from '@/components/settings/integrations/McpIntegration';
 import UsersContent from '@/components/UsersContent';
 import ConfigContainerV2 from '@/components/containers/ConfigContainerV2';
 import StylesContainerV2 from '@/components/containers/StylesContainerV2';
@@ -352,6 +353,7 @@ function SettingsContent() {
             Connect external services to your MinusX workspace.
           </Text>
           <SlackIntegration />
+          <McpIntegration />
         </VStack>
       ),
     },

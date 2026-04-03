@@ -306,7 +306,6 @@ export interface SlackBotConfig {
 
 export type ConfigBot = SlackBotConfig;
 
-
 export interface ConfigContent extends BaseFileContent {
   branding?: {
     logoLight?: string;
@@ -1028,13 +1027,9 @@ export interface OrchestrationTask {
 /**
  * Conversation metadata
  */
-export interface ConversationSource {
-  type: 'slack';
-  teamId: string;
-  channelId: string;
-  threadTs: string;
-  channelName?: string;  // resolved display name, e.g. "general"
-}
+export type ConversationSource =
+  | { type: 'slack'; teamId: string; channelId: string; threadTs: string; channelName?: string }
+  | { type: 'mcp'; sessionId: string };
 
 export interface ConversationMetadata {
   userId: string;
