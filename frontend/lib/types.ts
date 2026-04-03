@@ -306,10 +306,6 @@ export interface SlackBotConfig {
 
 export type ConfigBot = SlackBotConfig;
 
-export interface McpSettings {
-  enabled?: boolean;
-}
-
 export interface ConfigContent extends BaseFileContent {
   branding?: {
     logoLight?: string;
@@ -329,7 +325,6 @@ export interface ConfigContent extends BaseFileContent {
   channels?: ConfigChannel[];
   error_delivery?: AlertRecipient[];
   bots?: ConfigBot[];
-  mcp?: McpSettings;
   // Future: other config sections can be added here
 }
 

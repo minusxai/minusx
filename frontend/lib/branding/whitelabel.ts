@@ -4,7 +4,7 @@
  */
 
 import type { FileType } from '@/lib/ui/file-metadata';
-import type { UserRole, ConfigChannel, MessagingWebhook, AlertRecipient, ConfigBot, McpSettings } from '@/lib/types';
+import type { UserRole, ConfigChannel, MessagingWebhook, AlertRecipient, ConfigBot } from '@/lib/types';
 
 export interface SetupWizard {
   status: 'pending' | 'complete';
@@ -61,7 +61,6 @@ export interface CompanyConfig {
   accessRules?: AccessRulesOverride;  // Per-company file type access overrides (overrides rules.json)
   setupWizard?: SetupWizard;
   bots?: ConfigBot[];
-  mcp?: McpSettings;
   // Future: theme, features, etc.
 }
 
@@ -137,7 +136,6 @@ export function mergeConfig(
     accessRules: overrides.accessRules ?? defaults.accessRules,
     setupWizard: overrides.setupWizard ?? defaults.setupWizard,
     bots: overrides.bots ?? defaults.bots,
-    mcp: overrides.mcp ?? defaults.mcp,
     // Future: merge other config sections
   };
 }
