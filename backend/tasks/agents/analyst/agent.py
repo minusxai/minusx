@@ -243,7 +243,7 @@ class SlackAgent(AnalystAgent):
 - Only use tools that are actually available in this Slack mode.
 - Prefer answering analytically over making file edits.
 - If conversation history already exists in the log, do NOT re-introduce yourself. Continue the conversation naturally.
-- Every response MUST include an <answer> block with visible text. Never end a turn with only <thinking> blocks — the user is waiting for a reply.
+- IMPORTANT: Do NOT use <thinking>, <answer>, or any other XML tags in your response. Write your reply as plain text only. The entire text of your response will be posted directly to Slack.
 """.strip()
         return {"role": "system", "content": f"{base}\n\n{slack_addendum}"}
 
