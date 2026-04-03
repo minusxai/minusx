@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Box, HStack, Button, Text, VStack, Menu, Portal, Icon, Spinner, Input } from '@chakra-ui/react'
-import { LuChevronDown, LuType, LuHash, LuCalendar, LuBraces, LuColumns3, LuCheck, LuDownload, LuArrowUp, LuArrowDown, LuFilter, LuX, LuArrowUpDown } from 'react-icons/lu'
+import { LuChevronDown, LuType, LuHash, LuCalendar, LuBraces, LuColumns3, LuCheck, LuDownload, LuArrowUp, LuArrowDown, LuFilter, LuX, LuArrowUpDown, LuChartColumn } from 'react-icons/lu'
 import { calculateColumnStats, ColumnStats, getColumnType, loadDataIntoTable, generateRandomTableName } from '@/lib/database/duckdb'
 import { calculateHistogram } from '@/lib/chart/histogram'
 import { MiniHistogram } from './MiniHistogram'
@@ -17,6 +17,7 @@ import {
   type ColumnFiltersState,
   type VisibilityState,
   type ColumnDef,
+  type ColumnSizingState,
 } from '@tanstack/react-table'
 import { useVirtualizer } from '@tanstack/react-virtual'
 
@@ -86,11 +87,13 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>({})
   const [drillDown, setDrillDown] = useState<DrillDownState | null>(null)
   const closeDrillDown = useCallback(() => setDrillDown(null), [])
   const [stats, setStats] = useState<Record<string, ColumnStats> | null>(null)
   const [histograms, setHistograms] = useState<Record<string, Array<{ bin: number; binMin: number; binMax: number; count: number }>>>({})
   const [loadingStats, setLoadingStats] = useState(false)
+  const [showStats, setShowStats] = useState(false)
   const [activeFilterCol, setActiveFilterCol] = useState<string | null>(null)
 
   const containerRef = useRef<HTMLDivElement>(null)
@@ -106,6 +109,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
     setColumnVisibility({})
     setColumnFilters([])
     setSorting([])
+    setColumnSizing({})
   }, [colNames])
 
   // Column definitions for TanStack Table
@@ -131,14 +135,15 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
   const table = useReactTable({
     data: rows,
     columns: tableColumns,
-    state: { sorting, columnFilters, columnVisibility },
+    state: { sorting, columnFilters, columnVisibility, columnSizing },
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnSizingChange: setColumnSizing,
+    columnResizeMode: 'onChange',
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    // No pagination model — we virtualize instead
   })
 
   const { rows: tableRows } = table.getRowModel()
@@ -151,9 +156,9 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
     overscan: 20,
   })
 
-  // Stats calculation
+  // Stats calculation — only when user opts in
   useEffect(() => {
-    if (colNames.length > 0 && rows.length > 0 && types) {
+    if (showStats && colNames.length > 0 && rows.length > 0 && types) {
       setLoadingStats(true)
       const tableName = generateRandomTableName()
       loadDataIntoTable(tableName, rows)
@@ -181,7 +186,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
           setLoadingStats(false)
         })
     }
-  }, [colNames, rows, types])
+  }, [showStats, colNames, rows, types])
 
   const downloadCsv = useCallback(() => {
     const visibleCols = colNames.filter(c => columnVisibility[c] !== false)
@@ -275,11 +280,29 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
                       borderRightColor="border.default"
                       borderBottom="1px solid"
                       borderBottomColor="border.default"
-                      width={`${100 / visibleColumnCount}%`}
+                      width={header.getSize()}
+                      minW="100px"
                       _last={{ borderRight: 'none' }}
                       position="relative"
                       verticalAlign="top"
                     >
+                      {/* Resize handle */}
+                      <Box
+                        position="absolute"
+                        right={0}
+                        top={0}
+                        bottom={0}
+                        w="4px"
+                        cursor="col-resize"
+                        userSelect="none"
+                        touchAction="none"
+                        opacity={header.column.getIsResizing() ? 1 : 0}
+                        _hover={{ opacity: 1 }}
+                        bg="accent.teal"
+                        zIndex={3}
+                        onMouseDown={header.getResizeHandler()}
+                        onTouchStart={header.getResizeHandler()}
+                      />
                       <VStack align="start" gap={1}>
                         {/* Column name + sort + filter controls */}
                         <HStack gap={1} justify="start" overflow="hidden" w="100%">
@@ -370,63 +393,65 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
                           </HStack>
                         )}
 
-                        {/* Stats area */}
-                        <Box h="100px" w="100%" overflow="hidden">
-                          {colType === 'json' ? (
-                            <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" fontWeight="400">
-                              stats n/a
-                            </Text>
-                          ) : (
-                            <>
-                              {loadingStats && !stats && (
-                                <Box w="100%" h="100%" display="flex" alignItems="center" justifyContent="center">
-                                  <Spinner size="sm" color="fg.subtle" />
-                                </Box>
-                              )}
-                              {(() => {
-                                const colStats = stats?.[header.id]
-                                if (!colStats) return null
-                                return (
-                                  <>
-                                    <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" fontWeight="400">
-                                      {colStats.type === 'number' && (
-                                        <>avg: {colStats.avg.toLocaleString('en-US', { maximumFractionDigits: 0 })}</>
+                        {/* Stats area — only rendered when toggled on */}
+                        {showStats && (
+                          <Box h="100px" w="100%" overflow="hidden">
+                            {colType === 'json' ? (
+                              <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" fontWeight="400">
+                                stats n/a
+                              </Text>
+                            ) : (
+                              <>
+                                {loadingStats && !stats && (
+                                  <Box w="100%" h="100%" display="flex" alignItems="center" justifyContent="center">
+                                    <Spinner size="sm" color="fg.subtle" />
+                                  </Box>
+                                )}
+                                {(() => {
+                                  const colStats = stats?.[header.id]
+                                  if (!colStats) return null
+                                  return (
+                                    <>
+                                      <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" fontWeight="400">
+                                        {colStats.type === 'number' && (
+                                          <>avg: {colStats.avg.toLocaleString('en-US', { maximumFractionDigits: 0 })}</>
+                                        )}
+                                        {colStats.type === 'date' && (
+                                          <>{colStats.unique} unique</>
+                                        )}
+                                        {colStats.type === 'text' && (
+                                          <>{colStats.unique} unique</>
+                                        )}
+                                      </Text>
+                                      {colStats.type === 'text' && colStats.topValues.length > 0 && (
+                                        <Box mt={1} w="100%">
+                                          <MiniBarChart
+                                            data={colStats.topValues}
+                                            totalUnique={colStats.unique}
+                                            color={getTypeColor(colType)}
+                                            height={75}
+                                          />
+                                        </Box>
                                       )}
-                                      {colStats.type === 'date' && (
-                                        <>{colStats.unique} unique</>
+                                      {(colStats.type === 'number' || colStats.type === 'date') && histograms[header.id] && (
+                                        <Box mt={1} w="100%">
+                                          <MiniHistogram
+                                            data={histograms[header.id]}
+                                            color={getTypeColor(colType)}
+                                            height={30}
+                                            isDate={colStats.type === 'date'}
+                                            isFirstColumn={displayIndex === 0}
+                                            isLastColumn={displayIndex === visibleHeaders.length - 1}
+                                          />
+                                        </Box>
                                       )}
-                                      {colStats.type === 'text' && (
-                                        <>{colStats.unique} unique</>
-                                      )}
-                                    </Text>
-                                    {colStats.type === 'text' && colStats.topValues.length > 0 && (
-                                      <Box mt={1} w="100%">
-                                        <MiniBarChart
-                                          data={colStats.topValues}
-                                          totalUnique={colStats.unique}
-                                          color={getTypeColor(colType)}
-                                          height={75}
-                                        />
-                                      </Box>
-                                    )}
-                                    {(colStats.type === 'number' || colStats.type === 'date') && histograms[header.id] && (
-                                      <Box mt={1} w="100%">
-                                        <MiniHistogram
-                                          data={histograms[header.id]}
-                                          color={getTypeColor(colType)}
-                                          height={30}
-                                          isDate={colStats.type === 'date'}
-                                          isFirstColumn={displayIndex === 0}
-                                          isLastColumn={displayIndex === visibleHeaders.length - 1}
-                                        />
-                                      </Box>
-                                    )}
-                                  </>
-                                )
-                              })()}
-                            </>
-                          )}
-                        </Box>
+                                    </>
+                                  )
+                                })()}
+                              </>
+                            )}
+                          </Box>
+                        )}
                       </VStack>
                     </Box>
                   )
@@ -508,23 +533,19 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
 
       {/* Bottom Bar */}
       <HStack justify="space-between" align="center" mt={2} px={2} flexShrink={0}>
+        {/* Left: Stats, Columns, Filters */}
         <HStack gap={3}>
-          <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-            {tableRows.length !== rows.length
-              ? `${tableRows.length} filtered of ${rows.length} rows`
-              : `${rows.length} rows`
-            }
-          </Text>
           <Button
             size="xs"
-            variant="outline"
-            bg="bg.muted"
-            borderColor="border.default"
-            _hover={{ bg: 'bg.subtle', borderColor: 'border.emphasized' }}
-            onClick={downloadCsv}
+            variant={showStats ? 'solid' : 'outline'}
+            bg={showStats ? 'accent.teal' : 'bg.muted'}
+            color={showStats ? 'white' : undefined}
+            borderColor={showStats ? 'accent.teal' : 'border.default'}
+            _hover={{ bg: showStats ? 'accent.teal/80' : 'bg.subtle', borderColor: 'border.emphasized' }}
+            onClick={() => setShowStats(prev => !prev)}
           >
-            <Icon as={LuDownload} boxSize={3} />
-            CSV
+            <Icon as={LuChartColumn} boxSize={3} />
+            Stats
           </Button>
           <Menu.Root closeOnSelect={false}>
             <Menu.Trigger asChild>
@@ -632,6 +653,27 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
               Clear {columnFilters.length} filter{columnFilters.length > 1 ? 's' : ''}
             </Button>
           )}
+        </HStack>
+
+        {/* Right: Row count, CSV */}
+        <HStack gap={3}>
+          <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+            {tableRows.length !== rows.length
+              ? `${tableRows.length} filtered of ${rows.length} rows`
+              : `${rows.length} rows`
+            }
+          </Text>
+          <Button
+            size="xs"
+            variant="outline"
+            bg="bg.muted"
+            borderColor="border.default"
+            _hover={{ bg: 'bg.subtle', borderColor: 'border.emphasized' }}
+            onClick={downloadCsv}
+          >
+            <Icon as={LuDownload} boxSize={3} />
+            CSV
+          </Button>
         </HStack>
       </HStack>
       <DrillDownCard drillDown={drillDown} onClose={closeDrillDown} sql={sql} databaseName={databaseName} />
