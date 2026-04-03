@@ -121,7 +121,7 @@ The `import-db` script supports:
 │                   (Next.js 16 + React 19)                   │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  SQLite (atlas_documents.db)                                │
+│  SQLite or Postgres (atlas_documents.db / DATABASE_URL)     │
 │  ├─ Questions, Dashboards, Notebooks, Presentations         │
 │  ├─ Connections, Context, Users, Folders                    │
 │  └─ Accessed directly by Next.js server components          │
@@ -144,8 +144,8 @@ The `import-db` script supports:
 
 ### Key Concepts
 
-**Document Storage (SQLite)**
-- All documents stored in `atlas_documents.db` with WAL mode
+**Document Storage (SQLite/Postgres)**
+- Supports both SQLite (`atlas_documents.db`, WAL mode) and Postgres (via `DATABASE_URL`); adapters in `lib/database/`
 - Files accessed by integer ID via `/f/{id}` routes (not by path)
 - Path field is display-only for organization (e.g., `/org/Revenue-Summary`)
 - Content stored as JSON in `content` column
@@ -183,7 +183,7 @@ The configs system provides per-company configuration stored as database documen
   ```
 
 **Loading Strategy** (Optimized for SSR):
-- **Configs + Contexts**: Always load on server-side render (SSR) with Next.js `unstable_cache` (5-min revalidate, separate cache keys per company)
+- **Configs + Contexts**: Always load on server-side render (SSR)
 - **Connections**: 50ms timeout on SSR, client-side fallback if exceeded
 - **Server hydration**: All three resources (configs, contexts, connections) passed to Redux as `preloadedState`
 - **Client fallback**: API routes (`/api/configs`, `/api/contexts`, `/api/connections`) available if data not SSR'd
@@ -192,11 +192,6 @@ The configs system provides per-company configuration stored as database documen
 - Database values override hardcoded defaults from `frontend/lib/branding/whitelabel.ts`
 - If config document doesn't exist, falls back to hardcoded `COMPANY_BRANDING` object
 - Partial configs supported: only specified fields override, others use defaults
-
-**Cache Invalidation**:
-- Automatic revalidation after 5 minutes (Next.js `unstable_cache`)
-- Manual revalidation: restart server or use `revalidateTag('configs')`
-- Cache keys include `company_id` to prevent cross-company collisions
 
 **Client Usage**:
 ```typescript
@@ -542,7 +537,7 @@ export async function POST(req: NextRequest) {
 - **React 19** with Next.js 16 (App Router)
 - **Chakra UI v3** with custom theme (Flat UI colors)
 - **Redux Toolkit** for state management
-- **better-sqlite3** for direct SQLite access in server components
+- **better-sqlite3** for direct SQLite access; Postgres adapter also supported via `pg`
 - **Monaco Editor** for SQL editing
 - **ECharts 6** for visualizations (themed with JetBrains Mono fonts)
 - **NextAuth v5** for authentication
@@ -558,7 +553,7 @@ export async function POST(req: NextRequest) {
   - Default `BASE_DUCKDB_DATA_PATH` is `.` (current directory)
 
 ### Database
-- **SQLite** (WAL mode): Documents, metadata, configuration
+- **SQLite** (WAL mode) or **Postgres**: Documents, metadata, configuration
 - **DuckDB**: Default analytics database (local)
 - **BigQuery/PostgreSQL**: Optional external data warehouses
 
@@ -573,7 +568,7 @@ export async function POST(req: NextRequest) {
   - **Note**: Replaces the old `DEFAULT_DUCKDB_PATH` variable which only stored the filename
 
 #### Frontend
-- `DATABASE_URL`: SQLite database path (default: `data/atlas_documents.db`)
+- `DATABASE_URL`: Document DB connection — SQLite file path (default: `data/atlas_documents.db`) or a `postgres://` URL
 - `NEXTAUTH_SECRET`: NextAuth secret for session encryption
 - `NEXTAUTH_URL`: NextAuth URL (default: `http://localhost:3000`)
 
