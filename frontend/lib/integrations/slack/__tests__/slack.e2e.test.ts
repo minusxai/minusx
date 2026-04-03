@@ -220,6 +220,14 @@ describe('Slack Bot Integration', () => {
             json: async () => ({ ok: true, ts: `${Date.now()}.000001` }),
           } as Response;
         }
+        // Slack reactions.add / reactions.remove
+        if (urlStr.includes('slack.com/api/reactions.add') || urlStr.includes('slack.com/api/reactions.remove')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ ok: true }),
+          } as Response;
+        }
         // Slack auth.test (used by manual-install route)
         if (urlStr.includes('slack.com/api/auth.test')) {
           return {
