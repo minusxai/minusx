@@ -11,7 +11,6 @@ import {
   getCoreRowModel,
   getSortedRowModel,
   getFilteredRowModel,
-  flexRender,
   createColumnHelper,
   type SortingState,
   type ColumnFiltersState,
@@ -32,6 +31,10 @@ interface TableProps {
 
 type ColumnType = 'text' | 'number' | 'date' | 'json'
 
+// Reusable format options — created once, not per call
+const NUMBER_FORMAT = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 })
+const DATE_FORMAT = new Intl.DateTimeFormat('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+
 const formatValue = (value: any, type: ColumnType): string => {
   if (value === null || value === undefined) {
     return '-'
@@ -39,12 +42,12 @@ const formatValue = (value: any, type: ColumnType): string => {
   switch (type) {
     case 'number':
       if (typeof value === 'number') {
-        return value.toLocaleString('en-US', { maximumFractionDigits: 2 })
+        return NUMBER_FORMAT.format(value)
       }
       return String(value)
     case 'date':
       if (value instanceof Date) {
-        return value.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+        return DATE_FORMAT.format(value)
       }
       return String(value)
     case 'json':
@@ -148,6 +151,13 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
 
   const { rows: tableRows } = table.getRowModel()
 
+  // Pre-compute column index map to avoid indexOf() per cell
+  const colIndexMap = useMemo(() => {
+    const map: Record<string, number> = {}
+    colNames.forEach((col, i) => { map[col] = i })
+    return map
+  }, [colNames])
+
   // Virtual scrolling
   const rowVirtualizer = useVirtualizer({
     count: tableRows.length,
@@ -155,6 +165,41 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
     estimateSize: () => ROW_HEIGHT,
     overscan: 20,
   })
+
+  const virtualItems = rowVirtualizer.getVirtualItems()
+
+  // Pre-compute visible column IDs and sizes once per render
+  const visibleColIds = useMemo(() => {
+    return table.getVisibleLeafColumns().map(c => c.id)
+  }, [table, columnVisibility]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const colSizes = useMemo(() => {
+    const sizes: Record<string, number> = {}
+    table.getVisibleLeafColumns().forEach(c => { sizes[c.id] = c.getSize() })
+    return sizes
+  }, [table, columnSizing, columnVisibility]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Event delegation: single click handler on tbody, find cell via DOM traversal
+  const handleBodyClick = useCallback((e: React.MouseEvent<HTMLTableSectionElement>) => {
+    const td = (e.target as HTMLElement).closest('td') as HTMLTableCellElement | null
+    if (!td) return
+    const tr = td.closest('tr')
+    if (!tr) return
+    const rowIdx = Number(tr.dataset.rowIdx)
+    const colId = td.dataset.colId
+    if (colId == null || isNaN(rowIdx)) return
+    const row = tableRows[rowIdx]
+    if (!row) return
+    const colIdx = colIndexMap[colId]
+    const value = row.original[colId]
+    const colType = columnTypes[colIdx]
+    setDrillDown({
+      filters: { [colId]: formatValue(value, colType) },
+      filterTypes: { [colId]: colType },
+      yColumn: colId,
+      position: { x: e.clientX, y: e.clientY },
+    })
+  }, [tableRows, colIndexMap, columnTypes])
 
   // Stats calculation — only when user opts in
   useEffect(() => {
@@ -246,6 +291,26 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
             '&::-webkit-scrollbar-track': { background: 'var(--chakra-colors-bg-muted)', borderRadius: '5px' },
             '&::-webkit-scrollbar-thumb': { background: '#16a085', borderRadius: '5px' },
             '&::-webkit-scrollbar-thumb:hover': { background: '#1abc9c' },
+            '& .table-v2-row': {
+              borderBottom: '1px solid var(--chakra-colors-border-muted)',
+            },
+            '& .table-v2-row:hover': {
+              background: 'var(--chakra-colors-bg-muted) !important',
+            },
+            '& .table-v2-cell': {
+              fontFamily: 'var(--chakra-fonts-mono)',
+              fontSize: 'var(--chakra-fontSizes-sm)',
+              color: 'var(--chakra-colors-fg-default)',
+              padding: '12px 16px',
+              textAlign: 'left',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              cursor: 'pointer',
+            },
+            '& .table-v2-cell:hover': {
+              background: 'var(--chakra-colors-bg-muted)',
+            },
           }}
         >
           <Box
@@ -459,74 +524,45 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
               </Box>
             </Box>
 
-            {/* Virtualized Body */}
-            <Box as="tbody">
-              {/* Spacer for virtual items before */}
-              {rowVirtualizer.getVirtualItems().length > 0 && rowVirtualizer.getVirtualItems()[0].start > 0 && (
-                <Box as="tr">
-                  <Box as="td" h={`${rowVirtualizer.getVirtualItems()[0].start}px`} p={0} />
-                </Box>
+            {/* Virtualized Body — native elements + event delegation for performance */}
+            <tbody onClick={handleBodyClick}>
+              {virtualItems.length > 0 && virtualItems[0].start > 0 && (
+                <tr><td style={{ height: virtualItems[0].start, padding: 0 }} /></tr>
               )}
-              {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              {virtualItems.map((virtualRow) => {
                 const row = tableRows[virtualRow.index]
+                const original = row.original
+                const lastColIdx = visibleColIds.length - 1
                 return (
-                  <Box
-                    as="tr"
+                  <tr
                     key={row.id}
-                    bg={virtualRow.index % 2 === 1 ? 'bg.muted/30' : undefined}
-                    _hover={{ bg: 'bg.muted/50' }}
-                    transition="background 0.15s"
-                    h={`${ROW_HEIGHT}px`}
-                    borderBottom="1px solid"
-                    borderBottomColor="border.muted"
+                    data-row-idx={virtualRow.index}
+                    className="table-v2-row"
+                    style={{
+                      height: ROW_HEIGHT,
+                      background: virtualRow.index % 2 === 1 ? 'var(--chakra-colors-bg-muted)' : undefined,
+                    }}
                   >
-                    {row.getVisibleCells().map((cell) => {
-                      const colIndex = colNames.indexOf(cell.column.id)
-                      return (
-                        <Box
-                          as="td"
-                          key={cell.id}
-                          fontFamily="mono"
-                          fontSize="sm"
-                          color="fg.default"
-                          py={3}
-                          px={4}
-                          textAlign="left"
-                          borderRight="1px solid"
-                          borderRightColor="border.muted"
-                          _last={{ borderRight: 'none' }}
-                          overflow="hidden"
-                          textOverflow="ellipsis"
-                          whiteSpace="nowrap"
-                          cursor="pointer"
-                          _hover={{ bg: 'bg.muted' }}
-                          onClick={(e: React.MouseEvent) => {
-                            setDrillDown({
-                              filters: { [cell.column.id]: formatValue(cell.getValue(), columnTypes[colIndex]) },
-                              filterTypes: { [cell.column.id]: columnTypes[colIndex] },
-                              yColumn: cell.column.id,
-                              position: { x: e.clientX, y: e.clientY },
-                            })
-                          }}
-                        >
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </Box>
-                      )
-                    })}
-                  </Box>
+                    {visibleColIds.map((colId, cellIdx) => (
+                      <td
+                        key={colId}
+                        data-col-id={colId}
+                        className="table-v2-cell"
+                        style={{
+                          width: colSizes[colId],
+                          borderRight: cellIdx < lastColIdx ? '1px solid var(--chakra-colors-border-muted)' : undefined,
+                        }}
+                      >
+                        {formatValue(original[colId], columnTypes[colIndexMap[colId]])}
+                      </td>
+                    ))}
+                  </tr>
                 )
               })}
-              {/* Spacer for virtual items after */}
-              {rowVirtualizer.getVirtualItems().length > 0 && (
-                <Box as="tr">
-                  <Box
-                    as="td"
-                    h={`${rowVirtualizer.getTotalSize() - (rowVirtualizer.getVirtualItems()[rowVirtualizer.getVirtualItems().length - 1].end)}px`}
-                    p={0}
-                  />
-                </Box>
+              {virtualItems.length > 0 && (
+                <tr><td style={{ height: rowVirtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end, padding: 0 }} /></tr>
               )}
-            </Box>
+            </tbody>
           </Box>
         </Box>
       )}
