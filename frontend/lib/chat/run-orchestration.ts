@@ -32,6 +32,8 @@ export interface RunOrchestrationParams {
 export interface RunOrchestrationResult {
   conversationId: number;
   log: ConversationLogEntry[];
+  /** Log entries added by this run only (excludes prior conversation history). */
+  logDiff: ConversationLogEntry[];
 }
 
 async function callPythonBackend(
@@ -142,5 +144,6 @@ export async function runChatOrchestration({
   return {
     conversationId: currentFileId,
     log: [...baseLog, ...accumulatedLogDiff],
+    logDiff: accumulatedLogDiff,
   };
 }
