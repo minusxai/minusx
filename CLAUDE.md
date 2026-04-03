@@ -695,6 +695,8 @@ For component-level UI interaction tests (React rendering, user events, DOM asse
 
 **Debugging Async Orchestration:** Debug multi-tier async execution by adding temporary logging at tier boundaries (Python response, tool execution results) to trace data flow through execution loop
 
+**TalkToUser is NOT a normal tool_call for most agents — do not mock it as one.** `TalkToUser` is only in `SlackAgent`'s toolset (so the bot can post back to Slack threads). All other agents (`AnalystAgent`, `DashboardAgent`, etc.) reply via `finish_reason='stop'` with plain `content` — `TalkToUser` is never in their tool list. In tests, the correct mock pattern for a non-Slack agent reply is `{ response: { content: 'reply text', finish_reason: 'stop' } }`. Mocking TalkToUser as a tool_call for non-Slack agents will silently fail (Python won't recognise it) and produce the "I do not have a text reply" error. The `LLMMockServer.configure()` method enforces this: it throws if `tool_calls` contains TalkToUser — always use `finish_reason: 'stop'` with `content` instead, and let the Python backend handle reply formatting.
+
 ## Past Learnings
 
 **Context fullSchema Semantics:** The `fullSchema` field in a context represents what tables/schemas are AVAILABLE for that context to whitelist (inherited from parent or loaded from connections), NOT what the context has actually whitelisted. The context's own `databases[].whitelist` array determines what it actually exposes. When a parent context applies `childPaths` restrictions on whitelist items, those restrictions filter what appears in the child's `fullSchema` - effectively limiting what the child CAN whitelist, not what it HAS whitelisted.

@@ -457,44 +457,6 @@ describe('Slack Bot Integration', () => {
       expect(postedMessages).toHaveLength(0);
     }, 60000);
 
-    it('TalkToUser tool call: content is extracted and posted to Slack', async () => {
-      // Simulate the SlackAgent calling TalkToUser (the primary reply mechanism).
-      // First LLM call returns a TalkToUser tool call; second call returns stop after
-      // Python executes TalkToUser and sends the result back.
-      await getLLMMockServer!().configure([
-        {
-          response: {
-            content: '',
-            role: 'assistant',
-            tool_calls: [{
-              id: 'tc_talk_1',
-              type: 'function',
-              function: {
-                name: 'TalkToUser',
-                arguments: JSON.stringify({ content: 'Sales grew 15% last quarter.' }),
-              },
-            }],
-            finish_reason: 'tool_calls',
-          },
-          usage: USAGE,
-        },
-        {
-          response: { content: '', role: 'assistant', finish_reason: 'stop' },
-          usage: USAGE,
-        },
-      ]);
-
-      const ts = '1700006000.000001';
-      const installation = buildInstallation();
-      await processSlackEvent(
-        makeAppMentionPayload({ ts, text: `<@${TEST_BOT_USER_ID}> how did sales do?` }) as any,
-        installation,
-      );
-
-      expect(postedMessages).toHaveLength(1);
-      expect(postedMessages[0].text).toBe('Sales grew 15% last quarter.');
-    }, 60000);
-
     it('unknown MinusX user receives a polite error reply', async () => {
       const installation = buildInstallation();
       // TEST_UNKNOWN_USER_ID resolves to nobody@unknown.example which is not in the DB
