@@ -9,7 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { OAuthCodeDB, OAuthTokenDB } from '@/lib/mcp/oauth-db';
+import { OAuthCodeDB, OAuthTokenDB } from '@/lib/oauth/db';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',

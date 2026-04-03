@@ -6,7 +6,7 @@
  */
 
 import 'server-only';
-import { OAuthTokenDB } from './oauth-db';
+import { OAuthTokenDB } from '@/lib/oauth/db';
 import { UserDB } from '@/lib/database/user-db';
 import { CompanyDB } from '@/lib/database/company-db';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';

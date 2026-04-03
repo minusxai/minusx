@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { OAuthCodeDB } from '@/lib/mcp/oauth-db';
+import { OAuthCodeDB } from '@/lib/oauth/db';
 
 export async function POST(request: NextRequest) {
   const session = await auth();
