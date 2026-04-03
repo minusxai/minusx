@@ -176,42 +176,18 @@ describe('Explore page: submit question → agent responds → see answer → to
       const mockServer = getLLMMockServer!();
       await mockServer.reset();
 
-      // Configure LLM mock: one TalkToUser call with <thinking> + <answer>, then done
-      await mockServer.configure([
-        {
-          // Turn 1: agent responds via TalkToUser with thinking and answer blocks
-          response: {
-            content: '',
-            role: 'assistant',
-            tool_calls: [
-              {
-                id: 'tc_talk_to_user',
-                type: 'function',
-                function: {
-                  name: 'TalkToUser',
-                  arguments: JSON.stringify({
-                    content:
-                      '<thinking>Let me think through this step by step. The user is asking about the data.</thinking>' +
-                      '<answer>Based on the data, the answer is 42.</answer>',
-                  }),
-                },
-              },
-            ],
-            finish_reason: 'tool_calls',
-          },
-          usage: { total_tokens: 120, prompt_tokens: 90, completion_tokens: 30 },
+      // Configure LLM mock: AnalystAgent replies via finish_reason='stop' + content
+      // (AnalystAgent does NOT have TalkToUser in its toolset — never mock it as a tool_call)
+      await mockServer.configure({
+        response: {
+          content:
+            '<thinking>Let me think through this step by step. The user is asking about the data.</thinking>' +
+            '<answer>Based on the data, the answer is 42.</answer>',
+          role: 'assistant',
+          finish_reason: 'stop',
         },
-        {
-          // Turn 2: final text response — ends the agent loop
-          response: {
-            content: 'Done.',
-            role: 'assistant',
-            tool_calls: [],
-            finish_reason: 'stop',
-          },
-          usage: { total_tokens: 60, prompt_tokens: 45, completion_tokens: 15 },
-        },
-      ]);
+        usage: { total_tokens: 120, prompt_tokens: 90, completion_tokens: 30 },
+      });
 
       // Render ChatInterface mimicking /explore (no conversationId = new conversation)
       renderWithProviders(

@@ -23,6 +23,17 @@ function extractToolText(content: unknown): string {
 
   if (content && typeof content === 'object') {
     const contentRecord = content as Record<string, unknown>;
+    // Handle content_blocks format: [{ type: 'text', text: '...' }, ...]
+    // This is produced when TalkToUser is auto-dispatched alongside tool calls
+    if ('content_blocks' in contentRecord && Array.isArray(contentRecord.content_blocks)) {
+      const blocks = contentRecord.content_blocks as Array<Record<string, unknown>>;
+      const text = blocks
+        .filter(b => b.type === 'text' && typeof b.text === 'string')
+        .map(b => b.text as string)
+        .join('\n')
+        .trim();
+      if (text) return text;
+    }
     if ('content' in contentRecord) {
       return extractToolText(contentRecord.content);
     }
@@ -90,5 +101,9 @@ export function extractSlackReplyFromLog(log: ConversationLogEntry[]): string | 
     }
   }
 
+  console.warn(
+    '[Slack] extractSlackReplyFromLog: could not find reply. Last entries:',
+    log.slice(-3).map((e) => ({ type: e._type, hasResult: !!((e as unknown) as Record<string, unknown>).result })),
+  );
   return null;
 }

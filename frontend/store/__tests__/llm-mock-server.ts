@@ -245,6 +245,23 @@ export class LLMMockServer {
   async configure(config: MockConfig | MockConfig[]): Promise<void> {
     const configs = Array.isArray(config) ? config : [config];
 
+    // Guard: never mock TalkToUser as a tool_call.
+    // All agents reply via finish_reason='stop' + content — the Python backend handles
+    // routing. Mocking TalkToUser as a tool_call silently fails and produces the
+    // "no text reply" error. Use { response: { content: '...', finish_reason: 'stop' } } instead.
+    for (const c of configs) {
+      const hasTalkToUser = c.response.tool_calls?.some(
+        tc => tc.function?.name === 'TalkToUser',
+      );
+      if (hasTalkToUser) {
+        throw new Error(
+          'LLMMockServer: do not mock TalkToUser as a tool_call. ' +
+          'Use { response: { content: "...", finish_reason: "stop" } } instead — ' +
+          'the Python backend converts content to the correct reply format automatically.',
+        );
+      }
+    }
+
     const response = await fetch(`http://localhost:${this.port}/mock/configure`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

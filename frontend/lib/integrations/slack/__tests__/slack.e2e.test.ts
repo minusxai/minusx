@@ -134,6 +134,33 @@ function makeAppMentionPayload(opts: {
   };
 }
 
+/** Build a Slack direct message (message.im) event envelope. */
+function makeDMPayload(opts: {
+  text?: string;
+  userId?: string;
+  channel?: string;
+  ts?: string;
+  threadTs?: string;
+  eventId?: string;
+  teamId?: string;
+}): Record<string, unknown> {
+  const ts = opts.ts ?? '1700000000.000001';
+  return {
+    type: 'event_callback',
+    team_id: opts.teamId ?? TEST_TEAM_ID,
+    event_id: opts.eventId ?? `Ev_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    event: {
+      type: 'message',
+      channel_type: 'im',
+      user: opts.userId ?? TEST_USER_ID,
+      text: opts.text ?? 'Hello bot',
+      channel: opts.channel ?? 'D_TEST_DM',
+      ts,
+      ...(opts.threadTs ? { thread_ts: opts.threadTs } : {}),
+    },
+  };
+}
+
 /** Pre-built installation object (bypasses findSlackInstallationByTeam for direct calls). */
 function buildInstallation(): SlackInstallationMatch {
   return {
@@ -335,10 +362,24 @@ describe('Slack Bot Integration', () => {
         installation,
       );
       expect(postedMessages).toHaveLength(1);
+      expect(postedMessages[0].text).toBe('Sales are up 12%.');
 
       // Second message — same thread, different ts
       postedMessages.length = 0;
       await getLLMMockServer!().configure({
+        // Use validateRequest to assert the Python backend received the follow-up text,
+        // not the first message. This is the core of Bug #1: if the agent reads
+        // ev.thread_ts's root message instead of ev.text, the messages array would end
+        // with 'sales?' rather than 'and last week?'.
+        validateRequest: (req) => {
+          const msgs = req.messages ?? [];
+          const lastUserMsg = [...msgs].reverse().find(m => m.role === 'user');
+          if (!lastUserMsg?.content?.includes('and last week?')) {
+            throw new Error(
+              `Expected last user message to contain "and last week?" but got: ${lastUserMsg?.content}`,
+            );
+          }
+        },
         response: { content: 'Last week they were up 8%.', role: 'assistant', finish_reason: 'stop' },
         usage: USAGE,
       });
@@ -347,17 +388,67 @@ describe('Slack Bot Integration', () => {
         installation,
       );
       expect(postedMessages).toHaveLength(1);
+      // Reply must be the second response, not the first — proves the agent read
+      // the follow-up message, not the thread root.
+      expect(postedMessages[0].text).toBe('Last week they were up 8%.');
 
-      // Only ONE conversation file should exist at the Slack path (no slack_thread files)
+      // Only ONE conversation file should exist at the Slack path
       const { createAdapter } = await import('@/lib/database/adapter/factory');
       const db = await createAdapter({ type: 'sqlite', sqlitePath: TEST_DB_PATH });
       const { rows } = await db.query<{ cnt: number }>(
-        `SELECT COUNT(*) AS cnt FROM files WHERE company_id = 1 AND type = 'conversation' AND path LIKE '%/logs/slack/%'`,
+        `SELECT COUNT(*) AS cnt FROM files WHERE company_id = 1 AND type = 'conversation' AND path LIKE '%/logs/conversations/%/slack-%'`,
+        [],
+      );
+      expect(rows[0].cnt).toBe(1);
+
+      // The conversation log must contain entries from BOTH messages — proves history
+      // was appended rather than the file being reset on the follow-up.
+      const { rows: [fileRow] } = await db.query<{ content: string }>(
+        `SELECT content FROM files WHERE company_id = 1 AND type = 'conversation' AND path LIKE '%/logs/conversations/%/slack-%' LIMIT 1`,
         [],
       );
       await db.close();
-      expect(rows[0].cnt).toBe(1);
+      const content = JSON.parse(fileRow.content) as {
+        log: unknown[];
+        metadata: { source?: { type: string; teamId: string; channelId: string; threadTs: string } };
+      };
+      // First message produces at least 2 log entries (task + task_result);
+      // second message appends at least 2 more — so minimum 4 total.
+      expect(content.log.length).toBeGreaterThanOrEqual(4);
+
+      // ConversationSource metadata must be stored so the file is identifiable as a Slack thread.
+      expect(content.metadata.source).toEqual({
+        type: 'slack',
+        teamId: TEST_TEAM_ID,
+        channelId: TEST_CHANNEL,
+        threadTs,
+      });
     }, 120000);
+
+    it('direct message: agent replies and conversation file is stored at user path', async () => {
+      await getLLMMockServer!().configure({
+        response: { content: 'Hello! How can I help you today?', role: 'assistant', finish_reason: 'stop' },
+        usage: USAGE,
+      });
+
+      const ts = '1700005000.000001';
+      const installation = buildInstallation();
+      await processSlackEvent(makeDMPayload({ ts }) as any, installation);
+
+      expect(postedMessages).toHaveLength(1);
+      expect(postedMessages[0].text).toBeTruthy();
+      expect(postedMessages[0].thread_ts).toBe(ts);
+
+      // File should be stored under the user's conversation folder, not a separate slack folder
+      const { createAdapter } = await import('@/lib/database/adapter/factory');
+      const db = await createAdapter({ type: 'sqlite', sqlitePath: TEST_DB_PATH });
+      const { rows } = await db.query<{ cnt: number }>(
+        `SELECT COUNT(*) AS cnt FROM files WHERE company_id = 1 AND type = 'conversation' AND path LIKE '%/logs/conversations/%/slack-%'`,
+        [],
+      );
+      await db.close();
+      expect(rows[0].cnt).toBeGreaterThanOrEqual(1);
+    }, 60000);
 
     it('event dedup: the same event_id is processed only once', async () => {
       await getLLMMockServer!().configure({

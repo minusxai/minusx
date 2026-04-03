@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { handleApiError } from '@/lib/api/api-responses';
 import { FilesAPI } from '@/lib/data/files.server';
-import { ConversationFileContent, ConversationLogEntry, FileType } from '@/lib/types';
+import { ConversationFileContent, ConversationLogEntry, FileType, ConversationSource } from '@/lib/types';
 import { truncateMessageForName } from '@/lib/conversations';
 import { resolvePath } from '@/lib/mode/path-resolver';
 
@@ -20,6 +20,7 @@ export interface ConversationSummary {
   parentPageType?: FileType | 'explore';        // Type of page (e.g., 'dashboard', 'report')
   parentFileId?: number;         // File ID of the page where conversation started
   parentFileName?: string;       // Name of the file where conversation started
+  source?: ConversationSource;   // Origin metadata (e.g. Slack thread)
 }
 
 /**
@@ -97,12 +98,13 @@ export async function GET() {
     // Derive userId from user object
     const userId = user.userId?.toString() || user.email;
 
-    // Get all conversation files for this user
+    // Get all conversation files for this user (personal + Slack threads)
+    // Slack threads are stored at /logs/conversations/{userId}/slack-* (same folder, depth 2 covers them)
     const conversationsPath = resolvePath(user.mode, `/logs/conversations/${userId}`);
     const filesResult = await FilesAPI.getFiles({
       type: 'conversation',
       paths: [conversationsPath],
-      depth: 2  // Get all descendants
+      depth: 2,  // covers direct children + one subfolder (e.g. slack-* files)
     }, user);
 
     // Parse and summarize conversations
@@ -118,7 +120,7 @@ export async function GET() {
         const parentFileInfo = getParentFileInfo(content.log);
         const summary: ConversationSummary = {
           id: fileInfo.id,
-          name: content.metadata.name || fileResult.data.name,  // Use file.name (metadata) as fallback, not content.name
+          name: content.metadata.name || fileResult.data.name,
           createdAt: content.metadata.createdAt,
           updatedAt: content.metadata.updatedAt,
           forkedFrom: content.metadata.forkedFrom,
@@ -127,6 +129,7 @@ export async function GET() {
           parentPageType: getParentPageType(content.log),
           parentFileId: parentFileInfo.id,
           parentFileName: parentFileInfo.name,
+          source: content.metadata.source,
         };
 
         conversations.push(summary);
