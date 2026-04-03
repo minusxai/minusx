@@ -12,7 +12,7 @@ from tasks.llm.client import allm_request as real_allm_request, describe_tool
 from tasks.llm.models import ALLMRequest, LlmSettings, UserInfo
 from tasks.llm.config import ANALYST_V2_MODEL, MAX_STEPS_LOWER_LEVEL
 from .tools import SearchDBSchema, SearchFiles, Clarify, Navigate, CreateFile
-from .tools import ReadFiles, EditFile, ExecuteQuery, PublishAll, TalkToUser
+from .tools import ReadFiles, EditFile, ExecuteQuery, PublishAll
 from .prompt_loader import get_prompt
 
 
@@ -159,7 +159,7 @@ class AnalystAgent(Agent):
             return []
 
         return [ReadFiles, EditFile, ExecuteQuery, PublishAll, Navigate, Clarify, SearchDBSchema, SearchFiles, CreateFile]
-    
+
     def _get_history(self):
         previous_root_tasks = self._orchestrator.get_previous_root_tasks()
         previous_root_tasks.reverse()
@@ -242,7 +242,6 @@ class SlackAgent(AnalystAgent):
 - If the request is ambiguous, ask a direct question in your answer instead of using Clarify.
 - Only use tools that are actually available in this Slack mode.
 - Prefer answering analytically over making file edits.
-- Always call TalkToUser to send your final reply to the user.
 - If conversation history already exists in the log, do NOT re-introduce yourself. Continue the conversation naturally.
 """.strip()
         return {"role": "system", "content": f"{base}\n\n{slack_addendum}"}
@@ -251,7 +250,7 @@ class SlackAgent(AnalystAgent):
         """Slack uses a read/query-focused subset of Analyst tools."""
         if len(self.tool_thread) >= MAX_STEPS_LOWER_LEVEL - 5:
             return []
-        return [ReadFiles, ExecuteQuery, SearchDBSchema, SearchFiles, TalkToUser]
+        return [ReadFiles, ExecuteQuery, SearchDBSchema, SearchFiles]
 
 
 @register_agent
