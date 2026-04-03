@@ -474,6 +474,45 @@ describe('Slack Bot Integration', () => {
       expect(postedMessages).toHaveLength(0);
     }, 60000);
 
+    it('stale-answer guard: when current turn has no visible text, does NOT post a previous turn\'s answer', async () => {
+      // This is the regression test for the bug where extractSlackReplyFromLog scanned
+      // the full log and returned a previous turn's answer when the current turn had none.
+      const threadTs = '1700006000.000001';
+      const installation = buildInstallation();
+
+      // Turn 1 — produces a visible answer stored in the conversation log
+      await getLLMMockServer!().configure({
+        response: { content: 'The answer from turn one.', role: 'assistant', finish_reason: 'stop' },
+        usage: USAGE,
+      });
+      await processSlackEvent(
+        makeAppMentionPayload({ ts: threadTs, threadTs, eventId: `Ev_stale_t1_${Date.now()}`, text: `<@${TEST_BOT_USER_ID}> question one` }) as any,
+        installation,
+      );
+      expect(postedMessages[0].text).toBe('The answer from turn one.');
+
+      // Turn 2 — LLM produces only <thinking> with no <answer> block (no visible text)
+      postedMessages.length = 0;
+      await getLLMMockServer!().configure({
+        response: {
+          content: '<thinking>I need to query the database but I cannot right now.</thinking>',
+          role: 'assistant',
+          finish_reason: 'stop',
+        },
+        usage: USAGE,
+      });
+      await processSlackEvent(
+        makeAppMentionPayload({ ts: '1700006001.000001', threadTs, eventId: `Ev_stale_t2_${Date.now()}`, text: `<@${TEST_BOT_USER_ID}> question two` }) as any,
+        installation,
+      );
+
+      expect(postedMessages).toHaveLength(1);
+      // Must NOT be the previous turn's answer — that was the bug.
+      expect(postedMessages[0].text).not.toBe('The answer from turn one.');
+      // Must be the honest fallback, not a stale reply.
+      expect(postedMessages[0].text).toMatch(/do not have a text reply/i);
+    }, 120000);
+
     it('unknown MinusX user receives a polite error reply', async () => {
       const installation = buildInstallation();
       // TEST_UNKNOWN_USER_ID resolves to nobody@unknown.example which is not in the DB

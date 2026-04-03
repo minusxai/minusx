@@ -129,7 +129,7 @@ export async function processSlackEvent(
     });
 
     const reply =
-      extractSlackReplyFromLog(result.log) ??
+      extractSlackReplyFromLog(result.logDiff) ??
       'I finished the run, but I do not have a text reply to post back.';
 
     await postSlackMessage(installation.bot.bot_token, {
