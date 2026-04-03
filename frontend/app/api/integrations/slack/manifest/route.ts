@@ -18,7 +18,7 @@ export const GET = withAuth(async (_request: NextRequest, user) => {
   }
 
   const { config } = await getConfigs(user);
-  const appName = `${config.branding.agentName || 'MinusX'} Slack Bot`;
+  const appName = `${config.branding.agentName || 'MinusX'}`;
   const devSubdomain = IS_DEV ? (_request.nextUrl.searchParams.get('subdomain') ?? undefined) : undefined;
   const manifest = buildSlackManifest(appName, capabilities.baseUrl ?? undefined, devSubdomain);
 
