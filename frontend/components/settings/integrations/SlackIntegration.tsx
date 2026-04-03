@@ -178,156 +178,163 @@ function SlackSetupGuide() {
     }
   };
 
+  const isConfigured = slackBots.length > 0;
+
   return (
     <VStack align="stretch" gap={4}>
-      {/* Step 1: Instance URL (dev only) */}
-      {IS_DEV && (
-        <Box borderWidth="1px" borderColor="border" borderRadius="md" p={4}>
-          <HStack gap={3} mb={3}>
-            <StepBadge n={1} />
-            <Text fontSize="sm" fontWeight="semibold" fontFamily="mono">Set your public URL</Text>
-          </HStack>
-          <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={3}>
-            Public HTTPS URL for Slack event delivery. Use your ngrok URL in development.
-          </Text>
-          <Input
-            aria-label="Slack public base URL"
-            size="sm"
-            fontFamily="mono"
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            placeholder="https://your-ngrok-url"
-          />
-        </Box>
+      {/* Setup steps — only show when no workspace is connected */}
+      {!isConfigured && (
+        <>
+          {/* Step 1: Instance URL (dev only) */}
+          {IS_DEV && (
+            <Box borderWidth="1px" borderColor="border" borderRadius="md" p={4}>
+              <HStack gap={3} mb={3}>
+                <StepBadge n={1} />
+                <Text fontSize="sm" fontWeight="semibold" fontFamily="mono">Set your public URL</Text>
+              </HStack>
+              <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={3}>
+                Public HTTPS URL for Slack event delivery. Use your ngrok URL in development.
+              </Text>
+              <Input
+                aria-label="Slack public base URL"
+                size="sm"
+                fontFamily="mono"
+                value={baseUrl}
+                onChange={(e) => setBaseUrl(e.target.value)}
+                placeholder="https://your-ngrok-url"
+              />
+            </Box>
+          )}
+
+          {/* Step 2 (or Step 1 in prod): Manifest */}
+          <Box borderWidth="1px" borderColor="border" borderRadius="md" p={4}>
+            <HStack gap={3} mb={3}>
+              <StepBadge n={IS_DEV ? 2 : 1} />
+              <Text fontSize="sm" fontWeight="semibold" fontFamily="mono">Create your Slack app</Text>
+            </HStack>
+            <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={3}>
+              {IS_DEV
+                ? 'Generate the manifest, then use it to create a new Slack app in your workspace. Requires a public HTTPS URL from Step 1.'
+                : 'Create a new Slack app pre-filled with the correct settings for this instance.'}
+            </Text>
+            <HStack gap={2} mb={manifestJson ? 3 : 0} wrap="wrap">
+              {IS_DEV ? (
+                <Button
+                  aria-label="Generate Slack manifest"
+                  size="sm"
+                  variant="outline"
+                  onClick={loadManifest}
+                  loading={isLoadingManifest}
+                >
+                  Generate manifest
+                </Button>
+              ) : (
+                <Button
+                  aria-label="Create Slack app from manifest"
+                  size="sm"
+                  colorPalette="teal"
+                  onClick={handleOpenInSlack}
+                  loading={isLoadingManifest}
+                >
+                  <LuExternalLink size={12} />
+                  Create Slack App
+                </Button>
+              )}
+              {IS_DEV && manifestJson && (
+                <>
+                  <Button
+                    aria-label="Copy manifest JSON"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleCopy}
+                  >
+                    {copied ? <LuCheck size={12} /> : <LuCopy size={12} />}
+                    {copied ? 'Copied!' : 'Copy JSON'}
+                  </Button>
+                  <Button
+                    aria-label="Create Slack app from manifest"
+                    size="sm"
+                    colorPalette="teal"
+                    onClick={handleOpenInSlack}
+                  >
+                    <LuExternalLink size={12} />
+                    Create Slack App
+                  </Button>
+                </>
+              )}
+            </HStack>
+            {IS_DEV && manifestJson && (
+              <Box
+                as="pre"
+                fontSize="2xs"
+                fontFamily="mono"
+                bg="bg.subtle"
+                borderRadius="md"
+                p={3}
+                overflowX="auto"
+                maxH="260px"
+                overflowY="auto"
+                borderWidth="1px"
+                borderColor="border"
+                whiteSpace="pre"
+              >
+                {manifestJson}
+              </Box>
+            )}
+          </Box>
+
+          {/* Connect credentials */}
+          <Box borderWidth="1px" borderColor="border" borderRadius="md" p={4}>
+            <HStack gap={3} mb={3}>
+              <StepBadge n={IS_DEV ? 3 : 2} />
+              <Text fontSize="sm" fontWeight="semibold" fontFamily="mono">Connect credentials</Text>
+            </HStack>
+            <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={3}>
+              After creating the Slack app above, install it to your workspace from the app&apos;s settings page.<br></br> Then copy the <strong>Bot User OAuth Token</strong> from <em>OAuth &amp; Permissions</em> and the <strong>Signing Secret</strong> from <em>Basic Information</em>.
+            </Text>
+            <VStack align="stretch" gap={3}>
+              <Box>
+                <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Bot token</Text>
+                <Input
+                  aria-label="Slack bot token"
+                  size="sm"
+                  type="password"
+                  fontFamily="mono"
+                  value={botToken}
+                  onChange={(e) => setBotToken(e.target.value)}
+                  placeholder="xoxb-..."
+                />
+              </Box>
+              <Box>
+                <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Signing secret</Text>
+                <Input
+                  aria-label="Slack signing secret"
+                  size="sm"
+                  type="password"
+                  fontFamily="mono"
+                  value={signingSecret}
+                  onChange={(e) => setSigningSecret(e.target.value)}
+                  placeholder="From the Slack App's 'Basic Information' section"
+                />
+              </Box>
+              <Button
+                aria-label="Connect Slack bot"
+                size="sm"
+                alignSelf="flex-start"
+                colorPalette="teal"
+                onClick={handleConnect}
+                loading={isSubmitting}
+              >
+                <LuShieldCheck size={14} />
+                Connect
+              </Button>
+            </VStack>
+          </Box>
+        </>
       )}
 
-      {/* Step 2 (or Step 1 in prod): Manifest */}
-      <Box borderWidth="1px" borderColor="border" borderRadius="md" p={4}>
-        <HStack gap={3} mb={3}>
-          <StepBadge n={IS_DEV ? 2 : 1} />
-          <Text fontSize="sm" fontWeight="semibold" fontFamily="mono">Create your Slack app</Text>
-        </HStack>
-        <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={3}>
-          {IS_DEV
-            ? 'Generate the manifest, then use it to create a new Slack app in your workspace. Requires a public HTTPS URL from Step 1.'
-            : 'Create a new Slack app pre-filled with the correct settings for this instance.'}
-        </Text>
-        <HStack gap={2} mb={manifestJson ? 3 : 0} wrap="wrap">
-          {IS_DEV ? (
-            <Button
-              aria-label="Generate Slack manifest"
-              size="sm"
-              variant="outline"
-              onClick={loadManifest}
-              loading={isLoadingManifest}
-            >
-              Generate manifest
-            </Button>
-          ) : (
-            <Button
-              aria-label="Create Slack app from manifest"
-              size="sm"
-              colorPalette="teal"
-              onClick={handleOpenInSlack}
-              loading={isLoadingManifest}
-            >
-              <LuExternalLink size={12} />
-              Create Slack App
-            </Button>
-          )}
-          {IS_DEV && manifestJson && (
-            <>
-              <Button
-                aria-label="Copy manifest JSON"
-                size="sm"
-                variant="outline"
-                onClick={handleCopy}
-              >
-                {copied ? <LuCheck size={12} /> : <LuCopy size={12} />}
-                {copied ? 'Copied!' : 'Copy JSON'}
-              </Button>
-              <Button
-                aria-label="Create Slack app from manifest"
-                size="sm"
-                colorPalette="teal"
-                onClick={handleOpenInSlack}
-              >
-                <LuExternalLink size={12} />
-                Create Slack App
-              </Button>
-            </>
-          )}
-        </HStack>
-        {IS_DEV && manifestJson && (
-          <Box
-            as="pre"
-            fontSize="2xs"
-            fontFamily="mono"
-            bg="bg.subtle"
-            borderRadius="md"
-            p={3}
-            overflowX="auto"
-            maxH="260px"
-            overflowY="auto"
-            borderWidth="1px"
-            borderColor="border"
-            whiteSpace="pre"
-          >
-            {manifestJson}
-          </Box>
-        )}
-      </Box>
-
-      {/* Connect credentials */}
-      <Box borderWidth="1px" borderColor="border" borderRadius="md" p={4}>
-        <HStack gap={3} mb={3}>
-          <StepBadge n={IS_DEV ? 3 : 2} />
-          <Text fontSize="sm" fontWeight="semibold" fontFamily="mono">Connect credentials</Text>
-        </HStack>
-        <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={3}>
-          After creating the Slack app above, install it to your workspace from the app&apos;s settings page.<br></br> Then copy the <strong>Bot User OAuth Token</strong> from <em>OAuth &amp; Permissions</em> and the <strong>Signing Secret</strong> from <em>Basic Information</em>.
-        </Text>
-        <VStack align="stretch" gap={3}>
-          <Box>
-            <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Bot token</Text>
-            <Input
-              aria-label="Slack bot token"
-              size="sm"
-              type="password"
-              fontFamily="mono"
-              value={botToken}
-              onChange={(e) => setBotToken(e.target.value)}
-              placeholder="xoxb-..."
-            />
-          </Box>
-          <Box>
-            <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={1}>Signing secret</Text>
-            <Input
-              aria-label="Slack signing secret"
-              size="sm"
-              type="password"
-              fontFamily="mono"
-              value={signingSecret}
-              onChange={(e) => setSigningSecret(e.target.value)}
-              placeholder="From the Slack App's 'Basic Information' section"
-            />
-          </Box>
-          <Button
-            aria-label="Connect Slack bot"
-            size="sm"
-            alignSelf="flex-start"
-            colorPalette="teal"
-            onClick={handleConnect}
-            loading={isSubmitting}
-          >
-            <LuShieldCheck size={14} />
-            Connect
-          </Button>
-        </VStack>
-      </Box>
-
       {/* Connected workspaces */}
-      {slackBots.length > 0 && (
+      {isConfigured && (
         <Box>
           <Text fontSize="xs" fontWeight="semibold" fontFamily="mono" color="fg.muted" mb={2} textTransform="uppercase" letterSpacing="wide">
             Connected workspaces

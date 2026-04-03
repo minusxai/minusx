@@ -1,6 +1,6 @@
 'use client';
 
-import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen } from 'react-icons/lu';
+import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen, LuUserPlus } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { Box, Flex, VStack, HStack, Text, IconButton, Icon, Menu, Portal } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -139,9 +139,10 @@ export default function Sidebar() {
         ],
       },
       {
-        category: 'Engineering',
+        category: 'Admin',
         items: [
           { href: `/p/${mode}/database`, icon: <FILE_TYPE_METADATA.connection.icon />, label: FILE_TYPE_METADATA.connection.label, adminOnly: true },
+          { href: '/settings?tab=users', icon: <LuUserPlus />, label: 'Invite Users', adminOnly: true },
         ],
       },
       {
@@ -277,16 +278,23 @@ export default function Sidebar() {
                 <Box h="1px" bg="border.muted" my={3} />
               )}
               {/* Section Items */}
-              {section.items.map((item) => (
-                <NavItem
-                  key={item.href}
-                  href={item.href}
-                  icon={item.icon}
-                  label={item.label}
-                  isCollapsed={isCollapsed}
-                  isActive={pathname === item.href.split('?')[0]}
-                />
-              ))}
+              {section.items.map((item) => {
+                const [itemPath, itemQuery] = item.href.split('?');
+                const itemParams = new URLSearchParams(itemQuery || '');
+                const isActive = pathname === itemPath && (
+                  !itemQuery || [...itemParams.entries()].every(([k, v]) => searchParams?.get(k) === v)
+                );
+                return (
+                  <NavItem
+                    key={item.href}
+                    href={item.href}
+                    icon={item.icon}
+                    label={item.label}
+                    isCollapsed={isCollapsed}
+                    isActive={isActive}
+                  />
+                );
+              })}
             </Box>
           ))}
         </VStack>
