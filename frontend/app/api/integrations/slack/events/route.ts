@@ -1,7 +1,7 @@
 import { after, NextRequest, NextResponse } from 'next/server';
 import { getCompanyUserEffectiveUser } from '@/lib/auth/auth-helpers';
 import { runChatOrchestration } from '@/lib/chat/run-orchestration';
-import { getSlackUserEmail, postSlackMessage, verifySlackRequestSignature } from '@/lib/integrations/slack/api';
+import { getConversationHistory, getSlackUserEmail, postSlackMessage, verifySlackRequestSignature } from '@/lib/integrations/slack/api';
 import { getSlackSigningSecret } from '@/lib/integrations/slack/config';
 import { buildSlackAgentArgs } from '@/lib/integrations/slack/context';
 import { extractSlackReplyFromLog, normalizeSlackPrompt } from '@/lib/integrations/slack/messages';
@@ -70,17 +70,24 @@ export async function processSlackEvent(
   if (eventId && !reserveSlackEvent(eventId)) return;
 
   try {
-    // Handle app_home_opened — send welcome message on first visit
+    // Handle app_home_opened — send welcome message only if DM is empty
     if (ev?.type === 'app_home_opened' && ev.tab === 'messages') {
-      const teamId = installation.bot.team_id ?? getTeamId(payload) ?? '';
-      if (ev.user && teamId && shouldSendWelcome(teamId, ev.user)) {
-        const appName = installation.config.branding?.agentName || 'MinusX';
-        const { text, blocks } = buildWelcomeBlocks(appName);
-        await postSlackMessage(installation.bot.bot_token, {
-          channel: ev.channel || ev.user,
-          text,
-          blocks,
-        });
+      const channel = ev.channel || ev.user;
+      if (channel) {
+        const teamId = installation.bot.team_id ?? getTeamId(payload) ?? '';
+        // In-memory check first (fast path), then verify via Slack API
+        if (ev.user && teamId && shouldSendWelcome(teamId, ev.user)) {
+          const { messages } = await getConversationHistory(installation.bot.bot_token, channel, 1);
+          if (messages.length === 0) {
+            const appName = installation.config.branding?.agentName || 'MinusX';
+            const { text, blocks } = buildWelcomeBlocks(appName);
+            await postSlackMessage(installation.bot.bot_token, {
+              channel,
+              text,
+              blocks,
+            });
+          }
+        }
       }
       if (eventId) markSlackEventDone(eventId);
       return;

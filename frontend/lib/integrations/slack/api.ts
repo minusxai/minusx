@@ -95,6 +95,25 @@ export async function getSlackUserEmail(token: string, userId: string): Promise<
   return result.user?.profile?.email?.trim() || null;
 }
 
+export async function getConversationHistory(
+  token: string,
+  channel: string,
+  limit: number = 1,
+): Promise<{ messages: Array<{ bot_id?: string; text?: string }> }> {
+  const query = new URLSearchParams({ channel, limit: limit.toString() });
+  const result = await slackApiFetch<{ messages: Array<{ bot_id?: string; text?: string }> }>(
+    `conversations.history?${query.toString()}`,
+    {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+  if (!result.ok) {
+    throw new Error(`Slack conversations.history failed: ${result.error}`);
+  }
+  return { messages: result.messages ?? [] };
+}
+
 export function verifySlackRequestSignature(input: {
   rawBody: string;
   timestamp: string | null;
