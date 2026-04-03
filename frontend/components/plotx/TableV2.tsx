@@ -85,6 +85,19 @@ const getTypeColor = (type: ColumnType) => {
 }
 
 const ROW_HEIGHT = 41
+// Max unique values to show checkbox picker; above this only the search bar is shown.
+// Uses the greater of this floor or 50% of total rows.
+const FACET_PICKER_MAX_UNIQUE = 500
+const FACET_PICKER_RATIO = 0.5
+
+// Filter value: text search OR a set of selected values
+interface FacetedFilterValue {
+  search: string
+  selected: string[] // stored as array for serialization; treated as set
+}
+
+const isFacetedFilter = (v: unknown): v is FacetedFilterValue =>
+  v != null && typeof v === 'object' && 'search' in v
 
 export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSize, sql, databaseName }: TableProps) => {
   const [sorting, setSorting] = useState<SortingState>([])
@@ -128,7 +141,18 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
           if (!filterValue) return true
           const val = row.getValue(columnId)
           const formatted = formatValue(val, colType)
-          return formatted.toLowerCase().includes(filterValue.toLowerCase())
+          if (isFacetedFilter(filterValue)) {
+            // If values are selected, use those; otherwise fall back to text search
+            if (filterValue.selected.length > 0) {
+              return filterValue.selected.includes(formatted)
+            }
+            if (filterValue.search) {
+              return formatted.toLowerCase().includes(filterValue.search.toLowerCase())
+            }
+            return true
+          }
+          // Legacy: plain string filter
+          return formatted.toLowerCase().includes(String(filterValue).toLowerCase())
         },
         sortingFn: colType === 'number' ? 'basic' : 'alphanumeric',
       })
@@ -150,6 +174,26 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
   })
 
   const { rows: tableRows } = table.getRowModel()
+
+  // Pre-compute unique values per column (top 200, sorted by frequency) for faceted filter
+  const columnUniqueValues = useMemo(() => {
+    const result: Record<string, Array<{ value: string; count: number }>> = {}
+    for (const col of colNames) {
+      const colIdx = colNames.indexOf(col)
+      const colType = columnTypes[colIdx]
+      if (colType === 'json') continue
+      const counts = new Map<string, number>()
+      for (const row of rows) {
+        const formatted = formatValue(row[col], colType)
+        counts.set(formatted, (counts.get(formatted) ?? 0) + 1)
+      }
+      result[col] = Array.from(counts.entries())
+        .map(([value, count]) => ({ value, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 200)
+    }
+    return result
+  }, [colNames, columnTypes, rows])
 
   // Pre-compute column index map to avoid indexOf() per cell
   const colIndexMap = useMemo(() => {
@@ -287,10 +331,11 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
           overflowX="auto"
           overflowY="auto"
           css={{
-            '&::-webkit-scrollbar': { height: '10px', width: '10px' },
-            '&::-webkit-scrollbar-track': { background: 'var(--chakra-colors-bg-muted)', borderRadius: '5px' },
-            '&::-webkit-scrollbar-thumb': { background: '#16a085', borderRadius: '5px' },
-            '&::-webkit-scrollbar-thumb:hover': { background: '#1abc9c' },
+            '&::-webkit-scrollbar': { height: '6px', width: '6px' },
+            '&::-webkit-scrollbar-track': { background: 'transparent' },
+            '&::-webkit-scrollbar-thumb': { background: 'rgba(128,128,128,0.3)', borderRadius: '3px' },
+            '&::-webkit-scrollbar-thumb:hover': { background: 'rgba(128,128,128,0.5)' },
+            '&::-webkit-scrollbar-corner': { background: 'transparent' },
             '& .table-v2-row': {
               borderBottom: '1px solid var(--chakra-colors-border-muted)',
             },
@@ -328,7 +373,11 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
                   const colIndex = colNames.indexOf(header.id)
                   const colType = columnTypes[colIndex]
                   const isSorted = header.column.getIsSorted()
-                  const filterValue = (header.column.getFilterValue() as string) ?? ''
+                  const rawFilter = header.column.getFilterValue()
+                  const facetedFilter: FacetedFilterValue = isFacetedFilter(rawFilter)
+                    ? rawFilter
+                    : { search: '', selected: [] }
+                  const hasActiveFilter = facetedFilter.search !== '' || facetedFilter.selected.length > 0
 
                   return (
                     <Box
@@ -343,8 +392,9 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
                       color="fg.default"
                       borderRight="1px solid"
                       borderRightColor="border.default"
-                      borderBottom="1px solid"
-                      borderBottomColor="border.default"
+                      borderBottom={(hasActiveFilter || isSorted) ? '2px solid' : '1px solid'}
+                      borderBottomColor={(hasActiveFilter || isSorted) ? 'accent.teal' : 'border.default'}
+                      bg={(hasActiveFilter || isSorted) ? 'accent.teal/5' : undefined}
                       width={header.getSize()}
                       minW="100px"
                       _last={{ borderRight: 'none' }}
@@ -396,66 +446,174 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
                               cursor="pointer"
                               display="flex"
                               alignItems="center"
+                              justifyContent="center"
+                              w={4} h={4}
+                              borderRadius="sm"
+                              bg={isSorted ? 'accent.teal' : undefined}
                               opacity={isSorted ? 1 : 0.5}
-                              _hover={{ opacity: 1 }}
-                              transition="opacity 0.15s"
-                              p={0.5}
+                              _hover={{ opacity: 1, bg: isSorted ? 'accent.teal' : 'bg.subtle' }}
+                              transition="all 0.15s"
                             >
                               {isSorted === 'asc' ? (
-                                <Icon as={LuArrowUp} boxSize={3} color="accent.teal" />
+                                <Icon as={LuArrowUp} boxSize={2.5} color="white" />
                               ) : isSorted === 'desc' ? (
-                                <Icon as={LuArrowDown} boxSize={3} color="accent.teal" />
+                                <Icon as={LuArrowDown} boxSize={2.5} color="white" />
                               ) : (
-                                <Icon as={LuArrowUpDown} boxSize={3} color="fg.muted" />
+                                <Icon as={LuArrowUpDown} boxSize={2.5} color="fg.muted" />
                               )}
                             </Box>
                             {/* Filter toggle */}
                             {colType !== 'json' && (
                               <Box
                                 as="button"
+                                data-filter-anchor={header.id}
                                 onClick={() => setActiveFilterCol(prev => prev === header.id ? null : header.id)}
                                 cursor="pointer"
                                 display="flex"
                                 alignItems="center"
-                                opacity={filterValue ? 1 : 0.5}
-                                _hover={{ opacity: 1 }}
-                                transition="opacity 0.15s"
-                                p={0.5}
+                                justifyContent="center"
+                                w={4} h={4}
+                                borderRadius="sm"
+                                bg={hasActiveFilter ? 'accent.teal' : undefined}
+                                opacity={hasActiveFilter ? 1 : 0.5}
+                                _hover={{ opacity: 1, bg: hasActiveFilter ? 'accent.teal' : 'bg.subtle' }}
+                                transition="all 0.15s"
                               >
-                                <Icon as={LuFilter} boxSize={3} color={filterValue ? 'accent.teal' : 'fg.muted'} />
+                                <Icon as={LuFilter} boxSize={2.5} color={hasActiveFilter ? 'white' : 'fg.muted'} />
                               </Box>
                             )}
                           </HStack>
                         </HStack>
 
-                        {/* Inline filter input */}
+                        {/* Faceted filter popover — rendered via Portal */}
                         {activeFilterCol === header.id && (
-                          <HStack w="100%" gap={1}>
-                            <Input
-                              size="xs"
-                              placeholder="Filter..."
-                              value={filterValue}
-                              onChange={(e) => header.column.setFilterValue(e.target.value || undefined)}
-                              fontFamily="mono"
-                              fontSize="xs"
-                              autoFocus
-                              bg="bg.surface"
-                              borderColor="border.default"
-                              _focus={{ borderColor: 'accent.teal', boxShadow: 'none' }}
+                          <Portal>
+                            <Box
+                              position="fixed"
+                              top={0} left={0} right={0} bottom={0}
+                              zIndex={99}
+                              onClick={() => setActiveFilterCol(null)}
                             />
-                            {filterValue && (
-                              <Box
-                                as="button"
-                                onClick={() => header.column.setFilterValue(undefined)}
-                                cursor="pointer"
-                                display="flex"
-                                alignItems="center"
-                                flexShrink={0}
-                              >
-                                <Icon as={LuX} boxSize={3} color="fg.subtle" />
-                              </Box>
-                            )}
-                          </HStack>
+                            <Box
+                              position="absolute"
+                              zIndex={100}
+                              bg="bg.surface"
+                              border="1px solid"
+                              borderColor="border.default"
+                              borderRadius="md"
+                              shadow="lg"
+                              p={2}
+                              w="220px"
+                              ref={(el: HTMLDivElement | null) => {
+                                if (!el) return
+                                // Position below the filter icon
+                                const th = el.closest('body')?.querySelector(`th [data-filter-anchor="${header.id}"]`)
+                                if (!th) return
+                                const rect = (th as HTMLElement).getBoundingClientRect()
+                                el.style.top = `${rect.bottom + 4}px`
+                                el.style.left = `${Math.max(8, rect.left - 180)}px`
+                                el.style.position = 'fixed'
+                              }}
+                              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                            >
+                              <VStack gap={1.5} align="stretch">
+                                <HStack gap={1}>
+                                  <Input
+                                    size="xs"
+                                    placeholder="Search values..."
+                                    value={facetedFilter.search}
+                                    onChange={(e) => {
+                                      const search = e.target.value
+                                      header.column.setFilterValue(
+                                        search || facetedFilter.selected.length > 0
+                                          ? { search, selected: facetedFilter.selected }
+                                          : undefined
+                                      )
+                                    }}
+                                    fontFamily="mono"
+                                    fontSize="xs"
+                                    autoFocus
+                                    bg="bg.surface"
+                                    borderColor="border.default"
+                                    _focus={{ borderColor: 'accent.teal', boxShadow: 'none' }}
+                                  />
+                                  {hasActiveFilter && (
+                                    <Box
+                                      as="button"
+                                      onClick={() => {
+                                        header.column.setFilterValue(undefined)
+                                        setActiveFilterCol(null)
+                                      }}
+                                      cursor="pointer"
+                                      display="flex"
+                                      alignItems="center"
+                                      flexShrink={0}
+                                    >
+                                      <Icon as={LuX} boxSize={3} color="fg.subtle" />
+                                    </Box>
+                                  )}
+                                </HStack>
+                                {columnUniqueValues[header.id] && columnUniqueValues[header.id].length <= Math.max(FACET_PICKER_MAX_UNIQUE, rows.length * FACET_PICKER_RATIO) && (
+                                  <Box maxH="200px" overflowY="auto" css={{
+                                    '&::-webkit-scrollbar': { width: '4px' },
+                                    '&::-webkit-scrollbar-thumb': { background: '#16a085', borderRadius: '2px' },
+                                  }}>
+                                    {columnUniqueValues[header.id]
+                                      .filter(({ value }) =>
+                                        !facetedFilter.search || value.toLowerCase().includes(facetedFilter.search.toLowerCase())
+                                      )
+                                      .slice(0, 50)
+                                      .map(({ value, count }) => {
+                                        const isSelected = facetedFilter.selected.includes(value)
+                                        return (
+                                          <HStack
+                                            key={value}
+                                            gap={1.5}
+                                            px={1.5}
+                                            py={1}
+                                            cursor="pointer"
+                                            borderRadius="sm"
+                                            bg={isSelected ? 'accent.teal/10' : undefined}
+                                            _hover={{ bg: isSelected ? 'accent.teal/15' : 'bg.subtle' }}
+                                            onClick={() => {
+                                              const next = isSelected
+                                                ? facetedFilter.selected.filter(v => v !== value)
+                                                : [...facetedFilter.selected, value]
+                                              header.column.setFilterValue(
+                                                next.length > 0 || facetedFilter.search
+                                                  ? { search: facetedFilter.search, selected: next }
+                                                  : undefined
+                                              )
+                                            }}
+                                          >
+                                            <Box
+                                              w={3} h={3} borderRadius="sm" flexShrink={0}
+                                              border="1px solid"
+                                              borderColor={isSelected ? 'accent.teal' : 'border.default'}
+                                              bg={isSelected ? 'accent.teal' : 'transparent'}
+                                              display="flex" alignItems="center" justifyContent="center"
+                                            >
+                                              {isSelected && <Icon as={LuCheck} boxSize={2} color="white" />}
+                                            </Box>
+                                            <Text fontSize="xs" fontFamily="mono" truncate flex="1" color="fg.default">
+                                              {value}
+                                            </Text>
+                                            <Text fontSize="xs" fontFamily="mono" color="fg.subtle" flexShrink={0}>
+                                              {count}
+                                            </Text>
+                                          </HStack>
+                                        )
+                                      })}
+                                  </Box>
+                                )}
+                                {facetedFilter.selected.length > 0 && (
+                                  <Text fontSize="2xs" color="accent.teal" fontFamily="mono" textAlign="center">
+                                    {facetedFilter.selected.length} selected
+                                  </Text>
+                                )}
+                              </VStack>
+                            </Box>
+                          </Portal>
                         )}
 
                         {/* Stats area — only rendered when toggled on */}

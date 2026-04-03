@@ -108,7 +108,7 @@ describe('TableV2', () => {
     await user.click(buttons[1])
 
     // Filter input should appear
-    const filterInput = screen.getByPlaceholderText('Filter...')
+    const filterInput = screen.getByPlaceholderText('Search values...')
     await user.type(filterInput, 'NYC')
 
     // Should show only NYC rows (Alice and Charlie)
