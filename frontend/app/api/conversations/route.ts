@@ -18,6 +18,8 @@ export interface ConversationSummary {
   messageCount: number;          // Number of user messages
   lastMessage?: string;          // Preview of last message
   parentPageType?: FileType | 'explore';        // Type of page (e.g., 'dashboard', 'report')
+  parentFileId?: number;         // File ID of the page where conversation started
+  parentFileName?: string;       // Name of the file where conversation started
 }
 
 /**
@@ -64,6 +66,16 @@ function getParentPageType(log: ConversationLogEntry[]): FileType | 'explore' | 
 }
 
 /**
+ * Get parent file info (id, name) from first task's app_state
+ */
+function getParentFileInfo(log: ConversationLogEntry[]): { id?: number; name?: string } {
+  const firstTask = log.find(entry => entry._type === 'task');
+  const fileState = firstTask?.args?.app_state?.state?.fileState;
+  if (!fileState) return {};
+  return { id: fileState.id, name: fileState.name };
+}
+
+/**
  * GET /api/conversations
  * List all conversations for the current user
  */
@@ -103,6 +115,7 @@ export async function GET() {
         const content = fileResult.data.content as unknown as ConversationFileContent;
 
         // Extract summary info
+        const parentFileInfo = getParentFileInfo(content.log);
         const summary: ConversationSummary = {
           id: fileInfo.id,
           name: content.metadata.name || fileResult.data.name,  // Use file.name (metadata) as fallback, not content.name
@@ -111,7 +124,9 @@ export async function GET() {
           forkedFrom: content.metadata.forkedFrom,
           messageCount: countUserMessages(content.log),
           lastMessage: getLastUserMessage(content.log),
-          parentPageType: getParentPageType(content.log)
+          parentPageType: getParentPageType(content.log),
+          parentFileId: parentFileInfo.id,
+          parentFileName: parentFileInfo.name,
         };
 
         conversations.push(summary);

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box, VStack, HStack, Text, Icon, Button, Spinner, Grid, GridItem } from '@chakra-ui/react';
-import { LuPlus, LuChevronDown, LuRefreshCw, LuSparkles, LuPin, LuShare2, LuExpand, LuTerminal } from 'react-icons/lu';
+import { LuPlus, LuChevronDown, LuRefreshCw, LuSparkles, LuPin, LuShare2, LuExpand, LuTerminal, LuMessageSquare } from 'react-icons/lu';
 import type { LoadError } from '@/lib/types/errors';
 import type { Attachment } from '@/lib/types';
 import { AppState } from '@/lib/appState';
@@ -127,6 +127,7 @@ export default function ChatInterface({
 
   const [showThinking, setShowThinking] = useState<boolean>(false)
   const [showToolInspector, setShowToolInspector] = useState(false)
+  const [continueChatConfirmed, setContinueChatConfirmed] = useState(false)
 
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const userIsAdmin = effectiveUser?.role ? isAdmin(effectiveUser.role) : false;
@@ -148,6 +149,30 @@ export default function ChatInterface({
 
   const isNewConversation = !providedConversationId;
   const conversationID = conversation?.conversationID;
+
+  // Determine if this conversation originated from a file page (question, dashboard, etc.)
+  const parentPageInfo = useMemo(() => {
+    if (!conversation?.agent_args?.app_state) return null;
+    const appStateData = conversation.agent_args.app_state;
+    if (appStateData.type === 'file' && appStateData.state?.fileState) {
+      const { id, name, type } = appStateData.state.fileState;
+      return { id: id as number, name: name as string, type: type as string };
+    }
+    return null;
+  }, [conversation?.agent_args?.app_state]);
+
+  // On the explore page, if viewing a conversation that started on a file page, require confirmation to continue
+  const needsContinueConfirmation = isExplorePage && !isNewConversation && !!parentPageInfo && !continueChatConfirmed;
+
+  // Reset confirmation when navigating to a different conversation
+  const prevConversationIdRef = useRef(providedConversationId);
+  useEffect(() => {
+    if (prevConversationIdRef.current !== providedConversationId) {
+      prevConversationIdRef.current = providedConversationId;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setContinueChatConfirmed(false);
+    }
+  }, [providedConversationId]);
 
   // Stable callback — inline arrow would defeat React.memo on SimpleChatMessage (re-renders all messages each streaming chunk)
   const toggleShowThinking = useCallback(() => setShowThinking(prev => !prev), []);
@@ -718,8 +743,75 @@ export default function ChatInterface({
         />
       )}
 
+      {/* Continue chat confirmation banner for conversations from other pages */}
+      {needsContinueConfirmation && parentPageInfo && (
+        <Box
+          position="sticky"
+          bottom={0}
+          bg="bg.canvas"
+          pt={3}
+          pb={{ base: 1, md: 3 }}
+          px={4}
+          zIndex={10}
+        >
+          <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }} gap={2} w="100%">
+            <GridItem colSpan={colSpan} colStart={colStart}>
+              <Box
+                bg="bg.muted"
+                borderWidth="1px"
+                borderColor="border.default"
+                borderRadius="lg"
+                px={4}
+                py={3}
+              >
+                <VStack align="center" gap={2}>
+                  <VStack align="center" gap={0.5}>
+                    <Text fontSize="sm" color="fg.default" fontFamily="mono" fontWeight="500">
+                      This conversation started on{' '}
+                      {parentPageInfo.id > 0 ? (
+                        <Text
+                          as="span"
+                          color="accent.teal"
+                          cursor="pointer"
+                          _hover={{ textDecoration: 'underline' }}
+                          onClick={() => navigate(`/f/${parentPageInfo.id}`)}
+                        >
+                          {parentPageInfo.name}
+                        </Text>
+                      ) : (
+                        <>a{' '}
+                          <Text
+                            as="span"
+                            color="accent.teal"
+                            cursor="pointer"
+                            _hover={{ textDecoration: 'underline' }}
+                            onClick={() => navigate(`/new/${parentPageInfo.type}`)}
+                          >
+                            new {parentPageInfo.type} page
+                          </Text>
+                        </>
+                      )}
+                    </Text>
+                  </VStack>
+                  <Button
+                    size="sm"
+                    bg="accent.teal"
+                    color="white"
+                    _hover={{ opacity: 0.9 }}
+                    onClick={() => setContinueChatConfirmed(true)}
+                  >
+                    <Icon as={LuMessageSquare} boxSize={4} mr={1} />
+                    Continue chat here
+                  </Button>
+                </VStack>
+              </Box>
+            </GridItem>
+          </Grid>
+        </Box>
+      )}
+
       {/* Input - Sticky at bottom (hidden in readOnly mode) */}
-      {!readOnly && !loadError && (
+      {!readOnly && !loadError && !needsContinueConfirmation && (
         <Box
           position="sticky"
           bottom={0}

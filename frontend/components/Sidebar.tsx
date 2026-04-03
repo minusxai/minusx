@@ -1,6 +1,6 @@
 'use client';
 
-import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen, LuDatabaseZap } from 'react-icons/lu';
+import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { Box, Flex, VStack, HStack, Text, IconButton, Icon, Menu, Portal } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -126,26 +126,22 @@ export default function Sidebar() {
 
   // Get user mode for mode-aware navigation
   const mode = effectiveUser?.mode || 'org';
-  const effectiveDir = currentPath === '/' ? encodeURIComponent('/org') : encodeURIComponent(currentPath);
   const userIsAdmin = effectiveUser?.role && isAdmin(effectiveUser.role);
 
   // Build and filter nav sections inside useMemo so JSX icon expressions are only evaluated
-  // when mode/effectiveDir/showDebug/userIsAdmin actually change (not on every streaming render)
+  // when mode/showDebug/userIsAdmin actually change (not on every streaming render)
   const navSections = useMemo(() => {
     const raw: NavSection[] = [
       {
         category: 'Analytics',
         items: [
           { href: '/explore', icon: <FILE_TYPE_METADATA.explore.icon />, label: FILE_TYPE_METADATA.explore.label },
-          { href: `/new/question?folder=${effectiveDir}`, icon: <FILE_TYPE_METADATA.question.icon />, label: 'New Question' },
-          { href: `/new/dashboard?folder=${effectiveDir}`, icon: <FILE_TYPE_METADATA.dashboard.icon />, label: 'New Dashboard' },
         ],
       },
       {
         category: 'Engineering',
         items: [
           { href: `/p/${mode}/database`, icon: <FILE_TYPE_METADATA.connection.icon />, label: FILE_TYPE_METADATA.connection.label, adminOnly: true },
-          { href: `/new/connection`, icon: <LuDatabaseZap />, label: 'New DB Connection', adminOnly: true },
         ],
       },
       {
@@ -163,7 +159,7 @@ export default function Sidebar() {
         items: section.items.filter((item: NavItem) => !item.adminOnly || userIsAdmin),
       }))
       .filter(section => section.items.length > 0);
-  }, [showDebug, userIsAdmin, mode, effectiveDir]);
+  }, [showDebug, userIsAdmin, mode]);
 
   return (
     <Box
@@ -263,7 +259,7 @@ export default function Sidebar() {
             icon={homeItem.icon}
             label={homeItem.label}
             isCollapsed={isCollapsed}
-            isActive={pathname === homeItem.href}
+            isActive={pathname === homeItem.href || pathname.startsWith('/p/')}
           />
 
           {navSections.map((section) => (

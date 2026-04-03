@@ -259,7 +259,7 @@ export default function CreateMenu({
                   opacity={isCollapsed ? 0 : 1}
                   transition="opacity 0.2s"
                 >
-                  Create
+                  New
                 </Text>
               )}
             </Box>

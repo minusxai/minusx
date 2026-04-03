@@ -12,6 +12,7 @@ import MobileRightSidebar from '@/components/MobileRightSidebar';
 import SearchBar from '@/components/SearchBar';
 import ProductTour from '@/components/ProductTour';
 import { useAppSelector } from '@/store/hooks';
+import { ConversationList } from '@/components/explore/ConversationList';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { useFolder } from '@/lib/hooks/file-state-hooks';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -44,7 +45,7 @@ export default function PathPage({ params }: PathPageProps) {
   const fullPath = '/' + pathSegments.join('/');
 
   // Load folder into Redux (populates pathIndex, uses TTL cache)
-  const { files: folderFiles, loading: folderLoading } = useFolder(fullPath);
+  useFolder(fullPath);
 
   // Client-side permission check for folder access
   useEffect(() => {
@@ -155,6 +156,21 @@ export default function PathPage({ params }: PathPageProps) {
 
   const shouldShowContextSelector = user?.role === 'admin';
 
+  const handleConversationSelect = (id?: number) => {
+    if (id) {
+      navigate(`/explore/${id}`);
+    } else {
+      navigate('/explore');
+    }
+  };
+
+  const conversationHistory = (
+    <ConversationList
+      onSelectConversation={handleConversationSelect}
+      currentConversationId={undefined}
+    />
+  );
+
   return (
     <Box minH="90vh" bg="bg.canvas" display="flex">
       {/* Product tour for tutorial mode */}
@@ -184,6 +200,7 @@ export default function PathPage({ params }: PathPageProps) {
               title="Folder Context"
               filePath={fullPath}
               showChat={showChat}
+              history={conversationHistory}
               contextVersion={selectedVersion}
               selectedContextPath={selectedContextPath}
               onContextChange={shouldShowContextSelector ? (_path: string | null, version?: number) => {
@@ -198,6 +215,7 @@ export default function PathPage({ params }: PathPageProps) {
               title="Folder Context"
               filePath={fullPath}
               showChat={showChat}
+              history={conversationHistory}
               contextVersion={selectedVersion}
               selectedContextPath={selectedContextPath}
               onContextChange={shouldShowContextSelector ? (_path: string | null, version?: number) => {
