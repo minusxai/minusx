@@ -14,6 +14,7 @@ import { selectAugmentedFiles, compressAugmentedFile } from '@/lib/api/file-stat
 import Editor from '@monaco-editor/react';
 import Markdown from '@/components/Markdown';
 import ChatInterface from '@/components/explore/ChatInterface';
+import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import type { ContextContent, DatabaseContext } from '@/lib/types';
 
 const TYPEWRITER_SPEED = 35;
@@ -97,6 +98,11 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const showDebug = useAppSelector((state) => state.ui.showDebug);
   const dispatch = useAppDispatch();
+
+  // Check if a context file already exists (persisted, id > 0)
+  const contextCriteria = useMemo(() => ({ type: 'context' as const }), []);
+  const { files: existingContextFiles } = useFilesByCriteria({ criteria: contextCriteria, partial: true });
+  const existingContext = existingContextFiles.find(f => (f.id as number) > 0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [description, setDescription] = useState('');
@@ -213,8 +219,14 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
     });
   }, [loading, virtualFileId, connectionName, schemas, onContextCreated]);
 
-  /** Save (publish) the virtual file to DB and advance to next step */
+  /** Save (publish) the virtual file to DB and advance to next step.
+   *  If a context file already exists, skip publishing and use the existing one. */
   const handleSave = useCallback(async () => {
+    // If a context already exists in the DB, just use it
+    if (existingContext) {
+      onComplete(existingContext.id as number);
+      return;
+    }
     if (!virtualFileId) {
       setError('Context file is still being created. Please wait a moment.');
       return;
@@ -255,7 +267,7 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
     } finally {
       setSaving(false);
     }
-  }, [virtualFileId, connectionName, effectiveWhitelist, description, onComplete]);
+  }, [virtualFileId, connectionName, effectiveWhitelist, description, onComplete, existingContext]);
 
   /** Show inline agent activity feed and kick off the agent */
   const reduxState = useAppSelector(state => state);

@@ -8,6 +8,7 @@ import { preserveModeParam } from '@/lib/mode/mode-utils';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { createConversation, selectActiveConversation, selectConversation, interruptChat, generateVirtualConversationId } from '@/store/chatSlice';
 import { setNavigation, setActiveVirtualId } from '@/store/navigationSlice';
+import { removeVirtualFile, isVirtualFileId } from '@/store/filesSlice';
 import { createVirtualFile, editFile, publishAll, selectAugmentedFiles, compressAugmentedFile } from '@/lib/api/file-state';
 import { getStore } from '@/store/store';
 import { useFile } from '@/lib/hooks/file-state-hooks';
@@ -20,6 +21,24 @@ import type { CompletedToolCall } from '@/lib/types';
 const TYPEWRITER_SPEED = 35;
 
 const DASHBOARD_PROMPT = `Let's build the dashboard!`;
+
+function SkipLinks({ onSkip, onGoHome }: { onSkip: () => void; onGoHome: () => void }) {
+  const linkStyle = {
+    fontSize: 'xs',
+    color: 'fg.subtle',
+    fontFamily: 'mono',
+    cursor: 'pointer',
+    textDecoration: 'underline',
+    _hover: { color: 'fg.muted' },
+  } as const;
+  return (
+    <HStack>
+      <Text as="button" {...linkStyle} onClick={onSkip}>Build dashboard manually</Text>
+      <Text fontSize="xs" color="fg.subtle" fontFamily="mono">or</Text>
+      <Text as="button" {...linkStyle} onClick={onGoHome}>Go home</Text>
+    </HStack>
+  );
+}
 
 interface StepGeneratingProps {
   connectionName: string;
@@ -172,14 +191,36 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
     }
   }, [virtualDashboardId, router, onComplete]);
 
+  /** Discard all virtual (unsaved) files created during this step */
+  const discardVirtualFiles = useCallback(() => {
+    const allFiles = getStore().getState().files.files;
+    for (const idStr of Object.keys(allFiles)) {
+      const id = Number(idStr);
+      if (isVirtualFileId(id)) {
+        dispatch(removeVirtualFile(id));
+      }
+    }
+  }, [dispatch]);
+
   /** Skip: interrupt agent, mark wizard complete, go to /new/dashboard */
   const handleSkip = useCallback(async () => {
     if (activeConvId) {
       dispatch(interruptChat({ conversationID: activeConvId }));
     }
+    discardVirtualFiles();
     if (onComplete) await onComplete();
     router.push(preserveModeParam('/new/dashboard'));
-  }, [activeConvId, dispatch, router, onComplete]);
+  }, [activeConvId, dispatch, router, onComplete, discardVirtualFiles]);
+
+  /** Skip everything and go home */
+  const handleGoHome = useCallback(async () => {
+    if (activeConvId) {
+      dispatch(interruptChat({ conversationID: activeConvId }));
+    }
+    discardVirtualFiles();
+    if (onComplete) await onComplete();
+    router.push(preserveModeParam('/p/org'));
+  }, [activeConvId, dispatch, router, onComplete, discardVirtualFiles]);
 
   const isDone = !isGenerating && hasStarted;
 
@@ -259,17 +300,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
               <LuSparkles size={14} />
               Auto-generate dashboard
             </Button>
-            <Text
-              as="button"
-              fontSize="xs"
-              color="fg.subtle"
-              fontFamily="mono"
-              cursor="pointer"
-              _hover={{ color: 'fg.muted', textDecoration: 'underline' }}
-              onClick={handleSkip}
-            >
-              Skip & build manually
-            </Text>
+            <SkipLinks onSkip={handleSkip} onGoHome={handleGoHome} />
           </VStack>
         )}
         {isDone && (
@@ -286,24 +317,14 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
           </Button>
         )}
         {isGenerating && (
-          <HStack gap={3} align="center">
+          <VStack gap={2} align="center">
             <HStack gap={1}>
               <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out infinite' }} />
               <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out 0.2s infinite' }} />
               <Box w="5px" h="5px" borderRadius="full" bg="accent.teal" css={{ animation: 'pulse 1.4s ease-in-out 0.4s infinite' }} />
             </HStack>
-            <Text
-              as="button"
-              fontSize="xs"
-              color="fg.subtle"
-              fontFamily="mono"
-              cursor="pointer"
-              _hover={{ color: 'fg.muted', textDecoration: 'underline' }}
-              onClick={handleSkip}
-            >
-              Skip & build manually
-            </Text>
-          </HStack>
+            <SkipLinks onSkip={handleSkip} onGoHome={handleGoHome} />
+          </VStack>
         )}
       </HStack>
 

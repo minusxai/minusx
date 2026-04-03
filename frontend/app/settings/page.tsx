@@ -330,6 +330,12 @@ function SettingsContent() {
       ),
       visible: showDebugOption,
     },
+    {
+      tab: 'general',
+      title: 'Build',
+      description: GIT_COMMIT_SHA,
+      control: <></>,
+    },
   ], [askForConfirmation, showDebug, showJson, showAllErrorToasts, showDebugOption, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, showAdvanced, isAdmin]);
 
   // ── Tabs config ──────────────────────────────────────────────────
@@ -468,9 +474,6 @@ function SettingsContent() {
           ))}
         </Tabs.Root>
 
-        <Text mt={12} fontSize="xs" color="fg.subtle" fontFamily="mono" textAlign="center">
-          build: {GIT_COMMIT_SHA}
-        </Text>
       </Container>
     </Box>
   );
