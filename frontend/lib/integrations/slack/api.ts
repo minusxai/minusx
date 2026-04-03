@@ -95,6 +95,24 @@ export async function getSlackUserEmail(token: string, userId: string): Promise<
   return result.user?.profile?.email?.trim() || null;
 }
 
+export async function publishHomeView(
+  token: string,
+  userId: string,
+  view: unknown,
+): Promise<void> {
+  const result = await slackApiFetch<Record<string, never>>('views.publish', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ user_id: userId, view }),
+  });
+  if (!result.ok) {
+    console.warn(`[Slack] views.publish failed: ${result.error}`);
+  }
+}
+
 export async function getConversationHistory(
   token: string,
   channel: string,
@@ -112,6 +130,46 @@ export async function getConversationHistory(
     throw new Error(`Slack conversations.history failed: ${result.error}`);
   }
   return { messages: result.messages ?? [] };
+}
+
+export async function addReaction(
+  token: string,
+  channel: string,
+  timestamp: string,
+  emoji: string,
+): Promise<void> {
+  const result = await slackApiFetch<Record<string, never>>('reactions.add', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ channel, timestamp, name: emoji }),
+  });
+  // Silently ignore "already_reacted" errors
+  if (!result.ok && result.error !== 'already_reacted') {
+    console.warn(`[Slack] reactions.add failed: ${result.error}`);
+  }
+}
+
+export async function removeReaction(
+  token: string,
+  channel: string,
+  timestamp: string,
+  emoji: string,
+): Promise<void> {
+  const result = await slackApiFetch<Record<string, never>>('reactions.remove', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ channel, timestamp, name: emoji }),
+  });
+  // Silently ignore "no_reaction" errors
+  if (!result.ok && result.error !== 'no_reaction') {
+    console.warn(`[Slack] reactions.remove failed: ${result.error}`);
+  }
 }
 
 export function verifySlackRequestSignature(input: {

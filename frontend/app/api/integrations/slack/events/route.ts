@@ -1,11 +1,12 @@
 import { after, NextRequest, NextResponse } from 'next/server';
 import { getCompanyUserEffectiveUser } from '@/lib/auth/auth-helpers';
 import { runChatOrchestration } from '@/lib/chat/run-orchestration';
-import { getConversationHistory, getSlackUserEmail, postSlackMessage, verifySlackRequestSignature } from '@/lib/integrations/slack/api';
+import { addReaction, getConversationHistory, getSlackUserEmail, postSlackMessage, publishHomeView, removeReaction, verifySlackRequestSignature } from '@/lib/integrations/slack/api';
 import { getSlackSigningSecret } from '@/lib/integrations/slack/config';
 import { buildSlackAgentArgs } from '@/lib/integrations/slack/context';
+import { resolveBaseUrl } from '@/lib/jobs/job-utils';
 import { extractSlackReplyFromLog, normalizeSlackPrompt } from '@/lib/integrations/slack/messages';
-import { buildWelcomeBlocks, shouldSendWelcome } from '@/lib/integrations/slack/welcome';
+import { buildHomeView, buildWelcomeBlocks, shouldSendWelcome } from '@/lib/integrations/slack/welcome';
 import {
   findSlackInstallationByTeam,
   getOrCreateSlackConversationId,
@@ -70,7 +71,18 @@ export async function processSlackEvent(
   if (eventId && !reserveSlackEvent(eventId)) return;
 
   try {
-    // Handle app_home_opened — send welcome message only if DM is empty
+    // Handle app_home_opened — publish Home tab or send welcome DM
+    if (ev?.type === 'app_home_opened') {
+      if (ev.tab === 'home' && ev.user) {
+        const appName = installation.config.branding?.agentName || 'MinusX';
+        const platformUrl = await resolveBaseUrl(installation.companyId);
+        const homeView = buildHomeView(appName, platformUrl);
+        await publishHomeView(installation.bot.bot_token, ev.user, homeView);
+        if (eventId) markSlackEventDone(eventId);
+        return;
+      }
+    }
+
     if (ev?.type === 'app_home_opened' && ev.tab === 'messages') {
       const channel = ev.channel || ev.user;
       if (channel) {
@@ -99,6 +111,9 @@ export async function processSlackEvent(
     if (!userMessage) return;
 
     const threadTs = ev.thread_ts ?? ev.ts;
+
+    // React with :eyes: to acknowledge we're working on it
+    await addReaction(installation.bot.bot_token, ev.channel, ev.ts, 'eyes');
 
     if (!ev.user) {
       await postErrorReply(
@@ -164,9 +179,18 @@ export async function processSlackEvent(
       thread_ts: threadTs,
     });
 
+    // Swap :eyes: for :white_check_mark:
+    await removeReaction(installation.bot.bot_token, ev.channel, ev.ts, 'eyes');
+    await addReaction(installation.bot.bot_token, ev.channel, ev.ts, 'white_check_mark');
+
     if (eventId) markSlackEventDone(eventId);
   } catch (err) {
     console.error('[Slack events] Failed to process event', err);
+    // On error, swap :eyes: for :x:
+    if (ev?.channel && ev?.ts) {
+      await removeReaction(installation.bot.bot_token, ev.channel, ev.ts, 'eyes').catch(() => {});
+      await addReaction(installation.bot.bot_token, ev.channel, ev.ts, 'x').catch(() => {});
+    }
     if (eventId) markSlackEventDone(eventId);
   }
 }

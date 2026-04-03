@@ -8,6 +8,7 @@ export const SLACK_BOT_SCOPES = [
   'groups:history',
   'im:history',
   'mpim:history',
+  'reactions:write',
   'users:read',
   'users:read.email',
 ] as const;
@@ -64,7 +65,7 @@ export function buildSlackManifest(appName: string, baseUrl: string = AUTH_URL, 
     },
     features: {
       app_home: {
-        home_tab_enabled: false,
+        home_tab_enabled: true,
         messages_tab_enabled: true,
         messages_tab_read_only_enabled: false,
       },
