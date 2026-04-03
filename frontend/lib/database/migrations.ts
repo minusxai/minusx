@@ -1096,13 +1096,6 @@ export const MIGRATIONS: MigrationEntry[] = [
     },
     description: 'Set setupWizard.status = "complete" on all existing /org/configs/config documents (existing companies have already completed onboarding)',
   },
-  {
-    dataVersion: undefined,  // No data format change
-    schemaVersion: 9,        // Schema bumps to 9 for OAuth tables
-    schemaMigration: null,   // null = recreate DB with new schema
-    dataMigration: (data: InitData) => data,
-    description: 'Add OAuth tables (oauth_authorization_codes, oauth_tokens) for OAuth 2.1 auth flow',
-  },
 ];
 
 /**

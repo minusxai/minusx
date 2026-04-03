@@ -137,33 +137,4 @@ export const DATABASE_SCHEMA = `
     UPDATE configs SET updated_at = CURRENT_TIMESTAMP WHERE key = NEW.key;
   END;
 
-  -- OAuth authorization codes (short-lived, for OAuth 2.1 flow)
-  CREATE TABLE IF NOT EXISTS oauth_authorization_codes (
-    code TEXT PRIMARY KEY,
-    company_id INTEGER NOT NULL,
-    user_id INTEGER NOT NULL,
-    redirect_uri TEXT NOT NULL,
-    code_challenge TEXT NOT NULL,
-    code_challenge_method TEXT NOT NULL DEFAULT 'S256',
-    scope TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    expires_at TIMESTAMP NOT NULL,
-    used INTEGER DEFAULT 0
-  );
-
-  -- OAuth tokens (access + refresh, for OAuth 2.1 flow)
-  CREATE TABLE IF NOT EXISTS oauth_tokens (
-    token_hash TEXT PRIMARY KEY,
-    refresh_token_hash TEXT UNIQUE,
-    company_id INTEGER NOT NULL,
-    user_id INTEGER NOT NULL,
-    scope TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    expires_at TIMESTAMP NOT NULL,
-    refresh_expires_at TIMESTAMP,
-    revoked_at TIMESTAMP
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_oauth_tokens_refresh ON oauth_tokens(refresh_token_hash);
-  CREATE INDEX IF NOT EXISTS idx_oauth_tokens_company ON oauth_tokens(company_id, user_id);
 `;

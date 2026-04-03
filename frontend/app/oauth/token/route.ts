@@ -1,11 +1,12 @@
 /**
  * OAuth 2.1 Token Endpoint
  *
- * POST: Exchange authorization code for tokens, or refresh tokens.
+ * POST: Exchange authorization code (with PKCE) for an access token.
  *
  * Supports:
  * - grant_type=authorization_code (with PKCE code_verifier)
- * - grant_type=refresh_token
+ *
+ * Refresh tokens are not issued — clients re-run OAuth when the access token expires.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -29,7 +30,6 @@ export async function OPTIONS() {
 }
 
 export async function POST(request: NextRequest) {
-  // Token endpoint accepts both application/x-www-form-urlencoded and application/json
   let body: Record<string, string>;
 
   const contentType = request.headers.get('content-type') || '';
@@ -42,27 +42,15 @@ export async function POST(request: NextRequest) {
 
   const grantType = body.grant_type;
 
-  if (grantType === 'authorization_code') {
-    return handleAuthorizationCode(body);
-  } else if (grantType === 'refresh_token') {
-    return handleRefreshToken(body);
-  } else {
+  if (grantType !== 'authorization_code') {
     return oauthError('unsupported_grant_type', `Grant type "${grantType}" is not supported`);
   }
-}
 
-async function handleAuthorizationCode(body: Record<string, string>): Promise<NextResponse> {
   const { code, code_verifier, redirect_uri } = body;
 
-  if (!code) {
-    return oauthError('invalid_request', 'Missing code');
-  }
-  if (!code_verifier) {
-    return oauthError('invalid_request', 'Missing code_verifier (PKCE required)');
-  }
-  if (!redirect_uri) {
-    return oauthError('invalid_request', 'Missing redirect_uri');
-  }
+  if (!code) return oauthError('invalid_request', 'Missing code');
+  if (!code_verifier) return oauthError('invalid_request', 'Missing code_verifier (PKCE required)');
+  if (!redirect_uri) return oauthError('invalid_request', 'Missing redirect_uri');
 
   const result = await OAuthCodeDB.consume(code, redirect_uri, code_verifier);
   if (!result) {
@@ -73,27 +61,6 @@ async function handleAuthorizationCode(body: Record<string, string>): Promise<Ne
 
   return NextResponse.json({
     access_token: tokenPair.accessToken,
-    refresh_token: tokenPair.refreshToken,
-    token_type: tokenPair.tokenType,
-    expires_in: tokenPair.expiresIn,
-  }, { headers: CORS_HEADERS });
-}
-
-async function handleRefreshToken(body: Record<string, string>): Promise<NextResponse> {
-  const { refresh_token } = body;
-
-  if (!refresh_token) {
-    return oauthError('invalid_request', 'Missing refresh_token');
-  }
-
-  const tokenPair = await OAuthTokenDB.refresh(refresh_token);
-  if (!tokenPair) {
-    return oauthError('invalid_grant', 'Invalid, expired, or revoked refresh token');
-  }
-
-  return NextResponse.json({
-    access_token: tokenPair.accessToken,
-    refresh_token: tokenPair.refreshToken,
     token_type: tokenPair.tokenType,
     expires_in: tokenPair.expiresIn,
   }, { headers: CORS_HEADERS });
