@@ -6,6 +6,7 @@ import { LuBot, LuTrash2, LuExternalLink, LuShieldCheck, LuCopy, LuCheck, LuChev
 import { useConfigs, reloadConfigs } from '@/lib/hooks/useConfigs';
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
 import { toaster } from '@/components/ui/toaster';
+import { IS_DEV } from '@/lib/constants';
 import type { SlackBotConfig } from '@/lib/types';
 
 const SLACK_BASE_URL_STORAGE_KEY = 'slack-base-url';
@@ -37,9 +38,11 @@ function StepBadge({ n, done }: { n: number; done?: boolean }) {
 
 function SlackSetupGuide() {
   const { config } = useConfigs();
-  const [baseUrl, setBaseUrl] = useState(() =>
-    typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000'
-  );
+  const [baseUrl, setBaseUrl] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    if (!IS_DEV) return window.location.origin;
+    return window.localStorage.getItem(SLACK_BASE_URL_STORAGE_KEY)?.trim() || window.location.origin;
+  });
   const [manifestJson, setManifestJson] = useState<string | null>(null);
   const [isLoadingManifest, setIsLoadingManifest] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -51,12 +54,9 @@ function SlackSetupGuide() {
   const slackBots = (config.bots ?? []).filter((bot): bot is SlackBotConfig => bot.type === 'slack');
 
   useEffect(() => {
-    const savedBaseUrl = window.localStorage.getItem(SLACK_BASE_URL_STORAGE_KEY)?.trim();
-    if (savedBaseUrl) setBaseUrl(savedBaseUrl);
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem(SLACK_BASE_URL_STORAGE_KEY, baseUrl.trim());
+    if (IS_DEV) {
+      window.localStorage.setItem(SLACK_BASE_URL_STORAGE_KEY, baseUrl.trim());
+    }
   }, [baseUrl]);
 
   const loadManifest = useCallback(async () => {
@@ -99,9 +99,31 @@ function SlackSetupGuide() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleOpenInSlack = () => {
-    if (!manifestJson) return;
-    const slackUrl = `https://api.slack.com/apps?new_app=1&manifest_json=${encodeURIComponent(manifestJson)}`;
+  const handleOpenInSlack = async () => {
+    let manifest = manifestJson;
+    if (!manifest) {
+      setIsLoadingManifest(true);
+      try {
+        const query = new URLSearchParams({ baseUrl: baseUrl.trim() });
+        const response = await fetch(`/api/integrations/slack/manifest?${query.toString()}`, {
+          method: 'GET',
+          credentials: 'include',
+        });
+        if (!response.ok) throw new Error('Failed to load manifest');
+        manifest = await response.text();
+        setManifestJson(manifest);
+      } catch (error) {
+        toaster.create({
+          title: 'Failed to generate manifest',
+          description: error instanceof Error ? error.message : 'Check that your URL is a public HTTPS URL.',
+          type: 'error',
+        });
+        return;
+      } finally {
+        setIsLoadingManifest(false);
+      }
+    }
+    const slackUrl = `https://api.slack.com/apps?new_app=1&manifest_json=${encodeURIComponent(manifest)}`;
     window.open(slackUrl, '_blank', 'noopener,noreferrer');
   };
 
@@ -158,46 +180,62 @@ function SlackSetupGuide() {
 
   return (
     <VStack align="stretch" gap={4}>
-      {/* Step 1: Instance URL */}
-      <Box borderWidth="1px" borderColor="border" borderRadius="md" p={4}>
-        <HStack gap={3} mb={3}>
-          <StepBadge n={1} />
-          <Text fontSize="sm" fontWeight="semibold" fontFamily="mono">Set your public URL</Text>
-        </HStack>
-        <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={3}>
-          The HTTPS URL where your MinusX instance is publicly reachable. Slack will POST events here.
-          Use your ngrok URL in development.
-        </Text>
-        <Input
-          aria-label="Slack public base URL"
-          size="sm"
-          fontFamily="mono"
-          value={baseUrl}
-          onChange={(e) => setBaseUrl(e.target.value)}
-          placeholder="https://your-public-url.example.com"
-        />
-      </Box>
+      {/* Step 1: Instance URL (dev only) */}
+      {IS_DEV && (
+        <Box borderWidth="1px" borderColor="border" borderRadius="md" p={4}>
+          <HStack gap={3} mb={3}>
+            <StepBadge n={1} />
+            <Text fontSize="sm" fontWeight="semibold" fontFamily="mono">Set your public URL</Text>
+          </HStack>
+          <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={3}>
+            Public HTTPS URL for Slack event delivery. Use your ngrok URL in development.
+          </Text>
+          <Input
+            aria-label="Slack public base URL"
+            size="sm"
+            fontFamily="mono"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder="https://your-ngrok-url"
+          />
+        </Box>
+      )}
 
-      {/* Step 2: Manifest */}
+      {/* Step 2 (or Step 1 in prod): Manifest */}
       <Box borderWidth="1px" borderColor="border" borderRadius="md" p={4}>
         <HStack gap={3} mb={3}>
-          <StepBadge n={2} />
+          <StepBadge n={IS_DEV ? 2 : 1} />
           <Text fontSize="sm" fontWeight="semibold" fontFamily="mono">Create your Slack app</Text>
         </HStack>
         <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={3}>
-          Generate the manifest, then use it to create a new Slack app in your workspace. Requires a public HTTPS URL from Step 1.
+          {IS_DEV
+            ? 'Generate the manifest, then use it to create a new Slack app in your workspace. Requires a public HTTPS URL from Step 1.'
+            : 'Create a new Slack app pre-filled with the correct settings for this instance.'}
         </Text>
         <HStack gap={2} mb={manifestJson ? 3 : 0} wrap="wrap">
-          <Button
-            aria-label="Generate Slack manifest"
-            size="sm"
-            variant="outline"
-            onClick={loadManifest}
-            loading={isLoadingManifest}
-          >
-            Generate manifest
-          </Button>
-          {manifestJson && (
+          {IS_DEV ? (
+            <Button
+              aria-label="Generate Slack manifest"
+              size="sm"
+              variant="outline"
+              onClick={loadManifest}
+              loading={isLoadingManifest}
+            >
+              Generate manifest
+            </Button>
+          ) : (
+            <Button
+              aria-label="Create Slack app from manifest"
+              size="sm"
+              colorPalette="teal"
+              onClick={handleOpenInSlack}
+              loading={isLoadingManifest}
+            >
+              <LuExternalLink size={12} />
+              Create Slack App
+            </Button>
+          )}
+          {IS_DEV && manifestJson && (
             <>
               <Button
                 aria-label="Copy manifest JSON"
@@ -209,18 +247,18 @@ function SlackSetupGuide() {
                 {copied ? 'Copied!' : 'Copy JSON'}
               </Button>
               <Button
-                aria-label="Open Slack app creation"
+                aria-label="Create Slack app from manifest"
                 size="sm"
                 colorPalette="teal"
                 onClick={handleOpenInSlack}
               >
                 <LuExternalLink size={12} />
-                Open in Slack
+                Create Slack App
               </Button>
             </>
           )}
         </HStack>
-        {manifestJson && (
+        {IS_DEV && manifestJson && (
           <Box
             as="pre"
             fontSize="2xs"
@@ -240,14 +278,14 @@ function SlackSetupGuide() {
         )}
       </Box>
 
-      {/* Step 3: Connect credentials */}
+      {/* Connect credentials */}
       <Box borderWidth="1px" borderColor="border" borderRadius="md" p={4}>
         <HStack gap={3} mb={3}>
-          <StepBadge n={3} />
+          <StepBadge n={IS_DEV ? 3 : 2} />
           <Text fontSize="sm" fontWeight="semibold" fontFamily="mono">Connect credentials</Text>
         </HStack>
         <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={3}>
-          After installing the Slack app, paste the bot token and signing secret from your Slack app&apos;s <em>Basic Information</em> page.
+          After creating the Slack app above, install it to your workspace from the app&apos;s settings page.<br></br> Then copy the <strong>Bot User OAuth Token</strong> from <em>OAuth &amp; Permissions</em> and the <strong>Signing Secret</strong> from <em>Basic Information</em>.
         </Text>
         <VStack align="stretch" gap={3}>
           <Box>
@@ -271,7 +309,7 @@ function SlackSetupGuide() {
               fontFamily="mono"
               value={signingSecret}
               onChange={(e) => setSigningSecret(e.target.value)}
-              placeholder="From Slack Basic Information"
+              placeholder="From the Slack App's 'Basic Information' section"
             />
           </Box>
           <Button

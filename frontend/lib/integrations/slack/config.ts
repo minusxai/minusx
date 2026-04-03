@@ -58,7 +58,7 @@ export function buildSlackManifest(appName: string, baseUrl: string = AUTH_URL, 
   return {
     display_information: {
       name: appName,
-      description: `Talk directly to ${appName}  agent from Slack.`,
+      description: `Talk directly to ${appName} agent from Slack.`,
       long_description: `${appName} is an Agentic Business Intelligence platform built for native AI interop. Ask questions in plain English across all your data, use agents to dig through dashboards and questions, and get answers you can understand and trust.`,
       background_color: '#0D1117',
     },
