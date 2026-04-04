@@ -143,6 +143,7 @@ export function buildHomeView(appName: string, platformUrl: string = 'https://mi
 // Keyed by `${teamId}:${userId}` — avoids sending the welcome on every DM open.
 // ---------------------------------------------------------------------------
 
+// eslint-disable-next-line no-restricted-syntax -- tracks welcomed user emails; cross-tenant sharing is intentional (idempotent welcome, not data access)
 const welcomedUsers = new Set<string>();
 const MAX_WELCOMED_SIZE = 2000;
 

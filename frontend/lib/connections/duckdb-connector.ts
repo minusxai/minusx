@@ -4,8 +4,9 @@ import * as fs from 'fs';
 import { BASE_DUCKDB_DATA_PATH } from '@/lib/config';
 import { NodeConnector, SchemaEntry, QueryResult, TestConnectionResult } from './base';
 import { withDuckDbConnection } from './duckdb-registry';
+import { immutableSet } from '@/lib/utils/immutable-collections';
 
-const SKIP_SCHEMAS = new Set(['system', 'temp']);
+const SKIP_SCHEMAS = immutableSet(['system', 'temp']);
 
 // Make rows JSON-safe: JSON.stringify handles Date→ISO string natively;
 // BigInt needs an explicit replacer since it throws otherwise.

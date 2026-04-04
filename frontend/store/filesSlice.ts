@@ -6,11 +6,12 @@ import type { RootState } from './store';
 import type { LoadError } from '@/lib/types/errors';
 import { replaceNegativeIdsInContent } from '@/lib/data/helpers/replace-references';
 import { dbFileToFileState } from '@/lib/api/compress-augmented';
+import { immutableSet } from '@/lib/utils/immutable-collections';
 
 // System file types that save in-place and are excluded from bulk Publish.
 // Defined as a Set here (instead of importing from file-metadata) to avoid
 // circular-dependency issues between store and ui modules.
-const SYSTEM_FILE_TYPES_SET = new Set<string>(['connection', 'config', 'styles', 'context']);
+const SYSTEM_FILE_TYPES_SET = immutableSet<string>(['connection', 'config', 'styles', 'context']);
 
 /**
  * Ephemeral changes - non-persistent state like lastExecuted query

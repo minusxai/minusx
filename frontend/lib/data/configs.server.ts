@@ -7,6 +7,7 @@ import { resolvePath } from '@/lib/mode/path-resolver';
 import { Mode, DEFAULT_MODE } from '@/lib/mode/mode-types';
 import { validateWebhook } from '@/lib/messaging/webhook-executor';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
+import { immutableSet } from '@/lib/utils/immutable-collections';
 
 export interface GetConfigsResult {
   config: CompanyConfig;
@@ -146,7 +147,7 @@ export function validateCompanyConfig(content: unknown): content is Partial<Comp
 
 const VALID_ROLES = ['admin', 'editor', 'viewer'] as const;
 const VALID_ACCESS_FIELDS = ['allowedTypes', 'createTypes', 'viewTypes'] as const;
-const VALID_FILE_TYPES = new Set(Object.keys(FILE_TYPE_METADATA));
+const VALID_FILE_TYPES = immutableSet(Object.keys(FILE_TYPE_METADATA));
 
 /**
  * Validate a file type array value (or '*')

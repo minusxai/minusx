@@ -238,6 +238,7 @@ export async function loadFiles(fileIds: number[], ttl: number, skip: boolean): 
  */
 // Simple per-key memoization cache: returns the same reference when state hasn't changed,
 // which suppresses React Redux dev-mode "selector returned a different result" warnings.
+// eslint-disable-next-line no-restricted-syntax -- client-side Redux memoization; keyed by fileIds, invalidated by state reference
 const _augmentedFilesCache = new Map<string, { state: RootState; result: AugmentedFile[] }>();
 
 export function selectAugmentedFiles(state: RootState, fileIds: number[]): AugmentedFile[] {

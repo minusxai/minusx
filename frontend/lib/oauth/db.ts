@@ -27,9 +27,11 @@ interface CodeEntry {
   expiresAt: number; // ms since epoch
 }
 
+/* eslint-disable no-restricted-syntax -- safe: single-use PKCE codes, companyId embedded in each entry */
 const codeStore: Map<string, CodeEntry> = (
   (globalThis as Record<string, unknown>).__oauthCodes ??= new Map<string, CodeEntry>()
 ) as Map<string, CodeEntry>;
+/* eslint-enable no-restricted-syntax */
 
 // ---------------------------------------------------------------------------
 // OAuthCodeDB — short-lived PKCE authorization codes
