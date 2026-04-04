@@ -6,7 +6,7 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile, clearFileChanges, createVirtualFile } from '@/lib/api/file-state';
 import { useQueryResult } from '@/lib/hooks/file-state-hooks';
-import { selectMergedContent, selectEffectiveName, setEphemeral } from '@/store/filesSlice';
+import { selectMergedContent, selectEffectiveName, setEphemeral, removeVirtualFile, isVirtualFileId } from '@/store/filesSlice';
 import { setFileEditMode } from '@/store/uiSlice';
 import { QuestionContent } from '@/lib/types';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
@@ -153,13 +153,23 @@ export default function CreateQuestionModalContainer({
   const primaryActionLabel = isCreateMode ? 'Add' : 'Update';
   const handlePrimaryAction = isCreateMode ? handleAdd : handleUpdate;
 
-  // Handle cancel - always discard and close (low stakes for modal-created questions)
+  // Handle cancel
   const handleCancel = useCallback(() => {
     if (typeof effectiveId === 'number') {
-      clearFileChanges({ fileId: effectiveId });
+      if (isCreateMode) {
+        // Cancel during creation: clean up the orphaned virtual file.
+        // It was never added to any dashboard, so remove it entirely.
+        dispatch(removeVirtualFile(effectiveId));
+      } else if (!isVirtualFileId(effectiveId)) {
+        // Cancel while editing a real (published) file: revert to DB state.
+        clearFileChanges({ fileId: effectiveId });
+      }
+      // Cancel while editing a virtual file: just close.
+      // clearFileChanges would reset persistableChanges → blank template,
+      // destroying the content the user wrote when they first created the question.
     }
     onClose();
-  }, [effectiveId, onClose]);
+  }, [effectiveId, isCreateMode, dispatch, onClose]);
 
   // Register handleCancel with parent so ESC/click-outside go through dirty check
   useEffect(() => {
