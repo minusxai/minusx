@@ -35,17 +35,56 @@ function paths(c: CompanyData): string[] {
 }
 
 describe('fixFilesWithBrokenPaths', () => {
+  // ── Basic no-op cases ─────────────────────────────────────────────────────
+
   it('leaves files alone when their parent folder exists', () => {
     const c = company(
       doc(1, '/org', 'folder'),
       doc(2, '/org/report'),
     );
     fixFilesWithBrokenPaths(c);
-    expect(paths(c)).toEqual(['/org', '/org/report']);
+    expect(paths(c)).toContain('/org/report');
   });
 
+  it('leaves /org, /tutorial, /internals root folders alone', () => {
+    const c = company(
+      doc(1, '/org', 'folder'),
+      doc(2, '/tutorial', 'folder'),
+      doc(3, '/internals', 'folder'),
+    );
+    fixFilesWithBrokenPaths(c);
+    expect(paths(c)).toEqual(expect.arrayContaining(['/org', '/tutorial', '/internals']));
+  });
+
+  // ── Root-level (parts.length === 1) ──────────────────────────────────────
+
+  it('moves a non-folder at root level with an invalid name to /org', () => {
+    const c = company(
+      doc(1, '/org', 'folder'),
+      doc(2, '/orphan-question'),         // not a valid mode root
+    );
+    fixFilesWithBrokenPaths(c);
+    expect(c.documents.find(d => d.id === 2)!.path).toBe('/org/orphan-question');
+  });
+
+  it('moves a folder at root level with an invalid name to /org, cascading children', () => {
+    const c = company(
+      doc(1, '/org', 'folder'),
+      doc(2, '/ghost', 'folder'),          // invalid root folder
+      doc(3, '/ghost/child-question'),
+      doc(4, '/ghost/sub', 'folder'),
+      doc(5, '/ghost/sub/deep-question'),
+    );
+    fixFilesWithBrokenPaths(c);
+    expect(c.documents.find(d => d.id === 2)!.path).toBe('/org/ghost');
+    expect(c.documents.find(d => d.id === 3)!.path).toBe('/org/ghost/child-question');
+    expect(c.documents.find(d => d.id === 4)!.path).toBe('/org/ghost/sub');
+    expect(c.documents.find(d => d.id === 5)!.path).toBe('/org/ghost/sub/deep-question');
+  });
+
+  // ── Broken intermediate parent ────────────────────────────────────────────
+
   it('moves file to nearest valid ancestor when immediate parent is missing', () => {
-    // /org/missing doesn't exist as a folder; /org does
     const c = company(
       doc(1, '/org', 'folder'),
       doc(2, '/org/missing/report'),
@@ -55,104 +94,121 @@ describe('fixFilesWithBrokenPaths', () => {
   });
 
   it('picks the deepest valid ancestor, not the shallowest', () => {
-    // /org/a exists, /org/a/b does not — should land in /org/a, not /org
     const c = company(
       doc(1, '/org', 'folder'),
       doc(2, '/org/a', 'folder'),
-      doc(3, '/org/a/b/report'),
+      doc(3, '/org/a/b/report'),           // /org/a/b missing; nearest valid is /org/a
     );
     fixFilesWithBrokenPaths(c);
     expect(c.documents[2].path).toBe('/org/a/report');
   });
 
   it('handles multiple levels of missing ancestors', () => {
-    // /org/a, /org/a/b, /org/a/b/c all missing — deepest valid is /org
     const c = company(
       doc(1, '/org', 'folder'),
-      doc(2, '/org/a/b/c/report'),
+      doc(2, '/org/a/b/c/report'),         // /org/a, /org/a/b, /org/a/b/c all missing
     );
     fixFilesWithBrokenPaths(c);
     expect(c.documents[1].path).toBe('/org/report');
   });
 
-  it('skips folder-type documents', () => {
-    // A folder with a broken parent should be left alone
+  // ── Folder with broken parent ─────────────────────────────────────────────
+
+  it('moves a folder with a broken parent and cascades all its children', () => {
+    const c = company(
+      doc(1, '/org', 'folder'),
+      doc(2, '/org/missing/subfolder', 'folder'),  // /org/missing doesn't exist
+      doc(3, '/org/missing/subfolder/query'),
+    );
+    fixFilesWithBrokenPaths(c);
+    expect(c.documents.find(d => d.id === 2)!.path).toBe('/org/subfolder');
+    expect(c.documents.find(d => d.id === 3)!.path).toBe('/org/subfolder/query');
+  });
+
+  it('files already under a valid folder are not moved even if that folder had a broken parent', () => {
+    // /org/missing is missing, but after fixing /org/subfolder its child /query should stay put
     const c = company(
       doc(1, '/org', 'folder'),
       doc(2, '/org/missing/subfolder', 'folder'),
+      doc(3, '/org/missing/subfolder/query'),
+      doc(4, '/org/missing/subfolder/nested', 'folder'),
+      doc(5, '/org/missing/subfolder/nested/deep'),
     );
     fixFilesWithBrokenPaths(c);
-    expect(c.documents[1].path).toBe('/org/missing/subfolder');
+    const byId = (id: number) => c.documents.find(d => d.id === id)!.path;
+    expect(byId(2)).toBe('/org/subfolder');
+    expect(byId(3)).toBe('/org/subfolder/query');
+    expect(byId(4)).toBe('/org/subfolder/nested');
+    expect(byId(5)).toBe('/org/subfolder/nested/deep');
   });
 
+  // ── Slot conflicts ────────────────────────────────────────────────────────
+
   it('tries a higher ancestor when the nearest valid slot is already occupied', () => {
-    // /org/a/report already exists → nearest valid (/org/a) is occupied →
-    // fall back to /org/report
     const c = company(
       doc(1, '/org', 'folder'),
       doc(2, '/org/a', 'folder'),
-      doc(3, '/org/a/report'),       // occupies /org/a/report
-      doc(4, '/org/a/b/report'),     // nearest free slot must be /org/report
+      doc(3, '/org/a/report'),             // occupies /org/a/report
+      doc(4, '/org/a/b/report'),           // nearest free slot is /org/report
     );
     fixFilesWithBrokenPaths(c);
-    expect(c.documents[2].path).toBe('/org/a/report'); // doc 3 untouched
-    expect(c.documents[3].path).toBe('/org/report');
+    expect(c.documents.find(d => d.id === 3)!.path).toBe('/org/a/report'); // untouched
+    expect(c.documents.find(d => d.id === 4)!.path).toBe('/org/report');
   });
 
+  // ── /org fallback ─────────────────────────────────────────────────────────
+
   it('falls back to /org when no valid ancestor exists anywhere in the path', () => {
-    // /tutorial doesn't exist as a folder, but /org does
     const c = company(
       doc(1, '/org', 'folder'),
-      doc(2, '/tutorial/missing/report'),
+      doc(2, '/tutorial/missing/report'),  // /tutorial doesn't exist as a folder
     );
     fixFilesWithBrokenPaths(c);
-    expect(c.documents[1].path).toBe('/org/report');
+    expect(c.documents.find(d => d.id === 2)!.path).toBe('/org/report');
   });
 
   it('appends numeric suffix to resolve name collision in /org fallback', () => {
-    // /org/report is already taken; second file landing in /org should become /org/report_2
     const c = company(
       doc(1, '/org', 'folder'),
-      doc(2, '/org/report'),             // occupies /org/report
-      doc(3, '/tutorial/x/report'),      // falls back to /org, collision → suffix
+      doc(2, '/org/report'),               // occupies /org/report
+      doc(3, '/tutorial/x/report'),        // falls back to /org — collision → suffix
     );
     fixFilesWithBrokenPaths(c);
-    expect(c.documents[1].path).toBe('/org/report');   // untouched
-    expect(c.documents[2].path).toBe('/org/report_2');
+    expect(c.documents.find(d => d.id === 2)!.path).toBe('/org/report');
+    expect(c.documents.find(d => d.id === 3)!.path).toBe('/org/report_2');
   });
 
   it('leaves file unchanged when /org does not exist and no valid ancestor', () => {
-    // Only /tutorial exists; file is under /corp which has no valid folder at all
     const c = company(
-      doc(1, '/tutorial', 'folder'),
-      doc(2, '/corp/a/b/report'),
+      doc(1, '/tutorial', 'folder'),       // only /tutorial exists
+      doc(2, '/corp/a/b/report'),          // /corp not in path; /org missing
     );
     fixFilesWithBrokenPaths(c);
-    expect(c.documents[1].path).toBe('/corp/a/b/report');
+    expect(c.documents.find(d => d.id === 2)!.path).toBe('/corp/a/b/report');
   });
 
-  it('handles multiple broken files without cross-contaminating their destinations', () => {
+  // ── Multi-file edge cases ─────────────────────────────────────────────────
+
+  it('handles multiple broken files without cross-contaminating destinations', () => {
     const c = company(
       doc(1, '/org', 'folder'),
       doc(2, '/org/missing/file1'),
       doc(3, '/org/missing/file2'),
     );
     fixFilesWithBrokenPaths(c);
-    expect(c.documents[1].path).toBe('/org/file1');
-    expect(c.documents[2].path).toBe('/org/file2');
+    expect(c.documents.find(d => d.id === 2)!.path).toBe('/org/file1');
+    expect(c.documents.find(d => d.id === 3)!.path).toBe('/org/file2');
   });
 
   it('two broken files with the same name: second goes to next available ancestor', () => {
-    // Both want /org/a/report but /org/a/report is taken after the first move.
-    // Second should climb to /org/report.
     const c = company(
       doc(1, '/org', 'folder'),
       doc(2, '/org/a', 'folder'),
-      doc(3, '/org/a/x/report'),   // moves to /org/a/report (nearest free)
-      doc(4, '/org/a/y/report'),   // /org/a/report now taken → climbs to /org/report
+      doc(3, '/org/a/x/report'),           // moves to /org/a/report (nearest free)
+      doc(4, '/org/a/y/report'),           // /org/a/report now taken → climbs to /org/report
     );
     fixFilesWithBrokenPaths(c);
-    expect(c.documents[2].path).toBe('/org/a/report');
-    expect(c.documents[3].path).toBe('/org/report');
+    expect(c.documents.find(d => d.id === 3)!.path).toBe('/org/a/report');
+    expect(c.documents.find(d => d.id === 4)!.path).toBe('/org/report');
   });
 });

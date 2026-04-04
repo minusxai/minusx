@@ -6,6 +6,7 @@
 import { InitData, CompanyData } from './import-export';
 import { LATEST_DATA_VERSION, LATEST_SCHEMA_VERSION } from './constants';
 import { DEFAULT_STYLES } from '@/lib/branding/whitelabel';
+import { VALID_MODES } from '@/lib/mode/mode-types';
 
 export type DataMigration = (data: InitData) => InitData;
 export type SchemaMigration = null;  // Null means "recreate DB with new schema"
@@ -1109,37 +1110,48 @@ export const MIGRATIONS: MigrationEntry[] = [
 ];
 
 /**
- * For each non-folder document in a company whose immediate parent folder does not exist,
- * relocate it to the deepest valid ancestor folder that has a free slot for that file name.
- * If no valid ancestor exists anywhere in the path, fall back to /org (with a numeric suffix
- * to resolve any name collision). Mutates companyData.documents in place.
+ * For every document in a company whose path is invalid (missing parent folder, or sitting at
+ * a root segment that is not a recognised mode), relocate it to the deepest valid ancestor
+ * folder that has a free slot. Falls back to /org (with numeric suffix) when no ancestor exists.
+ * For folders, all descendants are cascade-updated before the folder itself is moved.
+ * Mutates companyData.documents in place.
  */
 export function fixFilesWithBrokenPaths(companyData: CompanyData): void {
-  // Build set of valid folder paths from existing folder documents
   const folderPaths = new Set<string>(
     companyData.documents.filter(d => d.type === 'folder').map(d => d.path)
   );
-  // Track all occupied paths so we can detect conflicts at the destination
   const allPaths = new Set<string>(companyData.documents.map(d => d.path));
 
+  // Process shallowest-first: a moved folder's new path is registered in folderPaths
+  // before we reach any of its children, so children resolve correctly in one pass.
+  companyData.documents.sort(
+    (a, b) => a.path.split('/').filter(Boolean).length - b.path.split('/').filter(Boolean).length
+  );
+
+  const validModeRoots = new Set<string>(VALID_MODES.map(m => `/${m}`));
+
   for (const doc of companyData.documents) {
-    if (doc.type === 'folder') continue;
-
     const parts = doc.path.split('/').filter(Boolean);
-    if (parts.length <= 1) continue; // at root level, nothing to check
 
-    const parentPath = '/' + parts.slice(0, -1).join('/');
-    if (folderPaths.has(parentPath)) continue; // parent exists — no fix needed
+    if (parts.length === 0) continue; // empty path — unrecoverable, skip
+
+    if (parts.length === 1) {
+      // Root-level: valid only when it is a folder at a recognised mode root (/org, /tutorial, /internals)
+      if (doc.type === 'folder' && validModeRoots.has(doc.path)) continue;
+      // Otherwise fall through — ancestor walk finds nothing, hitting the /org fallback
+    } else {
+      const parentPath = '/' + parts.slice(0, -1).join('/');
+      if (folderPaths.has(parentPath)) continue; // parent exists — no fix needed
+    }
 
     const fileName = parts[parts.length - 1];
 
     // Walk up from the immediate parent toward the root, looking for the deepest
     // valid folder that has an unoccupied slot for this file name.
-    // i represents the number of path segments in the candidate ancestor.
     let newPath: string | null = null;
     for (let i = parts.length - 2; i >= 1; i--) {
       const ancestorPath = '/' + parts.slice(0, i).join('/');
-      if (!folderPaths.has(ancestorPath)) continue; // not a valid folder, try higher
+      if (!folderPaths.has(ancestorPath)) continue;
       const candidatePath = ancestorPath + '/' + fileName;
       if (!allPaths.has(candidatePath)) {
         newPath = candidatePath;
@@ -1149,8 +1161,7 @@ export function fixFilesWithBrokenPaths(companyData: CompanyData): void {
     }
 
     if (newPath === null) {
-      // No valid ancestor found in the path — absolute fallback to /org.
-      // Use a numeric suffix to resolve any name collision there.
+      // Absolute fallback to /org with numeric suffix for collisions
       const fallback = '/org';
       if (folderPaths.has(fallback)) {
         let candidate = fallback + '/' + fileName;
@@ -1163,6 +1174,25 @@ export function fixFilesWithBrokenPaths(companyData: CompanyData): void {
     }
 
     if (newPath === null) continue; // /org doesn't exist either — truly unresolvable
+
+    // For folders: cascade path update to all descendants before moving self
+    if (doc.type === 'folder') {
+      const oldPrefix = doc.path + '/';
+      for (const other of companyData.documents) {
+        if (other.path.startsWith(oldPrefix)) {
+          const updatedPath = newPath + '/' + other.path.slice(oldPrefix.length);
+          allPaths.delete(other.path);
+          allPaths.add(updatedPath);
+          if (other.type === 'folder') {
+            folderPaths.delete(other.path);
+            folderPaths.add(updatedPath);
+          }
+          other.path = updatedPath;
+        }
+      }
+      folderPaths.delete(doc.path);
+      folderPaths.add(newPath);
+    }
 
     allPaths.delete(doc.path);
     allPaths.add(newPath);
