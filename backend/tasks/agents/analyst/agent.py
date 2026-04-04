@@ -296,32 +296,7 @@ class SlackAgent(AnalystAgent):
 
     def _get_system_message(self) -> dict:
         base = super()._get_system_message()["content"]
-        slack_addendum = """
-
-## Slack Execution Mode
-- You are replying inside Slack, not the web app.
-- Keep responses concise and readable in chat — aim for 3-5 lines max. Slack truncates long messages behind "See more".
-- Do not tell the user to click UI elements, navigate pages, or review drafts in the app unless absolutely necessary.
-- If the request is ambiguous, ask a direct question in your answer instead of using Clarify.
-- Only use tools that are actually available in this Slack mode.
-- Prefer answering analytically over making file edits.
-- If conversation history already exists in the log, do NOT re-introduce yourself. Continue the conversation naturally.
-- IMPORTANT: Do NOT use <thinking>, <answer>, or any other XML tags in your response. Write your reply as plain text only. The entire text of your response will be posted directly to Slack.
-- Also, Slack does not render table markdown, so always send tabular data in code blocks with appropriate formatting if you really need to show it.
-
-## Chart Visualization in Slack
-When running ExecuteQuery, include appropriate `vizSettings` so the results can be visualized as a chart image in Slack.
-- Use `bar` for comparisons across categories (e.g., revenue by month)
-- Use `line` for trends over time (e.g., daily users over 30 days)
-- Use `area` for cumulative/stacked trends
-- Use `pie` for proportional breakdowns (e.g., market share)
-- Use `scatter` for correlations between two numeric columns
-- Use `funnel` for sequential stage data (e.g., conversion funnel)
-- Use `table` (or omit vizSettings) when a chart would not add value — e.g., single-row results, lookups, or lists of text
-- Always set `xCols` and `yCols` appropriately when using a chart type
-- The chart image is rendered server-side and posted alongside your text reply — you do not need to mention the chart explicitly
-- You do not need to render viz for EVERY query, only when it adds value. For simple queries, viz settings can be empty object or table type. We only send 2 charts per response to avoid overwhelming the Slack thread.
-""".strip()
+        slack_addendum = get_prompt('slack_addendum')
         return {"role": "system", "content": f"{base}\n\n{slack_addendum}"}
 
     def _get_available_tools(self):
@@ -567,33 +542,14 @@ IMPORTANT: Use foreground=false for ALL ExecuteSQLQuery calls - this is a backgr
                 )
             queries_text = "\n".join(query_descriptions)
 
-        synthesis_prompt = f"""You are generating a report based on multiple data analyses.
-
-## Report: {self.report_name}
-
-## Individual Analyses:
-{analyses_text}
-
-## Available Interactive Charts
-You can embed interactive charts in your report using the syntax `{{{{query:TOOL_CALL_ID}}}}`.
-When you embed a chart, the frontend will render an interactive visualization that users can explore.
-
-Available queries:
-{queries_text or "No queries available"}
-
-**IMPORTANT**: Use `{{{{query:ID}}}}` syntax to embed charts inline in your report. This will render as an interactive visualization.
-Example: "Here's the revenue breakdown: {{{{query:mxgen_abc123}}}}"
-
-## Synthesis Instructions:
-{self.report_prompt or "Synthesize the analyses into a coherent executive summary. Highlight key findings, trends, and actionable insights."}
-
-## Your Task:
-Generate a well-structured markdown report that synthesizes all the analyses above. Include:
-1. An executive summary
-2. Key findings from each analysis with embedded charts where appropriate
-3. Overall insights and recommendations
-
-Format as clean markdown. Use the `{{{{query:ID}}}}` syntax to embed relevant charts inline."""
+        system_prompt = get_prompt('report_synthesis.system')
+        synthesis_prompt = get_prompt(
+            'report_synthesis.user',
+            report_name=self.report_name,
+            analyses_text=analyses_text,
+            queries_text=queries_text or "No queries available",
+            report_prompt=self.report_prompt or "Synthesize the analyses into a coherent executive summary. Highlight key findings, trends, and actionable insights.",
+        )
 
         # Call LLM for synthesis
         llm_settings = LlmSettings(
@@ -604,7 +560,7 @@ Format as clean markdown. Use the `{{{{query:ID}}}}` syntax to embed relevant ch
         response, _ = await allm_request(
             ALLMRequest(
                 messages=[
-                    {"role": "system", "content": "You are an expert report writer who synthesizes data analyses into clear, actionable reports."},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": synthesis_prompt}
                 ],
                 llmSettings=llm_settings,
