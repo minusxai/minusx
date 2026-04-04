@@ -1,9 +1,12 @@
 """Test prompt loading and composition."""
 
+import json
 import os
 import shutil
 from pathlib import Path
 from tasks.agents.analyst.prompt_loader import PromptLoader
+from tasks.agents.analyst.agent import AnalystAgent
+from tasks.llm.client import describe_tool
 
 
 def test_prompt_loader():
@@ -28,7 +31,8 @@ def test_prompt_loader():
             'context': 'This is a sample e-commerce database.',
             'connection_id': 'test-connection-123',
             'home_folder': '/org',
-            'max_steps': 10
+            'max_steps': 10,
+            'skills_catalog': AnalystAgent._build_skills_catalog()
         }
         user_variables = {
             'app_state': '{"fileType": "question", "query": "SELECT * FROM orders"}',
@@ -39,8 +43,8 @@ def test_prompt_loader():
 
         prompts_to_test = [
             {
-                'id': 'native.system',
-                'filename': 'native_system.txt',
+                'id': 'default.system',
+                'filename': 'system.txt',
                 'variables': system_variables,
                 'assertions': [
                     ('MinusX', 'Agent name'),
@@ -55,8 +59,8 @@ def test_prompt_loader():
                 ]
             },
             {
-                'id': 'native.user',
-                'filename': 'native_user.txt',
+                'id': 'default.user',
+                'filename': 'user.txt',
                 'variables': user_variables,
                 'assertions': [
                     ('fileType', 'App state'),

@@ -12,8 +12,11 @@ from tasks.llm.client import allm_request as real_allm_request, describe_tool
 from tasks.llm.models import ALLMRequest, LlmSettings, UserInfo
 from tasks.llm.config import ANALYST_V2_MODEL, MAX_STEPS_LOWER_LEVEL
 from .tools import SearchDBSchema, SearchFiles, Clarify, Navigate, CreateFile
-from .tools import ReadFiles, EditFile, ExecuteQuery, PublishAll
-from .prompt_loader import get_prompt
+from .tools import ReadFiles, EditFile, ExecuteQuery, PublishAll, LoadSkill
+from .prompt_loader import get_prompt, list_skills
+
+# Skills preloaded into the system prompt (not listed in LoadSkill catalog)
+PRELOADED_SKILLS = {"questions", "dashboards", "contexts", "explore"}
 
 
 # Mock LLM request if LLM_MOCK_URL is set (for testing)
@@ -100,18 +103,29 @@ class AnalystAgent(Agent):
 
         self.child_count = len(child_batches)
 
+    @staticmethod
+    def _build_skills_catalog() -> str:
+        """Generate the LoadSkill catalog from skill definitions, excluding preloaded skills."""
+        skills = list_skills()
+        lines = []
+        for name, description in skills.items():
+            if name not in PRELOADED_SKILLS:
+                lines.append(f'  - `"{name}"` — {description}')
+        return "\n".join(lines)
+
     def _get_system_message(self) -> dict:
         """Generate system message with schema and context."""
         max_steps = MAX_STEPS_LOWER_LEVEL - 5  # Safety margin
 
         content = get_prompt(
-            'native.system',
+            'default.system',
             schema=self.schema,
             context=self.context,
             connection_id=self.connection_id,
             home_folder=self.home_folder,
             max_steps=max_steps,
-            agent_name=self.agent_name
+            agent_name=self.agent_name,
+            skills_catalog=self._build_skills_catalog()
         )
         return {"role": "system", "content": content}
 
@@ -136,7 +150,7 @@ class AnalystAgent(Agent):
         attachments_str = self._format_attachments()
 
         content = get_prompt(
-            'native.user',
+            'default.user',
             app_state=app_state_str,
             goal=self.goal,
             current_date=time.strftime("%Y-%m-%d"),
@@ -158,7 +172,7 @@ class AnalystAgent(Agent):
         if len(self.tool_thread) >= MAX_STEPS_LOWER_LEVEL - 5:
             return []
 
-        return [ReadFiles, EditFile, ExecuteQuery, PublishAll, Navigate, Clarify, SearchDBSchema, SearchFiles, CreateFile]
+        return [ReadFiles, EditFile, ExecuteQuery, PublishAll, Navigate, Clarify, SearchDBSchema, SearchFiles, CreateFile, LoadSkill]
 
     def _get_history(self):
         previous_root_tasks = self._orchestrator.get_previous_root_tasks()

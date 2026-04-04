@@ -7,6 +7,41 @@ import json
 from tasks.agents.analyst.file_schema import (
     vizSettingsJsonStr, ATLAS_FILE_SCHEMA_JSON,
 )
+from tasks.agents.analyst.prompt_loader import get_skill, list_skills
+
+@register_agent
+class LoadSkill(Tool):
+    """Load detailed instructions for a specific domain (e.g., alerts, reports, parameters, visualizations, composed_questions).
+
+    Use this before working with file types or features you need more context on.
+    Returns the full skill content as a tool result — no round-trip to the frontend.
+    """
+
+    def __init__(
+        self,
+        name: str = Field(..., description="Skill name to load (e.g., 'alerts', 'reports'). See the skills catalog in the system prompt for the full list."),
+        **kwargs
+    ):
+        super().__init__(**kwargs)  # type: ignore
+        self.name = name
+
+    async def reduce(self, child_batches):
+        pass
+
+    async def run(self) -> str:
+        content = get_skill(self.name)
+        if content is None:
+            available = list(list_skills().keys())
+            return json.dumps({
+                'success': False,
+                'error': f"Skill '{self.name}' not found. Available skills: {available}"
+            })
+        return json.dumps({
+            'success': True,
+            'skill': self.name,
+            'content': content
+        })
+
 
 @register_agent
 class SearchDBSchema(Tool):
