@@ -12,7 +12,7 @@ import JsonEditor from '../slides/JsonEditor';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectMergedContent, selectIsDirty, setEphemeral, addQuestionToDashboard, isVirtualFileId, removeVirtualFile } from '@/store/filesSlice';
 import { editFile } from '@/lib/api/file-state';
-import { openFileModal, selectDashboardEditMode, selectFileViewMode } from '@/store/uiSlice';
+import { pushView, selectDashboardEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
 import { shallowEqual } from 'react-redux';
@@ -385,7 +385,7 @@ export default function DashboardView({
             showTitle={true}
             editMode={editMode}
             index={index}
-            onEdit={editMode ? () => dispatch(openFileModal(questionId)) : undefined}
+            onEdit={editMode ? () => dispatch(pushView({ type: 'question', fileId: questionId })) : undefined}
             onRemove={() => handleRemoveQuestion(questionId.toString())}
           />
         </Box>
@@ -518,6 +518,7 @@ export default function DashboardView({
                     }}
                     excludedIds={questionIds}
                     title="Let's add some questions!"
+                    dashboardId={fileId}
                   />
                 </Box>
               </Box>
@@ -533,6 +534,7 @@ export default function DashboardView({
                   }}
                   excludedIds={questionIds}
                   title="Add more questions"
+                  dashboardId={fileId}
                 />
               </Box>
             )}

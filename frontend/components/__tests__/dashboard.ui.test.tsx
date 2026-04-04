@@ -18,34 +18,6 @@
 
 // Must be hoisted before any module imports
 
-// Stub the Chakra Dialog + Portal shell of CreateQuestionModal to avoid JSDOM
-// incompatibilities (focus-trap, Portal rendering) while keeping the real
-// CreateQuestionModalContainer — which contains all application logic
-// (createVirtualFile, editFile, onQuestionCreated flow) — fully intact.
-jest.mock('@/components/modals/CreateQuestionModal', () => {
-  const React = require('react');
-  return {
-    __esModule: true,
-    default: ({ isOpen, onClose, onQuestionCreated, folderPath, questionId }: any) => {
-      if (!isOpen) return null;
-      // Lazy require avoids circular-dep issues at factory evaluation time.
-      const { default: Container } = require('@/components/modals/CreateQuestionModalContainer');
-      return React.createElement(
-        'section',
-        { role: 'dialog', 'aria-label': 'Create question' },
-        React.createElement(Container, {
-          isOpen,
-          onClose,
-          onQuestionCreated,
-          folderPath,
-          questionId,
-          onAttemptCloseRef: { current: null },
-        })
-      );
-    },
-  };
-});
-
 jest.mock('@/lib/database/db-config', () => {
   const path = require('path');
   return {
@@ -87,6 +59,7 @@ import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { publishAll } from '@/lib/api/file-state';
 import type { DashboardContent } from '@/lib/types.gen';
 import { renderWithProviders } from '@/test/helpers/render-with-providers';
+import { renderFilePage } from '@/test/helpers/render-file-page';
 import { waitForReduxState, waitForConversationFinished } from '@/test/helpers/redux-wait';
 import FileHeader from '@/components/FileHeader';
 import DashboardContainerV2 from '@/components/containers/DashboardContainerV2';
@@ -889,6 +862,8 @@ describe('Combined flow: new dashboard with question from scratch', () => {
     testStore = storeModule.makeStore();
     getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
 
+    // Clear any leftover queued values from a previous test before pinning new ones.
+    (filesSliceModule.generateVirtualId as jest.Mock).mockClear();
     // Pin generateVirtualId: Navigate gets DASH_VID, CreateFile gets Q_VID.
     (filesSliceModule.generateVirtualId as jest.Mock)
       .mockReturnValueOnce(DASH_VID)
@@ -1007,10 +982,10 @@ describe('Combined flow: new dashboard with question from scratch', () => {
     );
 
     testStore.dispatch(setDashboardEditMode({ fileId: DASH_VID, editMode: true }));
-    renderWithProviders(<DashboardContainerV2 fileId={DASH_VID} />, { store: testStore });
+    renderFilePage(<DashboardContainerV2 fileId={DASH_VID} />, testStore);
 
     // QuestionBrowserPanel is visible in edit mode — click "Create New Question".
-    // This opens the real CreateQuestionModal (Portal + Dialog stubs make it render inline).
+    // This pushes a create-question layer onto the ViewStack (rendered inside FileLayout).
     const createBtn = await screen.findByLabelText('Create New Question');
     await user.click(createBtn);
 

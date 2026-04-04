@@ -23,7 +23,8 @@ import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { DbFile } from '@/lib/types';
 import { useFolder, useAppState } from '@/lib/hooks/file-state-hooks';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
-import { setLeftSidebarCollapsed } from '@/store/uiSlice';
+import { setLeftSidebarCollapsed, selectViewStackDepth } from '@/store/uiSlice';
+import ViewStackOverlay from './ViewStack';
 import { useEffect } from 'react';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 
@@ -82,6 +83,7 @@ export default function FileLayout(props: FileLayoutProps) {
   const shouldShowBottomBar = fileType === 'question' && !isMobile
   const metadata = getFileTypeMetadata(fileType);
   const dispatch = useAppDispatch();
+  const viewStackDepth = useAppSelector(selectViewStackDepth);
 
   // Get current app state for database name (for question pages)
   const { appState, loading: appStateLoading } = useAppState();
@@ -98,31 +100,46 @@ export default function FileLayout(props: FileLayoutProps) {
     overflow={metadata.h === '100vh' ? 'hidden' : 'visible'}
     >
       <VStack flex="1" minW="0" position="relative" align="stretch" overflow={metadata.h === '100vh' ? 'hidden' : 'visible'} minHeight="0">
-        <VStack maxW="100%" flex="1" mx="0"
-            px={{ base: 4, md: 8, lg: 12 }}
-            pt={{ base: 3, md: 4, lg: 5 }}
-            pb={shouldShowBottomBar ? 0 : { base: 4, md: 6, lg: 8 }}
-            align="stretch" overflow="hidden" minHeight="0">
-          <Flex justify="space-between" align="center" mb={4} gap={4}>
-            <Box flex="1" minW={0}>
-              <Breadcrumb
-                items={breadcrumbItems}
-                siblingFiles={fileId ? siblingFiles : undefined}
-                currentFileId={fileId}
-              />
-            </Box>
-          </Flex>
-          {content}
-        </VStack>
-        {/* Sticky search bar container - only when bottom bar is not shown */}
-        {!shouldShowBottomBar && shouldShowRightSidebar && rightSidebar && rightSidebar.showChat && (
-          <SearchBar filePath={rightSidebar.filePath} databaseName={appStateDatabaseName} />
-        )}
+        {/* Dim base content when a stack layer is active */}
+        <Box
+          flex="1"
+          minHeight="0"
+          display="flex"
+          flexDirection="column"
+          overflow="hidden"
+          opacity={viewStackDepth > 0 ? 0.3 : 1}
+          transition="opacity 0.2s ease"
+          pointerEvents={viewStackDepth > 0 ? 'none' : 'auto'}
+        >
+          <VStack maxW="100%" flex="1" mx="0"
+              px={{ base: 4, md: 8, lg: 12 }}
+              pt={{ base: 3, md: 4, lg: 5 }}
+              pb={shouldShowBottomBar ? 0 : { base: 4, md: 6, lg: 8 }}
+              align="stretch" overflow="hidden" minHeight="0">
+            <Flex justify="space-between" align="center" mb={4} gap={4}>
+              <Box flex="1" minW={0}>
+                <Breadcrumb
+                  items={breadcrumbItems}
+                  siblingFiles={fileId ? siblingFiles : undefined}
+                  currentFileId={fileId}
+                />
+              </Box>
+            </Flex>
+            {content}
+          </VStack>
+          {/* Sticky search bar container - only when bottom bar is not shown */}
+          {!shouldShowBottomBar && shouldShowRightSidebar && rightSidebar && rightSidebar.showChat && (
+            <SearchBar filePath={rightSidebar.filePath} databaseName={appStateDatabaseName} />
+          )}
 
-        {/* Bottom bar for question page - includes search bar */}
-        {shouldShowBottomBar && (
-          <BottomBar showChat={rightSidebar?.showChat} filePath={rightSidebar?.filePath} databaseName={appStateDatabaseName} />
-        )}
+          {/* Bottom bar for question page - includes search bar */}
+          {shouldShowBottomBar && (
+            <BottomBar showChat={rightSidebar?.showChat} filePath={rightSidebar?.filePath} databaseName={appStateDatabaseName} />
+          )}
+        </Box>
+
+        {/* Content stack — absolute overlay, clipped to this VStack */}
+        <ViewStackOverlay />
       </VStack>
       {shouldShowRightSidebar && rightSidebar && (
         <>

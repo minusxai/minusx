@@ -3,6 +3,10 @@ import { IS_DEV } from '@/lib/constants';
 import type { RootState } from './store';
 import type { Attachment } from '@/lib/types';
 
+export type ViewStackItem =
+  | { type: 'question'; fileId: number }
+  | { type: 'create-question'; folderPath: string; dashboardId: number };
+
 interface UIState {
   leftSidebarCollapsed: boolean;
   rightSidebarCollapsed: boolean;
@@ -25,6 +29,7 @@ interface UIState {
   sidebarDrafts: Record<number, string>;  // fileId -> draft input text
   proposedQueries: Record<number, string>;  // fileId -> proposed SQL query (for diff view)
   modalFile: { fileId: number; state: 'ACTIVE' | 'COLLAPSED' } | null;
+  viewStack: ViewStackItem[];
   chatAttachments: Attachment[];
 }
 
@@ -50,6 +55,7 @@ const initialState: UIState = {
   sidebarDrafts: {},
   proposedQueries: {},
   modalFile: null,
+  viewStack: [],
   chatAttachments: [],
 };
 
@@ -181,6 +187,15 @@ const uiSlice = createSlice({
     expandFileModal: (state) => {
       if (state.modalFile) state.modalFile.state = 'ACTIVE';
     },
+    pushView: (state, action: PayloadAction<ViewStackItem>) => {
+      state.viewStack.push(action.payload);
+    },
+    popView: (state) => {
+      state.viewStack.pop();
+    },
+    clearViewStack: (state) => {
+      state.viewStack = [];
+    },
     addChatAttachment: (state, action: PayloadAction<Attachment>) => {
       state.chatAttachments.push(action.payload);
     },
@@ -237,6 +252,9 @@ export const {
   removeChatAttachment,
   clearChatAttachments,
   setBulkUiFlags,
+  pushView,
+  popView,
+  clearViewStack,
 } = uiSlice.actions;
 
 export default uiSlice.reducer;
@@ -283,3 +301,7 @@ export const selectProposedQuery = (state: RootState, fileId: number | undefined
   fileId ? state.ui.proposedQueries[fileId] : undefined;
 export const selectModalFile = (state: RootState) => state.ui.modalFile;
 export const selectChatAttachments = (state: RootState) => state.ui.chatAttachments;
+export const selectViewStack = (state: RootState) => state.ui.viewStack;
+export const selectTopView = (state: RootState): ViewStackItem | undefined =>
+  state.ui.viewStack[state.ui.viewStack.length - 1];
+export const selectViewStackDepth = (state: RootState) => state.ui.viewStack.length;
