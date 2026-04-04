@@ -9,13 +9,14 @@ import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { setFile } from '@/store/filesSlice';
 import { FilesAPI } from '@/lib/data/files';
-import CreateQuestionModal from './modals/CreateQuestionModal';
+import { pushView } from '@/store/uiSlice';
 
 interface QuestionBrowserPanelProps {
   folderPath: string;
   onAddQuestion: (questionId: number) => void;
   excludedIds?: number[];
   title?: string;
+  dashboardId?: number;
 }
 
 // Local display type that includes metadata (name) + content
@@ -29,10 +30,10 @@ export const QuestionBrowserPanel = ({
   onAddQuestion,
   excludedIds = [],
   title,
+  dashboardId,
 }: QuestionBrowserPanelProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [questionsMap, setQuestionsMap] = useState<Record<number, QuestionDisplay>>({});
-  const [createModalOpen, setCreateModalOpen] = useState(false);
   const filesInRedux = useAppSelector(state => state.files.files);
   const dispatch = useAppDispatch();
 
@@ -142,7 +143,9 @@ export const QuestionBrowserPanel = ({
           width="100%"
           onClick={(e) => {
             e.stopPropagation();
-            setCreateModalOpen(true);
+            if (dashboardId !== undefined) {
+              dispatch(pushView({ type: 'create-question', folderPath, dashboardId }));
+            }
           }}
           colorPalette="teal"
           gap={2}
@@ -233,13 +236,6 @@ export const QuestionBrowserPanel = ({
             </Box>
         )}
 
-      {/* Create Question Modal */}
-      <CreateQuestionModal
-        isOpen={createModalOpen}
-        onClose={() => setCreateModalOpen(false)}
-        onQuestionCreated={onAddQuestion}
-        folderPath={folderPath}
-      />
     </VStack>
   );
 };
