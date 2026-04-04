@@ -85,6 +85,7 @@ ALTER TABLE query_execution_events ADD COLUMN IF NOT EXISTS company_id    INTEGE
 `;
 
 // Track which absolute paths have already had initSchema run (idempotent guard)
+// eslint-disable-next-line no-restricted-syntax -- keyed by absolute file path (unique per company by directory layout)
 const initializedPaths = new Set<string>();
 
 // Convert legacy ? placeholders to $1, $2, ... (DuckDB prepared statement syntax)

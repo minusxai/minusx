@@ -19,6 +19,14 @@ const BASE_RESTRICTED_SYNTAX = [
     selector: "MemberExpression[object.name='process'][property.name='env']",
     message: "Do not access process.env directly. Import from lib/config.ts (server-only vars) or lib/constants.ts (client-safe NEXT_PUBLIC_* vars) instead.",
   },
+  {
+    selector: "Program > VariableDeclaration NewExpression[callee.name='Map']",
+    message: "Module-level Maps are shared across all requests and tenants. For mutable caches: ensure keys include companyId+mode, then add eslint-disable-next-line with justification. For immutable constants: use immutableMap() from lib/utils/immutable-collections instead of new Map().",
+  },
+  {
+    selector: "Program > VariableDeclaration NewExpression[callee.name='Set']",
+    message: "Module-level Sets are shared across all requests. For mutable state: add eslint-disable-next-line with justification. For immutable constants: use immutableSet() from lib/utils/immutable-collections instead of new Set().",
+  },
 ];
 
 const eslintConfig = defineConfig([

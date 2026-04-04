@@ -3,6 +3,7 @@
 import { Box, Text, HStack, Input, Portal, createListCollection } from '@chakra-ui/react';
 import { LuClock } from 'react-icons/lu';
 import { SelectRoot, SelectTrigger, SelectPositioner, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
+import { immutableSet } from '@/lib/utils/immutable-collections';
 
 const CRON_PRESETS = [
   { value: '0 9 * * *',   label: 'Daily at 9am' },
@@ -13,7 +14,7 @@ const CRON_PRESETS = [
   { value: '__custom__',  label: 'Custom Schedule' },
 ];
 
-const CRON_PRESET_VALUES = new Set(
+const CRON_PRESET_VALUES = immutableSet(
   CRON_PRESETS.filter(p => p.value !== '__custom__').map(p => p.value)
 );
 

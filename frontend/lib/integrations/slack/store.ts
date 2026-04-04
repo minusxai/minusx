@@ -144,6 +144,7 @@ export async function getOrCreateSlackConversationId(
 // Acceptable for single-instance deployments; Slack retries are infrequent.
 // ============================================================================
 
+// eslint-disable-next-line no-restricted-syntax -- Slack event IDs are globally unique (assigned by Slack), dedup is cross-company safe
 const processedEventIds = new Set<string>();
 const MAX_DEDUP_SIZE = 500;
 

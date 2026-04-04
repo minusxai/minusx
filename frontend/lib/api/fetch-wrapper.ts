@@ -8,12 +8,15 @@ type CacheEntry<T> = {
   promise?: Promise<T>;  // For deduplication
 };
 
+// eslint-disable-next-line no-restricted-syntax -- client-side only, keyed by URL (company-scoped by definition)
 const cache = new Map<string, CacheEntry<any>>();
 
 // In-flight requests map for deduplication
+// eslint-disable-next-line no-restricted-syntax -- client-side only, keyed by URL (company-scoped by definition)
 const inFlightRequests = new Map<string, Promise<any>>();
 
 // AbortController map for request cancellation
+// eslint-disable-next-line no-restricted-syntax -- client-side only, keyed by URL (company-scoped by definition)
 const abortControllers = new Map<string, AbortController>();
 
 /**

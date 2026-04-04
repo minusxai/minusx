@@ -25,9 +25,11 @@ interface McpSession {
   logger: McpSessionLogger;
 }
 
+/* eslint-disable no-restricted-syntax -- safe: keyed by crypto.randomUUID(), auth-gated before access */
 const sessions: Map<string, McpSession> = (
   (globalThis as Record<string, unknown>).__mcpSessions ??= new Map<string, McpSession>()
 ) as Map<string, McpSession>;
+/* eslint-enable no-restricted-syntax */
 
 // Clean up stale sessions every 30 minutes
 const CLEANUP_INTERVAL = 30 * 60 * 1000;

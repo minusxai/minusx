@@ -62,7 +62,9 @@ async function applyNoneParams(
 const QUERY_CACHE_TTL_MS = 60_000; // 60 seconds, hardcoded
 
 interface CacheEntry { result: QueryResult; cachedAt: number; }
+// eslint-disable-next-line no-restricted-syntax -- tenant-isolated: keys are `${companyId}:${mode}:${queryHash}`
 const queryCache = new Map<string, CacheEntry>();
+// eslint-disable-next-line no-restricted-syntax -- tenant-isolated: keys are `${companyId}:${mode}:${queryHash}`
 const queryInflight = new Map<string, Promise<QueryResult>>();
 
 // Evict stale entries every 5 minutes

@@ -21,6 +21,7 @@ import { captureError } from '@/lib/messaging/capture-error';
 
 // AbortController registry for managing conversation interruption
 // Key is conversation._id (stable internal ID that never changes)
+// eslint-disable-next-line no-restricted-syntax -- client-side Redux listener; AbortControllers are ephemeral, no data leakage
 const abortControllers = new Map<string, AbortController>();
 
 // API base URL - defaults to relative path in browser, absolute in Node/tests
