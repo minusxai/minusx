@@ -237,7 +237,7 @@ class SlackAgent(AnalystAgent):
 
 ## Slack Execution Mode
 - You are replying inside Slack, not the web app.
-- Keep responses concise and readable in chat.
+- Keep responses concise and readable in chat — aim for 3-5 lines max. Slack truncates long messages behind "See more".
 - Do not tell the user to click UI elements, navigate pages, or review drafts in the app unless absolutely necessary.
 - If the request is ambiguous, ask a direct question in your answer instead of using Clarify.
 - Only use tools that are actually available in this Slack mode.
