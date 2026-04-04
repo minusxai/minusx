@@ -1,11 +1,12 @@
 import { after, NextRequest, NextResponse } from 'next/server';
 import { getCompanyUserEffectiveUser } from '@/lib/auth/auth-helpers';
 import { runChatOrchestration } from '@/lib/chat/run-orchestration';
-import { addReaction, getConversationHistory, getSlackUserEmail, postSlackMessage, publishHomeView, removeReaction, verifySlackRequestSignature } from '@/lib/integrations/slack/api';
+import { addReaction, getConversationHistory, getSlackUserEmail, postSlackMessage, publishHomeView, removeReaction, uploadSlackFile, verifySlackRequestSignature } from '@/lib/integrations/slack/api';
 import { getSlackSigningSecret } from '@/lib/integrations/slack/config';
 import { buildSlackAgentArgs } from '@/lib/integrations/slack/context';
 import { resolveBaseUrl } from '@/lib/jobs/job-utils';
-import { extractSlackReply, markdownToSlackMrkdwn, buildSlackReplyBlocks, normalizeSlackPrompt } from '@/lib/integrations/slack/messages';
+import { extractSlackReply, extractQueryCharts, markdownToSlackMrkdwn, buildSlackReplyBlocks, normalizeSlackPrompt } from '@/lib/integrations/slack/messages';
+import { renderChartToPng } from '@/lib/chart/render-chart';
 import { buildHomeView, buildWelcomeBlocks, shouldSendWelcome } from '@/lib/integrations/slack/welcome';
 import {
   findSlackInstallationByTeam,
@@ -63,6 +64,7 @@ async function postErrorReply(
 export async function processSlackEvent(
   payload: SlackEventEnvelope,
   installation: SlackInstallationMatch,
+  publicBaseUrl?: string,
 ): Promise<void> {
   const ev = payload.event;
   const eventId = payload.event_id;
@@ -175,11 +177,11 @@ export async function processSlackEvent(
 
     if (slackReply) {
       const mrkdwnText = markdownToSlackMrkdwn(slackReply.text);
-      const baseUrl = await resolveBaseUrl(installation.companyId);
+      const baseUrl = publicBaseUrl ?? await resolveBaseUrl(installation.companyId);
       const viewUrl = `${baseUrl}/explore/${conversationId}`;
+
       const blocks = buildSlackReplyBlocks({
         text: mrkdwnText,
-        // images: ['https://docsv2.minusx.ai/dark/dashboard.png'],
         viewUrl,
       });
 
@@ -189,6 +191,25 @@ export async function processSlackEvent(
         thread_ts: threadTs,
         blocks,
       });
+
+      // Render and upload chart images (max 2) into the thread
+      const queryCharts = extractQueryCharts(result.logDiff);
+      for (const chart of queryCharts) {
+        try {
+          const chartPng = await renderChartToPng(chart.queryResult, chart.vizSettings);
+          if (chartPng) {
+            const { fileId } = await uploadSlackFile(installation.bot.bot_token, {
+              channel: ev.channel,
+              threadTs,
+              filename: 'chart.png',
+              fileData: chartPng,
+            });
+            console.log(`[Slack] Chart uploaded to thread: ${fileId}`);
+          }
+        } catch (err) {
+          console.warn('[Slack] Chart rendering/upload failed:', err);
+        }
+      }
     } else {
       await postSlackMessage(installation.bot.bot_token, {
         channel: ev.channel,
@@ -260,7 +281,13 @@ export async function POST(request: NextRequest) {
 
   // Process asynchronously so Slack doesn't time out waiting for the agent
   // processSlackEvent handles event deduplication internally via reserveSlackEvent
-  after(() => processSlackEvent(payload, installation));
+  const forwardedProto = (request.headers.get('x-forwarded-proto') || request.nextUrl.protocol.replace(':', '') || 'https')
+    .split(',')[0]
+    .trim();
+  const host = request.headers.get('host') || request.nextUrl.host;
+  const publicBaseUrl = `${forwardedProto}://${host}`;
+
+  after(() => processSlackEvent(payload, installation, publicBaseUrl));
 
   return NextResponse.json({ ok: true });
 }

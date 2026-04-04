@@ -1,6 +1,7 @@
 import 'server-only';
 import { combineContent, parseThinkingAnswer } from '@/lib/utils/xml-parser';
-import type { ConversationLogEntry } from '@/lib/types';
+import type { ConversationLogEntry, QueryResult } from '@/lib/types';
+import type { VizSettings } from '@/lib/types.gen';
 
 // ── Markdown → Slack mrkdwn conversion ───────────────────────────────────────
 
@@ -230,4 +231,84 @@ export function buildSlackReplyBlocks(options: SlackReplyBlocksOptions): unknown
   }
 
   return blocks;
+}
+
+// ── Query chart extraction ───────────────────────────────────────────────────
+
+const RENDERABLE_CHART_TYPES = new Set(['line', 'bar', 'area', 'scatter', 'pie', 'funnel']);
+
+export interface QueryChart {
+  queryResult: QueryResult;
+  vizSettings: VizSettings;
+}
+
+/**
+ * Extract renderable charts from an orchestration logDiff.
+ *
+ * Scans for ExecuteQuery tool calls that have:
+ * - A non-table/pivot vizSettings
+ * - A successful query result with rows
+ *
+ * Returns the last `maxCharts` renderable charts (most recent first).
+ * Returns empty array if none found.
+ */
+export function extractQueryCharts(log: ConversationLogEntry[], maxCharts: number = 2): QueryChart[] {
+  // Build a map of task unique_id → args for ExecuteQuery tasks
+  const executeQueryTasks = new Map<string, { vizSettings?: string | VizSettings }>();
+
+  for (const entry of log) {
+    if (entry._type === 'task' && entry.agent === 'ExecuteQuery') {
+      executeQueryTasks.set(entry.unique_id, {
+        vizSettings: entry.args?.vizSettings,
+      });
+    }
+  }
+
+  if (executeQueryTasks.size === 0) return [];
+
+  // Scan results in reverse to find the last renderable charts
+  const charts: QueryChart[] = [];
+
+  for (let i = log.length - 1; i >= 0; i--) {
+    if (charts.length >= maxCharts) break;
+
+    const entry = log[i];
+    if (entry._type !== 'task_result') continue;
+
+    const taskArgs = executeQueryTasks.get(entry._task_unique_id);
+    if (!taskArgs) continue;
+
+    // Extract QueryResult from details (full rows)
+    const details = entry.details as { queryResult?: QueryResult } | undefined;
+    const queryResult = details?.queryResult;
+    if (!queryResult?.rows?.length || !queryResult?.columns?.length) continue;
+
+    // Parse vizSettings
+    let vizSettings: VizSettings | undefined;
+    if (taskArgs.vizSettings) {
+      if (typeof taskArgs.vizSettings === 'string') {
+        try {
+          vizSettings = JSON.parse(taskArgs.vizSettings);
+        } catch {
+          continue;
+        }
+      } else {
+        vizSettings = taskArgs.vizSettings as VizSettings;
+      }
+    }
+
+    // Skip non-renderable types
+    if (!vizSettings || !RENDERABLE_CHART_TYPES.has(vizSettings.type)) continue;
+
+    charts.push({ queryResult, vizSettings });
+  }
+
+  // Reverse so they're in chronological order (oldest first)
+  return charts.reverse();
+}
+
+/** @deprecated Use extractQueryCharts instead */
+export function extractQueryChart(log: ConversationLogEntry[]): QueryChart | null {
+  const charts = extractQueryCharts(log, 1);
+  return charts[0] ?? null;
 }

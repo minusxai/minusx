@@ -9,7 +9,7 @@
  *   3. Auto-dispatched TalkToUser (text alongside tool_calls) → completed_tool_calls[].content = { success: true, content_blocks: [{ type: 'text', text: '...' }] }
  */
 
-import { extractSlackReply, markdownToSlackMrkdwn, buildSlackReplyBlocks } from '@/lib/integrations/slack/messages';
+import { extractSlackReply, markdownToSlackMrkdwn, buildSlackReplyBlocks, extractQueryChart, extractQueryCharts } from '@/lib/integrations/slack/messages';
 import type { ConversationLogEntry } from '@/lib/types';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -353,5 +353,160 @@ describe('buildSlackReplyBlocks', () => {
   it('skips images and button when not provided', () => {
     const blocks = buildSlackReplyBlocks({ text: 'Simple reply.' });
     expect(blocks).toHaveLength(1);
+  });
+});
+
+// ── extractQueryChart ────────────────────────────────────────────────────────
+
+describe('extractQueryChart', () => {
+  function executeQueryTask(uniqueId: string, vizSettings?: string | object): ConversationLogEntry {
+    return {
+      _type: 'task',
+      agent: 'ExecuteQuery',
+      args: {
+        query: 'SELECT * FROM t',
+        connectionId: 'db1',
+        vizSettings: typeof vizSettings === 'object' ? JSON.stringify(vizSettings) : vizSettings,
+      },
+      unique_id: uniqueId,
+      _run_id: 'run1',
+      created_at: new Date().toISOString(),
+    } as unknown as ConversationLogEntry;
+  }
+
+  function executeQueryResult(taskUniqueId: string, queryResult: object): ConversationLogEntry {
+    return {
+      _type: 'task_result',
+      _task_unique_id: taskUniqueId,
+      result: { success: true },
+      details: { success: true, queryResult },
+      created_at: new Date().toISOString(),
+    } as unknown as ConversationLogEntry;
+  }
+
+  const sampleQueryResult = {
+    columns: ['month', 'revenue'],
+    types: ['VARCHAR', 'INTEGER'],
+    rows: [{ month: 'Jan', revenue: 100 }, { month: 'Feb', revenue: 200 }],
+  };
+
+  it('extracts a bar chart from ExecuteQuery with vizSettings', () => {
+    const log = [
+      executeQueryTask('eq1', { type: 'bar', xCols: ['month'], yCols: ['revenue'] }),
+      executeQueryResult('eq1', sampleQueryResult),
+    ];
+    const chart = extractQueryChart(log);
+    expect(chart).not.toBeNull();
+    expect(chart!.vizSettings.type).toBe('bar');
+    expect(chart!.queryResult.rows).toHaveLength(2);
+  });
+
+  it('extracts line chart', () => {
+    const log = [
+      executeQueryTask('eq1', { type: 'line', xCols: ['month'], yCols: ['revenue'] }),
+      executeQueryResult('eq1', sampleQueryResult),
+    ];
+    expect(extractQueryChart(log)!.vizSettings.type).toBe('line');
+  });
+
+  it('returns null for table vizSettings', () => {
+    const log = [
+      executeQueryTask('eq1', { type: 'table' }),
+      executeQueryResult('eq1', sampleQueryResult),
+    ];
+    expect(extractQueryChart(log)).toBeNull();
+  });
+
+  it('returns null for pivot vizSettings', () => {
+    const log = [
+      executeQueryTask('eq1', { type: 'pivot' }),
+      executeQueryResult('eq1', sampleQueryResult),
+    ];
+    expect(extractQueryChart(log)).toBeNull();
+  });
+
+  it('returns null when no vizSettings provided', () => {
+    const log = [
+      executeQueryTask('eq1'),
+      executeQueryResult('eq1', sampleQueryResult),
+    ];
+    expect(extractQueryChart(log)).toBeNull();
+  });
+
+  it('returns null for empty rows', () => {
+    const log = [
+      executeQueryTask('eq1', { type: 'bar', xCols: ['month'], yCols: ['revenue'] }),
+      executeQueryResult('eq1', { columns: ['month'], types: ['VARCHAR'], rows: [] }),
+    ];
+    expect(extractQueryChart(log)).toBeNull();
+  });
+
+  it('returns the LAST renderable chart when multiple queries exist', () => {
+    const log = [
+      executeQueryTask('eq1', { type: 'bar', xCols: ['month'], yCols: ['revenue'] }),
+      executeQueryResult('eq1', sampleQueryResult),
+      executeQueryTask('eq2', { type: 'pie', xCols: ['month'], yCols: ['revenue'] }),
+      executeQueryResult('eq2', sampleQueryResult),
+    ];
+    const chart = extractQueryChart(log);
+    expect(chart!.vizSettings.type).toBe('pie');
+  });
+
+  it('skips non-renderable and returns the last renderable', () => {
+    const log = [
+      executeQueryTask('eq1', { type: 'bar', xCols: ['month'], yCols: ['revenue'] }),
+      executeQueryResult('eq1', sampleQueryResult),
+      executeQueryTask('eq2', { type: 'table' }),
+      executeQueryResult('eq2', sampleQueryResult),
+    ];
+    const chart = extractQueryChart(log);
+    expect(chart!.vizSettings.type).toBe('bar');
+  });
+
+  it('extractQueryCharts returns max 2 charts in chronological order', () => {
+    const log = [
+      executeQueryTask('eq1', { type: 'bar', xCols: ['month'], yCols: ['revenue'] }),
+      executeQueryResult('eq1', sampleQueryResult),
+      executeQueryTask('eq2', { type: 'line', xCols: ['month'], yCols: ['revenue'] }),
+      executeQueryResult('eq2', sampleQueryResult),
+      executeQueryTask('eq3', { type: 'pie', xCols: ['month'], yCols: ['revenue'] }),
+      executeQueryResult('eq3', sampleQueryResult),
+    ];
+    const charts = extractQueryCharts(log);
+    expect(charts).toHaveLength(2);
+    // Last 2 in chronological order
+    expect(charts[0].vizSettings.type).toBe('line');
+    expect(charts[1].vizSettings.type).toBe('pie');
+  });
+
+  it('extractQueryCharts skips non-renderable types', () => {
+    const log = [
+      executeQueryTask('eq1', { type: 'bar', xCols: ['month'], yCols: ['revenue'] }),
+      executeQueryResult('eq1', sampleQueryResult),
+      executeQueryTask('eq2', { type: 'table' }),
+      executeQueryResult('eq2', sampleQueryResult),
+      executeQueryTask('eq3', { type: 'line', xCols: ['month'], yCols: ['revenue'] }),
+      executeQueryResult('eq3', sampleQueryResult),
+    ];
+    const charts = extractQueryCharts(log);
+    expect(charts).toHaveLength(2);
+    expect(charts[0].vizSettings.type).toBe('bar');
+    expect(charts[1].vizSettings.type).toBe('line');
+  });
+
+  it('returns null when no ExecuteQuery in log', () => {
+    const log = [
+      taskEntry('Hello'),
+      taskResultWithContent('Hi there!'),
+    ];
+    expect(extractQueryChart(log)).toBeNull();
+  });
+
+  it('handles vizSettings as a JSON string', () => {
+    const log = [
+      executeQueryTask('eq1', '{"type":"scatter","xCols":["x"],"yCols":["y"]}'),
+      executeQueryResult('eq1', sampleQueryResult),
+    ];
+    expect(extractQueryChart(log)!.vizSettings.type).toBe('scatter');
   });
 });

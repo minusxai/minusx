@@ -8,6 +8,10 @@
  * No DOM required — safe for Node.js server contexts.
  */
 import * as echarts from 'echarts';
+import { SVGRenderer } from 'echarts/renderers';
+import { TitleComponent, LegendComponent, TooltipComponent, GridComponent } from 'echarts/components';
+import { BarChart, LineChart, PieChart, ScatterChart, FunnelChart } from 'echarts/charts';
+echarts.use([SVGRenderer, TitleComponent, LegendComponent, TooltipComponent, GridComponent, BarChart, LineChart, PieChart, ScatterChart, FunnelChart] as any);
 import { Resvg } from '@resvg/resvg-js';
 import sharp from 'sharp';
 import fs from 'fs';

@@ -244,6 +244,20 @@ class SlackAgent(AnalystAgent):
 - Prefer answering analytically over making file edits.
 - If conversation history already exists in the log, do NOT re-introduce yourself. Continue the conversation naturally.
 - IMPORTANT: Do NOT use <thinking>, <answer>, or any other XML tags in your response. Write your reply as plain text only. The entire text of your response will be posted directly to Slack.
+- Also, Slack does not render table markdown, so always send tabular data in code blocks with appropriate formatting if you really need to show it.
+
+## Chart Visualization in Slack
+When running ExecuteQuery, include appropriate `vizSettings` so the results can be visualized as a chart image in Slack.
+- Use `bar` for comparisons across categories (e.g., revenue by month)
+- Use `line` for trends over time (e.g., daily users over 30 days)
+- Use `area` for cumulative/stacked trends
+- Use `pie` for proportional breakdowns (e.g., market share)
+- Use `scatter` for correlations between two numeric columns
+- Use `funnel` for sequential stage data (e.g., conversion funnel)
+- Use `table` (or omit vizSettings) when a chart would not add value — e.g., single-row results, lookups, or lists of text
+- Always set `xCols` and `yCols` appropriately when using a chart type
+- The chart image is rendered server-side and posted alongside your text reply — you do not need to mention the chart explicitly
+- You do not need to render viz for EVERY query, only when it adds value. For simple queries, viz settings can be empty object or table type. We only send 2 charts per response to avoid overwhelming the Slack thread.
 """.strip()
         return {"role": "system", "content": f"{base}\n\n{slack_addendum}"}
 
