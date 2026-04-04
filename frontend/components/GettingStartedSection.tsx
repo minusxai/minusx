@@ -197,7 +197,7 @@ export default function GettingStartedSection() {
             label: 'Invite Team',
             description: 'Add team members',
             icon: LuUsers,
-            href: '/users',
+            href: '/settings?tab=users',
             isCompleted: hasInvitedUsers,
           },
         ] : []),
