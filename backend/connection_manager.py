@@ -11,6 +11,10 @@ class ConnectionManager:
     def __init__(self):
         self._connections: Dict[str, AsyncDatabaseConnector] = {}
 
+    def _cache_key(self, name: str, company_id: Optional[int], mode: Optional[str]) -> str:
+        """Build a cache key that includes company and mode for multi-tenant isolation."""
+        return f"{company_id}:{mode}:{name}"
+
     def get_connection(self, name: str) -> AsyncDatabaseConnector:
         """Get a connection by name"""
         if name not in self._connections:
@@ -87,9 +91,10 @@ class ConnectionManager:
             session_token: Session token for internal API authentication
             mode: Mode (org, tutorial, etc.) for mode-based isolation
         """
-        # Check cache first
-        if name in self._connections:
-            return self._connections[name]
+        # Check cache first — key includes company_id + mode to prevent cross-tenant hits
+        cache_key = self._cache_key(name, company_id, mode)
+        if cache_key in self._connections:
+            return self._connections[cache_key]
 
         # Not in cache - fetch config from Next.js
         print(f"[ConnectionManager] Initializing connection '{name}' for company {company_id} mode {mode} (fetching config from Next.js)")
@@ -108,7 +113,7 @@ class ConnectionManager:
             raise ValueError(f"Invalid connection config: {validation['errors']}")
 
         # Cache it
-        self._connections[name] = connector
+        self._connections[cache_key] = connector
         print(f"[ConnectionManager] ✅ Initialized and cached connection '{name}' (type: {conn_type})")
         return connector
 
