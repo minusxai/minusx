@@ -360,7 +360,7 @@ async def execute_sql_query(query_request: QueryRequest, request: Request):
 
 
 @app.post("/api/connections/{name}/initialize")
-async def initialize_connection(name: str, conn: ConnectionInitialize):
+async def initialize_connection(name: str, conn: ConnectionInitialize, request: Request):
     """Initialize a connection in-memory (called by Next.js)"""
     try:
         connector = get_async_connector(name, conn.type, conn.config)
@@ -369,8 +369,12 @@ async def initialize_connection(name: str, conn: ConnectionInitialize):
         if not validation['valid']:
             raise HTTPException(status_code=400, detail=validation['errors'])
 
-        # Add to connection manager
-        connection_manager._connections[name] = connector
+        # Use company_id + mode in cache key for multi-tenant isolation
+        company_id_header = request.headers.get('x-company-id')
+        company_id = int(company_id_header) if company_id_header else None
+        mode = request.headers.get('x-mode', 'org')
+        cache_key = connection_manager._cache_key(name, company_id, mode)
+        connection_manager._connections[cache_key] = connector
 
         # Get schema to return in response
         schema = await connector.get_schema()
@@ -389,10 +393,14 @@ async def initialize_connection(name: str, conn: ConnectionInitialize):
 
 
 @app.post("/api/connections/{name}/remove")
-async def remove_connection(name: str):
+async def remove_connection(name: str, request: Request):
     """Remove connection from memory"""
-    if name in connection_manager._connections:
-        del connection_manager._connections[name]
+    company_id_header = request.headers.get('x-company-id')
+    company_id = int(company_id_header) if company_id_header else None
+    mode = request.headers.get('x-mode', 'org')
+    cache_key = connection_manager._cache_key(name, company_id, mode)
+    if cache_key in connection_manager._connections:
+        del connection_manager._connections[cache_key]
     return {"success": True}
 
 

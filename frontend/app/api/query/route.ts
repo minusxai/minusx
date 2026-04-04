@@ -99,9 +99,11 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
     // Compute hash on raw inputs (matches client-side Redux hash key)
     const queryHash = getQueryHash(query, paramValues, database_name);
+    // Server cache key includes company+mode to prevent cross-tenant hits
+    const serverCacheKey = `${user.companyId}:${user.mode}:${queryHash}`;
 
     // Cache hit — return immediately
-    const cached = queryCache.get(queryHash);
+    const cached = queryCache.get(serverCacheKey);
     if (cached && Date.now() - cached.cachedAt < QUERY_CACHE_TTL_MS) {
       appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
         queryHash, databaseName: database_name, durationMs: 0,
@@ -113,7 +115,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     }
 
     // Thundering herd: join in-flight promise for same hash
-    const existingInflight = queryInflight.get(queryHash);
+    const existingInflight = queryInflight.get(serverCacheKey);
     if (existingInflight) {
       const result = await existingInflight;
       return successResponse(result);
@@ -153,7 +155,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
       // Populate server-side cache
       const cachedAt = Date.now();
-      queryCache.set(queryHash, { result, cachedAt });
+      queryCache.set(serverCacheKey, { result, cachedAt });
 
       // Publish analytics event (fire-and-forget via registry)
       appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
@@ -165,13 +167,13 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       return { ...result, cachedAt };
     })();
 
-    queryInflight.set(queryHash, execPromise);
+    queryInflight.set(serverCacheKey, execPromise);
     try {
       const result = await execPromise;
       console.log(`[QUERY API] Total request time: ${Date.now() - startTime}ms`);
       return successResponse(result);
     } finally {
-      queryInflight.delete(queryHash);
+      queryInflight.delete(serverCacheKey);
     }
   } catch (error) {
     console.error(`[QUERY API] Error after ${Date.now() - startTime}ms:`, error);
