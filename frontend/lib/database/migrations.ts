@@ -6,6 +6,7 @@
 import { InitData, CompanyData } from './import-export';
 import { LATEST_DATA_VERSION, LATEST_SCHEMA_VERSION } from './constants';
 import { DEFAULT_STYLES } from '@/lib/branding/whitelabel';
+import { VALID_MODES } from '@/lib/mode/mode-types';
 
 export type DataMigration = (data: InitData) => InitData;
 export type SchemaMigration = null;  // Null means "recreate DB with new schema"
@@ -1096,7 +1097,108 @@ export const MIGRATIONS: MigrationEntry[] = [
     },
     description: 'Set setupWizard.status = "complete" on all existing /org/configs/config documents (existing companies have already completed onboarding)',
   },
+  {
+    dataVersion: 26,
+    description: 'V26: Fix files with broken paths by moving them to the nearest valid ancestor folder',
+    dataMigration: (data: InitData) => {
+      for (const companyData of data.companies as CompanyData[]) {
+        fixFilesWithBrokenPaths(companyData);
+      }
+      return data;
+    },
+  },
 ];
+
+/**
+ * For every document in a company whose path is invalid (missing parent folder, or sitting at
+ * a root segment that is not a recognised mode), relocate it to the deepest valid ancestor
+ * folder that has a free slot. Falls back to /org (with numeric suffix) when no ancestor exists.
+ * For folders, all descendants are cascade-updated before the folder itself is moved.
+ * Mutates companyData.documents in place.
+ */
+export function fixFilesWithBrokenPaths(companyData: CompanyData): void {
+  const folderPaths = new Set<string>(
+    companyData.documents.filter(d => d.type === 'folder').map(d => d.path)
+  );
+  const allPaths = new Set<string>(companyData.documents.map(d => d.path));
+
+  // Process shallowest-first: a moved folder's new path is registered in folderPaths
+  // before we reach any of its children, so children resolve correctly in one pass.
+  companyData.documents.sort(
+    (a, b) => a.path.split('/').filter(Boolean).length - b.path.split('/').filter(Boolean).length
+  );
+
+  const validModeRoots = new Set<string>(VALID_MODES.map(m => `/${m}`));
+
+  for (const doc of companyData.documents) {
+    const parts = doc.path.split('/').filter(Boolean);
+
+    if (parts.length === 0) continue; // empty path — unrecoverable, skip
+
+    if (parts.length === 1) {
+      // Root-level: valid only when it is a folder at a recognised mode root (/org, /tutorial, /internals)
+      if (doc.type === 'folder' && validModeRoots.has(doc.path)) continue;
+      // Otherwise fall through — ancestor walk finds nothing, hitting the /org fallback
+    } else {
+      const parentPath = '/' + parts.slice(0, -1).join('/');
+      if (folderPaths.has(parentPath)) continue; // parent exists — no fix needed
+    }
+
+    const fileName = parts[parts.length - 1];
+
+    // Walk up from the immediate parent toward the root, looking for the deepest
+    // valid folder that has an unoccupied slot for this file name.
+    let newPath: string | null = null;
+    for (let i = parts.length - 2; i >= 1; i--) {
+      const ancestorPath = '/' + parts.slice(0, i).join('/');
+      if (!folderPaths.has(ancestorPath)) continue;
+      const candidatePath = ancestorPath + '/' + fileName;
+      if (!allPaths.has(candidatePath)) {
+        newPath = candidatePath;
+        break;
+      }
+      // Slot taken at this level — continue searching a higher ancestor
+    }
+
+    if (newPath === null) {
+      // Absolute fallback to /org with numeric suffix for collisions
+      const fallback = '/org';
+      if (folderPaths.has(fallback)) {
+        let candidate = fallback + '/' + fileName;
+        let suffix = 1;
+        while (allPaths.has(candidate)) {
+          candidate = `${fallback}/${fileName}_${++suffix}`;
+        }
+        newPath = candidate;
+      }
+    }
+
+    if (newPath === null) continue; // /org doesn't exist either — truly unresolvable
+
+    // For folders: cascade path update to all descendants before moving self
+    if (doc.type === 'folder') {
+      const oldPrefix = doc.path + '/';
+      for (const other of companyData.documents) {
+        if (other.path.startsWith(oldPrefix)) {
+          const updatedPath = newPath + '/' + other.path.slice(oldPrefix.length);
+          allPaths.delete(other.path);
+          allPaths.add(updatedPath);
+          if (other.type === 'folder') {
+            folderPaths.delete(other.path);
+            folderPaths.add(updatedPath);
+          }
+          other.path = updatedPath;
+        }
+      }
+      folderPaths.delete(doc.path);
+      folderPaths.add(newPath);
+    }
+
+    allPaths.delete(doc.path);
+    allPaths.add(newPath);
+    doc.path = newPath;
+  }
+}
 
 /**
  * Get target versions after applying all migrations
