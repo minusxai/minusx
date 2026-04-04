@@ -157,6 +157,7 @@ export async function processSlackEvent(
       teamId,
       ev.channel,
       threadTs,
+      userMessage,
     );
 
     const agentArgs = await buildSlackAgentArgs(effectiveUser);

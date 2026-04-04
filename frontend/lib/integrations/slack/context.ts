@@ -26,7 +26,7 @@ export async function buildSlackAgentArgs(user: EffectiveUser): Promise<{
   selected_database_info?: { name: string; dialect: string };
   schema?: Array<{ schema: string; tables: string[] }>;
   context?: string;
-  app_state: { type: 'explore' };
+  app_state: { type: 'slack' };
 }> {
   const { connections } = await listAllConnections(user, false);
   const selectedConnectionName = selectDatabase(connections, null);
@@ -66,6 +66,6 @@ export async function buildSlackAgentArgs(user: EffectiveUser): Promise<{
       : undefined,
     schema: flattenSchemaForPrompt(databases, selectedDatabaseName),
     context: documentation,
-    app_state: { type: 'explore' },
+    app_state: { type: 'slack' },
   };
 }

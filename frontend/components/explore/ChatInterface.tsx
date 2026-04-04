@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box, VStack, HStack, Text, Icon, Button, Spinner, Grid, GridItem } from '@chakra-ui/react';
-import { LuPlus, LuChevronDown, LuRefreshCw, LuSparkles, LuPin, LuShare2, LuExpand, LuTerminal, LuMessageSquare } from 'react-icons/lu';
+import { LuPlus, LuChevronDown, LuRefreshCw, LuSparkles, LuPin, LuShare2, LuExpand, LuTerminal, LuMessageSquare, LuSlack } from 'react-icons/lu';
 import type { LoadError } from '@/lib/types/errors';
 import type { Attachment } from '@/lib/types';
 import { AppState } from '@/lib/appState';
@@ -148,7 +148,7 @@ export default function ChatInterface({
   const isNewConversation = !providedConversationId;
   const conversationID = conversation?.conversationID;
 
-  // Determine if this conversation originated from a file page (question, dashboard, etc.)
+  // Determine if this conversation originated from a file page or Slack
   const parentPageInfo = useMemo(() => {
     if (!conversation?.agent_args?.app_state) return null;
     const appStateData = conversation.agent_args.app_state;
@@ -156,10 +156,13 @@ export default function ChatInterface({
       const { id, name, type } = appStateData.state.fileState;
       return { id: id as number, name: name as string, type: type as string };
     }
+    if (appStateData.type === 'slack') {
+      return { id: 0, name: 'Slack', type: 'slack' };
+    }
     return null;
   }, [conversation?.agent_args?.app_state]);
 
-  // On the explore page, if viewing a conversation that started on a file page, require confirmation to continue
+  // On the explore page, if viewing a conversation that started on a file page or Slack, require confirmation to continue
   const needsContinueConfirmation = isExplorePage && !isNewConversation && !!parentPageInfo && !continueChatConfirmed;
 
   // Reset confirmation when navigating to a different conversation
@@ -766,7 +769,9 @@ export default function ChatInterface({
                   <VStack align="center" gap={0.5}>
                     <Text fontSize="sm" color="fg.default" fontFamily="mono" fontWeight="500">
                       This conversation started on{' '}
-                      {parentPageInfo.id > 0 ? (
+                      {parentPageInfo.type === 'slack' ? (
+                        <Text as="span" color="accent.teal">Slack</Text>
+                      ) : parentPageInfo.id > 0 ? (
                         <Text
                           as="span"
                           color="accent.teal"

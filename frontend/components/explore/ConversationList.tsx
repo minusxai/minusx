@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useCallback } from 'react';
-import { Box, Button, VStack, Text, Spinner, HStack } from '@chakra-ui/react';
+import { Box, Button, VStack, Text, Spinner, HStack, Icon } from '@chakra-ui/react';
+import { LuSlack } from 'react-icons/lu';
 import { ConversationSummary } from '@/app/api/conversations/route';
 import FileTypeBadge from '../FileTypeBadge';
 import { useFetch } from '@/lib/api/useFetch';
@@ -130,9 +131,14 @@ const ConversationItem = React.memo(function ConversationItem({ conversation, is
 
         {/* Metadata Row */}
         <HStack justify="space-between" fontSize="xs" color="accent.muted" align="center">
-          {conversation.parentPageType && (
+          {conversation.source?.type === 'slack' ? (
+            <HStack gap={1} fontFamily="mono" fontSize="2xs" fontWeight="600" color="white" px={1.5} py={0.5} bg="#4A154B" borderRadius="sm" flexShrink={0} opacity={0.9}>
+              <Icon asChild boxSize="10px"><LuSlack /></Icon>
+              <Text>Slack</Text>
+            </HStack>
+          ) : conversation.parentPageType ? (
             <FileTypeBadge fileType={conversation.parentPageType} size="xs" opacity={0.9}/>
-          )}
+          ) : null}
           <Text>{conversation.messageCount} user message{conversation.messageCount > 1 ? 's' : ''}</Text>
           <Text>{getRelativeTime(conversation.updatedAt)}</Text>
         </HStack>
