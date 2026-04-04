@@ -8,16 +8,6 @@
  * No DOM required — safe for Node.js server contexts.
  */
 import * as echarts from 'echarts';
-// Register individual components for Next.js tree-shaking (SSR).
-// In Jest the full echarts bundle is used and these are already included.
-try {
-  const { SVGRenderer } = require('echarts/renderers');
-  const { TitleComponent, LegendComponent, TooltipComponent, GridComponent } = require('echarts/components');
-  const { BarChart, LineChart, PieChart, ScatterChart, FunnelChart } = require('echarts/charts');
-  echarts.use([SVGRenderer, TitleComponent, LegendComponent, TooltipComponent, GridComponent, BarChart, LineChart, PieChart, ScatterChart, FunnelChart]);
-} catch {
-  // Full echarts bundle already includes everything — no registration needed
-}
 import { Resvg } from '@resvg/resvg-js';
 import sharp from 'sharp';
 import fs from 'fs';
@@ -28,6 +18,20 @@ import { COLOR_PALETTE, withMinusXTheme } from './echarts-theme';
 import type { QueryResult } from '@/lib/types';
 import type { VizSettings } from '@/lib/types.gen';
 
+// Register individual ECharts components for Next.js tree-shaking (SSR).
+// In Jest/tsx the full echarts bundle is loaded and these are already included.
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports, no-restricted-syntax -- dynamic require needed: echarts sub-path exports are ESM-only and break Jest's CJS transform
+  const r = require;
+  const { SVGRenderer } = r('echarts/renderers');
+  const { TitleComponent, LegendComponent, TooltipComponent, GridComponent } = r('echarts/components');
+  const { BarChart, LineChart, PieChart, ScatterChart, FunnelChart } = r('echarts/charts');
+  echarts.use([SVGRenderer, TitleComponent, LegendComponent, TooltipComponent, GridComponent, BarChart, LineChart, PieChart, ScatterChart, FunnelChart]);
+} catch {
+  // Full echarts bundle already includes everything — no registration needed
+}
+
+// eslint-disable-next-line no-restricted-syntax -- immutable constant set of renderable chart types
 const RENDERABLE_TYPES = new Set(['line', 'bar', 'area', 'scatter', 'pie', 'funnel']);
 
 const LABEL_COLORS = {

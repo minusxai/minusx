@@ -235,6 +235,7 @@ export function buildSlackReplyBlocks(options: SlackReplyBlocksOptions): unknown
 
 // ── Query chart extraction ───────────────────────────────────────────────────
 
+// eslint-disable-next-line no-restricted-syntax -- immutable constant set of renderable chart types
 const RENDERABLE_CHART_TYPES = new Set(['line', 'bar', 'area', 'scatter', 'pie', 'funnel']);
 
 export interface QueryChart {
