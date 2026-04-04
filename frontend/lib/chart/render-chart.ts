@@ -381,7 +381,6 @@ function getFontFiles(): string[] {
     }
   }
 
-  console.log(`[Chart] Font files resolved: ${resolved.length} (from ${fontsDir})`);
   fontFilesCache = resolved;
   return resolved;
 }
