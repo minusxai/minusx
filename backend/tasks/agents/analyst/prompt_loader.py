@@ -78,6 +78,37 @@ class PromptLoader:
 
         return current
 
+    def list_skills(self) -> dict:
+        """Return a dict of skill_name -> description for all available skills.
+
+        Skills are templates whose keys start with 'skill_'.
+        """
+        skills = {}
+        for key, value in self.templates.items():
+            if key.startswith('skill_') and isinstance(value, dict):
+                name = key[len('skill_'):]  # strip 'skill_' prefix
+                skills[name] = value.get('description', '')
+        return skills
+
+    def get_skill(self, name: str) -> str | None:
+        """Get the resolved content of a skill by name.
+
+        Args:
+            name: Skill name (e.g., 'alerts', 'reports'). The 'skill_' prefix is added automatically.
+
+        Returns:
+            Resolved skill content string, or None if not found.
+        """
+        key = f'skill_{name}'
+        template = self.templates.get(key)
+        if template is None or not isinstance(template, dict):
+            return None
+        content = template.get('content', '')
+        if not content:
+            return None
+        # Resolve any nested template references within the skill content
+        return self._resolve_templates(content)
+
     def _resolve_templates(self, text: str) -> str:
         """Resolve template references in text.
 
@@ -128,6 +159,14 @@ class PromptLoader:
 _loader = None
 
 
+def _get_loader() -> PromptLoader:
+    """Get or create the global PromptLoader singleton."""
+    global _loader
+    if _loader is None:
+        _loader = PromptLoader()
+    return _loader
+
+
 def get_prompt(prompt_id: str, **variables) -> str:
     """Convenience function to get a prompt using global loader.
 
@@ -138,7 +177,14 @@ def get_prompt(prompt_id: str, **variables) -> str:
     Returns:
         Composed and substituted prompt
     """
-    global _loader
-    if _loader is None:
-        _loader = PromptLoader()
-    return _loader.get(prompt_id, **variables)
+    return _get_loader().get(prompt_id, **variables)
+
+
+def list_skills() -> dict:
+    """List all available skills with their descriptions."""
+    return _get_loader().list_skills()
+
+
+def get_skill(name: str) -> str | None:
+    """Get a skill's resolved content by name. Returns None if not found."""
+    return _get_loader().get_skill(name)

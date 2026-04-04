@@ -12,8 +12,22 @@ from tasks.llm.client import allm_request as real_allm_request, describe_tool
 from tasks.llm.models import ALLMRequest, LlmSettings, UserInfo
 from tasks.llm.config import ANALYST_V2_MODEL, MAX_STEPS_LOWER_LEVEL
 from .tools import SearchDBSchema, SearchFiles, Clarify, Navigate, CreateFile
-from .tools import ReadFiles, EditFile, ExecuteQuery, PublishAll
-from .prompt_loader import get_prompt
+from .tools import ReadFiles, EditFile, ExecuteQuery, PublishAll, LoadSkill
+from .prompt_loader import get_prompt, get_skill, list_skills
+
+# Map page type → skills to preload into the system prompt
+PAGE_SKILL_MAP: dict[str, list[str]] = {
+    "question": ["questions"],
+    "dashboard": ["dashboards", "questions"],
+    "context": ["contexts"],
+    "report": ["reports"],
+    "alert": ["alerts"],
+    "explore": ["explore"],
+    "folder": ["explore"],
+    "slack": ["explore"],
+}
+# Default when page type is unknown or null
+DEFAULT_PRELOADED_SKILLS = ["questions", "explore"]
 
 
 # Mock LLM request if LLM_MOCK_URL is set (for testing)
@@ -100,18 +114,68 @@ class AnalystAgent(Agent):
 
         self.child_count = len(child_batches)
 
+    def _get_page_type(self) -> str | None:
+        """Extract the page type from app_state.
+
+        app_state.type is 'file', 'folder', or 'explore'.
+        For files, the actual type is at app_state.state.fileState.type.
+        """
+        if not isinstance(self.app_state, dict):
+            return None
+        top_type = self.app_state.get("type")
+        if top_type in ("explore", "folder", "slack"):
+            return top_type
+        if top_type == "file":
+            state = self.app_state.get("state")
+            if isinstance(state, dict):
+                fs = state.get("fileState")
+                if isinstance(fs, dict):
+                    return fs.get("type")
+        return None
+
+    def _get_preloaded_skill_names(self) -> list[str]:
+        """Determine which skills to preload based on the current page type."""
+        page_type = self._get_page_type()
+        return PAGE_SKILL_MAP.get(page_type, DEFAULT_PRELOADED_SKILLS)
+
+    @staticmethod
+    def _build_skills_catalog(preloaded: set[str] | None = None) -> str:
+        """Generate the LoadSkill catalog, excluding already-preloaded skills."""
+        if preloaded is None:
+            preloaded = set(DEFAULT_PRELOADED_SKILLS)
+        skills = list_skills()
+        lines = []
+        for name, description in skills.items():
+            if name not in preloaded:
+                lines.append(f'  - `"{name}"` — {description}')
+        return "\n".join(lines)
+
+    @staticmethod
+    def _build_preloaded_skills_content(skill_names: list[str]) -> str:
+        """Resolve and concatenate the content of preloaded skills."""
+        sections = []
+        for name in skill_names:
+            content = get_skill(name)
+            if content:
+                sections.append(content)
+        return "\n\n".join(sections)
+
     def _get_system_message(self) -> dict:
         """Generate system message with schema and context."""
         max_steps = MAX_STEPS_LOWER_LEVEL - 5  # Safety margin
+        preloaded_names = self._get_preloaded_skill_names()
+        preloaded_set = set(preloaded_names)
 
         content = get_prompt(
-            'native.system',
+            'default.system',
             schema=self.schema,
             context=self.context,
             connection_id=self.connection_id,
             home_folder=self.home_folder,
             max_steps=max_steps,
-            agent_name=self.agent_name
+            agent_name=self.agent_name,
+            skills_catalog=self._build_skills_catalog(preloaded_set),
+            preloaded_skills=self._build_preloaded_skills_content(preloaded_names)
         )
         return {"role": "system", "content": content}
 
@@ -136,7 +200,7 @@ class AnalystAgent(Agent):
         attachments_str = self._format_attachments()
 
         content = get_prompt(
-            'native.user',
+            'default.user',
             app_state=app_state_str,
             goal=self.goal,
             current_date=time.strftime("%Y-%m-%d"),
@@ -158,7 +222,7 @@ class AnalystAgent(Agent):
         if len(self.tool_thread) >= MAX_STEPS_LOWER_LEVEL - 5:
             return []
 
-        return [ReadFiles, EditFile, ExecuteQuery, PublishAll, Navigate, Clarify, SearchDBSchema, SearchFiles, CreateFile]
+        return [ReadFiles, EditFile, ExecuteQuery, PublishAll, Navigate, Clarify, SearchDBSchema, SearchFiles, CreateFile, LoadSkill]
 
     def _get_history(self):
         previous_root_tasks = self._orchestrator.get_previous_root_tasks()
@@ -233,39 +297,14 @@ class SlackAgent(AnalystAgent):
 
     def _get_system_message(self) -> dict:
         base = super()._get_system_message()["content"]
-        slack_addendum = """
-
-## Slack Execution Mode
-- You are replying inside Slack, not the web app.
-- Keep responses concise and readable in chat — aim for 3-5 lines max. Slack truncates long messages behind "See more".
-- Do not tell the user to click UI elements, navigate pages, or review drafts in the app unless absolutely necessary.
-- If the request is ambiguous, ask a direct question in your answer instead of using Clarify.
-- Only use tools that are actually available in this Slack mode.
-- Prefer answering analytically over making file edits.
-- If conversation history already exists in the log, do NOT re-introduce yourself. Continue the conversation naturally.
-- IMPORTANT: Do NOT use <thinking>, <answer>, or any other XML tags in your response. Write your reply as plain text only. The entire text of your response will be posted directly to Slack.
-- Also, Slack does not render table markdown, so always send tabular data in code blocks with appropriate formatting if you really need to show it.
-
-## Chart Visualization in Slack
-When running ExecuteQuery, include appropriate `vizSettings` so the results can be visualized as a chart image in Slack.
-- Use `bar` for comparisons across categories (e.g., revenue by month)
-- Use `line` for trends over time (e.g., daily users over 30 days)
-- Use `area` for cumulative/stacked trends
-- Use `pie` for proportional breakdowns (e.g., market share)
-- Use `scatter` for correlations between two numeric columns
-- Use `funnel` for sequential stage data (e.g., conversion funnel)
-- Use `table` (or omit vizSettings) when a chart would not add value — e.g., single-row results, lookups, or lists of text
-- Always set `xCols` and `yCols` appropriately when using a chart type
-- The chart image is rendered server-side and posted alongside your text reply — you do not need to mention the chart explicitly
-- You do not need to render viz for EVERY query, only when it adds value. For simple queries, viz settings can be empty object or table type. We only send 2 charts per response to avoid overwhelming the Slack thread.
-""".strip()
+        slack_addendum = get_prompt('slack_addendum')
         return {"role": "system", "content": f"{base}\n\n{slack_addendum}"}
 
     def _get_available_tools(self):
         """Slack uses a read/query-focused subset of Analyst tools."""
         if len(self.tool_thread) >= MAX_STEPS_LOWER_LEVEL - 5:
             return []
-        return [ReadFiles, ExecuteQuery, SearchDBSchema, SearchFiles]
+        return [ReadFiles, ExecuteQuery, SearchDBSchema, SearchFiles, LoadSkill]
 
 
 @register_agent
@@ -504,33 +543,14 @@ IMPORTANT: Use foreground=false for ALL ExecuteSQLQuery calls - this is a backgr
                 )
             queries_text = "\n".join(query_descriptions)
 
-        synthesis_prompt = f"""You are generating a report based on multiple data analyses.
-
-## Report: {self.report_name}
-
-## Individual Analyses:
-{analyses_text}
-
-## Available Interactive Charts
-You can embed interactive charts in your report using the syntax `{{{{query:TOOL_CALL_ID}}}}`.
-When you embed a chart, the frontend will render an interactive visualization that users can explore.
-
-Available queries:
-{queries_text or "No queries available"}
-
-**IMPORTANT**: Use `{{{{query:ID}}}}` syntax to embed charts inline in your report. This will render as an interactive visualization.
-Example: "Here's the revenue breakdown: {{{{query:mxgen_abc123}}}}"
-
-## Synthesis Instructions:
-{self.report_prompt or "Synthesize the analyses into a coherent executive summary. Highlight key findings, trends, and actionable insights."}
-
-## Your Task:
-Generate a well-structured markdown report that synthesizes all the analyses above. Include:
-1. An executive summary
-2. Key findings from each analysis with embedded charts where appropriate
-3. Overall insights and recommendations
-
-Format as clean markdown. Use the `{{{{query:ID}}}}` syntax to embed relevant charts inline."""
+        system_prompt = get_prompt('report_synthesis.system')
+        synthesis_prompt = get_prompt(
+            'report_synthesis.user',
+            report_name=self.report_name,
+            analyses_text=analyses_text,
+            queries_text=queries_text or "No queries available",
+            report_prompt=self.report_prompt or "Synthesize the analyses into a coherent executive summary. Highlight key findings, trends, and actionable insights.",
+        )
 
         # Call LLM for synthesis
         llm_settings = LlmSettings(
@@ -541,7 +561,7 @@ Format as clean markdown. Use the `{{{{query:ID}}}}` syntax to embed relevant ch
         response, _ = await allm_request(
             ALLMRequest(
                 messages=[
-                    {"role": "system", "content": "You are an expert report writer who synthesizes data analyses into clear, actionable reports."},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": synthesis_prompt}
                 ],
                 llmSettings=llm_settings,
