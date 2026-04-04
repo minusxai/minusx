@@ -8,10 +8,16 @@
  * No DOM required — safe for Node.js server contexts.
  */
 import * as echarts from 'echarts';
-import { SVGRenderer } from 'echarts/renderers';
-import { TitleComponent, LegendComponent, TooltipComponent, GridComponent } from 'echarts/components';
-import { BarChart, LineChart, PieChart, ScatterChart, FunnelChart } from 'echarts/charts';
-echarts.use([SVGRenderer, TitleComponent, LegendComponent, TooltipComponent, GridComponent, BarChart, LineChart, PieChart, ScatterChart, FunnelChart] as any);
+// Register individual components for Next.js tree-shaking (SSR).
+// In Jest the full echarts bundle is used and these are already included.
+try {
+  const { SVGRenderer } = require('echarts/renderers');
+  const { TitleComponent, LegendComponent, TooltipComponent, GridComponent } = require('echarts/components');
+  const { BarChart, LineChart, PieChart, ScatterChart, FunnelChart } = require('echarts/charts');
+  echarts.use([SVGRenderer, TitleComponent, LegendComponent, TooltipComponent, GridComponent, BarChart, LineChart, PieChart, ScatterChart, FunnelChart]);
+} catch {
+  // Full echarts bundle already includes everything — no registration needed
+}
 import { Resvg } from '@resvg/resvg-js';
 import sharp from 'sharp';
 import fs from 'fs';
@@ -33,37 +39,6 @@ const BG_COLORS = {
   dark: '#161b22',
   light: '#ffffff',
 };
-
-// ── Font embedding for SVG ───────────────────────────────────────────────────
-
-let fontCssCache: string | null = null;
-
-function getEmbeddedFontCss(): string {
-  if (fontCssCache !== null) return fontCssCache;
-
-  const fontsDir = path.join(process.cwd(), 'public/fonts');
-  const faces: string[] = [];
-
-  const weights = [
-    { file: 'JetBrainsMono-Regular.ttf', weight: '400' },
-    { file: 'JetBrainsMono-Bold.ttf', weight: '700' },
-  ];
-
-  for (const { file, weight } of weights) {
-    const fontPath = path.join(fontsDir, file);
-    try {
-      if (fs.existsSync(fontPath)) {
-        const data = fs.readFileSync(fontPath).toString('base64');
-        faces.push(`@font-face { font-family: 'JetBrains Mono'; font-weight: ${weight}; src: url(data:font/ttf;base64,${data}) format('truetype'); }`);
-      }
-    } catch {
-      // Skip missing font
-    }
-  }
-
-  fontCssCache = faces.join('\n');
-  return fontCssCache;
-}
 
 // ── Title generation (mirrors ChartBuilder.tsx logic) ─────────────────────────
 
@@ -259,19 +234,6 @@ function forceBackground(option: echarts.EChartsOption, colorMode: 'light' | 'da
   return { ...option, backgroundColor: BG_COLORS[colorMode] };
 }
 
-/**
- * Embed font CSS into an SVG string so text renders correctly in sharp/rsvg.
- */
-function embedFontInSvg(svg: string): string {
-  const fontCss = getEmbeddedFontCss();
-  if (!fontCss) return svg;
-
-  // Inject font-face inside existing <style> or add a new <style> block
-  if (svg.includes('<style')) {
-    return svg.replace(/<style\s*>/, `<style>\n${fontCss}\n`);
-  }
-  return svg.replace('</svg>', `<style>${fontCss}</style></svg>`);
-}
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
@@ -355,10 +317,8 @@ export function renderChartToSvg(
   });
 
   chart.setOption(option);
-  let svg = chart.renderToSVGString();
+  const svg = chart.renderToSVGString();
   chart.dispose();
-
-  svg = embedFontInSvg(svg);
 
   return svg;
 }
