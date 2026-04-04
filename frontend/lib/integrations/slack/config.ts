@@ -1,5 +1,5 @@
 import 'server-only';
-import { AUTH_URL, SLACK_SIGNING_SECRET as CONFIG_SLACK_SIGNING_SECRET } from '@/lib/config';
+import { AUTH_URL, SLACK_SIGNING_SECRET as CONFIG_SLACK_SIGNING_SECRET, SLACK_CLIENT_ID, SLACK_CLIENT_SECRET } from '@/lib/config';
 
 export const SLACK_BOT_SCOPES = [
   'app_mentions:read',
@@ -54,6 +54,22 @@ export function getSlackCapabilities(baseUrlOverride?: string | null) {
     selfHostedEnabled: hasPublicBaseUrl,
     baseUrl: hasPublicBaseUrl ? baseUrl : AUTH_URL,
   };
+}
+
+export function isSlackOAuthConfigured(): boolean {
+  return !!(SLACK_CLIENT_ID?.trim() && SLACK_CLIENT_SECRET?.trim());
+}
+
+export function buildOAuthUrl(state: string): string {
+  const scopes = SLACK_BOT_SCOPES.join(',');
+  const redirectUri = `${AUTH_URL}/api/integrations/slack/oauth-callback`;
+  const params = new URLSearchParams({
+    client_id: SLACK_CLIENT_ID!,
+    scope: scopes,
+    redirect_uri: redirectUri,
+    state,
+  });
+  return `https://slack.com/oauth/v2/authorize?${params.toString()}`;
 }
 
 export function buildSlackManifest(appName: string, baseUrl: string = AUTH_URL, devSubdomain?: string) {
