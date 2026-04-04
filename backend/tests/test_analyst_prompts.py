@@ -84,6 +84,19 @@ def test_prompt_loader():
 
             print(f"✓ {test_case['id']} loaded successfully -> {file_path}")
 
+        # Write tool descriptions (use the tool classes directly from imports)
+        from tasks.agents.analyst.tools import (
+            ReadFiles, EditFile, ExecuteQuery, PublishAll, Navigate,
+            Clarify, SearchDBSchema, SearchFiles, CreateFile, LoadSkill
+        )
+        tools = [ReadFiles, EditFile, ExecuteQuery, PublishAll, Navigate,
+                 Clarify, SearchDBSchema, SearchFiles, CreateFile, LoadSkill]
+        tool_schemas = [describe_tool(t) for t in tools]
+        tools_path = output_dir / 'tools.txt'
+        with open(tools_path, 'w') as f:
+            f.write(json.dumps(tool_schemas, indent=2))
+        print(f"✓ tools written -> {tools_path}")
+
         print("\n✅ All prompt tests passed!")
 
         if keep_files:
