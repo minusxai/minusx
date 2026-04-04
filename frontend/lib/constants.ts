@@ -37,7 +37,7 @@ function parseAnalyticsConfig(jsonString: string | undefined): AnalyticsConfig {
         console.warn('[Config] Analytics provider requires token, falling back to noop');
         return { ...defaultConfig, enabled: false };
       }
-      const sessionRecordingConfig = parsed.mixpanel.sessionRecording
+      const sessionRecording = parsed.mixpanel.sessionRecording
         ? {
             enabled: parsed.mixpanel.sessionRecording.enabled || false,
             sampleRate: parsed.mixpanel.sessionRecording.sampleRate ?? 0.1,
@@ -47,7 +47,7 @@ function parseAnalyticsConfig(jsonString: string | undefined): AnalyticsConfig {
         enabled: parsed.enabled,
         debug: parsed.debug || false,
         provider: 'mixpanel',
-        mixpanel: { token: parsed.mixpanel.token, sessionRecording: sessionRecordingConfig },
+        mixpanel: { ...parsed.mixpanel, sessionRecording },
       };
     }
     return { enabled: parsed.enabled, debug: parsed.debug || false, provider: parsed.provider || 'noop' };
