@@ -5,7 +5,7 @@ import { addReaction, getConversationHistory, getSlackUserEmail, postSlackMessag
 import { getSlackSigningSecret } from '@/lib/integrations/slack/config';
 import { buildSlackAgentArgs } from '@/lib/integrations/slack/context';
 import { resolveBaseUrl } from '@/lib/jobs/job-utils';
-import { extractSlackReplyFromLog, normalizeSlackPrompt } from '@/lib/integrations/slack/messages';
+import { extractSlackReply, markdownToSlackMrkdwn, buildSlackReplyBlocks, normalizeSlackPrompt } from '@/lib/integrations/slack/messages';
 import { buildHomeView, buildWelcomeBlocks, shouldSendWelcome } from '@/lib/integrations/slack/welcome';
 import {
   findSlackInstallationByTeam,
@@ -169,15 +169,32 @@ export async function processSlackEvent(
       conversationId,
     });
 
-    const reply =
-      extractSlackReplyFromLog(result.logDiff) ??
-      'I finished the run, but I do not have a text reply to post back.';
+    const slackReply = extractSlackReply(result.logDiff);
+    const fallbackText = 'I finished the run, but I do not have a text reply to post back.';
 
-    await postSlackMessage(installation.bot.bot_token, {
-      channel: ev.channel,
-      text: reply,
-      thread_ts: threadTs,
-    });
+    if (slackReply) {
+      const mrkdwnText = markdownToSlackMrkdwn(slackReply.text);
+      const baseUrl = await resolveBaseUrl(installation.companyId);
+      const viewUrl = `${baseUrl}/explore/${conversationId}`;
+      const blocks = buildSlackReplyBlocks({
+        text: mrkdwnText,
+        // images: ['https://docsv2.minusx.ai/dark/dashboard.png'],
+        viewUrl,
+      });
+
+      await postSlackMessage(installation.bot.bot_token, {
+        channel: ev.channel,
+        text: slackReply.text, // plain text fallback for notifications
+        thread_ts: threadTs,
+        blocks,
+      });
+    } else {
+      await postSlackMessage(installation.bot.bot_token, {
+        channel: ev.channel,
+        text: fallbackText,
+        thread_ts: threadTs,
+      });
+    }
 
     // Swap :eyes: for :white_check_mark:
     await removeReaction(installation.bot.bot_token, ev.channel, ev.ts, 'eyes');
