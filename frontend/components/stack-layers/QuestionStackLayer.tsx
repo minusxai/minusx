@@ -34,7 +34,8 @@ export default function QuestionStackLayer({ fileId, folderPath, isCreateMode, d
     if (dashboardId !== undefined) {
       dispatch(addQuestionToDashboard({ dashboardId, questionId: virtualId }));
     }
-    dispatch(popView());
+    // Don't popView here — CreateQuestionModalContainer calls onClose() right after,
+    // which dispatches popView(). Popping twice would break the stack.
   };
 
   return (
