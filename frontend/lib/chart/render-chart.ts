@@ -2,8 +2,8 @@
  * Server-side chart rendering.
  *
  * Takes a QueryResult + VizSettings and renders to SVG using ECharts SSR mode.
- * Reuses the same aggregateData(), buildChartOption(), and withMinusXTheme()
- * logic as the client-side chart components.
+ * Reuses the same aggregateData() and chart option builders as the
+ * client-side chart components.
  *
  * No DOM required — safe for Node.js server contexts.
  */
@@ -13,8 +13,8 @@ import sharp from 'sharp';
 import fs from 'fs';
 import path from 'path';
 import { aggregateData } from './aggregate-data';
-import { buildChartOption } from './chart-utils';
-import { COLOR_PALETTE, withMinusXTheme } from './echarts-theme';
+import { buildChartOption, buildFunnelChartOption, buildPieChartOption, buildWaterfallChartOption } from './chart-utils';
+import { COLOR_PALETTE } from './echarts-theme';
 import type { QueryResult } from '@/lib/types';
 import type { VizSettings } from '@/lib/types.gen';
 
@@ -32,12 +32,7 @@ try {
 }
 
 // eslint-disable-next-line no-restricted-syntax -- immutable constant set of renderable chart types
-const RENDERABLE_TYPES = new Set(['line', 'bar', 'area', 'scatter', 'pie', 'funnel']);
-
-const LABEL_COLORS = {
-  light: '#0D1117',
-  dark: '#E6EDF3',
-};
+const RENDERABLE_TYPES = new Set(['line', 'bar', 'area', 'scatter', 'pie', 'funnel', 'waterfall']);
 
 const BG_COLORS = {
   dark: '#161b22',
@@ -63,164 +58,6 @@ export interface RenderChartOptions {
   colorMode?: 'light' | 'dark';
   /** Path to logo file for footer. Defaults to MinusX logo from public/ */
   logoPath?: string;
-}
-
-/**
- * Build pie chart option — mirrors PiePlot.tsx logic.
- */
-function buildPieOption(
-  xAxisData: string[],
-  series: Array<{ name: string; data: number[] }>,
-  colorMode: 'light' | 'dark',
-  chartTitle?: string,
-): echarts.EChartsOption {
-  const pieData = xAxisData.map((name, index) => {
-    const value = series.reduce((sum, s) => {
-      const val = s.data[index];
-      return sum + (typeof val === 'number' && !isNaN(val) ? val : 0);
-    }, 0);
-    return { name, value };
-  });
-
-  const total = pieData.reduce((sum, item) => sum + item.value, 0);
-
-  const coloredData = pieData.map((item, index) => ({
-    ...item,
-    itemStyle: { color: COLOR_PALETTE[index % COLOR_PALETTE.length] },
-  }));
-
-  const baseOption: echarts.EChartsOption = {
-    backgroundColor: BG_COLORS[colorMode],
-    ...(chartTitle ? { title: { text: chartTitle, left: 'center', top: 5, show: true } } : {}),
-    tooltip: { trigger: 'item' },
-    legend: {
-      data: pieData.map(d => d.name),
-      top: chartTitle ? 35 : 10,
-      orient: 'horizontal',
-      type: 'scroll',
-      pageIconSize: 10,
-      pageTextStyle: { fontSize: 10 },
-    },
-    series: [{
-      name: 'Pie',
-      type: 'pie',
-      radius: ['30%', '70%'],
-      center: ['50%', '55%'],
-      avoidLabelOverlap: true,
-      itemStyle: {
-        borderRadius: 10,
-        borderColor: colorMode === 'dark' ? '#1a1a1a' : '#ffffff',
-        borderWidth: 2,
-      },
-      label: {
-        show: true,
-        position: 'outside',
-        formatter: (params: any) => {
-          const percent = ((params.value / total) * 100).toFixed(1);
-          return `${params.name}\n${percent}%`;
-        },
-        textBorderColor: 'transparent',
-        textBorderWidth: 0,
-        textShadowColor: 'transparent',
-        textShadowBlur: 0,
-        color: colorMode === 'dark' ? '#ffffff' : '#1a1a1a',
-      },
-      labelLine: { show: true, length: 15, length2: 10 },
-      emphasis: {
-        label: {
-          show: true,
-          fontSize: 14,
-          fontWeight: 'bold',
-          textBorderColor: 'transparent',
-          textBorderWidth: 0,
-          textShadowColor: 'transparent',
-          textShadowBlur: 0,
-        },
-      },
-      data: coloredData,
-    }],
-  };
-
-  return withMinusXTheme(baseOption, colorMode);
-}
-
-/**
- * Build funnel chart option — mirrors FunnelPlot.tsx logic.
- */
-function buildFunnelOption(
-  xAxisData: string[],
-  series: Array<{ name: string; data: number[] }>,
-  colorMode: 'light' | 'dark',
-  chartTitle?: string,
-): echarts.EChartsOption {
-  const rawData = xAxisData.map((name, index) => {
-    const value = series.reduce((sum, s) => {
-      const val = s.data[index];
-      return sum + (typeof val === 'number' && !isNaN(val) ? val : 0);
-    }, 0);
-    return { name, value };
-  });
-
-  const baseColor = COLOR_PALETTE[0];
-  const funnelData = rawData.map((item) => ({
-    ...item,
-    itemStyle: { color: baseColor },
-  }));
-
-  const maxValue = Math.max(...funnelData.map(d => d.value));
-  const topValue = maxValue > 0 ? maxValue : 1;
-
-  const baseOption: echarts.EChartsOption = {
-    backgroundColor: BG_COLORS[colorMode],
-    ...(chartTitle ? { title: { text: chartTitle, left: 'center', top: 5, show: true } } : {}),
-    tooltip: { trigger: 'item' },
-    legend: {
-      data: funnelData.map(d => d.name),
-      top: chartTitle ? 35 : 10,
-      orient: 'horizontal',
-      type: 'scroll',
-      pageIconSize: 10,
-      pageTextStyle: { fontSize: 10 },
-    },
-    series: [{
-      name: 'Funnel',
-      type: 'funnel',
-      orient: 'horizontal',
-      left: '5%',
-      right: '5%',
-      top: 60,
-      bottom: 20,
-      width: '90%',
-      height: '70%',
-      min: 0,
-      max: maxValue,
-      minSize: '0%',
-      maxSize: '100%',
-      sort: 'none',
-      gap: 2,
-      label: {
-        show: true,
-        position: 'inside',
-        color: LABEL_COLORS[colorMode],
-        fontWeight: 'bold',
-        backgroundColor: colorMode === 'dark' ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)',
-        borderRadius: 4,
-        padding: [4, 8],
-        formatter: (params: any) => {
-          const pct = ((params.value / topValue) * 100).toFixed(1);
-          return `${params.name}\n${params.value} (${pct}%)`;
-        },
-      },
-      labelLine: { length: 10, lineStyle: { width: 1 } },
-      itemStyle: { borderColor: 'transparent', borderWidth: 1 },
-      emphasis: {
-        label: { fontSize: 14, color: LABEL_COLORS[colorMode] },
-      },
-      data: funnelData,
-    }],
-  };
-
-  return withMinusXTheme(baseOption, colorMode);
 }
 
 /**
@@ -289,9 +126,38 @@ export function renderChartToSvg(
   let option: echarts.EChartsOption;
 
   if (chartType === 'pie') {
-    option = buildPieOption(aggregated.xAxisData, aggregated.series, colorMode, chartTitle);
+    option = buildPieChartOption({
+      xAxisData: aggregated.xAxisData,
+      series: aggregated.series,
+      colorMode,
+      xAxisColumns: xCols,
+      yAxisColumns: yCols,
+      chartTitle,
+      colorPalette: COLOR_PALETTE,
+      columnFormats: vizSettings.columnFormats ?? undefined,
+    });
   } else if (chartType === 'funnel') {
-    option = buildFunnelOption(aggregated.xAxisData, aggregated.series, colorMode, chartTitle);
+    option = buildFunnelChartOption({
+      xAxisData: aggregated.xAxisData,
+      series: aggregated.series,
+      colorMode,
+      xAxisColumns: xCols,
+      yAxisColumns: yCols,
+      chartTitle,
+      colorPalette: COLOR_PALETTE,
+      columnFormats: vizSettings.columnFormats ?? undefined,
+    });
+  } else if (chartType === 'waterfall') {
+    option = buildWaterfallChartOption({
+      xAxisData: aggregated.xAxisData,
+      series: aggregated.series,
+      colorMode,
+      xAxisColumns: xCols,
+      yAxisColumns: yCols,
+      chartTitle,
+      colorPalette: COLOR_PALETTE,
+      columnFormats: vizSettings.columnFormats ?? undefined,
+    });
   } else {
     option = buildChartOption({
       xAxisData: aggregated.xAxisData,
