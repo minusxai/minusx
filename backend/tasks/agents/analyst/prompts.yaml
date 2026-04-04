@@ -565,3 +565,18 @@ prompts:
       3. Overall insights and recommendations
 
       Format as clean markdown. Use the `{{{{query:ID}}}}` syntax to embed relevant charts inline.
+
+  # ── Test/eval agent ────────────────────────────────────────────────
+
+  eval_addendum:
+    preamble: |
+
+      ## Eval Mode
+      Once you have your answer, call the Submit tool and end the conversation. Do NOT edit or create any files.
+
+    binary: |
+      Submit tool: call SubmitBinary(answer=True) if the answer is yes/correct, or SubmitBinary(answer=False) if the answer is no/incorrect. If the data is insufficient to answer, call CannotAnswer(reason=...) instead.
+    number_match: |
+      Submit tool: call SubmitNumber(answer=<float>) with your computed numeric answer. If the data is insufficient to answer, call CannotAnswer(reason=...) instead.
+    string_match: |
+      Submit tool: call SubmitString(answer=<string>) with your computed string answer. If the data is insufficient to answer, call CannotAnswer(reason=...) instead.

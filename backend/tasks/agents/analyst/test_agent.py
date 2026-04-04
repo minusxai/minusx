@@ -4,6 +4,7 @@ from typing import Optional
 from tasks import register_agent
 from tasks.llm.config import MAX_STEPS_LOWER_LEVEL
 from .agent import AnalystAgent
+from .prompt_loader import get_prompt
 from .tools import SubmitBinary, SubmitNumber, SubmitString, CannotAnswer
 
 
@@ -30,34 +31,13 @@ class TestAgent(AnalystAgent):
         """Extend system message to instruct the agent to submit its answer."""
         base = super()._get_system_message()
 
-        preamble = (
-            "\n\n## Eval Mode\n"
-            "Once you have your answer, "
-            "call the Submit tool and the conversation. "
-            "Do NOT edit or create any files.\n\n"
-        )
-
+        preamble = get_prompt('eval_addendum.preamble')
         assertion_type = self.assertion.get('type', 'binary')
-        if assertion_type == 'binary':
-            submit_instruction = preamble + (
-                "Submit tool: call SubmitBinary(answer=True) if the answer is yes/correct, "
-                "or SubmitBinary(answer=False) if the answer is no/incorrect. "
-                "If the data is insufficient to answer, call CannotAnswer(reason=...) instead."
-            )
-        elif assertion_type == 'string_match':
-            submit_instruction = preamble + (
-                "Submit tool: call SubmitString(answer=<string>) with your computed string answer. "
-                "If the data is insufficient to answer, call CannotAnswer(reason=...) instead."
-            )
-        else:
-            submit_instruction = preamble + (
-                "Submit tool: call SubmitNumber(answer=<float>) with your computed numeric answer. "
-                "If the data is insufficient to answer, call CannotAnswer(reason=...) instead."
-            )
+        type_instruction = get_prompt(f'eval_addendum.{assertion_type}')
 
         return {
             "role": "system",
-            "content": base["content"] + submit_instruction
+            "content": base["content"] + preamble + type_instruction
         }
 
     def _get_available_tools(self):
