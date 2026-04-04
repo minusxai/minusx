@@ -180,22 +180,15 @@ export async function processSlackEvent(
       const baseUrl = publicBaseUrl ?? await resolveBaseUrl(installation.companyId);
       const viewUrl = `${baseUrl}/explore/${conversationId}`;
 
-      const blocks = buildSlackReplyBlocks({
-        text: mrkdwnText,
-        viewUrl,
-      });
-
-      await postSlackMessage(installation.bot.bot_token, {
-        channel: ev.channel,
-        text: slackReply.text, // plain text fallback for notifications
-        thread_ts: threadTs,
-        blocks,
-      });
-
-      // Render and upload chart images (max 2) into the thread
+      // Upload chart images first (max 2) so they appear before the text reply
       const queryCharts = extractQueryCharts(result.logDiff);
       for (const chart of queryCharts) {
         try {
+          console.log(`[Slack] Rendering chart:`, JSON.stringify({
+            vizSettings: chart.vizSettings,
+            columns: chart.queryResult.columns,
+            rowCount: chart.queryResult.rows.length,
+          }));
           const chartPng = await renderChartToPng(chart.queryResult, chart.vizSettings);
           if (chartPng) {
             const { fileId } = await uploadSlackFile(installation.bot.bot_token, {
@@ -210,6 +203,19 @@ export async function processSlackEvent(
           console.warn('[Slack] Chart rendering/upload failed:', err);
         }
       }
+
+      // Then send the text reply with "View in MinusX" button
+      const blocks = buildSlackReplyBlocks({
+        text: mrkdwnText,
+        viewUrl,
+      });
+
+      await postSlackMessage(installation.bot.bot_token, {
+        channel: ev.channel,
+        text: slackReply.text,
+        thread_ts: threadTs,
+        blocks,
+      });
     } else {
       await postSlackMessage(installation.bot.bot_token, {
         channel: ev.channel,

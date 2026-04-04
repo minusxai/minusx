@@ -41,7 +41,7 @@ let fontCssCache: string | null = null;
 function getEmbeddedFontCss(): string {
   if (fontCssCache !== null) return fontCssCache;
 
-  const fontsDir = path.join(__dirname, '../../public/fonts');
+  const fontsDir = path.join(process.cwd(), 'public/fonts');
   const faces: string[] = [];
 
   const weights = [
@@ -368,9 +368,9 @@ export function renderChartToSvg(
 let fontFilesCache: string[] | null = null;
 
 function getFontFiles(): string[] {
-  if (fontFilesCache) return fontFilesCache;
+  if (fontFilesCache && fontFilesCache.length > 0) return fontFilesCache;
 
-  const fontsDir = path.join(__dirname, '../../public/fonts');
+  const fontsDir = path.join(process.cwd(), 'public/fonts');
   const files = ['JetBrainsMono-Regular.ttf', 'JetBrainsMono-Bold.ttf'];
   const resolved: string[] = [];
 
@@ -381,6 +381,7 @@ function getFontFiles(): string[] {
     }
   }
 
+  console.log(`[Chart] Font files resolved: ${resolved.length} (from ${fontsDir})`);
   fontFilesCache = resolved;
   return resolved;
 }
@@ -419,7 +420,7 @@ export async function renderChartToPng(
 
   // Default logo: resolve from public/ directory
   const defaultLogoFile = colorMode === 'dark' ? 'logox.svg' : 'logox_dark.svg';
-  const logoPath = options.logoPath ?? path.join(__dirname, '../../public', defaultLogoFile);
+  const logoPath = options.logoPath ?? path.join(process.cwd(), 'public', defaultLogoFile);
 
   const svg = renderChartToSvg(queryResult, vizSettings, options);
   if (!svg) return null;
