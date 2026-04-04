@@ -79,6 +79,78 @@ export async function postSlackMessage(
   return { ts: result.ts };
 }
 
+/**
+ * Upload a file to Slack and share it in a channel/thread.
+ *
+ * 3-step flow per Slack docs:
+ * 1. files.getUploadURLExternal → get temporary upload URL
+ * 2. POST file bytes to that URL
+ * 3. files.completeUploadExternal → share into channel/thread
+ */
+export async function uploadSlackFile(
+  token: string,
+  opts: {
+    channel: string;
+    threadTs?: string;
+    filename: string;
+    fileData: Buffer;
+  },
+): Promise<{ fileId: string }> {
+  const data = Buffer.from(opts.fileData);
+
+  // Step 1: Get upload URL
+  const step1 = await fetch('https://slack.com/api/files.getUploadURLExternal', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      filename: opts.filename,
+      length: String(data.length),
+    }),
+  });
+  const { ok: ok1, upload_url, file_id, error: err1 } = await step1.json() as {
+    ok: boolean; upload_url: string; file_id: string; error?: string;
+  };
+  if (!ok1) {
+    throw new Error(`Slack files.getUploadURLExternal failed: ${err1}`);
+  }
+
+  // Step 2: POST file bytes to the upload URL
+  await fetch(upload_url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: new Blob([data]),
+  });
+
+  // Step 3: Complete upload and share to channel/thread
+  const completeBody: Record<string, unknown> = {
+    files: [{ id: file_id, title: opts.filename }],
+    channel_id: opts.channel,
+  };
+  if (opts.threadTs) {
+    completeBody.thread_ts = opts.threadTs;
+  }
+
+  const step3 = await fetch('https://slack.com/api/files.completeUploadExternal', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(completeBody),
+  });
+  const { ok: ok3, files, error: err3 } = await step3.json() as {
+    ok: boolean; files?: Array<{ id: string }>; error?: string;
+  };
+  if (!ok3) {
+    throw new Error(`Slack files.completeUploadExternal failed: ${err3}`);
+  }
+
+  return { fileId: files?.[0]?.id || file_id };
+}
+
 export async function getSlackUserEmail(token: string, userId: string): Promise<string | null> {
   const query = new URLSearchParams({ user: userId });
   const result = await slackApiFetch<SlackUserInfoResponse>(`users.info?${query.toString()}`, {

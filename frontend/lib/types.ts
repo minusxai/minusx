@@ -999,6 +999,7 @@ export const ToolNames = {
   EXECUTE_QUERY: 'ExecuteQuery',
   ONBOARDING_CONTEXT_AGENT: 'OnboardingContextAgent',
   ONBOARDING_DASHBOARD_AGENT: 'OnboardingDashboardAgent',
+  SLACK_AGENT: 'SlackAgent',
 } as const;
 
 export type ToolName = typeof ToolNames[keyof typeof ToolNames];

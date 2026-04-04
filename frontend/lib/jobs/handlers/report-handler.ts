@@ -1,6 +1,4 @@
 import 'server-only';
-// Register Next.js backend tool handlers so orchestratePendingTools can execute them
-import '@/app/api/chat/tool-handlers.server';
 import { FilesAPI } from '@/lib/data/files.server';
 import { runChatOrchestration } from '@/lib/chat/run-orchestration';
 import { resolveBaseUrl } from '@/lib/jobs/job-utils';

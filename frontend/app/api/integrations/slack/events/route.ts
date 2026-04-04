@@ -1,11 +1,12 @@
 import { after, NextRequest, NextResponse } from 'next/server';
 import { getCompanyUserEffectiveUser } from '@/lib/auth/auth-helpers';
 import { runChatOrchestration } from '@/lib/chat/run-orchestration';
-import { addReaction, getConversationHistory, getSlackUserEmail, postSlackMessage, publishHomeView, removeReaction, verifySlackRequestSignature } from '@/lib/integrations/slack/api';
+import { addReaction, getConversationHistory, getSlackUserEmail, postSlackMessage, publishHomeView, removeReaction, uploadSlackFile, verifySlackRequestSignature } from '@/lib/integrations/slack/api';
 import { getSlackSigningSecret } from '@/lib/integrations/slack/config';
 import { buildSlackAgentArgs } from '@/lib/integrations/slack/context';
 import { resolveBaseUrl } from '@/lib/jobs/job-utils';
-import { extractSlackReplyFromLog, normalizeSlackPrompt } from '@/lib/integrations/slack/messages';
+import { extractSlackReply, extractQueryCharts, markdownToSlackMrkdwn, buildSlackReplyBlocks, normalizeSlackPrompt } from '@/lib/integrations/slack/messages';
+import { renderChartToPng } from '@/lib/chart/render-chart';
 import { buildHomeView, buildWelcomeBlocks, shouldSendWelcome } from '@/lib/integrations/slack/welcome';
 import {
   findSlackInstallationByTeam,
@@ -63,6 +64,7 @@ async function postErrorReply(
 export async function processSlackEvent(
   payload: SlackEventEnvelope,
   installation: SlackInstallationMatch,
+  publicBaseUrl?: string,
 ): Promise<void> {
   const ev = payload.event;
   const eventId = payload.event_id;
@@ -157,6 +159,7 @@ export async function processSlackEvent(
       teamId,
       ev.channel,
       threadTs,
+      userMessage,
     );
 
     const agentArgs = await buildSlackAgentArgs(effectiveUser);
@@ -169,15 +172,51 @@ export async function processSlackEvent(
       conversationId,
     });
 
-    const reply =
-      extractSlackReplyFromLog(result.logDiff) ??
-      'I finished the run, but I do not have a text reply to post back.';
+    const slackReply = extractSlackReply(result.logDiff);
+    const fallbackText = 'I finished the run, but I do not have a text reply to post back.';
 
-    await postSlackMessage(installation.bot.bot_token, {
-      channel: ev.channel,
-      text: reply,
-      thread_ts: threadTs,
-    });
+    if (slackReply) {
+      const mrkdwnText = markdownToSlackMrkdwn(slackReply.text);
+      const baseUrl = publicBaseUrl ?? await resolveBaseUrl(installation.companyId);
+      const viewUrl = `${baseUrl}/explore/${conversationId}`;
+
+      // Upload chart images first (max 2) so they appear before the text reply
+      const queryCharts = extractQueryCharts(result.logDiff);
+      for (const chart of queryCharts) {
+        try {
+          const chartPng = await renderChartToPng(chart.queryResult, chart.vizSettings);
+          if (chartPng) {
+            await uploadSlackFile(installation.bot.bot_token, {
+              channel: ev.channel,
+              threadTs,
+              filename: 'chart.png',
+              fileData: chartPng,
+            });
+          }
+        } catch (err) {
+          console.warn('[Slack] Chart rendering/upload failed:', err);
+        }
+      }
+
+      // Then send the text reply with "View in MinusX" button
+      const blocks = buildSlackReplyBlocks({
+        text: mrkdwnText,
+        viewUrl,
+      });
+
+      await postSlackMessage(installation.bot.bot_token, {
+        channel: ev.channel,
+        text: slackReply.text,
+        thread_ts: threadTs,
+        blocks,
+      });
+    } else {
+      await postSlackMessage(installation.bot.bot_token, {
+        channel: ev.channel,
+        text: fallbackText,
+        thread_ts: threadTs,
+      });
+    }
 
     // Swap :eyes: for :white_check_mark:
     await removeReaction(installation.bot.bot_token, ev.channel, ev.ts, 'eyes');
@@ -242,7 +281,13 @@ export async function POST(request: NextRequest) {
 
   // Process asynchronously so Slack doesn't time out waiting for the agent
   // processSlackEvent handles event deduplication internally via reserveSlackEvent
-  after(() => processSlackEvent(payload, installation));
+  const forwardedProto = (request.headers.get('x-forwarded-proto') || request.nextUrl.protocol.replace(':', '') || 'https')
+    .split(',')[0]
+    .trim();
+  const host = request.headers.get('host') || request.nextUrl.host;
+  const publicBaseUrl = `${forwardedProto}://${host}`;
+
+  after(() => processSlackEvent(payload, installation, publicBaseUrl));
 
   return NextResponse.json({ ok: true });
 }

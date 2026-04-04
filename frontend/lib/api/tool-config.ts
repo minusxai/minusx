@@ -49,6 +49,9 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
   [ToolNames.ONBOARDING_DASHBOARD_AGENT]: {
     displayComponent: ContentDisplay,
   },
+  [ToolNames.SLACK_AGENT]: {
+    displayComponent: ContentDisplay,
+  },
   'Navigate': {
     displayComponent: NavigateDisplay
   },

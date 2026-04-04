@@ -113,7 +113,7 @@ export async function getOrCreateSlackConversationId(
   teamId: string,
   channelId: string,
   threadTs: string,
-  channelName?: string,
+  userMessage?: string,
 ): Promise<number> {
   const userId = user.userId?.toString() || user.email;
   const path = threadFilePath(user.mode, userId, teamId, channelId, threadTs);
@@ -123,8 +123,10 @@ export async function getOrCreateSlackConversationId(
   } catch {
     // First message in this thread — create the conversation file
     const now = new Date().toISOString();
-    const name = `slack-${channelId}-${now.slice(0, 10)}`;
-    const source: ConversationSource = { type: 'slack', teamId, channelId, threadTs, ...(channelName && { channelName }) };
+    const name = userMessage
+      ? userMessage.trim().replace(/\s+/g, ' ').substring(0, 50)
+      : `slack-${channelId}-${now.slice(0, 10)}`;
+    const source: ConversationSource = { type: 'slack', teamId, channelId, threadTs };
     const initialContent: ConversationFileContent = {
       metadata: { userId, name, createdAt: now, updatedAt: now, logLength: 0, source },
       log: [],
