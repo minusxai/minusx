@@ -6,26 +6,46 @@ import { ApiErrors } from '@/lib/api/api-responses';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { isSlackOAuthConfigured, buildOAuthUrl } from '@/lib/integrations/slack/config';
 import { NEXTAUTH_SECRET } from '@/lib/config';
+import { extractSubdomain } from '@/lib/utils/subdomain';
 
-function buildState(): string {
-  const ts = Date.now().toString();
-  const nonce = crypto.randomBytes(16).toString('hex');
-  const payload = `${ts}.${nonce}`;
-  const sig = crypto
-    .createHmac('sha256', NEXTAUTH_SECRET)
-    .update(payload)
-    .digest('hex');
-  return `${payload}.${sig}`;
+interface StatePayload {
+  ts: number;
+  nonce: string;
+  subdomain: string | null;
+  returnUrl: string;
+  userEmail: string;
 }
 
-export const GET = withAuth(async (_request: NextRequest, user) => {
+export function buildState(payload: StatePayload): string {
+  const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const sig = crypto
+    .createHmac('sha256', NEXTAUTH_SECRET)
+    .update(encoded)
+    .digest('hex');
+  return `${encoded}.${sig}`;
+}
+
+export const GET = withAuth(async (request: NextRequest, user) => {
   if (!isAdmin(user.role)) {
     return ApiErrors.forbidden('Only admins can manage Slack bots');
   }
   if (!isSlackOAuthConfigured()) {
     return ApiErrors.badRequest('Slack OAuth is not configured on this server');
   }
-  const state = buildState();
-  const oauthUrl = buildOAuthUrl(state);
-  return NextResponse.redirect(oauthUrl);
+
+  const host = request.headers.get('host') ?? '';
+  const subdomain = extractSubdomain(host);
+  // Build return URL using the originating host so we redirect back to the right subdomain
+  const protocol = host.includes('localhost') ? 'http' : 'https';
+  const returnUrl = `${protocol}://${host}/settings?tab=integrations`;
+
+  const state = buildState({
+    ts: Date.now(),
+    nonce: crypto.randomBytes(16).toString('hex'),
+    subdomain,
+    returnUrl,
+    userEmail: user.email,
+  });
+
+  return NextResponse.redirect(buildOAuthUrl(state));
 });

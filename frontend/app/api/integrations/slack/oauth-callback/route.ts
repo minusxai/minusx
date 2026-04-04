@@ -1,38 +1,51 @@
 import 'server-only';
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { handleApiError, ApiErrors } from '@/lib/api/api-responses';
-import { isAdmin } from '@/lib/auth/role-helpers';
 import { isSlackOAuthConfigured, SLACK_BOT_SCOPES } from '@/lib/integrations/slack/config';
 import { slackAuthTest } from '@/lib/integrations/slack/api';
 import { upsertSlackBotConfig } from '@/lib/integrations/slack/store';
 import { NEXTAUTH_SECRET, SLACK_CLIENT_ID, SLACK_CLIENT_SECRET, AUTH_URL } from '@/lib/config';
+import { CompanyDB } from '@/lib/database/company-db';
 import type { SlackBotConfig } from '@/lib/types';
 
 const STATE_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 
-function verifyState(state: string): boolean {
+interface StatePayload {
+  ts: number;
+  nonce: string;
+  subdomain: string | null;
+  returnUrl: string;
+  userEmail: string;
+}
+
+function verifyState(state: string): StatePayload | null {
   const lastDot = state.lastIndexOf('.');
-  if (lastDot < 0) return false;
-  const payload = state.slice(0, lastDot);
+  if (lastDot < 0) return null;
+  const encoded = state.slice(0, lastDot);
   const sig = state.slice(lastDot + 1);
 
   const expectedSig = crypto
     .createHmac('sha256', NEXTAUTH_SECRET)
-    .update(payload)
+    .update(encoded)
     .digest('hex');
 
   const sigBuf = Buffer.from(sig, 'hex');
   const expectedBuf = Buffer.from(expectedSig, 'hex');
-  if (sigBuf.length !== expectedBuf.length) return false;
-  if (!crypto.timingSafeEqual(sigBuf, expectedBuf)) return false;
+  if (sigBuf.length !== expectedBuf.length) return null;
+  if (!crypto.timingSafeEqual(sigBuf, expectedBuf)) return null;
 
-  const ts = parseInt(payload.split('.')[0], 10);
-  if (!Number.isFinite(ts)) return false;
-  if (Date.now() - ts > STATE_EXPIRY_MS) return false;
+  let payload: StatePayload;
+  try {
+    payload = JSON.parse(Buffer.from(encoded, 'base64url').toString()) as StatePayload;
+  } catch {
+    return null;
+  }
 
-  return true;
+  if (!Number.isFinite(payload.ts)) return null;
+  if (Date.now() - payload.ts > STATE_EXPIRY_MS) return null;
+
+  return payload;
 }
 
 interface SlackOAuthV2Response {
@@ -71,24 +84,42 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state');
   const error = searchParams.get('error');
 
+  // Extract returnUrl from state before verifying (for denied redirect)
+  // Safe to read unverified here — we only use it for a redirect, not for trust decisions
+  const deniedReturn = (() => {
+    try {
+      const lastDot = (state ?? '').lastIndexOf('.');
+      if (lastDot < 0) return `${AUTH_URL}/settings?tab=integrations&slack=denied`;
+      const raw = JSON.parse(Buffer.from((state ?? '').slice(0, lastDot), 'base64url').toString()) as Partial<StatePayload>;
+      return `${raw.returnUrl ?? `${AUTH_URL}/settings?tab=integrations`}&slack=denied`;
+    } catch {
+      return `${AUTH_URL}/settings?tab=integrations&slack=denied`;
+    }
+  })();
+
   if (error) {
-    return NextResponse.redirect(`${AUTH_URL}/settings?tab=integrations&slack=denied`);
+    return NextResponse.redirect(deniedReturn);
   }
 
   if (!code || !state) {
     return ApiErrors.validationError('Missing code or state parameter');
   }
 
-  if (!verifyState(state)) {
+  const payload = verifyState(state);
+  if (!payload) {
     return ApiErrors.validationError('Invalid or expired state parameter');
   }
 
-  const user = await getEffectiveUser();
-  if (!user) {
-    return NextResponse.redirect(`${AUTH_URL}/settings?tab=integrations&slack=auth_required`);
-  }
-  if (!isAdmin(user.role)) {
-    return ApiErrors.forbidden('Only admins can manage Slack bots');
+  // Look up company from subdomain encoded in the signed state.
+  // We don't use a session cookie here — the callback lands on the root domain
+  // (minusx.app) while the user's session is scoped to their company subdomain.
+  // Security: the state is HMAC-signed, so subdomain can't be tampered with.
+  const company = payload.subdomain
+    ? await CompanyDB.getBySubdomain(payload.subdomain)
+    : await CompanyDB.getDefaultCompany();
+
+  if (!company) {
+    return ApiErrors.notFound('Company not found for this workspace');
   }
 
   try {
@@ -111,14 +142,14 @@ export async function GET(request: NextRequest) {
       app_id: oauthResp.app_id,
       enterprise_id: oauthResp.enterprise?.id,
       installed_at: new Date().toISOString(),
-      installed_by: user.email,
+      installed_by: payload.userEmail,
       enabled: true,
       scopes: [...SLACK_BOT_SCOPES],
     };
 
-    await upsertSlackBotConfig(user.companyId, user.mode, bot);
+    await upsertSlackBotConfig(company.id, 'org', bot);
 
-    return NextResponse.redirect(`${AUTH_URL}/settings?tab=integrations&slack=installed`);
+    return NextResponse.redirect(`${payload.returnUrl}&slack=installed`);
   } catch (error) {
     return handleApiError(error);
   }

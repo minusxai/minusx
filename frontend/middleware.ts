@@ -56,6 +56,7 @@ export default auth(async (req) => {
     pathname.startsWith('/.well-known/oauth') ||
     pathname.startsWith('/api/integrations/slack/events') ||
     pathname.startsWith('/api/integrations/slack/interact') ||
+    pathname.startsWith('/api/integrations/slack/oauth-callback') ||
     pathname === '/api/health' ||
     pathname === '/api/jobs/cron'
   ) {
