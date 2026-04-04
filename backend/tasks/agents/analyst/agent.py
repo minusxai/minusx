@@ -123,7 +123,7 @@ class AnalystAgent(Agent):
         if not isinstance(self.app_state, dict):
             return None
         top_type = self.app_state.get("type")
-        if top_type in ("explore", "folder"):
+        if top_type in ("explore", "folder", "slack"):
             return top_type
         if top_type == "file":
             state = self.app_state.get("state")
