@@ -18,8 +18,8 @@ export default function ConversationContainerV2({ fileId }: FileComponentProps) 
     );
   }
 
-  const conversation = file.content as unknown as ConversationFileContent;
-  const taskCount = conversation.log?.length || 0;
+  const conversation = file.content as unknown as ConversationFileContent | null;
+  const taskCount = conversation?.log?.length || 0;
 
   return (
     <Box p={8} maxW="1400px" mx="auto">
@@ -50,12 +50,12 @@ export default function ConversationContainerV2({ fileId }: FileComponentProps) 
             </HStack>
             <HStack>
               <Text fontWeight="600" minW="120px" color="fg.default">User ID:</Text>
-              <Text fontFamily="mono" fontSize="sm" color="fg.default">{conversation.metadata?.userId || 'N/A'}</Text>
+              <Text fontFamily="mono" fontSize="sm" color="fg.default">{conversation?.metadata?.userId || 'N/A'}</Text>
             </HStack>
             <HStack>
               <Text fontWeight="600" minW="120px" color="fg.default">Created:</Text>
               <Text fontSize="sm" color="fg.default">
-                {conversation.metadata?.createdAt
+                {conversation?.metadata?.createdAt
                   ? new Date(conversation.metadata.createdAt).toLocaleString()
                   : 'N/A'}
               </Text>
@@ -63,7 +63,7 @@ export default function ConversationContainerV2({ fileId }: FileComponentProps) 
             <HStack>
               <Text fontWeight="600" minW="120px" color="fg.default">Updated:</Text>
               <Text fontSize="sm" color="fg.default">
-                {conversation.metadata?.updatedAt
+                {conversation?.metadata?.updatedAt
                   ? new Date(conversation.metadata.updatedAt).toLocaleString()
                   : 'N/A'}
               </Text>
@@ -77,7 +77,7 @@ export default function ConversationContainerV2({ fileId }: FileComponentProps) 
 
         {/* JSON Viewer */}
         <Box w="100%">
-          <JsonViewer data={conversation} title="Full Conversation Data" />
+          <JsonViewer data={conversation ?? {}} title="Full Conversation Data" />
         </Box>
       </VStack>
     </Box>
