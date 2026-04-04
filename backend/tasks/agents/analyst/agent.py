@@ -24,6 +24,7 @@ PAGE_SKILL_MAP: dict[str, list[str]] = {
     "alert": ["alerts"],
     "explore": ["explore"],
     "folder": ["explore"],
+    "slack": ["explore"],
 }
 # Default when page type is unknown or null
 DEFAULT_PRELOADED_SKILLS = ["questions", "explore"]
@@ -303,7 +304,7 @@ class SlackAgent(AnalystAgent):
         """Slack uses a read/query-focused subset of Analyst tools."""
         if len(self.tool_thread) >= MAX_STEPS_LOWER_LEVEL - 5:
             return []
-        return [ReadFiles, ExecuteQuery, SearchDBSchema, SearchFiles]
+        return [ReadFiles, ExecuteQuery, SearchDBSchema, SearchFiles, LoadSkill]
 
 
 @register_agent
