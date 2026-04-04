@@ -1096,7 +1096,79 @@ export const MIGRATIONS: MigrationEntry[] = [
     },
     description: 'Set setupWizard.status = "complete" on all existing /org/configs/config documents (existing companies have already completed onboarding)',
   },
+  {
+    dataVersion: 26,
+    description: 'V26: Fix files with broken paths by moving them to the nearest valid ancestor folder',
+    dataMigration: (data: InitData) => {
+      for (const companyData of data.companies as CompanyData[]) {
+        fixFilesWithBrokenPaths(companyData);
+      }
+      return data;
+    },
+  },
 ];
+
+/**
+ * For each non-folder document in a company whose immediate parent folder does not exist,
+ * relocate it to the deepest valid ancestor folder that has a free slot for that file name.
+ * If no valid ancestor exists anywhere in the path, fall back to /org (with a numeric suffix
+ * to resolve any name collision). Mutates companyData.documents in place.
+ */
+export function fixFilesWithBrokenPaths(companyData: CompanyData): void {
+  // Build set of valid folder paths from existing folder documents
+  const folderPaths = new Set<string>(
+    companyData.documents.filter(d => d.type === 'folder').map(d => d.path)
+  );
+  // Track all occupied paths so we can detect conflicts at the destination
+  const allPaths = new Set<string>(companyData.documents.map(d => d.path));
+
+  for (const doc of companyData.documents) {
+    if (doc.type === 'folder') continue;
+
+    const parts = doc.path.split('/').filter(Boolean);
+    if (parts.length <= 1) continue; // at root level, nothing to check
+
+    const parentPath = '/' + parts.slice(0, -1).join('/');
+    if (folderPaths.has(parentPath)) continue; // parent exists — no fix needed
+
+    const fileName = parts[parts.length - 1];
+
+    // Walk up from the immediate parent toward the root, looking for the deepest
+    // valid folder that has an unoccupied slot for this file name.
+    // i represents the number of path segments in the candidate ancestor.
+    let newPath: string | null = null;
+    for (let i = parts.length - 2; i >= 1; i--) {
+      const ancestorPath = '/' + parts.slice(0, i).join('/');
+      if (!folderPaths.has(ancestorPath)) continue; // not a valid folder, try higher
+      const candidatePath = ancestorPath + '/' + fileName;
+      if (!allPaths.has(candidatePath)) {
+        newPath = candidatePath;
+        break;
+      }
+      // Slot taken at this level — continue searching a higher ancestor
+    }
+
+    if (newPath === null) {
+      // No valid ancestor found in the path — absolute fallback to /org.
+      // Use a numeric suffix to resolve any name collision there.
+      const fallback = '/org';
+      if (folderPaths.has(fallback)) {
+        let candidate = fallback + '/' + fileName;
+        let suffix = 1;
+        while (allPaths.has(candidate)) {
+          candidate = `${fallback}/${fileName}_${++suffix}`;
+        }
+        newPath = candidate;
+      }
+    }
+
+    if (newPath === null) continue; // /org doesn't exist either — truly unresolvable
+
+    allPaths.delete(doc.path);
+    allPaths.add(newPath);
+    doc.path = newPath;
+  }
+}
 
 /**
  * Get target versions after applying all migrations
