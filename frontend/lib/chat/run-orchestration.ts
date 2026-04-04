@@ -3,11 +3,9 @@
  *
  * Extracted from /api/chat/route.ts so job handlers (e.g. report-handler.ts)
  * can run a full agent execution without going through HTTP.
- *
- * Caller is responsible for importing tool handlers before calling this:
- *   import '@/app/api/chat/tool-handlers.server';
  */
 import 'server-only';
+import '@/app/api/chat/tool-handlers.server';
 import { getOrCreateConversation, appendLogToConversation } from '@/lib/conversations';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import { orchestratePendingTools } from '@/app/api/chat/orchestrator';
