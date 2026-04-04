@@ -149,7 +149,7 @@ describe('Explore page: database selector defaults to first connection', () => {
   });
 
   it('auto-selects first connection when connections are pre-loaded in Redux', async () => {
-    // Pre-seed Redux with 2 connections (with non-empty schemas so they pass allowedDatabaseNames filter)
+    // Pre-seed Redux with 2 connections
     testStore.dispatch(
       setFiles({
         files: [
@@ -176,9 +176,7 @@ describe('Explore page: database selector defaults to first connection', () => {
   });
 
   it('auto-selects first schema-loaded connection when first connection has no schema', async () => {
-    // Bug scenario: first connection has no schema (not yet introspected), others do.
-    // auto-select must pick the first connection WITH a schema, not just the first connection —
-    // otherwise the selector shows "No connection" because allowedDatabaseNames filters schema-less ones.
+    // auto-select prefers connections with schemas loaded (better UX: start with a working connection).
     testStore.dispatch(
       setFiles({
         files: [
@@ -198,7 +196,7 @@ describe('Explore page: database selector defaults to first connection', () => {
       { store: testStore }
     );
 
-    // Should select 'has_schema_db_1' (first WITH schema), NOT show "No connection"
+    // Should select 'has_schema_db_1' (first WITH schema)
     await waitFor(() => {
       const selector = screen.getByLabelText('Database selector');
       expect(selector).toHaveTextContent('has_schema_db_1');
