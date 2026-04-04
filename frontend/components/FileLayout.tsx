@@ -96,10 +96,8 @@ export default function FileLayout(props: FileLayoutProps) {
 //   }, [dispatch]);
 
   return (
-    <Box display="flex" h={metadata.h} bg="bg.canvas"
-    overflow={metadata.h === '100vh' ? 'hidden' : 'visible'}
-    >
-      <VStack flex="1" minW="0" position="relative" align="stretch" overflow={metadata.h === '100vh' ? 'hidden' : 'visible'} minHeight="0">
+    <Box display="flex" h="100vh" bg="bg.canvas" overflow="hidden">
+      <VStack flex="1" minW="0" position="relative" align="stretch" overflow="hidden" minHeight="0">
         {/* Dim base content when a stack layer is active */}
         <Box
           flex="1"
@@ -115,7 +113,7 @@ export default function FileLayout(props: FileLayoutProps) {
               px={{ base: 4, md: 8, lg: 12 }}
               pt={{ base: 3, md: 4, lg: 5 }}
               pb={shouldShowBottomBar ? 0 : { base: 4, md: 6, lg: 8 }}
-              align="stretch" overflow="hidden" minHeight="0">
+              align="stretch" overflow={metadata.h === '100vh' ? 'hidden' : 'auto'} minHeight="0">
             <Flex justify="space-between" align="center" mb={4} gap={4}>
               <Box flex="1" minW={0}>
                 <Breadcrumb
