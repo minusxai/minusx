@@ -520,11 +520,13 @@ describe('Job Runs E2E', () => {
       expect(runs).toHaveLength(1);  // only one run, not two
     });
 
-    it('skips alert with non-matching cron (daily at 3am)', async () => {
-      // Update alert to a cron that will never match now (0 3 * * * = 3am daily)
+    it('skips alert with non-matching cron (fired >1h ago)', async () => {
+      // Pick a valid hour that is always ≥2 hours in the past, so prevFire > MAX_CRON_DELAY_MS.
+      // safeHour = (currentHour - 2 + 24) % 24 guarantees a 2h+ gap regardless of when CI runs.
+      const safeHour = (new Date().getUTCHours() - 2 + 24) % 24;
       const updatedContent: AlertContent = {
         status: 'live',
-        schedule: { cron: '0 3 * * *', timezone: 'UTC' },
+        schedule: { cron: `0 ${safeHour} * * *`, timezone: 'UTC' },
         tests: [{ type: 'query', subject: { type: 'query', question_id: questionId, column: 'revenue', row: 0 }, answerType: 'number', operator: '<=', value: { type: 'constant', value: 100 } }],
         recipients: [],
       };

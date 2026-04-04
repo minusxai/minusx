@@ -141,7 +141,10 @@ async function runForCompany(
         : null;
       const prevFire = cronExpr ? getPrevFireTime(cronExpr, now) : null;
 
-      // Skip if the last scheduled fire time was more than 30 minutes ago.
+      // Skip if no prev fire time found (cron expression never matches).
+      if (cronExpr && !prevFire) { skipped++; continue; }
+
+      // Skip if the last scheduled fire time was more than 1 hour ago.
       // This tolerates scheduler delays (e.g. GHA queue) while preventing stale
       // daily/weekly jobs from firing hours after their scheduled time.
       const MAX_CRON_DELAY_MS = 60 * 60 * 1000;
