@@ -67,6 +67,32 @@ describe('renderChartToSvg', () => {
     });
   });
 
+  describe('funnel chart', () => {
+    it('renders a valid SVG string', () => {
+      const vizSettings: VizSettings = {
+        type: 'funnel',
+        xCols: ['month'],
+        yCols: ['revenue'],
+      };
+
+      const svg = renderChartToSvg(SAMPLE_QUERY_RESULT, vizSettings);
+      expect(svg).toContain('<svg');
+    });
+  });
+
+  describe('waterfall chart', () => {
+    it('renders a valid SVG string', () => {
+      const vizSettings: VizSettings = {
+        type: 'waterfall',
+        xCols: ['month'],
+        yCols: ['revenue'],
+      };
+
+      const svg = renderChartToSvg(SAMPLE_QUERY_RESULT, vizSettings);
+      expect(svg).toContain('<svg');
+    });
+  });
+
   describe('area chart', () => {
     it('renders a valid SVG string', () => {
       const vizSettings: VizSettings = {

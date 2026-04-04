@@ -2,18 +2,11 @@ import { useMemo, useState } from 'react'
 import { Box, Button } from '@chakra-ui/react'
 import { LuArrowRightLeft } from 'react-icons/lu'
 import { useAppSelector } from '@/store/hooks'
-import { EChart } from './EChart'
+import { ChartHost } from './ChartHost'
 import { useChartContainer } from './useChartContainer'
 import { ChartError } from './ChartError'
-import { isValidChartData, resolveChartFormats, buildToolbox, getTimestamp, type ChartProps } from '@/lib/chart/chart-utils'
-import { withMinusXTheme } from '@/lib/chart/echarts-theme'
-import type { EChartsOption } from 'echarts'
-
-// Theme-aware text colors
-const LABEL_COLORS = {
-  light: '#0D1117',
-  dark: '#E6EDF3',
-}
+import { buildFunnelChartOption, isValidChartData, type ChartProps } from '@/lib/chart/chart-utils'
+import { downloadChartCsv } from './build-chart-download'
 
 interface FunnelPlotProps extends ChartProps {
   emptyMessage?: string
@@ -25,150 +18,44 @@ export const FunnelPlot = (props: FunnelPlotProps) => {
   const { containerRef, containerWidth, containerHeight, chartEvents } = useChartContainer(onChartClick)
   const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>('horizontal')
 
-  const { fmtName, fmtValue } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
-
-  const option: EChartsOption = useMemo(() => {
+  const option = useMemo(() => {
     if (!isValidChartData(xAxisData, series)) {
       return {}
     }
 
-    // Transform data for funnel chart
-    // Each x-axis value becomes a funnel stage
-    // Sum values across all series for each stage
     const rawData = xAxisData.map((name, index) => {
       const value = series.reduce((sum, s) => {
         const val = s.data[index]
         return sum + (typeof val === 'number' && !isNaN(val) ? val : 0)
       }, 0)
-      return { name: fmtName(name), value }
+      return { name, value }
     })
-
-    // Use single base color with decreasing opacity
-    const baseColor = customPalette[0]
-    const funnelData = rawData.map((item) => {
-      return {
-        ...item,
-        itemStyle: {
-          color: baseColor,
-          ...(styleConfig?.opacity != null ? { opacity: styleConfig.opacity } : {}),
-        },
-      }
-    })
-
-    // Top value for calculating percentage (first item is the baseline stage)
-    const maxValue = Math.max(...funnelData.map(d => d.value))
-    const topValue = maxValue > 0 ? maxValue : 1
-
-    // CSV download for funnel chart
     const downloadCsv = () => {
-      const headers = ['Name', 'Value', 'Percent of Top']
-      const rows = funnelData.map(item => [
+      const maxValue = Math.max(...rawData.map(item => item.value))
+      const topValue = maxValue > 0 ? maxValue : 1
+      downloadChartCsv(['Name', 'Value', 'Percent of Top'], rawData.map(item => [
         item.name,
         item.value,
-        ((item.value / topValue) * 100).toFixed(1) + '%'
-      ])
-
-      const escapeCsvValue = (val: string | number) => {
-        const str = String(val)
-        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-          return `"${str.replace(/"/g, '""')}"`
-        }
-        return str
-      }
-
-      const csvContent = [
-        headers.map(escapeCsvValue).join(','),
-        ...rows.map(row => row.map(escapeCsvValue).join(','))
-      ].join('\n')
-
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `chart-${getTimestamp()}.csv`
-      link.click()
-      URL.revokeObjectURL(url)
+        `${((item.value / topValue) * 100).toFixed(1)}%`,
+      ]))
     }
 
-    const baseOption: EChartsOption = {
-      ...(chartTitle ? { title: { text: chartTitle, left: 'center', top: 5, show: showChartTitle } } : {}),
-      toolbox: buildToolbox({
-        colorMode,
-        downloadCsv,
-        chartTitle,
-        exportBranding,
-      }),
-      tooltip: {
-        trigger: 'item',
-        appendToBody: true,
-        z: 9999,
-        confine: false,
-        formatter: (params: any) => {
-          const { name, value } = params
-          // Calculate percentage relative to top stage
-          const percentOfTop = (value / topValue) * 100
-          return `${name}<br/>Value: ${fmtValue(value)}<br/>Percent: ${percentOfTop.toFixed(1)}%`
-        },
-      },
-      legend: {
-        data: funnelData.map(d => d.name),
-        top: chartTitle && showChartTitle ? 35 : 10,
-        orient: 'horizontal',
-        type: 'scroll',
-        pageIconSize: 10,
-        pageTextStyle: { fontSize: 10 },
-      },
-      series: [
-        {
-          name: 'Funnel',
-          type: 'funnel',
-          orient: orientation,
-          ...(orientation === 'horizontal'
-            ? { left: '5%', right: '5%', top: 60, bottom: 20, width: '90%', height: '70%' }
-            : { left: '10%', top: 60, bottom: 20, width: '80%' }
-          ),
-          min: 0,
-          max: Math.max(...funnelData.map(d => d.value)),
-          minSize: '0%',
-          maxSize: '100%',
-          sort: 'none',
-          gap: 2,
-          label: {
-            show: true,
-            position: 'inside',
-            color: LABEL_COLORS[colorMode],
-            fontWeight: 'bold',
-            backgroundColor: colorMode === 'dark' ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)',
-            borderRadius: 4,
-            padding: [4, 8],
-            formatter: (params: any) => {
-              const pct = ((params.value / topValue) * 100).toFixed(1)
-              return `${params.name}\n${fmtValue(params.value)} (${pct}%)`
-            },
-          },
-          labelLine: {
-            length: 10,
-            lineStyle: {
-              width: 1,
-            },
-          },
-          itemStyle: {
-            borderColor: 'transparent',
-            borderWidth: 1,
-          },
-          emphasis: {
-            label: {
-              fontSize: 14,
-              color: LABEL_COLORS[colorMode],
-            },
-          },
-          data: funnelData,
-        },
-      ],
-    }
-
-    return withMinusXTheme(baseOption, colorMode)
-  }, [xAxisData, series, colorMode, containerWidth, containerHeight, orientation, fmtName, fmtValue, chartTitle, showChartTitle, customPalette, styleConfig, exportBranding])
+    return buildFunnelChartOption({
+      xAxisData,
+      series,
+      colorMode,
+      columnFormats,
+      xAxisColumns,
+      yAxisColumns,
+      chartTitle,
+      showChartTitle,
+      colorPalette: customPalette,
+      styleConfig,
+      exportBranding,
+      downloadCsv,
+      orientation,
+    })
+  }, [xAxisData, series, colorMode, containerWidth, containerHeight, orientation, columnFormats, xAxisColumns, yAxisColumns, chartTitle, showChartTitle, customPalette, styleConfig, exportBranding])
 
   if ((xAxisColumns?.length ?? 0) > 1) {
     return <ChartError message="Funnel charts support only a single X-axis column. Remove extra columns from the X axis to continue." />
@@ -187,7 +74,12 @@ export const FunnelPlot = (props: FunnelPlotProps) => {
   }
 
   return (
-    <Box ref={containerRef} width="100%" height={props.height || '100%'} flex="1" minHeight="300px" overflow="visible" position="relative">
+    <ChartHost
+      containerRef={containerRef}
+      height={props.height}
+      option={option}
+      events={chartEvents}
+    >
       <Button
         size="xs"
         variant="ghost"
@@ -200,12 +92,6 @@ export const FunnelPlot = (props: FunnelPlotProps) => {
         <LuArrowRightLeft style={{ transform: orientation === 'vertical' ? 'rotate(90deg)' : 'none' }} />
         {"orientation"}
       </Button>
-      <EChart
-        option={option}
-        style={{ width: '100%', height: '100%', minHeight: '300px' }}
-        chartSettings={{ useCoarsePointer: true, renderer: 'canvas' }}
-        events={chartEvents}
-      />
-    </Box>
+    </ChartHost>
   )
 }

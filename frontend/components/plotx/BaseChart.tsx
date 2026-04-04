@@ -1,13 +1,11 @@
 import { useCallback, useMemo } from 'react'
 import { Box } from '@chakra-ui/react'
 import { useAppSelector } from '@/store/hooks'
-import { EChart } from './EChart'
 import { useChartContainer } from './useChartContainer'
+import { ChartHost } from './ChartHost'
 import { buildAnnotationGraphics, buildChartOption, isValidChartData, type ChartProps } from '@/lib/chart/chart-utils'
 import type { EChartsOption } from 'echarts'
 import type { EChartsType } from 'echarts/core'
-
-const CHART_SETTINGS = { useCoarsePointer: true, renderer: 'canvas' as const }
 
 interface BaseChartProps extends ChartProps {
   chartType: 'line' | 'bar' | 'area' | 'scatter' | 'combo'
@@ -88,15 +86,13 @@ export const BaseChart = (props: BaseChartProps) => {
   }
 
   return (
-    <Box ref={containerRef} width="100%" height={props.height || '100%'} flex="1" minHeight="300px" overflow="visible">
-      <EChart
-        key={chartInstanceKey}
-        option={option}
-        style={{ width: '100%', height: '100%', minHeight: '300px' }}
-        chartSettings={CHART_SETTINGS}
-        events={chartEvents}
-        onChartUpdate={handleChartUpdate}
-      />
-    </Box>
+    <ChartHost
+      containerRef={containerRef}
+      height={props.height}
+      option={option}
+      events={chartEvents}
+      onChartUpdate={handleChartUpdate}
+      chartKey={chartInstanceKey}
+    />
   )
 }
