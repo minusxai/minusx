@@ -4,12 +4,15 @@ import json
 from tasks import Agent
 from tasks.agents.analyst.tools import LoadSkill
 from tasks.agents.analyst.prompt_loader import PromptLoader, get_skill, list_skills
-from tasks.agents.analyst.agent import AnalystAgent
+from tasks.agents.analyst.agent import AnalystAgent, DEFAULT_PRELOADED_SKILLS
 
 
-def _get_system_prompt(**overrides):
+def _get_system_prompt(preloaded_skill_names=None, **overrides):
     """Helper to build a system prompt with default test variables."""
     loader = PromptLoader()
+    if preloaded_skill_names is None:
+        preloaded_skill_names = DEFAULT_PRELOADED_SKILLS
+    preloaded_set = set(preloaded_skill_names)
     defaults = {
         'agent_name': 'Test',
         'schema': '[]',
@@ -17,7 +20,8 @@ def _get_system_prompt(**overrides):
         'connection_id': 'test',
         'home_folder': '/org',
         'max_steps': 10,
-        'skills_catalog': AnalystAgent._build_skills_catalog(),
+        'skills_catalog': AnalystAgent._build_skills_catalog(preloaded_set),
+        'preloaded_skills': AnalystAgent._build_preloaded_skills_content(preloaded_skill_names),
     }
     defaults.update(overrides)
     return loader.get('default.system', **defaults)
@@ -136,21 +140,39 @@ class TestSystemPromptExcludesSkillContent:
         assert "LoadSkill" in system
         assert "alerts" in system.lower()
 
-    def test_system_prompt_still_contains_question_structure(self):
-        """Question file structure should still be in the base prompt (preloaded)."""
-        system = _get_system_prompt()
+    def test_question_page_preloads_question_skill(self):
+        """On a question page, question skill content is preloaded."""
+        system = _get_system_prompt(preloaded_skill_names=["questions"])
         assert '"query"' in system
         assert '"vizSettings"' in system
+        # Dashboard skill should NOT be preloaded (check for dashboard-specific content)
+        assert "Dashboard Page Behavior" not in system
 
-    def test_system_prompt_still_contains_dashboard_structure(self):
-        """Dashboard file structure should still be in the base prompt (preloaded)."""
-        system = _get_system_prompt()
+    def test_dashboard_page_preloads_dashboard_and_question_skills(self):
+        """On a dashboard page, both dashboard and question skills are preloaded."""
+        system = _get_system_prompt(preloaded_skill_names=["dashboards", "questions"])
         assert '"assets"' in system
         assert '"layout"' in system
         assert "12-column grid" in system
+        assert '"query"' in system
 
-    def test_system_prompt_still_contains_context_structure(self):
-        """Context file structure should still be in the base prompt (preloaded)."""
-        system = _get_system_prompt()
+    def test_context_page_preloads_context_skill(self):
+        """On a context page, context skill content is preloaded."""
+        system = _get_system_prompt(preloaded_skill_names=["contexts"])
         assert '"versions"' in system
         assert '"docs"' in system
+
+    def test_alert_page_preloads_alert_skill(self):
+        """On an alert page, alert skill is preloaded (not on-demand)."""
+        system = _get_system_prompt(preloaded_skill_names=["alerts"])
+        assert '"selector": "last"' in system
+        assert '"function": "value"' in system
+
+    def test_preloaded_skills_excluded_from_catalog(self):
+        """Skills that are preloaded should not appear in the LoadSkill catalog."""
+        system = _get_system_prompt(preloaded_skill_names=["dashboards", "questions"])
+        # "dashboards" and "questions" should NOT be in the catalog
+        assert '"dashboards"' not in system
+        assert '"questions"' not in system
+        # But "alerts" should be in the catalog
+        assert '"alerts"' in system

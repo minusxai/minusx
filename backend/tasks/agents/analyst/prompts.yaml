@@ -492,19 +492,9 @@ prompts:
       {guidelines}
 
       ## Preloaded Skills
-      The following skills are preloaded for quick reference. For other file types (reports, alerts) or advanced features (parameters, visualizations, composed questions), use `LoadSkill`.
+      The following skills are preloaded based on your current page. For other file types or advanced features, use `LoadSkill`.
 
-      {skill_questions.content}
-
-      {skill_dashboards.content}
-
-      {skill_contexts.content}
-
-      {skill_explore.content}
-
-      ### Invoked in Alert Page / Report Page
-      - Load the relevant skill first: `LoadSkill("alerts")` or `LoadSkill("reports")` to get file structure and behavior guidelines.
-      - All changes are done via EditFile. Only navigate or create new files if the user explicitly asks you to.
+      {preloaded_skills}
 
       {connection_section}
 

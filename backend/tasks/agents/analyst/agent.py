@@ -13,10 +13,20 @@ from tasks.llm.models import ALLMRequest, LlmSettings, UserInfo
 from tasks.llm.config import ANALYST_V2_MODEL, MAX_STEPS_LOWER_LEVEL
 from .tools import SearchDBSchema, SearchFiles, Clarify, Navigate, CreateFile
 from .tools import ReadFiles, EditFile, ExecuteQuery, PublishAll, LoadSkill
-from .prompt_loader import get_prompt, list_skills
+from .prompt_loader import get_prompt, get_skill, list_skills
 
-# Skills preloaded into the system prompt (not listed in LoadSkill catalog)
-PRELOADED_SKILLS = {"questions", "dashboards", "contexts", "explore"}
+# Map page type → skills to preload into the system prompt
+PAGE_SKILL_MAP: dict[str, list[str]] = {
+    "question": ["questions"],
+    "dashboard": ["dashboards", "questions"],
+    "context": ["contexts"],
+    "report": ["reports"],
+    "alert": ["alerts"],
+    "explore": ["explore"],
+    "folder": ["explore"],
+}
+# Default when page type is unknown or null
+DEFAULT_PRELOADED_SKILLS = ["questions", "explore"]
 
 
 # Mock LLM request if LLM_MOCK_URL is set (for testing)
@@ -103,19 +113,57 @@ class AnalystAgent(Agent):
 
         self.child_count = len(child_batches)
 
+    def _get_page_type(self) -> str | None:
+        """Extract the page type from app_state.
+
+        app_state.type is 'file', 'folder', or 'explore'.
+        For files, the actual type is at app_state.state.fileState.type.
+        """
+        if not isinstance(self.app_state, dict):
+            return None
+        top_type = self.app_state.get("type")
+        if top_type in ("explore", "folder"):
+            return top_type
+        if top_type == "file":
+            state = self.app_state.get("state")
+            if isinstance(state, dict):
+                fs = state.get("fileState")
+                if isinstance(fs, dict):
+                    return fs.get("type")
+        return None
+
+    def _get_preloaded_skill_names(self) -> list[str]:
+        """Determine which skills to preload based on the current page type."""
+        page_type = self._get_page_type()
+        return PAGE_SKILL_MAP.get(page_type, DEFAULT_PRELOADED_SKILLS)
+
     @staticmethod
-    def _build_skills_catalog() -> str:
-        """Generate the LoadSkill catalog from skill definitions, excluding preloaded skills."""
+    def _build_skills_catalog(preloaded: set[str] | None = None) -> str:
+        """Generate the LoadSkill catalog, excluding already-preloaded skills."""
+        if preloaded is None:
+            preloaded = set(DEFAULT_PRELOADED_SKILLS)
         skills = list_skills()
         lines = []
         for name, description in skills.items():
-            if name not in PRELOADED_SKILLS:
+            if name not in preloaded:
                 lines.append(f'  - `"{name}"` — {description}')
         return "\n".join(lines)
+
+    @staticmethod
+    def _build_preloaded_skills_content(skill_names: list[str]) -> str:
+        """Resolve and concatenate the content of preloaded skills."""
+        sections = []
+        for name in skill_names:
+            content = get_skill(name)
+            if content:
+                sections.append(content)
+        return "\n\n".join(sections)
 
     def _get_system_message(self) -> dict:
         """Generate system message with schema and context."""
         max_steps = MAX_STEPS_LOWER_LEVEL - 5  # Safety margin
+        preloaded_names = self._get_preloaded_skill_names()
+        preloaded_set = set(preloaded_names)
 
         content = get_prompt(
             'default.system',
@@ -125,7 +173,8 @@ class AnalystAgent(Agent):
             home_folder=self.home_folder,
             max_steps=max_steps,
             agent_name=self.agent_name,
-            skills_catalog=self._build_skills_catalog()
+            skills_catalog=self._build_skills_catalog(preloaded_set),
+            preloaded_skills=self._build_preloaded_skills_content(preloaded_names)
         )
         return {"role": "system", "content": content}
 

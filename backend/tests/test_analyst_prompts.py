@@ -6,6 +6,10 @@ import shutil
 from pathlib import Path
 from tasks.agents.analyst.prompt_loader import PromptLoader
 from tasks.agents.analyst.agent import AnalystAgent
+from tasks.agents.analyst.tools import (
+    ReadFiles, EditFile, ExecuteQuery, PublishAll, Navigate,
+    Clarify, SearchDBSchema, SearchFiles, CreateFile, LoadSkill
+)
 from tasks.llm.client import describe_tool
 
 
@@ -32,7 +36,8 @@ def test_prompt_loader():
             'connection_id': 'test-connection-123',
             'home_folder': '/org',
             'max_steps': 10,
-            'skills_catalog': AnalystAgent._build_skills_catalog()
+            'skills_catalog': AnalystAgent._build_skills_catalog({"questions", "explore"}),
+            'preloaded_skills': AnalystAgent._build_preloaded_skills_content(["questions", "explore"])
         }
         user_variables = {
             'app_state': '{"fileType": "question", "query": "SELECT * FROM orders"}',
@@ -84,11 +89,7 @@ def test_prompt_loader():
 
             print(f"✓ {test_case['id']} loaded successfully -> {file_path}")
 
-        # Write tool descriptions (use the tool classes directly from imports)
-        from tasks.agents.analyst.tools import (
-            ReadFiles, EditFile, ExecuteQuery, PublishAll, Navigate,
-            Clarify, SearchDBSchema, SearchFiles, CreateFile, LoadSkill
-        )
+        # Write tool descriptions
         tools = [ReadFiles, EditFile, ExecuteQuery, PublishAll, Navigate,
                  Clarify, SearchDBSchema, SearchFiles, CreateFile, LoadSkill]
         tool_schemas = [describe_tool(t) for t in tools]
