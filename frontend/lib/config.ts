@@ -31,6 +31,8 @@ interface EnvironmentConfig {
   INTERNAL_SLACK_CHANNEL_WEBHOOK: string | undefined;
   DEFAULT_EMAIL_WEBHOOK: string | undefined;
   SLACK_SIGNING_SECRET: string | undefined;
+  SLACK_CLIENT_ID: string | undefined;
+  SLACK_CLIENT_SECRET: string | undefined;
 }
 
 const errors: string[] = [];
@@ -80,6 +82,8 @@ const config: EnvironmentConfig = {
   INTERNAL_SLACK_CHANNEL_WEBHOOK: process.env.INTERNAL_SLACK_CHANNEL_WEBHOOK,
   DEFAULT_EMAIL_WEBHOOK: process.env.DEFAULT_EMAIL_WEBHOOK,
   SLACK_SIGNING_SECRET: process.env.SLACK_SIGNING_SECRET,
+  SLACK_CLIENT_ID: process.env.SLACK_CLIENT_ID,
+  SLACK_CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET,
 };
 
 // Skip validation in test mode or browser (client-side)
@@ -125,3 +129,5 @@ export const BACKEND_URL = config.BACKEND_URL;
 export const INTERNAL_SLACK_CHANNEL_WEBHOOK = config.INTERNAL_SLACK_CHANNEL_WEBHOOK;
 export const DEFAULT_EMAIL_WEBHOOK = config.DEFAULT_EMAIL_WEBHOOK;
 export const SLACK_SIGNING_SECRET = config.SLACK_SIGNING_SECRET;
+export const SLACK_CLIENT_ID = config.SLACK_CLIENT_ID;
+export const SLACK_CLIENT_SECRET = config.SLACK_CLIENT_SECRET;

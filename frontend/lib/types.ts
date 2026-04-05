@@ -290,7 +290,7 @@ export type ConfigChannel =
 export interface SlackBotConfig {
   type: 'slack';
   name: string;
-  install_mode: 'manifest_manual';
+  install_mode: 'manifest_manual' | 'oauth';
   bot_token: string;
   signing_secret?: string;
   team_id?: string;

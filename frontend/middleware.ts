@@ -6,7 +6,7 @@ import { isValidMode } from "@/lib/mode/mode-types"
 import { extractSubdomain, isSubdomainRoutingEnabled } from "@/lib/utils/subdomain"
 import { CompanyDB } from "@/lib/database/company-db"
 import { getConfigsByCompanyId } from "@/lib/data/configs.server"
-import { ALLOW_MULTIPLE_COMPANIES } from "@/lib/config"
+import { ALLOW_MULTIPLE_COMPANIES, AUTH_URL } from "@/lib/config"
 import { IS_DEV } from "@/lib/constants"
 
 export default auth(async (req) => {
@@ -56,6 +56,7 @@ export default auth(async (req) => {
     pathname.startsWith('/.well-known/oauth') ||
     pathname.startsWith('/api/integrations/slack/events') ||
     pathname.startsWith('/api/integrations/slack/interact') ||
+    pathname.startsWith('/api/integrations/slack/oauth-callback') ||
     pathname === '/api/health' ||
     pathname === '/api/jobs/cron'
   ) {
@@ -218,6 +219,30 @@ export default auth(async (req) => {
     }
 
     return NextResponse.redirect(homeUrl)
+  }
+
+  // Maintain cross-subdomain companies cookie so the root-domain Slack
+  // oauth-callback can identify which company subdomain(s) the browser is
+  // logged into, enabling the direct-install company-picker flow.
+  // Only written in production (localhost subdomain cookies are unreliable)
+  // and only when subdomain routing is active.
+  if (!IS_DEV && subdomain && isSubdomainRoutingEnabled()) {
+    const rootDomain = new URL(AUTH_URL).hostname;
+    const existing = req.cookies.get('mx-companies')?.value ?? '[]';
+    let companies: string[] = [];
+    try { companies = JSON.parse(existing); } catch { companies = []; }
+    if (!Array.isArray(companies)) companies = [];
+    if (!companies.includes(subdomain)) {
+      companies = [...companies, subdomain];
+      response.cookies.set('mx-companies', JSON.stringify(companies), {
+        domain: `.${rootDomain}`,
+        httpOnly: true,
+        secure: true,
+        sameSite: 'lax',
+        path: '/',
+        maxAge: 30 * 24 * 60 * 60, // 30 days
+      });
+    }
   }
 
   return response
