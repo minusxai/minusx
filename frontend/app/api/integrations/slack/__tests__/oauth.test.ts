@@ -39,8 +39,16 @@ jest.mock('@/lib/integrations/slack/store', () => ({
   upsertSlackBotConfig: jest.fn(),
 }));
 
+jest.mock('@/lib/auth/auth-helpers', () => ({
+  getEffectiveUser: jest.fn(),
+}));
+
+jest.mock('@/lib/auth/role-helpers', () => ({
+  isAdmin: (role: string) => role === 'admin',
+}));
+
 jest.mock('@/lib/api/with-auth', () => ({
-  withAuth: (handler: Function) => async (request: any) =>
+  withAuth: (handler: (req: any, user: any) => Promise<any>) => async (request: any) =>
     handler(request, {
       email: 'admin@acme.com',
       role: 'admin',
@@ -61,6 +69,7 @@ import { CompanyDB } from '@/lib/database/company-db';
 import { slackAuthTest } from '@/lib/integrations/slack/api';
 import { upsertSlackBotConfig } from '@/lib/integrations/slack/store';
 import { isSlackOAuthConfigured } from '@/lib/integrations/slack/config';
+import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -136,6 +145,16 @@ beforeEach(() => {
   (slackAuthTest as jest.Mock).mockResolvedValue(MOCK_AUTH_TEST);
   (upsertSlackBotConfig as jest.Mock).mockResolvedValue(undefined);
   (isSlackOAuthConfigured as jest.Mock).mockReturnValue(true);
+  // Default: authenticated admin (used by direct-install subdomain tests)
+  (getEffectiveUser as jest.Mock).mockResolvedValue({
+    email: 'admin@acme.com',
+    role: 'admin',
+    companyId: 42,
+    mode: 'org' as const,
+    userId: 1,
+    home_folder: '/org',
+    companyName: 'acme',
+  });
 });
 
 // ─── 1. buildState ────────────────────────────────────────────────────────────
@@ -293,15 +312,34 @@ describe('oauth-callback — edge cases', () => {
     expect(res.headers.get('location')).toContain('slack=denied');
   });
 
+  it('does not redirect to attacker URL when state has unverified returnUrl (open-redirect guard)', async () => {
+    // Attacker crafts a state with an arbitrary returnUrl but no valid HMAC
+    const maliciousPayload = Buffer.from(JSON.stringify({
+      ts: Date.now(),
+      nonce: 'x',
+      subdomain: 'acme',
+      returnUrl: 'https://evil.com',
+      userEmail: 'attacker@evil.com',
+    })).toString('base64url');
+    const fakeState = `${maliciousPayload}.invalidsig`;
+    const req = makeCallbackRequest({ error: 'access_denied', state: fakeState });
+    const res = await callbackHandler(req);
+    const location = res.headers.get('location') ?? '';
+    expect(location).not.toContain('evil.com');
+    expect(location).toContain('minusx.app');
+  });
+
   it('returns 400 when code is missing', async () => {
     const state = makeState();
     const res = await callbackHandler(makeCallbackRequest({ state }));
     expect(res.status).toBe(400);
   });
 
-  it('returns 400 when state is missing', async () => {
+  it('enters direct install path (not 400) when state is missing but code is present', async () => {
+    // code + no state → direct install flow, not a validation error
     const res = await callbackHandler(makeCallbackRequest({ code: 'code' }));
-    expect(res.status).toBe(400);
+    // Root domain with empty cookie → login HTML
+    expect(res.status).toBe(200);
   });
 
   it('returns 400 when OAuth is not configured', async () => {
@@ -378,5 +416,171 @@ describe('oauth-start — host header handling', () => {
     const callbackReq = makeCallbackRequest({ code: 'code', state });
     const callbackRes = await callbackHandler(callbackReq);
     expect(callbackRes.headers.get('location')).toContain('slack=installed');
+  });
+});
+
+// ─── 6. oauth-callback — direct install (no state) ────────────────────────────
+
+describe('oauth-callback — direct install (no state)', () => {
+  /** Build a callback request with an mx-companies cookie and optional x-subdomain header. */
+  function makeDirectRequest(
+    code: string,
+    companies: string[],
+    subdomain?: string,
+  ): NextRequest {
+    const url = new URL(CALLBACK_BASE);
+    url.searchParams.set('code', code);
+    const headers: Record<string, string> = {
+      cookie: `mx-companies=${encodeURIComponent(JSON.stringify(companies))}`,
+    };
+    if (subdomain) headers['x-subdomain'] = subdomain;
+    return new NextRequest(url.toString(), { headers });
+  }
+
+  // ── Root domain (no x-subdomain) ──────────────────────────────────────────
+
+  describe('root domain', () => {
+    it('renders login HTML when no companies in cookie', async () => {
+      const req = makeDirectRequest('slack-code', []);
+      const res = await callbackHandler(req);
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain('log in');
+    });
+
+    it('redirects to the single company subdomain when one company in cookie', async () => {
+      const req = makeDirectRequest('slack-code', ['acme']);
+      const res = await callbackHandler(req);
+      expect(res.headers.get('location')).toContain('acme.minusx.app');
+      expect(res.headers.get('location')).toContain('code=slack-code');
+    });
+
+    it('redirect to subdomain preserves the code exactly', async () => {
+      const req = makeDirectRequest('abc-123-xyz', ['acme']);
+      const res = await callbackHandler(req);
+      const location = res.headers.get('location')!;
+      const redirected = new URL(location);
+      expect(redirected.searchParams.get('code')).toBe('abc-123-xyz');
+    });
+
+    it('renders picker HTML with links for each company when multiple in cookie', async () => {
+      const req = makeDirectRequest('slack-code', ['acme', 'beta', 'gamma']);
+      const res = await callbackHandler(req);
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain('acme');
+      expect(html).toContain('beta');
+      expect(html).toContain('gamma');
+    });
+
+    it('picker links point to correct subdomain callback URLs', async () => {
+      const req = makeDirectRequest('my-code', ['acme', 'beta']);
+      const res = await callbackHandler(req);
+      const html = await res.text();
+      expect(html).toContain('acme.minusx.app/api/integrations/slack/oauth-callback');
+      expect(html).toContain('beta.minusx.app/api/integrations/slack/oauth-callback');
+    });
+
+    it('ignores malformed mx-companies cookie and shows login page', async () => {
+      const url = new URL(CALLBACK_BASE);
+      url.searchParams.set('code', 'code');
+      const req = new NextRequest(url.toString(), {
+        headers: { cookie: 'mx-companies=not-valid-json' },
+      });
+      const res = await callbackHandler(req);
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain('log in');
+    });
+  });
+
+  // ── Subdomain (x-subdomain present, session available) ───────────────────
+
+  describe('subdomain — authenticated', () => {
+    it('exchanges code, saves bot, redirects to settings', async () => {
+      const req = makeDirectRequest('slack-code', [], 'acme');
+      const res = await callbackHandler(req);
+      expect(upsertSlackBotConfig).toHaveBeenCalledWith(
+        42, 'org',
+        expect.objectContaining({ install_mode: 'oauth', bot_token: 'xoxb-test-bot-token' }),
+      );
+      expect(res.headers.get('location')).toContain('slack=installed');
+    });
+
+    it('redirect goes to the subdomain host, not root domain', async () => {
+      const url = new URL(CALLBACK_BASE);
+      url.searchParams.set('code', 'code');
+      // Simulate request arriving at acme.minusx.app
+      const req = new NextRequest(url.toString(), {
+        headers: { 'x-subdomain': 'acme', host: 'acme.minusx.app' },
+      });
+      const res = await callbackHandler(req);
+      expect(res.headers.get('location')).toContain('acme.minusx.app');
+    });
+
+    it('does not store signing_secret (uses env var for direct installs too)', async () => {
+      const req = makeDirectRequest('code', [], 'acme');
+      await callbackHandler(req);
+      const [,, bot] = (upsertSlackBotConfig as jest.Mock).mock.calls[0];
+      expect(bot.signing_secret).toBeUndefined();
+    });
+  });
+
+  describe('subdomain — unauthenticated', () => {
+    it('redirects to login when no session', async () => {
+      (getEffectiveUser as jest.Mock).mockResolvedValue(null);
+      const url = new URL(CALLBACK_BASE);
+      url.searchParams.set('code', 'slack-code');
+      const req = new NextRequest(url.toString(), {
+        headers: { 'x-subdomain': 'acme', host: 'acme.minusx.app' },
+      });
+      const res = await callbackHandler(req);
+      const location = res.headers.get('location')!;
+      expect(location).toContain('/login');
+      expect(location).toContain('callbackUrl');
+      expect(upsertSlackBotConfig).not.toHaveBeenCalled();
+    });
+
+    it('login redirect preserves the code in callbackUrl', async () => {
+      (getEffectiveUser as jest.Mock).mockResolvedValue(null);
+      const url = new URL(CALLBACK_BASE);
+      url.searchParams.set('code', 'preserve-me');
+      const req = new NextRequest(url.toString(), {
+        headers: { 'x-subdomain': 'acme', host: 'acme.minusx.app' },
+      });
+      const res = await callbackHandler(req);
+      expect(res.headers.get('location')).toContain('preserve-me');
+    });
+  });
+
+  describe('subdomain — non-admin', () => {
+    it('returns 403 when user is not an admin', async () => {
+      (getEffectiveUser as jest.Mock).mockResolvedValue({
+        email: 'viewer@acme.com',
+        role: 'viewer',
+        companyId: 42,
+        mode: 'org' as const,
+        userId: 2,
+        home_folder: '/org',
+        companyName: 'acme',
+      });
+      const req = makeDirectRequest('code', [], 'acme');
+      const res = await callbackHandler(req);
+      expect(res.status).toBe(403);
+      expect(upsertSlackBotConfig).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('subdomain — Slack errors', () => {
+    it('returns 500 when Slack exchange fails', async () => {
+      fetchMock.mockResolvedValue({
+        ok: true,
+        json: async () => ({ ok: false, error: 'invalid_code' }),
+      });
+      const req = makeDirectRequest('bad-code', [], 'acme');
+      const res = await callbackHandler(req);
+      expect(res.status).toBe(500);
+      expect(upsertSlackBotConfig).not.toHaveBeenCalled();
+    });
   });
 });

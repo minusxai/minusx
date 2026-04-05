@@ -7,6 +7,8 @@ import { slackAuthTest } from '@/lib/integrations/slack/api';
 import { upsertSlackBotConfig } from '@/lib/integrations/slack/store';
 import { NEXTAUTH_SECRET, SLACK_CLIENT_ID, SLACK_CLIENT_SECRET, AUTH_URL } from '@/lib/config';
 import { CompanyDB } from '@/lib/database/company-db';
+import { getEffectiveUser } from '@/lib/auth/auth-helpers';
+import { isAdmin } from '@/lib/auth/role-helpers';
 import type { SlackBotConfig } from '@/lib/types';
 
 const STATE_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
@@ -59,6 +61,9 @@ interface SlackOAuthV2Response {
 }
 
 async function exchangeCode(code: string): Promise<SlackOAuthV2Response> {
+  // redirect_uri must match the URI registered with Slack and used in the
+  // original authorize request — always the root domain, regardless of which
+  // host is executing the exchange.
   const redirectUri = `${AUTH_URL}/api/integrations/slack/oauth-callback`;
   const body = new URLSearchParams({
     code,
@@ -74,6 +79,127 @@ async function exchangeCode(code: string): Promise<SlackOAuthV2Response> {
   return resp.json() as Promise<SlackOAuthV2Response>;
 }
 
+function buildBotConfig(
+  oauthResp: SlackOAuthV2Response,
+  authTest: Awaited<ReturnType<typeof slackAuthTest>>,
+  installedBy: string,
+): SlackBotConfig {
+  return {
+    type: 'slack',
+    name: oauthResp.team?.name || authTest.team || 'Slack',
+    install_mode: 'oauth',
+    bot_token: oauthResp.access_token!,
+    // signing_secret omitted — events route falls back to SLACK_SIGNING_SECRET env var
+    team_id: oauthResp.team?.id || authTest.team_id,
+    team_name: oauthResp.team?.name || authTest.team,
+    bot_user_id: oauthResp.bot_user_id || authTest.user_id,
+    app_id: oauthResp.app_id,
+    enterprise_id: oauthResp.enterprise?.id,
+    installed_at: new Date().toISOString(),
+    installed_by: installedBy,
+    enabled: true,
+    scopes: [...SLACK_BOT_SCOPES],
+  };
+}
+
+// ─── Direct install helpers ───────────────────────────────────────────────────
+
+const rootDomain = new URL(AUTH_URL).hostname;
+
+function renderHtml(title: string, body: string): NextResponse {
+  return new NextResponse(
+    `<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${title}</title>
+<style>
+  body{font-family:system-ui,sans-serif;max-width:480px;margin:80px auto;padding:0 24px;color:#e2e8f0;background:#0d1117;}
+  h1{font-size:1.25rem;font-weight:600;margin-bottom:12px;}
+  p{color:#94a3b8;font-size:.9rem;margin-bottom:20px;line-height:1.6;}
+  ul{list-style:none;padding:0;margin:0;}
+  li{margin-bottom:10px;}
+  a{display:inline-block;padding:8px 16px;background:#0d9488;color:#fff;border-radius:6px;text-decoration:none;font-size:.875rem;}
+  a:hover{background:#0f766e;}
+</style>
+</head><body>${body}</body></html>`,
+    { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } },
+  );
+}
+
+async function handleDirectInstallRootDomain(
+  request: NextRequest,
+  code: string,
+): Promise<NextResponse> {
+  const raw = request.cookies.get('mx-companies')?.value ?? '[]';
+  let companies: string[] = [];
+  try { companies = JSON.parse(raw); } catch { companies = []; }
+  // Validate each entry is a well-formed subdomain label (RFC 1123) — prevents
+  // any malformed cookie value from being rendered into HTML.
+  companies = companies.filter((s): s is string => typeof s === 'string' && /^[a-z0-9][a-z0-9-]*$/.test(s));
+
+  if (companies.length === 0) {
+    return renderHtml(
+      'Log in to MinusX',
+      `<h1>Almost there</h1>
+       <p>Please log in to your MinusX workspace first, then go to
+       <strong>Settings → Integrations → Slack</strong> and click
+       <strong>Add to Slack</strong> from there.</p>
+       <a href="https://${rootDomain}">Go to MinusX</a>`,
+    );
+  }
+
+  if (companies.length === 1) {
+    const url = `https://${companies[0]}.${rootDomain}/api/integrations/slack/oauth-callback?code=${encodeURIComponent(code)}`;
+    return NextResponse.redirect(url);
+  }
+
+  // Multiple companies — render picker
+  const links = companies
+    .map(s => `<li><a href="https://${s}.${rootDomain}/api/integrations/slack/oauth-callback?code=${encodeURIComponent(code)}">${s}</a></li>`)
+    .join('\n');
+
+  return renderHtml(
+    'Select workspace — MinusX',
+    `<h1>Select your workspace</h1>
+     <p>You are logged into multiple MinusX workspaces. Choose which one to connect to Slack.</p>
+     <ul>${links}</ul>`,
+  );
+}
+
+async function handleDirectInstallSubdomain(
+  request: NextRequest,
+  code: string,
+): Promise<NextResponse> {
+  const host = request.headers.get('host') ?? '';
+
+  const user = await getEffectiveUser();
+  if (!user) {
+    const callbackUrl = encodeURIComponent(`/api/integrations/slack/oauth-callback?code=${code}`);
+    return NextResponse.redirect(`https://${host}/login?callbackUrl=${callbackUrl}`);
+  }
+
+  if (!isAdmin(user.role)) {
+    return ApiErrors.forbidden('Only admins can install Slack bots');
+  }
+
+  try {
+    const oauthResp = await exchangeCode(code);
+    if (!oauthResp.ok || !oauthResp.access_token) {
+      throw new Error(`Slack OAuth exchange failed: ${oauthResp.error ?? 'unknown'}`);
+    }
+
+    const authTest = await slackAuthTest(oauthResp.access_token);
+    const bot = buildBotConfig(oauthResp, authTest, user.email);
+
+    await upsertSlackBotConfig(user.companyId, 'org', bot);
+
+    return NextResponse.redirect(`https://${host}/settings?tab=integrations&slack=installed`);
+  } catch (error) {
+    return handleApiError(error);
+  }
+}
+
+// ─── Main handler ─────────────────────────────────────────────────────────────
+
 export async function GET(request: NextRequest) {
   if (!isSlackOAuthConfigured()) {
     return ApiErrors.badRequest('Slack OAuth is not configured on this server');
@@ -84,21 +210,29 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state');
   const error = searchParams.get('error');
 
-  // Extract returnUrl from state before verifying (for denied redirect)
-  // Safe to read unverified here — we only use it for a redirect, not for trust decisions
+  // Use verified returnUrl for the denied redirect — reading unverified state here
+  // would be an open redirect (attacker crafts state with arbitrary returnUrl).
   const deniedReturn = (() => {
-    try {
-      const lastDot = (state ?? '').lastIndexOf('.');
-      if (lastDot < 0) return `${AUTH_URL}/settings?tab=integrations&slack=denied`;
-      const raw = JSON.parse(Buffer.from((state ?? '').slice(0, lastDot), 'base64url').toString()) as Partial<StatePayload>;
-      return `${raw.returnUrl ?? `${AUTH_URL}/settings?tab=integrations`}&slack=denied`;
-    } catch {
-      return `${AUTH_URL}/settings?tab=integrations&slack=denied`;
-    }
+    if (!state) return `${AUTH_URL}/settings?tab=integrations&slack=denied`;
+    const verified = verifyState(state);
+    if (verified?.returnUrl) return `${verified.returnUrl}&slack=denied`;
+    return `${AUTH_URL}/settings?tab=integrations&slack=denied`;
   })();
 
   if (error) {
     return NextResponse.redirect(deniedReturn);
+  }
+
+  // Direct install path — no signed state.
+  // User arrived from Slack App Directory or a manually constructed install URL,
+  // not via our oauth-start route. Route based on whether middleware set x-subdomain.
+  if (!state && code) {
+    const subdomain = request.headers.get('x-subdomain');
+    if (!subdomain) {
+      return handleDirectInstallRootDomain(request, code);
+    } else {
+      return handleDirectInstallSubdomain(request, code);
+    }
   }
 
   if (!code || !state) {
@@ -129,23 +263,7 @@ export async function GET(request: NextRequest) {
     }
 
     const authTest = await slackAuthTest(oauthResp.access_token);
-
-    const bot: SlackBotConfig = {
-      type: 'slack',
-      name: oauthResp.team?.name || authTest.team || 'Slack',
-      install_mode: 'oauth',
-      bot_token: oauthResp.access_token,
-      // signing_secret omitted — events route falls back to SLACK_SIGNING_SECRET env var
-      team_id: oauthResp.team?.id || authTest.team_id,
-      team_name: oauthResp.team?.name || authTest.team,
-      bot_user_id: oauthResp.bot_user_id || authTest.user_id,
-      app_id: oauthResp.app_id,
-      enterprise_id: oauthResp.enterprise?.id,
-      installed_at: new Date().toISOString(),
-      installed_by: payload.userEmail,
-      enabled: true,
-      scopes: [...SLACK_BOT_SCOPES],
-    };
+    const bot = buildBotConfig(oauthResp, authTest, payload.userEmail);
 
     await upsertSlackBotConfig(company.id, 'org', bot);
 
