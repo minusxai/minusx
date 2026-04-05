@@ -346,7 +346,7 @@ function SettingsContent() {
     {
       id: 'integrations',
       label: 'Integrations',
-      visible: isAdmin,
+      visible: isAdvancedAdmin,
       custom: (
         <VStack align="stretch" gap={3}>
           <Text fontSize="xs" color="fg.muted" fontFamily="mono">
