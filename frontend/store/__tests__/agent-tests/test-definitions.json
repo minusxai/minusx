@@ -10,12 +10,12 @@
   },
   {
     "label": "Agent uses a tool when analysing mxfood",
-    "user_prompt": "Show me total revenue by month as a bar chart",
+    "user_prompt": "What were the top 5 products by revenue in mxfood?",
     "agent": "AnalystAgent",
     "agent_args": { "connection_id": "mxfood" },
     "test": [
       { "type": "conversation_jsonpath", "expression": "$[?(@.executionState=='FINISHED' && !@.error)]" },
-      { "type": "conversation_jsonpath", "expression": "$.messages[?(@.role=='tool')]" }
+      { "type": "conversation_jsonpath", "expression": "$[0].messages[?(@.role=='tool')]" }
     ]
   }
 ]

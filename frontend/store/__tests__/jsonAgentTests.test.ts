@@ -73,6 +73,6 @@ describe('JSON Agent Tests', () => {
   // Load and register JSON test specs
   // ---------------------------------------------------------------------------
 
-  const specs = loadAgentTestSpecs(path.join(__dirname, 'agent-tests/example.json'));
+  const specs = loadAgentTestSpecs(path.join(__dirname, 'agent-tests/test-definitions.json'));
   runAgentTestSpecs(specs, { getStore });
 });

@@ -65,7 +65,9 @@ export function loadAgentTestSpecs(filePath: string): AgentTestSpec[] {
 
 function evaluateAssertion(assertion: TestAssertion, conv: unknown): boolean {
   if (assertion.type === 'conversation_jsonpath') {
-    const results = JSONPath({ path: assertion.expression, json: conv as object });
+    // Wrap conv in an array so filter expressions like $[?(@.executionState=='FINISHED')]
+    // work naturally. Use $[0].messages[?(...)] to access sub-properties.
+    const results = JSONPath({ path: assertion.expression, json: [conv] as object });
     return Array.isArray(results) && results.length > 0;
   }
   throw new Error(`Unknown assertion type: "${(assertion as any).type}"`);
