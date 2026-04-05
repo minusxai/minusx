@@ -34,7 +34,7 @@ import { loadAgentTestSpecs, runAgentTestSpecs } from '@/test/harness/agent-test
 
 const TEST_DB_PATH = getTestDbPath('json_agent_tests');
 
-describe('JSON Agent Tests', () => {
+(process.env.ANTHROPIC_API_KEY ? describe : describe.skip)('JSON Agent Tests', () => {
   // Download mxfood dataset once before any tests run (no-op if already exists)
   beforeAll(async () => {
     await ensureMxfoodDataset();
