@@ -1,0 +1,21 @@
+[
+  {
+    "label": "Agent finishes without error on mxfood data",
+    "user_prompt": "How many orders were placed in total?",
+    "agent": "AnalystAgent",
+    "agent_args": { "connection_id": "mxfood" },
+    "test": [
+      { "type": "conversation_jsonpath", "expression": "$[?(@.executionState=='FINISHED' && !@.error)]" }
+    ]
+  },
+  {
+    "label": "Agent uses a tool when analysing mxfood",
+    "user_prompt": "What were the top 5 products by revenue in mxfood?",
+    "agent": "AnalystAgent",
+    "agent_args": { "connection_id": "mxfood" },
+    "test": [
+      { "type": "conversation_jsonpath", "expression": "$[?(@.executionState=='FINISHED' && !@.error)]" },
+      { "type": "conversation_jsonpath", "expression": "$[0].messages[?(@.role=='tool')]" }
+    ]
+  }
+]

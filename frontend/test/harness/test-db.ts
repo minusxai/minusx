@@ -98,6 +98,69 @@ export async function addTestConnection(dbPath: string) {
 }
 
 /**
+ * Ensure mxfood.duckdb exists at data/mxfood.duckdb (repo root).
+ * Downloads from GitHub releases if missing. Safe to call multiple times.
+ */
+export async function ensureMxfoodDataset(): Promise<void> {
+  const { execSync } = require('child_process');
+  const datasetPath = path.join(process.cwd(), '..', 'data', 'mxfood.duckdb');
+  if (fs.existsSync(datasetPath)) return;
+
+  const dir = path.dirname(datasetPath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+  console.log('📥 Downloading mxfood.duckdb...');
+  execSync(
+    `curl -fSL -o "${datasetPath}" https://github.com/minusxai/sample_datasets/releases/download/v1.0/mxfood.duckdb`,
+    { stdio: 'inherit' }
+  );
+  console.log('✅ mxfood.duckdb downloaded');
+}
+
+/**
+ * Add a mxfood DuckDB connection to the test database.
+ * file_path "data/mxfood.duckdb" resolves via BASE_DUCKDB_DATA_PATH=.. to
+ * ../data/mxfood.duckdb relative to the backend directory.
+ */
+export async function addMxfoodConnection(dbPath: string) {
+  const { createAdapter } = await import('@/lib/database/adapter/factory');
+  const db = await createAdapter({ type: 'sqlite', sqlitePath: dbPath });
+
+  const now = new Date().toISOString();
+  const connectionPath = '/org/connections/mxfood';
+
+  const existing = await db.query<{ id: number }>(
+    `SELECT id FROM files WHERE company_id = $1 AND path = $2`,
+    [1, connectionPath]
+  );
+
+  if (existing.rows.length === 0) {
+    const maxIdResult = await db.query<{ next_id: number }>(
+      `SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM files WHERE company_id = $1`,
+      [1]
+    );
+    const nextId = maxIdResult.rows[0].next_id;
+
+    await db.query(
+      `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        1, nextId,
+        'mxfood',
+        connectionPath,
+        'connection',
+        JSON.stringify({ id: 'mxfood', name: 'mxfood', type: 'duckdb', config: { file_path: 'data/mxfood.duckdb' } }),
+        '[]',
+        now,
+        now
+      ]
+    );
+  }
+
+  await db.close();
+}
+
+/**
  * Sets up test database with automatic initialization and cleanup.
  *
  * Usage:
