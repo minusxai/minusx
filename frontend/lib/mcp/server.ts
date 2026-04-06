@@ -116,5 +116,29 @@ export function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCall): M
     }
   );
 
+  // -----------------------------------------------------------------------
+  // ListAllConnections
+  // -----------------------------------------------------------------------
+  server.tool(
+    'ListAllConnections',
+    'List all available database connections with their names and types.',
+    {},
+    async () => {
+      const { connections } = await ConnectionsAPI.listAll(user);
+      const result: McpToolCallResult = {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify(
+              connections.map(({ name, type }) => ({ name, type }))
+            ),
+          },
+        ],
+      };
+      onToolCall?.('ListAllConnections', {}, result);
+      return result;
+    }
+  );
+
   return server;
 }
