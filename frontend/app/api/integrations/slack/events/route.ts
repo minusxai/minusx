@@ -263,6 +263,17 @@ export async function POST(request: NextRequest) {
   const installation = teamId ? await findSlackInstallationByTeam(teamId) : null;
   const signingSecret = installation?.bot.signing_secret ?? getSlackSigningSecret();
 
+  console.log('[Slack/events] received', {
+    type: payload.type,
+    teamId,
+    eventType: payload.event?.type,
+    eventSubtype: payload.event?.subtype,
+    channelType: payload.event?.channel_type,
+    botId: payload.event?.bot_id,
+    installationFound: !!installation,
+    signingSecretSource: installation?.bot.signing_secret ? 'installation' : signingSecret ? 'env' : 'none',
+  });
+
   if (signingSecret) {
     const isValid = verifySlackRequestSignature({
       rawBody,
@@ -272,6 +283,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!isValid) {
+      console.log('[Slack/events] dropping: invalid signature');
       return NextResponse.json({ ok: false }, { status: 401 });
     }
   }
@@ -284,14 +296,24 @@ export async function POST(request: NextRequest) {
 
   // If we have no signing secret at all, silently accept remaining events (prevents blocking setup)
   if (!signingSecret) {
+    console.log('[Slack/events] dropping: no signing secret configured');
     return NextResponse.json({ ok: true });
   }
 
   if (payload.type !== 'event_callback' || !isSupportedEvent(payload)) {
+    console.log('[Slack/events] dropping: unsupported event', {
+      payloadType: payload.type,
+      eventType: payload.event?.type,
+      eventSubtype: payload.event?.subtype,
+      channelType: payload.event?.channel_type,
+      botId: payload.event?.bot_id,
+      reason: payload.type !== 'event_callback' ? 'not event_callback' : 'isSupportedEvent=false',
+    });
     return NextResponse.json({ ok: true });
   }
 
   if (!teamId || !installation) {
+    console.log('[Slack/events] dropping: installation not found', { teamId, installationFound: !!installation });
     return NextResponse.json({ ok: true });
   }
 
@@ -303,6 +325,13 @@ export async function POST(request: NextRequest) {
   const host = request.headers.get('host') || request.nextUrl.host;
   const publicBaseUrl = `${forwardedProto}://${host}`;
 
+  console.log('[Slack/events] dispatching processSlackEvent', {
+    eventId: payload.event_id,
+    eventType: payload.event?.type,
+    companyId: installation.companyId,
+    mode: installation.mode,
+    publicBaseUrl,
+  });
   after(() => processSlackEvent(payload, installation, publicBaseUrl));
 
   return NextResponse.json({ ok: true });
