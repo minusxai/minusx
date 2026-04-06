@@ -3,7 +3,6 @@ import { Box } from '@chakra-ui/react'
 import { useAppSelector } from '@/store/hooks'
 import { ChartHost } from './ChartHost'
 import { useChartContainer } from './useChartContainer'
-import { ChartError } from './ChartError'
 import { buildWaterfallChartOption, isValidChartData, type ChartProps } from '@/lib/chart/chart-utils'
 import { downloadChartCsv } from './build-chart-download'
 
@@ -15,9 +14,6 @@ export const WaterfallPlot = (props: WaterfallPlotProps) => {
   const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns, chartTitle, showChartTitle = true, colorPalette: customPalette, styleConfig, exportBranding } = props
   const colorMode = useAppSelector((state) => state.ui.colorMode)
   const { containerRef, containerWidth, containerHeight, chartEvents } = useChartContainer(onChartClick)
-
-  const xColCount = xAxisColumns?.length ?? 0
-  const yColCount = yAxisColumns?.length ?? 0
 
   const option = useMemo(() => {
     if (!isValidChartData(xAxisData, series)) {
@@ -66,14 +62,6 @@ export const WaterfallPlot = (props: WaterfallPlotProps) => {
       downloadCsv,
     })
   }, [xAxisData, series, colorMode, containerWidth, containerHeight, columnFormats, xAxisColumns, yAxisColumns, chartTitle, showChartTitle, customPalette, styleConfig, exportBranding])
-
-  if (xColCount > 1) {
-    return <ChartError message="Waterfall charts support only a single X-axis column. Remove extra columns from the X axis to continue." />
-  }
-
-  if (yColCount > 1) {
-    return <ChartError message="Waterfall charts support only a single Y-axis column. Remove extra columns from the Y axis to continue." />
-  }
 
   if (!isValidChartData(xAxisData, series)) {
     return (

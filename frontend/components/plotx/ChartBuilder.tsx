@@ -371,6 +371,28 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     setDrillDown({ filters, yColumn, position: { x, y } })
   }, [chartType, xAxisColumns, yAxisColumns, aggregatedData, axisMapping, sql])
 
+  // Viz type constraint validation
+  const constraintError = useMemo((): string | null => {
+    switch (chartType) {
+      case 'combo':
+        if (yAxisColumns.length < 2) return 'Combo charts require at least 2 Y-axis columns (first becomes bar, rest become lines).'
+        if (xAxisColumns.length < 1) return 'Combo charts require at least 1 X-axis column.'
+        return null
+      case 'waterfall':
+        if (xAxisColumns.length > 1) return 'Waterfall charts support only a single X-axis column. Remove extra columns from the X axis to continue.'
+        if (yAxisColumns.length > 1) return 'Waterfall charts support only a single Y-axis column. Remove extra columns from the Y axis to continue.'
+        return null
+      case 'pie':
+        if (xAxisColumns.length < 1) return 'Pie charts require at least 1 X-axis column for grouping.'
+        return null
+      case 'funnel':
+        if (xAxisColumns.length < 1) return 'Funnel charts require at least 1 X-axis column for grouping.'
+        return null
+      default:
+        return null
+    }
+  }, [chartType, xAxisColumns.length, yAxisColumns.length])
+
   const hasData = yAxisColumns.length > 0
 
   // Use the compact view flag passed from parent
@@ -537,7 +559,9 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
 
         {/* Chart Display */}
         <Box flex="1" overflow="hidden" display="flex" flexDirection="column" minHeight="0">
-          {hasData ? (
+          {constraintError ? (
+            <ChartError message={constraintError} />
+          ) : hasData ? (
             <>
               {/* Show SingleValue when no X-axis columns selected */}
               {xAxisColumns.length === 0 ? (
