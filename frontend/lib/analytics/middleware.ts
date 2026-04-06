@@ -61,9 +61,10 @@ export const analyticsMiddleware: Middleware = (store) => (next) => (action) => 
     // e.g., "files/setFolderInfo" becomes "Redux/files/setFolderInfo"
     const eventName = `Redux/${action.type}`;
 
+    const user = store.getState().auth?.user;
     analytics.captureEvent(eventName, {
-      // Add minimal payload info (avoid sending large data)
-      has_payload: !!action.payload,
+      ...(action.payload !== undefined ? { payload: action.payload } : { hasPayload: false }),
+      ...(user && { userId: user.id, email: user.email, role: user.role, companyId: user.companyId }),
     });
   }
 

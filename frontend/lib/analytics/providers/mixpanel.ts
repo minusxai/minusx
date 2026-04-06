@@ -35,16 +35,10 @@ export class MixpanelProvider implements AnalyticsProvider {
     const distinctId = `${properties.companyId}/${properties.email}`;
 
     mixpanel.identify(distinctId);
-    mixpanel.people.set({
-      $email: properties.email,
-      $name: properties.email, // Use email as display name
-      userId: properties.userId,
-      role: properties.role,
-      companyId: properties.companyId,
-      companyName: properties.companyName,
-      mode: properties.mode,
-      last_seen: new Date().toISOString(),
-    });
+    // $email / $name are Mixpanel reserved display fields; spread the rest of UserProperties
+    mixpanel.people.set({ $email: properties.email, $name: properties.email, ...properties });
+    // Super properties — automatically attached to every future track() call
+    mixpanel.register({ ...properties });
   }
 
   captureEvent(eventName: string, properties?: EventProperties): void {

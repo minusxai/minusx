@@ -278,6 +278,10 @@ minusx/
 - **Direct Redux state mutation** - Always use slice actions
 - **Prop drilling** - Use Redux or context for deeply nested data
 - **Inline API calls in components** - Use custom hooks or listener middleware
+- **Explicit key enumeration** - Never manually re-list every field of a typed object when you can pass or spread the object directly. This causes change amplification: adding a new field to an interface requires hunting down every place keys were listed and updating them all, and you WILL miss some.
+  - Bad: `register({ userId: p.userId, email: p.email, role: p.role, ... })`
+  - Good: `register({ ...properties })`
+  - The typed interface is the single source of truth. Pass it through; let the consumer spread or destructure as needed. Only extract specific keys when the target API requires a different shape (e.g. Mixpanel's `$email` reserved field).
 
 **Component Patterns**
 - **Container/View separation**: Containers (smart) connect to Redux, Views (dumb) are pure presentation
