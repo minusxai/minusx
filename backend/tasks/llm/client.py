@@ -134,11 +134,15 @@ def describe_tool(cls):
         annotation = param.annotation
         default = param.default
         schema = get_json_schema_type(annotation)
-        required.append(name)
 
+        # Determine if parameter is required based on its default value
         if isinstance(default, FieldInfo):
             if default.description:
                 schema["description"] = default.description
+            if default.is_required():
+                required.append(name)
+        elif default is inspect.Parameter.empty:
+            required.append(name)
 
         properties[name] = schema
 
