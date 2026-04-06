@@ -512,7 +512,7 @@ export default function ParameterInput({
         )}
 
         {/* X button — toggles None on/off; always visible when param has a value or is None */}
-        {(isNone || hasValue) && (
+        {value !== undefined && (
           <Tooltip content={isNone ? 'Clear — restore to empty' : 'Set to None (skip this filter)'}>
             <IconButton
               aria-label={isNone ? 'Clear None' : 'Set to None'}

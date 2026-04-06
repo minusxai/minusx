@@ -28,7 +28,7 @@ interface FilterBuilderProps {
   filterType?: 'where' | 'having'; // Determines if we show aggregate functions
 }
 
-type Operator = '=' | '!=' | '>' | '<' | '>=' | '<=' | 'LIKE' | 'IN' | 'IS NULL' | 'IS NOT NULL';
+type Operator = '=' | '!=' | '>' | '<' | '>=' | '<=' | 'LIKE' | 'ILIKE' | 'IN' | 'IS NULL' | 'IS NOT NULL';
 
 const OPERATORS: Array<{ label: string; value: Operator }> = [
   { label: '=', value: '=' },
@@ -38,6 +38,7 @@ const OPERATORS: Array<{ label: string; value: Operator }> = [
   { label: '≥', value: '>=' },
   { label: '≤', value: '<=' },
   { label: 'LIKE', value: 'LIKE' },
+  { label: 'ILIKE', value: 'ILIKE' },
   { label: 'IN', value: 'IN' },
   { label: 'IS NULL', value: 'IS NULL' },
   { label: 'IS NOT NULL', value: 'IS NOT NULL' },

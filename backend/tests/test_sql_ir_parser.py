@@ -164,6 +164,18 @@ class TestWhere:
             ir = parse_sql_to_ir(sql)
             assert ir.where.conditions[0].operator == expected_op
 
+    def test_where_ilike(self):
+        """Test WHERE with ILIKE (case-insensitive LIKE)"""
+        ir = parse_sql_to_ir("SELECT * FROM users WHERE name ILIKE '%john%'")
+        assert ir.where.conditions[0].operator == 'ILIKE'
+
+    def test_where_ilike_with_param(self):
+        """Test WHERE ILIKE with a named parameter"""
+        ir = parse_sql_to_ir("SELECT * FROM users WHERE name ILIKE :search")
+        cond = ir.where.conditions[0]
+        assert cond.operator == 'ILIKE'
+        assert cond.param_name == 'search'
+
     def test_where_is_null(self):
         """Test WHERE IS NULL"""
         ir = parse_sql_to_ir("SELECT * FROM users WHERE deleted_at IS NULL")

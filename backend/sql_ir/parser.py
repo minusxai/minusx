@@ -566,7 +566,7 @@ def parse_single_condition(expr: exp.Expression) -> Optional[FilterCondition]:
 
     # Comparison operators
     _CMP_OPS = {exp.EQ: '=', exp.NEQ: '!=', exp.GT: '>', exp.LT: '<',
-                exp.GTE: '>=', exp.LTE: '<=', exp.Like: 'LIKE'}
+                exp.GTE: '>=', exp.LTE: '<=', exp.Like: 'LIKE', exp.ILike: 'ILIKE'}
     op = _CMP_OPS.get(type(expr))
     if op:
         return parse_comparison(expr, op)
