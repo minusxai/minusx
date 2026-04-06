@@ -1,4 +1,5 @@
 import { after, NextRequest, NextResponse } from 'next/server';
+import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { getCompanyUserEffectiveUser } from '@/lib/auth/auth-helpers';
 import { runChatOrchestration } from '@/lib/chat/run-orchestration';
 import { addReaction, getConversationHistory, getSlackUserEmail, postSlackMessage, publishHomeView, removeReaction, uploadSlackFile, verifySlackRequestSignature } from '@/lib/integrations/slack/api';
@@ -143,8 +144,7 @@ export async function processSlackEvent(
       slackEmail,
       installation.mode,
     );
-    if (!effectiveUser) {
-      await postErrorReply(
+    if (!effectiveUser) {      await postErrorReply(
         installation,
         ev.channel,
         threadTs,
@@ -152,6 +152,15 @@ export async function processSlackEvent(
       );
       return;
     }
+
+    appEventRegistry.publish(AppEvents.USER_MESSAGE, {
+      source: 'slack',
+      userId: effectiveUser.userId,
+      userEmail: effectiveUser.email,
+      messagePreview: userMessage.slice(0, 100),
+      companyId: installation.companyId,
+      mode: installation.mode,
+    });
 
     const teamId = installation.bot.team_id ?? getTeamId(payload) ?? '';
     const conversationId = await getOrCreateSlackConversationId(
@@ -225,6 +234,13 @@ export async function processSlackEvent(
     if (eventId) markSlackEventDone(eventId);
   } catch (err) {
     console.error('[Slack events] Failed to process event', err);
+    appEventRegistry.publish(AppEvents.ERROR, {
+      source: 'slack_events',
+      message: err instanceof Error ? err.message : String(err),
+      error: err,
+      companyId: installation.companyId,
+      mode: installation.mode,
+    });
     // On error, swap :eyes: for :x:
     if (ev?.channel && ev?.ts) {
       await removeReaction(installation.bot.bot_token, ev.channel, ev.ts, 'eyes').catch(() => {});

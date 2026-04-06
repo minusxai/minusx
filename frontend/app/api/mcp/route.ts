@@ -14,6 +14,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { authenticateOAuthRequest } from '@/lib/mcp/auth';
 import { createMcpServer } from '@/lib/mcp/server';
 import { McpSessionLogger } from '@/lib/mcp/session-logger';
+import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 
 // ---------------------------------------------------------------------------
 // Session store (in-memory, survives HMR via globalThis)
@@ -119,6 +120,13 @@ export async function POST(request: NextRequest): Promise<Response> {
       const logger = new McpSessionLogger(id, user);
       sessionRef.logger = logger;
       sessions.set(id, { transport, server, logger });
+      appEventRegistry.publish(AppEvents.USER_MESSAGE, {
+        source: 'mcp',
+        userId: user.userId,
+        userEmail: user.email,
+        companyId: user.companyId,
+        mode: user.mode,
+      });
     },
     onsessionclosed: (id: string) => {
       const session = sessions.get(id);
@@ -129,8 +137,22 @@ export async function POST(request: NextRequest): Promise<Response> {
     },
   });
 
-  await server.connect(transport);
-  return addCorsHeaders(await transport.handleRequest(request));
+  try {
+    await server.connect(transport);
+    return addCorsHeaders(await transport.handleRequest(request));
+  } catch (err) {
+    appEventRegistry.publish(AppEvents.ERROR, {
+      source: 'mcp',
+      message: err instanceof Error ? err.message : String(err),
+      error: err,
+      companyId: user.companyId,
+      mode: user.mode,
+    });
+    return new Response(JSON.stringify({ jsonrpc: '2.0', error: { code: -32603, message: 'Internal error' }, id: null }), {
+      status: 500,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -21,6 +21,7 @@ export interface ChatRequest {
   conversationID?: number | null;   // Optional - file ID, null to create new
   log_index?: number | null;        // Index to load log up to (replaces tasks_id)
   user_message?: string | null;
+  source?: 'explore' | 'side_chat'; // Where the message originated
   completed_tool_calls?: CompletedToolCall[];  // Array of [ToolCall, ToolMessage] tuples
   agent?: string;                   // Agent name
   agent_args?: {

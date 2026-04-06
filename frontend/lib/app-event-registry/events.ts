@@ -13,6 +13,8 @@ export const AppEvents = {
   ERROR:                    'error',
   JOB_CRON_SUCCEEDED:       'job:cron_succeeded',
   JOB_CRON_FAILED:          'job:cron_failed',
+  USER_MESSAGE:             'user:message',
+  MCP_TOOL_CALL:            'mcp:tool_call',
 } as const;
 
 export type AppEventName = typeof AppEvents[keyof typeof AppEvents];
@@ -34,4 +36,6 @@ export interface AppEventPayloads {
   'error':                    BaseEventPayload & { source: string; message: string; mode?: string; error?: unknown; context?: Record<string, unknown> };
   'job:cron_succeeded':       BaseEventPayload & { triggered: number; skipped: number };
   'job:cron_failed':          BaseEventPayload & { triggered: number; skipped: number; failed: number };
+  'user:message':             BaseEventPayload & { source: 'explore' | 'side_chat' | 'slack' | 'mcp'; conversationId?: number; userId?: number; userEmail?: string; messagePreview?: string };
+  'mcp:tool_call':            BaseEventPayload & { sessionId: string; tool: string; userId?: number; userEmail?: string };
 }

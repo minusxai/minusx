@@ -16,6 +16,7 @@
 import 'server-only';
 import { randomUUID } from 'crypto';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
+import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { FilesAPI } from '@/lib/data/files.server';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import type {
@@ -66,6 +67,15 @@ export class McpSessionLogger {
     };
 
     this.entries.push(taskEntry, resultEntry);
+
+    appEventRegistry.publish(AppEvents.MCP_TOOL_CALL, {
+      sessionId: this.sessionId,
+      tool,
+      userId: this.user.userId,
+      userEmail: this.user.email,
+      companyId: this.user.companyId,
+      mode: this.user.mode,
+    });
   }
 
   /**

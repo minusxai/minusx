@@ -103,6 +103,18 @@ export async function POST(request: NextRequest) {
     // Step 3: Setup loop variables
     let completed_tool_calls = body.completed_tool_calls?.map(tuple => tuple[1]) || [];
     let user_message: string | null = body.user_message || null;
+
+    if (user_message) {
+      appEventRegistry.publish(AppEvents.USER_MESSAGE, {
+        source: body.source ?? 'explore',
+        conversationId: convFileId,
+        userId: user.userId,
+        userEmail: user.email,
+        messagePreview: user_message.slice(0, 100),
+        companyId: user.companyId,
+        mode: user.mode,
+      });
+    }
     let accumulatedLogDiff: ConversationLogEntry[] = [];
     accumulatedCompletedToolCalls = [];  // Use outer scope variable
     let accumulatedLLMCalls: Record<string, LLMCallDetail> = {};

@@ -29,6 +29,7 @@ interface EnvironmentConfig {
   DEFAULT_DB_TYPE: string;
   BACKEND_URL: string;
   INTERNAL_SLACK_CHANNEL_WEBHOOK: string | undefined;
+  APP_EVENTS_SLACK_WEBHOOK: string | undefined;
   DEFAULT_EMAIL_WEBHOOK: string | undefined;
   SLACK_SIGNING_SECRET: string | undefined;
   SLACK_CLIENT_ID: string | undefined;
@@ -80,6 +81,7 @@ const config: EnvironmentConfig = {
   DEFAULT_DB_TYPE: getOptional(process.env.DEFAULT_DB_TYPE, 'duckdb'),
   BACKEND_URL: getOptional(process.env.NEXT_PUBLIC_BACKEND_URL, 'http://localhost:8001'),
   INTERNAL_SLACK_CHANNEL_WEBHOOK: process.env.INTERNAL_SLACK_CHANNEL_WEBHOOK,
+  APP_EVENTS_SLACK_WEBHOOK: process.env.APP_EVENTS_SLACK_WEBHOOK,
   DEFAULT_EMAIL_WEBHOOK: process.env.DEFAULT_EMAIL_WEBHOOK,
   SLACK_SIGNING_SECRET: process.env.SLACK_SIGNING_SECRET,
   SLACK_CLIENT_ID: process.env.SLACK_CLIENT_ID,
@@ -127,6 +129,7 @@ export const ANALYTICS_DB_DIR = config.ANALYTICS_DB_DIR;
 export const DEFAULT_DB_TYPE = config.DEFAULT_DB_TYPE;
 export const BACKEND_URL = config.BACKEND_URL;
 export const INTERNAL_SLACK_CHANNEL_WEBHOOK = config.INTERNAL_SLACK_CHANNEL_WEBHOOK;
+export const APP_EVENTS_SLACK_WEBHOOK = config.APP_EVENTS_SLACK_WEBHOOK;
 export const DEFAULT_EMAIL_WEBHOOK = config.DEFAULT_EMAIL_WEBHOOK;
 export const SLACK_SIGNING_SECRET = config.SLACK_SIGNING_SECRET;
 export const SLACK_CLIENT_ID = config.SLACK_CLIENT_ID;
