@@ -1315,12 +1315,15 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           showSymbol: true,
           lineStyle: { opacity: seriesOpacity ?? 0.95 },
         }
-      case 'bar':
+      case 'bar': {
+        const stackGroup = useDualYAxis ? (yAxisAssignments[index] === 0 ? 'left' : 'right') : 'total'
         return {
           ...baseConfig,
-          ...(isStacked ? { stack: 'total' } : {}),
+          ...(isStacked ? { stack: stackGroup } : {}),
         }
-      case 'area':
+      }
+      case 'area': {
+        const stackGroup = useDualYAxis ? (yAxisAssignments[index] === 0 ? 'left' : 'right') : 'total'
         const areaColor = palette[index % palette.length]
         const bottomOpacity = seriesOpacity ?? 0.5
         const topOpacity = bottomOpacity * 0.5
@@ -1330,7 +1333,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           type: 'line' as const,
           symbol: 'none',
           showSymbol: false,
-          ...(isStacked ? { stack: 'total' } : {}),
+          ...(isStacked ? { stack: stackGroup } : {}),
           areaStyle: {
             color: {
               type: 'linear' as const,
@@ -1345,6 +1348,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
             },
           },
         }
+      }
       case 'combo':
         if (index === 0) {
           return {
