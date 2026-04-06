@@ -360,4 +360,62 @@ describe('Parameterized Query Execution E2E', () => {
     );
     expect(getExecuteCalls()).toHaveLength(0);
   });
+
+  // =========================================================================
+  // Postgres — ILIKE filter
+  // =========================================================================
+
+  it('postgres: ILIKE filter with valid value forwards :param intact to Python', async () => {
+    const request = makeQueryRequest({
+      database_name: PG_CONN,
+      query: 'SELECT * FROM users_b WHERE name ILIKE :search',
+      parameters: { search: 'alice' },
+    });
+
+    const response = await queryPostHandler(request);
+    expect(response.status).toBe(200);
+
+    const body = JSON.parse(getExecuteCalls()[0][1].body);
+    expect(body.query).toContain(':search');
+    expect(body.parameters).toEqual({ search: 'alice' });
+  });
+
+  it('postgres: ILIKE filter with null value removes condition via IR (not NULL substitution)', async () => {
+    // Override: IR endpoints succeed, returning an IR with the ILIKE condition already removed
+    (pythonBackendFetch as jest.Mock).mockImplementation(async (url: string) => {
+      if (url.includes('/api/sql-to-ir')) {
+        return {
+          ok: true,
+          json: async () => ({
+            success: true,
+            ir: {
+              version: 1,
+              select: [{ type: 'column', column: '*' }],
+              from: { table: 'users_c' },
+              where: { operator: 'AND', conditions: [{ column: 'name', operator: 'ILIKE', param_name: 'search' }] },
+            },
+          }),
+        };
+      }
+      if (url.includes('/api/ir-to-sql')) {
+        // Simulates IR→SQL after removeNoneParamConditions removed the ILIKE condition
+        return { ok: true, json: async () => ({ success: true, sql: 'SELECT * FROM users_c' }) };
+      }
+      return mockPythonSuccess();
+    });
+
+    const request = makeQueryRequest({
+      database_name: PG_CONN,
+      query: 'SELECT * FROM users_c WHERE name ILIKE :search',
+      parameters: { search: null },
+    });
+
+    const response = await queryPostHandler(request);
+    expect(response.status).toBe(200);
+
+    const body = JSON.parse(getExecuteCalls()[0][1].body);
+    expect(body.query).not.toContain(':search');
+    expect(body.query).not.toContain('NULL'); // condition removed, not NULL-substituted
+    expect(body.parameters).not.toHaveProperty('search');
+  });
 });

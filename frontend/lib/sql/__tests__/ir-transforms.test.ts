@@ -150,6 +150,12 @@ describe('removeNoneParamConditions', () => {
     expect((result.where!.conditions[0] as FilterCondition).value).toBe(true);
   });
 
+  it('removes a WHERE ILIKE condition whose param is None', () => {
+    const ir = makeIR([{ column: 'name', operator: 'ILIKE', param_name: 'search' }]);
+    const result = removeNoneParamConditions(ir, new Set(['search']));
+    expect(result.where).toBeUndefined();
+  });
+
   it('handles mix of None and valued params', () => {
     const ir = makeIR([
       { column: 'a', operator: '=', param_name: 'p1' },

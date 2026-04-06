@@ -268,8 +268,8 @@ def _check_unsupported_operators(ast: exp.Expression) -> Set[str]:
     """
     Check for operators not in our supported list.
 
-    Supported: =, !=, >, <, >=, <=, LIKE, IN, IS NULL, IS NOT NULL
-    Unsupported: BETWEEN, NOT LIKE, NOT IN, ILIKE, ~, etc.
+    Supported: =, !=, >, <, >=, <=, LIKE, ILIKE, IN, IS NULL, IS NOT NULL
+    Unsupported: BETWEEN, NOT LIKE, NOT IN, NOT ILIKE, ~, etc.
     """
     unsupported: Set[str] = set()
 
@@ -288,9 +288,6 @@ def _check_unsupported_operators(ast: exp.Expression) -> Set[str]:
             elif isinstance(inner, exp.ILike):
                 unsupported.add("NOT ILIKE")
 
-        # ILIKE (case-insensitive LIKE)
-        elif isinstance(node, exp.ILike):
-            unsupported.add("ILIKE (use LIKE or LOWER(column) LIKE LOWER(pattern))")
 
         # Regex operators
         elif isinstance(node, (exp.RegexpLike, exp.RegexpILike)):

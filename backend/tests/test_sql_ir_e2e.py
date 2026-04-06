@@ -222,6 +222,26 @@ class TestSQLRoundTrip:
         assert "active =" in generated_norm  # Value may be 'true' or 'TRUE'
         assert "LIMIT 10" in generated_norm
 
+    def test_ilike_literal_round_trip(self):
+        """Test ILIKE with a literal value round-trips correctly"""
+        sql = "SELECT name FROM users WHERE email ILIKE '%example%'"
+        ir = parse_sql_to_ir(sql)
+        assert ir.where.conditions[0].operator == 'ILIKE'
+        out = ir_to_sql_python(ir)
+        assert 'ILIKE' in out.upper()
+        assert 'example' in out
+
+    def test_ilike_param_round_trip(self):
+        """Test ILIKE with a named parameter round-trips with :param preserved"""
+        sql = "SELECT name FROM users WHERE email ILIKE :search"
+        ir = parse_sql_to_ir(sql)
+        cond = ir.where.conditions[0]
+        assert cond.operator == 'ILIKE'
+        assert cond.param_name == 'search'
+        out = ir_to_sql_python(ir)
+        assert ':search' in out
+        assert 'ILIKE' in out.upper()
+
     def test_join_with_aggregates(self):
         """Test JOIN with GROUP BY and aggregates"""
         original_sql = """

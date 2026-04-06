@@ -44,7 +44,7 @@ export interface FilterCondition {
   column?: string | null;  // null for COUNT(*) in HAVING clauses
   table?: string;
   aggregate?: 'COUNT' | 'SUM' | 'AVG' | 'MIN' | 'MAX' | 'COUNT_DISTINCT';
-  operator: '=' | '!=' | '>' | '<' | '>=' | '<=' | 'LIKE' | 'IN' | 'IS NULL' | 'IS NOT NULL';
+  operator: '=' | '!=' | '>' | '<' | '>=' | '<=' | 'LIKE' | 'ILIKE' | 'IN' | 'IS NULL' | 'IS NOT NULL';
   value?: boolean | string | number | string[];
   param_name?: string;
   // For DATE_TRUNC on the left (column) side of a filter

@@ -66,7 +66,7 @@ class FilterCondition(BaseModel):
     column: Optional[str] = None  # None for COUNT(*) in HAVING clauses
     table: Optional[str] = None
     aggregate: Optional[Literal['COUNT', 'SUM', 'AVG', 'MIN', 'MAX', 'COUNT_DISTINCT']] = None
-    operator: Literal['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'IN', 'IS NULL', 'IS NOT NULL']
+    operator: Literal['=', '!=', '>', '<', '>=', '<=', 'LIKE', 'ILIKE', 'IN', 'IS NULL', 'IS NOT NULL']
     value: Optional[Union[bool, str, int, float, List[str]]] = None  # bool must come before int to prevent coercion
     param_name: Optional[str] = None  # If value is :paramName
     # Expression fields (for DATE_TRUNC on the left/column side of a filter)
