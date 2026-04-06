@@ -344,20 +344,6 @@ function SettingsContent() {
     { id: 'general', label: 'General' },
     { id: 'users', label: 'Users', visible: isAdmin, custom: <UsersContent /> },
     {
-      id: 'integrations',
-      label: 'Integrations',
-      visible: isAdvancedAdmin,
-      custom: (
-        <VStack align="stretch" gap={3}>
-          <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-            Connect external services to your MinusX workspace.
-          </Text>
-          <SlackIntegration />
-          <McpIntegration />
-        </VStack>
-      ),
-    },
-    {
       id: 'messaging',
       label: 'Messaging',
       visible: isAdmin,
@@ -369,6 +355,20 @@ function SettingsContent() {
           <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
             <ErrorDeliverySection />
           </Box>
+        </VStack>
+      ),
+    },
+    {
+      id: 'integrations',
+      label: 'Integrations',
+      visible: isAdvancedAdmin,
+      custom: (
+        <VStack align="stretch" gap={3}>
+          <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+            Connect external services to your MinusX workspace.
+          </Text>
+          <SlackIntegration />
+          <McpIntegration />
         </VStack>
       ),
     },
