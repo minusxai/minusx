@@ -34,9 +34,13 @@ export type VisualizationType =
  */
 export type Xcols = string[] | null;
 /**
- * list of column names in the y axis (for non-pivot chart types)
+ * list of column names in the y axis (for non-pivot chart types). When dualAxis is enabled in axisConfig, these are the left-axis columns.
  */
 export type Ycols = string[] | null;
+/**
+ * list of column names for the right Y axis (only used when axisConfig.dualAxis is true)
+ */
+export type Yrightcols = string[] | null;
 /**
  * additional columns to show in chart tooltips without changing grouping or series structure
  */
@@ -192,6 +196,10 @@ export type Ymax = number | null;
  * optional Y-axis title override for charts with a single Y axis
  */
 export type Ytitle = string | null;
+/**
+ * enable dual Y-axis mode. When true, yRightCols in VizSettings determines which columns go on the right axis.
+ */
+export type Dualaxis = boolean | null;
 export type Parameters = QuestionParameter[] | null;
 export type Name2 = string;
 export type ParameterType = "text" | "number" | "date";
@@ -266,6 +274,7 @@ export interface VizSettings {
   type: VisualizationType;
   xCols?: Xcols;
   yCols?: Ycols;
+  yRightCols?: Yrightcols;
   tooltipCols?: Tooltipcols;
   /**
    * pivot table configuration (only used when type is 'pivot')
@@ -358,6 +367,7 @@ export interface AxisConfig {
   yMin?: Ymin;
   yMax?: Ymax;
   yTitle?: Ytitle;
+  dualAxis?: Dualaxis;
 }
 export interface QuestionParameter {
   name: Name2;

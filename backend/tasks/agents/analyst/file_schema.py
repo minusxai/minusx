@@ -78,6 +78,7 @@ class AxisConfig(BaseModel):
     yMin: Optional[float] = Field(None, description="explicit Y-axis minimum value")
     yMax: Optional[float] = Field(None, description="explicit Y-axis maximum value")
     yTitle: Optional[str] = Field(None, description="optional Y-axis title override for charts with a single Y axis")
+    dualAxis: Optional[bool] = Field(None, description="enable dual Y-axis mode. When true, yRightCols in VizSettings determines which columns go on the right axis.")
 
 class ColumnFormatConfig(BaseModel):
     """Per-column display formatting. Only set when the user explicitly asks to change formatting."""
@@ -104,7 +105,8 @@ class VisualizationSettings(BaseModel):
     """visualization settings"""
     type: VisualizationType = Field(..., description="type of the visualization (default is table)")
     xCols: Optional[List[str]] = Field([], description="list of column names in the x axis (for non-pivot chart types)")
-    yCols: Optional[List[str]] = Field([], description="list of column names in the y axis (for non-pivot chart types)")
+    yCols: Optional[List[str]] = Field([], description="list of column names in the y axis (for non-pivot chart types). When dualAxis is enabled in axisConfig, these are the left-axis columns.")
+    yRightCols: Optional[List[str]] = Field([], description="list of column names for the right Y axis (only used when axisConfig.dualAxis is true)")
     tooltipCols: Optional[List[str]] = Field([], description="additional columns to show in chart tooltips without changing grouping or series structure")
     pivotConfig: Optional[PivotConfig] = Field(None, description="pivot table configuration (only used when type is 'pivot')")
     columnFormats: Optional[Dict[str, ColumnFormatConfig]] = Field(None, description="per-column display formatting keyed by column name. Only set when user asks to rename columns, change decimal places, or change date format. Good defaults are applied automatically.")
