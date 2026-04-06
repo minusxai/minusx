@@ -9,9 +9,11 @@ import type { Mode } from '@/lib/mode/mode-types';
 export async function notifyErrorEvent(payload: AppEventPayloads['error']): Promise<void> {
   // Always notify bug reporting channel (independent of company config, fire-and-forget)
   const internalExtras: Record<string, string> = {};
-  if (payload.context?.user)    internalExtras.user    = String(payload.context.user);
-  if (payload.context?.url)     internalExtras.url     = String(payload.context.url);
-  if (payload.context?.company) internalExtras.company = String(payload.context.company);
+  if (payload.companyId)        internalExtras.companyId = String(payload.companyId);
+  if (payload.mode)             internalExtras.mode      = payload.mode;
+  if (payload.context?.user)    internalExtras.user      = String(payload.context.user);
+  if (payload.context?.url)     internalExtras.url       = String(payload.context.url);
+  if (payload.context?.company) internalExtras.company   = String(payload.context.company);
   void notifyInternal(payload.source, payload.message, internalExtras);
   const { config } = await getConfigsByCompanyId(payload.companyId, payload.mode as Mode | undefined);
   const recipients = config.error_delivery ?? [];

@@ -1,36 +1,32 @@
 import 'server-only';
 import { GIT_COMMIT_SHA } from '@/lib/constants';
-import { INTERNAL_SLACK_CHANNEL_WEBHOOK, AUTH_URL } from '@/lib/config';
+import { MX_API_BASE_URL, MX_API_KEY } from '@/lib/config';
 
 /**
  * Bug reporting channel notifier for app-level errors.
- * Completely independent of company config — uses INTERNAL_SLACK_CHANNEL_WEBHOOK env var directly.
- * Never exposed to clients. Never re-uses any company-configured webhook.
+ * Routes through MX_API_BASE_URL/notify → SLACK_ERRORS_WEBHOOK.
+ * Never exposed to clients.
  */
 export async function notifyInternal(
   source: string,
   message: string,
   extras?: Record<string, string>,
 ): Promise<void> {
-  const webhookUrl = INTERNAL_SLACK_CHANNEL_WEBHOOK;
-  if (!webhookUrl) return;
-
-  const errObj: Record<string, string> = {
-    source,
-    message,
-    commit: GIT_COMMIT_SHA,
-    ...(extras ?? {}),
-  };
+  if (!MX_API_BASE_URL) return;
 
   try {
-    await fetch(webhookUrl, {
+    await fetch(`${MX_API_BASE_URL}/notify`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(MX_API_KEY ? { 'mx-api-key': MX_API_KEY } : {}),
+      },
       body: JSON.stringify({
-        email_id: extras?.user ?? source,
-        created_at: new Date().toISOString().replace('T', ' ').replace(/\.\d+Z$/, ''),
-        err_str: JSON.stringify(errObj),
-        thread_url: AUTH_URL,
+        type: 'error',
+        source,
+        message,
+        commit: GIT_COMMIT_SHA,
+        ...(extras ?? {}),
       }),
     });
   } catch (e) {

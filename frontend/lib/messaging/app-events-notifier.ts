@@ -1,24 +1,20 @@
 import 'server-only';
-import { APP_EVENTS_SLACK_WEBHOOK } from '@/lib/config';
+import { MX_API_BASE_URL, MX_API_KEY } from '@/lib/config';
 
 export async function notifyAppEvent(
   eventType: string,
   payload: Record<string, unknown>,
 ): Promise<void> {
-  if (!APP_EVENTS_SLACK_WEBHOOK) return;
-
-  const lines: string[] = [`*${eventType}*`];
-  for (const [k, v] of Object.entries(payload)) {
-    if (v !== undefined && v !== null) {
-      lines.push(`• ${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`);
-    }
-  }
+  if (!MX_API_BASE_URL) return;
 
   try {
-    await fetch(APP_EVENTS_SLACK_WEBHOOK, {
+    await fetch(`${MX_API_BASE_URL}/notify`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: lines.join('\n') }),
+      headers: {
+        'Content-Type': 'application/json',
+        ...(MX_API_KEY ? { 'mx-api-key': MX_API_KEY } : {}),
+      },
+      body: JSON.stringify({ type: eventType, ...payload }),
     });
   } catch (e) {
     console.error('[app-events-notifier] Failed to send notification:', e);

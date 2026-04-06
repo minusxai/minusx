@@ -1,9 +1,8 @@
 """
 Bug channel notifier for app-level bug reporting.
-Completely independent of company config — uses INTERNAL_SLACK_CHANNEL_WEBHOOK env var directly.
+Routes through MX_API_BASE_URL/notify → SLACK_ERRORS_WEBHOOK.
 Never re-uses any company-configured webhook.
 """
-import json
 import os
 import logging
 import subprocess
@@ -11,6 +10,9 @@ from datetime import datetime, timezone
 import httpx
 
 logger = logging.getLogger(__name__)
+
+_MX_API_BASE_URL = os.environ.get('MX_API_BASE_URL', '')
+_MX_API_KEY = os.environ.get('MX_API_KEY', '')
 
 
 def _read_git_commit_sha() -> str:
@@ -24,20 +26,23 @@ _GIT_COMMIT_SHA = _read_git_commit_sha()
 
 
 async def notify_internal(source: str, message: str, extras: dict | None = None) -> None:
-    webhook_url = os.environ.get('INTERNAL_SLACK_CHANNEL_WEBHOOK')
-    if not webhook_url:
+    if not _MX_API_BASE_URL:
         return
 
-    err_obj = {'source': source, 'message': message, 'commit': _GIT_COMMIT_SHA, **(extras or {})}
     payload = {
-        'email_id': (extras or {}).get('user', source),
+        'type': 'error',
+        'source': source,
+        'message': message,
+        'commit': _GIT_COMMIT_SHA,
         'created_at': datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
-        'err_str': json.dumps(err_obj),
-        'thread_url': os.environ.get('AUTH_URL', 'https://minusx.ai'),
+        **(extras or {}),
     }
+    headers = {'Content-Type': 'application/json'}
+    if _MX_API_KEY:
+        headers['mx-api-key'] = _MX_API_KEY
 
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            await client.post(webhook_url, json=payload)
+            await client.post(f'{_MX_API_BASE_URL}/notify', json=payload, headers=headers)
     except Exception as e:
         logger.error(f'[internal-notifier] Failed to send internal notification: {e}')

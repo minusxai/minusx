@@ -5,6 +5,7 @@ import { CompanyDB } from '@/lib/database/company-db';
 import { hashPassword } from '@/lib/auth/password-utils';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
 import { isAdmin } from '@/lib/auth/role-helpers';
+import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 
 /**
  * GET /api/users
@@ -135,6 +136,15 @@ export async function POST(request: NextRequest) {
       companyId: newUser.company_id,
       companyName: company?.name,
     };
+
+    appEventRegistry.publish(AppEvents.USER_CREATED, {
+      companyId,
+      mode: 'org',
+      userId: newUser.id,
+      userEmail: newUser.email,
+      role: newUser.role,
+      createdBy: session.user.email ?? undefined,
+    });
 
     return successResponse({ user: safeUser }, 201);
   } catch (error) {

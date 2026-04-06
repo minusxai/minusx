@@ -1,4 +1,4 @@
-"""Httpx transport that redirects LiteLLM traffic to mx-llm-provider."""
+"""Httpx transport that redirects LiteLLM traffic through the LLM proxy."""
 
 import httpx
 

@@ -43,3 +43,6 @@ appEventRegistry.subscribe(AppEvents.LLM_CALL,                 p => trackLLMCall
 appEventRegistry.subscribe(AppEvents.QUERY_EXECUTED,           p => trackQueryExecutionEvent({ queryHash: p.queryHash, databaseName: p.databaseName, durationMs: p.durationMs, rowCount: p.rowCount, wasCacheHit: p.wasCacheHit, userEmail: p.userEmail ?? null, companyId: p.companyId }));
 appEventRegistry.subscribe(AppEvents.ERROR,                    p => notifyErrorEvent(p));
 appEventRegistry.subscribe(AppEvents.USER_MESSAGE,             p => notifyAppEvent('user:message', p as unknown as Record<string, unknown>));
+appEventRegistry.subscribe(AppEvents.USER_LOGGED_IN,           p => notifyAppEvent('user:login',   p as unknown as Record<string, unknown>));
+appEventRegistry.subscribe(AppEvents.USER_CREATED,             p => notifyAppEvent('user:created', p as unknown as Record<string, unknown>));
+appEventRegistry.subscribe(AppEvents.USER_DELETED,             p => notifyAppEvent('user:deleted', p as unknown as Record<string, unknown>));

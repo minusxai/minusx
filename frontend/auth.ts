@@ -10,6 +10,7 @@ import { isAdmin } from '@/lib/auth/role-helpers'
 import { getCompanyNameById } from '@/lib/data/configs.server'
 import { ADMIN_PWD } from '@/lib/config'
 import { CURRENT_TOKEN_VERSION } from '@/lib/auth/auth-constants'
+import { appEventRegistry, AppEvents } from '@/lib/app-event-registry'
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
@@ -137,6 +138,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         token.tokenVersion = CURRENT_TOKEN_VERSION  // Increment this when JWT schema changes
         token.createdAt = Math.floor(Date.now() / 1000)  // Unix timestamp
         // Note: JWT 'iat' (issued-at) is automatically added by NextAuth
+
+        appEventRegistry.publish(AppEvents.USER_LOGGED_IN, {
+          companyId: user.companyId as number,
+          mode: 'org',
+          userId: user.userId as number,
+          userEmail: user.email as string,
+          role: user.role as string,
+        });
       }
 
       // Handle session updates

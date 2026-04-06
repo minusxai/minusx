@@ -4,6 +4,7 @@ import { UserDB } from '@/lib/database/user-db';
 import { hashPassword } from '@/lib/auth/password-utils';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
 import { isAdmin } from '@/lib/auth/role-helpers';
+import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -176,6 +177,15 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     await UserDB.delete(userId, companyId);
+
+    appEventRegistry.publish(AppEvents.USER_DELETED, {
+      companyId,
+      mode: 'org',
+      userId: existingUser.id,
+      userEmail: existingUser.email,
+      role: existingUser.role,
+      deletedBy: session.user.email ?? undefined,
+    });
 
     return successResponse({ message: 'User deleted successfully' });
   } catch (error) {
