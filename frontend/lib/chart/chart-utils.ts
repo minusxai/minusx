@@ -12,7 +12,8 @@ export interface ChartProps {
   height?: number | string
   xAxisLabel?: string
   yAxisLabel?: string
-  yAxisColumns?: string[]  // The actual Y-axis column names (for dual-axis logic)
+  yAxisColumns?: string[]  // The actual Y-axis column names (left axis when dual axis)
+  yRightCols?: string[]    // Right Y-axis column names (only when axisConfig.dualAxis is true)
   onChartClick?: (params: unknown) => void  // ECharts click event handler for drill-down
   columnFormats?: Record<string, ColumnFormatConfig>
   xAxisColumns?: string[]  // Actual X-axis column names (for format config lookup)
@@ -33,8 +34,10 @@ interface AnnotationGraphicsConfig {
   chartType: string
   xAxisColumns?: string[]
   yAxisColumns?: string[]
+  yRightCols?: string[]
   columnFormats?: Record<string, ColumnFormatConfig>
   annotations?: ChartAnnotation[]
+  axisConfig?: AxisConfig
   colorMode?: 'light' | 'dark'
   colorPalette: string[]
 }
@@ -639,8 +642,10 @@ export const buildAnnotationGraphics = ({
   chartType,
   xAxisColumns,
   yAxisColumns,
+  yRightCols,
   columnFormats,
   annotations,
+  axisConfig,
   colorMode = 'dark',
   colorPalette,
 }: AnnotationGraphicsConfig): EChartsOption['graphic'] => {
@@ -658,8 +663,8 @@ export const buildAnnotationGraphics = ({
   const plotRight = rect.x + rect.width
   const plotBottom = rect.y + rect.height
   const plotHeight = rect.height
-  const useDualYAxis = needsDualYAxis(series)
-  const yAxisAssignments = useDualYAxis ? assignSeriesToAxes(series, yAxisColumns) : series.map(() => 0)
+  const useDualYAxis = axisConfig?.dualAxis === true && yRightCols && yRightCols.length > 0
+  const yAxisAssignments = useDualYAxis ? assignSeriesToYRightCols(series, yRightCols) : series.map(() => 0)
   const getColumnDisplayName = (col: string) => columnFormats?.[col]?.alias || col
   const getSeriesDisplayName = (seriesName: string): string => {
     const axisMatch = seriesName.match(/^(.*) \(([LR])\)$/)
@@ -1141,86 +1146,24 @@ export const buildToolbox = ({
   bottom: 10,
 })
 
-// Helper function to detect if series need dual Y-axes
-const needsDualYAxis = (series: Array<{ name: string; data: number[] }>): boolean => {
-  if (series.length < 2) return false
-
-  // Calculate scale ranges for each series
-  const ranges = series.map(s => {
-    const values = s.data.filter(v => !isNaN(v) && v !== null)
-    if (values.length === 0) return { min: 0, max: 0, range: 0 }
-    const min = Math.min(...values)
-    const max = Math.max(...values)
-    return { min, max, range: max - min }
-  })
-
-  // Find the largest and smallest ranges
-  const validRanges = ranges.filter(r => r.range > 0)
-  if (validRanges.length < 2) return false
-
-  const maxRange = Math.max(...validRanges.map(r => r.range))
-  const minRange = Math.min(...validRanges.map(r => r.range))
-
-  // If the ratio between largest and smallest range is > 10, use dual axes
-  // This threshold can be adjusted based on needs
-  return maxRange / minRange > 10
-}
-
-// Helper function to assign series to Y-axes
-const assignSeriesToAxes = (
+// Assign series to Y-axes based on explicit yRightCols.
+// Series whose Y-column is in yRightCols → axis 1 (right), others → axis 0 (left).
+// Works with split series (e.g. "Appetizers - orders") by checking if name ends with " - col".
+const assignSeriesToYRightCols = (
   series: Array<{ name: string; data: number[] }>,
-  yAxisColumns?: string[]
+  yRightCols: string[]
 ): number[] => {
-  if (series.length < 2) return series.map(() => 0)
-
-  // If we have 2+ Y-axis columns, check if series names match the "group - yCol" pattern
-  // Only use column-based assignment if at least one series matches the pattern
-  if (yAxisColumns && yAxisColumns.length >= 2) {
-    // Check if any series has the " - col" pattern
-    const hasGroupPattern = series.some(s =>
-      yAxisColumns.some(col => s.name.endsWith(` - ${col}`))
-    )
-
-    if (hasGroupPattern) {
-      // Use column-based assignment for series that match the pattern
-      return series.map(s => {
-        // Check which Y-column this series belongs to
-        for (let i = 0; i < yAxisColumns.length; i++) {
-          if (s.name.endsWith(` - ${yAxisColumns[i]}`)) {
-            // First Y-column goes to left axis (0), all others to right axis (1)
-            return i === 0 ? 0 : 1
-          }
-        }
-
-        // Fallback: if name doesn't match pattern, assign to left axis
-        return 0
-      })
+  // eslint-disable-next-line no-restricted-syntax -- function-local Set, not shared module state
+  const rightSet = new Set(yRightCols)
+  return series.map(s => {
+    // Direct match: series name is a right-axis column
+    if (rightSet.has(s.name)) return 1
+    // Split pattern: "GroupValue - yCol" — check if the yCol suffix is in rightSet
+    for (const col of yRightCols) {
+      if (s.name.endsWith(` - ${col}`)) return 1
     }
-  }
-
-  // Use magnitude-based assignment (for ungrouped data or when pattern doesn't match)
-  // Calculate average magnitude for each series
-  const magnitudes = series.map(s => {
-    const values = s.data.filter(v => !isNaN(v) && v !== null)
-    if (values.length === 0) return 0
-    const avg = values.reduce((sum, v) => sum + Math.abs(v), 0) / values.length
-    return avg
+    return 0
   })
-
-  // Sort series by magnitude
-  const sortedIndices = magnitudes
-    .map((mag, idx) => ({ mag, idx }))
-    .sort((a, b) => b.mag - a.mag)
-
-  // Assign half to left axis (0), half to right axis (1)
-  const assignments = new Array(series.length).fill(0)
-  const halfPoint = Math.ceil(series.length / 2)
-
-  sortedIndices.forEach((item, rank) => {
-    assignments[item.idx] = rank < halfPoint ? 0 : 1
-  })
-
-  return assignments
 }
 
 // Base chart configuration builder
@@ -1230,6 +1173,7 @@ interface BaseChartConfig {
   xAxisLabel?: string
   yAxisLabel?: string
   yAxisColumns?: string[]
+  yRightCols?: string[]
   xAxisColumns?: string[]
   pointMeta?: Record<string, any>[]
   tooltipColumns?: string[]
@@ -1249,7 +1193,7 @@ interface BaseChartConfig {
 }
 
 export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
-  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, xAxisColumns, pointMeta, tooltipColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig, styleConfig, annotations, exportBranding } = config
+  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, yRightCols, xAxisColumns, pointMeta, tooltipColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig, styleConfig, annotations, exportBranding } = config
   const xScaleType = axisConfig?.xScale ?? 'linear'
   const yScaleType = axisConfig?.yScale ?? 'linear'
   const xMin = axisConfig?.xMin ?? undefined
@@ -1294,11 +1238,9 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
     return { min, max }
   }
 
-  // Determine if we need dual Y-axes
-  // Only use dual Y-axis when there are 2+ Y-axis columns (distinct metrics)
-  // NOT when there are multiple series from the same metric due to splits
-  const useDualYAxis = chartType === 'line' && yAxisColumns && yAxisColumns.length >= 2 && series.length > 1 && needsDualYAxis(series)
-  const yAxisAssignments = useDualYAxis ? assignSeriesToAxes(series, yAxisColumns) : series.map(() => 0)
+  // Dual Y-axis: explicitly enabled via axisConfig.dualAxis + yRightCols
+  const useDualYAxis = axisConfig?.dualAxis === true && yRightCols && yRightCols.length > 0
+  const yAxisAssignments = useDualYAxis ? assignSeriesToYRightCols(series, yRightCols) : series.map(() => 0)
   const resolvedYAxisLabel = axisConfig?.yTitle?.trim() || yAxisLabel
 
   // Calculate max length for Y-axis names based on available height

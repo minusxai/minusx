@@ -34,7 +34,9 @@ interface ChartBuilderProps {
   chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo'
   initialXCols?: string[]
   initialYCols?: string[]
+  initialYRightCols?: string[]
   onAxisChange?: (xCols: string[], yCols: string[]) => void
+  onYRightColsChange?: (yRightCols: string[]) => void
   showAxisBuilder?: boolean
   useCompactView?: boolean
   fillHeight?: boolean
@@ -63,7 +65,7 @@ interface GroupedColumns {
   categories: string[]
 }
 
-export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, onAxisChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, annotations, onAnnotationsChange, exportBranding }: ChartBuilderProps) => {
+export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, initialYRightCols, onAxisChange, onYRightColsChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, annotations, onAnnotationsChange, exportBranding }: ChartBuilderProps) => {
   const colorPalette = useMemo(() => getEffectiveColorPalette(styleConfig?.colors), [styleConfig?.colors])
 
   // Group columns by type
@@ -125,6 +127,16 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     }
     return groupedColumns.numbers.length > 0 ? [groupedColumns.numbers[0]] : []
   }, [initialYCols, columns, groupedColumns])
+
+  const isDualAxis = axisConfig?.dualAxis === true
+
+  const yRightColumns = useMemo<string[]>(() => {
+    if (!isDualAxis) return []
+    if (initialYRightCols !== undefined) {
+      return initialYRightCols.filter(col => columns.includes(col))
+    }
+    return []
+  }, [isDualAxis, initialYRightCols, columns])
 
   // Column format config — always derived from props
   const columnFormats = useMemo<Record<string, ColumnFormatConfig>>(() => initialColumnFormats ?? {}, [initialColumnFormats])
@@ -220,6 +232,17 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     onAxisChange?.(xAxisColumns, yAxisColumns.filter(c => c !== column))
   }, [yAxisColumns, xAxisColumns, onAxisChange])
 
+  // Handle drop/remove on Y Right axis
+  const handleDropYRight = useCallback((col: string) => {
+    if (!yRightColumns.includes(col)) {
+      onYRightColsChange?.([...yRightColumns, col])
+    }
+  }, [yRightColumns, onYRightColsChange])
+
+  const removeFromYRight = useCallback((column: string) => {
+    onYRightColsChange?.(yRightColumns.filter(c => c !== column))
+  }, [yRightColumns, onYRightColsChange])
+
   const handleDropTooltip = useCallback((col: string) => {
     if (!tooltipColumns.includes(col)) {
       onTooltipColsChange?.([...tooltipColumns, col])
@@ -231,34 +254,65 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   }, [tooltipColumns, onTooltipColsChange])
 
   // Build axis zones for AxisBuilder
-  const chartZones: AxisZone[] = useMemo(() => [
-    {
+  const chartZones: AxisZone[] = useMemo(() => {
+    const xZone: AxisZone = {
       label: 'X Axis',
       items: xAxisColumns.map(col => ({ column: col })),
       emptyText: 'Drop columns here',
       onDrop: handleDropX,
       onRemove: removeFromX,
-    },
-    {
-      label: 'Y Axis',
-      items: yAxisColumns.map(col => ({ column: col })),
-      emptyText: 'Drop columns here',
-      onDrop: handleDropY,
-      onRemove: removeFromY,
-    },
-    {
+    }
+    const tooltipZone: AxisZone = {
       label: 'Tooltip',
       items: tooltipColumns.map(col => ({ column: col })),
       emptyText: 'Extra fields for hover details',
       onDrop: handleDropTooltip,
       onRemove: removeFromTooltip,
-    },
-  ], [xAxisColumns, yAxisColumns, tooltipColumns, handleDropX, handleDropY, handleDropTooltip, removeFromX, removeFromY, removeFromTooltip])
+    }
 
-  // Aggregate data
+    if (isDualAxis) {
+      return [
+        xZone,
+        {
+          label: 'Y Left',
+          items: yAxisColumns.map(col => ({ column: col })),
+          emptyText: 'Drop columns here',
+          onDrop: handleDropY,
+          onRemove: removeFromY,
+        },
+        {
+          label: 'Y Right',
+          items: yRightColumns.map(col => ({ column: col })),
+          emptyText: 'Drop columns here',
+          onDrop: handleDropYRight,
+          onRemove: removeFromYRight,
+        },
+        tooltipZone,
+      ]
+    }
+
+    return [
+      xZone,
+      {
+        label: 'Y Axis',
+        items: yAxisColumns.map(col => ({ column: col })),
+        emptyText: 'Drop columns here',
+        onDrop: handleDropY,
+        onRemove: removeFromY,
+      },
+      tooltipZone,
+    ]
+  }, [xAxisColumns, yAxisColumns, yRightColumns, isDualAxis, tooltipColumns, handleDropX, handleDropY, handleDropYRight, handleDropTooltip, removeFromX, removeFromY, removeFromYRight, removeFromTooltip])
+
+  // Aggregate data — combine left + right Y columns so all series are produced
+  const allYColumns = useMemo(() => {
+    if (!isDualAxis || yRightColumns.length === 0) return yAxisColumns
+    return [...yAxisColumns, ...yRightColumns]
+  }, [isDualAxis, yAxisColumns, yRightColumns])
+
   const aggregatedData = useMemo(() => {
-    return aggregateData(rows, xAxisColumns, yAxisColumns, chartType, tooltipColumns)
-  }, [rows, xAxisColumns, yAxisColumns, chartType, tooltipColumns])
+    return aggregateData(rows, xAxisColumns, allYColumns, chartType, tooltipColumns)
+  }, [rows, xAxisColumns, allYColumns, chartType, tooltipColumns])
 
   // Compute axis mapping for multi-X-column charts (needed for drill-down click handler)
   const axisMapping = useMemo(() => {
@@ -375,12 +429,12 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   const constraintError = useMemo((): string | null => {
     switch (chartType) {
       case 'combo':
-        if (yAxisColumns.length < 2) return 'Combo charts require at least 2 Y-axis columns (first becomes bar, rest become lines).'
+        if (allYColumns.length < 2) return 'Combo charts require at least 2 Y-axis columns (first becomes bar, rest become lines).'
         if (xAxisColumns.length < 1) return 'Combo charts require at least 1 X-axis column.'
         return null
       case 'waterfall':
         if (xAxisColumns.length > 1) return 'Waterfall charts support only a single X-axis column. Remove extra columns from the X axis to continue.'
-        if (yAxisColumns.length > 1) return 'Waterfall charts support only a single Y-axis column. Remove extra columns from the Y axis to continue.'
+        if (allYColumns.length > 1) return 'Waterfall charts support only a single Y-axis column. Remove extra columns from the Y axis to continue.'
         return null
       case 'pie':
         if (xAxisColumns.length < 1) return 'Pie charts require at least 1 X-axis column for grouping.'
@@ -391,9 +445,9 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
       default:
         return null
     }
-  }, [chartType, xAxisColumns.length, yAxisColumns.length])
+  }, [chartType, xAxisColumns.length, allYColumns.length])
 
-  const hasData = yAxisColumns.length > 0
+  const hasData = allYColumns.length > 0
 
   // Use the compact view flag passed from parent
   const useCompactView = useCompactViewProp
@@ -579,6 +633,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       tooltipColumns,
                       columnFormats,
                       yAxisColumns,
+                      yRightCols: yRightColumns,
                       height: useCompactView && !fillHeight ? 300 : undefined,
                       onChartClick: handleChartClick,
                       chartTitle,

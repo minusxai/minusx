@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useMemo } from 'react'
-import { Box, HStack, VStack, Text } from '@chakra-ui/react'
+import { Box, HStack, VStack, Text, Switch } from '@chakra-ui/react'
 import { LuChevronDown, LuChevronRight } from 'react-icons/lu'
 import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } from './AxisComponents'
 import type { ColumnFormatConfig, AxisConfig } from '@/lib/types'
@@ -55,6 +55,24 @@ const AxisSettingsPanel = ({ axis, axisConfig, onChange }: {
 
   return (
     <VStack align="stretch" gap={2.5} minW={0}>
+      {axis === 'y' && (
+        <HStack gap={2} align="center">
+          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
+            Dual Y-axis
+          </Text>
+          <Switch.Root
+            size="sm"
+            checked={!!axisConfig.dualAxis}
+            onCheckedChange={(e) => { onChange({ ...axisConfig, dualAxis: e.checked || null }) }}
+            colorPalette="teal"
+          >
+            <Switch.HiddenInput aria-label="Dual Y-axis toggle" />
+            <Switch.Control>
+              <Switch.Thumb />
+            </Switch.Control>
+          </Switch.Root>
+        </HStack>
+      )}
       {axis === 'y' && (
         <Box>
           <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>

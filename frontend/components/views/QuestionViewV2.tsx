@@ -325,6 +325,15 @@ export default function QuestionViewV2({
     });
   };
 
+  const handleYRightColsChange = (yRightCols: string[]) => {
+    onChange({
+      vizSettings: {
+        ...content.vizSettings,
+        yRightCols,
+      }
+    });
+  };
+
   const handleTooltipColsChange = (tooltipCols: string[]) => {
     onChange({
       vizSettings: {
@@ -903,6 +912,7 @@ export default function QuestionViewV2({
                 queryEstimatedDurationMs={queryEstimatedDurationMs}
                 onVizTypeChange={handleVizTypeChange}
                 onAxisChange={handleAxisChange}
+                onYRightColsChange={handleYRightColsChange}
                 onTooltipColsChange={handleTooltipColsChange}
                 onPivotConfigChange={handlePivotConfigChange}
                 onColumnFormatsChange={handleColumnFormatsChange}

@@ -1,7 +1,13 @@
 import React from 'react'
 import { screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '@/test/helpers/render-with-providers'
 import { ChartBuilder } from '@/components/plotx/ChartBuilder'
+
+// Mock EChart to avoid echarts init crash in JSDOM
+jest.mock('@/components/plotx/EChart', () => ({
+  EChart: () => <div data-testid="mock-echart" />,
+}))
 
 jest.mock('@/lib/hooks/useConfigs', () => ({
   useConfigs: () => ({
@@ -81,25 +87,18 @@ describe('ChartBuilder viz type constraints', () => {
   })
 
   it('combo chart does not show constraint error with 2+ Y-axis columns', () => {
-    // ECharts init throws in JSDOM, but we only care that the constraint error is absent
-    jest.spyOn(console, 'error').mockImplementation(() => {})
-    try {
-      renderWithProviders(
-        <ChartBuilder
-          columns={columns}
-          types={types}
-          rows={rows}
-          chartType="combo"
-          initialXCols={['month']}
-          initialYCols={['revenue', 'orders']}
-        />
-      )
-    } catch {
-      // ECharts may throw in JSDOM — that's fine
-    }
+    renderWithProviders(
+      <ChartBuilder
+        columns={columns}
+        types={types}
+        rows={rows}
+        chartType="combo"
+        initialXCols={['month']}
+        initialYCols={['revenue', 'orders']}
+      />
+    )
 
     expect(screen.queryByText(/combo charts require/i)).not.toBeInTheDocument()
-    jest.restoreAllMocks()
   })
 
   it('waterfall chart shows error with multiple Y-axis columns', () => {
@@ -160,5 +159,79 @@ describe('ChartBuilder viz type constraints', () => {
     )
 
     expect(screen.getByText(/funnel charts require at least 1 X-axis column/i)).toBeInTheDocument()
+  })
+})
+
+describe('ChartBuilder dual axis', () => {
+  const columns = ['month', 'category', 'revenue', 'orders']
+  const types = ['TIMESTAMP', 'VARCHAR', 'DOUBLE', 'BIGINT']
+  const rows = [
+    { month: '2026-01', category: 'A', revenue: 100, orders: 10 },
+    { month: '2026-02', category: 'B', revenue: 200, orders: 20 },
+  ]
+
+  it('shows single Y Axis zone when dualAxis is off', () => {
+    renderWithProviders(
+      <ChartBuilder
+        columns={columns}
+        types={types}
+        rows={rows}
+        chartType="line"
+        initialXCols={['month']}
+        initialYCols={['revenue', 'orders']}
+        showAxisBuilder
+        axisConfig={{}}
+        onAxisConfigChange={jest.fn()}
+      />
+    )
+
+    expect(screen.getByText('Y Axis')).toBeInTheDocument()
+    expect(screen.queryByText('Y Left')).not.toBeInTheDocument()
+    expect(screen.queryByText('Y Right')).not.toBeInTheDocument()
+  })
+
+  it('shows Y Left and Y Right zones when dualAxis is on', () => {
+    renderWithProviders(
+      <ChartBuilder
+        columns={columns}
+        types={types}
+        rows={rows}
+        chartType="line"
+        initialXCols={['month']}
+        initialYCols={['revenue']}
+        initialYRightCols={['orders']}
+        showAxisBuilder
+        axisConfig={{ dualAxis: true }}
+        onAxisConfigChange={jest.fn()}
+      />
+    )
+
+    expect(screen.queryByText('Y Axis')).not.toBeInTheDocument()
+    expect(screen.getByText('Y Left')).toBeInTheDocument()
+    expect(screen.getByText('Y Right')).toBeInTheDocument()
+  })
+
+  it('shows dual axis toggle in settings panel', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(
+      <ChartBuilder
+        columns={columns}
+        types={types}
+        rows={rows}
+        chartType="line"
+        initialXCols={['month']}
+        initialYCols={['revenue', 'orders']}
+        showAxisBuilder
+        axisConfig={{}}
+        onAxisConfigChange={jest.fn()}
+        settingsExpanded
+      />
+    )
+
+    // Switch to settings tab
+    const settingsTab = screen.getByText('Settings')
+    await user.click(settingsTab)
+
+    expect(screen.getByLabelText('Dual Y-axis toggle')).toBeInTheDocument()
   })
 })
