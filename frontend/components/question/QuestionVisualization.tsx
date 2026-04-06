@@ -40,6 +40,7 @@ interface QuestionVisualizationProps {
   queryEstimatedDurationMs?: number | null;
   onVizTypeChange: (type: VizSettings['type']) => void;
   onAxisChange: (xCols: string[], yCols: string[]) => void;
+  onYRightColsChange?: (yRightCols: string[]) => void;
   onTooltipColsChange?: (cols: string[]) => void;
   onPivotConfigChange?: (config: PivotConfig) => void;
   onColumnFormatsChange?: (formats: Record<string, ColumnFormatConfig>) => void;
@@ -126,6 +127,7 @@ export function QuestionVisualization({
   queryEstimatedDurationMs,
   onVizTypeChange,
   onAxisChange,
+  onYRightColsChange,
   onTooltipColsChange,
   onPivotConfigChange,
   onColumnFormatsChange,
@@ -358,7 +360,9 @@ export function QuestionVisualization({
                       chartType={currentState.vizSettings.type}
                       initialXCols={currentState.vizSettings?.xCols ?? undefined}
                       initialYCols={currentState.vizSettings?.yCols ?? undefined}
+                      initialYRightCols={currentState.vizSettings?.yRightCols ?? undefined}
                       onAxisChange={onAxisChange}
+                      onYRightColsChange={onYRightColsChange}
                       initialTooltipCols={currentState.vizSettings?.tooltipCols ?? undefined}
                       onTooltipColsChange={onTooltipColsChange}
                       showAxisBuilder={config.viz.showChartBuilder}

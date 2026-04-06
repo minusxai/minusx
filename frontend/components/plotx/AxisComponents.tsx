@@ -315,9 +315,11 @@ interface ZoneChipProps {
   extra?: React.ReactNode
   formatConfig?: ColumnFormatConfig
   onFormatChange?: (config: ColumnFormatConfig) => void
+  onDragStart?: (e: React.DragEvent) => void
+  onDragEnd?: () => void
 }
 
-export const ZoneChip = ({ column, type, onRemove, extra, formatConfig, onFormatChange }: ZoneChipProps) => {
+export const ZoneChip = ({ column, type, onRemove, extra, formatConfig, onFormatChange, onDragStart, onDragEnd }: ZoneChipProps) => {
   const Icon = getTypeIcon(type)
   const color = getTypeColor(type)
   const [showPopover, setShowPopover] = useState(false)
@@ -359,6 +361,12 @@ export const ZoneChip = ({ column, type, onRemove, extra, formatConfig, onFormat
         minWidth={0}
         maxWidth="100%"
         overflow="hidden"
+        draggable
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        cursor="grab"
+        _active={{ cursor: 'grabbing' }}
+        userSelect="none"
       >
         <Box as={Icon} fontSize="sm" color={color} flexShrink={0} />
         <Text

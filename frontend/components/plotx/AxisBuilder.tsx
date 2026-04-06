@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
-import { Box, HStack, VStack, Text } from '@chakra-ui/react'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { Box, HStack, VStack, Text, Switch } from '@chakra-ui/react'
 import { LuChevronDown, LuChevronRight } from 'react-icons/lu'
 import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } from './AxisComponents'
 import type { ColumnFormatConfig, AxisConfig } from '@/lib/types'
@@ -55,6 +55,24 @@ const AxisSettingsPanel = ({ axis, axisConfig, onChange }: {
 
   return (
     <VStack align="stretch" gap={2.5} minW={0}>
+      {axis === 'y' && (
+        <HStack gap={2} align="center">
+          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
+            Dual Y-axis
+          </Text>
+          <Switch.Root
+            size="sm"
+            checked={!!axisConfig.dualAxis}
+            onCheckedChange={(e) => { onChange({ ...axisConfig, dualAxis: e.checked || null }) }}
+            colorPalette="teal"
+          >
+            <Switch.HiddenInput aria-label="Dual Y-axis toggle" />
+            <Switch.Control>
+              <Switch.Thumb />
+            </Switch.Control>
+          </Switch.Root>
+        </HStack>
+      )}
       {axis === 'y' && (
         <Box>
           <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
@@ -142,6 +160,7 @@ const AxisSettingsPanel = ({ axis, axisConfig, onChange }: {
 
 export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnFormatChange, children, stylePanel, annotationPanel, axisConfig, onAxisConfigChange, chartType }: AxisBuilderProps) => {
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null)
+  const [dragSourceZone, setDragSourceZone] = useState<AxisZone | null>(null)
   const [selectedColumnForMobile, setSelectedColumnForMobile] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'fields' | 'settings'>('fields')
   const [collapsedPanels, setCollapsedPanels] = useState<Record<string, boolean>>({
@@ -151,6 +170,14 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
     annotations: false,
   })
   const isTouchDevice = useIsTouchDevice()
+  // Track whether a drop landed on a zone (set in onDrop, read in onDragEnd)
+  const dropLandedRef = useRef(false)
+  // Track pending source removal (deferred to onDragEnd so fresh zone closures are used)
+  const pendingRemoveRef = useRef<{ column: string; zoneLabel: string } | null>(null)
+  // Keep a ref to the latest zones so deferred removal can use fresh closures
+  const zonesRef = useRef(zones)
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { zonesRef.current = zones }, [zones])
 
   // Compute assigned columns from all zones
   const assignedColumns = useMemo(() => {
@@ -161,12 +188,39 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
 
   const handleDragStart = useCallback((e: React.DragEvent, column: string) => {
     setDraggedColumn(column)
+    dropLandedRef.current = false
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/plain', column)
   }, [])
 
   const handleDragEnd = useCallback(() => {
+    // If dragged from a zone and drop did NOT land on any zone → remove (drag outside)
+    if (dragSourceZone && draggedColumn && !dropLandedRef.current) {
+      dragSourceZone.onRemove(draggedColumn)
+    }
+    // If a zone-to-zone move is pending, defer source removal to after React
+    // re-renders with the onDrop state, so zonesRef has fresh closures
+    if (pendingRemoveRef.current) {
+      requestAnimationFrame(() => {
+        if (pendingRemoveRef.current) {
+          const { column, zoneLabel } = pendingRemoveRef.current
+          const freshZone = zonesRef.current.find(z => z.label === zoneLabel)
+          freshZone?.onRemove(column)
+          pendingRemoveRef.current = null
+        }
+      })
+    }
     setDraggedColumn(null)
+    setDragSourceZone(null)
+    dropLandedRef.current = false
+  }, [dragSourceZone, draggedColumn])
+
+  const handleZoneChipDragStart = useCallback((e: React.DragEvent, column: string, sourceZone: AxisZone) => {
+    setDraggedColumn(column)
+    setDragSourceZone(sourceZone)
+    dropLandedRef.current = false
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', column)
   }, [])
 
   const handleMobileSelect = useCallback((column: string) => {
@@ -176,11 +230,17 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
   const handleZoneDrop = useCallback((zone: AxisZone) => {
     const col = draggedColumn || selectedColumnForMobile
     if (col) {
+      dropLandedRef.current = true
       zone.onDrop(col)
+      // Defer source removal to handleDragEnd so it uses fresh zone closures
+      // (avoids stale state when source.onRemove and target.onDrop share a state setter)
+      if (dragSourceZone && dragSourceZone.label !== zone.label) {
+        pendingRemoveRef.current = { column: col, zoneLabel: dragSourceZone.label }
+      }
     }
     setDraggedColumn(null)
     setSelectedColumnForMobile(null)
-  }, [draggedColumn, selectedColumnForMobile])
+  }, [draggedColumn, selectedColumnForMobile, dragSourceZone])
 
   const showXAxisSettings = chartType === 'scatter' && !!onAxisConfigChange
   const showYAxisSettings = !!onAxisConfigChange
@@ -317,6 +377,8 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
                         extra={item.extra}
                         formatConfig={columnFormats?.[item.column]}
                         onFormatChange={onColumnFormatChange ? (config) => onColumnFormatChange(item.column, config) : undefined}
+                        onDragStart={(e) => handleZoneChipDragStart(e, item.column, zone)}
+                        onDragEnd={handleDragEnd}
                       />
                     ))}
                   </HStack>
