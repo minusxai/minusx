@@ -27,7 +27,7 @@ export interface SessionRecordingConfig {
 export interface MixpanelConfig {
   token: string;
   sessionRecording?: SessionRecordingConfig;
-  // Future: Add more provider-specific options here
+  [key: string]: any; // pass-through for any mixpanel.init() option (e.g. record_mask_all_text)
 }
 
 /**

@@ -4,18 +4,21 @@ import type { AnalyticsProvider, UserProperties, EventProperties, SessionConfig 
 export class MixpanelProvider implements AnalyticsProvider {
   private initialized = false;
 
-  init(token: string, config?: { debug?: boolean; sessionRecording?: { enabled: boolean; sampleRate: number } }): void {
+  init(token: string, config?: { debug?: boolean; sessionRecording?: { enabled: boolean; sampleRate: number }; [key: string]: any }): void {
+    const { debug = false, sessionRecording, ...extraConfig } = config ?? {};
+
     const mixpanelConfig: Record<string, any> = {
-      debug: config?.debug || false,
+      debug,
       track_pageview: false,
       persistence: 'localStorage',
       ignore_dnt: false,
+      ...extraConfig, // pass through any extra keys (e.g. record_mask_all_text) directly to mixpanel.init()
     };
 
     // Enable session recording if configured
-    if (config?.sessionRecording?.enabled) {
+    if (sessionRecording?.enabled) {
       // Convert 0-1 range to 0-100 percentage (provider-specific)
-      mixpanelConfig.record_sessions_percent = config.sessionRecording.sampleRate * 100;
+      mixpanelConfig.record_sessions_percent = (sessionRecording.sampleRate ?? 0.1) * 100;
       console.log('[Analytics] Session recording enabled:', mixpanelConfig.record_sessions_percent + '%');
     }
 

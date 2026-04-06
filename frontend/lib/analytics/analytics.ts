@@ -29,9 +29,11 @@ class Analytics {
       this.provider = new MixpanelProvider();
 
       try {
-        this.provider.init(config.mixpanel.token, {
+        const { token, sessionRecording, ...passthroughConfig } = config.mixpanel;
+        this.provider.init(token, {
           debug: config.debug,
-          sessionRecording: config.mixpanel.sessionRecording,
+          sessionRecording,
+          ...passthroughConfig,
         });
         this.initialized = true;
       } catch (error) {
