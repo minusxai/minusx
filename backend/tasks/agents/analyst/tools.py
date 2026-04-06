@@ -329,6 +329,8 @@ class EditFile(Tool):
     All changes succeed or the batch fails: on failure the response includes `succeededCount`
     and `failedIndex` so you know exactly where to retry.
 
+    On fail, you can retry with shortened oldMatch if applicable.
+
     Example — update query and viz in one call:
     EditFile(fileId=123, changes=[
         {"oldMatch": '"query":"SELECT 1"', "newMatch": '"query":"SELECT id, name FROM users"'},
