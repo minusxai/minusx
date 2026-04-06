@@ -145,7 +145,7 @@ registerTool('ExecuteQuery', async (args, user) => {
     query,
     connectionId,
     parameters
-  });
+  }, user);
 
   return result;
 });
