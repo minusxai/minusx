@@ -431,7 +431,8 @@ function SelectedFilePane({ fileId, publishingSingleId, onDiscard, onPublish }: 
   onDiscard: () => void;
   onPublish: () => void;
 }) {
-  const [viewMode, setViewMode] = useState<'preview' | 'diff'>('diff');
+  const showJson = useAppSelector(state => state.ui.showJson);
+  const [viewMode, setViewMode] = useState<'preview' | 'diff'>(showJson ? 'diff' : 'preview');
   const file = useAppSelector(state => selectFile(state, fileId));
 
   return (
@@ -446,28 +447,30 @@ function SelectedFilePane({ fileId, publishingSingleId, onDiscard, onPublish }: 
       >
         <HStack gap={2} flex={1} minW={0}>
           <SelectedFileName fileId={fileId} />
-          <HStack gap={0} bg="bg.muted" borderRadius="sm" p={0.5}>
-            <IconButton
-              aria-label="Preview"
-              size="2xs"
-              variant={viewMode === 'preview' ? 'solid' : 'ghost'}
-              bg={viewMode === 'preview' ? 'accent.teal' : undefined}
-              color={viewMode === 'preview' ? 'white' : 'fg.muted'}
-              onClick={() => setViewMode('preview')}
-            >
-              <LuEye />
-            </IconButton>
-            <IconButton
-              aria-label="Diff"
-              size="2xs"
-              variant={viewMode === 'diff' ? 'solid' : 'ghost'}
-              bg={viewMode === 'diff' ? 'accent.teal' : undefined}
-              color={viewMode === 'diff' ? 'white' : 'fg.muted'}
-              onClick={() => setViewMode('diff')}
-            >
-              <LuCode />
-            </IconButton>
-          </HStack>
+          {showJson && (
+            <HStack gap={0} bg="bg.muted" borderRadius="sm" p={0.5}>
+              <IconButton
+                aria-label="Preview"
+                size="2xs"
+                variant={viewMode === 'preview' ? 'solid' : 'ghost'}
+                bg={viewMode === 'preview' ? 'accent.teal' : undefined}
+                color={viewMode === 'preview' ? 'white' : 'fg.muted'}
+                onClick={() => setViewMode('preview')}
+              >
+                <LuEye />
+              </IconButton>
+              <IconButton
+                aria-label="Diff"
+                size="2xs"
+                variant={viewMode === 'diff' ? 'solid' : 'ghost'}
+                bg={viewMode === 'diff' ? 'accent.teal' : undefined}
+                color={viewMode === 'diff' ? 'white' : 'fg.muted'}
+                onClick={() => setViewMode('diff')}
+              >
+                <LuCode />
+              </IconButton>
+            </HStack>
+          )}
         </HStack>
         <HStack gap={0.5} flexShrink={0}>
           <IconButton
