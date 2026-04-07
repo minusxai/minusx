@@ -1350,25 +1350,27 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         }
       }
       case 'combo':
-        if (index === 0) {
+        if (yAxisAssignments[index] === 1) {
+          // Right Y-axis → line
           return {
             ...baseConfig,
-            type: 'bar' as const,
-            itemStyle: {
-              ...baseConfig.itemStyle,
-              opacity: seriesOpacity ?? 0.5,
-            },
+            type: 'line' as const,
+            z: 10,
+            symbol: 'circle',
+            symbolSize: markerSize ?? 6,
+            showSymbol: true,
+            showAllSymbol: true,
+            lineStyle: { opacity: seriesOpacity ?? 0.95, width: 2 },
           }
         }
+        // Left Y-axis (or no dual axis) → bar
         return {
           ...baseConfig,
-          type: 'line' as const,
-          z: 10,
-          symbol: 'circle',
-          symbolSize: markerSize ?? 6,
-          showSymbol: true,
-          showAllSymbol: true,
-          lineStyle: { opacity: seriesOpacity ?? 0.95, width: 2 },
+          type: 'bar' as const,
+          itemStyle: {
+            ...baseConfig.itemStyle,
+            opacity: seriesOpacity ?? 0.5,
+          },
         }
       case 'scatter':
         return {
@@ -1430,13 +1432,17 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         }))
         .sort((a, b) => a.axis - b.axis)
         .map(({ axis, ...item }) => item)
-    : series.map((s, idx) => ({
-        name: s.name,
-        itemStyle: {
-          color: palette[idx % palette.length],
-          opacity: 1,
-        },
-      }))
+    : series
+        .map((s, idx) => ({
+          name: s.name,
+          count: s.data.filter(v => v != null && v !== 0).length,
+          itemStyle: {
+            color: palette[idx % palette.length],
+            opacity: 1,
+          },
+        }))
+        .sort((a, b) => b.count - a.count)
+        .map(({ count, ...item }) => item)
 
   // Build Y-axis configuration (single or dual)
   const yAxisType = yScaleType === 'log' ? 'log' as const : 'value' as const
