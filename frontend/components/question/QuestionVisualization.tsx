@@ -15,7 +15,7 @@ import { parseErrorMessage } from '@/lib/utils/error-parser';
 import { VizTypeSelector } from './VizTypeSelector';
 import type { QuestionContent, QueryResult, VizSettings, PivotConfig, ColumnFormatConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types';
 import { useState, useEffect, useRef } from 'react';
-import { useAppDispatch } from '@/store/hooks';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 
@@ -137,6 +137,7 @@ export function QuestionVisualization({
   onAnnotationsChange,
 }: QuestionVisualizationProps) {
   const dispatch = useAppDispatch();
+  const showJson = useAppSelector(state => state.ui.showJson);
   const { config: appConfig } = useConfigs();
   const agentName = appConfig.branding.agentName;
 
@@ -338,7 +339,7 @@ export function QuestionVisualization({
               </VStack>
             ) : data ? (
               <>
-                {data.finalQuery && (
+                {data.finalQuery && showJson && (
                   <Tooltip content={data.finalQuery} positioning={{ placement: 'bottom-start' }}>
                     <Box
                       position="absolute"
