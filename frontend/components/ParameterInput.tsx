@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Input, HStack, Text, MenuRoot, MenuTrigger, MenuContent, MenuItem,
-  Portal, MenuPositioner, Box, IconButton, VStack, Popover, NativeSelect, Spinner, Field,
+  Portal, MenuPositioner, Box, IconButton, VStack, Popover, Spinner,
   Combobox, createListCollection,
 } from '@chakra-ui/react';
 import { LuChevronDown, LuX, LuSettings2, LuTriangleAlert } from 'react-icons/lu';
@@ -298,59 +298,133 @@ function SourceConfigPopover({ parameter, onParameterChange }: SourceConfigPopov
       </Popover.Trigger>
       <Portal>
         <Popover.Positioner>
-          <Popover.Content width="280px" bg="bg.elevated" p={0} overflow="visible" borderRadius="lg">
-            <Popover.Body p={3} bg="bg.elevated" overflow="visible">
+          <Popover.Content
+            width="280px"
+            bg="bg.surface"
+            p={0}
+            overflow="visible"
+            borderRadius="md"
+            border="1px solid"
+            borderColor="border.muted"
+            boxShadow="lg"
+          >
+            <Popover.Body p={3} overflow="visible">
               <VStack gap={3} align="stretch">
-                <Field.Root>
-                  <Field.Label fontSize="xs" fontWeight="600">Source</Field.Label>
-                  <NativeSelect.Root size="sm">
-                    <NativeSelect.Field
-                      value={mode}
-                      onChange={(e) => handleModeChange(e.target.value as 'manual' | 'question')}
-                    >
-                      <option value="manual">Free input</option>
-                      <option value="question">From question</option>
-                    </NativeSelect.Field>
-                    <NativeSelect.Indicator />
-                  </NativeSelect.Root>
-                </Field.Root>
+                <Box>
+                  <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
+                    Source
+                  </Text>
+                  <HStack gap={1}>
+                    {([
+                      { value: 'manual', label: 'Free input' },
+                      { value: 'question', label: 'From question' },
+                    ] as const).map((opt) => (
+                      <Box
+                        key={opt.value}
+                        as="button"
+                        px={2.5}
+                        py={1}
+                        borderRadius="sm"
+                        border="1px solid"
+                        borderColor={mode === opt.value ? 'accent.teal' : 'border.muted'}
+                        bg={mode === opt.value ? 'accent.teal/10' : 'bg.muted'}
+                        color={mode === opt.value ? 'accent.teal' : 'fg.default'}
+                        fontSize="xs"
+                        fontWeight="600"
+                        fontFamily="mono"
+                        cursor="pointer"
+                        _hover={{
+                          borderColor: 'accent.teal',
+                          color: 'accent.teal',
+                        }}
+                        transition="all 0.1s"
+                        onClick={() => handleModeChange(opt.value)}
+                      >
+                        {opt.label}
+                      </Box>
+                    ))}
+                  </HStack>
+                </Box>
 
                 {mode === 'question' && (
                   <>
-                    <Field.Root>
-                      <Field.Label fontSize="xs" fontWeight="600">Question</Field.Label>
+                    <Box>
+                      <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
+                        Question
+                      </Text>
                       <FileSearchSelect
                         files={questionList}
                         selectedId={sourceQuestionId}
                         onSelect={handleQuestionSelect}
                         placeholder="Search questions…"
                       />
-                    </Field.Root>
+                    </Box>
 
                     {sourceQuestionId && (
-                      <Field.Root>
-                        <Field.Label fontSize="xs" fontWeight="600">
+                      <Box>
+                        <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
                           Column
                           {parameter.type === 'number' && (
                             <Text as="span" fontSize="2xs" color="fg.subtle" ml={1}>(numeric only)</Text>
                           )}
-                        </Field.Label>
-                        <NativeSelect.Root size="sm">
-                          <NativeSelect.Field
-                            value={parameter.source?.column ?? ''}
-                            onChange={(e) => handleColumnSelect(e.target.value)}
-                            aria-disabled={loadingCols}
-                          >
-                            <option value="">
-                              {loadingCols ? 'Loading…' : filteredColumns.length === 0 ? 'No columns found' : '— select column —'}
-                            </option>
-                            {filteredColumns.map(c => (
-                              <option key={c.name} value={c.name}>{c.name}</option>
-                            ))}
-                          </NativeSelect.Field>
-                          <NativeSelect.Indicator />
-                        </NativeSelect.Root>
-                      </Field.Root>
+                        </Text>
+                        <MenuRoot positioning={{ placement: 'bottom-start' }}>
+                          <MenuTrigger asChild>
+                            <HStack
+                              as="button"
+                              w="full"
+                              px={2.5}
+                              py={1.5}
+                              bg="bg.muted"
+                              borderRadius="sm"
+                              border="1px solid"
+                              borderColor="border.muted"
+                              cursor="pointer"
+                              fontSize="xs"
+                              fontFamily="mono"
+                              _hover={{ borderColor: 'accent.teal' }}
+                              justify="space-between"
+                            >
+                              <Text lineClamp={1} color={parameter.source?.column ? 'fg.default' : 'fg.subtle'}>
+                                {loadingCols ? 'Loading…' : parameter.source?.column || '— select column —'}
+                              </Text>
+                              <LuChevronDown size={12} />
+                            </HStack>
+                          </MenuTrigger>
+                          <Portal>
+                            <MenuPositioner>
+                              <MenuContent
+                                minW="200px"
+                                maxH="200px"
+                                overflowY="auto"
+                                bg="bg.surface"
+                                borderColor="border.default"
+                                shadow="lg"
+                                p={1}
+                              >
+                                {filteredColumns.length === 0 ? (
+                                  <Box px={3} py={2}>
+                                    <Text fontSize="xs" color="fg.subtle">{loadingCols ? 'Loading…' : 'No columns found'}</Text>
+                                  </Box>
+                                ) : filteredColumns.map(c => (
+                                  <MenuItem
+                                    key={c.name}
+                                    value={c.name}
+                                    onClick={() => handleColumnSelect(c.name)}
+                                    px={3}
+                                    py={1.5}
+                                    borderRadius="sm"
+                                    _hover={{ bg: 'bg.muted' }}
+                                    cursor="pointer"
+                                  >
+                                    <Text fontSize="xs" fontFamily="mono">{c.name}</Text>
+                                  </MenuItem>
+                                ))}
+                              </MenuContent>
+                            </MenuPositioner>
+                          </Portal>
+                        </MenuRoot>
+                      </Box>
                     )}
                   </>
                 )}
