@@ -1432,13 +1432,17 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         }))
         .sort((a, b) => a.axis - b.axis)
         .map(({ axis, ...item }) => item)
-    : series.map((s, idx) => ({
-        name: s.name,
-        itemStyle: {
-          color: palette[idx % palette.length],
-          opacity: 1,
-        },
-      }))
+    : series
+        .map((s, idx) => ({
+          name: s.name,
+          count: s.data.filter(v => v != null && v !== 0).length,
+          itemStyle: {
+            color: palette[idx % palette.length],
+            opacity: 1,
+          },
+        }))
+        .sort((a, b) => b.count - a.count)
+        .map(({ count, ...item }) => item)
 
   // Build Y-axis configuration (single or dual)
   const yAxisType = yScaleType === 'log' ? 'log' as const : 'value' as const
