@@ -360,4 +360,457 @@ describe('Chat Interruption & Error Recovery E2E', () => {
     const calls = await getLLMMockServer!().getCalls();
     expect(calls).toHaveLength(1);
   });
+
+  // ==========================================================================
+  // Test 3: Clarify tool interrupted — cascade <Interrupted /> to parent Clarify
+  // ==========================================================================
+
+  it('Clarify (FrontendToolException) interrupted — parent Clarify gets <Interrupted /> so LLM history is valid', async () => {
+    // ---- Step 1: AnalystAgent calls LLM → returns Clarify tool call ----
+    // LLM mock returns a Clarify tool_call. Python dispatches Clarify.
+    // Next.js Clarify handler throws FrontendToolException → spawns ClarifyFrontend.
+    // Frontend receives pending_tool_calls=[ClarifyFrontend].
+    const clarifyId = 'test_clarify_id_001';
+    await getLLMMockServer!().configure({
+      response: {
+        content: '',
+        role: 'assistant',
+        tool_calls: [{
+          id: clarifyId,
+          type: 'function',
+          function: {
+            name: 'Clarify',
+            arguments: JSON.stringify({
+              question: 'Which metric do you want to analyze?',
+              options: [{ label: 'Revenue' }, { label: 'Orders' }],
+              multiSelect: false
+            })
+          }
+        }],
+        finish_reason: 'tool_calls'
+      },
+      usage: { total_tokens: 30, prompt_tokens: 20, completion_tokens: 10 }
+    });
+
+    const response1 = await chatPostHandler(createNextRequest({
+      user_message: 'Show me performance metrics',
+      agent: 'AnalystAgent',
+      agent_args: { goal: 'Show me performance metrics' }
+    }));
+    const r1 = await response1.json();
+
+    console.log('[Test 3] Step 1 response:', JSON.stringify(r1, null, 2));
+
+    expect(response1.status).toBe(200);
+    expect(r1.error).toBeNull();
+    // ClarifyFrontend must be the pending tool at the frontend level
+    expect(r1.pending_tool_calls).toHaveLength(1);
+    expect(r1.pending_tool_calls[0].function.name).toBe('ClarifyFrontend');
+    // The ClarifyFrontend id is different from clarifyId (it gets a new id in Next.js)
+    expect(r1.pending_tool_calls[0]._parent_unique_id).toBe(clarifyId);
+
+    const conversationID = r1.conversationID;
+    const logIndex = r1.log_index;
+
+    // ---- Step 2: Configure LLM mock for recovery call ----
+    // The validateRequest ensures both Clarify AND ClarifyFrontend appear as
+    // valid tool_result entries — confirming the cascade fix works.
+    await getLLMMockServer!().configure({
+      validateRequest: (req) => {
+        const messages = req.messages;
+
+        // Rule 1: every assistant tool_call has a matching tool_result
+        for (let i = 0; i < messages.length; i++) {
+          const msg = messages[i] as any;
+          if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
+            for (const tc of msg.tool_calls) {
+              const hasResult = messages.slice(i + 1).some(
+                (m: any) => m.role === 'tool' && m.tool_call_id === tc.id
+              );
+              if (!hasResult) {
+                throw new Error(
+                  'Missing tool_result for tool_call_id=' + tc.id +
+                  ' (tool: ' + (tc.function && tc.function.name) + ')'
+                );
+              }
+            }
+          }
+        }
+
+        // Rule 2: no consecutive assistant messages
+        for (let i = 1; i < messages.length; i++) {
+          if (messages[i].role === 'assistant' && messages[i - 1].role === 'assistant') {
+            throw new Error(
+              'Consecutive assistant messages at indices ' + (i - 1) + ' and ' + i
+            );
+          }
+        }
+
+        // Rule 3: every tool_result has a preceding tool_call
+        for (let i = 0; i < messages.length; i++) {
+          const msg = messages[i] as any;
+          if (msg.role === 'tool' && msg.tool_call_id) {
+            const hasCall = messages.slice(0, i).some(
+              (m: any) =>
+                m.role === 'assistant' &&
+                m.tool_calls &&
+                m.tool_calls.some((tc: any) => tc.id === msg.tool_call_id)
+            );
+            if (!hasCall) {
+              throw new Error(
+                'tool_result at index ' + i + ' has no preceding tool_call: id=' + msg.tool_call_id
+              );
+            }
+          }
+        }
+
+        // Assert Clarify was interrupted — it must appear as a valid tool_result
+        // This is the key assertion: without the cascade fix, Clarify.result=None
+        // causes task_batch_to_thread to emit assistant([Clarify]) with NO tool_result.
+        const hasClarifyInterrupted = messages.some(
+          (m: any) =>
+            m.role === 'tool' &&
+            typeof m.content === 'string' &&
+            m.content.includes('<Interrupted />')
+        );
+        if (!hasClarifyInterrupted) {
+          throw new Error(
+            'Expected a tool_result with <Interrupted /> for the Clarify tool. ' +
+            'The cascade fix should mark Clarify as interrupted after ClarifyFrontend is interrupted.'
+          );
+        }
+
+        return true;
+      },
+      response: {
+        content: 'I can show you both Revenue and Orders metrics.',
+        role: 'assistant',
+        tool_calls: [],
+        finish_reason: 'stop'
+      },
+      usage: { total_tokens: 60, prompt_tokens: 50, completion_tokens: 10 }
+    });
+
+    // ---- Step 3: New user message interrupts ClarifyFrontend + cascades to Clarify ----
+    // The fix in conversation.py should cascade <Interrupted /> from ClarifyFrontend
+    // up to Clarify (its parent), so the LLM history has a valid tool_result for Clarify.
+    const response2 = await chatPostHandler(createNextRequest({
+      conversationID,
+      log_index: logIndex,
+      user_message: 'Never mind, just show me revenue',
+      agent: 'AnalystAgent',
+      agent_args: { goal: 'Never mind, just show me revenue' }
+    }));
+    const r2 = await response2.json();
+
+    console.log('[Test 3] Step 2 response:', JSON.stringify(r2, null, 2));
+
+    expect(response2.status).toBe(200);
+    expect(r2.error).toBeNull();
+
+    // LLM was called twice: once for Clarify (step 1) + once for recovery (step 3)
+    const calls = await getLLMMockServer!().getCalls();
+    expect(calls).toHaveLength(2);
+  });
+
+  // ==========================================================================
+  // Test 4: AnalystAgent dispatches ReadFiles (non-Clarify frontend tool) via LLM →
+  //         user interrupts with new message → LLM history remains valid
+  // ==========================================================================
+
+  it('ReadFiles (non-Clarify frontend tool) interrupted by new message — LLM receives valid history', async () => {
+    // ReadFiles is NOT in the primary toolRegistry (only fallback), so Next.js
+    // passes it through to the frontend as a remainingPendingTool.
+    // This test verifies that the interrupt/recovery path works for ALL
+    // frontend tools, not just Clarify.
+
+    const readFilesId = 'test_readfiles_id_001';
+
+    // ---- Step 1: Configure LLM mock → AnalystAgent calls ReadFiles ----
+    await getLLMMockServer!().configure({
+      response: {
+        content: '',
+        role: 'assistant',
+        tool_calls: [{
+          id: readFilesId,
+          type: 'function',
+          function: {
+            name: 'ReadFiles',
+            arguments: JSON.stringify({ fileIds: [42] })
+          }
+        }],
+        finish_reason: 'tool_calls'
+      },
+      usage: { total_tokens: 30, prompt_tokens: 20, completion_tokens: 10 }
+    });
+
+    const response1 = await chatPostHandler(createNextRequest({
+      user_message: 'Show me file 42',
+      agent: 'AnalystAgent',
+      agent_args: { goal: 'Show me file 42' }
+    }));
+    const r1 = await response1.json();
+
+    console.log('[Test 4] Step 1 response:', JSON.stringify(r1, null, 2));
+
+    expect(response1.status).toBe(200);
+    expect(r1.error).toBeNull();
+    // ReadFiles is a frontend tool — it must be pending at the frontend level
+    expect(r1.pending_tool_calls).toHaveLength(1);
+    expect(r1.pending_tool_calls[0].function.name).toBe('ReadFiles');
+    expect(r1.pending_tool_calls[0].id).toBe(readFilesId);
+
+    const conversationID = r1.conversationID;
+    const logIndex = r1.log_index;
+
+    // ---- Step 2: Configure LLM mock for recovery call ----
+    await getLLMMockServer!().configure({
+      validateRequest: (req) => {
+        const messages = req.messages;
+
+        // Rule 1: every assistant tool_call has a matching tool_result
+        for (let i = 0; i < messages.length; i++) {
+          const msg = messages[i] as any;
+          if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
+            for (const tc of msg.tool_calls) {
+              const hasResult = messages.slice(i + 1).some(
+                (m: any) => m.role === 'tool' && m.tool_call_id === tc.id
+              );
+              if (!hasResult) {
+                throw new Error(
+                  'Missing tool_result for tool_call_id=' + tc.id +
+                  ' (tool: ' + (tc.function && tc.function.name) + ')'
+                );
+              }
+            }
+          }
+        }
+
+        // Rule 2: no consecutive assistant messages
+        for (let i = 1; i < messages.length; i++) {
+          if (messages[i].role === 'assistant' && messages[i - 1].role === 'assistant') {
+            throw new Error(
+              'Consecutive assistant messages at indices ' + (i - 1) + ' and ' + i
+            );
+          }
+        }
+
+        // Rule 3: every tool_result has a preceding tool_call
+        for (let i = 0; i < messages.length; i++) {
+          const msg = messages[i] as any;
+          if (msg.role === 'tool' && msg.tool_call_id) {
+            const hasCall = messages.slice(0, i).some(
+              (m: any) =>
+                m.role === 'assistant' &&
+                m.tool_calls &&
+                m.tool_calls.some((tc: any) => tc.id === msg.tool_call_id)
+            );
+            if (!hasCall) {
+              throw new Error(
+                'tool_result at index ' + i + ' has no preceding tool_call: id=' + msg.tool_call_id
+              );
+            }
+          }
+        }
+
+        // ReadFiles must be interrupted
+        const hasInterrupted = messages.some(
+          (m: any) =>
+            m.role === 'tool' &&
+            typeof m.content === 'string' &&
+            m.content.includes('<Interrupted />')
+        );
+        if (!hasInterrupted) {
+          throw new Error(
+            'Expected a tool_result with <Interrupted /> for ReadFiles.'
+          );
+        }
+
+        // Verify ReadFiles specifically is what got interrupted
+        const readFilesInterrupted = messages.some(
+          (m: any) => m.role === 'tool' && m.tool_call_id === 'test_readfiles_id_001' &&
+            typeof m.content === 'string' && m.content.includes('<Interrupted />')
+        );
+        if (!readFilesInterrupted) {
+          throw new Error(
+            'Expected tool_result for ReadFiles (id=test_readfiles_id_001) to contain <Interrupted />'
+          );
+        }
+
+        return true;
+      },
+      response: {
+        content: 'I can help you with that instead.',
+        role: 'assistant',
+        tool_calls: [],
+        finish_reason: 'stop'
+      },
+      usage: { total_tokens: 50, prompt_tokens: 40, completion_tokens: 10 }
+    });
+
+    // ---- Step 3: New user message interrupts ReadFiles ----
+    const response2 = await chatPostHandler(createNextRequest({
+      conversationID,
+      log_index: logIndex,
+      user_message: 'Never mind, just answer my question directly',
+      agent: 'AnalystAgent',
+      agent_args: { goal: 'Never mind, just answer my question directly' }
+    }));
+    const r2 = await response2.json();
+
+    console.log('[Test 4] Step 2 response:', JSON.stringify(r2, null, 2));
+
+    expect(response2.status).toBe(200);
+    expect(r2.error).toBeNull();
+
+    // LLM was called twice: once for ReadFiles dispatch + once for recovery
+    const calls = await getLLMMockServer!().getCalls();
+    expect(calls).toHaveLength(2);
+  });
+
+  // ==========================================================================
+  // Test 5: Completed turn + LLM error on next turn → recovery works cleanly
+  //
+  // This is the "pure Anthropic error" scenario: Turn 1 completes successfully
+  // with a text response (no pending tools). Turn 2 gets an LLM error (logDiff=[]).
+  // Turn 3 must continue with valid conversation history.
+  // ==========================================================================
+
+  it('Completed turn + LLM error on subsequent turn — user can continue conversation cleanly', async () => {
+    // ---- Step 1: Turn 1 — AnalystAgent completes with text answer ----
+    await getLLMMockServer!().configure({
+      response: {
+        content: 'Revenue for Q3 was $4.2M.',
+        role: 'assistant',
+        tool_calls: [],
+        finish_reason: 'stop'
+      },
+      usage: { total_tokens: 40, prompt_tokens: 30, completion_tokens: 10 }
+    });
+
+    const response1 = await chatPostHandler(createNextRequest({
+      user_message: 'What was revenue in Q3?',
+      agent: 'AnalystAgent',
+      agent_args: { goal: 'What was revenue in Q3?' }
+    }));
+    const r1 = await response1.json();
+
+    console.log('[Test 5] Step 1 response (success):', JSON.stringify(r1, null, 2));
+
+    expect(response1.status).toBe(200);
+    expect(r1.error).toBeNull();
+    expect(r1.pending_tool_calls).toHaveLength(0);
+
+    const conversationID = r1.conversationID;
+    const logIndex = r1.log_index;
+
+    // ---- Step 2: Turn 2 — LLM mock empty → error (simulates Anthropic API error) ----
+    // No configure() call → mock queue is empty → mock returns HTTP 500 →
+    // Python throws → logDiff=[] → DB unchanged
+    const response2 = await chatPostHandler(createNextRequest({
+      conversationID,
+      log_index: logIndex,
+      user_message: 'What about Q4?',
+      agent: 'AnalystAgent',
+      agent_args: { goal: 'What about Q4?' }
+    }));
+    const r2 = await response2.json();
+
+    console.log('[Test 5] Step 2 response (expected LLM error):', JSON.stringify(r2, null, 2));
+
+    // LLM error → soft error returned
+    expect(r2.error).toBeTruthy();
+    // DB unchanged → log_index unchanged
+    expect(r2.log_index).toBe(logIndex);
+    expect(r2.conversationID).toBe(conversationID);
+    expect(r2.pending_tool_calls).toHaveLength(0);
+
+    // ---- Step 3: Turn 3 — User retries → LLM responds, history has Turn 1 context ----
+    await getLLMMockServer!().configure({
+      validateRequest: (req) => {
+        const messages = req.messages;
+
+        // No tool calls in this conversation — just alternating user/assistant messages
+        // Rule: no consecutive same-role messages
+        for (let i = 1; i < messages.length; i++) {
+          if (messages[i].role === messages[i - 1].role && messages[i].role !== 'system') {
+            throw new Error(
+              'Consecutive ' + messages[i].role + ' messages at indices ' + (i - 1) + ' and ' + i
+            );
+          }
+        }
+
+        // Turn 1 history must be present: user(msg1) + assistant(text_answer)
+        const hasMsg1 = messages.some(
+          (m: any) => m.role === 'user' && typeof m.content === 'string' &&
+            m.content.includes('Q3')
+        );
+        if (!hasMsg1) {
+          throw new Error('Turn 1 user message (Q3) not found in history for Turn 3 LLM call');
+        }
+
+        const hasResponse1 = messages.some(
+          (m: any) => m.role === 'assistant' && typeof m.content === 'string' &&
+            m.content.includes('$4.2M')
+        );
+        if (!hasResponse1) {
+          throw new Error('Turn 1 assistant response ($4.2M) not found in history for Turn 3 LLM call');
+        }
+
+        // The CURRENT turn message should be Q4 (msg3, since msg2 was the failed turn)
+        // Note: msg2 (the failed turn) should NOT appear — logDiff=[] means R2 was never saved
+        const hasMsg3 = messages.some(
+          (m: any) => m.role === 'user' && typeof m.content === 'string' &&
+            m.content.includes('Q4')
+        );
+        if (!hasMsg3) {
+          throw new Error('Turn 3 user message (Q4) not found as current message');
+        }
+
+        // All tool_use must have tool_results (sanity check — no tools in this convo)
+        for (let i = 0; i < messages.length; i++) {
+          const msg = messages[i] as any;
+          if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
+            for (const tc of msg.tool_calls) {
+              const hasResult = messages.slice(i + 1).some(
+                (m: any) => m.role === 'tool' && m.tool_call_id === tc.id
+              );
+              if (!hasResult) {
+                throw new Error('Missing tool_result for tool_call_id=' + tc.id);
+              }
+            }
+          }
+        }
+
+        return true;
+      },
+      response: {
+        content: 'Revenue for Q4 was $5.1M.',
+        role: 'assistant',
+        tool_calls: [],
+        finish_reason: 'stop'
+      },
+      usage: { total_tokens: 60, prompt_tokens: 50, completion_tokens: 10 }
+    });
+
+    const response3 = await chatPostHandler(createNextRequest({
+      conversationID: r2.conversationID,
+      log_index: r2.log_index,
+      user_message: 'What about Q4?',
+      agent: 'AnalystAgent',
+      agent_args: { goal: 'What about Q4?' }
+    }));
+    const r3 = await response3.json();
+
+    console.log('[Test 5] Step 3 response (recovery):', JSON.stringify(r3, null, 2));
+
+    expect(response3.status).toBe(200);
+    expect(r3.error).toBeNull();
+    expect(r3.log_index).toBeGreaterThan(logIndex);
+
+    // LLM was called twice: once for Turn 1 + once for Turn 3 recovery
+    // (Turn 2 LLM call failed, so mock queue was empty — getCalls returns 2)
+    const calls = await getLLMMockServer!().getCalls();
+    expect(calls).toHaveLength(2);
+  });
 });
