@@ -85,7 +85,7 @@ export class DuckDbConnector extends NodeConnector {
       if (params) {
         for (const [key, val] of Object.entries(params)) {
           const replacement = typeof val === 'number' ? String(val) : `'${String(val).replace(/'/g, "''")}'`;
-          finalQuery = finalQuery.replace(new RegExp(`:${key}\\b`, 'g'), replacement);
+          finalQuery = finalQuery.replace(new RegExp(`:${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'), replacement);
         }
       }
 
