@@ -125,16 +125,20 @@ export default function FileLayout(props: FileLayoutProps) {
             </Flex>
             {content}
           </VStack>
-          {/* Sticky search bar container - only when bottom bar is not shown */}
-          {!shouldShowBottomBar && shouldShowRightSidebar && rightSidebar && rightSidebar.showChat && (
-            <SearchBar filePath={rightSidebar.filePath} databaseName={appStateDatabaseName} />
-          )}
-
-          {/* Bottom bar for question page - includes search bar */}
-          {shouldShowBottomBar && (
-            <BottomBar showChat={rightSidebar?.showChat} filePath={rightSidebar?.filePath} databaseName={appStateDatabaseName} />
-          )}
         </Box>
+
+        {/* Chat bars live OUTSIDE the dimmed box so they remain accessible when the
+            ViewStack overlay is active. The SearchBar has z-index:1000 which beats the
+            overlay's z-index:50 in this shared stacking context. */}
+        {/* Floating search bar — shown on non-question pages (dashboard, context, etc.) */}
+        {!shouldShowBottomBar && shouldShowRightSidebar && rightSidebar && rightSidebar.showChat && (
+          <SearchBar filePath={rightSidebar.filePath} databaseName={appStateDatabaseName} />
+        )}
+
+        {/* Bottom bar for question page - includes search bar */}
+        {shouldShowBottomBar && (
+          <BottomBar showChat={rightSidebar?.showChat} filePath={rightSidebar?.filePath} databaseName={appStateDatabaseName} />
+        )}
 
         {/* Content stack — absolute overlay, clipped to this VStack */}
         <ViewStackOverlay />
