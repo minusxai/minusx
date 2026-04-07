@@ -10,7 +10,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import DatabaseSelector from '@/components/DatabaseSelector';
 import { ContextSelector } from './ContextSelector';
 import { useConfigs } from '@/lib/hooks/useConfigs';
-import { LexicalMentionEditor } from '@/components/chat/LexicalMentionEditor';
+import { LexicalMentionEditor, LexicalMentionEditorRef } from '@/components/chat/LexicalMentionEditor';
 import { DatabaseWithSchema, Attachment } from '@/lib/types';
 import { extractTextFromDocument, SUPPORTED_DOC_EXTENSIONS } from '@/lib/utils/attachment-extract';
 import { toaster } from '@/components/ui/toaster';
@@ -60,6 +60,7 @@ export default function ChatInput({
   const [input, setInput] = useState('');
   const attachments = useAppSelector(selectChatAttachments);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const editorRef = useRef<LexicalMentionEditorRef>(null);
   // Handle pending message from SearchBar — wait for connections/context to finish loading
   // before sending, so the message isn't discarded by the loading guard in handleSendMessage.
   useEffect(() => {
@@ -73,6 +74,7 @@ export default function ChatInput({
     if (input.trim() && !disabled && !isAgentRunning && !connectionsLoading && !contextsLoading) {
       onSend(input.trim(), attachments);
       setInput('');
+      editorRef.current?.clear();
     }
   };
 
@@ -125,6 +127,7 @@ export default function ChatInput({
                 {/* Textarea with Mentions Support */}
                 <Box px={1} py={2}>
                   <LexicalMentionEditor
+                    ref={editorRef}
                     placeholder={isAgentRunning ? `${agentName} is thinking...` : `Ask ${agentName} anything!`}
                     databaseName={databaseName}
                     disabled={disabled || isAgentRunning}

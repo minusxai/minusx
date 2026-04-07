@@ -35,6 +35,7 @@ interface LexicalMentionEditorProps {
 
 export interface LexicalMentionEditorRef {
   focus: () => void;
+  clear: () => void;
 }
 
 const editorTheme = {
@@ -219,6 +220,13 @@ export const LexicalMentionEditor = forwardRef<LexicalMentionEditorRef, LexicalM
     useImperativeHandle(ref, () => ({
       focus: () => {
         editorRef.current?.focus();
+      },
+      clear: () => {
+        editorRef.current?.update(() => {
+          const root = $getRoot();
+          root.clear();
+          root.append($createParagraphNode());
+        });
       },
     }));
 
