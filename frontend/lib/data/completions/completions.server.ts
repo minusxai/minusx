@@ -16,7 +16,7 @@ import {
   ColumnSuggestionsResult,
 } from './types';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
-import { DatabaseWithSchema, QuestionContent } from '@/lib/types';
+import { connectionTypeToDialect, DatabaseWithSchema, QuestionContent } from '@/lib/types';
 import { FilesAPI } from '@/lib/data/files.server';
 import { CTEfyQuery, ResolvedReference } from '@/lib/sql/query-composer';
 import { extractReferencesFromSQL, parseReferenceAlias } from '@/lib/sql/sql-references';
@@ -152,11 +152,13 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
     for (const ref of resolvedReferences) {
       if (!ref.inferredColumns && ref.query) {
         try {
+          const inferDialect = connectionTypeToDialect(context.connectionType ?? '');
           const inferResponse = await pythonBackendFetch('/api/infer-columns', {
             method: 'POST',
             body: JSON.stringify({
               query: ref.query,
               schema_data: context.schemaData || [],
+              dialect: inferDialect,
             }),
           });
           if (inferResponse.ok) {
