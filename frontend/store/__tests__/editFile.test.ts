@@ -756,6 +756,7 @@ describe('CreateFile tool - auto-execute query results', () => {
     const qr = parsed.state.queryResults[0];
     expect(qr).toBeDefined();
     expect(qr.totalRows).toBe(1);
+    expect(qr.shownRows).toBe(1);
     expect(qr.truncated).toBe(false);
     expect(qr.data).toContain('| 42 |');
   });

@@ -20,7 +20,7 @@ import type {
   FileType,
 } from '@/lib/types';
 
-const LIMIT_CHARS = 2_000;
+const LIMIT_CHARS = 50_000;
 
 // ---------------------------------------------------------------------------
 // DbFile → FileState
@@ -95,7 +95,7 @@ function mdTableCell(value: string): string {
 
 export function compressQueryResult(qr: QueryResult & { error?: string }, maxChars = LIMIT_CHARS): CompressedQueryResult {
   if ((qr as any).error) {
-    return { columns: [], types: [], data: '', totalRows: 0, truncated: false, id: qr.id, error: (qr as any).error };
+    return { columns: [], types: [], data: '', totalRows: 0, shownRows: 0, truncated: false, id: qr.id, error: (qr as any).error };
   }
   const { columns, types, rows } = qr;
   const totalRows = rows.length;
@@ -105,13 +105,15 @@ export function compressQueryResult(qr: QueryResult & { error?: string }, maxCha
   let md = `${header}\n${sep}\n`;
 
   let truncated = false;
+  let shownRows = 0;
   for (const row of rows) {
     const line = `| ${columns.map(c => mdTableCell(String(row[c] ?? ''))).join(' | ')} |\n`;
     if (md.length + line.length > maxChars) { truncated = true; break; }
     md += line;
+    shownRows++;
   }
 
-  return { columns, types, data: md, totalRows, truncated, id: qr.id };
+  return { columns, types, data: md, totalRows, shownRows, truncated, id: qr.id };
 }
 
 function compressFileState(fs: FileState): CompressedFileState {
