@@ -2,5 +2,5 @@
  * Database version constants for migrations
  */
 
-export const LATEST_DATA_VERSION = 26;  // V26: Fix files with broken paths by moving them to nearest valid ancestor folder
+export const LATEST_DATA_VERSION = 27;  // V27: Ensure system folders exist under mode roots; relocate misplaced config/styles/connection files
 export const LATEST_SCHEMA_VERSION = 8;

@@ -3,7 +3,7 @@
  * Supports both data format migrations and schema changes
  */
 
-import { InitData, CompanyData } from './import-export';
+import { InitData, CompanyData, ExportedDocument } from './import-export';
 import { LATEST_DATA_VERSION, LATEST_SCHEMA_VERSION } from './constants';
 import { DEFAULT_STYLES } from '@/lib/branding/whitelabel';
 import { VALID_MODES } from '@/lib/mode/mode-types';
@@ -1107,12 +1107,24 @@ export const MIGRATIONS: MigrationEntry[] = [
       return data;
     },
   },
+  {
+    dataVersion: 27,
+    description: 'V27: Ensure system folders exist under mode roots; relocate misplaced config/styles/connection files',
+    dataMigration: (data: InitData) => {
+      for (const companyData of data.companies as CompanyData[]) {
+        fixSystemFolderPlacement(companyData);
+      }
+      return data;
+    },
+  },
 ];
 
 /**
  * For every document in a company whose path is invalid (missing parent folder, or sitting at
  * a root segment that is not a recognised mode), relocate it to the deepest valid ancestor
  * folder that has a free slot. Falls back to /org (with numeric suffix) when no ancestor exists.
+ * config/styles files are redirected to /<mode>/config and connection files to /<mode>/database
+ * rather than landing directly in the mode root. Paths starting with /logs are left untouched.
  * For folders, all descendants are cascade-updated before the folder itself is moved.
  * Mutates companyData.documents in place.
  */
@@ -1130,7 +1142,14 @@ export function fixFilesWithBrokenPaths(companyData: CompanyData): void {
 
   const validModeRoots = new Set<string>(VALID_MODES.map(m => `/${m}`));
 
+  // Ensure system subfolders exist under every present mode root so the redirect
+  // logic below always has a valid destination folder to target.
+  ensureSystemFolders(companyData, validModeRoots, folderPaths, allPaths);
+
   for (const doc of companyData.documents) {
+    // Conversation logs and other /logs paths must never be relocated.
+    if (doc.path.startsWith('/logs')) continue;
+
     const parts = doc.path.split('/').filter(Boolean);
 
     if (parts.length === 0) continue; // empty path — unrecoverable, skip
@@ -1175,6 +1194,23 @@ export function fixFilesWithBrokenPaths(companyData: CompanyData): void {
 
     if (newPath === null) continue; // /org doesn't exist either — truly unresolvable
 
+    // If the resolved path lands directly in a mode root, redirect system-typed files
+    // to the appropriate subfolder (config/styles → /config, connection → /database).
+    const newParts = newPath.split('/').filter(Boolean);
+    const newParent = '/' + newParts.slice(0, -1).join('/');
+    if (validModeRoots.has(newParent)) {
+      const sub = getSystemSubfolder(doc.type);
+      if (sub !== null) {
+        const subfolderPath = `${newParent}/${sub}`;
+        let redirected = `${subfolderPath}/${fileName}`;
+        let suffix = 1;
+        while (allPaths.has(redirected)) {
+          redirected = `${subfolderPath}/${fileName}_${++suffix}`;
+        }
+        newPath = redirected;
+      }
+    }
+
     // For folders: cascade path update to all descendants before moving self
     if (doc.type === 'folder') {
       const oldPrefix = doc.path + '/';
@@ -1197,6 +1233,144 @@ export function fixFilesWithBrokenPaths(companyData: CompanyData): void {
     allPaths.delete(doc.path);
     allPaths.add(newPath);
     doc.path = newPath;
+  }
+}
+
+/**
+ * Ensures config/, database/, and logs/ subfolders exist under every mode root
+ * that is present in companyData. Creates missing folder documents in place and
+ * registers them in the provided folderPaths / allPaths sets.
+ */
+function ensureSystemFolders(
+  companyData: CompanyData,
+  validModeRoots: Set<string>,
+  folderPaths: Set<string>,
+  allPaths: Set<string>,
+): void {
+  for (const modeRoot of validModeRoots) {
+    if (!folderPaths.has(modeRoot)) continue;
+    for (const sub of ['config', 'database', 'logs']) {
+      const subPath = `${modeRoot}/${sub}`;
+      if (allPaths.has(subPath)) continue; // already occupied by any document type
+      const folder = createFolderDoc(companyData, subPath);
+      companyData.documents.push(folder);
+      folderPaths.add(subPath);
+      allPaths.add(subPath);
+    }
+  }
+}
+
+/** Returns the system subfolder name for file types that must not land in a mode root. */
+function getSystemSubfolder(docType: string): string | null {
+  if (docType === 'config' || docType === 'styles') return 'config';
+  if (docType === 'connection') return 'database';
+  return null;
+}
+
+/** Creates a new folder document using the max-id+1 strategy. */
+function createFolderDoc(companyData: CompanyData, path: string): ExportedDocument {
+  const maxId = companyData.documents.reduce((max, d) => Math.max(max, d.id), 0);
+  const now = new Date().toISOString();
+  return {
+    id: maxId + 1,
+    name: path.split('/').filter(Boolean).pop()!,
+    path,
+    type: 'folder' as const,
+    references: [],
+    content: {},
+    company_id: companyData.id,
+    created_at: now,
+    updated_at: now,
+    version: 1,
+    last_edit_id: null,
+  };
+}
+
+/**
+ * Ensures system subfolders (config, database, logs) exist under every mode root,
+ * relocates any config/styles/connection files sitting directly in a mode root to
+ * the appropriate subfolder, and normalizes any double (or repeated) slashes in
+ * all document paths. Paths starting with /logs are never touched.
+ * Mutates companyData.documents in place.
+ */
+export function fixSystemFolderPlacement(companyData: CompanyData): void {
+  const folderPaths = new Set<string>(
+    companyData.documents.filter(d => d.type === 'folder').map(d => d.path)
+  );
+  const allPaths = new Set<string>(companyData.documents.map(d => d.path));
+  const validModeRoots = new Set<string>(VALID_MODES.map(m => `/${m}`));
+
+  // Step 1: create system subfolders under all existing mode roots
+  ensureSystemFolders(companyData, validModeRoots, folderPaths, allPaths);
+
+  // Step 2: relocate any system-typed files sitting directly in a mode root
+  for (const doc of companyData.documents) {
+    if (doc.path.startsWith('/logs')) continue;
+
+    const parts = doc.path.split('/').filter(Boolean);
+    if (parts.length !== 2) continue; // only files sitting directly in a mode root
+
+    const parent = `/${parts[0]}`;
+    if (!validModeRoots.has(parent)) continue;
+
+    const sub = getSystemSubfolder(doc.type);
+    if (sub === null) continue;
+
+    const fileName = parts[1];
+    let newPath = `${parent}/${sub}/${fileName}`;
+    let suffix = 1;
+    while (allPaths.has(newPath)) {
+      newPath = `${parent}/${sub}/${fileName}_${++suffix}`;
+    }
+
+    allPaths.delete(doc.path);
+    allPaths.add(newPath);
+    doc.path = newPath;
+  }
+
+  // Step 3: normalize double (or repeated) slashes in all paths, e.g. /org//report → /org/report.
+  // Process shallowest-first so folder renames cascade correctly to children.
+  companyData.documents.sort(
+    (a, b) => a.path.split('/').filter(Boolean).length - b.path.split('/').filter(Boolean).length
+  );
+  for (const doc of companyData.documents) {
+    if (doc.path.startsWith('/logs')) continue;
+
+    const normalized = doc.path.replace(/\/+/g, '/');
+    if (normalized === doc.path) continue;
+
+    // Resolve collision: if another doc already occupies the normalized path, append suffix
+    const namePart = normalized.split('/').filter(Boolean).pop()!;
+    const parentPart = normalized.slice(0, normalized.lastIndexOf('/') + 1);
+    let candidate = normalized;
+    let suffix = 1;
+    while (allPaths.has(candidate)) {
+      candidate = `${parentPart}${namePart}_${++suffix}`;
+    }
+
+    // For folders: cascade the rename to all descendants before updating self
+    if (doc.type === 'folder') {
+      const oldPrefix = doc.path + '/';
+      const newPrefix = candidate + '/';
+      for (const other of companyData.documents) {
+        if (other.path.startsWith(oldPrefix)) {
+          const updatedPath = newPrefix + other.path.slice(oldPrefix.length);
+          allPaths.delete(other.path);
+          allPaths.add(updatedPath);
+          if (other.type === 'folder') {
+            folderPaths.delete(other.path);
+            folderPaths.add(updatedPath);
+          }
+          other.path = updatedPath;
+        }
+      }
+      folderPaths.delete(doc.path);
+      folderPaths.add(candidate);
+    }
+
+    allPaths.delete(doc.path);
+    allPaths.add(candidate);
+    doc.path = candidate;
   }
 }
 
