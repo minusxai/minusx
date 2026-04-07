@@ -2,7 +2,8 @@ import { DbFile } from '@/lib/types';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { canAccessFileType, canViewFileType } from '@/lib/auth/access-rules';
 import { isAdmin } from '@/lib/auth/role-helpers';
-import { resolvePath, resolveHomeFolderSync } from '@/lib/mode/path-resolver';
+import { resolvePath, resolveHomeFolderSync, isUnderSystemFolder } from '@/lib/mode/path-resolver';
+import type { Mode } from '@/lib/mode/mode-types';
 import type { AccessRulesOverride } from '@/lib/branding/whitelabel';
 
 /**
@@ -35,7 +36,9 @@ export function checkFileAccess(file: DbFile, user: EffectiveUser): boolean {
   // user.home_folder is stored as relative path (e.g., 'sales/team1')
   // Resolve to physical path (e.g., '/org/sales/team1' or '/tutorial/sales/team1')
   const resolvedHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder);
-  const homeAccess = file.path === resolvedHomeFolder || file.path.startsWith(resolvedHomeFolder + '/');
+  const homeAccess =
+    (file.path === resolvedHomeFolder || file.path.startsWith(resolvedHomeFolder + '/'))
+    && !isUnderSystemFolder(file.path, user.mode as Mode);
 
   if (homeAccess) return true;
 
@@ -177,9 +180,12 @@ export function canAccessFile(file: DbFile, user: EffectiveUser, overrides?: Acc
     return true;
   }
 
-  // Non-admin: Check home folder access
+  // Non-admin: Check home folder access (system folder subtrees are excluded — use
+  // isAccessibleSystemPath below to re-grant only the specific paths non-admins need)
   const resolvedHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder);
-  const homeAccess = file.path === resolvedHomeFolder || file.path.startsWith(resolvedHomeFolder + '/');
+  const homeAccess =
+    (file.path === resolvedHomeFolder || file.path.startsWith(resolvedHomeFolder + '/'))
+    && !isUnderSystemFolder(file.path, user.mode as Mode);
 
   if (homeAccess) {
     return true;

@@ -16,7 +16,7 @@ import { ConversationList } from '@/components/explore/ConversationList';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { useFolder } from '@/lib/hooks/file-state-hooks';
 import { useConfigs } from '@/lib/hooks/useConfigs';
-import { resolvePath, resolveHomeFolderSync, SYSTEM_FOLDERS, isHiddenSystemPath } from '@/lib/mode/path-resolver';
+import { resolvePath, resolveHomeFolderSync, SYSTEM_FOLDERS, isHiddenSystemPath, isUnderSystemFolder } from '@/lib/mode/path-resolver';
 import { DEFAULT_MODE } from '@/lib/mode/mode-types';
 
 
@@ -84,6 +84,12 @@ export default function PathPage({ params }: PathPageProps) {
 
       // Non-admins cannot browse parent folders — redirect to home folder
       if (!isHomeOrSubPath) {
+        router.replace(`/p${resolvedHomeFolder}`);
+        return;
+      }
+
+      // Non-admins cannot browse system folders (logs, database, configs, etc.)
+      if (isUnderSystemFolder(fullPath, currentMode as any)) {
         router.replace(`/p${resolvedHomeFolder}`);
         return;
       }
