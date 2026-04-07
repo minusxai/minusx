@@ -249,12 +249,11 @@ export default function DashboardView({
   const effectiveSubmittedValues = useMemo(() => {
     const values: Record<string, any> = {};
     for (const p of mergedParameters) {
+      // Use 'in' check so null (skipped) is preserved from lastExecutedParams
       if (p.name in lastExecutedParams) {
         values[p.name] = lastExecutedParams[p.name];
-      } else if (p.name in paramValues) {
-        values[p.name] = paramValues[p.name];
       } else {
-        values[p.name] = questionParamDefaults.get(p.name) ?? '';
+        values[p.name] = paramValues[p.name] ?? questionParamDefaults.get(p.name) ?? '';
       }
     }
     return values;
