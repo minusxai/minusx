@@ -717,7 +717,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
                   </tr>
                 )
               })}
-              {virtualItems.length > 0 && (
+              {virtualItems.length > 0 && rowVirtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end > 0 && (
                 <tr><td style={{ height: rowVirtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end, padding: 0 }} /></tr>
               )}
             </tbody>
