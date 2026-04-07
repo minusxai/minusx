@@ -231,17 +231,22 @@ function TabsLayout({
   chatSections,
   refSections,
   activeSidebarSection,
+  onSetActiveSection,
   toggleSection,
   sectionContentProps,
 }: {
   chatSections: SidebarSectionMetadata[];
   refSections: SidebarSectionMetadata[];
   activeSidebarSection: string | null;
+  onSetActiveSection: (id: string) => void;
   toggleSection: (id: string) => void;
   sectionContentProps: SectionContentSharedProps;
 }) {
-  const [activeTab, setActiveTab] = useState<'chat' | 'context'>('chat');
+  const refSectionIds = useMemo(() => new Set(refSections.map(s => s.id as string)), [refSections]);
   const chatSection = chatSections.find(s => s.id === 'chat');
+
+  // Derive active tab from which section is active in Redux
+  const activeTab = activeSidebarSection && refSectionIds.has(activeSidebarSection) ? 'context' : 'chat';
 
   return (
     <VStack gap={0} height="100%" overflow="hidden">
@@ -252,7 +257,7 @@ function TabsLayout({
           px={4}
           py={2.5}
           cursor="pointer"
-          onClick={() => setActiveTab('chat')}
+          onClick={() => onSetActiveSection('chat')}
           bg={activeTab === 'chat' ? 'bg.surface' : 'bg.muted'}
           borderBottom="2px solid"
           borderColor={activeTab === 'chat' ? 'accent.primary' : 'transparent'}
@@ -276,7 +281,7 @@ function TabsLayout({
           px={4}
           py={2.5}
           cursor="pointer"
-          onClick={() => setActiveTab('context')}
+          onClick={() => { const first = refSections[0]; if (first) onSetActiveSection(first.id); }}
           bg={activeTab === 'context' ? 'bg.surface' : 'bg.muted'}
           borderBottom="2px solid"
           borderColor={activeTab === 'context' ? 'accent.danger' : 'transparent'}
@@ -634,6 +639,7 @@ export default function RightSidebar({
                   chatSections={chatSections}
                   refSections={refSections}
                   activeSidebarSection={activeSidebarSection}
+                  onSetActiveSection={(id) => dispatch(setActiveSidebarSection(id))}
                   toggleSection={toggleSection}
                   sectionContentProps={sectionContentProps}
                 />
