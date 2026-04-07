@@ -392,7 +392,7 @@ export default function DashboardView({
             showTitle={true}
             editMode={editMode}
             index={index}
-            onEdit={editMode ? () => dispatch(pushView({ type: 'question', fileId: questionId })) : undefined}
+            onEdit={() => dispatch(pushView({ type: 'question', fileId: questionId }))}
             onRemove={() => handleRemoveQuestion(questionId.toString())}
           />
         </Box>
