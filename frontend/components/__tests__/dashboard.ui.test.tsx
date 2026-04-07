@@ -1522,8 +1522,8 @@ describe('Multiple questions in dashboard', () => {
       { store: testStore }
     );
 
-    // Two "Remove question" buttons — one per tile.  Click the first.
-    const removeBtns = await screen.findAllByLabelText('Remove question');
+    // Two "Remove from dashboard" buttons — one per tile.  Click the first.
+    const removeBtns = await screen.findAllByLabelText('Remove from dashboard');
     expect(removeBtns).toHaveLength(2);
     await user.click(removeBtns[0]);
 
