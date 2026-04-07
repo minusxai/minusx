@@ -227,7 +227,7 @@ def _render_query_with_regex_fallback(query: str, params: dict[str, Any]) -> str
     rendered = query
     for key, value in params.items():
         replacement = str(value) if isinstance(value, (int, float)) else f"'{str(value).replace(chr(39), chr(39) + chr(39))}'"
-        rendered = re.sub(rf':{key}\b', replacement, rendered)
+        rendered = re.sub(rf':{re.escape(key)}\b', replacement, rendered)
     return rendered
 
 
