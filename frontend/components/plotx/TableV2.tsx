@@ -337,7 +337,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
             '&::-webkit-scrollbar-thumb:hover': { background: 'rgba(128,128,128,0.5)' },
             '&::-webkit-scrollbar-corner': { background: 'transparent' },
             '& .table-v2-row': {
-              borderBottom: '1px solid var(--chakra-colors-border-muted)',
+              boxShadow: 'inset 0 -1px 0 var(--chakra-colors-border-muted)',
             },
             '& .table-v2-row:hover': {
               background: 'var(--chakra-colors-bg-muted) !important',
