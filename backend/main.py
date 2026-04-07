@@ -251,7 +251,9 @@ def _render_query_with_sqlalchemy_literals(
             continue
         bind_params.append(bindparam(key, value=value, type_=bind_type))
 
-    statement = text(query).bindparams(*bind_params)
+    # Not executed — only compiled to a string for display (finalQuery tooltip).
+    # CodeQL flags text() as SQL injection, but this is never sent to a database.
+    statement = text(query).bindparams(*bind_params)  # noqa: S608
     dialect = engine.sync_engine.dialect if isinstance(engine, AsyncEngine) else engine.dialect
 
     try:
