@@ -80,6 +80,15 @@ export class DuckDbConnector extends NodeConnector {
         return `$${paramValues.length}`;
       });
 
+      // Build display query with params inlined
+      let finalQuery = sql;
+      if (params) {
+        for (const [key, val] of Object.entries(params)) {
+          const replacement = typeof val === 'number' ? String(val) : `'${String(val).replace(/'/g, "''")}'`;
+          finalQuery = finalQuery.replace(new RegExp(`:${key}\\b`, 'g'), replacement);
+        }
+      }
+
       const result = await conn.run(positionalSql, paramValues as never);
       const colCount = result.columnCount;
       const columns: string[] = [];
@@ -90,7 +99,7 @@ export class DuckDbConnector extends NodeConnector {
       }
       const rawRows = await result.getRowObjectsJS() as Record<string, unknown>[];
       const rows = makeJsonSafe(rawRows);
-      return { columns, types, rows };
+      return { columns, types, rows, finalQuery };
     });
   }
 

@@ -155,7 +155,6 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       const result = await runQuery(database_name, noneResolvedQuery, resolvedParams, user, parameterTypes) as QueryResult & { finalQuery?: string };
       const durationMs = Date.now() - queryStart;
 
-      // Use finalQuery from Python backend; for Node connectors (no Python), use the pre-param query
       const displayQuery = result.finalQuery ?? noneResolvedQuery;
 
       // Populate server-side cache
