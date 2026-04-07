@@ -619,15 +619,14 @@ async def sql_autocomplete(request: AutocompleteRequest):
 class ValidateSqlRequest(BaseModel):
     """Request to validate SQL syntax"""
     query: str
-    db_type: str = "postgres"
+    dialect: str
 
 
 @app.post("/api/validate-sql")
 async def validate_sql(request: ValidateSqlRequest):
     """Validate SQL syntax using sqlglot and return error positions."""
     try:
-        dialect = _get_dialect_for_connection(request.db_type)
-        result = validate_sql_syntax(request.query, dialect)
+        result = validate_sql_syntax(request.query, request.dialect)
         return {"valid": result.valid, "errors": [e.__dict__ for e in result.errors]}
     except Exception as e:
         logger.error(f"SQL validation error: {e}")
@@ -638,13 +637,13 @@ class InferColumnsRequest(BaseModel):
     """Request to infer output columns from a SQL query"""
     query: str
     schema_data: List[Dict[str, Any]] = []
-    dialect: Optional[str] = None
+    dialect: str
 
 
 @app.post("/api/infer-columns")
 async def infer_columns_endpoint(request: InferColumnsRequest):
     """Infer output column names and types from a SQL query using sqlglot static analysis."""
-    result = infer_columns(request.query, request.schema_data, request.dialect or "postgres")
+    result = infer_columns(request.query, request.schema_data, request.dialect)
     return {
         "columns": [{"name": c.name, "type": c.type} for c in result.columns],
         "error": result.error,

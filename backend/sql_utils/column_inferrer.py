@@ -22,7 +22,7 @@ class InferColumnsResult:
 def infer_columns(
     query: str,
     schema_data: List[Dict[str, Any]],
-    dialect: str = "postgres",
+    dialect: str,
 ) -> InferColumnsResult:
     """
     Infer output column names and types from a SQL query.

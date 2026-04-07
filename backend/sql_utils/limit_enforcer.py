@@ -8,9 +8,10 @@ import re
 
 def enforce_query_limit(
     sql: str,
+    *,
     default_limit: int = 1000,
     max_limit: int = 10000,
-    dialect: str = "postgres"
+    dialect: str
 ) -> str:
     """
     Enforces row limits on SQL queries.
