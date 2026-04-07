@@ -1350,25 +1350,27 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         }
       }
       case 'combo':
-        if (index === 0) {
+        if (yAxisAssignments[index] === 1) {
+          // Right Y-axis → line
           return {
             ...baseConfig,
-            type: 'bar' as const,
-            itemStyle: {
-              ...baseConfig.itemStyle,
-              opacity: seriesOpacity ?? 0.5,
-            },
+            type: 'line' as const,
+            z: 10,
+            symbol: 'circle',
+            symbolSize: markerSize ?? 6,
+            showSymbol: true,
+            showAllSymbol: true,
+            lineStyle: { opacity: seriesOpacity ?? 0.95, width: 2 },
           }
         }
+        // Left Y-axis (or no dual axis) → bar
         return {
           ...baseConfig,
-          type: 'line' as const,
-          z: 10,
-          symbol: 'circle',
-          symbolSize: markerSize ?? 6,
-          showSymbol: true,
-          showAllSymbol: true,
-          lineStyle: { opacity: seriesOpacity ?? 0.95, width: 2 },
+          type: 'bar' as const,
+          itemStyle: {
+            ...baseConfig.itemStyle,
+            opacity: seriesOpacity ?? 0.5,
+          },
         }
       case 'scatter':
         return {
