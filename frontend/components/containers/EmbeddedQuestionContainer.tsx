@@ -52,15 +52,16 @@ export default function EmbeddedQuestionContainer({
       return questionParams.reduce((acc, p) => ({ ...acc, [p.name]: ownParamValues[p.name] ?? '' }), {} as Record<string, any>);
     }
     // Use explicit values dict if provided (from dashboard state),
-    // fall back to question's own parameterValues only when the key is absent.
-    // Key-existence check (not ??) ensures explicit null (None) is never overridden.
-    // Only include params the question actually uses to avoid polluting cache key.
-    return questionParams.reduce((acc, p) => ({
-      ...acc,
-      [p.name]: (externalParamValues && p.name in externalParamValues)
-        ? externalParamValues[p.name]
-        : (ownParamValues[p.name] ?? '')
-    }), {} as Record<string, any>);
+    // fall back to question's own parameterValues.
+    // Use 'in' check so null (skipped) from dashboard is preserved, not overridden by question's own values.
+    return questionParams.reduce((acc, p) => {
+      if (externalParamValues && p.name in externalParamValues) {
+        acc[p.name] = externalParamValues[p.name];
+      } else {
+        acc[p.name] = ownParamValues[p.name] ?? '';
+      }
+      return acc;
+    }, {} as Record<string, any>);
   }, [externalParameters, externalParamValues, localQuestion.parameters, localQuestion.parameterValues]);
 
   // Phase 3: Use useQueryResult hook for automatic execution with TTL caching

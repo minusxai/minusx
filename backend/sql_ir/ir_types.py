@@ -74,6 +74,8 @@ class FilterCondition(BaseModel):
     unit: Optional[Literal['DAY', 'WEEK', 'MONTH', 'QUARTER', 'YEAR', 'HOUR', 'MINUTE']] = None
     # For verbatim SQL expressions on the right side (e.g. CURRENT_TIMESTAMP, TIMESTAMP_TRUNC(...))
     raw_value: Optional[str] = None
+    # For verbatim SQL on the left/column side (e.g. SPLIT_PART(col, '-', 1))
+    raw_column: Optional[str] = None
 
 
 class FilterGroup(BaseModel):

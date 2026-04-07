@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ConfigDict
 from database import infer_type_from_value
-from sqlalchemy import text
+from sqlalchemy import Boolean, Date, DateTime, Float, Integer, String, bindparam, text
 import os
 import re
 import time
@@ -83,6 +83,7 @@ class QueryResponse(BaseModel):
     columns: list[str]
     types: list[str]
     rows: list[dict]
+    finalQuery: Optional[str] = None
 
 
 class ConnectionInitialize(BaseModel):
@@ -193,6 +194,73 @@ def _coerce_params_for_asyncpg(params: dict, parameter_types: dict) -> dict:
                 pass
         coerced[key] = value
     return coerced
+
+
+def _sqlalchemy_literal_type(value: Any, declared_type: Optional[str]):
+    """Pick a SQLAlchemy type so literal SQL rendering uses dialect-aware quoting."""
+    if declared_type == 'date':
+        return DateTime() if isinstance(value, datetime) else Date()
+    if declared_type == 'number':
+        if isinstance(value, bool):
+            return Boolean()
+        return Integer() if isinstance(value, int) else Float()
+    if declared_type == 'text':
+        return String()
+
+    if isinstance(value, datetime):
+        return DateTime()
+    if isinstance(value, date_type):
+        return Date()
+    if isinstance(value, bool):
+        return Boolean()
+    if isinstance(value, int):
+        return Integer()
+    if isinstance(value, float):
+        return Float()
+    if isinstance(value, str):
+        return String()
+    return None
+
+
+def _render_query_with_regex_fallback(query: str, params: dict[str, Any]) -> str:
+    """Best-effort fallback for display SQL if literal compilation fails."""
+    rendered = query
+    for key, value in params.items():
+        replacement = str(value) if isinstance(value, (int, float)) else f"'{str(value).replace(chr(39), chr(39) + chr(39))}'"
+        rendered = re.sub(rf':{re.escape(key)}\b', replacement, rendered)
+    return rendered
+
+
+def _render_query_with_sqlalchemy_literals(
+    query: str,
+    params: dict[str, Any],
+    parameter_types: dict[str, str],
+    engine: Any,
+) -> str:
+    """Render a display-only SQL string using SQLAlchemy's literal compiler."""
+    if not params:
+        return query
+
+    literal_params = _coerce_params_for_asyncpg(params, parameter_types or {})
+    bind_params = []
+
+    for key, value in literal_params.items():
+        bind_type = _sqlalchemy_literal_type(value, (parameter_types or {}).get(key))
+        if bind_type is None:
+            bind_params.append(bindparam(key, value=value))
+            continue
+        bind_params.append(bindparam(key, value=value, type_=bind_type))
+
+    # Not executed — only compiled to a string for display (finalQuery tooltip).
+    # CodeQL flags text() as SQL injection, but this is never sent to a database.
+    statement = text(query).bindparams(*bind_params)  # noqa: S608
+    dialect = engine.sync_engine.dialect if isinstance(engine, AsyncEngine) else engine.dialect
+
+    try:
+        return str(statement.compile(dialect=dialect, compile_kwargs={"literal_binds": True}))
+    except Exception:
+        logger.exception("Failed to render finalQuery via SQLAlchemy literal compilation")
+        return _render_query_with_regex_fallback(query, params)
 
 
 def _get_dialect_for_connection(conn_type: str) -> str:
@@ -345,11 +413,19 @@ async def execute_sql_query(query_request: QueryRequest, request: Request):
             process_start = time.time()
             print(f"[PYTHON] Result processing (rows: {len(rows)}) took {(time.time() - process_start) * 1000:.2f}ms")
 
+        final_query = _render_query_with_sqlalchemy_literals(
+            safe_query,
+            query_request.parameters or {},
+            query_request.parameter_types or {},
+            engine,
+        )
+
         print(f"[PYTHON] Total execute-query time: {(time.time() - start_time) * 1000:.2f}ms")
         return {
             "columns": columns,
             "types": types,
-            "rows": rows
+            "rows": rows,
+            "finalQuery": final_query
         }
     except ValueError as e:
         print(f"[PYTHON] Error after {(time.time() - start_time) * 1000:.2f}ms: {e}")

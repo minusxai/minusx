@@ -3,14 +3,14 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Input, HStack, Text, MenuRoot, MenuTrigger, MenuContent, MenuItem,
-  Portal, MenuPositioner, Box, IconButton, VStack, Popover, NativeSelect, Spinner, Field,
+  Portal, MenuPositioner, Box, IconButton, VStack, Popover, Spinner, Button,
   Combobox, createListCollection,
 } from '@chakra-ui/react';
-import { LuChevronDown, LuX, LuSettings2, LuTriangleAlert } from 'react-icons/lu';
+import { LuChevronDown, LuSettings2, LuTriangleAlert, LuBan } from 'react-icons/lu';
 import { Tooltip } from '@/components/ui/tooltip';
 import { QuestionParameter, QuestionContent } from '@/lib/types';
-import type { ParameterSource } from '@/lib/types.gen';
-import { getTypeColor, getTypeColorHex, getTypeIcon } from '@/lib/sql/sql-params';
+import type { QuestionParameterSource, SqlParameterSource } from '@/lib/types.gen';
+import { getTypeColor, getTypeIcon } from '@/lib/sql/sql-params';
 import DatePicker from './DatePicker';
 import { useFile, useFilesByCriteria, useQueryResult } from '@/lib/hooks/file-state-hooks';
 import FileSearchSelect from './shared/FileSearchSelect';
@@ -28,7 +28,7 @@ function isNumericType(type: string): boolean {
 // Rendered in place of the text/number Input when parameter.source is set.
 
 interface SourceDropdownWidgetProps {
-  source: ParameterSource;
+  source: QuestionParameterSource;
   paramType: 'text' | 'number';
   currentValue: string | number | undefined;
   paramName: string;
@@ -206,22 +206,184 @@ function SourceDropdownWidget({ source, paramType, currentValue, paramName, onCh
   );
 }
 
+// ─── Inline SQL Dropdown Widget ──────────────────────────────────────────────
+// Rendered when parameter.source.type === 'sql'. Executes the inline query and
+// shows results as a combobox dropdown.
+
+interface InlineSqlDropdownWidgetProps {
+  source: SqlParameterSource;
+  paramType: 'text' | 'number';
+  currentValue: string | number | undefined;
+  paramName: string;
+  database?: string;
+  onChange: (value: string | number) => void;
+  onSubmit?: (paramName?: string, value?: string | number) => void;
+}
+
+function InlineSqlDropdownWidget({ source, paramType, currentValue, paramName, database, onChange, onSubmit }: InlineSqlDropdownWidgetProps) {
+  const { data, loading, error } = useQueryResult(
+    source.query,
+    {},
+    database ?? '',
+    undefined,
+    { skip: !source.query }
+  );
+
+  // Extract distinct values from the first column
+  const values = useMemo<string[] | null>(() => {
+    if (!data?.rows || !data?.columns?.length) return null;
+    const firstCol = data.columns[0];
+    const col = typeof firstCol === 'string' ? firstCol : firstCol.name;
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const row of data.rows) {
+      const v = row[col];
+      if (v !== null && v !== undefined) {
+        const str = paramType === 'number' ? formatNumStr(String(v)) : String(v);
+        if (!seen.has(str)) {
+          seen.add(str);
+          result.push(str);
+        }
+      }
+    }
+    return paramType === 'number'
+      ? result.sort((a, b) => parseFloat(a) - parseFloat(b))
+      : result.sort();
+  }, [data, paramType]);
+
+  const [filterText, setFilterText] = useState('');
+
+  const filteredCollection = useMemo(() => {
+    const lower = filterText.toLowerCase();
+    const all = values ?? [];
+    if (!lower) return createListCollection({ items: all.map(v => ({ value: v, label: v })) });
+    const prefix: string[] = [];
+    const rest: string[] = [];
+    for (const v of all) {
+      if (v.toLowerCase().startsWith(lower)) prefix.push(v);
+      else if (v.toLowerCase().includes(lower)) rest.push(v);
+    }
+    return createListCollection({ items: [...prefix, ...rest].map(v => ({ value: v, label: v })) });
+  }, [values, filterText]);
+
+  const defaultDisplayValue = currentValue !== undefined && currentValue !== null
+    ? (paramType === 'number' ? formatNumStr(String(currentValue)) : String(currentValue))
+    : '';
+
+  const [inputDisplay, setInputDisplay] = useState(defaultDisplayValue);
+  const committedRef = useRef(defaultDisplayValue);
+
+  const commit = (raw: string) => {
+    committedRef.current = raw;
+    setInputDisplay(raw);
+    setFilterText('');
+    const final: string | number = paramType === 'number' ? (parseFloat(raw) || 0) : raw;
+    onChange(final);
+  };
+
+  return (
+    <HStack gap={1}>
+      {(error || (values !== null && values.length === 0 && !loading)) && (
+        <Tooltip content={error ? 'Could not load suggestions' : 'No suggestions found'}>
+          <Box color="orange.400" display="flex" alignItems="center">
+            <LuTriangleAlert size={14} />
+          </Box>
+        </Tooltip>
+      )}
+      {loading && values === null && <Spinner size="xs" color="accent.teal" />}
+
+      <Combobox.Root
+        collection={filteredCollection}
+        inputValue={inputDisplay}
+        onValueChange={(e) => {
+          if (e.value[0] !== undefined) commit(e.value[0]);
+        }}
+        onInputValueChange={(details) => {
+          setInputDisplay(details.inputValue);
+          setFilterText(details.inputValue);
+        }}
+        onOpenChange={({ open }) => {
+          if (!open) {
+            setInputDisplay(committedRef.current);
+            setFilterText('');
+          }
+        }}
+        openOnClick
+        inputBehavior="none"
+        positioning={{ placement: 'bottom-start', gutter: 4 }}
+        size="sm"
+      >
+        <Combobox.Control>
+          <Combobox.Input
+            placeholder={paramType === 'number' ? '0 or select…' : 'type or select…'}
+            bg="transparent"
+            border="none"
+            fontSize="xs"
+            h={ROW_H}
+            minW="100px"
+            fontFamily="mono"
+            _focus={{ outline: 'none', boxShadow: 'none' }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || ((e.metaKey || e.ctrlKey) && e.key === 'Enter')) {
+                e.preventDefault();
+                e.stopPropagation();
+                const raw = e.currentTarget.value;
+                commit(raw);
+                if (onSubmit) {
+                  const final: string | number = paramType === 'number'
+                    ? (parseFloat(raw) || 0)
+                    : raw;
+                  onSubmit(paramName, final);
+                }
+              }
+            }}
+          />
+        </Combobox.Control>
+        <Portal>
+          <Combobox.Positioner>
+            <Combobox.Content minW="160px">
+              {loading && values === null ? (
+                <Combobox.Empty>Loading…</Combobox.Empty>
+              ) : filteredCollection.items.length === 0 ? (
+                <Combobox.Empty>No matches</Combobox.Empty>
+              ) : (
+                filteredCollection.items.map(item => (
+                  <Combobox.Item key={item.value} item={item}>
+                    <Combobox.ItemText>{item.label}</Combobox.ItemText>
+                    <Combobox.ItemIndicator />
+                  </Combobox.Item>
+                ))
+              )}
+            </Combobox.Content>
+          </Combobox.Positioner>
+        </Portal>
+      </Combobox.Root>
+    </HStack>
+  );
+}
+
 // ─── Source Config Popover ────────────────────────────────────────────────────
 // Settings gear that opens a popover to configure parameter.source.
 
 interface SourceConfigPopoverProps {
   parameter: QuestionParameter;
   onParameterChange: (updated: QuestionParameter) => void;
+  onTypeChange?: (type: 'text' | 'number' | 'date') => void;
+  disableTypeChange?: boolean;
 }
 
-function SourceConfigPopover({ parameter, onParameterChange }: SourceConfigPopoverProps) {
+function SourceConfigPopover({ parameter, onParameterChange, onTypeChange, disableTypeChange }: SourceConfigPopoverProps) {
   const [open, setOpen] = useState(false);
   const [columns, setColumns] = useState<{ name: string; type: string }[]>([]);
   const [loadingCols, setLoadingCols] = useState(false);
 
-  // Local mode state: 'manual' | 'question'. Tracks the toggle, even before question is selected.
+  // Local mode state tracks the toggle, even before config is complete.
   const isFromQuestion = parameter.source?.type === 'question';
-  const [mode, setMode] = useState<'manual' | 'question'>(isFromQuestion ? 'question' : 'manual');
+  const isFromSql = parameter.source?.type === 'sql';
+  const [mode, setMode] = useState<'manual' | 'question' | 'sql'>(
+    isFromSql ? 'sql' : isFromQuestion ? 'question' : 'manual'
+  );
+  const [sqlQuery, setSqlQuery] = useState(isFromSql ? (parameter.source as SqlParameterSource).query : '');
 
   const sourceQuestionId = parameter.source?.type === 'question' ? parameter.source.id : null;
 
@@ -261,23 +423,63 @@ function SourceConfigPopover({ parameter, onParameterChange }: SourceConfigPopov
     return columns;
   }, [columns, parameter.type]);
 
-  const handleModeChange = (newMode: 'manual' | 'question') => {
+  // Local draft state for question source (not committed until Apply)
+  const [draftQuestionId, setDraftQuestionId] = useState<number | null>(sourceQuestionId);
+  const [draftColumn, setDraftColumn] = useState(parameter.source?.type === 'question' ? parameter.source.column : '');
+
+  const handleModeChange = (newMode: 'manual' | 'question' | 'sql') => {
     setMode(newMode);
     if (newMode === 'manual') {
       onParameterChange({ ...parameter, source: null });
       setColumns([]);
+      setSqlQuery('');
+      setDraftQuestionId(null);
+      setDraftColumn('');
+    } else if (newMode === 'sql') {
+      setColumns([]);
+      setDraftQuestionId(null);
+      setDraftColumn('');
+    } else if (newMode === 'question') {
+      setSqlQuery('');
     }
-    // Switching to 'question': wait for user to pick a question before setting source
   };
 
   const handleQuestionSelect = (id: number) => {
-    onParameterChange({ ...parameter, source: { type: 'question', id, column: '' } });
+    setDraftQuestionId(id);
+    setDraftColumn('');
     fetchColumns(id);
   };
 
   const handleColumnSelect = (column: string) => {
-    if (!sourceQuestionId) return;
-    onParameterChange({ ...parameter, source: { type: 'question', id: sourceQuestionId, column } });
+    setDraftColumn(column);
+  };
+
+  // Can we apply?
+  const canApply =
+    (mode === 'question' && !!draftQuestionId && !!draftColumn) ||
+    (mode === 'sql' && !!sqlQuery.trim());
+
+  // Check if current config differs from saved
+  const isDirty = (() => {
+    if (mode === 'manual') return false; // manual applies immediately
+    if (mode === 'question') {
+      if (parameter.source?.type !== 'question') return !!draftQuestionId && !!draftColumn;
+      return draftQuestionId !== parameter.source.id || draftColumn !== parameter.source.column;
+    }
+    if (mode === 'sql') {
+      if (parameter.source?.type !== 'sql') return !!sqlQuery.trim();
+      return sqlQuery.trim() !== parameter.source.query;
+    }
+    return false;
+  })();
+
+  const handleApply = () => {
+    if (mode === 'question' && draftQuestionId && draftColumn) {
+      onParameterChange({ ...parameter, source: { type: 'question', id: draftQuestionId, column: draftColumn } });
+    } else if (mode === 'sql' && sqlQuery.trim()) {
+      onParameterChange({ ...parameter, source: { type: 'sql', query: sqlQuery.trim() } });
+    }
+    setOpen(false);
   };
 
   return (
@@ -290,7 +492,7 @@ function SourceConfigPopover({ parameter, onParameterChange }: SourceConfigPopov
           h={ROW_H}
           w={ROW_H}
           minW={ROW_H}
-          color={isFromQuestion ? 'accent.teal' : 'fg.subtle'}
+          color={isFromQuestion || isFromSql ? 'accent.teal' : 'fg.subtle'}
           _hover={{ color: 'accent.teal', bg: 'bg.emphasized' }}
         >
           <LuSettings2 style={{ width: 13, height: 13 }} />
@@ -298,61 +500,224 @@ function SourceConfigPopover({ parameter, onParameterChange }: SourceConfigPopov
       </Popover.Trigger>
       <Portal>
         <Popover.Positioner>
-          <Popover.Content width="280px" bg="bg.elevated" p={0} overflow="visible" borderRadius="lg">
-            <Popover.Body p={3} bg="bg.elevated" overflow="visible">
+          <Popover.Content
+            width="280px"
+            bg="bg.surface"
+            p={0}
+            overflow="visible"
+            borderRadius="md"
+            border="1px solid"
+            borderColor="border.muted"
+            boxShadow="lg"
+          >
+            <Popover.Body p={3} overflow="visible">
               <VStack gap={3} align="stretch">
-                <Field.Root>
-                  <Field.Label fontSize="xs" fontWeight="600">Source</Field.Label>
-                  <NativeSelect.Root size="sm">
-                    <NativeSelect.Field
-                      value={mode}
-                      onChange={(e) => handleModeChange(e.target.value as 'manual' | 'question')}
-                    >
-                      <option value="manual">Free input</option>
-                      <option value="question">From question</option>
-                    </NativeSelect.Field>
-                    <NativeSelect.Indicator />
-                  </NativeSelect.Root>
-                </Field.Root>
+                {/* Type selector */}
+                {onTypeChange && !disableTypeChange && (
+                  <Box>
+                    <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
+                      Type
+                    </Text>
+                    <HStack gap={1}>
+                      {([
+                        { value: 'text', label: 'Text' },
+                        { value: 'number', label: 'Number' },
+                        { value: 'date', label: 'Date' },
+                      ] as const).map((opt) => (
+                        <Box
+                          key={opt.value}
+                          as="button"
+                          px={2.5}
+                          py={1}
+                          borderRadius="sm"
+                          border="1px solid"
+                          borderColor={parameter.type === opt.value ? getTypeColor(opt.value) : 'border.muted'}
+                          bg={parameter.type === opt.value ? getTypeColor(opt.value) + '/10' : 'bg.muted'}
+                          color={parameter.type === opt.value ? getTypeColor(opt.value) : 'fg.default'}
+                          fontSize="xs"
+                          fontWeight="600"
+                          fontFamily="mono"
+                          cursor="pointer"
+                          _hover={{
+                            borderColor: getTypeColor(opt.value),
+                            color: getTypeColor(opt.value),
+                          }}
+                          transition="all 0.1s"
+                          onClick={() => onTypeChange(opt.value)}
+                        >
+                          <HStack gap={1}>
+                            {React.createElement(getTypeIcon(opt.value), { size: 14 })}
+                            <span>{opt.label}</span>
+                          </HStack>
+                        </Box>
+                      ))}
+                    </HStack>
+                  </Box>
+                )}
+
+                <Box>
+                  <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
+                    Source
+                  </Text>
+                  <HStack gap={1} flexWrap="wrap">
+                    {([
+                      { value: 'manual', label: 'Free input' },
+                      { value: 'question', label: 'Saved question' },
+                      { value: 'sql', label: 'Inline SQL' },
+                    ] as const).map((opt) => (
+                      <Box
+                        key={opt.value}
+                        as="button"
+                        px={2.5}
+                        py={1}
+                        borderRadius="sm"
+                        border="1px solid"
+                        borderColor={mode === opt.value ? 'accent.teal' : 'border.muted'}
+                        bg={mode === opt.value ? 'accent.teal/10' : 'bg.muted'}
+                        color={mode === opt.value ? 'accent.teal' : 'fg.default'}
+                        fontSize="xs"
+                        fontWeight="600"
+                        fontFamily="mono"
+                        cursor="pointer"
+                        _hover={{
+                          borderColor: 'accent.teal',
+                          color: 'accent.teal',
+                        }}
+                        transition="all 0.1s"
+                        onClick={() => handleModeChange(opt.value)}
+                      >
+                        {opt.label}
+                      </Box>
+                    ))}
+                  </HStack>
+                </Box>
+
+                {mode === 'sql' && (
+                  <Box>
+                    <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
+                      Query
+                    </Text>
+                    <textarea
+                      style={{
+                        width: '100%',
+                        minHeight: '60px',
+                        padding: '6px 10px',
+                        background: 'var(--chakra-colors-bg-muted)',
+                        borderRadius: '4px',
+                        border: '1px solid var(--chakra-colors-border-muted)',
+                        fontSize: '12px',
+                        fontFamily: 'var(--chakra-fonts-mono)',
+                        color: 'var(--chakra-colors-fg-default)',
+                        resize: 'vertical',
+                        outline: 'none',
+                      }}
+                      onFocus={(e) => { e.target.style.borderColor = 'var(--chakra-colors-accent-teal)'; }}
+                      onBlur={(e) => { e.target.style.borderColor = 'var(--chakra-colors-border-muted)'; }}
+                      placeholder="SELECT DISTINCT year FROM sales"
+                      value={sqlQuery}
+                      onChange={(e) => setSqlQuery(e.target.value)}
+                    />
+                  </Box>
+                )}
 
                 {mode === 'question' && (
                   <>
-                    <Field.Root>
-                      <Field.Label fontSize="xs" fontWeight="600">Question</Field.Label>
+                    <Box>
+                      <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
+                        Question
+                      </Text>
                       <FileSearchSelect
                         files={questionList}
-                        selectedId={sourceQuestionId}
+                        selectedId={draftQuestionId}
                         onSelect={handleQuestionSelect}
                         placeholder="Search questions…"
                       />
-                    </Field.Root>
+                    </Box>
 
-                    {sourceQuestionId && (
-                      <Field.Root>
-                        <Field.Label fontSize="xs" fontWeight="600">
+                    {draftQuestionId && (
+                      <Box>
+                        <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
                           Column
                           {parameter.type === 'number' && (
                             <Text as="span" fontSize="2xs" color="fg.subtle" ml={1}>(numeric only)</Text>
                           )}
-                        </Field.Label>
-                        <NativeSelect.Root size="sm">
-                          <NativeSelect.Field
-                            value={parameter.source?.column ?? ''}
-                            onChange={(e) => handleColumnSelect(e.target.value)}
-                            aria-disabled={loadingCols}
-                          >
-                            <option value="">
-                              {loadingCols ? 'Loading…' : filteredColumns.length === 0 ? 'No columns found' : '— select column —'}
-                            </option>
-                            {filteredColumns.map(c => (
-                              <option key={c.name} value={c.name}>{c.name}</option>
-                            ))}
-                          </NativeSelect.Field>
-                          <NativeSelect.Indicator />
-                        </NativeSelect.Root>
-                      </Field.Root>
+                        </Text>
+                        <MenuRoot positioning={{ placement: 'bottom-start' }}>
+                          <MenuTrigger asChild>
+                            <HStack
+                              as="button"
+                              w="full"
+                              px={2.5}
+                              py={1.5}
+                              bg="bg.muted"
+                              borderRadius="sm"
+                              border="1px solid"
+                              borderColor="border.muted"
+                              cursor="pointer"
+                              fontSize="xs"
+                              fontFamily="mono"
+                              _hover={{ borderColor: 'accent.teal' }}
+                              justify="space-between"
+                            >
+                              <Text lineClamp={1} color={draftColumn ? 'fg.default' : 'fg.subtle'}>
+                                {loadingCols ? 'Loading…' : draftColumn || '— select column —'}
+                              </Text>
+                              <LuChevronDown size={12} />
+                            </HStack>
+                          </MenuTrigger>
+                          <Portal>
+                            <MenuPositioner>
+                              <MenuContent
+                                minW="200px"
+                                maxH="200px"
+                                overflowY="auto"
+                                bg="bg.surface"
+                                borderColor="border.default"
+                                shadow="lg"
+                                p={1}
+                              >
+                                {filteredColumns.length === 0 ? (
+                                  <Box px={3} py={2}>
+                                    <Text fontSize="xs" color="fg.subtle">{loadingCols ? 'Loading…' : 'No columns found'}</Text>
+                                  </Box>
+                                ) : filteredColumns.map(c => (
+                                  <MenuItem
+                                    key={c.name}
+                                    value={c.name}
+                                    onClick={() => handleColumnSelect(c.name)}
+                                    px={3}
+                                    py={1.5}
+                                    borderRadius="sm"
+                                    _hover={{ bg: 'bg.muted' }}
+                                    cursor="pointer"
+                                  >
+                                    <Text fontSize="xs" fontFamily="mono">{c.name}</Text>
+                                  </MenuItem>
+                                ))}
+                              </MenuContent>
+                            </MenuPositioner>
+                          </Portal>
+                        </MenuRoot>
+                      </Box>
                     )}
                   </>
+                )}
+                {/* Apply button */}
+                {(mode === 'question' || mode === 'sql') && (
+                  <Button
+                    size="xs"
+                    bg="accent.teal"
+                    color="white"
+                    fontFamily="mono"
+                    fontWeight="600"
+                    fontSize="xs"
+                    w="full"
+                    _hover={{ opacity: 0.9 }}
+                    disabled={!canApply || !isDirty}
+                    onClick={handleApply}
+                  >
+                    Apply
+                  </Button>
                 )}
               </VStack>
             </Popover.Body>
@@ -375,6 +740,7 @@ interface ParameterInputProps {
   disableTypeChange?: boolean;
   disableSourceConfig?: boolean;
   onHoverParam?: (key: string | null) => void;
+  database?: string;
 }
 
 export default function ParameterInput({
@@ -387,9 +753,11 @@ export default function ParameterInput({
   disableTypeChange = false,
   disableSourceConfig = false,
   onHoverParam,
+  database,
 }: ParameterInputProps) {
   const paramKey = `${parameter.name}-${parameter.type}`;
-  const hasSource = parameter.source?.type === 'question' && !!parameter.source.column;
+  const hasQuestionSource = parameter.source?.type === 'question' && !!parameter.source.column;
+  const hasSqlSource = parameter.source?.type === 'sql' && !!parameter.source.query;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = parameter.type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value;
@@ -415,69 +783,69 @@ export default function ParameterInput({
   };
 
   const isNone = value === null;
-  const hasValue = value !== undefined && value !== '' && value !== null;
 
-  const typeOptions: Array<{ type: 'text' | 'number' | 'date'; label: string }> = [
-    { type: 'text', label: 'Text' },
-    { type: 'number', label: 'Number' },
-    { type: 'date', label: 'Date' },
-  ];
-
-  // Whether to show source config (not for date params, not in dashboard view)
-  const showSourceConfig = !disableSourceConfig && parameter.type !== 'date';
 
   return (
-    <Box
-      position="relative"
-      p={2}
-      pt={4}
+    <HStack
+      gap={0}
       bg="bg.muted"
       borderRadius="md"
-      border="1px solid"
-      borderColor="border.default"
+      h={ROW_H}
+      align="center"
       onMouseEnter={() => onHoverParam?.(paramKey)}
       onMouseLeave={() => onHoverParam?.(null)}
+      overflow="hidden"
     >
-      {/* Parameter name - floating label (top left) */}
-      <Text
-        position="absolute"
-        top={-2}
-        left={2}
+      {/* Param label */}
+      <HStack
+        gap={1}
+        px={2}
+        h="full"
+        bg={getTypeColor(parameter.type)}
+        color="white"
         fontSize="xs"
         fontWeight="600"
-        color="white"
         fontFamily="mono"
-        bg={getTypeColor(parameter.type)}
-        borderRadius={5}
-        px={2}
+        flexShrink={0}
       >
-        :{parameter.name}
-      </Text>
+        {React.createElement(getTypeIcon(parameter.type), { size: 11 })}
+        <Text fontSize="xs" fontFamily="mono" fontWeight="600">:{parameter.name}</Text>
+      </HStack>
 
-      <HStack gap={1.5} align="center">
-
-        {/* None state indicator — replaces the input when param is explicitly None */}
-        {isNone ? (
-          <HStack
-            bg="bg.muted"
-            borderRadius="md"
-            border="1px dashed"
-            borderColor="border.muted"
-            px={2}
-            h={ROW_H}
-            minW="100px"
-          >
-            <Text fontSize="xs" color="fg.subtle" fontStyle="italic">None</Text>
-          </HStack>
-        ) : (
-        /* Input field — dropdown when source is configured, otherwise standard input */
-        hasSource && parameter.type !== 'date' ? (
+      {/* Value area */}
+      {isNone ? (
+        <HStack
+          px={2}
+          h="full"
+          gap={1}
+          cursor="pointer"
+          onClick={() => onChange('')}
+          color="accent.danger"
+          _hover={{ bg: 'accent.danger/10' }}
+          transition="all 0.1s"
+        >
+          <LuBan style={{ width: 10, height: 10 }} />
+          <Text fontSize="xs" fontWeight="600" fontFamily="mono">Skipped</Text>
+        </HStack>
+      ) : (
+        hasQuestionSource && parameter.type !== 'date' ? (
           <SourceDropdownWidget
             key={String(value ?? '')}
-            source={parameter.source!}
+            source={parameter.source as QuestionParameterSource}
             paramType={parameter.type as 'text' | 'number'}
             currentValue={value ?? undefined}
             paramName={parameter.name}
+            onChange={onChange}
+            onSubmit={onSubmit}
+          />
+        ) : hasSqlSource && parameter.type !== 'date' ? (
+          <InlineSqlDropdownWidget
+            key={String(value ?? '')}
+            source={parameter.source as SqlParameterSource}
+            paramType={parameter.type as 'text' | 'number'}
+            currentValue={value ?? undefined}
+            paramName={parameter.name}
+            database={database}
             onChange={onChange}
             onSubmit={onSubmit}
           />
@@ -494,123 +862,53 @@ export default function ParameterInput({
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             type={parameter.type === 'number' ? 'number' : 'text'}
-            minW="100px"
-            bg="bg.canvas"
-            borderColor="border.muted"
-            fontFamily={parameter.type === 'number' ? 'mono' : 'inherit'}
-            fontSize="sm"
-            px={3}
-            h={ROW_H}
+            w="100px"
+            bg="transparent"
+            border="none"
+            fontFamily="mono"
+            fontSize="xs"
+            px={2}
+            h="full"
+            borderRadius={0}
             _focus={{
-              borderColor: 'accent.teal',
-              boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)',
+              outline: 'none',
+              boxShadow: 'none',
             }}
             placeholder={parameter.type === 'number' ? '0' : 'value'}
             aria-label={parameter.name}
           />
         )
-        )}
+      )}
 
-        {/* X button — toggles None on/off; always visible (undefined and '' both look empty) */}
-        {(
-          <Tooltip content={isNone ? 'Clear — restore to empty' : 'Set to None (skip this filter)'}>
-            <IconButton
-              aria-label={isNone ? 'Clear None' : 'Set to None'}
-              variant="ghost"
-              onClick={() => onChange(isNone ? '' : null)}
-              color="fg.subtle"
-              h={ROW_H}
-              w={ROW_H}
-              minW={ROW_H}
-              _hover={{ color: isNone ? 'fg' : 'accent.danger', bg: 'bg.emphasized' }}
-            >
-              <LuX style={{ width: 10, height: 10 }} />
-            </IconButton>
-          </Tooltip>
-        )}
+      {/* Actions */}
+      {!isNone && (
+        <Tooltip content="Skip this filter">
+          <Box
+            as="button"
+            px={1.5}
+            h="full"
+            display="flex"
+            alignItems="center"
+            color="fg.subtle"
+            cursor="pointer"
+            _hover={{ color: 'accent.danger', bg: 'accent.danger/10' }}
+            transition="all 0.1s"
+            onClick={() => onChange(null)}
+            aria-label="Skip this filter"
+          >
+            <LuBan style={{ width: 11, height: 11 }} />
+          </Box>
+        </Tooltip>
+      )}
 
-        {/* Source config gear (text/number only, hidden in dashboard view) */}
-        {showSourceConfig && onParameterChange && (
-          <SourceConfigPopover
-            parameter={parameter}
-            onParameterChange={onParameterChange}
-          />
-        )}
-
-        {/* Type selector - dropdown or read-only indicator (hidden when source is configured) */}
-        {!hasSource && (
-          disableTypeChange ? (
-            <HStack
-              gap={1}
-              px={2}
-              h={ROW_H}
-              bg="bg.canvas"
-              borderRadius="sm"
-              border="1px solid"
-              borderColor="border.muted"
-              fontSize="xs"
-              fontWeight="600"
-              style={{ color: getTypeColorHex(parameter.type) }}
-              align="center"
-            >
-              {React.createElement(getTypeIcon(parameter.type), { size: 16 })}
-            </HStack>
-          ) : (
-            <Tooltip content="Change parameter type">
-              <MenuRoot positioning={{ placement: 'bottom' }}>
-                <MenuTrigger asChild>
-                  <HStack
-                    as="button"
-                    gap={1}
-                    px={2}
-                    h={ROW_H}
-                    bg="bg.canvas"
-                    borderRadius="sm"
-                    border="1px solid"
-                    borderColor="border.muted"
-                    cursor="pointer"
-                    fontSize="xs"
-                    fontWeight="600"
-                    style={{ color: getTypeColorHex(parameter.type) }}
-                    _hover={{
-                      bg: 'bg.surface',
-                      borderColor: 'accent.teal',
-                    }}
-                    align="center"
-                  >
-                    {React.createElement(getTypeIcon(parameter.type), { size: 16 })}
-                    <LuChevronDown size={12} />
-                  </HStack>
-                </MenuTrigger>
-                <Portal>
-                  <MenuPositioner>
-                    <MenuContent minW="120px" p={1}>
-                      {typeOptions.map((option) => (
-                        <MenuItem
-                          key={option.type}
-                          value={option.type}
-                          style={{ color: getTypeColorHex(option.type) }}
-                          onClick={() => onTypeChange(option.type)}
-                          px={3}
-                          py={2}
-                          borderRadius="sm"
-                        >
-                          <HStack gap={2}>
-                            {React.createElement(getTypeIcon(option.type), { size: 16 })}
-                            <Text fontSize="sm" fontWeight="600" fontFamily="mono">
-                              {option.label}
-                            </Text>
-                          </HStack>
-                        </MenuItem>
-                      ))}
-                    </MenuContent>
-                  </MenuPositioner>
-                </Portal>
-              </MenuRoot>
-            </Tooltip>
-          )
-        )}
-      </HStack>
-    </Box>
+      {!disableSourceConfig && onParameterChange && (
+        <SourceConfigPopover
+          parameter={parameter}
+          onParameterChange={onParameterChange}
+          onTypeChange={disableTypeChange ? undefined : onTypeChange}
+          disableTypeChange={disableTypeChange}
+        />
+      )}
+    </HStack>
   );
 }

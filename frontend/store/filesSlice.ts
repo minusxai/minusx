@@ -978,17 +978,8 @@ export const selectIsDirty = (state: RootState, id: FileId): boolean => {
   // Virtual (unsaved) files are always dirty
   if (isVirtualFileId(id)) return true;
 
-  let hasContentChanges = !!(file.persistableChanges && Object.keys(file.persistableChanges).length > 0);
+  const hasContentChanges = !!(file.persistableChanges && Object.keys(file.persistableChanges).length > 0);
   const hasMetadataChanges = !!(file.metadataChanges && (file.metadataChanges.name !== undefined || file.metadataChanges.path !== undefined));
-
-  // Dashboard param-only changes don't count as dirty — exploring with different param values
-  // shouldn't trigger edit mode. Params are silently included on the next explicit save.
-  if (hasContentChanges && file.type === 'dashboard') {
-    const keys = Object.keys(file.persistableChanges ?? {});
-    if (keys.length === 1 && keys[0] === 'parameterValues') {
-      hasContentChanges = false;
-    }
-  }
 
   return hasContentChanges || hasMetadataChanges;
 };
@@ -1035,14 +1026,14 @@ export const selectFileLoadError = (state: RootState, id: FileId): LoadError | n
 export const selectDirtyFiles = createSelector(
   [(state: RootState) => state.files.files],
   (files): FileState[] =>
-    Object.values(files).filter(file =>
-      file &&
-      !SYSTEM_FILE_TYPES_SET.has(file.type) &&
-      (
-        (file.persistableChanges && Object.keys(file.persistableChanges).length > 0) ||
-        (file.metadataChanges && (file.metadataChanges.name !== undefined || file.metadataChanges.path !== undefined))
-      )
-    ) as FileState[]
+    Object.values(files).filter(file => {
+      if (!file || SYSTEM_FILE_TYPES_SET.has(file.type)) return false;
+
+      const hasContentChanges = !!(file.persistableChanges && Object.keys(file.persistableChanges).length > 0);
+      const hasMetadataChanges = !!(file.metadataChanges && (file.metadataChanges.name !== undefined || file.metadataChanges.path !== undefined));
+
+      return hasContentChanges || hasMetadataChanges;
+    }) as FileState[]
 );
 
 export const selectConnectionsLoading = createSelector(

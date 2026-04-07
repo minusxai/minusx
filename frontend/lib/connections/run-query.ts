@@ -8,6 +8,7 @@ export interface QueryResult {
   columns: string[];
   types: string[];
   rows: Record<string, any>[];
+  finalQuery?: string;
 }
 
 /**

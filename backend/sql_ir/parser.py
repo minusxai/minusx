@@ -618,9 +618,35 @@ def parse_comparison(expr: exp.Expression, operator: str) -> Optional[FilterCond
         table_name = parsed.table
         date_trunc_function = 'DATE_TRUNC'
         date_trunc_unit = parsed.unit
-    # If it's not a column/star and not an aggregate, skip it
+    # If it's not a column/star and not an aggregate, store as raw SQL
     elif not isinstance(column_expr, (exp.Column, exp.Star)):
-        return None
+        # Function call or complex expression on the left side (e.g. SPLIT_PART(...))
+        raw_column_sql = column_expr.sql(dialect='postgres')
+        # Still need to parse the right side for param_name
+        right = expr.right
+        value = None
+        param_name = None
+        raw_value = None
+        if isinstance(right, exp.Placeholder):
+            param_name = right.name if hasattr(right, 'name') else right.this
+        elif isinstance(right, exp.Literal):
+            value = right.this
+            if not right.is_string:
+                try:
+                    value = float(value) if '.' in str(value) else int(value)
+                except ValueError:
+                    pass
+        elif isinstance(right, exp.Null):
+            value = None
+        else:
+            raw_value = right.sql(dialect='postgres')
+        return FilterCondition(
+            operator=operator,
+            value=value,
+            param_name=param_name,
+            raw_value=raw_value,
+            raw_column=raw_column_sql,
+        )
     # Extract column name and table
     elif isinstance(column_expr, exp.Star):
         # For aggregates other than COUNT, * doesn't make sense

@@ -27,7 +27,7 @@ import {
   IconButton,
 } from '@chakra-ui/react';
 import { Dialog } from '@chakra-ui/react';
-import { LuSave, LuUndo2, LuX, LuCheck, LuPanelLeftClose, LuPanelLeftOpen } from 'react-icons/lu';
+import { LuSave, LuUndo2, LuX, LuCheck, LuPanelLeftClose, LuPanelLeftOpen, LuCode, LuEye } from 'react-icons/lu';
 import { useDirtyFiles } from '@/lib/hooks/file-state-hooks';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import FileView from '@/components/FileView';
@@ -397,42 +397,13 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
               {/* Right pane: file view */}
               <Box flex="1" minW="0" display="flex" flexDirection="column" bg="bg.canvas" overflow="hidden">
                 {selectedFileId !== null ? (
-                  <>
-                    <HStack
-                      px={4}
-                      py={2}
-                      borderBottom="1px solid"
-                      borderColor="border.default"
-                      flexShrink={0}
-                      justify="space-between"
-                    >
-                      <SelectedFileName fileId={selectedFileId} />
-                      <HStack gap={0.5} flexShrink={0}>
-                        <IconButton
-                          aria-label="Discard changes"
-                          size="2xs"
-                          variant="ghost"
-                          color="accent.danger"
-                          onClick={() => handleDiscardFile(selectedFileId)}
-                        >
-                          <LuUndo2 />
-                        </IconButton>
-                        <IconButton
-                          aria-label="Save file"
-                          size="2xs"
-                          variant="ghost"
-                          color="accent.teal"
-                          loading={publishingSingleId === selectedFileId}
-                          onClick={() => handlePublishFile(selectedFileId)}
-                        >
-                          <LuCheck />
-                        </IconButton>
-                      </HStack>
-                    </HStack>
-                    <Box flex="1" minH="0" display="flex" flexDirection="column" overflowY="auto">
-                      <FileView key={selectedFileId} fileId={selectedFileId} mode="preview" hideHeader />
-                    </Box>
-                  </>
+                  <SelectedFilePane
+                    fileId={selectedFileId}
+                    publishingSingleId={publishingSingleId}
+                    onDiscard={() => handleDiscardFile(selectedFileId)}
+                    onPublish={() => handlePublishFile(selectedFileId)}
+                  />
+
                 ) : (
                   <Box
                     display="flex"
@@ -451,5 +422,152 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
         </Dialog.Positioner>
       </Portal>
     </Dialog.Root>
+  );
+}
+
+function SelectedFilePane({ fileId, publishingSingleId, onDiscard, onPublish }: {
+  fileId: number;
+  publishingSingleId: number | null;
+  onDiscard: () => void;
+  onPublish: () => void;
+}) {
+  const showJson = useAppSelector(state => state.ui.showJson);
+  const [viewMode, setViewMode] = useState<'preview' | 'diff'>(showJson ? 'diff' : 'preview');
+  const file = useAppSelector(state => selectFile(state, fileId));
+
+  return (
+    <>
+      <HStack
+        px={4}
+        py={2}
+        borderBottom="1px solid"
+        borderColor="border.default"
+        flexShrink={0}
+        justify="space-between"
+      >
+        <HStack gap={2} flex={1} minW={0}>
+          <SelectedFileName fileId={fileId} />
+          {showJson && (
+            <HStack gap={0} bg="bg.muted" borderRadius="sm" p={0.5}>
+              <IconButton
+                aria-label="Preview"
+                size="2xs"
+                variant={viewMode === 'preview' ? 'solid' : 'ghost'}
+                bg={viewMode === 'preview' ? 'accent.teal' : undefined}
+                color={viewMode === 'preview' ? 'white' : 'fg.muted'}
+                onClick={() => setViewMode('preview')}
+              >
+                <LuEye />
+              </IconButton>
+              <IconButton
+                aria-label="Diff"
+                size="2xs"
+                variant={viewMode === 'diff' ? 'solid' : 'ghost'}
+                bg={viewMode === 'diff' ? 'accent.teal' : undefined}
+                color={viewMode === 'diff' ? 'white' : 'fg.muted'}
+                onClick={() => setViewMode('diff')}
+              >
+                <LuCode />
+              </IconButton>
+            </HStack>
+          )}
+        </HStack>
+        <HStack gap={0.5} flexShrink={0}>
+          <IconButton
+            aria-label="Discard changes"
+            size="2xs"
+            variant="ghost"
+            color="accent.danger"
+            onClick={onDiscard}
+          >
+            <LuUndo2 />
+          </IconButton>
+          <IconButton
+            aria-label="Save file"
+            size="2xs"
+            variant="ghost"
+            color="accent.teal"
+            loading={publishingSingleId === fileId}
+            onClick={onPublish}
+          >
+            <LuCheck />
+          </IconButton>
+        </HStack>
+      </HStack>
+
+      {viewMode === 'preview' ? (
+        <Box flex="1" minH="0" display="flex" flexDirection="column" overflowY="auto">
+          <FileView key={fileId} fileId={fileId} mode="preview" hideHeader />
+        </Box>
+      ) : (
+        <Box flex="1" minH="0" overflowY="auto" p={4} fontSize="xs" fontFamily="mono">
+          {file && <DiffView file={file} />}
+        </Box>
+      )}
+    </>
+  );
+}
+
+function DiffView({ file }: { file: FileState }) {
+  const { content, persistableChanges, metadataChanges } = file;
+
+  const changedKeys = Object.keys(persistableChanges ?? {});
+  const hasMetadata = metadataChanges && (metadataChanges.name !== undefined || metadataChanges.path !== undefined);
+
+  if (changedKeys.length === 0 && !hasMetadata) {
+    return <Text color="fg.muted" fontSize="sm">No changes detected</Text>;
+  }
+
+  return (
+    <VStack gap={3} align="stretch">
+      {hasMetadata && (
+        <Box>
+          <Text fontWeight="700" color="fg.subtle" mb={1.5} textTransform="uppercase" letterSpacing="0.05em" fontSize="2xs">
+            Metadata
+          </Text>
+          {metadataChanges?.name !== undefined && (
+            <HStack gap={2} mb={1}>
+              <Text color="fg.muted" minW="60px">name:</Text>
+              <Text color="accent.danger" textDecoration="line-through">{file.name}</Text>
+              <Text color="accent.teal">{metadataChanges.name}</Text>
+            </HStack>
+          )}
+          {metadataChanges?.path !== undefined && (
+            <HStack gap={2}>
+              <Text color="fg.muted" minW="60px">path:</Text>
+              <Text color="accent.danger" textDecoration="line-through">{file.path}</Text>
+              <Text color="accent.teal">{metadataChanges.path}</Text>
+            </HStack>
+          )}
+        </Box>
+      )}
+
+      {changedKeys.map(key => {
+        const original = (content as Record<string, unknown>)?.[key];
+        const changed = (persistableChanges as Record<string, unknown>)?.[key];
+
+        return (
+          <Box key={key}>
+            <Text fontWeight="700" color="fg.subtle" mb={1.5} textTransform="uppercase" letterSpacing="0.05em" fontSize="2xs">
+              {key}
+            </Text>
+            <HStack gap={3} align="start">
+              <Box flex={1} bg="accent.danger/5" borderRadius="sm" p={2} border="1px solid" borderColor="accent.danger/20">
+                <Text fontSize="2xs" color="accent.danger" fontWeight="600" mb={1}>Original</Text>
+                <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: 'var(--chakra-colors-fg-default)', fontSize: '11px' }}>
+                  {JSON.stringify(original ?? null, null, 2)}
+                </pre>
+              </Box>
+              <Box flex={1} bg="accent.teal/5" borderRadius="sm" p={2} border="1px solid" borderColor="accent.teal/20">
+                <Text fontSize="2xs" color="accent.teal" fontWeight="600" mb={1}>Changed</Text>
+                <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: 'var(--chakra-colors-fg-default)', fontSize: '11px' }}>
+                  {JSON.stringify(changed ?? null, null, 2)}
+                </pre>
+              </Box>
+            </HStack>
+          </Box>
+        );
+      })}
+    </VStack>
   );
 }

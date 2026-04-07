@@ -300,11 +300,10 @@ export default function Sidebar() {
         </VStack>
       </VStack>
 
-      {/* Footer */}
-      <Box borderTop="1px solid" borderColor="border.default" flexShrink={0}>
         {/* Collapse button when collapsed */}
         {isCollapsed && (
           <>
+            <Box h="1px" bg="border.muted" mx={3} />
             <Flex justify="center" py={3}>
               <IconButton
                 onClick={handleToggleSidebar}
@@ -315,10 +314,12 @@ export default function Sidebar() {
                 <LuChevronRight />
               </IconButton>
             </Flex>
-            <Box h="1px" bg="border.muted" mx={3} />
           </>
         )}
 
+      {/* Footer */}
+      <Box borderTop="1px solid" borderColor="border.default" flexShrink={0}
+        aria-label="Getting Started">
         {/* Impersonation Selector (Admin + Advanced only, when expanded, after mount to avoid hydration mismatch) */}
         {mounted && !isCollapsed && showAdvanced && effectiveUser?.role && isAdmin(effectiveUser.role) && (
           <Box
@@ -455,8 +456,9 @@ export default function Sidebar() {
         {isCollapsed && (mode === 'org' || mode === 'tutorial') && (
           <Box h="1px" bg="border.muted" mx={3} />
         )}
+      </Box>
 
-        {/* User Menu */}
+      {/* User Menu */}
         <Box flexShrink={0}>
           <Menu.Root positioning={{ placement: isCollapsed ? 'right-end' : 'top-start' }}>
             <Menu.Trigger asChild>
@@ -639,7 +641,6 @@ export default function Sidebar() {
             </Portal>
           </Menu.Root>
         </Box>
-      </Box>
 
     </Box>
   );

@@ -6,7 +6,8 @@
  */
 
 import { Box, HStack, VStack, Text, Spinner, Button, IconButton } from '@chakra-ui/react';
-import { LuRocket, LuWrench, LuSettings, LuChevronDown, LuChevronUp } from 'react-icons/lu';
+import { LuRocket, LuWrench, LuSettings, LuChevronDown, LuChevronUp, LuCode } from 'react-icons/lu';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Table } from '@/components/plotx/Table';
 import { TableV2 } from '@/components/plotx/TableV2';
 import { ChartBuilder } from '@/components/plotx/ChartBuilder';
@@ -14,7 +15,7 @@ import { parseErrorMessage } from '@/lib/utils/error-parser';
 import { VizTypeSelector } from './VizTypeSelector';
 import type { QuestionContent, QueryResult, VizSettings, PivotConfig, ColumnFormatConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types';
 import { useState, useEffect, useRef } from 'react';
-import { useAppDispatch } from '@/store/hooks';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setRightSidebarCollapsed, setSidebarPendingMessage, setActiveSidebarSection } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 
@@ -136,6 +137,7 @@ export function QuestionVisualization({
   onAnnotationsChange,
 }: QuestionVisualizationProps) {
   const dispatch = useAppDispatch();
+  const showJson = useAppSelector(state => state.ui.showJson);
   const { config: appConfig } = useConfigs();
   const agentName = appConfig.branding.agentName;
 
@@ -337,6 +339,22 @@ export function QuestionVisualization({
               </VStack>
             ) : data ? (
               <>
+                {data.finalQuery && showJson && (
+                  <Tooltip content={data.finalQuery} positioning={{ placement: 'bottom-start' }}>
+                    <Box
+                      position="absolute"
+                      top={1}
+                      right={1}
+                      zIndex={5}
+                      color="fg.subtle"
+                      cursor="help"
+                      _hover={{ color: 'accent.teal' }}
+                      transition="color 0.1s"
+                    >
+                      <LuCode size={14} />
+                    </Box>
+                  </Tooltip>
+                )}
                 {currentState?.vizSettings?.type === 'table' && (
                   <Box flex="1" minHeight="0" overflow="hidden" display="flex" width={"100%"} alignItems={"stretch"} flexDirection={"column"}>
                     <TableV2 columns={data.columns} types={data.types} rows={data.rows} sql={currentState?.query} databaseName={currentState?.database_name} />
