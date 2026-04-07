@@ -812,7 +812,7 @@ export default function QuestionViewV2({
             flexDirection="column"
             minHeight="0"
             overflow="hidden"
-            my={!useCompactLayout ? 2 : 0}
+            // my={!useCompactLayout ? 2 : 0}
             mr={!useCompactLayout ? 2 : 0}
           >
             {/* SQL Preview - shows when reference chip is clicked */}

@@ -107,7 +107,7 @@ export default function ParameterRow({
         <Tooltip content="Run with updated values (⌘+Enter)">
           <IconButton
             aria-label="Run query"
-            size="sm"
+            size="xs"
             variant="solid"
             colorPalette="teal"
             px={2}

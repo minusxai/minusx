@@ -6,11 +6,11 @@ import {
   Portal, MenuPositioner, Box, IconButton, VStack, Popover, Spinner,
   Combobox, createListCollection,
 } from '@chakra-ui/react';
-import { LuChevronDown, LuX, LuSettings2, LuTriangleAlert } from 'react-icons/lu';
+import { LuChevronDown, LuSettings2, LuTriangleAlert, LuBan } from 'react-icons/lu';
 import { Tooltip } from '@/components/ui/tooltip';
 import { QuestionParameter, QuestionContent } from '@/lib/types';
 import type { ParameterSource } from '@/lib/types.gen';
-import { getTypeColor, getTypeColorHex, getTypeIcon } from '@/lib/sql/sql-params';
+import { getTypeColor, getTypeIcon } from '@/lib/sql/sql-params';
 import DatePicker from './DatePicker';
 import { useFile, useFilesByCriteria, useQueryResult } from '@/lib/hooks/file-state-hooks';
 import FileSearchSelect from './shared/FileSearchSelect';
@@ -212,9 +212,11 @@ function SourceDropdownWidget({ source, paramType, currentValue, paramName, onCh
 interface SourceConfigPopoverProps {
   parameter: QuestionParameter;
   onParameterChange: (updated: QuestionParameter) => void;
+  onTypeChange?: (type: 'text' | 'number' | 'date') => void;
+  disableTypeChange?: boolean;
 }
 
-function SourceConfigPopover({ parameter, onParameterChange }: SourceConfigPopoverProps) {
+function SourceConfigPopover({ parameter, onParameterChange, onTypeChange, disableTypeChange }: SourceConfigPopoverProps) {
   const [open, setOpen] = useState(false);
   const [columns, setColumns] = useState<{ name: string; type: string }[]>([]);
   const [loadingCols, setLoadingCols] = useState(false);
@@ -310,6 +312,49 @@ function SourceConfigPopover({ parameter, onParameterChange }: SourceConfigPopov
           >
             <Popover.Body p={3} overflow="visible">
               <VStack gap={3} align="stretch">
+                {/* Type selector */}
+                {onTypeChange && !disableTypeChange && (
+                  <Box>
+                    <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
+                      Type
+                    </Text>
+                    <HStack gap={1}>
+                      {([
+                        { value: 'text', label: 'Text' },
+                        { value: 'number', label: 'Number' },
+                        { value: 'date', label: 'Date' },
+                      ] as const).map((opt) => (
+                        <Box
+                          key={opt.value}
+                          as="button"
+                          px={2.5}
+                          py={1}
+                          borderRadius="sm"
+                          border="1px solid"
+                          borderColor={parameter.type === opt.value ? getTypeColor(opt.value) : 'border.muted'}
+                          bg={parameter.type === opt.value ? getTypeColor(opt.value) + '/10' : 'bg.muted'}
+                          color={parameter.type === opt.value ? getTypeColor(opt.value) : 'fg.default'}
+                          fontSize="xs"
+                          fontWeight="600"
+                          fontFamily="mono"
+                          cursor="pointer"
+                          _hover={{
+                            borderColor: getTypeColor(opt.value),
+                            color: getTypeColor(opt.value),
+                          }}
+                          transition="all 0.1s"
+                          onClick={() => onTypeChange(opt.value)}
+                        >
+                          <HStack gap={1}>
+                            {React.createElement(getTypeIcon(opt.value), { size: 14 })}
+                            <span>{opt.label}</span>
+                          </HStack>
+                        </Box>
+                      ))}
+                    </HStack>
+                  </Box>
+                )}
+
                 <Box>
                   <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
                     Source
@@ -489,62 +534,51 @@ export default function ParameterInput({
   };
 
   const isNone = value === null;
-  const hasValue = value !== undefined && value !== '' && value !== null;
 
-  const typeOptions: Array<{ type: 'text' | 'number' | 'date'; label: string }> = [
-    { type: 'text', label: 'Text' },
-    { type: 'number', label: 'Number' },
-    { type: 'date', label: 'Date' },
-  ];
-
-  // Whether to show source config (not for date params, not in dashboard view)
-  const showSourceConfig = !disableSourceConfig && parameter.type !== 'date';
 
   return (
-    <Box
-      position="relative"
-      p={2}
-      pt={4}
+    <HStack
+      gap={0}
       bg="bg.muted"
       borderRadius="md"
-      border="1px solid"
-      borderColor="border.default"
+      h={ROW_H}
+      align="center"
       onMouseEnter={() => onHoverParam?.(paramKey)}
       onMouseLeave={() => onHoverParam?.(null)}
+      overflow="hidden"
     >
-      {/* Parameter name - floating label (top left) */}
-      <Text
-        position="absolute"
-        top={-2}
-        left={2}
+      {/* Param label */}
+      <HStack
+        gap={1}
+        px={2}
+        h="full"
+        bg={getTypeColor(parameter.type)}
+        color="white"
         fontSize="xs"
         fontWeight="600"
-        color="white"
         fontFamily="mono"
-        bg={getTypeColor(parameter.type)}
-        borderRadius={5}
-        px={2}
+        flexShrink={0}
       >
-        :{parameter.name}
-      </Text>
+        {React.createElement(getTypeIcon(parameter.type), { size: 11 })}
+        <Text fontSize="xs" fontFamily="mono" fontWeight="600">:{parameter.name}</Text>
+      </HStack>
 
-      <HStack gap={1.5} align="center">
-
-        {/* None state indicator — replaces the input when param is explicitly None */}
-        {isNone ? (
-          <HStack
-            bg="bg.muted"
-            borderRadius="md"
-            border="1px dashed"
-            borderColor="border.muted"
-            px={2}
-            h={ROW_H}
-            minW="100px"
-          >
-            <Text fontSize="xs" color="fg.subtle" fontStyle="italic">None</Text>
-          </HStack>
-        ) : (
-        /* Input field — dropdown when source is configured, otherwise standard input */
+      {/* Value area */}
+      {isNone ? (
+        <HStack
+          px={2}
+          h="full"
+          gap={1}
+          cursor="pointer"
+          onClick={() => onChange('')}
+          color="accent.danger"
+          _hover={{ bg: 'accent.danger/10' }}
+          transition="all 0.1s"
+        >
+          <LuBan style={{ width: 10, height: 10 }} />
+          <Text fontSize="xs" fontWeight="600" fontFamily="mono">Skipped</Text>
+        </HStack>
+      ) : (
         hasSource && parameter.type !== 'date' ? (
           <SourceDropdownWidget
             key={String(value ?? '')}
@@ -568,123 +602,53 @@ export default function ParameterInput({
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             type={parameter.type === 'number' ? 'number' : 'text'}
-            minW="100px"
-            bg="bg.canvas"
-            borderColor="border.muted"
-            fontFamily={parameter.type === 'number' ? 'mono' : 'inherit'}
-            fontSize="sm"
-            px={3}
-            h={ROW_H}
+            w="100px"
+            bg="transparent"
+            border="none"
+            fontFamily="mono"
+            fontSize="xs"
+            px={2}
+            h="full"
+            borderRadius={0}
             _focus={{
-              borderColor: 'accent.teal',
-              boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)',
+              outline: 'none',
+              boxShadow: 'none',
             }}
             placeholder={parameter.type === 'number' ? '0' : 'value'}
             aria-label={parameter.name}
           />
         )
-        )}
+      )}
 
-        {/* X button — toggles None on/off; always visible (undefined and '' both look empty) */}
-        {(
-          <Tooltip content={isNone ? 'Clear — restore to empty' : 'Set to None (skip this filter)'}>
-            <IconButton
-              aria-label={isNone ? 'Clear None' : 'Set to None'}
-              variant="ghost"
-              onClick={() => onChange(isNone ? '' : null)}
-              color="fg.subtle"
-              h={ROW_H}
-              w={ROW_H}
-              minW={ROW_H}
-              _hover={{ color: isNone ? 'fg' : 'accent.danger', bg: 'bg.emphasized' }}
-            >
-              <LuX style={{ width: 10, height: 10 }} />
-            </IconButton>
-          </Tooltip>
-        )}
+      {/* Actions */}
+      {!isNone && (
+        <Tooltip content="Skip this filter">
+          <Box
+            as="button"
+            px={1.5}
+            h="full"
+            display="flex"
+            alignItems="center"
+            color="fg.subtle"
+            cursor="pointer"
+            _hover={{ color: 'accent.danger', bg: 'accent.danger/10' }}
+            transition="all 0.1s"
+            onClick={() => onChange(null)}
+            aria-label="Skip this filter"
+          >
+            <LuBan style={{ width: 11, height: 11 }} />
+          </Box>
+        </Tooltip>
+      )}
 
-        {/* Source config gear (text/number only, hidden in dashboard view) */}
-        {showSourceConfig && onParameterChange && (
-          <SourceConfigPopover
-            parameter={parameter}
-            onParameterChange={onParameterChange}
-          />
-        )}
-
-        {/* Type selector - dropdown or read-only indicator (hidden when source is configured) */}
-        {!hasSource && (
-          disableTypeChange ? (
-            <HStack
-              gap={1}
-              px={2}
-              h={ROW_H}
-              bg="bg.canvas"
-              borderRadius="sm"
-              border="1px solid"
-              borderColor="border.muted"
-              fontSize="xs"
-              fontWeight="600"
-              style={{ color: getTypeColorHex(parameter.type) }}
-              align="center"
-            >
-              {React.createElement(getTypeIcon(parameter.type), { size: 16 })}
-            </HStack>
-          ) : (
-            <Tooltip content="Change parameter type">
-              <MenuRoot positioning={{ placement: 'bottom' }}>
-                <MenuTrigger asChild>
-                  <HStack
-                    as="button"
-                    gap={1}
-                    px={2}
-                    h={ROW_H}
-                    bg="bg.canvas"
-                    borderRadius="sm"
-                    border="1px solid"
-                    borderColor="border.muted"
-                    cursor="pointer"
-                    fontSize="xs"
-                    fontWeight="600"
-                    style={{ color: getTypeColorHex(parameter.type) }}
-                    _hover={{
-                      bg: 'bg.surface',
-                      borderColor: 'accent.teal',
-                    }}
-                    align="center"
-                  >
-                    {React.createElement(getTypeIcon(parameter.type), { size: 16 })}
-                    <LuChevronDown size={12} />
-                  </HStack>
-                </MenuTrigger>
-                <Portal>
-                  <MenuPositioner>
-                    <MenuContent minW="120px" p={1}>
-                      {typeOptions.map((option) => (
-                        <MenuItem
-                          key={option.type}
-                          value={option.type}
-                          style={{ color: getTypeColorHex(option.type) }}
-                          onClick={() => onTypeChange(option.type)}
-                          px={3}
-                          py={2}
-                          borderRadius="sm"
-                        >
-                          <HStack gap={2}>
-                            {React.createElement(getTypeIcon(option.type), { size: 16 })}
-                            <Text fontSize="sm" fontWeight="600" fontFamily="mono">
-                              {option.label}
-                            </Text>
-                          </HStack>
-                        </MenuItem>
-                      ))}
-                    </MenuContent>
-                  </MenuPositioner>
-                </Portal>
-              </MenuRoot>
-            </Tooltip>
-          )
-        )}
-      </HStack>
-    </Box>
+      {!disableSourceConfig && onParameterChange && (
+        <SourceConfigPopover
+          parameter={parameter}
+          onParameterChange={onParameterChange}
+          onTypeChange={disableTypeChange ? undefined : onTypeChange}
+          disableTypeChange={disableTypeChange}
+        />
+      )}
+    </HStack>
   );
 }
