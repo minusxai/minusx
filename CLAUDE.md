@@ -428,6 +428,17 @@ The `/hello-world` page guides new users through setup. All onboarding state log
 - **Dashboard merging**: Parameters with same name AND type merge at dashboard level
 - **Type locking**: Types can change in question view, but locked in dashboard view
 
+**Parameter value states** — a parameter can be in one of three states:
+| State | JS value | SQL behavior |
+|---|---|---|
+| Has a value | `"foo"` / `100` | Filter condition included, `:param` substituted with the value |
+| Empty | `""` | Treated as None — filter condition removed via IR, remaining `:param` refs replaced with `NULL` |
+| **None** (explicit) | `null` | Same as empty — filter condition removed via IR, remaining `:param` refs replaced with `NULL` |
+
+The UI exposes a "Set to None / Clear None" toggle on each parameter input. None is `null` in JS. The `applyNoneParams` function in `app/api/query/route.ts` handles both `null` and `""` identically: IR round-trip strips the filter condition; any remaining `:param` refs become `NULL`.
+
+**Dashboard fallback rule**: `effectiveSubmittedValues` uses the question's saved `parameterValues` default only when the key is **absent** from the dashboard's submitted params. An explicit `null` or `""` is never overridden by the question default — key-existence checks (`in`) are used, not `??`.
+
 ### Charting / Visualization Library
 
 **Viz Types** (defined in `lib/types.ts` → `VizSettings`):
