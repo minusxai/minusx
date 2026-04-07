@@ -46,6 +46,7 @@ import { addReferenceToQuestion, removeReferenceFromQuestion, setFile } from '@/
 import { setSqlEditorCollapsed, selectSqlEditorCollapsed, setQuestionCollapsedPanel, selectQuestionCollapsedPanel, selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { QueryBuilderRoot, QueryModeSelector } from '../query-builder';
 import { FilesAPI } from '@/lib/data/files';
+import { CompletionsAPI } from '@/lib/data/completions/completions';
 
 /**
  * Props for QuestionViewV2
@@ -218,6 +219,29 @@ export default function QuestionViewV2({
       resizeObserver.disconnect();
     };
   }, []);
+
+  // Proactive GUI compatibility check: run once when the query and dialect are known.
+  // Sets canUseGUI=false (with tooltip reason) if sqlToIR fails, so the GUI button is
+  // already dimmed when the user opens a question — no surprise on mode switch.
+  useEffect(() => {
+    let cancelled = false;
+    const check = !content.query?.trim()
+      ? Promise.resolve<void>(undefined)
+      : CompletionsAPI.sqlToIR({ sql: content.query, dialect }).then(() => undefined);
+
+    check.then(() => {
+      if (cancelled) return;
+      setCanUseGUI(true);
+      setGuiError(null);
+    }).catch((err: unknown) => {
+      if (cancelled) return;
+      setCanUseGUI(false);
+      const msg = err instanceof Error ? err.message : String(err);
+      setGuiError(msg || 'This query cannot be edited in GUI mode');
+    });
+
+    return () => { cancelled = true; };
+  }, [content.query, dialect]);
 
   // Use compact layout when container is narrow (< 700px) - stacked vertical layout
   const useCompactLayout = (containerWidth > 0 && containerWidth < 700) || !fullMode;
@@ -584,7 +608,8 @@ export default function QuestionViewV2({
                   <QueryModeSelector
                     mode={queryMode}
                     onModeChange={setQueryMode}
-                    canUseGUI={true}
+                    canUseGUI={canUseGUI}
+                    guiError={guiError ?? undefined}
                   />
                 )}
               </HStack>

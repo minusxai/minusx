@@ -1123,7 +1123,7 @@ HAVING AVG(avg_order_value) > '75'`;
         ORDER BY 1
       `;
 
-      const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
+      const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'bigquery' });
       expect(parseResult.success).toBe(true);
       expect(parseResult.ir).toBeDefined();
 
@@ -1136,7 +1136,7 @@ HAVING AVG(avg_order_value) > '75'`;
       expect(ir.group_by).toBeDefined();
       expect(ir.order_by).toBeDefined();
 
-      const generateResult = await CompletionsAPI.irToSql({ ir, dialect: 'postgres' });
+      const generateResult = await CompletionsAPI.irToSql({ ir, dialect: 'bigquery' });
       expect(generateResult.success).toBe(true);
       expect(generateResult.sql).toContain('DATE_TRUNC');
       expect(generateResult.sql).toContain('WHERE');
@@ -1156,7 +1156,7 @@ HAVING AVG(avg_order_value) > '75'`;
         ORDER BY 1
       `;
 
-      const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
+      const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'bigquery' });
       expect(parseResult.success).toBe(true);
 
       const ir = parseResult.ir! as QueryIR;
@@ -1166,7 +1166,7 @@ HAVING AVG(avg_order_value) > '75'`;
       expect(ir.group_by).toBeDefined();
       expect(ir.order_by).toBeDefined();
 
-      const generateResult = await CompletionsAPI.irToSql({ ir, dialect: 'postgres' });
+      const generateResult = await CompletionsAPI.irToSql({ ir, dialect: 'bigquery' });
       expect(generateResult.success).toBe(true);
       expect(generateResult.sql).toContain('last_message_role');
       expect(generateResult.sql).toContain('DATE_TRUNC');

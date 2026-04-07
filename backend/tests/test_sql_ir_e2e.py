@@ -422,7 +422,7 @@ class TestDateTruncFilters:
         ORDER BY 1
         """
 
-        ir = parse_sql_to_ir(sql, 'duckdb')
+        ir = parse_sql_to_ir(sql, 'bigquery')
 
         # SELECT: DATE_TRUNC expression + COUNT(DISTINCT)
         assert len(ir.select) == 2
@@ -476,7 +476,7 @@ class TestDateTruncFilters:
         ORDER BY 1
         """
 
-        ir = parse_sql_to_ir(sql, 'duckdb')
+        ir = parse_sql_to_ir(sql, 'bigquery')
 
         # WHERE: both conditions present
         assert ir.where is not None

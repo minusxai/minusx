@@ -18,7 +18,7 @@ from .ir_types import (
     CTE,
 )
 from .validator import UnsupportedSQLError
-from .enhanced_validator import validate_sql_for_gui, compare_sql_ast
+from .enhanced_validator import validate_sql_for_gui, validate_round_trip
 from .generator import ir_to_sql, compound_ir_to_sql
 
 
@@ -124,11 +124,11 @@ def _parse_compound_query(ast: exp.Union, original_sql: str, dialect: str, _skip
     if not _skip_validation:
         try:
             regenerated_sql = compound_ir_to_sql(compound_ir, dialect)
-            comparison = compare_sql_ast(original_sql, regenerated_sql, dialect)
-            if not comparison.equivalent:
+            result = validate_round_trip(original_sql, regenerated_sql, dialect)
+            if not result.supported:
                 raise UnsupportedSQLError(
                     "Round-trip validation failed: regenerated SQL differs from original",
-                    comparison.differences or ["SQL statements differ"],
+                    result.unsupportedFeatures or ["SQL statements differ"],
                     hint="This query structure is not fully supported in GUI mode. Use SQL mode."
                 )
         except UnsupportedSQLError:
@@ -224,11 +224,11 @@ def _parse_simple_query(ast, original_sql: str, dialect: str, _skip_validation: 
     if not _skip_validation:
         try:
             regenerated_sql = ir_to_sql(ir, dialect)
-            comparison = compare_sql_ast(original_sql, regenerated_sql, dialect)
-            if not comparison.equivalent:
+            result = validate_round_trip(original_sql, regenerated_sql, dialect)
+            if not result.supported:
                 raise UnsupportedSQLError(
                     "Round-trip validation failed: regenerated SQL differs from original",
-                    comparison.differences or ["SQL statements differ"],
+                    result.unsupportedFeatures or ["SQL statements differ"],
                     hint="This query structure is not fully supported in GUI mode. Use SQL mode."
                 )
         except UnsupportedSQLError:
