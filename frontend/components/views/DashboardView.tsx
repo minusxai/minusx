@@ -236,6 +236,11 @@ export default function DashboardView({
     return mergedParameters;
   }, [mergedParameters]);
 
+  // Get database from the first question that has one (for inline SQL param sources)
+  const dashboardDatabase = useMemo(() => {
+    return questionContents.find(c => c?.database_name)?.database_name;
+  }, [questionContents]);
+
   // Effective submitted values: only these flow to query execution.
   // lastExecutedParams gates stale detection; paramValues is the persisted fallback
   // (used on initial load and after publish clears ephemeral state).
@@ -456,6 +461,7 @@ export default function DashboardView({
                 }}
                 disableTypeChange={true}
                 onHoverParam={setHoveredParamKey}
+                database={dashboardDatabase}
               />
             </Box>
           )}
