@@ -197,6 +197,17 @@ def generate_filter_group(group: FilterGroup) -> str:
 
 def generate_filter_condition(cond: FilterCondition) -> str:
     """Generate a single filter condition."""
+    # Raw column expression (e.g. SPLIT_PART(col, '-', 1))
+    if cond.raw_column:
+        column = cond.raw_column
+        if cond.operator in ("IS NULL", "IS NOT NULL"):
+            return f"{column} {cond.operator}"
+        if cond.param_name:
+            return f"{column} {cond.operator} :{cond.param_name}"
+        if cond.raw_value is not None:
+            return f"{column} {cond.operator} {cond.raw_value}"
+        return f"{column} {cond.operator} {format_value(cond.value)}"
+
     # Build column reference
     if cond.aggregate:
         # Aggregate in HAVING

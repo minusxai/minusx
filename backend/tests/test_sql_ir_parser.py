@@ -349,3 +349,54 @@ class TestEdgeCases:
         ir = parse_sql_to_ir("SELECT * FROM public.users")
         assert ir.from_.schema == 'public'
         assert ir.from_.table == 'users'
+
+
+class TestFunctionCallsInWhere:
+    """Test WHERE conditions involving function calls with parameters."""
+
+    def test_split_part_with_param(self):
+        """Test SPLIT_PART(...) = :param in WHERE — the param should be detected."""
+        sql = """
+        SELECT release_date, ROUND(AVG(elo), 0) AS avg_elo, MAX(elo) AS max_elo
+        FROM chatbot_arena_leaderboard
+        WHERE release_date IS NOT NULL
+          AND SPLIT_PART(release_date, '-', 1) = :year
+        GROUP BY release_date
+        ORDER BY release_date ASC
+        """
+        ir = parse_sql_to_ir(sql)
+        assert ir.where is not None
+        # Should have 2 conditions: IS NOT NULL and the SPLIT_PART = :year
+        assert len(ir.where.conditions) == 2
+        # Find the param condition
+        param_conds = [c for c in ir.where.conditions if hasattr(c, 'param_name') and c.param_name == 'year']
+        assert len(param_conds) == 1, f"Expected param_name='year' in conditions, got: {ir.where.conditions}"
+
+    def test_comparison_with_param_on_expression(self):
+        """Test column > :param style condition."""
+        sql = """
+        SELECT * FROM scores
+        WHERE elo > :min_elo
+        """
+        ir = parse_sql_to_ir(sql)
+        assert ir.where is not None
+        cond = ir.where.conditions[0]
+        assert cond.param_name == 'min_elo'
+        assert cond.operator == '>'
+
+    def test_multiple_params_with_function_calls(self):
+        """Test query with multiple params, one involving a function call."""
+        sql = """
+        SELECT release_date, ROUND(AVG(elo), 0) AS avg_elo, MAX(elo) AS max_elo
+        FROM chatbot_arena_leaderboard
+        WHERE release_date IS NOT NULL
+          AND SPLIT_PART(release_date, '-', 1) = :year
+          AND elo > :min_elo
+        GROUP BY release_date
+        ORDER BY release_date ASC
+        """
+        ir = parse_sql_to_ir(sql)
+        assert ir.where is not None
+        param_names = [c.param_name for c in ir.where.conditions if hasattr(c, 'param_name') and c.param_name]
+        assert 'year' in param_names, f"'year' not found in param_names: {param_names}"
+        assert 'min_elo' in param_names, f"'min_elo' not found in param_names: {param_names}"
