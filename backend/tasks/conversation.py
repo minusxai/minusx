@@ -1,7 +1,7 @@
 """Conversation log utilities for managing task results and extracting tool calls."""
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, cast
 from .orchestrator import ConversationLog, TaskResult, Task
 from .types import (
     ChatCompletionToolMessageParamMX,
@@ -99,6 +99,57 @@ def pending_leaf_task_to_tool_call(
 
     return tool_call
 
+def _cascade_interrupt_to_parents(log: ConversationLog) -> ConversationLog:
+    """
+    After leaf tasks are marked as <Interrupted />, cascade to non-root parent tasks
+    whose ALL children are now completed/interrupted.
+
+    This handles the FrontendToolException pattern where a parent task (e.g., Clarify)
+    has result=None while its children (e.g., ClarifyFrontend) are interrupted.
+    Without this, task_batch_to_thread produces an assistant message with a tool_call
+    that has no corresponding tool_result — an LLM API violation.
+    """
+    latest_root_index, _ = get_latest_root(log)
+    if latest_root_index is None:
+        return log
+
+    changed = True
+    while changed:
+        changed = False
+
+        # Rebuild maps from current log state on each iteration (log grows each pass)
+        task_map: Dict[str, Task] = {}
+        result_ids: Set[str] = set()
+        for entry in log[latest_root_index:]:
+            if entry.type_ == "task":
+                task_map[entry.unique_id] = entry
+            elif entry.type_ == "task_result":
+                result_ids.add(entry.task_unique_id)
+
+        for task_id, task in task_map.items():
+            if task_id in result_ids:
+                continue  # Already has a result
+            if task.parent_unique_id is None:
+                continue  # Skip root agents — they don't need tool_result entries
+
+            # Find all children of this task
+            children = [t for t in task_map.values() if t.parent_unique_id == task_id]
+            if not children:
+                continue  # Leaf task — should already be handled by the leaf-interrupt loop
+
+            # Cascade only when every child has a result
+            if all(child.unique_id in result_ids for child in children):
+                log.append(TaskResult(
+                    task_unique_id=task_id,
+                    result='<Interrupted />',
+                    created_at=datetime.now(timezone.utc).isoformat()
+                ))
+                result_ids.add(task_id)
+                changed = True
+
+    return log
+
+
 def update_log_with_completed_tool_calls(
     log: ConversationLog,
     completed_tool_calls: List[ChatCompletionToolMessageParamMX],
@@ -140,6 +191,13 @@ def update_log_with_completed_tool_calls(
         else:
             # Use helper to convert Task to ToolCall (without children)
             remaining_pending_tool_calls.append(pending_leaf_task_to_tool_call(task))
+
+    # After marking leaf tasks, cascade <Interrupted /> up to non-root parents
+    # whose all children are now complete. This is necessary for tools that use
+    # FrontendToolException (e.g., Clarify → ClarifyFrontend): without cascading,
+    # Clarify.result stays None and task_batch_to_thread emits an orphaned tool_call.
+    if interrupt_pending:
+        log = _cascade_interrupt_to_parents(log)
 
     return log, remaining_pending_tool_calls
 
