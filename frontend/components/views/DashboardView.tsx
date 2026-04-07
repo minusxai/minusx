@@ -239,11 +239,18 @@ export default function DashboardView({
   // Effective submitted values: only these flow to query execution.
   // lastExecutedParams gates stale detection; paramValues is the persisted fallback
   // (used on initial load and after publish clears ephemeral state).
-  // Falls back to the first non-empty value from the underlying questions' saved parameterValues.
+  // Falls back to the first non-empty value from the underlying questions' saved parameterValues,
+  // but ONLY when the key is absent — explicit null (None) is never overridden by question defaults.
   const effectiveSubmittedValues = useMemo(() => {
     const values: Record<string, any> = {};
     for (const p of mergedParameters) {
-      values[p.name] = lastExecutedParams[p.name] ?? paramValues[p.name] ?? questionParamDefaults.get(p.name) ?? '';
+      if (p.name in lastExecutedParams) {
+        values[p.name] = lastExecutedParams[p.name];
+      } else if (p.name in paramValues) {
+        values[p.name] = paramValues[p.name];
+      } else {
+        values[p.name] = questionParamDefaults.get(p.name) ?? '';
+      }
     }
     return values;
   }, [mergedParameters, lastExecutedParams, paramValues, questionParamDefaults]);
