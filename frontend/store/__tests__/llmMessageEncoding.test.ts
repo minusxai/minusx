@@ -67,7 +67,7 @@ const TUTORIAL_DASHBOARD_ID = 12; // /tutorial/user-engagement-dashboard
 
 const FIXTURE_QUESTION_CONTENT = {
   query: 'SELECT * FROM sales',
-  database_name: 'default_db',
+  connection_name: 'default_db',
   vizSettings: { type: 'table' }
 };
 

@@ -102,7 +102,7 @@ function createMockFile(id: number, type: FileType = 'question'): DbFile {
   const getDefaultContent = (fileType: FileType): any => {
     switch (fileType) {
       case 'question':
-        return { query: 'SELECT 1', database_name: 'test', parameters: [], vizSettings: { type: 'table' } };
+        return { query: 'SELECT 1', connection_name: 'test', parameters: [], vizSettings: { type: 'table' } };
       case 'dashboard':
         return { assets: [], layout: { columns: 12, items: [] } };
       case 'folder':
@@ -634,7 +634,7 @@ describe('readFiles - File State Manager', () => {
 
       await editFile({
         fileId: 1,
-        changes: { content: { query: 'SELECT 2', database_name: 'new_db' } }
+        changes: { content: { query: 'SELECT 2', connection_name: 'new_db' } }
       });
 
       const state = mockStore.getState() as RootState;
@@ -914,7 +914,7 @@ describe('readFiles - File State Manager', () => {
     it('should create virtual file with generated ID', async () => {
       const mockTemplate = {
         fileName: 'Untitled Question',
-        content: { query: 'SELECT 1', vizSettings: {}, database_name: 'test' }
+        content: { query: 'SELECT 1', vizSettings: {}, connection_name: 'test' }
       };
 
       const mockGetTemplate = jest.fn().mockResolvedValue(mockTemplate);
@@ -942,7 +942,7 @@ describe('readFiles - File State Manager', () => {
     it('should pre-populate question with database and query', async () => {
       const mockTemplate = {
         fileName: 'New Query',
-        content: { query: 'SELECT * FROM users', vizSettings: {}, database_name: 'my_db' }
+        content: { query: 'SELECT * FROM users', vizSettings: {}, connection_name: 'my_db' }
       };
 
       const mockGetTemplate = jest.fn().mockResolvedValue(mockTemplate);
@@ -1185,7 +1185,7 @@ describe('readFiles - File State Manager', () => {
         method: 'POST',
         body: JSON.stringify({
           query: 'SELECT * FROM users',
-          database_name: 'test_db',
+          connection_name: 'test_db',
           parameters: {},
           references: []
         })

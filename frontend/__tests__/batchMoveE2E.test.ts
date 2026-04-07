@@ -49,7 +49,7 @@ function makeQuestion(description = 'test'): QuestionContent {
   return {
     description,
     query: 'SELECT 1',
-    database_name: 'test_db',
+    connection_name: 'test_db',
     parameters: [],
     vizSettings: { type: 'table' },
   };

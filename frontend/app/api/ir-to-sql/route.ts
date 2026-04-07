@@ -10,12 +10,12 @@ import { handleApiError } from '@/lib/api/api-responses';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { ir } = body;
+    const { ir, dialect } = body;
 
     // Forward to Python backend
     const response = await pythonBackendFetch('/api/ir-to-sql', {
       method: 'POST',
-      body: JSON.stringify({ ir }),
+      body: JSON.stringify({ ir, dialect }),
     });
 
     const data = await response.json();

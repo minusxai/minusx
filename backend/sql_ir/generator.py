@@ -9,7 +9,7 @@ from typing import Union
 from .ir_types import QueryIR, CompoundQueryIR, SelectColumn, FilterGroup, FilterCondition
 
 
-def ir_to_sql(ir: QueryIR) -> str:
+def ir_to_sql(ir: QueryIR, dialect: str) -> str:
     """
     Convert QueryIR to SQL string.
 
@@ -290,7 +290,7 @@ def generate_order_by_expression(col) -> str:
     return col.column
 
 
-def compound_ir_to_sql(ir: CompoundQueryIR) -> str:
+def compound_ir_to_sql(ir: CompoundQueryIR, dialect: str) -> str:
     """Convert CompoundQueryIR (UNION/UNION ALL) to SQL string."""
     if len(ir.queries) < 2:
         raise ValueError("Compound query must have at least 2 queries")
@@ -302,7 +302,7 @@ def compound_ir_to_sql(ir: CompoundQueryIR) -> str:
     for q in ir.queries:
         # Temporarily clear order_by and limit for individual queries
         q_copy = q.model_copy(update={'order_by': None, 'limit': None})
-        query_sqls.append(ir_to_sql(q_copy))
+        query_sqls.append(ir_to_sql(q_copy, dialect))
 
     # Interleave queries with operators
     parts = [query_sqls[0]]
@@ -327,15 +327,15 @@ def compound_ir_to_sql(ir: CompoundQueryIR) -> str:
     return result
 
 
-def any_ir_to_sql(ir: Union[QueryIR, CompoundQueryIR, dict]) -> str:
+def any_ir_to_sql(ir: Union[QueryIR, CompoundQueryIR, dict], dialect: str) -> str:
     """Dispatch to the correct generator based on IR type."""
     if isinstance(ir, dict):
         if ir.get('type') == 'compound':
-            return compound_ir_to_sql(CompoundQueryIR.model_validate(ir))
-        return ir_to_sql(QueryIR.model_validate(ir))
+            return compound_ir_to_sql(CompoundQueryIR.model_validate(ir), dialect)
+        return ir_to_sql(QueryIR.model_validate(ir), dialect)
     if isinstance(ir, CompoundQueryIR):
-        return compound_ir_to_sql(ir)
-    return ir_to_sql(ir)
+        return compound_ir_to_sql(ir, dialect)
+    return ir_to_sql(ir, dialect)
 
 
 def format_value(value) -> str:

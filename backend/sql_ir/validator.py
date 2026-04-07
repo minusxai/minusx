@@ -14,14 +14,14 @@ class UnsupportedSQLError(Exception):
         self.hint = hint
 
 
-def validate_sql_features(sql: str) -> None:
+def validate_sql_features(sql: str, dialect: str) -> None:
     """
     Validate that SQL only uses features supported by the GUI builder.
 
     Raises UnsupportedSQLError if unsupported features are detected.
     """
     try:
-        ast = sqlglot.parse_one(sql, read="postgres")
+        ast = sqlglot.parse_one(sql, read=dialect)
     except Exception as e:
         raise UnsupportedSQLError(f"Failed to parse SQL: {str(e)}", ["PARSE_ERROR"])
 

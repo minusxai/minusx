@@ -58,7 +58,7 @@ describe('Completions SQL IR - E2E Tests', () => {
         LIMIT 50
       `;
 
-      const result = await CompletionsAPI.sqlToIR({ sql: complexSQL });
+      const result = await CompletionsAPI.sqlToIR({ sql: complexSQL, dialect: 'postgres' });
 
       expect(result.success).toBe(true);
       expect(result.ir).toBeDefined();
@@ -136,7 +136,7 @@ describe('Completions SQL IR - E2E Tests', () => {
     it('should parse query with COUNT DISTINCT', async () => {
       const sql = 'SELECT category, COUNT(DISTINCT user_id) AS unique_users FROM orders GROUP BY category';
 
-      const result = await CompletionsAPI.sqlToIR({ sql });
+      const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
 
       expect(result.success).toBe(true);
       expect((result.ir! as QueryIR).select[1]).toMatchObject({
@@ -150,7 +150,7 @@ describe('Completions SQL IR - E2E Tests', () => {
     it('should parse query with parameters', async () => {
       const sql = 'SELECT * FROM products WHERE price >= :min_price AND price <= :max_price';
 
-      const result = await CompletionsAPI.sqlToIR({ sql });
+      const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
 
       expect(result.success).toBe(true);
       expect((result.ir! as QueryIR).where).toBeDefined();
@@ -164,7 +164,7 @@ describe('Completions SQL IR - E2E Tests', () => {
     it('should parse query with IS NULL and IS NOT NULL', async () => {
       const sql = 'SELECT * FROM users WHERE deleted_at IS NULL AND email IS NOT NULL';
 
-      const result = await CompletionsAPI.sqlToIR({ sql });
+      const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
 
       expect(result.success).toBe(true);
       expect((result.ir! as QueryIR).where).toBeDefined();
@@ -179,7 +179,7 @@ describe('Completions SQL IR - E2E Tests', () => {
     it('should reject query with subquery', async () => {
       const sql = 'SELECT * FROM users WHERE id IN (SELECT user_id FROM orders)';
 
-      const result = await CompletionsAPI.sqlToIR({ sql });
+      const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
 
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
@@ -195,7 +195,7 @@ describe('Completions SQL IR - E2E Tests', () => {
         SELECT * FROM active_users
       `;
 
-      const result = await CompletionsAPI.sqlToIR({ sql });
+      const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
 
       expect(result.success).toBe(true);
       expect((result.ir as QueryIR | undefined)?.ctes).toBeDefined();
@@ -205,7 +205,7 @@ describe('Completions SQL IR - E2E Tests', () => {
     it('should parse query with UNION as compound IR', async () => {
       const sql = 'SELECT * FROM users UNION SELECT * FROM admins';
 
-      const result = await CompletionsAPI.sqlToIR({ sql });
+      const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
 
       expect(result.success).toBe(true);
       expect(result.ir?.type).toBe('compound');
@@ -214,7 +214,7 @@ describe('Completions SQL IR - E2E Tests', () => {
     it('should parse query with CASE expression as raw passthrough', async () => {
       const sql = "SELECT CASE WHEN age > 18 THEN 'adult' ELSE 'minor' END FROM users";
 
-      const result = await CompletionsAPI.sqlToIR({ sql });
+      const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
 
       expect(result.success).toBe(true);
       expect((result.ir as QueryIR | undefined)?.select.some((c: { type: string }) => c.type === 'raw')).toBe(true);
@@ -223,7 +223,7 @@ describe('Completions SQL IR - E2E Tests', () => {
     it('should reject query with window function', async () => {
       const sql = 'SELECT name, ROW_NUMBER() OVER (ORDER BY created_at) FROM users';
 
-      const result = await CompletionsAPI.sqlToIR({ sql });
+      const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
 
       expect(result.success).toBe(false);
       expect(result.unsupportedFeatures).toContain('Window functions');
@@ -232,7 +232,7 @@ describe('Completions SQL IR - E2E Tests', () => {
     it('should reject invalid SQL syntax', async () => {
       const sql = 'SELECT INVALID SYNTAX FROM';
 
-      const result = await CompletionsAPI.sqlToIR({ sql });
+      const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
 
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
@@ -282,7 +282,7 @@ describe('Completions SQL IR - E2E Tests', () => {
         limit: 10
       };
 
-      const result = await CompletionsAPI.irToSql({ ir });
+      const result = await CompletionsAPI.irToSql({ ir, dialect: 'postgres' });
 
       expect(result.success).toBe(true);
       expect(result.sql).toBeDefined();
@@ -314,7 +314,7 @@ describe('Completions SQL IR - E2E Tests', () => {
         from: { table: 'orders' }
       };
 
-      const result = await CompletionsAPI.irToSql({ ir });
+      const result = await CompletionsAPI.irToSql({ ir, dialect: 'postgres' });
 
       expect(result.success).toBe(true);
       expect(result.sql).toContain('COUNT(DISTINCT user_id)');
@@ -334,7 +334,7 @@ describe('Completions SQL IR - E2E Tests', () => {
         }
       };
 
-      const result = await CompletionsAPI.irToSql({ ir });
+      const result = await CompletionsAPI.irToSql({ ir, dialect: 'postgres' });
 
       expect(result.success).toBe(true);
       expect(result.sql).toContain(':min_price');
@@ -355,7 +355,7 @@ describe('Completions SQL IR - E2E Tests', () => {
         }
       };
 
-      const result = await CompletionsAPI.irToSql({ ir });
+      const result = await CompletionsAPI.irToSql({ ir, dialect: 'postgres' });
 
       expect(result.success).toBe(true);
       expect(result.sql).toContain('deleted_at IS NULL');
@@ -375,7 +375,7 @@ describe('Completions SQL IR - E2E Tests', () => {
         }
       };
 
-      const result = await CompletionsAPI.irToSql({ ir });
+      const result = await CompletionsAPI.irToSql({ ir, dialect: 'postgres' });
 
       expect(result.success).toBe(true);
       expect(result.sql).toContain("IN ('active', 'pending')");
@@ -395,7 +395,7 @@ describe('Completions SQL IR - E2E Tests', () => {
         ]
       };
 
-      const result = await CompletionsAPI.irToSql({ ir });
+      const result = await CompletionsAPI.irToSql({ ir, dialect: 'postgres' });
 
       expect(result.success).toBe(true);
       expect(result.sql).toContain('LEFT JOIN');
@@ -408,7 +408,7 @@ describe('Completions SQL IR - E2E Tests', () => {
         from: { table: 'users', schema: 'public' }
       };
 
-      const result = await CompletionsAPI.irToSql({ ir });
+      const result = await CompletionsAPI.irToSql({ ir, dialect: 'postgres' });
 
       expect(result.success).toBe(true);
       expect(result.sql).toContain('public.users');
@@ -423,7 +423,7 @@ describe('Completions SQL IR - E2E Tests', () => {
         // Missing 'from' field
       } as any;
 
-      const result = await CompletionsAPI.irToSql({ ir: invalidIR });
+      const result = await CompletionsAPI.irToSql({ ir: invalidIR, dialect: 'postgres' });
 
       // Should still attempt to generate, but may produce invalid SQL
       expect(result.success).toBe(false);
@@ -443,7 +443,7 @@ describe('Completions SQL IR - E2E Tests', () => {
         }
       };
 
-      const result = await CompletionsAPI.irToSql({ ir });
+      const result = await CompletionsAPI.irToSql({ ir, dialect: 'postgres' });
 
       // Generator should still work, but SQL may be invalid
       expect(result.success).toBe(true); // Generator doesn't validate, just converts
@@ -457,7 +457,7 @@ describe('Completions SQL IR - E2E Tests', () => {
         from: { table: 'users' }
       };
 
-      const result = await CompletionsAPI.irToSql({ ir });
+      const result = await CompletionsAPI.irToSql({ ir, dialect: 'postgres' });
 
       expect(result.success).toBe(true);
       // Generated SQL may have newlines for formatting
@@ -479,11 +479,11 @@ describe('Completions SQL IR - E2E Tests', () => {
       `;
 
       // Parse to IR
-      const parseResult = await CompletionsAPI.sqlToIR({ sql: originalSQL });
+      const parseResult = await CompletionsAPI.sqlToIR({ sql: originalSQL, dialect: 'postgres' });
       expect(parseResult.success).toBe(true);
 
       // Generate SQL from IR
-      const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir! });
+      const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir!, dialect: 'postgres' });
       expect(generateResult.success).toBe(true);
 
       const regeneratedSQL = generateResult.sql!;
@@ -509,7 +509,7 @@ describe('Completions SQL IR - E2E Tests', () => {
       it('should preserve SELECT DISTINCT in IR', async () => {
         const sql = 'SELECT DISTINCT status FROM orders';
 
-        const result = await CompletionsAPI.sqlToIR({ sql });
+        const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
 
         expect(result.success).toBe(true);
         expect(result.ir).toBeDefined();
@@ -524,7 +524,7 @@ describe('Completions SQL IR - E2E Tests', () => {
           from: { table: 'orders' }
         };
 
-        const result = await CompletionsAPI.irToSql({ ir });
+        const result = await CompletionsAPI.irToSql({ ir, dialect: 'postgres' });
 
         expect(result.success).toBe(true);
         expect(result.sql).toContain('SELECT DISTINCT');
@@ -533,10 +533,10 @@ describe('Completions SQL IR - E2E Tests', () => {
       it('should round-trip SELECT DISTINCT without loss', async () => {
         const originalSQL = 'SELECT DISTINCT category FROM products';
 
-        const parseResult = await CompletionsAPI.sqlToIR({ sql: originalSQL });
+        const parseResult = await CompletionsAPI.sqlToIR({ sql: originalSQL, dialect: 'postgres' });
         expect(parseResult.success).toBe(true);
 
-        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir! });
+        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir!, dialect: 'postgres' });
         expect(generateResult.success).toBe(true);
 
         const regeneratedSQL = generateResult.sql!;
@@ -549,7 +549,7 @@ describe('Completions SQL IR - E2E Tests', () => {
       it('should preserve COUNT(*) in IR', async () => {
         const sql = 'SELECT COUNT(*) FROM users';
 
-        const result = await CompletionsAPI.sqlToIR({ sql });
+        const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
 
         expect(result.success).toBe(true);
         expect(result.ir).toBeDefined();
@@ -561,7 +561,7 @@ describe('Completions SQL IR - E2E Tests', () => {
       it('should preserve COUNT(column) in IR', async () => {
         const sql = 'SELECT COUNT(id) FROM users';
 
-        const result = await CompletionsAPI.sqlToIR({ sql });
+        const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
 
         expect(result.success).toBe(true);
         expect((result.ir! as QueryIR).select[0].type).toBe('aggregate');
@@ -582,7 +582,7 @@ describe('Completions SQL IR - E2E Tests', () => {
           from: { table: 'users' }
         };
 
-        const result = await CompletionsAPI.irToSql({ ir });
+        const result = await CompletionsAPI.irToSql({ ir, dialect: 'postgres' });
 
         expect(result.success).toBe(true);
         expect(result.sql).toContain('COUNT(*)');
@@ -591,15 +591,15 @@ describe('Completions SQL IR - E2E Tests', () => {
       it('should round-trip COUNT(*) vs COUNT(column) without confusion', async () => {
         // Test COUNT(*)
         const countStarSQL = 'SELECT COUNT(*) FROM users';
-        const countStarParse = await CompletionsAPI.sqlToIR({ sql: countStarSQL });
-        const countStarGenerate = await CompletionsAPI.irToSql({ ir: countStarParse.ir! });
+        const countStarParse = await CompletionsAPI.sqlToIR({ sql: countStarSQL, dialect: 'postgres' });
+        const countStarGenerate = await CompletionsAPI.irToSql({ ir: countStarParse.ir!, dialect: 'postgres' });
 
         expect(countStarGenerate.sql).toContain('COUNT(*)');
 
         // Test COUNT(column)
         const countColSQL = 'SELECT COUNT(name) FROM users';
-        const countColParse = await CompletionsAPI.sqlToIR({ sql: countColSQL });
-        const countColGenerate = await CompletionsAPI.irToSql({ ir: countColParse.ir! });
+        const countColParse = await CompletionsAPI.sqlToIR({ sql: countColSQL, dialect: 'postgres' });
+        const countColGenerate = await CompletionsAPI.irToSql({ ir: countColParse.ir!, dialect: 'postgres' });
 
         expect(countColGenerate.sql).toContain('COUNT(name)');
         expect(countColGenerate.sql).not.toContain('COUNT(*)');
@@ -613,8 +613,8 @@ describe('Completions SQL IR - E2E Tests', () => {
           SELECT name /* inline comment */ FROM users
         `;
 
-        const parseResult = await CompletionsAPI.sqlToIR({ sql });
-        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir! });
+        const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
+        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir!, dialect: 'postgres' });
 
         // Comments are lost, but this is acceptable (doesn't affect query semantics)
         expect(generateResult.sql).not.toContain('--');
@@ -624,8 +624,8 @@ describe('Completions SQL IR - E2E Tests', () => {
       it('should NOT preserve exact formatting (acceptable loss)', async () => {
         const sql = 'SELECT    name,email   FROM     users';
 
-        const parseResult = await CompletionsAPI.sqlToIR({ sql });
-        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir! });
+        const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
+        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir!, dialect: 'postgres' });
 
         // Formatting changes are acceptable (doesn't affect query semantics)
         // Generated SQL will have standardized formatting
@@ -638,8 +638,8 @@ describe('Completions SQL IR - E2E Tests', () => {
       it('should normalize boolean values (acceptable change)', async () => {
         const sql = 'SELECT * FROM users WHERE active = true';
 
-        const parseResult = await CompletionsAPI.sqlToIR({ sql });
-        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir! });
+        const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
+        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir!, dialect: 'postgres' });
 
         // May normalize true → TRUE or true or 'TRUE', but semantically equivalent
         // Currently converts to string 'TRUE' which is acceptable for most databases
@@ -653,7 +653,7 @@ describe('Completions SQL IR - E2E Tests', () => {
       it('should parse SUM(col1 * col2) as raw passthrough', async () => {
         const sql = 'SELECT SUM(price * quantity) AS total FROM orders';
 
-        const result = await CompletionsAPI.sqlToIR({ sql });
+        const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
         expect(result.success).toBe(true);
         expect((result.ir as QueryIR | undefined)?.select.some((c: { type: string }) => c.type === 'raw')).toBe(true);
       });
@@ -661,7 +661,7 @@ describe('Completions SQL IR - E2E Tests', () => {
       it('should parse COUNT(CASE WHEN ...) as raw passthrough', async () => {
         const sql = "SELECT COUNT(CASE WHEN status = 'active' THEN 1 END) FROM users";
 
-        const result = await CompletionsAPI.sqlToIR({ sql });
+        const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
 
         expect(result.success).toBe(true);
         expect((result.ir as QueryIR | undefined)?.select.some((c: { type: string }) => c.type === 'raw')).toBe(true);
@@ -670,7 +670,7 @@ describe('Completions SQL IR - E2E Tests', () => {
       it('should parse AVG(col1 + col2) as raw passthrough', async () => {
         const sql = 'SELECT AVG(price + tax) AS avg_total FROM products';
 
-        const result = await CompletionsAPI.sqlToIR({ sql });
+        const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
         expect(result.success).toBe(true);
         expect((result.ir as QueryIR | undefined)?.select.some((c: { type: string }) => c.type === 'raw')).toBe(true);
       });
@@ -680,7 +680,7 @@ describe('Completions SQL IR - E2E Tests', () => {
       it('should reject WHERE col1 + col2 > value', async () => {
         const sql = 'SELECT * FROM users WHERE age + 5 > 30';
 
-        const result = await CompletionsAPI.sqlToIR({ sql });
+        const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
         expect(result.success).toBe(false);
         expect(result.unsupportedFeatures).toContain('Complex expressions in filters (e.g., col1 + col2 > 10)');
       });
@@ -688,7 +688,7 @@ describe('Completions SQL IR - E2E Tests', () => {
       it('should reject WHERE with arithmetic on both sides', async () => {
         const sql = 'SELECT * FROM products WHERE price * 1.1 > cost * 1.2';
 
-        const result = await CompletionsAPI.sqlToIR({ sql });
+        const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
         expect(result.success).toBe(false);
       });
     });
@@ -697,7 +697,7 @@ describe('Completions SQL IR - E2E Tests', () => {
       it('should reject BETWEEN operator', async () => {
         const sql = 'SELECT * FROM users WHERE age BETWEEN 20 AND 30';
 
-        const result = await CompletionsAPI.sqlToIR({ sql });
+        const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
         expect(result.success).toBe(false);
         expect(result.unsupportedFeatures).toContain('BETWEEN (use >= and <= instead)');
         expect(result.hint).toContain('Use >= and <=');
@@ -706,7 +706,7 @@ describe('Completions SQL IR - E2E Tests', () => {
       it('should reject NOT LIKE operator', async () => {
         const sql = "SELECT * FROM users WHERE name NOT LIKE 'A%'";
 
-        const result = await CompletionsAPI.sqlToIR({ sql });
+        const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
         expect(result.success).toBe(false);
         expect(result.unsupportedFeatures).toContain('NOT LIKE');
       });
@@ -714,7 +714,7 @@ describe('Completions SQL IR - E2E Tests', () => {
       it('should reject NOT IN operator', async () => {
         const sql = "SELECT * FROM users WHERE status NOT IN ('deleted', 'banned')";
 
-        const result = await CompletionsAPI.sqlToIR({ sql });
+        const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
         expect(result.success).toBe(false);
         expect(result.unsupportedFeatures).toContain('NOT IN');
       });
@@ -722,7 +722,7 @@ describe('Completions SQL IR - E2E Tests', () => {
       it('should reject regex operators', async () => {
         const sql = "SELECT * FROM users WHERE email ~ '^[a-z]+@'";
 
-        const result = await CompletionsAPI.sqlToIR({ sql });
+        const result = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
         expect(result.success).toBe(false);
         expect(result.unsupportedFeatures).toContain('Regex operators (~, ~*, etc.)');
       });
@@ -756,10 +756,10 @@ describe('Completions SQL IR - E2E Tests', () => {
 
       supportedQueries.forEach(({ name, sql, checks }) => {
         it(`should preserve semantics for: ${name}`, async () => {
-          const parseResult = await CompletionsAPI.sqlToIR({ sql });
+          const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
           expect(parseResult.success).toBe(true);
 
-          const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir! });
+          const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir!, dialect: 'postgres' });
           expect(generateResult.success).toBe(true);
 
           // Verify key components are present
@@ -786,10 +786,10 @@ describe('Completions SQL IR - E2E Tests', () => {
 
       aggregateQueries.forEach(({ name, sql, checks }) => {
         it(`should preserve semantics for: ${name}`, async () => {
-          const parseResult = await CompletionsAPI.sqlToIR({ sql });
+          const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
           expect(parseResult.success).toBe(true);
 
-          const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir! });
+          const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir!, dialect: 'postgres' });
           expect(generateResult.success).toBe(true);
 
           checks.forEach(check => {
@@ -840,10 +840,10 @@ describe('Completions SQL IR - E2E Tests', () => {
 
       filterQueries.forEach(({ name, sql, checks }) => {
         it(`should preserve semantics for: ${name}`, async () => {
-          const parseResult = await CompletionsAPI.sqlToIR({ sql });
+          const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
           expect(parseResult.success).toBe(true);
 
-          const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir! });
+          const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir!, dialect: 'postgres' });
           expect(generateResult.success).toBe(true);
 
           checks.forEach(check => {
@@ -857,10 +857,10 @@ describe('Completions SQL IR - E2E Tests', () => {
       it('should preserve INNER JOIN semantics', async () => {
         const sql = 'SELECT u.name, o.amount FROM users u INNER JOIN orders o ON u.id = o.user_id';
 
-        const parseResult = await CompletionsAPI.sqlToIR({ sql });
+        const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
         expect(parseResult.success).toBe(true);
 
-        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir! });
+        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir!, dialect: 'postgres' });
         expect(generateResult.success).toBe(true);
 
         expect(generateResult.sql).toContain('INNER JOIN');
@@ -878,10 +878,10 @@ describe('Completions SQL IR - E2E Tests', () => {
           LEFT JOIN categories c ON o.category_id = c.id
         `;
 
-        const parseResult = await CompletionsAPI.sqlToIR({ sql });
+        const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
         expect(parseResult.success).toBe(true);
 
-        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir! });
+        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir!, dialect: 'postgres' });
         expect(generateResult.success).toBe(true);
 
         expect(generateResult.sql).toContain('INNER JOIN');
@@ -894,8 +894,8 @@ describe('Completions SQL IR - E2E Tests', () => {
       it('should preserve ORDER BY with direction', async () => {
         const sql = 'SELECT * FROM users ORDER BY name ASC';
 
-        const parseResult = await CompletionsAPI.sqlToIR({ sql });
-        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir! });
+        const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
+        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir!, dialect: 'postgres' });
 
         expect(generateResult.sql).toContain('ORDER BY');
         expect(generateResult.sql).toContain('name');
@@ -905,8 +905,8 @@ describe('Completions SQL IR - E2E Tests', () => {
       it('should preserve multiple ORDER BY columns', async () => {
         const sql = 'SELECT * FROM users ORDER BY last_name ASC, first_name ASC';
 
-        const parseResult = await CompletionsAPI.sqlToIR({ sql });
-        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir! });
+        const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
+        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir!, dialect: 'postgres' });
 
         expect(generateResult.sql).toContain('ORDER BY');
         expect(generateResult.sql).toContain('last_name');
@@ -916,8 +916,8 @@ describe('Completions SQL IR - E2E Tests', () => {
       it('should preserve LIMIT', async () => {
         const sql = 'SELECT * FROM users LIMIT 100';
 
-        const parseResult = await CompletionsAPI.sqlToIR({ sql });
-        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir! });
+        const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
+        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir!, dialect: 'postgres' });
 
         expect(generateResult.sql).toContain('LIMIT 100');
       });
@@ -942,10 +942,10 @@ describe('Completions SQL IR - E2E Tests', () => {
           LIMIT 10
         `;
 
-        const parseResult = await CompletionsAPI.sqlToIR({ sql });
+        const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
         expect(parseResult.success).toBe(true);
 
-        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir! });
+        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir!, dialect: 'postgres' });
         expect(generateResult.success).toBe(true);
 
         const checks = [
@@ -1011,7 +1011,7 @@ describe('Completions SQL IR - E2E Tests', () => {
       const originalSQL = 'SELECT name, email FROM users WHERE active = true';
 
       // Parse to IR
-      const parseResult = await CompletionsAPI.sqlToIR({ sql: originalSQL });
+      const parseResult = await CompletionsAPI.sqlToIR({ sql: originalSQL, dialect: 'postgres' });
       expect(parseResult.success).toBe(true);
 
       const originalIR = parseResult.ir!;
@@ -1037,8 +1037,8 @@ describe('Completions SQL IR - E2E Tests', () => {
       it('should normalize formatting in regenerated SQL', async () => {
         const originalSQL = 'SELECT    name,email   FROM     users   WHERE active=true';
 
-        const parseResult = await CompletionsAPI.sqlToIR({ sql: originalSQL });
-        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir! });
+        const parseResult = await CompletionsAPI.sqlToIR({ sql: originalSQL, dialect: 'postgres' });
+        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir!, dialect: 'postgres' });
 
         // Regenerated SQL will have standardized formatting
         // This is acceptable - only semantic equivalence matters for dirty IR
@@ -1052,8 +1052,8 @@ describe('Completions SQL IR - E2E Tests', () => {
       it('should normalize case in regenerated SQL', async () => {
         const originalSQL = 'select name from users where active = TRUE';
 
-        const parseResult = await CompletionsAPI.sqlToIR({ sql: originalSQL });
-        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir! });
+        const parseResult = await CompletionsAPI.sqlToIR({ sql: originalSQL, dialect: 'postgres' });
+        const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir!, dialect: 'postgres' });
 
         // Generated SQL uses uppercase keywords
         expect(generateResult.sql).toContain('SELECT');
@@ -1067,8 +1067,8 @@ describe('Completions SQL IR - E2E Tests', () => {
     it('should handle string escaping correctly', async () => {
       const sql = "SELECT * FROM users WHERE name = 'O''Brien'";
 
-      const parseResult = await CompletionsAPI.sqlToIR({ sql });
-      const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir! });
+      const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
+      const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir!, dialect: 'postgres' });
 
       // Should preserve string escaping
       expect(generateResult.sql).toMatch(/O''Brien|O\\'Brien/);
@@ -1084,7 +1084,7 @@ FROM orders
 GROUP BY DATE_TRUNC('WEEK', week_start)
 HAVING AVG(avg_order_value) > '75'`;
 
-      const parseResult = await CompletionsAPI.sqlToIR({ sql });
+      const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
       expect(parseResult.success).toBe(true);
       expect(parseResult.ir).toBeDefined();
 
@@ -1093,7 +1093,7 @@ HAVING AVG(avg_order_value) > '75'`;
       expect(havingCond?.value).toBe('75');
       expect(typeof havingCond?.value).toBe('string');
 
-      const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir! });
+      const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir!, dialect: 'postgres' });
       expect(generateResult.success).toBe(true);
       // Must regenerate with quoted '75', not numeric 75
       expect(generateResult.sql).toContain("'75'");
@@ -1102,11 +1102,11 @@ HAVING AVG(avg_order_value) > '75'`;
     it('should handle empty WHERE clause', async () => {
       const sql = 'SELECT * FROM users';
 
-      const parseResult = await CompletionsAPI.sqlToIR({ sql });
+      const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
       // May be undefined or null - both are acceptable for "no WHERE clause"
       expect((parseResult.ir! as QueryIR).where == null).toBe(true);
 
-      const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir! });
+      const generateResult = await CompletionsAPI.irToSql({ ir: parseResult.ir!, dialect: 'postgres' });
       expect(generateResult.sql).not.toContain('WHERE');
     });
   });
@@ -1123,7 +1123,7 @@ HAVING AVG(avg_order_value) > '75'`;
         ORDER BY 1
       `;
 
-      const parseResult = await CompletionsAPI.sqlToIR({ sql });
+      const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
       expect(parseResult.success).toBe(true);
       expect(parseResult.ir).toBeDefined();
 
@@ -1136,7 +1136,7 @@ HAVING AVG(avg_order_value) > '75'`;
       expect(ir.group_by).toBeDefined();
       expect(ir.order_by).toBeDefined();
 
-      const generateResult = await CompletionsAPI.irToSql({ ir });
+      const generateResult = await CompletionsAPI.irToSql({ ir, dialect: 'postgres' });
       expect(generateResult.success).toBe(true);
       expect(generateResult.sql).toContain('DATE_TRUNC');
       expect(generateResult.sql).toContain('WHERE');
@@ -1156,7 +1156,7 @@ HAVING AVG(avg_order_value) > '75'`;
         ORDER BY 1
       `;
 
-      const parseResult = await CompletionsAPI.sqlToIR({ sql });
+      const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
       expect(parseResult.success).toBe(true);
 
       const ir = parseResult.ir! as QueryIR;
@@ -1166,7 +1166,7 @@ HAVING AVG(avg_order_value) > '75'`;
       expect(ir.group_by).toBeDefined();
       expect(ir.order_by).toBeDefined();
 
-      const generateResult = await CompletionsAPI.irToSql({ ir });
+      const generateResult = await CompletionsAPI.irToSql({ ir, dialect: 'postgres' });
       expect(generateResult.success).toBe(true);
       expect(generateResult.sql).toContain('last_message_role');
       expect(generateResult.sql).toContain('DATE_TRUNC');
@@ -1183,7 +1183,7 @@ HAVING AVG(avg_order_value) > '75'`;
         ORDER BY 2 DESC
       `;
 
-      const parseResult = await CompletionsAPI.sqlToIR({ sql });
+      const parseResult = await CompletionsAPI.sqlToIR({ sql, dialect: 'postgres' });
       expect(parseResult.success).toBe(true);
 
       const ir = parseResult.ir! as QueryIR;
@@ -1193,7 +1193,7 @@ HAVING AVG(avg_order_value) > '75'`;
       expect(ir.order_by).toBeDefined();
       expect(ir.order_by![0].direction).toBe('DESC');
 
-      const generateResult = await CompletionsAPI.irToSql({ ir });
+      const generateResult = await CompletionsAPI.irToSql({ ir, dialect: 'postgres' });
       expect(generateResult.success).toBe(true);
       expect(generateResult.sql).toContain('IS NULL');
       expect(generateResult.sql?.toUpperCase()).toContain('CURRENT_TIMESTAMP');

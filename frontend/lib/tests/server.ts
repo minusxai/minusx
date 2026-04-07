@@ -55,19 +55,19 @@ async function resolveExpectedValue(
 
   // type: 'query' — run the question or inline SQL, extract column/row cell
   let sql: string;
-  let database_name: string;
+  let connection_name: string;
   if (value.source === 'inline') {
     sql = value.sql;
-    database_name = value.database_name;
+    connection_name = value.connection_name;
   } else {
     const fileResult = await FilesAPI.loadFile(value.question_id, user);
     const question = fileResult.data?.content as QuestionContent | undefined;
-    if (!question?.query || !question.database_name) return null;
+    if (!question?.query || !question.connection_name) return null;
     sql = question.query;
-    database_name = question.database_name;
+    connection_name = question.connection_name;
   }
 
-  const result = await runQuery(database_name, sql, {}, user);
+  const result = await runQuery(connection_name, sql, {}, user);
   if (!result.rows.length) return null;
   return extractCellValue(result.rows, result.columns, value.column, value.row);
 }
@@ -86,11 +86,11 @@ async function executeQueryTest(
   let subjectDb: string;
   if (subject.source === 'inline') {
     subjectSql = subject.sql;
-    subjectDb = subject.database_name;
+    subjectDb = subject.connection_name;
   } else {
     const fileResult = await FilesAPI.loadFile(subject.question_id, user);
     const question = fileResult.data?.content as QuestionContent | undefined;
-    if (!question?.query || !question.database_name) {
+    if (!question?.query || !question.connection_name) {
       return {
         test,
         passed: false,
@@ -98,7 +98,7 @@ async function executeQueryTest(
       };
     }
     subjectSql = question.query;
-    subjectDb = question.database_name;
+    subjectDb = question.connection_name;
   }
 
   let rows: Record<string, unknown>[];

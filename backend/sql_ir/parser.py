@@ -22,12 +22,13 @@ from .enhanced_validator import validate_sql_for_gui, compare_sql_ast
 from .generator import ir_to_sql, compound_ir_to_sql
 
 
-def parse_sql_to_ir(sql: str, _skip_validation: bool = False) -> Union[QueryIR, CompoundQueryIR]:
+def parse_sql_to_ir(sql: str, dialect: str, _skip_validation: bool = False) -> Union[QueryIR, CompoundQueryIR]:
     """
     Parse SQL string into QueryIR or CompoundQueryIR representation.
 
     Args:
         sql: SQL query string
+        dialect: sqlglot dialect for parsing (e.g. 'postgres', 'bigquery', 'duckdb')
         _skip_validation: Internal flag to skip validation (used by round-trip check)
 
     Returns:
@@ -38,7 +39,7 @@ def parse_sql_to_ir(sql: str, _skip_validation: bool = False) -> Union[QueryIR, 
     """
     # Use enhanced validator for binary support boundary (unless skipping for round-trip)
     if not _skip_validation:
-        validation = validate_sql_for_gui(sql)
+        validation = validate_sql_for_gui(sql, dialect)
         if not validation.supported:
             raise UnsupportedSQLError(
                 validation.errors[0] if validation.errors else "SQL not supported",
@@ -48,19 +49,19 @@ def parse_sql_to_ir(sql: str, _skip_validation: bool = False) -> Union[QueryIR, 
 
     # Parse SQL
     try:
-        ast = sqlglot.parse_one(sql, read="postgres")
+        ast = sqlglot.parse_one(sql, read=dialect)
     except Exception as e:
         raise UnsupportedSQLError(f"Failed to parse SQL: {str(e)}", ["PARSE_ERROR"])
 
     # Check if this is a compound query (UNION / UNION ALL)
     if isinstance(ast, exp.Union):
-        return _parse_compound_query(ast, sql, _skip_validation)
+        return _parse_compound_query(ast, sql, dialect, _skip_validation)
 
     # Simple query path
-    return _parse_simple_query(ast, sql, _skip_validation)
+    return _parse_simple_query(ast, sql, dialect, _skip_validation)
 
 
-def _parse_compound_query(ast: exp.Union, original_sql: str, _skip_validation: bool) -> CompoundQueryIR:
+def _parse_compound_query(ast: exp.Union, original_sql: str, dialect: str, _skip_validation: bool) -> CompoundQueryIR:
     """Parse a UNION/UNION ALL compound query into CompoundQueryIR."""
     # Flatten the nested Union tree into a list of (select_node, operator) pairs
     # sqlglot represents A UNION B UNION ALL C as Union(Union(A, B), C)
@@ -92,7 +93,7 @@ def _parse_compound_query(ast: exp.Union, original_sql: str, _skip_validation: b
     if order_clause:
         # We need a Select-like node to use parse_order_by, but Union doesn't have select expressions
         # Parse order by manually from the order clause
-        compound_order_by = _parse_order_by_from_clause(order_clause)
+        compound_order_by = _parse_order_by_from_clause(order_clause, dialect)
 
     limit_clause = ast.args.get("limit")
     if limit_clause:
@@ -108,7 +109,7 @@ def _parse_compound_query(ast: exp.Union, original_sql: str, _skip_validation: b
     for select_node in queries_nodes:
         if not isinstance(select_node, exp.Select):
             raise UnsupportedSQLError("Expected SELECT in UNION branch", ["COMPOUND_PARSE_ERROR"])
-        ir = _parse_select_to_query_ir(select_node)
+        ir = _parse_select_to_query_ir(select_node, dialect)
         query_irs.append(ir)
 
     compound_ir = CompoundQueryIR(
@@ -122,8 +123,8 @@ def _parse_compound_query(ast: exp.Union, original_sql: str, _skip_validation: b
     # Round-trip validation
     if not _skip_validation:
         try:
-            regenerated_sql = compound_ir_to_sql(compound_ir)
-            comparison = compare_sql_ast(original_sql, regenerated_sql)
+            regenerated_sql = compound_ir_to_sql(compound_ir, dialect)
+            comparison = compare_sql_ast(original_sql, regenerated_sql, dialect)
             if not comparison.equivalent:
                 raise UnsupportedSQLError(
                     "Round-trip validation failed: regenerated SQL differs from original",
@@ -142,7 +143,7 @@ def _parse_compound_query(ast: exp.Union, original_sql: str, _skip_validation: b
     return compound_ir
 
 
-def _parse_order_by_from_clause(order_clause) -> Optional[List[OrderByClause]]:
+def _parse_order_by_from_clause(order_clause, dialect: str) -> Optional[List[OrderByClause]]:
     """Parse ORDER BY from a standalone order clause (not attached to a Select)."""
     order_by = []
     for ordered in order_clause.expressions:
@@ -164,20 +165,20 @@ def _parse_order_by_from_clause(order_clause) -> Optional[List[OrderByClause]]:
             else:
                 order_by.append(OrderByClause(
                     type='raw',
-                    raw_sql=column_expr.sql(dialect='postgres'),
+                    raw_sql=column_expr.sql(dialect=dialect),
                     direction=direction,
                 ))
     return order_by if order_by else None
 
 
-def _parse_select_to_query_ir(select_node: exp.Select) -> QueryIR:
+def _parse_select_to_query_ir(select_node: exp.Select, dialect: str) -> QueryIR:
     """Parse a single SELECT node into a QueryIR (used for both simple and compound queries)."""
     # Extract CTEs
     ctes = []
     with_clause = select_node.args.get('with_')
     if with_clause:
         for cte_node in with_clause.expressions:
-            cte_body_sql = cte_node.this.sql(dialect='postgres')
+            cte_body_sql = cte_node.this.sql(dialect=dialect)
             ctes.append(CTE(name=cte_node.alias, raw_sql=cte_body_sql))
 
     # Check for SELECT DISTINCT
@@ -186,13 +187,13 @@ def _parse_select_to_query_ir(select_node: exp.Select) -> QueryIR:
         distinct = True
 
     # Parse each component
-    select_columns = parse_select(select_node)
+    select_columns = parse_select(select_node, dialect)
     from_table = parse_from(select_node)
-    joins = parse_joins(select_node)
-    where_clause = parse_where(select_node)
-    group_by = parse_group_by(select_node)
-    having = parse_having(select_node)
-    order_by = parse_order_by(select_node)
+    joins = parse_joins(select_node, dialect)
+    where_clause = parse_where(select_node, dialect)
+    group_by = parse_group_by(select_node, dialect)
+    having = parse_having(select_node, dialect)
+    order_by = parse_order_by(select_node, dialect)
     limit = parse_limit(select_node)
 
     return QueryIR(
@@ -210,20 +211,20 @@ def _parse_select_to_query_ir(select_node: exp.Select) -> QueryIR:
     )
 
 
-def _parse_simple_query(ast, original_sql: str, _skip_validation: bool) -> QueryIR:
+def _parse_simple_query(ast, original_sql: str, dialect: str, _skip_validation: bool) -> QueryIR:
     """Parse a simple (non-compound) query into QueryIR."""
     # Extract SELECT node
     select_node = ast if isinstance(ast, exp.Select) else ast.find(exp.Select)
     if not select_node:
         raise UnsupportedSQLError("No SELECT statement found", ["NO_SELECT"])
 
-    ir = _parse_select_to_query_ir(select_node)
+    ir = _parse_select_to_query_ir(select_node, dialect)
 
     # Round-trip validation: SQL → IR → SQL must be lossless
     if not _skip_validation:
         try:
-            regenerated_sql = ir_to_sql(ir)
-            comparison = compare_sql_ast(original_sql, regenerated_sql)
+            regenerated_sql = ir_to_sql(ir, dialect)
+            comparison = compare_sql_ast(original_sql, regenerated_sql, dialect)
             if not comparison.equivalent:
                 raise UnsupportedSQLError(
                     "Round-trip validation failed: regenerated SQL differs from original",
@@ -242,7 +243,7 @@ def _parse_simple_query(ast, original_sql: str, _skip_validation: bool) -> Query
     return ir
 
 
-def parse_select(select_node: exp.Select) -> List[SelectColumn]:
+def parse_select(select_node: exp.Select, dialect: str) -> List[SelectColumn]:
     """Parse SELECT clause into list of SelectColumn objects."""
     columns = []
 
@@ -293,7 +294,7 @@ def parse_select(select_node: exp.Select) -> List[SelectColumn]:
                 # Complex aggregate (CASE WHEN, arithmetic, etc.) → raw passthrough
                 columns.append(SelectColumn(
                     type='raw',
-                    raw_sql=actual.sql(dialect='postgres'),
+                    raw_sql=actual.sql(dialect=dialect),
                     alias=alias,
                 ))
 
@@ -322,7 +323,7 @@ def parse_select(select_node: exp.Select) -> List[SelectColumn]:
                 # Complex DATE_TRUNC (e.g. DATE_TRUNC('month', STRPTIME(...))) → raw passthrough
                 columns.append(SelectColumn(
                     type='raw',
-                    raw_sql=actual.sql(dialect='postgres'),
+                    raw_sql=actual.sql(dialect=dialect),
                     alias=alias,
                 ))
 
@@ -355,7 +356,7 @@ def parse_select(select_node: exp.Select) -> List[SelectColumn]:
             # Raw passthrough for unrecognized expressions (CASE, COALESCE, arithmetic, etc.)
             columns.append(SelectColumn(
                 type='raw',
-                raw_sql=actual.sql(dialect='postgres'),
+                raw_sql=actual.sql(dialect=dialect),
                 alias=alias,
             ))
 
@@ -448,7 +449,7 @@ def _is_simple_join_on(on_expr: exp.Expression) -> bool:
     )
 
 
-def parse_joins(select_node: exp.Select) -> Optional[List[JoinClause]]:
+def parse_joins(select_node: exp.Select, dialect: str) -> Optional[List[JoinClause]]:
     """Parse JOIN clauses into list of JoinClause objects."""
     joins = []
 
@@ -478,7 +479,7 @@ def parse_joins(select_node: exp.Select) -> Optional[List[JoinClause]]:
             if _is_simple_join_on(on_clause):
                 on_conditions = parse_join_conditions(on_clause)
             else:
-                raw_on_sql = on_clause.sql(dialect='postgres')
+                raw_on_sql = on_clause.sql(dialect=dialect)
 
         joins.append(JoinClause(
             type=join_kind,
@@ -507,25 +508,25 @@ def parse_join_conditions(on_expr: exp.Expression) -> List[JoinCondition]:
     return conditions
 
 
-def parse_where(select_node: exp.Select) -> Optional[FilterGroup]:
+def parse_where(select_node: exp.Select, dialect: str) -> Optional[FilterGroup]:
     """Parse WHERE clause into FilterGroup."""
     where_clause = select_node.args.get("where")
     if not where_clause:
         return None
 
-    return parse_filter_expression(where_clause.this)
+    return parse_filter_expression(where_clause.this, dialect)
 
 
-def parse_having(select_node: exp.Select) -> Optional[FilterGroup]:
+def parse_having(select_node: exp.Select, dialect: str) -> Optional[FilterGroup]:
     """Parse HAVING clause into FilterGroup."""
     having_clause = select_node.args.get("having")
     if not having_clause:
         return None
 
-    return parse_filter_expression(having_clause.this)
+    return parse_filter_expression(having_clause.this, dialect)
 
 
-def parse_filter_expression(expr: exp.Expression) -> Union[FilterGroup, FilterCondition]:
+def parse_filter_expression(expr: exp.Expression, dialect: str) -> Union[FilterGroup, FilterCondition]:
     """Parse filter expression into FilterGroup or FilterCondition."""
     # Handle AND/OR groups
     if isinstance(expr, (exp.And, exp.Or)):
@@ -533,23 +534,23 @@ def parse_filter_expression(expr: exp.Expression) -> Union[FilterGroup, FilterCo
         conditions = []
         for child in expr.flatten():
             if isinstance(child, (exp.And, exp.Or)):
-                conditions.append(parse_filter_expression(child))
+                conditions.append(parse_filter_expression(child, dialect))
             else:
-                condition = parse_single_condition(child)
+                condition = parse_single_condition(child, dialect)
                 if condition:
                     conditions.append(condition)
         return FilterGroup(operator=operator, conditions=conditions)
 
     # Single condition
     else:
-        condition = parse_single_condition(expr)
+        condition = parse_single_condition(expr, dialect)
         if condition:
             # Wrap in AND group for consistency
             return FilterGroup(operator='AND', conditions=[condition])
         return FilterGroup(operator='AND', conditions=[])
 
 
-def parse_single_condition(expr: exp.Expression) -> Optional[FilterCondition]:
+def parse_single_condition(expr: exp.Expression, dialect: str) -> Optional[FilterCondition]:
     """Parse a single filter condition."""
     # Handle NOT wrapper (for IS NOT NULL)
     if isinstance(expr, exp.Not):
@@ -569,7 +570,7 @@ def parse_single_condition(expr: exp.Expression) -> Optional[FilterCondition]:
                 exp.GTE: '>=', exp.LTE: '<=', exp.Like: 'LIKE', exp.ILike: 'ILIKE'}
     op = _CMP_OPS.get(type(expr))
     if op:
-        return parse_comparison(expr, op)
+        return parse_comparison(expr, op, dialect)
     elif isinstance(expr, exp.In):
         return parse_in_condition(expr)
     elif isinstance(expr, exp.Is):
@@ -578,7 +579,7 @@ def parse_single_condition(expr: exp.Expression) -> Optional[FilterCondition]:
     return None
 
 
-def parse_comparison(expr: exp.Expression, operator: str) -> Optional[FilterCondition]:
+def parse_comparison(expr: exp.Expression, operator: str, dialect: str) -> Optional[FilterCondition]:
     """Parse comparison expression into FilterCondition."""
     left = expr.left
     right = expr.right
@@ -621,7 +622,7 @@ def parse_comparison(expr: exp.Expression, operator: str) -> Optional[FilterCond
     # If it's not a column/star and not an aggregate, store as raw SQL
     elif not isinstance(column_expr, (exp.Column, exp.Star)):
         # Function call or complex expression on the left side (e.g. SPLIT_PART(...))
-        raw_column_sql = column_expr.sql(dialect='postgres')
+        raw_column_sql = column_expr.sql(dialect=dialect)
         # Still need to parse the right side for param_name
         right = expr.right
         value = None
@@ -639,7 +640,7 @@ def parse_comparison(expr: exp.Expression, operator: str) -> Optional[FilterCond
         elif isinstance(right, exp.Null):
             value = None
         else:
-            raw_value = right.sql(dialect='postgres')
+            raw_value = right.sql(dialect=dialect)
         return FilterCondition(
             operator=operator,
             value=value,
@@ -688,7 +689,7 @@ def parse_comparison(expr: exp.Expression, operator: str) -> Optional[FilterCond
         value = None
     else:
         # Any unrecognized expression: store verbatim postgres SQL (no quoting)
-        raw_value = right.sql(dialect='postgres')
+        raw_value = right.sql(dialect=dialect)
 
     return FilterCondition(
         column=column_name,
@@ -741,7 +742,7 @@ def parse_is_null(expr: exp.Is) -> Optional[FilterCondition]:
     )
 
 
-def parse_group_by(select_node: exp.Select) -> Optional[GroupByClause]:
+def parse_group_by(select_node: exp.Select, dialect: str) -> Optional[GroupByClause]:
     """Parse GROUP BY clause into GroupByClause."""
     group_clause = select_node.args.get("group")
     if not group_clause:
@@ -765,7 +766,7 @@ def parse_group_by(select_node: exp.Select) -> Optional[GroupByClause]:
                 # Complex DATE_TRUNC (e.g. DATE_TRUNC('month', STRPTIME(...))) → raw passthrough
                 columns.append(GroupByItem(
                     type='column',
-                    column=expr.sql(dialect='postgres'),
+                    column=expr.sql(dialect=dialect),
                 ))
         elif isinstance(expr, exp.Date):
             inner = expr.this
@@ -809,13 +810,13 @@ def parse_group_by(select_node: exp.Select) -> Optional[GroupByClause]:
                         # Complex DATE_TRUNC → use full SQL as column reference
                         columns.append(GroupByItem(
                             type='column',
-                            column=actual.sql(dialect='postgres'),
+                            column=actual.sql(dialect=dialect),
                         ))
                 else:
                     # Unrecognized expression → use full SQL as column reference
                     columns.append(GroupByItem(
                         type='column',
-                        column=actual.sql(dialect='postgres'),
+                        column=actual.sql(dialect=dialect),
                     ))
 
     return GroupByClause(columns=columns) if columns else None
@@ -838,7 +839,7 @@ def parse_group_by_date_trunc(expr: exp.Expression) -> Optional[GroupByItem]:
     )
 
 
-def parse_order_by(select_node: exp.Select) -> Optional[List[OrderByClause]]:
+def parse_order_by(select_node: exp.Select, dialect: str) -> Optional[List[OrderByClause]]:
     """Parse ORDER BY clause into list of OrderByClause objects."""
     order_clause = select_node.args.get("order")
     if not order_clause:
@@ -867,7 +868,7 @@ def parse_order_by(select_node: exp.Select) -> Optional[List[OrderByClause]]:
                     # Complex DATE_TRUNC → raw passthrough
                     order_by.append(OrderByClause(
                         type='raw',
-                        raw_sql=column_expr.sql(dialect='postgres'),
+                        raw_sql=column_expr.sql(dialect=dialect),
                         direction=direction,
                     ))
             elif isinstance(column_expr, exp.Literal) and not column_expr.is_string:
@@ -899,7 +900,7 @@ def parse_order_by(select_node: exp.Select) -> Optional[List[OrderByClause]]:
                         else:
                             order_by.append(OrderByClause(
                                 type='raw',
-                                raw_sql=actual.sql(dialect='postgres'),
+                                raw_sql=actual.sql(dialect=dialect),
                                 direction=direction,
                             ))
                     elif isinstance(ref_expr, exp.Alias) and ref_expr.alias:
@@ -913,7 +914,7 @@ def parse_order_by(select_node: exp.Select) -> Optional[List[OrderByClause]]:
                 # Raw passthrough for CASE and other unrecognized ORDER BY expressions
                 order_by.append(OrderByClause(
                     type='raw',
-                    raw_sql=column_expr.sql(dialect='postgres'),
+                    raw_sql=column_expr.sql(dialect=dialect),
                     direction=direction,
                 ))
 

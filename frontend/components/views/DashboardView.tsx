@@ -238,7 +238,7 @@ export default function DashboardView({
 
   // Get database from the first question that has one (for inline SQL param sources)
   const dashboardDatabase = useMemo(() => {
-    return questionContents.find(c => c?.database_name)?.database_name;
+    return questionContents.find(c => c?.connection_name)?.connection_name;
   }, [questionContents]);
 
   // Effective submitted values: only these flow to query execution.

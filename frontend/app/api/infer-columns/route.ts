@@ -57,11 +57,11 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
     // Try to load schema from the question's connection
     let schemaData: DatabaseWithSchema[] = [];
-    if (questionContent.database_name) {
+    if (questionContent.connection_name) {
       try {
         const connectionsResult = await FilesAPI.getFiles({ type: 'connection' }, user);
         const connection = connectionsResult.data.find(
-          (f: any) => f.name === questionContent.database_name
+          (f: any) => f.name === questionContent.connection_name
         );
         if (connection) {
           const fullConnection = await FilesAPI.loadFile(connection.id, user);

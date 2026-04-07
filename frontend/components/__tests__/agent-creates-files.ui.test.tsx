@@ -17,7 +17,7 @@
  * - setupMockFetch — routes /api/chat to Next.js handler; passes Python/LLM calls through
  * - storeModule.makeStore() — full Redux store (all reducers + chatListenerMiddleware)
  * - jest.spyOn(storeModule, 'getStore') — aligns tool-handlers.ts with the test store
- * - No Python query execution — questions are created without a database_name so
+ * - No Python query execution — questions are created without a connection_name so
  *   CreateFile skips its auto-execute path
  *
  * Note: In JSDOM, `window` is defined, so chatListener sends POST /api/chat (relative URL).
@@ -82,7 +82,7 @@ async function templateInterceptor(urlStr: string, init?: RequestInit): Promise<
   if (method === 'POST' && urlStr.includes('/api/files/template')) {
     const body = JSON.parse(init?.body as string) as { type: string };
     const content = body.type === 'question'
-      ? { query: '', vizSettings: { type: 'table' }, database_name: '', parameters: [] }
+      ? { query: '', vizSettings: { type: 'table' }, connection_name: '', parameters: [] }
       : { assets: [], layout: { columns: 12, items: [] } };
     return {
       ok: true,

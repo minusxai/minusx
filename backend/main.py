@@ -73,7 +73,7 @@ class QueryRequest(BaseModel):
     query: str
     parameters: dict = {}
     parameter_types: dict = {}  # Optional: { param_name: 'text' | 'number' | 'date' }
-    database_name: str = "default"
+    connection_name: str = "default"
     session_token: Optional[str] = None  # Session token for internal API auth
     # NOTE: connection_type and connection_config are NO LONGER needed!
     # Python backend fetches config from Next.js automatically via internal API
@@ -292,14 +292,14 @@ async def execute_sql_query(query_request: QueryRequest, request: Request):
     Uses idempotent initialization: Python backend fetches connection config from Next.js if needed.
 
     Args:
-        query_request: QueryRequest with SQL query, database_name, and optional parameters
+        query_request: QueryRequest with SQL query, connection_name, and optional parameters
         request: FastAPI Request object to access headers
 
     Returns:
         QueryResponse with columns and rows
     """
     start_time = time.time()
-    print(f"[PYTHON] Start execute-query for database: {query_request.database_name}")
+    print(f"[PYTHON] Start execute-query for connection: {query_request.connection_name}")
 
     try:
         # Extract company_id from header (required for multi-tenant isolation)
@@ -318,7 +318,7 @@ async def execute_sql_query(query_request: QueryRequest, request: Request):
         # Idempotent connection initialization: fetch config from Next.js if not cached
         init_start = time.time()
         connector = await connection_manager.get_or_initialize_connection(
-            query_request.database_name,
+            query_request.connection_name,
             company_id,
             query_request.session_token,
             mode
@@ -606,7 +606,7 @@ async def sql_autocomplete(request: AutocompleteRequest):
             request.query,
             request.cursor_offset,
             request.schema_data,
-            request.database_name,
+            request.connection_name,
             request.connection_type,
         )
         return {"suggestions": [s.dict() for s in suggestions]}
@@ -678,7 +678,8 @@ async def chat_mentions(request: MentionRequest):
 
 class SqlToIRRequest(BaseModel):
     sql: str
-    database_name: Optional[str] = None  # For future schema context
+    dialect: str
+    connection_name: Optional[str] = None
 
 
 class SqlToIRResponse(BaseModel):
@@ -701,7 +702,7 @@ async def sql_to_ir_endpoint(req: SqlToIRRequest):
     list of unsupported features.
     """
     try:
-        ir = parse_sql_to_ir(req.sql)
+        ir = parse_sql_to_ir(req.sql, req.dialect)
         return SqlToIRResponse(
             success=True,
             ir=ir.model_dump(by_alias=True),
@@ -739,6 +740,7 @@ async def sql_to_ir_endpoint(req: SqlToIRRequest):
 
 class IRToSqlRequest(BaseModel):
     ir: Dict[str, Any]
+    dialect: str
 
 
 class IRToSqlResponse(BaseModel):
@@ -757,7 +759,7 @@ async def ir_to_sql_endpoint(req: IRToSqlRequest):
     """
     try:
         # Dispatch based on IR type
-        sql = any_ir_to_sql(req.ir)
+        sql = any_ir_to_sql(req.ir, req.dialect)
 
         return IRToSqlResponse(
             success=True,

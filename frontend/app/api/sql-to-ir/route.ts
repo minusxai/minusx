@@ -10,7 +10,7 @@ import { handleApiError } from '@/lib/api/api-responses';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { sql, databaseName } = body;
+    const { sql, dialect } = body;
 
     // Pre-process: strip @ from @reference table names so sqlglot can parse them.
     // Collect the mapping so we can restore them in the IR response.
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       body: JSON.stringify({
         sql: processedSql,
-        database_name: databaseName,
+        dialect,
       }),
     });
 

@@ -17,6 +17,7 @@ import type { QuestionOption } from '@/lib/hooks/useAvailableQuestions';
 
 interface CompoundQueryBuilderProps {
   databaseName: string;
+  dialect: string;
   ir: CompoundQueryIR;
   onIRChange: (ir: CompoundQueryIR) => void;
   onDissolve?: (keepIndex: number) => void;  // Convert back to simple, keeping the query at keepIndex
@@ -69,6 +70,7 @@ function OperatorSelector({
 
 export function CompoundQueryBuilder({
   databaseName,
+  dialect,
   ir,
   onIRChange,
   onDissolve,
@@ -91,7 +93,7 @@ export function CompoundQueryBuilder({
         ir.queries.map(async (q) => {
           if (!q.from?.table) return ''; // Skip empty queries
           try {
-            const result = await CompletionsAPI.irToSql({ ir: q });
+            const result = await CompletionsAPI.irToSql({ ir: q, dialect });
             return result.success && result.sql ? result.sql : '';
           } catch {
             return '';
@@ -114,7 +116,7 @@ export function CompoundQueryBuilder({
 
       // Parse the SQL back to IR and update the compound query
       if (!sql.trim()) return; // Skip empty SQL
-      CompletionsAPI.sqlToIR({ sql }).then((result) => {
+      CompletionsAPI.sqlToIR({ sql, dialect }).then((result) => {
         if (result.success && result.ir && result.ir.type !== 'compound') {
           const queryIR = result.ir as QueryIR;
           onIRChange({
@@ -227,6 +229,7 @@ export function CompoundQueryBuilder({
 
               <QueryBuilder
                 databaseName={databaseName}
+                dialect={dialect}
                 sql={querySqls[index] || ''}
                 onSqlChange={(sql) => handleQuerySqlChange(index, sql)}
                 availableQuestions={availableQuestions}

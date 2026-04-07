@@ -194,7 +194,7 @@ GROUP BY file_id
 
 const INSERT_QUERY_EXEC_SQL = `
 INSERT INTO query_execution_events
-  (query_hash, database_name, duration_ms, row_count, was_cache_hit, user_email, company_id)
+  (query_hash, connection_name, duration_ms, row_count, was_cache_hit, user_email, company_id)
 VALUES (?, ?, ?, ?, ?, ?, ?)
 `;
 

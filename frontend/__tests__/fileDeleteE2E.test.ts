@@ -40,7 +40,7 @@ function makeQuestion(): QuestionContent {
   return {
     description: '',
     query: 'SELECT 1',
-    database_name: 'test',
+    connection_name: 'test',
     parameters: [],
     vizSettings: { type: 'table' },
   };

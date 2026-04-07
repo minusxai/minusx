@@ -57,7 +57,7 @@ describe('Infer Columns - E2E Tests', () => {
             query: TEST_QUESTION_QUERY,
             vizSettings: { type: 'table' },
             parameters: {},
-            database_name: null,
+            connection_name: null,
             references: [],
           }),
           1,

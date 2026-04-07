@@ -81,7 +81,7 @@ export interface SqlCompletionsResult {
  */
 export interface SqlToIROptions {
   sql: string;
-  databaseName?: string;
+  dialect: string;
 }
 
 /**
@@ -101,6 +101,7 @@ export interface SqlToIRResult {
  */
 export interface IRToSqlOptions {
   ir: AnyQueryIR;
+  dialect: string;
 }
 
 /**

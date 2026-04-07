@@ -218,7 +218,7 @@ export default function ChatInput({
                         )}
                         <DatabaseSelector
                           value={databaseName}
-                          onChange={onDatabaseChange}
+                          onChange={({ connection_name }) => onDatabaseChange(connection_name)}
                           size="sm"
                         />
                       </HStack>

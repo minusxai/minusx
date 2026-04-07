@@ -216,7 +216,7 @@ export type Parametervalues = {
 /**
  * connection name (empty string if none)
  */
-export type DatabaseName = string;
+export type ConnectionName = string;
 export type References = QuestionReference[] | null;
 export type Id2 = number;
 export type Alias1 = string;
@@ -267,7 +267,7 @@ export interface QuestionContent {
   vizSettings: VizSettings;
   parameters?: Parameters;
   parameterValues?: Parametervalues;
-  database_name: DatabaseName;
+  connection_name: ConnectionName;
   references?: References;
 }
 /**

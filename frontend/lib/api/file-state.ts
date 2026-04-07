@@ -100,8 +100,8 @@ function buildEffectiveReference(refFile: FileState, inheritedParams: Record<str
   const effectiveParamsDict = content.parameters?.length
     ? resolveEffectiveParams(content.parameters, ownParamValues, inheritedParams)
     : {};
-  const effectiveQueryResultId = content.query && content.database_name
-    ? getQueryHash(content.query, effectiveParamsDict, content.database_name)
+  const effectiveQueryResultId = content.query && content.connection_name
+    ? getQueryHash(content.query, effectiveParamsDict, content.connection_name)
     : refFile.queryResultId;
   return {
     ...stripped,
@@ -135,8 +135,8 @@ function augmentWithParams(
     if (content?.query) {
       const ownParamValues = content.parameterValues ?? {};
       const params = resolveEffectiveParams(content.parameters || [], ownParamValues, inheritedParams);
-      const qr = selectQueryResult(state, content.query, params, content.database_name);
-      const id = getQueryHash(content.query, params, content.database_name);
+      const qr = selectQueryResult(state, content.query, params, content.connection_name);
+      const id = getQueryHash(content.query, params, content.connection_name);
       if (qr?.data) {
         result.set(id, { ...(qr.data || {}), id });
       } else if (qr?.error) {
@@ -529,17 +529,17 @@ export async function replaceFileState(fileId: number, targetFileObj: { name?: s
   if (fileState?.type === 'question') {
     const updatedState = getStore().getState();
     const finalContent = selectMergedContent(updatedState, fileId) as any;
-    if (finalContent?.query && finalContent?.database_name) {
+    if (finalContent?.query && finalContent?.connection_name) {
       const params = finalContent.parameterValues || {};
       try {
-        await getQueryResult({ query: finalContent.query, params, database: finalContent.database_name });
+        await getQueryResult({ query: finalContent.query, params, database: finalContent.connection_name });
         getStore().dispatch(setEphemeral({
           fileId: fileId as FileId,
           changes: {
             lastExecuted: {
               query: finalContent.query,
               params,
-              database: finalContent.database_name,
+              database: finalContent.connection_name,
               references: finalContent.references || []
             }
           }
@@ -589,8 +589,8 @@ function buildCurrentFileStr(state: ReturnType<typeof getStore>['getState'] exte
   let queryResultId = fileState.queryResultId;
   if (fileState.type === 'question') {
     const qc = mergedContent as QuestionContent;
-    if (qc?.query && qc?.database_name) {
-      queryResultId = getQueryHash(qc.query, qc.parameterValues || {}, qc.database_name);
+    if (qc?.query && qc?.connection_name) {
+      queryResultId = getQueryHash(qc.query, qc.parameterValues || {}, qc.connection_name);
     }
   }
   const fullFileStr = encodeFileStr({
@@ -1634,7 +1634,7 @@ export async function getQueryResult(
         },
         body: JSON.stringify({
           query,
-          database_name: database,
+          connection_name: database,
           parameters: queryParams,
           references: references || [],
           ...(parameterTypes && { parameterTypes })

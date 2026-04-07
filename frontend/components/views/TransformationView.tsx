@@ -198,9 +198,9 @@ function TransformRow({ transform, index, questions, dbSchemaMap, editMode, onCh
 }) {
   const selectedQuestion = questions.find(q => q.id === transform.question);
 
-  // Load the selected question's full content to get database_name
+  // Load the selected question's full content to get connection_name
   const { fileState: questionFile } = useFile(transform.question > 0 ? transform.question : undefined) ?? {};
-  const dbName = (questionFile?.content as QuestionContent | null)?.database_name;
+  const dbName = (questionFile?.content as QuestionContent | null)?.connection_name;
   const schemas = dbName ? (dbSchemaMap[dbName] ?? []) : [];
 
   return (

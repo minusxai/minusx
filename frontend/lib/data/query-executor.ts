@@ -38,7 +38,7 @@ export async function executeQuery(
     body: JSON.stringify({
       query,
       parameters: paramValues,
-      database_name: databaseName,
+      connection_name: databaseName,
     }),
   });
 

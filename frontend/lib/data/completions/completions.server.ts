@@ -255,7 +255,7 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
           query: processedQuery,
           cursor_offset: adjustedCursorOffset,
           schema_data: schemaData,
-          database_name: context.databaseName,
+          connection_name: context.databaseName,
           connection_type: context.connectionType,
         }),
       });
@@ -279,15 +279,12 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
   }
 
   async sqlToIR(options: SqlToIROptions): Promise<SqlToIRResult> {
-    const { sql, databaseName } = options;
+    const { sql, dialect } = options;
 
     try {
       const response = await pythonBackendFetch('/api/sql-to-ir', {
         method: 'POST',
-        body: JSON.stringify({
-          sql,
-          database_name: databaseName,
-        }),
+        body: JSON.stringify({ sql, dialect }),
       });
 
       if (!response.ok) {
@@ -311,13 +308,13 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
   }
 
   async irToSql(options: IRToSqlOptions): Promise<IRToSqlResult> {
-    const { ir } = options;
+    const { ir, dialect } = options;
 
     try {
       // Call Python backend - single source of truth for IR→SQL conversion
       const response = await pythonBackendFetch('/api/ir-to-sql', {
         method: 'POST',
-        body: JSON.stringify({ ir }),
+        body: JSON.stringify({ ir, dialect }),
       });
 
       if (!response.ok) {

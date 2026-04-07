@@ -17,6 +17,7 @@ import type { QuestionOption } from '@/lib/hooks/useAvailableQuestions';
 
 interface QueryBuilderRootProps {
   databaseName: string;
+  dialect: string;
   sql: string;
   onSqlChange: (sql: string) => void;
   onExecute?: () => void;
@@ -26,6 +27,7 @@ interface QueryBuilderRootProps {
 
 export function QueryBuilderRoot({
   databaseName,
+  dialect,
   sql,
   onSqlChange,
   onExecute,
@@ -54,7 +56,7 @@ export function QueryBuilderRoot({
       }
 
       try {
-        const result = await CompletionsAPI.sqlToIR({ sql });
+        const result = await CompletionsAPI.sqlToIR({ sql, dialect });
         if (result.success && result.ir) {
           if (isCompoundQueryIR(result.ir)) {
             setCompoundIR(result.ir);
@@ -82,7 +84,7 @@ export function QueryBuilderRoot({
   const handleConvertToCompound = useCallback(async () => {
     // Parse current SQL to get the QueryIR
     try {
-      const result = await CompletionsAPI.sqlToIR({ sql });
+      const result = await CompletionsAPI.sqlToIR({ sql, dialect });
       if (result.success && result.ir && !isCompoundQueryIR(result.ir)) {
         const currentQuery = result.ir as QueryIR;
         const emptyQuery: QueryIR = {
@@ -117,7 +119,7 @@ export function QueryBuilderRoot({
         setMode('simple');
         setCompoundIR(null);
         if (newIR.queries.length === 1) {
-          const sqlResult = await CompletionsAPI.irToSql({ ir: newIR.queries[0] });
+          const sqlResult = await CompletionsAPI.irToSql({ ir: newIR.queries[0], dialect });
           if (sqlResult.success && sqlResult.sql) {
             lastGeneratedSqlRef.current = sqlResult.sql;
             onSqlChange(sqlResult.sql);
@@ -132,7 +134,7 @@ export function QueryBuilderRoot({
 
       // Generate SQL from updated compound IR
       try {
-        const result = await CompletionsAPI.irToSql({ ir: newIR });
+        const result = await CompletionsAPI.irToSql({ ir: newIR, dialect });
         if (result.success && result.sql) {
           lastGeneratedSqlRef.current = result.sql;
           lastSqlRef.current = result.sql;
@@ -162,7 +164,7 @@ export function QueryBuilderRoot({
       const kept = compoundIR.queries[keepIndex];
       if (kept?.from?.table) {
         try {
-          const result = await CompletionsAPI.irToSql({ ir: kept });
+          const result = await CompletionsAPI.irToSql({ ir: kept, dialect });
           if (result.success && result.sql) {
             lastGeneratedSqlRef.current = result.sql;
             lastSqlRef.current = result.sql;
@@ -178,6 +180,7 @@ export function QueryBuilderRoot({
     return (
       <CompoundQueryBuilder
         databaseName={databaseName}
+        dialect={dialect}
         ir={compoundIR}
         onIRChange={handleCompoundIRChange}
         onDissolve={handleDissolve}
@@ -192,6 +195,7 @@ export function QueryBuilderRoot({
   return (
     <QueryBuilder
       databaseName={databaseName}
+      dialect={dialect}
       sql={sql}
       onSqlChange={(newSql) => {
         lastGeneratedSqlRef.current = newSql;

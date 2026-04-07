@@ -82,21 +82,21 @@ describe('searchFiles - Integration Tests', () => {
         description: 'Shows user data',
         vizSettings: { type: 'table' },
         parameters: [],
-        database_name: 'default'
+        connection_name: 'default'
       }),
       createMockQuestion(2, 'Sales Report', '/reports/sales', {
         query: 'SELECT user_id, address, email FROM UserAddress ua JOIN users u ON ua.user_id = u.id',
         description: 'Revenue by user address',
         vizSettings: { type: 'table' },
         parameters: [],
-        database_name: 'default'
+        connection_name: 'default'
       }),
       createMockQuestion(3, 'Address Book', '/reports/address', {
         query: 'SELECT * FROM locations',
         description: 'Location addresses',
         vizSettings: { type: 'table' },
         parameters: [],
-        database_name: 'default'
+        connection_name: 'default'
       }),
       createMockDashboard(4, 'Revenue Dashboard', '/dashboards/revenue', {
         description: 'User address analysis and metrics',
@@ -149,14 +149,14 @@ describe('searchFiles - Integration Tests', () => {
         description: 'Total sales with filters',
         vizSettings: { type: 'bar', xCols: ['date'], yCols: ['amount'] },
         parameters: [],
-        database_name: 'default'
+        connection_name: 'default'
       }),
       createMockQuestion(2, 'User Report', '/reports/user', {
         query: 'SELECT * FROM users WHERE name != "test"',
         description: 'User data',
         vizSettings: { type: 'table' },
         parameters: [],
-        database_name: 'default'
+        connection_name: 'default'
       })
     ];
 
@@ -199,7 +199,7 @@ describe('searchFiles - Integration Tests', () => {
         description: 'Shows sales data',
         vizSettings: { type: 'line', xCols: ['date'], yCols: ['revenue'] },
         parameters: [],
-        database_name: 'default'
+        connection_name: 'default'
       }),
       // Question with revenue in query and description (lower weight)
       createMockQuestion(2, 'Sales Report', '/reports/sales', {
@@ -207,7 +207,7 @@ describe('searchFiles - Integration Tests', () => {
         description: 'Revenue and cost analysis',
         vizSettings: { type: 'bar', xCols: ['category'], yCols: ['revenue', 'cost'] },
         parameters: [],
-        database_name: 'default'
+        connection_name: 'default'
       }),
       // Dashboard with revenue in multiple places
       createMockDashboard(3, 'Revenue Dashboard', '/dashboards/revenue', {
@@ -237,7 +237,7 @@ describe('searchFiles - Integration Tests', () => {
         description: 'revenue revenue revenue revenue',
         vizSettings: { type: 'table' },
         parameters: [],
-        database_name: 'default'
+        connection_name: 'default'
       })
     ];
 

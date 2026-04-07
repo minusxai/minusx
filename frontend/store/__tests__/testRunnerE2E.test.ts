@@ -133,7 +133,7 @@ describe('Query Test Runner E2E (FilesAPI + runQuery mocked)', () => {
         id: 1,
         name: 'Total Revenue',
         type: 'question',
-        content: { query: 'SELECT 42 AS total', database_name: 'default' },
+        content: { query: 'SELECT 42 AS total', connection_name: 'default' },
       },
     });
     mockRunQuery.mockResolvedValue({
@@ -166,7 +166,7 @@ describe('Query Test Runner E2E (FilesAPI + runQuery mocked)', () => {
         id: 2,
         name: 'Row Count',
         type: 'question',
-        content: { query: 'SELECT 5 AS cnt', database_name: 'default' },
+        content: { query: 'SELECT 5 AS cnt', connection_name: 'default' },
       },
     });
     mockRunQuery.mockResolvedValue({
@@ -199,7 +199,7 @@ describe('Query Test Runner E2E (FilesAPI + runQuery mocked)', () => {
         id: 3,
         name: 'Active Users',
         type: 'question',
-        content: { query: 'SELECT 100 AS users', database_name: 'default' },
+        content: { query: 'SELECT 100 AS users', connection_name: 'default' },
       },
     });
     mockRunQuery.mockResolvedValue({
@@ -231,7 +231,7 @@ describe('Query Test Runner E2E (FilesAPI + runQuery mocked)', () => {
         id: 4,
         name: 'Status Check',
         type: 'question',
-        content: { query: "SELECT 'active' AS status", database_name: 'default' },
+        content: { query: "SELECT 'active' AS status", connection_name: 'default' },
       },
     });
     mockRunQuery.mockResolvedValue({
@@ -263,7 +263,7 @@ describe('Query Test Runner E2E (FilesAPI + runQuery mocked)', () => {
         id: 5,
         name: 'Time Series',
         type: 'question',
-        content: { query: 'SELECT day, value FROM series', database_name: 'default' },
+        content: { query: 'SELECT day, value FROM series', connection_name: 'default' },
       },
     });
     mockRunQuery.mockResolvedValue({

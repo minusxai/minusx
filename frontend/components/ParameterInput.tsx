@@ -50,7 +50,7 @@ function SourceDropdownWidget({ source, paramType, currentValue, paramName, onCh
   const { data, loading, error } = useQueryResult(
     content?.query ?? '',
     (content?.parameterValues ?? {}) as Record<string, any>,
-    content?.database_name ?? '',
+    content?.connection_name ?? '',
     content?.references ?? undefined,
     { skip: !content?.query }
   );

@@ -63,7 +63,7 @@ export default function CreateQuestionModalContainer({
   const queryToExecute = lastExecuted || {
     query: mergedContent?.query || '',
     params: mergedContent?.parameterValues || {},
-    database: mergedContent?.database_name,
+    database: mergedContent?.connection_name,
     references: mergedContent?.references || []
   };
 
@@ -93,7 +93,7 @@ export default function CreateQuestionModalContainer({
     const initialQuery = {
       query: mergedContent.query || '',
       params: mergedContent.parameterValues || {},
-      database: mergedContent.database_name
+      database: mergedContent.connection_name
     };
 
     dispatch(setEphemeral({
@@ -119,7 +119,7 @@ export default function CreateQuestionModalContainer({
     const newQuery = {
       query: mergedContent.query,
       params: mergedContent.parameterValues || {},
-      database: mergedContent.database_name,
+      database: mergedContent.connection_name,
       references: mergedContent.references || []
     };
 

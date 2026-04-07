@@ -396,5 +396,5 @@ QUERIES = [
 
 @pytest.mark.parametrize("name,sql", QUERIES, ids=[n for n, _ in QUERIES])
 def test_template_query_parses(name, sql):
-    ir = parse_sql_to_ir(sql)
+    ir = parse_sql_to_ir(sql, 'duckdb')
     assert ir is not None

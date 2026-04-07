@@ -28,7 +28,7 @@ import {
   LuX,
   LuGripVertical,
 } from 'react-icons/lu';
-import { QuestionContent, QuestionParameter } from '@/lib/types';
+import { QuestionContent, QuestionParameter, connectionTypeToDialect } from '@/lib/types';
 import SqlEditor from '../SqlEditor';
 import ParameterRow from '../ParameterRow';
 import DatabaseSelector from '../DatabaseSelector';
@@ -114,7 +114,8 @@ export default function QuestionViewV2({
   // Get schema data for SQL autocomplete
   const { databases: schemaData } = useSchemaContext(filePath || '/org');
   const { connections } = useConnections();
-  const connectionType = content.database_name ? connections[content.database_name]?.metadata?.type : undefined;
+  const connectionType = content.connection_name ? connections[content.connection_name]?.metadata?.type : undefined;
+  const dialect = connectionTypeToDialect(connectionType ?? '');
 
   // SQL editor collapsed state — persisted in Redux per question so it survives navigation.
   // Default: open in page mode, collapsed in toolcall/embedded mode.
@@ -174,7 +175,7 @@ export default function QuestionViewV2({
   // Get available questions for inline @reference autocomplete
   const { questions: availableQuestions } = useAvailableQuestions(
     questionId,
-    content.database_name,
+    content.connection_name,
     referencedQuestions.map(r => r.id)
   );
 
@@ -305,8 +306,8 @@ export default function QuestionViewV2({
   };
 
   // Handle database change
-  const handleDatabaseChange = (database: string) => {
-    onChange({ database_name: database });
+  const handleDatabaseChange = ({ connection_name }: Pick<import('@/lib/types').FullQuery, 'connection_name' | 'dialect'>) => {
+    onChange({ connection_name });
   };
 
   // Handle viz type change
@@ -494,7 +495,7 @@ export default function QuestionViewV2({
               onClose={() => setShowQuestionPicker(false)}
               onSelect={handleAddReference}
               currentQuestionId={questionId}
-              currentConnectionId={content.database_name}
+              currentConnectionId={content.connection_name}
               excludedIds={referencedQuestions.map(r => r.id)}
             />
           )}
@@ -632,7 +633,7 @@ export default function QuestionViewV2({
 
                 {/* Database selector */}
                 <DatabaseSelector
-                  value={content.database_name || ''}
+                  value={content.connection_name || ''}
                   onChange={handleDatabaseChange}
                 />
               </HStack>
@@ -664,7 +665,7 @@ export default function QuestionViewV2({
                         alias: r.alias,
                         query: (r.question!.content as QuestionContent).query
                       }))}
-                    databaseName={content.database_name}
+                    databaseName={content.connection_name}
                     connectionType={connectionType}
                     fillHeight={!useCompactLayout}
                   />
@@ -674,7 +675,8 @@ export default function QuestionViewV2({
                 {queryMode === 'gui' && (
                   <Box flex={1} overflow="auto">
                     <QueryBuilderRoot
-                      databaseName={content.database_name || ''}
+                      databaseName={content.connection_name || ''}
+                      dialect={dialect}
                       sql={content.query}
                       onSqlChange={handleQueryChange}
                       onExecute={handleExecute}
@@ -824,7 +826,7 @@ export default function QuestionViewV2({
                 onValueChange={handleParameterValueChange}
                 onSubmit={handleParametersSubmit}
                 onParametersChange={handleParametersStructuralChange}
-                database={content.database_name}
+                database={content.connection_name}
               />
             )}
             {sqlPreviewId ? (

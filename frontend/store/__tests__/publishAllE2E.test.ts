@@ -122,7 +122,7 @@ describe('publishAll E2E', () => {
       {
         description: 'Revenue by month',
         query: 'SELECT month, SUM(revenue) FROM sales GROUP BY month',
-        database_name: 'test_db',
+        connection_name: 'test_db',
         parameters: [],
         vizSettings: { type: 'table' }
       } as QuestionContent,
@@ -137,7 +137,7 @@ describe('publishAll E2E', () => {
       {
         description: 'Active user count',
         query: 'SELECT COUNT(*) FROM users WHERE active = true',
-        database_name: 'test_db',
+        connection_name: 'test_db',
         parameters: [],
         vizSettings: { type: 'table' }
       } as QuestionContent,
@@ -233,7 +233,7 @@ describe('publishAll E2E', () => {
     const virtualContent: QuestionContent = {
       description: 'Brand new question',
       query: 'SELECT id, name FROM new_table LIMIT 10',
-      database_name: 'test_db',
+      connection_name: 'test_db',
       parameters: [],
       vizSettings: { type: 'table' }
     };

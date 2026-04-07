@@ -20,7 +20,7 @@ class ValidationResult(BaseModel):
     hint: Optional[str] = None
 
 
-def validate_sql_for_gui(sql: str) -> ValidationResult:
+def validate_sql_for_gui(sql: str, dialect: str) -> ValidationResult:
     """
     Validates if SQL can be fully supported in GUI mode (lossless).
 
@@ -28,12 +28,13 @@ def validate_sql_for_gui(sql: str) -> ValidationResult:
 
     Args:
         sql: SQL query string
+        dialect: sqlglot dialect for parsing (e.g. 'postgres', 'bigquery', 'duckdb')
 
     Returns:
         ValidationResult with supported=True (lossless) or supported=False (lossy/unsupported)
     """
     try:
-        ast = sqlglot.parse_one(sql, read="postgres")
+        ast = sqlglot.parse_one(sql, read=dialect)
     except Exception as e:
         return ValidationResult(
             supported=False,
@@ -325,7 +326,7 @@ class SQLComparisonResult(BaseModel):
     regenerated_normalized: Optional[str] = None
 
 
-def compare_sql_ast(sql1: str, sql2: str, dialect: str = "postgres") -> SQLComparisonResult:
+def compare_sql_ast(sql1: str, sql2: str, dialect: str = "duckdb") -> SQLComparisonResult:
     """
     Compare two SQL statements for semantic equivalence using AST comparison.
 
@@ -335,7 +336,7 @@ def compare_sql_ast(sql1: str, sql2: str, dialect: str = "postgres") -> SQLCompa
     Args:
         sql1: First SQL statement (typically the original)
         sql2: Second SQL statement (typically the regenerated)
-        dialect: SQL dialect for parsing (default: postgres)
+        dialect: SQL dialect for parsing (default: duckdb)
 
     Returns:
         SQLComparisonResult with equivalent=True if semantically equivalent
@@ -472,7 +473,7 @@ def _find_ast_differences(ast1: exp.Expression, ast2: exp.Expression) -> List[st
     return differences
 
 
-def validate_round_trip(original_sql: str, regenerated_sql: str) -> ValidationResult:
+def validate_round_trip(original_sql: str, regenerated_sql: str, dialect: str = "duckdb") -> ValidationResult:
     """
     Validate that a round-trip (SQL → IR → SQL) is lossless.
 
@@ -481,11 +482,12 @@ def validate_round_trip(original_sql: str, regenerated_sql: str) -> ValidationRe
     Args:
         original_sql: The original SQL before conversion to IR
         regenerated_sql: The SQL regenerated from IR
+        dialect: SQL dialect for parsing (default: duckdb)
 
     Returns:
         ValidationResult with supported=True if round-trip is lossless
     """
-    comparison = compare_sql_ast(original_sql, regenerated_sql)
+    comparison = compare_sql_ast(original_sql, regenerated_sql, dialect)
 
     if comparison.equivalent:
         return ValidationResult(supported=True)

@@ -212,7 +212,7 @@ class CompletionsDataLayerClient implements ICompletionsDataLayer {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sql: options.sql,
-          databaseName: options.databaseName,
+          dialect: options.dialect,
         }),
       });
 
@@ -243,6 +243,7 @@ class CompletionsDataLayerClient implements ICompletionsDataLayer {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ir: options.ir,
+          dialect: options.dialect,
         }),
       });
 
