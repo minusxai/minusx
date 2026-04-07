@@ -1,7 +1,7 @@
 import type { QuestionReference, QuestionContent, QueryResult } from '@/lib/types';
-import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
+import { handleApiError } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { CTEfyQuery, ResolvedReference } from '@/lib/sql/query-composer';
 import { FilesAPI } from '@/lib/data/files.server';
 import { runQuery } from '@/lib/connections/run-query';
@@ -61,11 +61,11 @@ async function applyNoneParams(
 // ---- Server-side query result cache (shared across sessions per process) ----
 const QUERY_CACHE_TTL_MS = 60_000; // 60 seconds, hardcoded
 
-interface CacheEntry { result: QueryResult; cachedAt: number; }
+interface CacheEntry { result: QueryResult; cachedAt: number; finalQuery: string; }
 // eslint-disable-next-line no-restricted-syntax -- tenant-isolated: keys are `${companyId}:${mode}:${queryHash}`
 const queryCache = new Map<string, CacheEntry>();
 // eslint-disable-next-line no-restricted-syntax -- tenant-isolated: keys are `${companyId}:${mode}:${queryHash}`
-const queryInflight = new Map<string, Promise<QueryResult>>();
+const queryInflight = new Map<string, Promise<QueryResult & { _finalQuery: string }>>();
 
 // Evict stale entries every 5 minutes
 setInterval(() => {
@@ -113,20 +113,20 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         companyId: user.companyId, userEmail: user.email,
       });
       console.log(`[QUERY API] Cache hit. Total request time: ${Date.now() - startTime}ms`);
-      return successResponse({ ...cached.result, cachedAt: cached.cachedAt });
+      return NextResponse.json({ success: true, data: { ...cached.result, cachedAt: cached.cachedAt }, finalQuery: cached.finalQuery });
     }
 
     // Thundering herd: join in-flight promise for same hash
     const existingInflight = queryInflight.get(serverCacheKey);
     if (existingInflight) {
-      const result = await existingInflight;
-      return successResponse(result);
+      const { _finalQuery: rq, ...rest } = await existingInflight;
+      return NextResponse.json({ success: true, data: rest, finalQuery: rq });
     }
 
     // Execute query (wrapped in a promise so concurrent identical requests share it)
     const execPromise = (async () => {
       // Handle composed questions (CTE construction)
-      let finalQuery = query;
+      let composedQuery = query;
       if (references && Array.isArray(references) && references.length > 0) {
         console.log(`[QUERY API] Constructing CTEs for ${references.length} references`);
         const cteStart = Date.now();
@@ -144,20 +144,23 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         );
 
         // Use extracted function to build CTEs
-        finalQuery = CTEfyQuery(query, resolvedRefs);
+        composedQuery = CTEfyQuery(query, resolvedRefs);
         console.log(`[QUERY API] CTE construction took ${Date.now() - cteStart}ms`);
       }
 
       // Apply None params: remove filter conditions or substitute with NULL
-      const { sql: resolvedQuery, params: resolvedParams } = await applyNoneParams(finalQuery, paramValues);
+      const { sql: noneResolvedQuery, params: resolvedParams } = await applyNoneParams(composedQuery, paramValues);
 
       const queryStart = Date.now();
-      const result = await runQuery(database_name, resolvedQuery, resolvedParams, user, parameterTypes);
+      const result = await runQuery(database_name, noneResolvedQuery, resolvedParams, user, parameterTypes) as QueryResult & { finalQuery?: string };
       const durationMs = Date.now() - queryStart;
+
+      // Use finalQuery from Python backend; for Node connectors (no Python), use the pre-param query
+      const displayQuery = result.finalQuery ?? noneResolvedQuery;
 
       // Populate server-side cache
       const cachedAt = Date.now();
-      queryCache.set(serverCacheKey, { result, cachedAt });
+      queryCache.set(serverCacheKey, { result, cachedAt, finalQuery: displayQuery });
 
       // Publish analytics event (fire-and-forget via registry)
       appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
@@ -166,14 +169,14 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         companyId: user.companyId, userEmail: user.email,
       });
 
-      return { ...result, cachedAt };
+      return { ...result, cachedAt, _finalQuery: displayQuery };
     })();
 
     queryInflight.set(serverCacheKey, execPromise);
     try {
-      const result = await execPromise;
+      const { _finalQuery: rq, ...rest } = await execPromise;
       console.log(`[QUERY API] Total request time: ${Date.now() - startTime}ms`);
-      return successResponse(result);
+      return NextResponse.json({ success: true, data: rest, finalQuery: rq });
     } finally {
       queryInflight.delete(serverCacheKey);
     }

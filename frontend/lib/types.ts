@@ -105,6 +105,7 @@ export interface QueryResult {
   rows: Record<string, any>[];
   id?: string;        // query hash for delta deduplication
   cachedAt?: number;  // Unix timestamp (ms) when result was cached; absent on cache miss
+  finalQuery?: string; // Fully resolved SQL with params inlined (for display)
 }
 
 export interface CompressedQueryResult {
