@@ -434,6 +434,15 @@ class ExecuteQuery(Tool):
 
     Use this to run ad-hoc queries for data exploration.
     Results are cached but not associated with any question file.
+
+    Returns a JSON object with:
+    - data: GFM markdown containing the first shownRows rows of output
+    - totalRows: total rows returned by the query
+    - shownRows: number of rows included in the data field (may be < totalRows if output was large)
+    - truncated: true when data was cut short (shownRows < totalRows)
+
+    When truncated is true, narrow the query (add WHERE clauses or LIMIT) rather
+    than re-running the same query unchanged.
     """
 
     def __init__(

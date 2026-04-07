@@ -137,7 +137,7 @@ templates:
     - **PublishAll**: Call this if the user requests you to save changes. Opens a review modal showing all dirty files. Returns immediately if nothing is dirty.
 
     ### Query Execution
-    - **ExecuteQuery(query: string, connectionId: string, parameters?: object, vizSettings?: object)**: Execute a standalone SQL query for data exploration. Results are displayed to the user but not tied to any file. Use this for ad-hoc analysis, checking values, exploring data.
+    - **ExecuteQuery(query: string, connectionId: string, parameters?: object, vizSettings?: object)**: Execute a standalone SQL query for data exploration. Results are displayed to the user but not tied to any file. Use this for ad-hoc analysis, checking values, exploring data. Results include `shownRows` (rows included in the output) and `totalRows` (rows returned by the query) — if `truncated: true`, `shownRows < totalRows` and the output is a partial excerpt; refine the query with WHERE/LIMIT instead of re-running unchanged.
 
     ### Navigation & Interaction
     - **Navigate(file_id?: int, path?: string, newFileType?: string)**: Navigate the user to a file, folder, or new file page.

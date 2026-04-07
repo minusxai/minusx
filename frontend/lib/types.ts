@@ -112,6 +112,7 @@ export interface CompressedQueryResult {
   types: string[];
   data: string;        // markdown table (possibly character-truncated)
   totalRows: number;   // original full row count
+  shownRows: number;   // rows actually present in data (≤ totalRows)
   truncated: boolean;  // true if data was cut short by LIMIT_CHARS
   id?: string;         // query hash (from QueryResult.id)
   error?: string;      // set when query execution failed

@@ -666,6 +666,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       expect(compressed.data).toContain('42');
       // Not truncated for small result sets
       expect(compressed.truncated).toBe(false);
+      expect(compressed.shownRows).toBe(compressed.totalRows);
     });
 
     it('error result has success:false and error message in both content and details', async () => {
@@ -747,6 +748,62 @@ describe('Phase 1: Unified File System API E2E', () => {
       expect(details.queryResult).toBeDefined();
       expect(details.queryResult!.columns).toEqual(['name', 'age']);
       expect(details.queryResult!.rows).toHaveLength(2);
+    });
+  });
+
+  // ============================================================================
+  // compressQueryResult — truncation behaviour
+  // ============================================================================
+
+  describe('compressQueryResult — truncation', () => {
+    const makeQR = (rows: Record<string, string>[]) => ({
+      columns: Object.keys(rows[0] ?? {}),
+      types: Object.keys(rows[0] ?? {}).map(() => 'VARCHAR'),
+      rows,
+    });
+
+    it('shownRows equals totalRows and truncated is false when all rows fit', () => {
+      const qr = makeQR([{ id: '1', name: 'Alice' }, { id: '2', name: 'Bob' }]);
+      const compressed = compressQueryResult(qr);
+      expect(compressed.truncated).toBe(false);
+      expect(compressed.totalRows).toBe(2);
+      expect(compressed.shownRows).toBe(2);
+    });
+
+    it('truncated is true and shownRows < totalRows when rows exceed maxChars', () => {
+      // Build rows whose combined markdown exceeds a small budget
+      const longValue = 'x'.repeat(100);
+      const rows = Array.from({ length: 10 }, (_, i) => ({ id: String(i), value: longValue }));
+      const qr = makeQR(rows);
+
+      // Use a tiny budget so only a few rows fit
+      const compressed = compressQueryResult(qr, 300);
+
+      expect(compressed.truncated).toBe(true);
+      expect(compressed.totalRows).toBe(10);
+      expect(compressed.shownRows).toBeGreaterThanOrEqual(1);
+      expect(compressed.shownRows).toBeLessThan(10);
+
+      // shownRows must exactly equal the number of data rows in the output
+      const dataRows = compressed.data.split('\n').filter(l => l.startsWith('|') && !l.includes('---')).length - 1; // subtract header
+      expect(compressed.shownRows).toBe(dataRows);
+    });
+
+    it('a single very-wide row that exceeds budget produces shownRows=0 and truncated=true', () => {
+      const row = { col: 'x'.repeat(500) };
+      const compressed = compressQueryResult({ columns: ['col'], types: ['VARCHAR'], rows: [row] }, 50);
+      expect(compressed.truncated).toBe(true);
+      expect(compressed.totalRows).toBe(1);
+      expect(compressed.shownRows).toBe(0);
+    });
+
+    it('error path returns shownRows=0 totalRows=0 truncated=false', () => {
+      const errQR = { columns: [], types: [], rows: [], error: 'connection refused' } as any;
+      const compressed = compressQueryResult(errQR);
+      expect(compressed.error).toBe('connection refused');
+      expect(compressed.truncated).toBe(false);
+      expect(compressed.totalRows).toBe(0);
+      expect(compressed.shownRows).toBe(0);
     });
   });
 
