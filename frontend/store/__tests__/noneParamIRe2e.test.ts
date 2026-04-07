@@ -218,15 +218,16 @@ describe('Parameterised query execution E2E (real Python backend)', () => {
     expect(capturedSQL()).not.toContain('WHERE');
   });
 
-  it("empty string treated same as null: IR removes condition", async () => {
+  it('empty string is a regular value — WHERE condition kept, param forwarded', async () => {
     const response = await queryPostHandler(makeQueryRequest({
       database_name: DUCK_CONN,
-      query: 'SELECT * FROM orders WHERE created_at > :date_min',
-      parameters: { date_min: '' },
+      query: 'SELECT * FROM orders WHERE status = :status',
+      parameters: { status: '' },
     }));
     expect(response.status).toBe(200);
-    expect(capturedSQL()).not.toContain(':date_min');
-    expect(capturedSQL()).not.toContain('WHERE');
+    expect(capturedSQL()).toContain('WHERE');
+    expect(capturedSQL()).toContain(':status');
+    expect(capturedParams()).toEqual({ status: '' });
   });
 
   it('ILIKE null: IR removes condition entirely (not NULL substitution)', async () => {
