@@ -249,11 +249,13 @@ export default function DashboardView({
   const effectiveSubmittedValues = useMemo(() => {
     const values: Record<string, any> = {};
     for (const p of mergedParameters) {
-      // Use 'in' check so null (skipped) is preserved from lastExecutedParams
+      // Use 'in' check so null (skipped) is preserved — ?? treats null as nullish
       if (p.name in lastExecutedParams) {
         values[p.name] = lastExecutedParams[p.name];
+      } else if (paramValues && p.name in paramValues) {
+        values[p.name] = paramValues[p.name];
       } else {
-        values[p.name] = paramValues[p.name] ?? questionParamDefaults.get(p.name) ?? '';
+        values[p.name] = questionParamDefaults.get(p.name) ?? '';
       }
     }
     return values;
@@ -449,14 +451,18 @@ export default function DashboardView({
                   setLocalParamValues(prev => ({ ...prev, [paramName]: value }));
                 }}
                 onSubmit={(newParamValues) => {
-                  // Persist submitted values + update lastExecuted.params to trigger execution
-                  editFile({ fileId, changes: { content: { parameterValues: newParamValues } } });
+                  // Update lastExecuted.params to trigger execution
                   dispatch(setEphemeral({
                     fileId,
                     changes: {
                       lastExecuted: { query: '', params: newParamValues, database: '', references: [] }
                     }
                   }));
+                  // In edit mode: persist to dirty state (saveable with Update)
+                  // Outside edit mode: ephemeral only (no dirty, no save needed)
+                  if (editMode) {
+                    editFile({ fileId, changes: { content: { parameterValues: newParamValues } } });
+                  }
                 }}
                 disableTypeChange={true}
                 onHoverParam={setHoveredParamKey}
