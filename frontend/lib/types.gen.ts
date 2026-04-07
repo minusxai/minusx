@@ -204,9 +204,12 @@ export type Parameters = QuestionParameter[] | null;
 export type Name2 = string;
 export type ParameterType = "text" | "number" | "date";
 export type Label = string | null;
+export type Source = QuestionParameterSource | SqlParameterSource | null;
 export type Type1 = "question";
 export type Id1 = number;
 export type Column1 = string;
+export type Type2 = "sql";
+export type Query1 = string;
 export type Parametervalues = {
   [k: string]: unknown;
 } | null;
@@ -221,11 +224,11 @@ export type References1 = number[] | null;
 export type Id3 = number | null;
 export type Name3 = string;
 export type Path1 = string;
-export type Type2 = "dashboard";
+export type Type3 = "dashboard";
 export type Description1 = string | null;
-export type Type3 = "question";
+export type Type4 = "question";
 export type Id4 = number;
-export type Type4 = "text" | "image" | "divider";
+export type Type5 = "text" | "image" | "divider";
 export type Id5 = string | null;
 export type Content = string | null;
 /**
@@ -373,15 +376,22 @@ export interface QuestionParameter {
   name: Name2;
   type: ParameterType;
   label?: Label;
-  source?: ParameterSource | null;
+  source?: Source;
 }
 /**
  * Reference to another question whose output drives a parameter's dropdown values.
  */
-export interface ParameterSource {
+export interface QuestionParameterSource {
   type: Type1;
   id: Id1;
   column: Column1;
+}
+/**
+ * Inline SQL query whose first column drives a parameter's dropdown values.
+ */
+export interface SqlParameterSource {
+  type: Type2;
+  query: Query1;
 }
 /**
  * Composed question reference — lets this query use @alias as a CTE.
@@ -394,7 +404,7 @@ export interface AtlasDashboardFile {
   id?: Id3;
   name: Name3;
   path: Path1;
-  type: Type2;
+  type: Type3;
   content: DashboardContent;
   references?: References2;
 }
@@ -408,14 +418,14 @@ export interface DashboardContent {
  * A reference to another question embedded in the dashboard.
  */
 export interface FileReference {
-  type: Type3;
+  type: Type4;
   id: Id4;
 }
 /**
  * Inline content block (text, image, divider) — no external file.
  */
 export interface InlineAsset {
-  type: Type4;
+  type: Type5;
   id?: Id5;
   content?: Content;
 }

@@ -131,11 +131,18 @@ class ParameterType(str, Enum):
     NUMBER = "number"
     DATE = "date"
 
-class ParameterSource(BaseModel):
+class QuestionParameterSource(BaseModel):
     """Reference to another question whose output drives a parameter's dropdown values."""
     type: Literal["question"]
     id: int
     column: str
+
+class SqlParameterSource(BaseModel):
+    """Inline SQL query whose first column drives a parameter's dropdown values."""
+    type: Literal["sql"]
+    query: str
+
+ParameterSource = Union[QuestionParameterSource, SqlParameterSource]
 
 class QuestionParameter(BaseModel):
     name: str

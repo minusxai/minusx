@@ -15,6 +15,7 @@ interface ParameterRowProps {
   onParametersChange?: (parameters: QuestionParameter[]) => void;  // structural
   disableTypeChange?: boolean;
   onHoverParam?: (key: string | null) => void;
+  database?: string;
 }
 
 export default function ParameterRow({
@@ -26,6 +27,7 @@ export default function ParameterRow({
   onParametersChange,
   disableTypeChange = false,
   onHoverParam,
+  database,
 }: ParameterRowProps) {
   // Compute effective value per param: prefer local edit value, fall back to last submitted value
   const getEffectiveValue = (param: QuestionParameter): string | number | null | undefined => {
@@ -101,6 +103,7 @@ export default function ParameterRow({
           disableTypeChange={disableTypeChange}
           disableSourceConfig={disableTypeChange}
           onHoverParam={onHoverParam}
+          database={database}
         />
       ))}
       {isDirty && (

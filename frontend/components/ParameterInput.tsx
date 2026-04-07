@@ -3,13 +3,13 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Input, HStack, Text, MenuRoot, MenuTrigger, MenuContent, MenuItem,
-  Portal, MenuPositioner, Box, IconButton, VStack, Popover, Spinner,
+  Portal, MenuPositioner, Box, IconButton, VStack, Popover, Spinner, Button,
   Combobox, createListCollection,
 } from '@chakra-ui/react';
 import { LuChevronDown, LuSettings2, LuTriangleAlert, LuBan } from 'react-icons/lu';
 import { Tooltip } from '@/components/ui/tooltip';
 import { QuestionParameter, QuestionContent } from '@/lib/types';
-import type { ParameterSource } from '@/lib/types.gen';
+import type { QuestionParameterSource, SqlParameterSource } from '@/lib/types.gen';
 import { getTypeColor, getTypeIcon } from '@/lib/sql/sql-params';
 import DatePicker from './DatePicker';
 import { useFile, useFilesByCriteria, useQueryResult } from '@/lib/hooks/file-state-hooks';
@@ -28,7 +28,7 @@ function isNumericType(type: string): boolean {
 // Rendered in place of the text/number Input when parameter.source is set.
 
 interface SourceDropdownWidgetProps {
-  source: ParameterSource;
+  source: QuestionParameterSource;
   paramType: 'text' | 'number';
   currentValue: string | number | undefined;
   paramName: string;
@@ -206,6 +206,162 @@ function SourceDropdownWidget({ source, paramType, currentValue, paramName, onCh
   );
 }
 
+// ─── Inline SQL Dropdown Widget ──────────────────────────────────────────────
+// Rendered when parameter.source.type === 'sql'. Executes the inline query and
+// shows results as a combobox dropdown.
+
+interface InlineSqlDropdownWidgetProps {
+  source: SqlParameterSource;
+  paramType: 'text' | 'number';
+  currentValue: string | number | undefined;
+  paramName: string;
+  database?: string;
+  onChange: (value: string | number) => void;
+  onSubmit?: (paramName?: string, value?: string | number) => void;
+}
+
+function InlineSqlDropdownWidget({ source, paramType, currentValue, paramName, database, onChange, onSubmit }: InlineSqlDropdownWidgetProps) {
+  const { data, loading, error } = useQueryResult(
+    source.query,
+    {},
+    database ?? '',
+    undefined,
+    { skip: !source.query }
+  );
+
+  // Extract distinct values from the first column
+  const values = useMemo<string[] | null>(() => {
+    if (!data?.rows || !data?.columns?.length) return null;
+    const firstCol = data.columns[0];
+    const col = typeof firstCol === 'string' ? firstCol : firstCol.name;
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const row of data.rows) {
+      const v = row[col];
+      if (v !== null && v !== undefined) {
+        const str = paramType === 'number' ? formatNumStr(String(v)) : String(v);
+        if (!seen.has(str)) {
+          seen.add(str);
+          result.push(str);
+        }
+      }
+    }
+    return paramType === 'number'
+      ? result.sort((a, b) => parseFloat(a) - parseFloat(b))
+      : result.sort();
+  }, [data, paramType]);
+
+  const [filterText, setFilterText] = useState('');
+
+  const filteredCollection = useMemo(() => {
+    const lower = filterText.toLowerCase();
+    const all = values ?? [];
+    if (!lower) return createListCollection({ items: all.map(v => ({ value: v, label: v })) });
+    const prefix: string[] = [];
+    const rest: string[] = [];
+    for (const v of all) {
+      if (v.toLowerCase().startsWith(lower)) prefix.push(v);
+      else if (v.toLowerCase().includes(lower)) rest.push(v);
+    }
+    return createListCollection({ items: [...prefix, ...rest].map(v => ({ value: v, label: v })) });
+  }, [values, filterText]);
+
+  const defaultDisplayValue = currentValue !== undefined && currentValue !== null
+    ? (paramType === 'number' ? formatNumStr(String(currentValue)) : String(currentValue))
+    : '';
+
+  const [inputDisplay, setInputDisplay] = useState(defaultDisplayValue);
+  const committedRef = useRef(defaultDisplayValue);
+
+  const commit = (raw: string) => {
+    committedRef.current = raw;
+    setInputDisplay(raw);
+    setFilterText('');
+    const final: string | number = paramType === 'number' ? (parseFloat(raw) || 0) : raw;
+    onChange(final);
+  };
+
+  return (
+    <HStack gap={1}>
+      {(error || (values !== null && values.length === 0 && !loading)) && (
+        <Tooltip content={error ? 'Could not load suggestions' : 'No suggestions found'}>
+          <Box color="orange.400" display="flex" alignItems="center">
+            <LuTriangleAlert size={14} />
+          </Box>
+        </Tooltip>
+      )}
+      {loading && values === null && <Spinner size="xs" color="accent.teal" />}
+
+      <Combobox.Root
+        collection={filteredCollection}
+        inputValue={inputDisplay}
+        onValueChange={(e) => {
+          if (e.value[0] !== undefined) commit(e.value[0]);
+        }}
+        onInputValueChange={(details) => {
+          setInputDisplay(details.inputValue);
+          setFilterText(details.inputValue);
+        }}
+        onOpenChange={({ open }) => {
+          if (!open) {
+            setInputDisplay(committedRef.current);
+            setFilterText('');
+          }
+        }}
+        openOnClick
+        inputBehavior="none"
+        positioning={{ placement: 'bottom-start', gutter: 4 }}
+        size="sm"
+      >
+        <Combobox.Control>
+          <Combobox.Input
+            placeholder={paramType === 'number' ? '0 or select…' : 'type or select…'}
+            bg="transparent"
+            border="none"
+            fontSize="xs"
+            h={ROW_H}
+            minW="100px"
+            fontFamily="mono"
+            _focus={{ outline: 'none', boxShadow: 'none' }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || ((e.metaKey || e.ctrlKey) && e.key === 'Enter')) {
+                e.preventDefault();
+                e.stopPropagation();
+                const raw = e.currentTarget.value;
+                commit(raw);
+                if (onSubmit) {
+                  const final: string | number = paramType === 'number'
+                    ? (parseFloat(raw) || 0)
+                    : raw;
+                  onSubmit(paramName, final);
+                }
+              }
+            }}
+          />
+        </Combobox.Control>
+        <Portal>
+          <Combobox.Positioner>
+            <Combobox.Content minW="160px">
+              {loading && values === null ? (
+                <Combobox.Empty>Loading…</Combobox.Empty>
+              ) : filteredCollection.items.length === 0 ? (
+                <Combobox.Empty>No matches</Combobox.Empty>
+              ) : (
+                filteredCollection.items.map(item => (
+                  <Combobox.Item key={item.value} item={item}>
+                    <Combobox.ItemText>{item.label}</Combobox.ItemText>
+                    <Combobox.ItemIndicator />
+                  </Combobox.Item>
+                ))
+              )}
+            </Combobox.Content>
+          </Combobox.Positioner>
+        </Portal>
+      </Combobox.Root>
+    </HStack>
+  );
+}
+
 // ─── Source Config Popover ────────────────────────────────────────────────────
 // Settings gear that opens a popover to configure parameter.source.
 
@@ -221,9 +377,13 @@ function SourceConfigPopover({ parameter, onParameterChange, onTypeChange, disab
   const [columns, setColumns] = useState<{ name: string; type: string }[]>([]);
   const [loadingCols, setLoadingCols] = useState(false);
 
-  // Local mode state: 'manual' | 'question'. Tracks the toggle, even before question is selected.
+  // Local mode state tracks the toggle, even before config is complete.
   const isFromQuestion = parameter.source?.type === 'question';
-  const [mode, setMode] = useState<'manual' | 'question'>(isFromQuestion ? 'question' : 'manual');
+  const isFromSql = parameter.source?.type === 'sql';
+  const [mode, setMode] = useState<'manual' | 'question' | 'sql'>(
+    isFromSql ? 'sql' : isFromQuestion ? 'question' : 'manual'
+  );
+  const [sqlQuery, setSqlQuery] = useState(isFromSql ? (parameter.source as SqlParameterSource).query : '');
 
   const sourceQuestionId = parameter.source?.type === 'question' ? parameter.source.id : null;
 
@@ -263,23 +423,63 @@ function SourceConfigPopover({ parameter, onParameterChange, onTypeChange, disab
     return columns;
   }, [columns, parameter.type]);
 
-  const handleModeChange = (newMode: 'manual' | 'question') => {
+  // Local draft state for question source (not committed until Apply)
+  const [draftQuestionId, setDraftQuestionId] = useState<number | null>(sourceQuestionId);
+  const [draftColumn, setDraftColumn] = useState(parameter.source?.type === 'question' ? parameter.source.column : '');
+
+  const handleModeChange = (newMode: 'manual' | 'question' | 'sql') => {
     setMode(newMode);
     if (newMode === 'manual') {
       onParameterChange({ ...parameter, source: null });
       setColumns([]);
+      setSqlQuery('');
+      setDraftQuestionId(null);
+      setDraftColumn('');
+    } else if (newMode === 'sql') {
+      setColumns([]);
+      setDraftQuestionId(null);
+      setDraftColumn('');
+    } else if (newMode === 'question') {
+      setSqlQuery('');
     }
-    // Switching to 'question': wait for user to pick a question before setting source
   };
 
   const handleQuestionSelect = (id: number) => {
-    onParameterChange({ ...parameter, source: { type: 'question', id, column: '' } });
+    setDraftQuestionId(id);
+    setDraftColumn('');
     fetchColumns(id);
   };
 
   const handleColumnSelect = (column: string) => {
-    if (!sourceQuestionId) return;
-    onParameterChange({ ...parameter, source: { type: 'question', id: sourceQuestionId, column } });
+    setDraftColumn(column);
+  };
+
+  // Can we apply?
+  const canApply =
+    (mode === 'question' && !!draftQuestionId && !!draftColumn) ||
+    (mode === 'sql' && !!sqlQuery.trim());
+
+  // Check if current config differs from saved
+  const isDirty = (() => {
+    if (mode === 'manual') return false; // manual applies immediately
+    if (mode === 'question') {
+      if (parameter.source?.type !== 'question') return !!draftQuestionId && !!draftColumn;
+      return draftQuestionId !== parameter.source.id || draftColumn !== parameter.source.column;
+    }
+    if (mode === 'sql') {
+      if (parameter.source?.type !== 'sql') return !!sqlQuery.trim();
+      return sqlQuery.trim() !== parameter.source.query;
+    }
+    return false;
+  })();
+
+  const handleApply = () => {
+    if (mode === 'question' && draftQuestionId && draftColumn) {
+      onParameterChange({ ...parameter, source: { type: 'question', id: draftQuestionId, column: draftColumn } });
+    } else if (mode === 'sql' && sqlQuery.trim()) {
+      onParameterChange({ ...parameter, source: { type: 'sql', query: sqlQuery.trim() } });
+    }
+    setOpen(false);
   };
 
   return (
@@ -292,7 +492,7 @@ function SourceConfigPopover({ parameter, onParameterChange, onTypeChange, disab
           h={ROW_H}
           w={ROW_H}
           minW={ROW_H}
-          color={isFromQuestion ? 'accent.teal' : 'fg.subtle'}
+          color={isFromQuestion || isFromSql ? 'accent.teal' : 'fg.subtle'}
           _hover={{ color: 'accent.teal', bg: 'bg.emphasized' }}
         >
           <LuSettings2 style={{ width: 13, height: 13 }} />
@@ -359,10 +559,11 @@ function SourceConfigPopover({ parameter, onParameterChange, onTypeChange, disab
                   <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
                     Source
                   </Text>
-                  <HStack gap={1}>
+                  <HStack gap={1} flexWrap="wrap">
                     {([
                       { value: 'manual', label: 'Free input' },
                       { value: 'question', label: 'Saved question' },
+                      { value: 'sql', label: 'Inline SQL' },
                     ] as const).map((opt) => (
                       <Box
                         key={opt.value}
@@ -391,6 +592,34 @@ function SourceConfigPopover({ parameter, onParameterChange, onTypeChange, disab
                   </HStack>
                 </Box>
 
+                {mode === 'sql' && (
+                  <Box>
+                    <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
+                      Query
+                    </Text>
+                    <textarea
+                      style={{
+                        width: '100%',
+                        minHeight: '60px',
+                        padding: '6px 10px',
+                        background: 'var(--chakra-colors-bg-muted)',
+                        borderRadius: '4px',
+                        border: '1px solid var(--chakra-colors-border-muted)',
+                        fontSize: '12px',
+                        fontFamily: 'var(--chakra-fonts-mono)',
+                        color: 'var(--chakra-colors-fg-default)',
+                        resize: 'vertical',
+                        outline: 'none',
+                      }}
+                      onFocus={(e) => { e.target.style.borderColor = 'var(--chakra-colors-accent-teal)'; }}
+                      onBlur={(e) => { e.target.style.borderColor = 'var(--chakra-colors-border-muted)'; }}
+                      placeholder="SELECT DISTINCT year FROM sales"
+                      value={sqlQuery}
+                      onChange={(e) => setSqlQuery(e.target.value)}
+                    />
+                  </Box>
+                )}
+
                 {mode === 'question' && (
                   <>
                     <Box>
@@ -399,13 +628,13 @@ function SourceConfigPopover({ parameter, onParameterChange, onTypeChange, disab
                       </Text>
                       <FileSearchSelect
                         files={questionList}
-                        selectedId={sourceQuestionId}
+                        selectedId={draftQuestionId}
                         onSelect={handleQuestionSelect}
                         placeholder="Search questions…"
                       />
                     </Box>
 
-                    {sourceQuestionId && (
+                    {draftQuestionId && (
                       <Box>
                         <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1.5}>
                           Column
@@ -430,8 +659,8 @@ function SourceConfigPopover({ parameter, onParameterChange, onTypeChange, disab
                               _hover={{ borderColor: 'accent.teal' }}
                               justify="space-between"
                             >
-                              <Text lineClamp={1} color={parameter.source?.column ? 'fg.default' : 'fg.subtle'}>
-                                {loadingCols ? 'Loading…' : parameter.source?.column || '— select column —'}
+                              <Text lineClamp={1} color={draftColumn ? 'fg.default' : 'fg.subtle'}>
+                                {loadingCols ? 'Loading…' : draftColumn || '— select column —'}
                               </Text>
                               <LuChevronDown size={12} />
                             </HStack>
@@ -473,6 +702,23 @@ function SourceConfigPopover({ parameter, onParameterChange, onTypeChange, disab
                     )}
                   </>
                 )}
+                {/* Apply button */}
+                {(mode === 'question' || mode === 'sql') && (
+                  <Button
+                    size="xs"
+                    bg="accent.teal"
+                    color="white"
+                    fontFamily="mono"
+                    fontWeight="600"
+                    fontSize="xs"
+                    w="full"
+                    _hover={{ opacity: 0.9 }}
+                    disabled={!canApply || !isDirty}
+                    onClick={handleApply}
+                  >
+                    Apply
+                  </Button>
+                )}
               </VStack>
             </Popover.Body>
           </Popover.Content>
@@ -494,6 +740,7 @@ interface ParameterInputProps {
   disableTypeChange?: boolean;
   disableSourceConfig?: boolean;
   onHoverParam?: (key: string | null) => void;
+  database?: string;
 }
 
 export default function ParameterInput({
@@ -506,9 +753,11 @@ export default function ParameterInput({
   disableTypeChange = false,
   disableSourceConfig = false,
   onHoverParam,
+  database,
 }: ParameterInputProps) {
   const paramKey = `${parameter.name}-${parameter.type}`;
-  const hasSource = parameter.source?.type === 'question' && !!parameter.source.column;
+  const hasQuestionSource = parameter.source?.type === 'question' && !!parameter.source.column;
+  const hasSqlSource = parameter.source?.type === 'sql' && !!parameter.source.query;
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = parameter.type === 'number' ? parseFloat(e.target.value) || 0 : e.target.value;
@@ -579,13 +828,24 @@ export default function ParameterInput({
           <Text fontSize="xs" fontWeight="600" fontFamily="mono">Skipped</Text>
         </HStack>
       ) : (
-        hasSource && parameter.type !== 'date' ? (
+        hasQuestionSource && parameter.type !== 'date' ? (
           <SourceDropdownWidget
             key={String(value ?? '')}
-            source={parameter.source!}
+            source={parameter.source as QuestionParameterSource}
             paramType={parameter.type as 'text' | 'number'}
             currentValue={value ?? undefined}
             paramName={parameter.name}
+            onChange={onChange}
+            onSubmit={onSubmit}
+          />
+        ) : hasSqlSource && parameter.type !== 'date' ? (
+          <InlineSqlDropdownWidget
+            key={String(value ?? '')}
+            source={parameter.source as SqlParameterSource}
+            paramType={parameter.type as 'text' | 'number'}
+            currentValue={value ?? undefined}
+            paramName={parameter.name}
+            database={database}
             onChange={onChange}
             onSubmit={onSubmit}
           />

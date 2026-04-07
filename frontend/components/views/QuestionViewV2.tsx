@@ -824,6 +824,7 @@ export default function QuestionViewV2({
                 onValueChange={handleParameterValueChange}
                 onSubmit={handleParametersSubmit}
                 onParametersChange={handleParametersStructuralChange}
+                database={content.database_name}
               />
             )}
             {sqlPreviewId ? (
