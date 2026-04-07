@@ -362,7 +362,7 @@ function SourceConfigPopover({ parameter, onParameterChange, onTypeChange, disab
                   <HStack gap={1}>
                     {([
                       { value: 'manual', label: 'Free input' },
-                      { value: 'question', label: 'From question' },
+                      { value: 'question', label: 'Saved question' },
                     ] as const).map((opt) => (
                       <Box
                         key={opt.value}

@@ -87,7 +87,7 @@ export default function TestValueEditor({ value, answerType, onChange, disabled,
 
   const valueSourceOptions = [
     { value: 'constant', label: 'Constant' },
-    { value: 'query_question', label: 'From question' },
+    { value: 'query_question', label: 'Saved question' },
     { value: 'query_inline', label: 'Inline SQL' },
     ...(allowCannotAnswer ? [{ value: 'cannot_answer', label: 'Cannot answer' }] : []),
   ];
