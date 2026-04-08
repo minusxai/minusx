@@ -73,8 +73,8 @@ export function renderChartToSvg(
   options: RenderChartOptions = {},
 ): string | null {
   const {
-    width = 800,
-    height = 400,
+    width = 512,
+    height = 256,
     colorMode = 'dark',
   } = options;
 

@@ -13,8 +13,8 @@ import { uploadFile } from '@/lib/object-store/client';
 import type { QueryResult } from '@/lib/types';
 import type { VizSettings } from '@/lib/types.gen';
 
-const CHART_WIDTH = 800;
-const CHART_HEIGHT = 400;
+const CHART_WIDTH = 512;
+const CHART_HEIGHT = 256;
 const JPEG_QUALITY = 0.85;
 
 /**

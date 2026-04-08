@@ -75,8 +75,8 @@ export async function renderChartToJpeg(
   vizSettings: VizSettings,
   options: { width?: number; height?: number; colorMode?: 'light' | 'dark'; logoPath?: string } = {},
 ): Promise<Buffer | null> {
-  const width = options.width ?? 800;
-  const height = options.height ?? 400;
+  const width = options.width ?? 512;
+  const height = options.height ?? 256;
   const colorMode = options.colorMode ?? 'dark';
 
   const defaultLogoFile = colorMode === 'dark' ? 'logox.svg' : 'logox_dark.svg';
