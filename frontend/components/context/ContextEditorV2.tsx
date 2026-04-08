@@ -604,7 +604,7 @@ export default function ContextEditorV2({
         </Box>
       )}
 
-      {/* Status bar: Live/Draft toggle — shown when schedule is configured */}
+      {/* Status bar: Live/Draft toggle + suppress — shown when schedule is configured */}
       {content.schedule && (
         <StatusBanner
           status={content.status ?? 'draft'}
@@ -612,6 +612,8 @@ export default function ContextEditorV2({
           runLabel="Run Now"
           editMode={editMode}
           onChange={(s) => onChange({ status: s })}
+          suppressUntil={content.suppressUntil}
+          onSuppressChange={(val) => onChange({ suppressUntil: val })}
         />
       )}
 

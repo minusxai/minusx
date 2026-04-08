@@ -16,7 +16,6 @@ import { selectIsDirty } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
 import AlertRunContainerV2 from '@/components/containers/AlertRunContainerV2';
 import TestList from '@/components/test/TestList';
-import { SuppressPicker } from '@/components/shared/SuppressPicker';
 
 interface AlertViewProps {
   alert: AlertContent;
@@ -129,6 +128,8 @@ export default function AlertView({
         runLabel="Check Now"
         editMode={editMode}
         onChange={(s) => onChange({ status: s })}
+        suppressUntil={alert.suppressUntil}
+        onSuppressChange={(val) => onChange({ suppressUntil: val })}
       />
 
       {/* JSON View */}
@@ -210,13 +211,6 @@ export default function AlertView({
               <SchedulePicker
                 schedule={{ cron: alert.schedule?.cron || '0 9 * * 1', timezone: alert.schedule?.timezone || 'America/New_York' }}
                 onChange={(s) => onChange({ schedule: s })}
-                editMode={editMode}
-              />
-
-              {/* Suppress Card */}
-              <SuppressPicker
-                suppressUntil={alert.suppressUntil}
-                onChange={(val) => onChange({ suppressUntil: val })}
                 editMode={editMode}
               />
 
