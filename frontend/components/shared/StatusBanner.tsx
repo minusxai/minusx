@@ -50,9 +50,13 @@ export function StatusBanner({
     : isLive ? 'var(--chakra-colors-green-fg)' : 'var(--chakra-colors-yellow-fg)';
   const textColor = suppressed && isLive ? 'orange.fg' : isLive ? 'green.fg' : 'yellow.fg';
 
-  const suppressedDisplay = suppressUntil
-    ? new Date(suppressUntil).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
-    : '';
+  // Parse as local date (not UTC) to avoid timezone-shifting the display by one day.
+  // new Date('YYYY-MM-DD') is UTC midnight; new Date(y, m, d) is local midnight.
+  const suppressedDisplay = (() => {
+    if (!suppressUntil) return '';
+    const [y, m, d] = suppressUntil.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  })();
 
   return (
     <HStack
