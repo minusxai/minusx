@@ -81,7 +81,7 @@ export function ConversationList({
 }
 
 function getTypeColor(type: string): string {
-  if (type === 'slack') return '#4A154B';
+  if (type === 'slack') return 'accent.secondary';
   const meta = FILE_TYPE_METADATA[type as keyof typeof FILE_TYPE_METADATA];
   return meta?.color || 'fg.muted';
 }
@@ -134,8 +134,9 @@ const ConversationItem = React.memo(function ConversationItem({ conversation, is
       py={2}
       cursor="pointer"
       bg={isActive ? 'bg.muted' : 'transparent'}
-      borderLeft="2px solid"
-      borderColor={sourceColor || 'transparent'}
+      borderLeftWidth="2px"
+      borderLeftStyle="solid"
+      borderLeftColor={sourceColor || 'transparent'}
       _hover={{ bg: "bg.muted"}}
       onClick={handleClick}
       transition="all 0.15s"
@@ -152,7 +153,7 @@ const ConversationItem = React.memo(function ConversationItem({ conversation, is
         {/* Metadata Row */}
         <HStack justify="space-between" fontSize="2xs" align="center" gap={2}>
           {sourceLabel && sourceType && (
-            <HStack gap={1} opacity={0.8}>
+            <HStack gap={1}>
               {getTypeIcon(sourceType) && (
                 <Icon as={getTypeIcon(sourceType)!} boxSize="10px" color={sourceColor} />
               )}

@@ -303,23 +303,18 @@ export default function Sidebar() {
 
         {/* Recent Chats Section */}
         {!isCollapsed ? (
-          <Box mt={2}>
+          <Box>
             <HStack
               px={3}
               py={2}
-              mt={2}
+              mt={4}
               cursor="pointer"
               onClick={() => setHistoryExpanded(!historyExpanded)}
-              _hover={{ bg: 'bg.muted' }}
-              borderRadius="md"
               justify="space-between"
             >
-              <HStack gap={2}>
-                <Icon as={LuClock} boxSize={3.5} color="accent.teal" />
-                <Text fontSize="2xs" fontWeight="600" color="fg.subtle" textTransform="uppercase" letterSpacing="0.1em" fontFamily="mono">
-                  Recent Chats
-                </Text>
-              </HStack>
+              <Text fontSize="2xs" fontWeight="600" color="fg.subtle" textTransform="uppercase" letterSpacing="0.1em" fontFamily="mono">
+                Recent Chats
+              </Text>
               <Icon
                 as={LuChevronDown}
                 boxSize={3.5}
