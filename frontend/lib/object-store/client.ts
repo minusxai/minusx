@@ -27,7 +27,8 @@ export async function uploadFile(
   const res = await fetch(`/api/object-store/upload-url?${params}`);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? `Failed to get upload URL (${res.status})`);
+    const message = typeof body.error === 'string' ? body.error : body.error?.message;
+    throw new Error(message ?? `Failed to get upload URL (${res.status})`);
   }
   const { uploadUrl, publicUrl } = (await res.json()) as { uploadUrl: string; publicUrl: string };
 

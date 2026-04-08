@@ -195,7 +195,9 @@ class AnalystAgent(Agent):
         return "\n".join(parts)
 
     def _get_image_content_blocks(self) -> list:
-        """Return Anthropic image content blocks for any image attachments."""
+        """Return image content blocks for any image attachments.
+        Uses OpenAI image_url format — litellm translates this to Anthropic format.
+        """
         blocks = []
         for att in self.attachments:
             if att.get("type") != "image":
@@ -204,8 +206,8 @@ class AnalystAgent(Agent):
             if not url:
                 continue
             blocks.append({
-                "type": "image",
-                "source": {"type": "url", "url": url},
+                "type": "image_url",
+                "image_url": {"url": url},
             })
         return blocks
 
