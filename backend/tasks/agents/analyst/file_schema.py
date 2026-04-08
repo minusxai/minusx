@@ -184,11 +184,11 @@ class InlineAsset(BaseModel):
 AssetReference = Annotated[Union[FileAssetRef, InlineAsset], Field(discriminator='type')]
 
 class DashboardLayoutItem(BaseModel):
-    id: int  # question ID
+    id: Union[int, str]  # question ID (int) or inline asset ID (str UUID)
     x: int
     y: int
     w: int = Field(..., ge=2, description="width in grid units (min 2)")
-    h: int = Field(..., ge=2, description="height in grid units (min 2)")
+    h: int = Field(..., ge=1, description="height in grid units (min 1)")
 
 class DashboardLayout(BaseModel):
     columns: Optional[int] = 12

@@ -72,7 +72,7 @@ function SmartEmbeddedQuestionContainerInner({
     >
       {showTitle && (
         <Box
-          bg={'bg.canvas'}
+          bg={'bg.subtle'}
           px={5}
           pt={3}
           borderColor="border.default"

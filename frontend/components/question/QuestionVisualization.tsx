@@ -194,7 +194,7 @@ export function QuestionVisualization({
         {/* Results container */}
         <Box
           flex="1"
-          bg="bg.canvas"
+          bg="bg.subtle"
         //   borderRadius="lg"
           // border="1px solid"
           // borderColor="border.default"

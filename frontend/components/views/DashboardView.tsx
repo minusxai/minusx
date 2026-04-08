@@ -1,8 +1,9 @@
 'use client';
 
 import { Box, Text } from '@chakra-ui/react';
-import { AssetReference, DashboardLayoutItem, DocumentContent, QuestionContent, QuestionParameter } from '@/lib/types';
+import { AssetReference, DashboardLayoutItem, DocumentContent, InlineAsset, QuestionContent, QuestionParameter, isInlineAsset } from '@/lib/types';
 import SmartEmbeddedQuestionContainer from '../containers/SmartEmbeddedQuestionContainer';
+import TextBlockCard from '../TextBlockCard';
 import ParameterRow from '../ParameterRow';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { Layout, WidthProvider, Responsive } from 'react-grid-layout';
@@ -10,7 +11,7 @@ import 'react-grid-layout/css/styles.css';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import JsonEditor from '../slides/JsonEditor';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectMergedContent, selectIsDirty, setEphemeral, addQuestionToDashboard, isVirtualFileId, removeVirtualFile } from '@/store/filesSlice';
+import { selectMergedContent, selectIsDirty, setEphemeral, addQuestionToDashboard, addTextBlockToDashboard, updateTextBlockContent, isVirtualFileId, removeVirtualFile } from '@/store/filesSlice';
 import { editFile } from '@/lib/api/file-state';
 import { pushView, selectDashboardEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -23,6 +24,14 @@ const DASHBOARD_MIN_W = 2;
 const DASHBOARD_MIN_H = 2;
 const DASHBOARD_DEFAULT_W = 6;
 const DASHBOARD_DEFAULT_H = 6;
+const TEXT_BLOCK_DEFAULT_W = 6;
+const TEXT_BLOCK_DEFAULT_H = 3;
+const TEXT_BLOCK_MIN_W = 2;
+const TEXT_BLOCK_MIN_H = 1;
+
+/** Convert a react-grid-layout string key back to number (questions) or string (inline assets). */
+const parseLayoutItemId = (key: string): number | string =>
+  /^\d+$/.test(key) ? Number(key) : key;
 
 const ResponsiveGridLayout = WidthProvider(Responsive);
 
@@ -61,18 +70,39 @@ const compactMobileLayout = (layout: Layout[], toCols: number): Layout[] => {
   });
 };
 
-// Generate default layout for assets (only question assets are positioned in grid)
+/** Get the grid layout key for an asset (string for both question IDs and inline asset UUIDs). */
+const getAssetLayoutKey = (asset: AssetReference): string => {
+  if (asset.type === 'question') return (asset as { id: number }).id.toString();
+  return (asset as InlineAsset).id || '';
+};
+
+/** Assets that participate in the grid layout (questions and text blocks). */
+const getLayoutableAssets = (assets: AssetReference[]): AssetReference[] =>
+  assets?.filter(asset =>
+    (asset.type === 'question' && 'id' in asset && asset.id) ||
+    (asset.type === 'text' && 'id' in asset && asset.id)
+  ) || [];
+
+// Generate default layout for all layoutable assets
 const generateDefaultLayout = (assets: AssetReference[]): Layout[] => {
-  const questionAssets = assets?.filter(asset => asset.type === 'question' && ('id' in asset) && asset.id) || [];
-  return questionAssets?.map((asset, i) => ({
-    i: ('id' in asset && asset.type === 'question') ? asset.id.toString() : '',  // Convert integer ID to string for grid layout
-    x: (i % 2) * DASHBOARD_DEFAULT_W, // 2 columns
-    y: Math.floor(i / 2) * DASHBOARD_DEFAULT_H,
-    w: DASHBOARD_DEFAULT_W,
-    h: DASHBOARD_DEFAULT_H,
-    minW: DASHBOARD_MIN_W,
-    minH: DASHBOARD_MIN_H,
-  }));
+  const layoutable = getLayoutableAssets(assets);
+  let currentY = 0;
+  return layoutable.map((asset) => {
+    const isText = asset.type === 'text';
+    const w = isText ? TEXT_BLOCK_DEFAULT_W : DASHBOARD_DEFAULT_W;
+    const h = isText ? TEXT_BLOCK_DEFAULT_H : DASHBOARD_DEFAULT_H;
+    const layout: Layout = {
+      i: getAssetLayoutKey(asset),
+      x: isText ? 0 : (currentY === 0 ? 0 : 0), // text blocks always full-width
+      y: currentY,
+      w,
+      h,
+      minW: isText ? TEXT_BLOCK_MIN_W : DASHBOARD_MIN_W,
+      minH: isText ? TEXT_BLOCK_MIN_H : DASHBOARD_MIN_H,
+    };
+    currentY += h;
+    return layout;
+  });
 };
 
 export default function DashboardView({
@@ -140,20 +170,27 @@ export default function DashboardView({
     let baseLayout: Layout[];
     if (document.layout?.items) {
       const layoutMap = new Map<string, DashboardLayoutItem>(document.layout.items.map((item: DashboardLayoutItem) => [String(item.id), item]));
-      const questionAssets = document.assets?.filter(a => a.type === 'question' && ('id' in a) && a.id) || [];
+      const layoutableAssets = getLayoutableAssets(document.assets);
 
       // Find the bottom of the existing layout to place missing assets below
       const maxY = document.layout.items.reduce((max: number, item: DashboardLayoutItem) => Math.max(max, item.y + item.h), 0);
 
-      baseLayout = questionAssets.map((asset, i) => {
-        const id = String((asset as { id: number }).id);
+      let missingCount = 0;
+      baseLayout = layoutableAssets.map((asset) => {
+        const id = getAssetLayoutKey(asset);
         const item = layoutMap.get(id);
+        const isText = asset.type === 'text';
+        const minW = isText ? TEXT_BLOCK_MIN_W : DASHBOARD_MIN_W;
+        const minH = isText ? TEXT_BLOCK_MIN_H : DASHBOARD_MIN_H;
         if (item) {
-          return { i: id, x: item.x, y: item.y, w: item.w, h: item.h, minW: DASHBOARD_MIN_W, minH: DASHBOARD_MIN_H };
+          return { i: id, x: item.x, y: item.y, w: item.w, h: item.h, minW, minH };
         }
         // Asset exists but has no layout entry — place below existing items with default size
-        const missingIndex = questionAssets.slice(0, i).filter(a => !layoutMap.has(String((a as { id: number }).id))).length;
-        return { i: id, x: (missingIndex % 2) * DASHBOARD_DEFAULT_W, y: maxY + Math.floor(missingIndex / 2) * DASHBOARD_DEFAULT_H, w: DASHBOARD_DEFAULT_W, h: DASHBOARD_DEFAULT_H, minW: DASHBOARD_MIN_W, minH: DASHBOARD_MIN_H };
+        const w = isText ? TEXT_BLOCK_DEFAULT_W : DASHBOARD_DEFAULT_W;
+        const h = isText ? TEXT_BLOCK_DEFAULT_H : DASHBOARD_DEFAULT_H;
+        const result = { i: id, x: isText ? 0 : (missingCount % 2) * DASHBOARD_DEFAULT_W, y: maxY + Math.floor(missingCount / 2) * h, w, h, minW, minH };
+        missingCount++;
+        return result;
       });
     } else {
       baseLayout = generateDefaultLayout(document.assets);
@@ -274,38 +311,38 @@ export default function DashboardView({
     }
   });
 
-  // Handler for removing questions (needs to be defined before questionGridItems)
-  const handleRemoveQuestion = useCallback((questionIdStr: string) => {
+  // Handler for removing any asset (question or text block) from the dashboard
+  const handleRemoveAsset = useCallback((idStr: string) => {
     if (!document?.assets) return;
 
-    const questionId = parseInt(questionIdStr, 10);
+    const parsedId = parseLayoutItemId(idStr);
+    const isNumeric = typeof parsedId === 'number';
 
     // Remove from assets
-    const updatedAssets = document.assets.filter(
-      asset => {
-        if (asset.type !== 'question') return true;
-        const fileRef = asset as { type: 'question'; id: number; slug?: string };
-        return fileRef.id !== questionId;
+    const updatedAssets = document.assets.filter(asset => {
+      if (isNumeric && asset.type === 'question') {
+        return (asset as { id: number }).id !== parsedId;
       }
-    );
+      if (!isNumeric && isInlineAsset(asset)) {
+        return (asset as InlineAsset).id !== parsedId;
+      }
+      return true;
+    });
 
     // Remove from layout
     const existingLayout = document.layout?.items || [];
-    const updatedLayoutItems = existingLayout.filter((item: any) => item.id !== questionIdStr);
-
-    const updatedLayout = {
-      columns: 12,
-      items: updatedLayoutItems
-    };
+    const updatedLayoutItems = existingLayout.filter(
+      (item: DashboardLayoutItem) => String(item.id) !== idStr
+    );
 
     onChange({
       assets: updatedAssets,
-      layout: updatedLayout
+      layout: { columns: 12, items: updatedLayoutItems }
     });
 
-    // Queue virtual file for cleanup after render
-    if (isVirtualFileId(questionId)) {
-      pendingVirtualCleanup.current.push(questionId);
+    // Queue virtual file for cleanup after render (questions only)
+    if (isNumeric && isVirtualFileId(parsedId)) {
+      pendingVirtualCleanup.current.push(parsedId);
     }
   }, [document?.assets, document?.layout?.items, onChange]);
 
@@ -367,53 +404,85 @@ export default function DashboardView({
     );
   }, [editMode, layouts.lg, currentCols]);
 
-  // Memoize the question grid items to prevent re-rendering on every keystroke
-  const questionGridItems = useMemo(() => {
+  // All assets that participate in the grid
+  const layoutableAssets = useMemo(() => getLayoutableAssets(document?.assets || []), [document?.assets]);
+
+  // Memoize the grid items (questions + text blocks) to prevent re-rendering on every keystroke
+  const gridItems = useMemo(() => {
     const highlightedIds = hoveredParamKey ? (paramToQuestionIds.get(hoveredParamKey) ?? []) : null;
 
-    return questionIds?.map((questionId, index) => {
-      const isHighlighted = highlightedIds ? highlightedIds.includes(questionId) : null;
+    return layoutableAssets.map((asset, index) => {
+      const key = getAssetLayoutKey(asset);
 
+      if (asset.type === 'question') {
+        const questionId = (asset as { id: number }).id;
+        const isHighlighted = highlightedIds ? highlightedIds.includes(questionId) : null;
+
+        return (
+          <Box
+            key={key}
+            bg="bg.subtle"
+            borderWidth="1px"
+            borderColor={
+              isHighlighted === true ? 'accent.teal' :
+              isHighlighted === false ? 'border.subtle' :
+              'border.default'
+            }
+            borderRadius="md"
+            opacity={isHighlighted === false ? 0.5 : 1}
+            overflow="hidden"
+            display="flex"
+            flexDirection="column"
+            transition="all 0.2s"
+          >
+            <SmartEmbeddedQuestionContainer
+              questionId={questionId}
+              externalParameters={parameterValuesForDisplay}
+              externalParamValues={effectiveSubmittedValues}
+              showTitle={true}
+              editMode={editMode}
+              index={index}
+              onEdit={() => dispatch(pushView({ type: 'question', fileId: questionId }))}
+              onRemove={() => handleRemoveAsset(questionId.toString())}
+            />
+          </Box>
+        );
+      }
+
+      // Text block
+      const textAsset = asset as InlineAsset;
       return (
         <Box
-          key={questionId || index}
-          bg="bg.surface"
+          key={key}
+          bg="bg.subtle"
           borderWidth="1px"
-          borderColor={
-            isHighlighted === true ? 'accent.teal' :
-            isHighlighted === false ? 'border.subtle' :
-            'border.default'
-          }
+          borderColor="border.default"
           borderRadius="md"
-          opacity={isHighlighted === false ? 0.5 : 1}
           overflow="hidden"
           display="flex"
           flexDirection="column"
-          transition="all 0.2s"
         >
-          <SmartEmbeddedQuestionContainer
-            questionId={questionId}
-            externalParameters={parameterValuesForDisplay}
-            externalParamValues={effectiveSubmittedValues}
-            showTitle={true}
+          <TextBlockCard
+            id={textAsset.id || ''}
+            content={textAsset.content || ''}
             editMode={editMode}
-            index={index}
-            onEdit={() => dispatch(pushView({ type: 'question', fileId: questionId }))}
-            onRemove={() => handleRemoveQuestion(questionId.toString())}
+            onContentChange={(id, content) => {
+              dispatch(updateTextBlockContent({ dashboardId: fileId, textBlockId: id, content }));
+            }}
+            onRemove={(id) => handleRemoveAsset(id)}
           />
         </Box>
       );
     });
-  }, [questionIds, editMode, handleRemoveQuestion, parameterValuesForDisplay, effectiveSubmittedValues, hoveredParamKey, paramToQuestionIds]);
+  }, [layoutableAssets, editMode, handleRemoveAsset, parameterValuesForDisplay, effectiveSubmittedValues, hoveredParamKey, paramToQuestionIds, fileId, dispatch]);
 
   const handleLayoutChange = (newLayout: Layout[]) => {
     if (!document) return;
 
-    // Update the layout in current state
     const updatedLayout = {
       columns: 12,
       items: newLayout.map(item => ({
-        id: Number(item.i),
+        id: parseLayoutItemId(item.i),
         x: item.x,
         y: item.y,
         w: item.w,
@@ -475,7 +544,7 @@ export default function DashboardView({
           <Box position="relative" maxW="100%" pb={30} minH={"100%"}>
             {gridBackground}
 
-            {questionIds.length > 0 ? (
+            {layoutableAssets.length > 0 ? (
               <ResponsiveGridLayout
                 key={`grid-v${gridVersion}`}
                 className="layout"
@@ -493,7 +562,7 @@ export default function DashboardView({
                 isDraggable={editMode}
                 isResizable={editMode}
               >
-                {questionGridItems}
+                {gridItems}
               </ResponsiveGridLayout>
             ) : !editMode ? (
               <Box
@@ -520,7 +589,7 @@ export default function DashboardView({
               </Box>
             ) : (
               <Box position="relative" minHeight="1500px">
-                {/* Empty state overlay for edit mode - question browser */}
+                {/* Empty state overlay for edit mode - question browser + text block */}
                 <Box
                   position="absolute"
                   top="5%"
@@ -534,24 +603,26 @@ export default function DashboardView({
                     onAddQuestion={(questionId) => {
                       dispatch(addQuestionToDashboard({ dashboardId: fileId, questionId }));
                     }}
+                    onAddTextBlock={() => dispatch(addTextBlockToDashboard({ dashboardId: fileId }))}
                     excludedIds={questionIds}
-                    title="Let's add some questions!"
+                    title="Add questions / text"
                     dashboardId={fileId}
                   />
                 </Box>
               </Box>
             )}
 
-            {/* Add Questions Panel - after last card in edit mode */}
-            {editMode && questionIds.length > 0 && (
+            {/* Add Questions/Text Panel - after last card in edit mode */}
+            {editMode && layoutableAssets.length > 0 && (
               <Box mt={4} maxW="500px" mx="auto" position="relative" zIndex={10}>
                 <QuestionBrowserPanel
                   folderPath={folderPath}
                   onAddQuestion={(questionId) => {
                     dispatch(addQuestionToDashboard({ dashboardId: fileId, questionId }));
                   }}
+                  onAddTextBlock={() => dispatch(addTextBlockToDashboard({ dashboardId: fileId }))}
                   excludedIds={questionIds}
-                  title="Add more questions"
+                  title="Add more questions / text"
                   dashboardId={fileId}
                 />
               </Box>

@@ -237,7 +237,7 @@ export type Content = string | null;
 export type Assets = (FileReference | InlineAsset)[];
 export type Columns1 = number | null;
 export type Items = DashboardLayoutItem[] | null;
-export type Id6 = number;
+export type Id6 = number | string;
 export type X1 = number;
 export type Y = number;
 /**
@@ -245,7 +245,7 @@ export type Y = number;
  */
 export type W = number;
 /**
- * height in grid units (min 2)
+ * height in grid units (min 1)
  */
 export type H = number;
 export type Parametervalues1 = {
