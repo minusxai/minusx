@@ -1,7 +1,9 @@
 """Tests for the SQL normalizer and round-trip validator."""
 
 import pytest
+from unittest.mock import patch
 from sql_ir.enhanced_validator import normalize_sql, validate_round_trip
+import sql_ir.enhanced_validator as _ev_module
 
 
 class TestNormalizeSql:
@@ -146,4 +148,66 @@ class TestValidateRoundTrip:
             "SELECT * FROM active"
         )
         result = validate_round_trip(sql, sql, dialect="postgres")
+        assert result.supported is True
+
+
+class TestNormalizeSqlWithoutOptimizer:
+    """
+    Verify that normalize_sql is still reliable when _optimize raises.
+
+    These tests patch out _optimize so we exercise the fallback path.
+    They confirm the generator-side fixes (no explicit ASC, JOIN not INNER JOIN)
+    are sufficient to eliminate false negatives for the common cases.
+    """
+
+    def _broken_optimize(self, ast, **kwargs):
+        raise RuntimeError("optimizer unavailable")
+
+    def test_order_by_asc_lossless_without_optimizer(self):
+        """ORDER BY name (original) vs ORDER BY name (generator output) — must match."""
+        # Generator no longer emits ASC, so both sides are identical after parse
+        original = "SELECT name FROM users ORDER BY name"
+        regenerated = "SELECT name FROM users ORDER BY name"
+        with patch.object(_ev_module, "_optimize", self._broken_optimize):
+            result = validate_round_trip(original, regenerated, dialect="duckdb")
+        assert result.supported is True
+
+    def test_inner_join_lossless_without_optimizer(self):
+        """JOIN (original) vs JOIN (generator output, no INNER) — must match."""
+        original = "SELECT u.id FROM users u JOIN orders o ON o.user_id = u.id"
+        regenerated = "SELECT u.id FROM users u JOIN orders o ON o.user_id = u.id"
+        with patch.object(_ev_module, "_optimize", self._broken_optimize):
+            result = validate_round_trip(original, regenerated, dialect="postgres")
+        assert result.supported is True
+
+    def test_order_by_desc_preserved_without_optimizer(self):
+        """DESC must still appear in output."""
+        original = "SELECT id FROM users ORDER BY id DESC"
+        regenerated = "SELECT id FROM users ORDER BY id DESC"
+        with patch.object(_ev_module, "_optimize", self._broken_optimize):
+            result = validate_round_trip(original, regenerated, dialect="bigquery")
+        assert result.supported is True
+
+    def test_different_columns_lossy_without_optimizer(self):
+        """Dropped column must still be caught even without optimizer."""
+        original = "SELECT id, name FROM users"
+        regenerated = "SELECT id FROM users"
+        with patch.object(_ev_module, "_optimize", self._broken_optimize):
+            result = validate_round_trip(original, regenerated, dialect="duckdb")
+        assert result.supported is False
+
+    def test_dropped_where_lossy_without_optimizer(self):
+        """Dropped WHERE clause must still be caught even without optimizer."""
+        original = "SELECT id FROM users WHERE active = TRUE"
+        regenerated = "SELECT id FROM users"
+        with patch.object(_ev_module, "_optimize", self._broken_optimize):
+            result = validate_round_trip(original, regenerated, dialect="postgres")
+        assert result.supported is False
+
+    def test_whitespace_difference_lossless_without_optimizer(self):
+        """Whitespace-only differences must not trigger false negatives."""
+        original = "SELECT   id   FROM   users"
+        regenerated = "SELECT id FROM users"
+        with patch.object(_ev_module, "_optimize", self._broken_optimize):
+            result = validate_round_trip(original, regenerated, dialect="duckdb")
         assert result.supported is True

@@ -65,12 +65,13 @@ def ir_to_sql(ir: QueryIR, dialect: str) -> str:
     if ir.having and ir.having.conditions:
         parts.append("HAVING " + generate_filter_group(ir.having, dialect))
 
-    # ORDER BY
+    # ORDER BY — omit direction when ASC (default), emit only for DESC
     if ir.order_by:
         order_parts = []
         for col in ir.order_by:
             col_expr = generate_order_by_expression(col, dialect)
-            order_parts.append(f"{col_expr} {col.direction}")
+            direction = f" {col.direction}" if col.direction == "DESC" else ""
+            order_parts.append(f"{col_expr}{direction}")
         parts.append("ORDER BY " + ", ".join(order_parts))
 
     # LIMIT
@@ -167,7 +168,7 @@ def generate_join_clause(join) -> str:
     elif join.type == "FULL":
         join_type = "FULL OUTER JOIN"
     else:
-        join_type = "INNER JOIN"
+        join_type = "JOIN"
 
     table = join.table.table
     if join.table.schema:
@@ -322,12 +323,13 @@ def compound_ir_to_sql(ir: CompoundQueryIR, dialect: str) -> str:
 
     result = "\n".join(parts)
 
-    # Append compound-level ORDER BY
+    # Append compound-level ORDER BY — omit direction when ASC (default)
     if ir.order_by:
         order_parts = []
         for col in ir.order_by:
             col_expr = generate_order_by_expression(col, dialect)
-            order_parts.append(f"{col_expr} {col.direction}")
+            direction = f" {col.direction}" if col.direction == "DESC" else ""
+            order_parts.append(f"{col_expr}{direction}")
         result += "\nORDER BY " + ", ".join(order_parts)
 
     # Append compound-level LIMIT
