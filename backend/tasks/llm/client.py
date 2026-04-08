@@ -233,8 +233,10 @@ async def allm_request(request: ALLMRequest, on_content=None):
 
     elif 'claude' in completion_request["model"]:
         completion_request["max_completion_tokens"] = MAX_TOKENS * 2
-        completion_request["temperature"] = 0
+        completion_request["temperature"] = 1  # Required when thinking is enabled
         completion_request["tool_choice"] = "auto"
+        completion_request["thinking"] = {"type": "adaptive"}
+        completion_request["output_config"] = {"effort": "low"}
 
         # Add cache checkpoints (up to 4 allowed by Anthropic)
         msgs = request.messages
@@ -301,6 +303,7 @@ async def allm_request(request: ALLMRequest, on_content=None):
     # Accumulate streaming response
     accumulated_content = ""
     accumulated_tool_calls = []  # List to hold tool calls by index
+    accumulated_thinking_blocks = []  # Collect native thinking blocks
     usage = None
     finish_reason = None
     cost = 0.0  # Default to 0.0 if not provided in stream
@@ -313,6 +316,11 @@ async def allm_request(request: ALLMRequest, on_content=None):
         # Get delta from first choice
         if hasattr(chunk, 'choices') and len(chunk.choices) > 0:
             delta = chunk.choices[0].delta
+
+            # Accumulate native thinking blocks
+            if hasattr(delta, 'thinking_blocks') and delta.thinking_blocks:
+                for block in delta.thinking_blocks:
+                    accumulated_thinking_blocks.append(block)
 
             # Accumulate and stream content
             if hasattr(delta, 'content') and delta.content:
@@ -382,6 +390,21 @@ async def allm_request(request: ALLMRequest, on_content=None):
 
     # Build content blocks array from accumulated data
     content_blocks = []
+
+    # Add thinking blocks first (Anthropic requires them before text in multi-turn)
+    for block in accumulated_thinking_blocks:
+        if isinstance(block, dict):
+            thinking_text = block.get("thinking", "")
+            signature = block.get("signature", "")
+        else:
+            thinking_text = getattr(block, "thinking", "")
+            signature = getattr(block, "signature", "")
+        if thinking_text:
+            content_blocks.append({
+                "type": "thinking",
+                "thinking": thinking_text,
+                "signature": signature,
+            })
 
     # Add text content as a block if present
     if accumulated_content:

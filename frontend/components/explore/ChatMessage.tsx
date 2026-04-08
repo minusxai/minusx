@@ -127,66 +127,61 @@ export default function ChatMessage({ message, databaseName, isCompact = false, 
                     ? toolMessage.content
                     : JSON.stringify(toolMessage.content);
 
-                  // Try to parse thinking/answer tags
-                  const parsed = parseThinkingAnswer(content, false);
+                  // Backward compat: old messages used <thinking>/<answer> XML tags
+                  const legacyParsed = parseThinkingAnswer(content, false);
 
-                  // If no tags found, render as before (backwards compatibility)
-                  if (!parsed) {
+                  if (legacyParsed) {
                     return (
-                      <GridItem
-                        key={toolCall.id}
-                        colSpan={assistantColSpan}
-                        colStart={assistantColStart}
-                      >
-                        <Box px={3} py={1}>
-                          <Markdown context={markdownContext}>{content}</Markdown>
-                        </Box>
-                      </GridItem>
+                      <React.Fragment key={toolCall.id}>
+                        {showThinking && legacyParsed.thinking.map((block, idx) => (
+                          <GridItem
+                            key={`thinking-${idx}`}
+                            colSpan={assistantColSpan}
+                            colStart={assistantColStart}
+                          >
+                            <Box px={3} py={1} aria-label="Thinking block">
+                              <Markdown context={markdownContext}>{block}</Markdown>
+                            </Box>
+                          </GridItem>
+                        ))}
+
+                        {legacyParsed.unparsed && (
+                          <GridItem
+                            colSpan={assistantColSpan}
+                            colStart={assistantColStart}
+                          >
+                            <Box px={3} py={1}>
+                              <Markdown context={markdownContext}>{legacyParsed.unparsed}</Markdown>
+                            </Box>
+                          </GridItem>
+                        )}
+
+                        {legacyParsed.answer.map((answerBlock, idx) => (
+                          <GridItem
+                            key={`answer-${idx}`}
+                            colSpan={assistantColSpan}
+                            colStart={assistantColStart}
+                          >
+                            <Box px={3} py={1} aria-label="Answer block">
+                              <Markdown context={markdownContext}>{answerBlock}</Markdown>
+                            </Box>
+                          </GridItem>
+                        ))}
+                      </React.Fragment>
                     );
                   }
 
-                  // Render thinking blocks only in exploratory context (showThinking=true)
-                  // In presentation context (showThinking=false), only show answer blocks
+                  // New messages: content is direct text (thinking is in content_blocks via ContentDisplay)
                   return (
-                    <React.Fragment key={toolCall.id}>
-                      {/* Thinking blocks - only in exploratory section */}
-                      {showThinking && parsed.thinking.map((block, idx) => (
-                        <GridItem
-                          key={`thinking-${idx}`}
-                          colSpan={assistantColSpan}
-                          colStart={assistantColStart}
-                        >
-                          <Box px={3} py={1} aria-label="Thinking block">
-                            <Markdown context={markdownContext}>{block}</Markdown>
-                          </Box>
-                        </GridItem>
-                      ))}
-
-                      {/* Unparsed content (content before first tag) */}
-                      {parsed.unparsed && (
-                        <GridItem
-                          colSpan={assistantColSpan}
-                          colStart={assistantColStart}
-                        >
-                          <Box px={3} py={1}>
-                            <Markdown context={markdownContext}>{parsed.unparsed}</Markdown>
-                          </Box>
-                        </GridItem>
-                      )}
-
-                      {/* Answer blocks - user-facing responses */}
-                      {parsed.answer.map((answerBlock, idx) => (
-                        <GridItem
-                          key={`answer-${idx}`}
-                          colSpan={assistantColSpan}
-                          colStart={assistantColStart}
-                        >
-                          <Box px={3} py={1} aria-label="Answer block">
-                            <Markdown context={markdownContext}>{answerBlock}</Markdown>
-                          </Box>
-                        </GridItem>
-                      ))}
-                    </React.Fragment>
+                    <GridItem
+                      key={toolCall.id}
+                      colSpan={assistantColSpan}
+                      colStart={assistantColStart}
+                    >
+                      <Box px={3} py={1}>
+                        <Markdown context={markdownContext}>{content}</Markdown>
+                      </Box>
+                    </GridItem>
                   );
                 })}
 

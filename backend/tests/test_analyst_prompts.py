@@ -170,7 +170,7 @@ class TestSlackPrompt:
         prompt = LOADER.get('slack_addendum')
         assert 'Slack' in prompt
         assert 'vizSettings' in prompt or 'chart' in prompt.lower()
-        assert '<thinking>' in prompt  # instructs not to use XML tags
+        assert 'plain text' in prompt  # instructs to reply as plain text only
 
 
 # ── Report agent ─────────────────────────────────────────────────────
