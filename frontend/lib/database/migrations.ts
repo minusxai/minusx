@@ -1117,6 +1117,16 @@ export const MIGRATIONS: MigrationEntry[] = [
       return data;
     },
   },
+  {
+    dataVersion: 28,
+    description: 'V28: Rename /<mode>/config folders to /<mode>/configs (fix v26/v27 naming bug)',
+    dataMigration: (data: InitData) => {
+      for (const companyData of data.companies as CompanyData[]) {
+        renameConfigToConfigs(companyData);
+      }
+      return data;
+    },
+  },
 ];
 
 /**
@@ -1249,7 +1259,7 @@ function ensureSystemFolders(
 ): void {
   for (const modeRoot of validModeRoots) {
     if (!folderPaths.has(modeRoot)) continue;
-    for (const sub of ['config', 'database', 'logs']) {
+    for (const sub of ['configs', 'database', 'logs']) {
       const subPath = `${modeRoot}/${sub}`;
       if (allPaths.has(subPath)) continue; // already occupied by any document type
       const folder = createFolderDoc(companyData, subPath);
@@ -1262,7 +1272,7 @@ function ensureSystemFolders(
 
 /** Returns the system subfolder name for file types that must not land in a mode root. */
 function getSystemSubfolder(docType: string): string | null {
-  if (docType === 'config' || docType === 'styles') return 'config';
+  if (docType === 'config' || docType === 'styles') return 'configs';
   if (docType === 'connection') return 'database';
   return null;
 }
@@ -1371,6 +1381,119 @@ export function fixSystemFolderPlacement(companyData: CompanyData): void {
     allPaths.delete(doc.path);
     allPaths.add(candidate);
     doc.path = candidate;
+  }
+}
+
+/**
+ * For each mode root, renames any /<mode>/config folder (created with the wrong name
+ * by v26/v27) to /<mode>/configs. If /<mode>/configs already exists, children of the
+ * wrong folder are merged into it (with suffix on collision) and the empty wrong folder
+ * is removed. Mutates companyData.documents in place.
+ */
+export function renameConfigToConfigs(companyData: CompanyData): void {
+  const folderPaths = new Set<string>(
+    companyData.documents.filter(d => d.type === 'folder').map(d => d.path)
+  );
+  const allPaths = new Set<string>(companyData.documents.map(d => d.path));
+  const validModeRoots = new Set<string>(VALID_MODES.map(m => `/${m}`));
+
+  for (const modeRoot of validModeRoots) {
+    const wrongPath = `${modeRoot}/config`;
+    const rightPath = `${modeRoot}/configs`;
+
+    if (!folderPaths.has(wrongPath)) continue; // no wrongly-named folder — nothing to do
+
+    if (!allPaths.has(rightPath)) {
+      // Simple rename: cascade all children, then rename the folder itself.
+      const oldPrefix = wrongPath + '/';
+      const newPrefix = rightPath + '/';
+      for (const doc of companyData.documents) {
+        if (doc.path.startsWith(oldPrefix)) {
+          const updated = newPrefix + doc.path.slice(oldPrefix.length);
+          allPaths.delete(doc.path);
+          allPaths.add(updated);
+          if (doc.type === 'folder') {
+            folderPaths.delete(doc.path);
+            folderPaths.add(updated);
+          }
+          doc.path = updated;
+          doc.name = updated.split('/').filter(Boolean).pop()!;
+        }
+      }
+      const folder = companyData.documents.find(d => d.path === wrongPath);
+      if (folder) {
+        allPaths.delete(wrongPath);
+        allPaths.add(rightPath);
+        folderPaths.delete(wrongPath);
+        folderPaths.add(rightPath);
+        folder.path = rightPath;
+        folder.name = 'configs';
+      }
+    } else {
+      // /<mode>/configs already exists — merge children of /<mode>/config into it,
+      // then delete the now-empty wrong folder.
+      const oldPrefix = wrongPath + '/';
+
+      // Process shallowest-first so that when a subfolder is renamed (possibly with a
+      // collision suffix), its children are cascaded immediately before we encounter
+      // them — preventing them from being placed under the pre-suffix path.
+      const toMerge = companyData.documents
+        .filter(d => d.path.startsWith(oldPrefix))
+        .sort((a, b) => a.path.split('/').length - b.path.split('/').length);
+
+      for (const doc of toMerge) {
+        // If an ancestor folder was already renamed and cascaded, this doc's path was
+        // updated to the new prefix — skip it, it's already in the right place.
+        if (!doc.path.startsWith(oldPrefix)) continue;
+
+        const relPath = doc.path.slice(oldPrefix.length);
+        const namePart = relPath.split('/').pop()!;
+        const relParent = relPath.includes('/') ? relPath.slice(0, relPath.lastIndexOf('/')) : '';
+        const parentNew = relParent ? `${rightPath}/${relParent}` : rightPath;
+        let candidate = `${parentNew}/${namePart}`;
+        let suffix = 1;
+        while (allPaths.has(candidate)) {
+          candidate = `${parentNew}/${namePart}_${++suffix}`;
+        }
+
+        // For folders: cascade the rename to all descendants before updating self,
+        // so that children already have the correct new prefix when we reach them.
+        if (doc.type === 'folder') {
+          const childOldPrefix = doc.path + '/';
+          const childNewPrefix = candidate + '/';
+          for (const other of companyData.documents) {
+            if (other.path.startsWith(childOldPrefix)) {
+              const updatedPath = childNewPrefix + other.path.slice(childOldPrefix.length);
+              allPaths.delete(other.path);
+              allPaths.add(updatedPath);
+              if (other.type === 'folder') {
+                folderPaths.delete(other.path);
+                folderPaths.add(updatedPath);
+              }
+              other.path = updatedPath;
+              other.name = updatedPath.split('/').filter(Boolean).pop()!;
+            }
+          }
+          folderPaths.delete(doc.path);
+          folderPaths.add(candidate);
+        }
+
+        allPaths.delete(doc.path);
+        allPaths.add(candidate);
+        doc.path = candidate;
+        doc.name = candidate.split('/').filter(Boolean).pop()!;
+      }
+
+      // Remove the wrong folder document itself.
+      const idx = companyData.documents.findIndex(
+        d => d.path === wrongPath && d.type === 'folder'
+      );
+      if (idx !== -1) {
+        companyData.documents.splice(idx, 1);
+        allPaths.delete(wrongPath);
+        folderPaths.delete(wrongPath);
+      }
+    }
   }
 }
 
