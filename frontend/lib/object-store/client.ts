@@ -18,10 +18,18 @@ export interface UploadResult {
  * @param onProgress  Optional callback receiving upload progress 0–1 (via XHR)
  * @returns           The public URL of the uploaded file
  */
+/** 50 MB client-side guard — S3 presigned PUT URLs cannot enforce ContentLengthRange,
+ *  so we reject oversized files before even requesting a URL. */
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+
 export async function uploadFile(
   file: File,
   onProgress?: (progress: number) => void,
 ): Promise<UploadResult> {
+  if (file.size > MAX_UPLOAD_BYTES) {
+    throw new Error(`File is too large (max 50 MB)`);
+  }
+
   // Step 1: get presigned upload URL from our API
   const params = new URLSearchParams({ filename: file.name, contentType: file.type });
   const res = await fetch(`/api/object-store/upload-url?${params}`);

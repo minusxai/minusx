@@ -107,10 +107,9 @@ export default function ChatInput({
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files ?? []);
     e.target.value = '';
-    await processFile(file);
+    await Promise.all(files.map(processFile));
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -129,8 +128,8 @@ export default function ChatInput({
     e.preventDefault();
     setIsDraggingOver(false);
     if (isAgentRunning) return;
-    const file = e.dataTransfer.files?.[0];
-    if (file) await processFile(file);
+    const files = Array.from(e.dataTransfer.files ?? []);
+    await Promise.all(files.map(processFile));
   };
 
   const removeAttachment = (index: number) => {
@@ -183,6 +182,7 @@ export default function ChatInput({
                 <input
                   type="file"
                   accept={`${SUPPORTED_DOC_EXTENSIONS},image/*`}
+                  multiple
                   ref={fileInputRef}
                   style={{ display: 'none' }}
                   onChange={handleFileSelect}
