@@ -94,9 +94,9 @@ export default function OAuthConsentForm({
   }
 
   const permissions = [
-    { icon: LuSearch, label: 'Search your database schemas' },
+    { icon: LuSearch, label: 'Search your database schemas and files' },
     { icon: LuDatabase, label: 'Execute SQL queries on your connections' },
-    { icon: LuTable, label: 'Read query results and metadata' },
+    { icon: LuTable, label: 'Read files, query results, and metadata' },
   ];
 
   return (
@@ -180,7 +180,7 @@ export default function OAuthConsentForm({
               Available tools
             </Text>
             <HStack gap={2} flexWrap="wrap">
-              {['SearchDBSchema', 'ExecuteQuery'].map((tool) => (
+              {['SearchDBSchema', 'ExecuteQuery', 'ListAllConnections', 'SearchFiles', 'ReadFiles'].map((tool) => (
                 <Box
                   key={tool}
                   px={2.5}
