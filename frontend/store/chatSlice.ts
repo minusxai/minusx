@@ -359,6 +359,9 @@ const chatSlice = createSlice({
 
       if (type === 'StreamedContent') {
         const { chunk } = payload as { chunk: string };
+        // Thinking is complete once text starts — clear it so the indicator disappears
+        // and the next LLM call's thinking starts fresh (fixes accumulation across turns)
+        conv.streamedThinking = '';
         const lastEntry = conv.streamedCompletedToolCalls[conv.streamedCompletedToolCalls.length - 1];
 
         if (!lastEntry || lastEntry.function?.name !== 'TalkToUser') {
