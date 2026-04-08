@@ -5,7 +5,7 @@ description: Combine questions into interactive views with shared filters
 
 <ThemedImage light="/light/dashboard.png" dark="/dark/dashboard.png" alt="MinusX Dashboard" />
 
-A **dashboard** is a collection of questions arranged in a grid layout with shared parameters for interactive filtering.
+A **dashboard** is a collection of questions and text blocks arranged in a grid layout with shared parameters for interactive filtering.
 
 ---
 
@@ -13,18 +13,29 @@ A **dashboard** is a collection of questions arranged in a grid layout with shar
 
 Create a dashboard from the sidebar by clicking **New → Dashboard**. Then:
 
-1. **Add questions** — add saved questions or create new ones directly
+1. **Add content** — add saved questions, create new ones, or insert text blocks for context and commentary
 2. **Arrange the layout** — drag and resize cards in the grid
 3. **Save** — give it a name and save to a folder
 
 ### Layout
 
-Each question appears as a card that can be:
+Each card can be:
 
 - **Moved** — drag to reposition
 - **Resized** — drag edges to change size
 
 Put key metrics at the top, detailed charts in the middle, supporting tables at the bottom.
+
+---
+
+## Text blocks
+
+Dashboards support **markdown text blocks** alongside questions — useful for adding titles, descriptions, commentary, or section headers.
+
+- Click **Add Text Block** to insert one
+- Edit using a built-in markdown editor
+- Text blocks can be repositioned and resized just like question cards
+- Supports standard markdown formatting (headings, bold, lists, links, etc.)
 
 ---
 
@@ -47,6 +58,7 @@ Use the chat sidebar to build dashboards conversationally:
 - "Create a sales dashboard with monthly revenue, top products, and customer count"
 - "Add a line chart showing weekly signups"
 - "Add a date range filter"
+- "Add a text block with a summary header"
 
 The agent creates questions, configures visualizations, and arranges the layout.
 
