@@ -520,6 +520,55 @@ describe('Job Runs E2E', () => {
       expect(runs).toHaveLength(1);  // only one run, not two
     });
 
+    it('skips alert suppressed until a future date', async () => {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const suppressUntil = tomorrow.toISOString().slice(0, 10); // "YYYY-MM-DD"
+
+      const suppressedContent: AlertContent = {
+        status: 'live',
+        schedule: { cron: '* * * * *', timezone: 'UTC' },
+        tests: [{ type: 'query', subject: { type: 'query', question_id: questionId, column: 'revenue', row: 0 }, answerType: 'number', operator: '<=', value: { type: 'constant', value: 100 } }],
+        recipients: [],
+        suppressUntil,
+      };
+      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', suppressedContent, [questionId], 1);
+
+      const req = makeCronRequest([1]);
+      const res = await cronPostHandler(req);
+      const body = await parseResponse(res);
+
+      expect(res.status).toBe(200);
+      expect(body.data.results[1].triggered).toBe(0);
+      const runs = await JobRunsDB.getByJobId(String(alertId), 'alert', 1);
+      expect(runs).toHaveLength(0);
+    });
+
+    it('runs alert whose suppressUntil date has passed', async () => {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const suppressUntil = yesterday.toISOString().slice(0, 10);
+
+      const expiredSuppressContent: AlertContent = {
+        status: 'live',
+        schedule: { cron: '* * * * *', timezone: 'UTC' },
+        tests: [{ type: 'query', subject: { type: 'query', question_id: questionId, column: 'revenue', row: 0 }, answerType: 'number', operator: '<=', value: { type: 'constant', value: 100 } }],
+        recipients: [],
+        suppressUntil,
+      };
+      await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', expiredSuppressContent, [questionId], 1);
+
+      const req = makeCronRequest([1]);
+      const res = await cronPostHandler(req);
+      const body = await parseResponse(res);
+
+      expect(res.status).toBe(200);
+      expect(body.data.results[1].triggered).toBe(1);
+      const runs = await JobRunsDB.getByJobId(String(alertId), 'alert', 1);
+      expect(runs).toHaveLength(1);
+      expect(runs[0].status).toBe('SUCCESS');
+    });
+
     it('skips alert with non-matching cron (fired >1h ago)', async () => {
       // Pick a valid hour that is always ≥2 hours in the past, so prevFire > MAX_CRON_DELAY_MS.
       // safeHour = (currentHour - 2 + 24) % 24 guarantees a 2h+ gap regardless of when CI runs.

@@ -459,6 +459,8 @@ export default function TransformationView({
         runLabel="Run Now"
         editMode={!!editMode}
         onChange={(s) => onChange({ status: s })}
+        suppressUntil={transformation.suppressUntil}
+        onSuppressChange={(val) => onChange({ suppressUntil: val })}
       />
 
       {/* JSON View */}

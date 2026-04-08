@@ -192,6 +192,8 @@ export default function ReportView({
         runLabel="Run Now"
         editMode={editMode}
         onChange={(s) => onChange({ status: s })}
+        suppressUntil={report.suppressUntil}
+        onSuppressChange={(val) => onChange({ suppressUntil: val })}
       />
 
       {/* JSON View */}

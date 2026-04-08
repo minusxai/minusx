@@ -39,6 +39,9 @@ export type {
 } from './sql/ir-types';
 export { isCompoundQueryIR } from './sql/ir-types';
 
+/** Make specific keys of T optional while keeping the rest unchanged. */
+export type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
+
 /**
  * Base entity interface shared by all database entities
  * Provides common fields for all stored entities
@@ -223,7 +226,7 @@ export interface EvalItem {
   connection_id?: string;  // per-eval connection override (falls back to context default)
 }
 
-export interface ContextContent extends BaseFileContent {
+export type ContextContent = PartialBy<ScheduledJobContent, 'schedule' | 'recipients'> & {
   // Versioning (NEW - replaces legacy top-level storage)
   versions?: ContextVersion[];
   published: PublishedVersions;  // Required - always has published.all
@@ -238,12 +241,7 @@ export interface ContextContent extends BaseFileContent {
 
   // Evals (stored at content level, independent of versions)
   evals?: Test[];
-  /** Optional cron schedule for automatic eval runs */
-  schedule?: AlertSchedule;
-  recipients?: AlertRecipient[];
-  /** Scheduling gate: 'live' = runs on schedule, 'draft' = manual only (default when absent) */
-  status?: 'live' | 'draft';
-}
+};
 
 export type UserRole = 'admin' | 'editor' | 'viewer';
 
@@ -421,30 +419,10 @@ export interface ReportReference {
   prompt: string;                       // What to ask about the data
 }
 
-/** Report schedule with cron expression and timezone */
-export interface ReportSchedule {
-  cron: string;      // Cron expression (e.g., "0 9 * * 1" = Monday 9am)
-  timezone: string;  // IANA timezone (e.g., "America/New_York")
-}
-
-export interface ReportContent extends BaseFileContent {
-  description?: string;
-
-  // Scheduling gate: 'live' = runs on schedule, 'draft' = manual only (default when absent)
-  status?: 'live' | 'draft';
-
-  // When to run
-  schedule: ReportSchedule;
-
-  // What to analyze - list of references (questions/dashboards) with prompts
+export type ReportContent = ScheduledJobContent & {
   references: ReportReference[];
-
-  // Overall report instructions - how to synthesize all reference analyses
   reportPrompt?: string;
-
-  // Where to send
-  recipients: AlertRecipient[];
-}
+};
 
 /**
  * Report Run Content
@@ -517,24 +495,30 @@ export interface AlertCondition {
   threshold: number;
 }
 
-export interface AlertSchedule {
+/** Cron schedule shared by all scheduled job types. */
+export type JobSchedule = {
   cron: string;
   timezone: string;
-}
+};
 
 export type AlertRecipient =
   | { channel: 'email_alert'; address: string }
   | { channel: 'phone_alert'; address: string }
   | { channel: 'slack_alert'; address: string };  // address = Slack channel name e.g. '#alerts'
 
-export interface AlertContent extends BaseFileContent {
+/** Base content for all scheduled jobs (alerts, reports, transformations, context evals). */
+export interface ScheduledJobContent extends BaseFileContent {
   description?: string;
-  schedule: AlertSchedule;
-  tests: Test[];                         // replaces: questionId + condition
-  notifyOn?: 'any_fail' | 'all_fail';   // when to fire notification (default: 'any_fail')
-  recipients?: AlertRecipient[];
-  status?: 'live' | 'draft';
+  status?: 'live' | 'draft';        // 'live' = runs on cron, 'draft' = manual only
+  suppressUntil?: string;           // ISO date "YYYY-MM-DD"; cron skips until end of this date
+  schedule: JobSchedule;
+  recipients: AlertRecipient[];
 }
+
+export type AlertContent = PartialBy<ScheduledJobContent, 'recipients'> & {
+  tests: Test[];
+  notifyOn?: 'any_fail' | 'all_fail';
+};
 
 // Job run types (from job_runs table)
 export type JobRunStatus = 'RUNNING' | 'SUCCESS' | 'FAILURE' | 'TIMEOUT';
@@ -702,14 +686,9 @@ export interface Transform {
   tests?: Test[];        // tests to run after this transform executes
 }
 
-export interface TransformationContent extends BaseFileContent {
-  description?: string;
+export type TransformationContent = PartialBy<ScheduledJobContent, 'schedule' | 'recipients'> & {
   transforms: Transform[];
-  schedule?: AlertSchedule;
-  recipients?: AlertRecipient[];
-  /** Scheduling gate: 'live' = runs on schedule, 'draft' = manual only (default when absent) */
-  status?: 'live' | 'draft';
-}
+};
 
 // Per-transform execution result (stored inside RunFileContent.output)
 export interface TransformResult {

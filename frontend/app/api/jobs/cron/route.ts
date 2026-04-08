@@ -22,7 +22,7 @@ import { getConfigsByCompanyId } from '@/lib/data/configs.server';
 import { sendEmailViaWebhook, sendPhoneAlertViaWebhook } from '@/lib/messaging/webhook-executor';
 import { resolveWebhook } from '@/lib/messaging/webhook-resolver.server';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
-import type { AlertContent, MessageAttemptLog, RunFileContent, RunMessageRecord } from '@/lib/types';
+import type { AlertContent, ScheduledJobContent, MessageAttemptLog, RunFileContent, RunMessageRecord } from '@/lib/types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
 export const dynamic = 'force-dynamic';
@@ -125,8 +125,15 @@ async function runForCompany(
       : { data: [] };
 
     for (const jobFile of allFiles) {
-      const content = jobFile.content as AlertContent | null;
+      const content = jobFile.content as ScheduledJobContent | null;
       if (!content || !jobDef.isActive(content)) { skipped++; continue; }
+
+      // Skip if suppressed (cron runs only; manual "Run Now" bypasses this entirely).
+      if (content.suppressUntil) {
+        const suppressEnd = new Date(content.suppressUntil);
+        suppressEnd.setHours(23, 59, 59, 999);
+        if (suppressEnd >= now) { skipped++; continue; }
+      }
 
       if (jobDef.job_type === 'alert') {
         const alert = content as AlertContent;

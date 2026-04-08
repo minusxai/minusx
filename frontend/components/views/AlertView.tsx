@@ -128,6 +128,8 @@ export default function AlertView({
         runLabel="Check Now"
         editMode={editMode}
         onChange={(s) => onChange({ status: s })}
+        suppressUntil={alert.suppressUntil}
+        onSuppressChange={(val) => onChange({ suppressUntil: val })}
       />
 
       {/* JSON View */}
