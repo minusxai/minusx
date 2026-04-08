@@ -36,7 +36,7 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
       </Suspense>
       <MobileBottomNav />
       <Box
-        ml={{ base: 0, md: leftSidebarCollapsed ? '72px' : '260px' }} // No margin on mobile
+        ml={{ base: 0, md: leftSidebarCollapsed ? '72px' : '300px' }} // No margin on mobile
         pb={{ base: '80px', md: 0 }} // Padding bottom for mobile nav
         transition="margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
         minH="100vh"
