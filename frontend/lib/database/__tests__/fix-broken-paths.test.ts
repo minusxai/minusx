@@ -1,4 +1,4 @@
-import { fixFilesWithBrokenPaths, fixSystemFolderPlacement } from '../migrations';
+import { fixFilesWithBrokenPaths, fixSystemFolderPlacement, renameConfigToConfigs } from '../migrations';
 import { CompanyData, ExportedDocument } from '../import-export';
 
 function doc(id: number, path: string, type = 'question'): ExportedDocument {
@@ -216,11 +216,11 @@ describe('fixFilesWithBrokenPaths', () => {
 // ── V26: system folder creation & smart placement ─────────────────────────────
 
 describe('fixFilesWithBrokenPaths — system folder routing', () => {
-  it('creates config/, database/, logs/ under /org when they are missing', () => {
+  it('creates configs/, database/, logs/ under /org when they are missing', () => {
     const c = company(doc(1, '/org', 'folder'));
     fixFilesWithBrokenPaths(c);
     const paths = c.documents.map(d => d.path);
-    expect(paths).toContain('/org/config');
+    expect(paths).toContain('/org/configs');
     expect(paths).toContain('/org/database');
     expect(paths).toContain('/org/logs');
   });
@@ -240,29 +240,29 @@ describe('fixFilesWithBrokenPaths — system folder routing', () => {
   it('does not create duplicate system folders when they already exist', () => {
     const c = company(
       doc(1, '/org', 'folder'),
-      doc(2, '/org/config', 'folder'),
+      doc(2, '/org/configs', 'folder'),
     );
     fixFilesWithBrokenPaths(c);
-    const configCount = c.documents.filter(d => d.path === '/org/config').length;
+    const configCount = c.documents.filter(d => d.path === '/org/configs').length;
     expect(configCount).toBe(1);
   });
 
-  it('routes a config file with a broken parent to /org/config/ instead of /org/', () => {
+  it('routes a config file with a broken parent to /org/configs/ instead of /org/', () => {
     const c = company(
       doc(1, '/org', 'folder'),
       doc(2, '/org/missing/my-config', 'config'),
     );
     fixFilesWithBrokenPaths(c);
-    expect(c.documents.find(d => d.id === 2)!.path).toBe('/org/config/my-config');
+    expect(c.documents.find(d => d.id === 2)!.path).toBe('/org/configs/my-config');
   });
 
-  it('routes a styles file with a broken parent to /org/config/', () => {
+  it('routes a styles file with a broken parent to /org/configs/', () => {
     const c = company(
       doc(1, '/org', 'folder'),
       doc(2, '/org/missing/my-styles', 'styles'),
     );
     fixFilesWithBrokenPaths(c);
-    expect(c.documents.find(d => d.id === 2)!.path).toBe('/org/config/my-styles');
+    expect(c.documents.find(d => d.id === 2)!.path).toBe('/org/configs/my-styles');
   });
 
   it('routes a connection file with a broken parent to /org/database/', () => {
@@ -274,16 +274,16 @@ describe('fixFilesWithBrokenPaths — system folder routing', () => {
     expect(c.documents.find(d => d.id === 2)!.path).toBe('/org/database/my-conn');
   });
 
-  it('routes a config file falling back via /org to /org/config/ with collision suffix', () => {
+  it('routes a config file falling back via /org to /org/configs/ with collision suffix', () => {
     const c = company(
       doc(1, '/org', 'folder'),
-      doc(2, '/org/config', 'folder'),
-      doc(3, '/org/config/my-cfg', 'config'),   // occupies the slot
-      doc(4, '/tutorial/missing/my-cfg', 'config'), // falls back to /org, redirect → /org/config/my-cfg taken → suffix
+      doc(2, '/org/configs', 'folder'),
+      doc(3, '/org/configs/my-cfg', 'config'),   // occupies the slot
+      doc(4, '/tutorial/missing/my-cfg', 'config'), // falls back to /org, redirect → /org/configs/my-cfg taken → suffix
     );
     fixFilesWithBrokenPaths(c);
-    expect(c.documents.find(d => d.id === 3)!.path).toBe('/org/config/my-cfg');
-    expect(c.documents.find(d => d.id === 4)!.path).toBe('/org/config/my-cfg_2');
+    expect(c.documents.find(d => d.id === 3)!.path).toBe('/org/configs/my-cfg');
+    expect(c.documents.find(d => d.id === 4)!.path).toBe('/org/configs/my-cfg_2');
   });
 
   it('skips /logs paths entirely and never moves them', () => {
@@ -301,7 +301,7 @@ describe('fixFilesWithBrokenPaths — system folder routing', () => {
     );
     fixFilesWithBrokenPaths(c);
     const paths = c.documents.map(d => d.path);
-    expect(paths).toContain('/tutorial/config');
+    expect(paths).toContain('/tutorial/configs');
     expect(paths).toContain('/tutorial/database');
     expect(paths).toContain('/tutorial/logs');
   });
@@ -310,11 +310,11 @@ describe('fixFilesWithBrokenPaths — system folder routing', () => {
 // ── V27: fixSystemFolderPlacement ─────────────────────────────────────────────
 
 describe('fixSystemFolderPlacement', () => {
-  it('creates config/, database/, logs/ under /org when missing', () => {
+  it('creates configs/, database/, logs/ under /org when missing', () => {
     const c = company(doc(1, '/org', 'folder'));
     fixSystemFolderPlacement(c);
     const paths = c.documents.map(d => d.path);
-    expect(paths).toContain('/org/config');
+    expect(paths).toContain('/org/configs');
     expect(paths).toContain('/org/database');
     expect(paths).toContain('/org/logs');
   });
@@ -331,22 +331,22 @@ describe('fixSystemFolderPlacement', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('moves a config file sitting directly in /org to /org/config/', () => {
+  it('moves a config file sitting directly in /org to /org/configs/', () => {
     const c = company(
       doc(1, '/org', 'folder'),
       doc(2, '/org/my-config', 'config'),
     );
     fixSystemFolderPlacement(c);
-    expect(c.documents.find(d => d.id === 2)!.path).toBe('/org/config/my-config');
+    expect(c.documents.find(d => d.id === 2)!.path).toBe('/org/configs/my-config');
   });
 
-  it('moves a styles file sitting directly in /org to /org/config/', () => {
+  it('moves a styles file sitting directly in /org to /org/configs/', () => {
     const c = company(
       doc(1, '/org', 'folder'),
       doc(2, '/org/my-styles', 'styles'),
     );
     fixSystemFolderPlacement(c);
-    expect(c.documents.find(d => d.id === 2)!.path).toBe('/org/config/my-styles');
+    expect(c.documents.find(d => d.id === 2)!.path).toBe('/org/configs/my-styles');
   });
 
   it('moves a connection file sitting directly in /org to /org/database/', () => {
@@ -389,13 +389,13 @@ describe('fixSystemFolderPlacement', () => {
   it('handles name collision in the target subfolder with a numeric suffix', () => {
     const c = company(
       doc(1, '/org', 'folder'),
-      doc(2, '/org/config', 'folder'),
-      doc(3, '/org/config/my-cfg', 'config'),   // already in the right place
-      doc(4, '/org/my-cfg', 'config'),           // collision → suffix
+      doc(2, '/org/configs', 'folder'),
+      doc(3, '/org/configs/my-cfg', 'config'),   // already in the right place
+      doc(4, '/org/my-cfg', 'config'),            // collision → suffix
     );
     fixSystemFolderPlacement(c);
-    expect(c.documents.find(d => d.id === 3)!.path).toBe('/org/config/my-cfg');
-    expect(c.documents.find(d => d.id === 4)!.path).toBe('/org/config/my-cfg_2');
+    expect(c.documents.find(d => d.id === 3)!.path).toBe('/org/configs/my-cfg');
+    expect(c.documents.find(d => d.id === 4)!.path).toBe('/org/configs/my-cfg_2');
   });
 
   it('applies to /tutorial mode as well', () => {
@@ -438,5 +438,105 @@ describe('fixSystemFolderPlacement', () => {
     fixSystemFolderPlacement(c);
     expect(c.documents.find(d => d.id === 3)!.path).toBe('/org/reports/q');
     expect(c.documents.find(d => d.id === 4)!.path).toBe('/org/reports/q_2');
+  });
+});
+
+// ── V28: renameConfigToConfigs ────────────────────────────────────────────────
+
+describe('renameConfigToConfigs', () => {
+  it('renames /org/config folder to /org/configs when configs does not exist', () => {
+    const c = company(
+      doc(1, '/org', 'folder'),
+      doc(2, '/org/config', 'folder'),
+      doc(3, '/org/config/my-styles', 'styles'),
+    );
+    renameConfigToConfigs(c);
+    const paths = c.documents.map(d => d.path);
+    expect(paths).not.toContain('/org/config');
+    expect(paths).toContain('/org/configs');
+    expect(c.documents.find(d => d.id === 2)!.path).toBe('/org/configs');
+    expect(c.documents.find(d => d.id === 2)!.name).toBe('configs');
+    expect(c.documents.find(d => d.id === 3)!.path).toBe('/org/configs/my-styles');
+  });
+
+  it('merges /org/config children into existing /org/configs and removes the wrong folder', () => {
+    const c = company(
+      doc(1, '/org', 'folder'),
+      doc(2, '/org/configs', 'folder'),
+      doc(3, '/org/configs/real-styles', 'styles'),
+      doc(4, '/org/config', 'folder'),            // wrongly-named folder from v27
+      doc(5, '/org/config/stray-config', 'config'),
+    );
+    renameConfigToConfigs(c);
+    const paths = c.documents.map(d => d.path);
+    expect(paths).not.toContain('/org/config');
+    expect(paths).toContain('/org/configs');
+    expect(paths).toContain('/org/configs/real-styles');
+    expect(paths).toContain('/org/configs/stray-config');
+    // The wrong folder document is removed
+    expect(c.documents.find(d => d.id === 4)).toBeUndefined();
+  });
+
+  it('handles a name collision when merging by appending a suffix', () => {
+    const c = company(
+      doc(1, '/org', 'folder'),
+      doc(2, '/org/configs', 'folder'),
+      doc(3, '/org/configs/config', 'config'),    // already occupies the target name
+      doc(4, '/org/config', 'folder'),
+      doc(5, '/org/config/config', 'config'),     // same name → collision
+    );
+    renameConfigToConfigs(c);
+    expect(c.documents.find(d => d.id === 3)!.path).toBe('/org/configs/config');
+    expect(c.documents.find(d => d.id === 5)!.path).toBe('/org/configs/config_2');
+  });
+
+  it('cascades child paths correctly when a merged subfolder is renamed with a suffix', () => {
+    const c = company(
+      doc(1, '/org', 'folder'),
+      doc(2, '/org/configs', 'folder'),
+      doc(3, '/org/configs/sub', 'folder'),        // collision: sub already exists
+      doc(4, '/org/config', 'folder'),
+      doc(5, '/org/config/sub', 'folder'),          // → /org/configs/sub_2
+      doc(6, '/org/config/sub/child', 'question'),  // must follow renamed parent → /org/configs/sub_2/child
+    );
+    renameConfigToConfigs(c);
+    expect(c.documents.find(d => d.id === 5)!.path).toBe('/org/configs/sub_2');
+    expect(c.documents.find(d => d.id === 6)!.path).toBe('/org/configs/sub_2/child');
+  });
+
+  it('keeps name in sync with the new path last segment after rename', () => {
+    const c = company(
+      doc(1, '/org', 'folder'),
+      doc(2, '/org/configs', 'folder'),
+      doc(3, '/org/configs/sub', 'folder'),        // collision
+      doc(4, '/org/config', 'folder'),
+      doc(5, '/org/config/sub', 'folder'),          // → /org/configs/sub_2
+      doc(6, '/org/config/sub/child', 'question'),  // → /org/configs/sub_2/child
+    );
+    renameConfigToConfigs(c);
+    expect(c.documents.find(d => d.id === 5)!.name).toBe('sub_2');
+    expect(c.documents.find(d => d.id === 6)!.name).toBe('child');
+  });
+
+  it('leaves the database untouched when there is no /org/config folder', () => {
+    const c = company(
+      doc(1, '/org', 'folder'),
+      doc(2, '/org/configs', 'folder'),
+      doc(3, '/org/configs/styles', 'styles'),
+    );
+    const before = c.documents.map(d => d.path).sort();
+    renameConfigToConfigs(c);
+    expect(c.documents.map(d => d.path).sort()).toEqual(before);
+  });
+
+  it('applies to /tutorial mode as well', () => {
+    const c = company(
+      doc(1, '/tutorial', 'folder'),
+      doc(2, '/tutorial/config', 'folder'),
+      doc(3, '/tutorial/config/my-cfg', 'config'),
+    );
+    renameConfigToConfigs(c);
+    expect(c.documents.find(d => d.id === 2)!.path).toBe('/tutorial/configs');
+    expect(c.documents.find(d => d.id === 3)!.path).toBe('/tutorial/configs/my-cfg');
   });
 });
