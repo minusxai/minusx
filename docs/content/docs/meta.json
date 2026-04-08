@@ -3,14 +3,15 @@
   "root": true,
   "pages": [
     "index",
-    "installation",
     "who-is-it-for",
+    "installation",
     "philosophy",
     "agent",
     "---Platform---",
     "bi",
     "data",
     "knowledge-base",
-    "proactive"
+    "proactive",
+    "integrations"
   ]
 }
