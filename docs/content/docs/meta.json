@@ -3,6 +3,7 @@
   "root": true,
   "pages": [
     "index",
+    "who-is-it-for",
     "installation",
     "philosophy",
     "agent",
@@ -10,6 +11,7 @@
     "bi",
     "data",
     "knowledge-base",
-    "proactive"
+    "proactive",
+    "integrations"
   ]
 }

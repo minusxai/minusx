@@ -1,0 +1,98 @@
+---
+title: Integrations
+description: Connect MinusX to external tools via MCP and Slack
+---
+
+MinusX integrates with external tools so you can query your data from wherever you work — whether that's an AI coding assistant or a Slack channel.
+
+---
+
+## MCP (Model Context Protocol)
+
+MinusX exposes an MCP-compatible server, letting AI clients like **Claude Desktop**, **Cursor**, and **Windsurf** query your databases directly.
+
+### What you get
+
+Three tools are available to any connected MCP client:
+
+| Tool | Description |
+|------|-------------|
+| **SearchDBSchema** | Search tables, columns, and relationships across your connected databases |
+| **ExecuteQuery** | Run SQL queries with parameter support |
+| **ListAllConnections** | List all available database connections |
+
+### How it works
+
+1. MinusX runs an MCP endpoint at `/api/mcp`
+2. MCP clients authenticate via OAuth 2.1 (auto-triggered on first connection — no manual tokens needed)
+3. Queries execute against your configured database connections
+4. All MCP tool calls are logged as conversation files for audit
+
+### Setup
+
+1. Go to **Settings → Integrations → MCP**
+2. Copy the config JSON shown in the UI
+3. Paste it into your client's config file:
+   - **Claude Desktop**: `claude_desktop_config.json`
+   - **Cursor / Windsurf**: follow the client's MCP setup docs
+4. Restart the client — it will auto-authenticate on first use
+
+---
+
+## Slack
+
+Connect MinusX as a Slack bot so your team can ask data questions directly in channels and DMs.
+
+### What you get
+
+- **@mention the bot** in any channel to ask a question
+- **DM the bot** for private queries
+- Results are delivered as formatted messages with charts uploaded as images
+- The bot uses status reactions: 👀 while processing, ✅ on success, ❌ on error
+
+### How it works
+
+1. Slack sends events (mentions, DMs) to MinusX via webhook
+2. MinusX matches the Slack user's email to a MinusX account
+3. A specialized **SlackAgent** runs — optimized for read/query workflows
+4. Results are formatted for Slack (markdown → mrkdwn) and posted back to the thread
+
+### Setup
+
+There are two installation modes:
+
+**OAuth (recommended)**:
+1. Go to **Settings → Integrations → Slack**
+2. Click **Add to Slack**
+3. Authorize the bot in your workspace
+4. Done — the bot appears in your workspace immediately
+
+**Manual setup**:
+1. Create a Slack app from the manifest (available at Settings → Integrations → Slack)
+2. Install it to your workspace
+3. Copy the **Bot Token** and **Signing Secret**
+4. Paste them into the manual setup form in MinusX
+
+### Permissions
+
+The Slack bot requests these scopes:
+
+- `app_mentions:read`, `chat:write` — respond to mentions and post messages
+- `channels:history`, `groups:history`, `im:history` — read conversation context
+- `files:read`, `files:write` — upload chart images
+- `reactions:write` — status indicators
+- `users:read`, `users:read.email` — match Slack users to MinusX accounts
+
+---
+
+## Webhooks
+
+MinusX also supports configurable webhooks for delivering alerts and notifications:
+
+- **Email** — send alert notifications and OTP codes
+- **Slack webhooks** — post alert summaries to Slack channels (separate from the bot integration)
+- **Phone/SMS** — send alert notifications via SMS
+
+Webhooks use template variables (e.g., `{{EMAIL_TO}}`, `{{EMAIL_SUBJECT}}`) and are configured via environment variables or the admin settings.
+
+---

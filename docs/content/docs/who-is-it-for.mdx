@@ -1,0 +1,140 @@
+---
+title: Who is MinusX for?
+description: From founders to data teams — MinusX scales with you
+---
+
+MinusX is built for everyone who works with data — but different features matter at different scales. This page helps you find where you fit and what to focus on first.
+
+---
+
+## Find yourself on the map
+
+<div style={{ width: '100%', maxWidth: 700, margin: '2rem auto', fontFamily: 'var(--font-mono, monospace)' }}>
+  <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr', gridTemplateRows: 'auto 1fr 1fr', gap: 0 }}>
+    {/* Empty top-left corner */}
+    <div style={{ borderBottom: '1px solid var(--fd-border)', borderRight: '1px solid var(--fd-border)' }} />
+
+    {/* Column headers */}
+    <div style={{ padding: '10px 16px', fontSize: 12, fontWeight: 600, opacity: 0.6, textAlign: 'center', borderBottom: '1px solid var(--fd-border)', borderRight: '1px solid var(--fd-border)' }}>
+      Simple data, few sources
+    </div>
+    <div style={{ padding: '10px 16px', fontSize: 12, fontWeight: 600, opacity: 0.6, textAlign: 'center', borderBottom: '1px solid var(--fd-border)' }}>
+      Lots of diverse sources, complex analyses
+    </div>
+
+    {/* Row 1: Founder */}
+    <div style={{ padding: '12px 14px', fontSize: 12, fontWeight: 600, opacity: 0.6, borderRight: '1px solid var(--fd-border)', borderBottom: '1px solid var(--fd-border)', display: 'flex', alignItems: 'center' }}>
+      Founder / Small team
+    </div>
+    <a href="#founder--simple-data" style={{ textDecoration: 'none', color: 'inherit' }}>
+      <div style={{ padding: '16px 18px', borderRight: '1px solid var(--fd-border)', borderBottom: '1px solid var(--fd-border)', cursor: 'pointer', height: '100%' }}>
+        <div style={{ fontSize: 12, opacity: 0.65, fontStyle: 'italic' }}>"Just help me build a dashboard"</div>
+      </div>
+    </a>
+    <a href="#founder--complex-data" style={{ textDecoration: 'none', color: 'inherit' }}>
+      <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--fd-border)', cursor: 'pointer', height: '100%' }}>
+        <div style={{ fontSize: 12, opacity: 0.65, fontStyle: 'italic' }}>"I need real answers from our warehouse without a large data team"</div>
+      </div>
+    </a>
+
+    {/* Row 2: Data team */}
+    <div style={{ padding: '12px 14px', fontSize: 12, fontWeight: 600, opacity: 0.6, borderRight: '1px solid var(--fd-border)', display: 'flex', alignItems: 'center' }}>
+      Data team serving an org
+    </div>
+    <a href="#data-team--simple-data" style={{ textDecoration: 'none', color: 'inherit' }}>
+      <div style={{ padding: '16px 18px', borderRight: '1px solid var(--fd-border)', cursor: 'pointer', height: '100%' }}>
+        <div style={{ fontSize: 12, opacity: 0.65, fontStyle: 'italic' }}>"I want ops and marketing to answer their own questions — and trust the answer"</div>
+      </div>
+    </a>
+    <a href="#data-team--complex-data" style={{ textDecoration: 'none', color: 'inherit' }}>
+      <div style={{ padding: '16px 18px', cursor: 'pointer', height: '100%' }}>
+        <div style={{ fontSize: 12, opacity: 0.65, fontStyle: 'italic' }}>"Every number needs to trace back to a governed, trusted dataset"</div>
+      </div>
+    </a>
+  </div>
+</div>
+
+**Founders & small teams** (top row) — you're a founder or have a small team of ~1–25. You need answers from your data without a large data team.
+
+**Data teams** (bottom row) — you're a data team supporting various teams' data needs. You need self-service, governance, and trust.
+
+---
+
+## Founder + Simple data
+
+> Just help me build a dashboard
+
+**Who you are**: A founder, solo operator, or small team (~1–25 people) with a database, a CSV, or a Google Sheet. You don't have a data team and don't want one.
+
+**What matters most**: Speed. Go from question to answer without ceremony.
+
+**Key features**:
+- [Explore](/docs/bi/explore) — ask questions in natural language, get instant results
+- [Questions](/docs/bi/questions) — save and revisit your analyses
+- [CSV / Google Sheets connections](/docs/data/connections) — upload a file and start querying immediately
+- [Visualization](/docs/bi/visualization) — charts with zero configuration
+- [Dashboards](/docs/bi/dashboards) — assemble a few charts into a shareable view
+
+**Start here**: [Getting Started guide →](/guides/getting-started)
+
+---
+
+## Founder + Complex data
+
+> I need real answers from our warehouse without a large data team
+
+**Who you are**: A founder or small team with a real data warehouse (Postgres, BigQuery, etc.), multiple data sources, and SQL that's getting serious — but no dedicated data team to manage a traditional BI tool.
+
+**What matters most**: Depth without overhead. The tool should handle complexity without requiring a BI admin.
+
+**Key features**:
+- [DuckDB / BigQuery / PostgreSQL connections](/docs/data/connections) — connect to your actual warehouse
+- [Data Modeling](/docs/data/data-modeling) — create trusted, materialized datasets
+- [Pivot tables](/docs/bi/visualization#pivot-tables) — cross-tabulation with formulas and heatmaps
+- [Advanced viz settings](/docs/bi/visualization#general-viz-settings) — dual-axis, annotations, column formatting
+- [Filters & Parameters](/docs/bi/filters) — dynamic, parameterized queries
+- [MCP integration](/docs/integrations#mcp-model-context-protocol) — query your data from Claude Desktop or Cursor
+
+**Start here**: [Your First Question →](/guides/first-question)
+
+---
+
+## Data team + Simple data
+
+> I want ops and marketing to answer their own questions — and trust the answer
+
+**Who you are**: A data team (or the one data person) at a growing company. The data isn't that complex, but you're drowning in ad-hoc requests. You need business teams to self-serve.
+
+**What matters most**: Self-service that actually works. Non-technical users need to get answers without pinging you every time — and the answers need to be correct.
+
+**Key features**:
+- [Knowledge Base](/docs/knowledge-base/context) — teach the agent your team's metrics, conventions, and gotchas
+- [Dashboards](/docs/bi/dashboards) — shared views with interactive filters
+- [Text blocks](/docs/bi/dashboards#text-blocks) — add context and commentary alongside charts
+- [Dashboard parameters](/docs/bi/dashboards#dashboard-parameters) — one filter controls all questions
+- [Slack integration](/docs/integrations#slack) — let teams ask data questions right in Slack
+- [Evals](/docs/knowledge-base/evals) — verify the AI gives correct answers before handing it to the team
+
+**Start here**: [Creating a Dashboard →](/guides/creating-dashboard)
+
+---
+
+## Data team + Complex data
+
+> Every number needs to trace back to a governed, trusted dataset
+
+**Who you are**: A data team serving dozens or hundreds of stakeholders across the org, with governance requirements, multiple data sources, and a need for reliability. You've been burned by "vibe SQL" before.
+
+**What matters most**: Trust, governance, and scalability. Every metric needs to be defined once, governed centrally, and used consistently.
+
+**Key features**:
+- [Data Modeling](/docs/data/data-modeling) — single source of truth with clear grain and business logic
+- [Context hierarchy](/docs/knowledge-base/context#tree-based-whitelisting) — org-wide governance with team-level access control
+- [Evals](/docs/knowledge-base/evals) — measure and track AI accuracy systematically
+- [Proactive Analytics](/docs/proactive) — scheduled reports and threshold-based alerts
+- [Permissions & modes](/docs/installation) — user management and environment isolation
+- [MCP + Slack](/docs/integrations) — meet stakeholders where they work
+
+**Start here**: [Knowledge Base Setup →](/guides/knowledge-base-setup)
+
+---

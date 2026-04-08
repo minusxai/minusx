@@ -7,13 +7,59 @@ description: Welcome to MinusX — the open-source agentic BI tool
 
 MinusX is an open-source, AI-native business intelligence tool that helps companies organize their data and put agents to work. It is `Claude Code` / `Codex` for serious data work. MinusX combines three core components of the data stack:
 
-1. [**Data Modeling**](/docs/data) — create trusted datasets (and metrics) everyone in the org can rely on
-2. [**True (for real) Self-Service BI**](/docs/bi) — explore ad-hoc questions, build and maintain dashboards
-3. [**Proactive Analytics**](/docs/proactive) — understand what to focus on, find out what's broken
+1. [**One Place for All Your Data**](/docs/data) — connect all your data sources, create trusted datasets and metrics that everyone in the org can rely on
+2. [**AI-Assisted Self-Service BI**](/docs/bi) — explore data in natural language, build questions and dashboards with an agent that understands your context
+3. [**Proactive Analytics**](/docs/proactive) — scheduled reports, threshold-based alerts — understand what to focus on and find out what's broken
 
 A trainable, trustworthy agent lives across the entire product surface, assisting in all the above workflows.
 
 <ThemedImage light="/common/schematic.png" dark="/common/schematic.png" alt="MinusX Schematic Diagram" />
+
+---
+
+## Who is MinusX for?
+
+Whether you're a founder with a Supabase instance or a data team supporting hundreds of stakeholders, MinusX scales with you. Different parts of MinusX become important at different scales.
+
+<div style={{ width: '100%', maxWidth: 700, margin: '1.5rem auto', fontFamily: 'var(--font-mono, monospace)' }}>
+  <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr', gridTemplateRows: 'auto 1fr 1fr', gap: 0 }}>
+    <div style={{ borderBottom: '1px solid var(--fd-border)', borderRight: '1px solid var(--fd-border)' }} />
+    <div style={{ padding: '10px 16px', fontSize: 12, fontWeight: 600, opacity: 0.6, textAlign: 'center', borderBottom: '1px solid var(--fd-border)', borderRight: '1px solid var(--fd-border)' }}>
+      Simple data, few sources
+    </div>
+    <div style={{ padding: '10px 16px', fontSize: 12, fontWeight: 600, opacity: 0.6, textAlign: 'center', borderBottom: '1px solid var(--fd-border)' }}>
+      Lots of diverse sources, complex analyses
+    </div>
+    <div style={{ padding: '12px 14px', fontSize: 12, fontWeight: 600, opacity: 0.6, borderRight: '1px solid var(--fd-border)', borderBottom: '1px solid var(--fd-border)', display: 'flex', alignItems: 'center' }}>
+      Founder / Small team
+    </div>
+    <a href="/docs/who-is-it-for#founder--simple-data" style={{ textDecoration: 'none', color: 'inherit' }}>
+      <div style={{ padding: '16px 18px', borderRight: '1px solid var(--fd-border)', borderBottom: '1px solid var(--fd-border)', cursor: 'pointer', height: '100%' }}>
+        <div style={{ fontSize: 12, opacity: 0.65, fontStyle: 'italic' }}>"Just help me build a dashboard"</div>
+      </div>
+    </a>
+    <a href="/docs/who-is-it-for#founder--complex-data" style={{ textDecoration: 'none', color: 'inherit' }}>
+      <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--fd-border)', cursor: 'pointer', height: '100%' }}>
+        <div style={{ fontSize: 12, opacity: 0.65, fontStyle: 'italic' }}>"I need real answers from our warehouse without a large data team"</div>
+      </div>
+    </a>
+    <div style={{ padding: '12px 14px', fontSize: 12, fontWeight: 600, opacity: 0.6, borderRight: '1px solid var(--fd-border)', display: 'flex', alignItems: 'center' }}>
+      Data team serving an org
+    </div>
+    <a href="/docs/who-is-it-for#data-team--simple-data" style={{ textDecoration: 'none', color: 'inherit' }}>
+      <div style={{ padding: '16px 18px', borderRight: '1px solid var(--fd-border)', cursor: 'pointer', height: '100%' }}>
+        <div style={{ fontSize: 12, opacity: 0.65, fontStyle: 'italic' }}>"I want ops and marketing to answer their own questions — and trust the answer"</div>
+      </div>
+    </a>
+    <a href="/docs/who-is-it-for#data-team--complex-data" style={{ textDecoration: 'none', color: 'inherit' }}>
+      <div style={{ padding: '16px 18px', cursor: 'pointer', height: '100%' }}>
+        <div style={{ fontSize: 12, opacity: 0.65, fontStyle: 'italic' }}>"Every number needs to trace back to a governed, trusted dataset"</div>
+      </div>
+    </a>
+  </div>
+</div>
+
+[Read more →](/docs/who-is-it-for)
 
 ---
 
@@ -52,9 +98,17 @@ MinusX is built on a few core beliefs:
 
 The MinusX agent lives on every page in MinusX. Whether you're exploring data, editing a question, or building a dashboard — the agent understands your current context and can take actions directly.
 
-<IconCards>
-  <IconCard icon="agent" title="MinusX Agent" description="Learn how the MinusX agent works across the platform" href="/docs/agent" />
-</IconCards>
+| Page | What can you do? | Examples |
+|------|-----------------|---------|
+| **Explore** | Go from question to insight in seconds | "What are the top 10 customers by revenue?" <br/> "Now filter to Q1" <br/> "Show it as a bar chart" |
+| **Questions** | Build production-grade analyses without writing SQL from scratch | "Add a date filter" <br/> "Change the aggregation to AVG" <br/> "Make this a pivot table with region as rows" |
+| **Dashboards** | Assemble a live view your team actually checks every morning | "Add a revenue chart" <br/> "Create a filter for region" <br/> "Move the KPI cards to the top" |
+| **Reports** | Make the data come to people instead of the other way around | "Change the schedule to weekly" <br/> "Add the marketing team" |
+| **Alerts** | Know when something breaks before your customers do | "Alert me when revenue drops below $10k" <br/> "Change to daily checks" |
+| **Slack** | Let your whole team ask data questions where they already work | "@minusx what was revenue last week?" <br/> "@minusx top 5 churned accounts this month" |
+| **MCP** | Give your AI coding tools direct access to your data | Search schemas, run queries, list connections — from Claude Desktop, Cursor, or Windsurf |
+
+[Read more about the agent →](/docs/agent)
 
 ---
 
@@ -65,6 +119,7 @@ The MinusX agent lives on every page in MinusX. Whether you're exploring data, e
   <IconCard icon="connection" title="Sources & Data Models" description="Connect databases and model your data" href="/docs/data" />
   <IconCard icon="knowledge-base" title="Knowledge Base & Evals" description="Teach the AI about your data and measure accuracy" href="/docs/knowledge-base" />
   <IconCard icon="proactive" title="Proactive Analytics" description="Scheduled reports and threshold-based alerts" href="/docs/proactive" />
+  <IconCard icon="connection" title="Integrations" description="MCP server for AI clients and Slack bot integration" href="/docs/integrations" />
 </IconCards>
 
 ---

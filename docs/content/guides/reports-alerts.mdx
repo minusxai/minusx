@@ -1,0 +1,75 @@
+---
+title: Reports & Alerts
+description: Set up automated reports and threshold-based alerts
+---
+
+This guide walks you through setting up scheduled reports and data alerts in MinusX.
+
+<Callout type="info">
+Reports and Alerts are part of [Proactive Analytics](/docs/proactive) — features that push insights to you instead of waiting for you to check.
+</Callout>
+
+---
+
+## Setting up a report
+
+Reports deliver dashboard or question snapshots on a recurring schedule.
+
+### Steps
+
+1. Open a **dashboard** or **question** you want to report on
+2. Click the **Schedule Report** action from the menu
+3. Configure the **schedule** — daily, weekly, or monthly
+4. Add **recipients** who should receive the report
+5. **Save** the report
+
+The report runs on schedule, executes all queries with the latest data, and delivers the results to your recipients.
+
+### Tips
+
+- Use dashboard-level parameters to control what data the report includes
+- Name your report clearly — recipients see the title in their notification
+- Start with a weekly cadence and adjust based on feedback
+
+---
+
+## Setting up an alert
+
+Alerts monitor a question's results and notify you when a condition is met.
+
+### Steps
+
+1. Open a **question** you want to monitor
+2. Click **Create Alert** from the menu
+3. Define the **condition**:
+   - **Threshold** — value exceeds or drops below a target
+   - **Change** — value changes by a certain amount or percentage
+   - **Existence** — query returns results (or stops returning results)
+4. Set the **check frequency** — how often MinusX evaluates the condition
+5. Add **notification recipients**
+6. **Save** the alert
+
+### Tips
+
+- Keep alert SQL simple and fast — it runs on every check
+- Use parameters to make alerts reusable (e.g., `:threshold` as a configurable value)
+- Start with generous thresholds and tighten as you learn what's normal
+
+---
+
+## Managing reports and alerts
+
+- View all active reports and alerts from the sidebar
+- Each report/alert shows its **run history** — when it last ran, whether it succeeded, and what the output was
+- You can **trigger a manual run** to test before waiting for the schedule
+- Edit the schedule, recipients, or conditions at any time
+
+---
+
+## What's next?
+
+<IconCards>
+  <IconCard icon="reports" title="Reports" description="Learn more about scheduled report delivery" href="/docs/proactive/reports" />
+  <IconCard icon="alerts" title="Alerts" description="Learn more about threshold-based alerts" href="/docs/proactive/alerts" />
+  <IconCard icon="dashboard" title="Creating a Dashboard" description="Build the dashboard your report will deliver" href="/guides/creating-dashboard" />
+</IconCards>

@@ -23,6 +23,22 @@ Every question in MinusX can be displayed as a table or chart. The visualization
 | **Trend** | Single KPI with trend direction |
 | **Waterfall** | Incremental positive/negative changes |
 
+### Per-type notes
+
+**Table** — displays raw query results with sortable columns. Supports [column formatting](#column-formatting) for custom display names, number formatting, and date formatting.
+
+**Line / Bar / Area / Scatter** — standard charts powered by ECharts. Support all general settings: [dual-axis](#axis-configuration), [annotations](#annotations), [tooltip columns](#tooltip-columns), [stacking](#style) (bar and area), and [marker sizing](#style) (scatter and line).
+
+**Combo** — mixed bar + line chart. The **first Y column** renders as bars, all remaining Y columns render as lines. Requires at least **2 Y columns** and at least **1 X column**.
+
+**Waterfall** — cascade chart showing cumulative positive and negative changes. Requires exactly **1 X column** and **1 Y column**.
+
+**Trend** — metric cards showing the current value and a percentage change vs. the previous value. No axis configuration — just add Y columns for the metrics you want to track. Supports [column formatting](#column-formatting) for prefixes, suffixes, and decimal points.
+
+**Funnel / Pie** — categorical charts. Both require exactly **1 X column** and **1 Y column**.
+
+**Pivot Table** — see [Pivot Tables](#pivot-tables) below.
+
 ---
 
 ## GUI Builder
@@ -39,6 +55,58 @@ Charts update in real time as you configure axes. Switch between chart types wit
 For charts with multiple X columns:
 - **Line / Bar / Area / Scatter** — reorders columns by cardinality automatically
 - **Pie / Funnel** — preserves your original column order
+
+---
+
+## General Viz Settings
+
+All chart types (except table and trend) support these configurable settings via the visualization toolbar.
+
+### Column formatting
+
+Per-column display formatting — available on all chart types including tables:
+
+| Setting | Description | Example |
+|---------|-------------|---------|
+| **Alias** | Custom display name override | `total_revenue` → "Total Revenue" |
+| **Decimal points** | Number of decimal places (0–4) | `1234.5678` → `1,234.57` |
+| **Date format** | Date display format | ISO, US, EU, short, month-year, year |
+| **Prefix** | String prepended to values | `$`, `€`, `£` |
+| **Suffix** | String appended to values | `%`, `k`, ` units` |
+
+### Style
+
+Customize the visual appearance of your chart:
+
+- **Series colors** — override individual series colors from the palette
+- **Opacity** — adjust series opacity (0.1 to 1.0)
+- **Marker size** — control point size on scatter, line, and combo charts (4–30px)
+- **Stacked mode** — stack series on bar and area charts instead of side-by-side
+
+### Axis configuration
+
+Control axis scales, ranges, and layout:
+
+- **Scale type** — switch between linear and logarithmic scale (X and Y axes)
+- **Range bounds** — set explicit min/max values for X and Y axes
+- **Y-axis title** — custom label for the Y axis
+- **Dual-axis mode** — enable a second Y axis on the right side. When enabled, drag columns to the **Right Y-axis** drop zone. Left and right axes scale independently.
+
+<Callout type="info">
+X-axis scale settings are only available on scatter charts. All other chart types use categorical X axes.
+</Callout>
+
+### Annotations
+
+Add reference labels anchored to specific data points — available on line, bar, area, and scatter charts:
+
+- Anchor to an **X-axis value** and optionally a specific **series**
+- Add a **text label** that displays on the chart
+- Maximum **8 annotations** per chart
+
+### Tooltip columns
+
+Drag additional columns to the **Tooltip** drop zone to include them in hover tooltips without affecting the chart's data aggregation. Useful for showing supporting context (e.g., customer name alongside a revenue figure).
 
 ---
 
@@ -64,6 +132,12 @@ Each value column can use: **SUM**, **AVG**, **COUNT**, **MIN**, or **MAX**
 - **Heatmap** — teal gradient coloring for visual emphasis
 - **Grand totals** — row and column totals
 
+### Row & column formulas
+
+When you have two or more dimension values in your rows or columns, you can create **derived rows/columns** computed from existing ones using arithmetic operators (`+`, `-`, `*`, `/`).
+
+For example, if your pivot has "Revenue" and "Cost" as row dimensions, you can add a formula row for "Profit" = Revenue − Cost. Formulas support multi-level dimensions with parent value scoping.
+
 ---
 
 ## AI-powered visualization
@@ -73,5 +147,8 @@ The agent can configure charts for you:
 - "Show this as a line chart by month"
 - "Make a pivot table with region as rows and quarter as columns"
 - "Switch to a bar chart"
+- "Add an annotation at the peak value"
+- "Enable dual-axis with revenue on the left and count on the right"
+- "Format the revenue column with a $ prefix and 2 decimal points"
 
 ---
