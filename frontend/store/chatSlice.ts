@@ -36,6 +36,7 @@ export type UserMessage = {
   role: 'user';
   content: string;
   created_at: string;
+  attachments?: import('@/lib/types').Attachment[];
 };
 
 export type CompletedToolCall = {

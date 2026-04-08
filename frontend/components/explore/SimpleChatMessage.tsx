@@ -45,6 +45,9 @@ const SimpleChatMessage = React.memo(function SimpleChatMessage({ message, datab
   const userColStart = isCompact ? 1 : { base: 1, md: 5};
 
   if (isUser) {
+    const userMsg = message as import('@/store/chatSlice').UserMessage;
+    const imageAttachments = userMsg.attachments?.filter(a => a.type === 'image') ?? [];
+
     return(
     <Grid
       templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }}
@@ -69,6 +72,27 @@ const SimpleChatMessage = React.memo(function SimpleChatMessage({ message, datab
                 context={markdownContext}
                 textAlign="left"
               />
+              {imageAttachments.length > 0 && (
+                <HStack mt={2} gap={2} flexWrap="wrap">
+                  {imageAttachments.map((att, i) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      key={i}
+                      src={att.content}
+                      alt={att.name}
+                      aria-label={`Attached image: ${att.name}`}
+                      style={{
+                        maxWidth: 200,
+                        maxHeight: 150,
+                        borderRadius: 6,
+                        objectFit: 'cover',
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => window.open(att.content, '_blank')}
+                    />
+                  ))}
+                </HStack>
+              )}
             </Box>
           </GridItem>
           <GridItem
