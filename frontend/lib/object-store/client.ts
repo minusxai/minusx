@@ -25,6 +25,7 @@ const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 export async function uploadFile(
   file: File,
   onProgress?: (progress: number) => void,
+  options?: { keyType?: 'uploads' | 'charts' },
 ): Promise<UploadResult> {
   if (file.size > MAX_UPLOAD_BYTES) {
     throw new Error(`File is too large (max 50 MB)`);
@@ -32,6 +33,7 @@ export async function uploadFile(
 
   // Step 1: get presigned upload URL from our API
   const params = new URLSearchParams({ filename: file.name, contentType: file.type });
+  if (options?.keyType) params.set('keyType', options.keyType);
   const res = await fetch(`/api/object-store/upload-url?${params}`);
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));

@@ -7,7 +7,7 @@ import { getSlackSigningSecret } from '@/lib/integrations/slack/config';
 import { buildSlackAgentArgs } from '@/lib/integrations/slack/context';
 import { resolveBaseUrl } from '@/lib/jobs/job-utils';
 import { extractSlackReply, extractQueryCharts, markdownToSlackMrkdwn, buildSlackReplyBlocks, normalizeSlackPrompt } from '@/lib/integrations/slack/messages';
-import { renderChartToPng } from '@/lib/chart/render-chart';
+import { renderChartToJpeg } from '@/lib/chart/render-chart';
 import { buildHomeView, buildWelcomeBlocks, shouldSendWelcome } from '@/lib/integrations/slack/welcome';
 import {
   findSlackInstallationByTeam,
@@ -193,13 +193,13 @@ export async function processSlackEvent(
       const queryCharts = extractQueryCharts(result.logDiff);
       for (const chart of queryCharts) {
         try {
-          const chartPng = await renderChartToPng(chart.queryResult, chart.vizSettings);
-          if (chartPng) {
+          const chartJpeg = await renderChartToJpeg(chart.queryResult, chart.vizSettings);
+          if (chartJpeg) {
             await uploadSlackFile(installation.bot.bot_token, {
               channel: ev.channel,
               threadTs,
-              filename: 'chart.png',
-              fileData: chartPng,
+              filename: 'chart.jpg',
+              fileData: chartJpeg,
             });
           }
         } catch (err) {

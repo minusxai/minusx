@@ -45,6 +45,8 @@ export async function GET(req: NextRequest) {
 
     const filename = req.nextUrl.searchParams.get('filename');
     const contentType = req.nextUrl.searchParams.get('contentType');
+    const keyTypeParam = req.nextUrl.searchParams.get('keyType');
+    const keyType = keyTypeParam === 'charts' ? 'charts' : 'uploads';
 
     if (!filename || !contentType) {
       return NextResponse.json(
@@ -63,7 +65,14 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const key = generateUploadKey(user.companyId, filename);
+    const ext = '.' + filename.split('.').pop()!.toLowerCase();
+    const key = generateUploadKey({
+      companyId: user.companyId,
+      userId: user.userId,
+      mode: user.mode,
+      type: keyType,
+      ext,
+    });
     const store = createObjectStore();
     const result = await store.getUploadUrl({ key, contentType });
 
