@@ -1,6 +1,6 @@
 'use client';
 
-import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen, LuUserPlus } from 'react-icons/lu';
+import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen, LuUserPlus, LuClock, LuChevronDown } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { Box, Flex, VStack, HStack, Text, IconButton, Icon, Menu, Portal } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -20,6 +20,7 @@ import { isAdmin } from '@/lib/auth/role-helpers';
 import { selectConfig } from '@/store/configsSlice';
 import { analytics, AnalyticsEvents } from '@/lib/analytics';
 import { switchMode } from '@/lib/mode/mode-utils';
+import { ConversationList } from './explore/ConversationList';
 
 interface NavItemProps {
   href: string;
@@ -81,6 +82,7 @@ export default function Sidebar() {
 
   // Avoid hydration mismatch: showAdvanced is false on server, may be true on client after localStorage restore
   const [mounted, setMounted] = useState(false);
+  const [historyExpanded, setHistoryExpanded] = useState(true);
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setMounted(true); }, []);
 
@@ -169,7 +171,7 @@ export default function Sidebar() {
       left={0}
       top={0}
       h="100vh"
-      w={isCollapsed ? '72px' : '260px'}
+      w={isCollapsed ? '72px' : '300px'}
       bg="bg.surface"
       borderRight="1px solid"
       borderColor="border.default"
@@ -298,6 +300,64 @@ export default function Sidebar() {
             </Box>
           ))}
         </VStack>
+
+        {/* Recent Chats Section */}
+        {!isCollapsed ? (
+          <Box mt={2}>
+            <HStack
+              px={3}
+              py={2}
+              mt={2}
+              cursor="pointer"
+              onClick={() => setHistoryExpanded(!historyExpanded)}
+              _hover={{ bg: 'bg.muted' }}
+              borderRadius="md"
+              justify="space-between"
+            >
+              <HStack gap={2}>
+                <Icon as={LuClock} boxSize={3.5} color="accent.teal" />
+                <Text fontSize="2xs" fontWeight="600" color="fg.subtle" textTransform="uppercase" letterSpacing="0.1em" fontFamily="mono">
+                  Recent Chats
+                </Text>
+              </HStack>
+              <Icon
+                as={LuChevronDown}
+                boxSize={3.5}
+                color="fg.subtle"
+                transform={historyExpanded ? 'rotate(0deg)' : 'rotate(-90deg)'}
+                transition="transform 0.2s"
+              />
+            </HStack>
+            {historyExpanded && (
+              <Box maxH="300px" overflowY="auto" css={{ scrollbarWidth: 'thin' }}>
+                <ConversationList
+                  onSelectConversation={(id) => {
+                    if (id) {
+                      navigate(`/explore/${id}`);
+                    } else {
+                      navigate('/explore');
+                    }
+                  }}
+                />
+              </Box>
+            )}
+          </Box>
+        ) : (
+          <Tooltip content="Recent Chats" positioning={{ placement: 'right' }}>
+            <Box
+              px={0}
+              py={2}
+              cursor="pointer"
+              display="flex"
+              justifyContent="center"
+              _hover={{ bg: 'bg.muted' }}
+              borderRadius="md"
+              onClick={() => navigate('/explore')}
+            >
+              <Icon as={LuClock} boxSize={5} color="accent.teal" />
+            </Box>
+          </Tooltip>
+        )}
       </VStack>
 
         {/* Collapse button when collapsed */}

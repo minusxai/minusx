@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, ReactNode, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Box, VStack, HStack, Text, Icon, IconButton } from '@chakra-ui/react';
 import { LuChevronRight, LuChevronLeft, LuGripVertical, LuChevronDown, LuMessageSquare, LuLayers } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
@@ -30,7 +30,6 @@ import { getSidebarSection, SidebarSectionMetadata } from '@/lib/ui/sidebar-sect
 export interface RightSidebarProps {
   title?: string;
   filePath?: string;  // File path for context filtering
-  history?: ReactNode;
   showChat?: boolean;
   fileId?: number;
   fileType?: FileType;
@@ -59,7 +58,6 @@ interface SectionContentSharedProps {
   contextsLoading: boolean;
   databases: ReturnType<typeof useContext>['databases'];
   documentation: string | undefined;
-  history: ReactNode | undefined;
   onContextChange?: (path: string | null, version?: number) => void;
   selectedContextPath?: string | null;
   contextVersion?: number;
@@ -78,7 +76,6 @@ function SectionContent({
   contextsLoading,
   databases,
   documentation,
-  history,
   onContextChange,
   selectedContextPath,
   contextVersion,
@@ -129,12 +126,6 @@ function SectionContent({
           ) : (
             <Text fontSize="sm" color="fg.muted" fontFamily="mono">No documentation available</Text>
           )}
-        </Box>
-      );
-    case 'history':
-      return (
-        <Box p={0}>
-          {history || <Text fontSize="sm" color="fg.muted" fontFamily="mono">No history yet</Text>}
         </Box>
       );
     case 'context':
@@ -353,7 +344,6 @@ function TabsLayout({
 export default function RightSidebar({
   title = "Misc Info",
   filePath = '/',
-  history,
   showChat = false,
   fileId,
   fileType,
@@ -453,10 +443,6 @@ export default function RightSidebar({
     sections.push(getSidebarSection('question-references'));
   }
 
-  if (history !== undefined) {
-    sections.push(getSidebarSection('history'));
-  }
-
   if (devMode) {
     sections.push(getSidebarSection('dev'));
   }
@@ -474,7 +460,6 @@ export default function RightSidebar({
     contextsLoading,
     databases,
     documentation,
-    history,
     onContextChange,
     selectedContextPath,
     contextVersion,

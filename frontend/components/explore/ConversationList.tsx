@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useCallback } from 'react';
-import { Box, Button, VStack, Text, Spinner, HStack, Icon } from '@chakra-ui/react';
+import { Box, VStack, Text, Spinner, HStack, Icon } from '@chakra-ui/react';
 import { LuSlack } from 'react-icons/lu';
 import { ConversationSummary } from '@/app/api/conversations/route';
-import FileTypeBadge from '../FileTypeBadge';
+import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { useFetch } from '@/lib/api/useFetch';
 import { API } from '@/lib/api/declarations';
 
@@ -25,10 +25,9 @@ export function ConversationList({
   return (
     <VStack
       align="stretch"
-      gap={2}
+      gap={0}
       h="100%"
       overflow="hidden"
-      p={3}
     >
 
       {/* Loading State */}
@@ -62,11 +61,11 @@ export function ConversationList({
       {/* Scrollable Conversation Items */}
       <VStack
         align="stretch"
-        // gap={1}
         overflow="auto"
         flex="1"
         maxH="400px"
         m={0}
+        gap={0}
       >
         {conversations.map((conv) => (
           <ConversationItem
@@ -79,6 +78,24 @@ export function ConversationList({
       </VStack>
     </VStack>
   );
+}
+
+function getTypeColor(type: string): string {
+  if (type === 'slack') return '#4A154B';
+  const meta = FILE_TYPE_METADATA[type as keyof typeof FILE_TYPE_METADATA];
+  return meta?.color || 'fg.muted';
+}
+
+function getTypeLabel(type: string): string {
+  if (type === 'slack') return 'Slack';
+  const meta = FILE_TYPE_METADATA[type as keyof typeof FILE_TYPE_METADATA];
+  return meta?.label || type;
+}
+
+function getTypeIcon(type: string): React.ComponentType | null {
+  if (type === 'slack') return LuSlack;
+  const meta = FILE_TYPE_METADATA[type as keyof typeof FILE_TYPE_METADATA];
+  return meta?.icon || null;
 }
 
 interface ConversationItemProps {
@@ -106,15 +123,19 @@ const ConversationItem = React.memo(function ConversationItem({ conversation, is
     return date.toLocaleDateString();
   };
 
+  // Unified source label: Slack source takes priority, then page type
+  const sourceType = conversation.source?.type === 'slack' ? 'slack' : conversation.parentPageType;
+  const sourceColor = sourceType ? getTypeColor(sourceType) : undefined;
+  const sourceLabel = sourceType ? getTypeLabel(sourceType) : undefined;
+
   return (
     <Box
-      px={2}
-      py={1}
-      borderRadius="md"
+      px={3}
+      py={2}
       cursor="pointer"
       bg={isActive ? 'bg.muted' : 'transparent'}
-      borderWidth={isActive ? 1 : 0}
-      borderColor="border.muted"
+      borderLeft="2px solid"
+      borderColor={sourceColor || 'transparent'}
       _hover={{ bg: "bg.muted"}}
       onClick={handleClick}
       transition="all 0.15s"
@@ -123,24 +144,29 @@ const ConversationItem = React.memo(function ConversationItem({ conversation, is
         {/* Conversation Name */}
         <Text
           fontSize="sm"
-        //   fontWeight={isActive ? 'semibold' : 'normal'}
           truncate
         >
           {conversation.name}
         </Text>
 
         {/* Metadata Row */}
-        <HStack justify="space-between" fontSize="xs" color="accent.muted" align="center">
-          {conversation.source?.type === 'slack' ? (
-            <HStack gap={1} fontFamily="mono" fontSize="2xs" fontWeight="600" color="white" px={1.5} py={0.5} bg="#4A154B" borderRadius="sm" flexShrink={0} opacity={0.9}>
-              <Icon asChild boxSize="10px"><LuSlack /></Icon>
-              <Text>Slack</Text>
+        <HStack justify="space-between" fontSize="2xs" align="center" gap={2}>
+          {sourceLabel && sourceType && (
+            <HStack gap={1} opacity={0.8}>
+              {getTypeIcon(sourceType) && (
+                <Icon as={getTypeIcon(sourceType)!} boxSize="10px" color={sourceColor} />
+              )}
+              <Text
+                fontFamily="mono"
+                fontSize="2xs"
+                fontWeight="600"
+                color={sourceColor}
+              >
+                {sourceLabel}
+              </Text>
             </HStack>
-          ) : conversation.parentPageType ? (
-            <FileTypeBadge fileType={conversation.parentPageType} size="xs" opacity={0.9}/>
-          ) : null}
-          <Text>{conversation.messageCount} user message{conversation.messageCount > 1 ? 's' : ''}</Text>
-          <Text>{getRelativeTime(conversation.updatedAt)}</Text>
+          )}
+          <Text fontFamily="mono" color="fg.muted">{getRelativeTime(conversation.updatedAt)}</Text>
         </HStack>
       </VStack>
     </Box>

@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box, HStack, VStack, Flex } from '@chakra-ui/react';
 import ChatInterface from './ChatInterface';
-import { ConversationList } from './ConversationList';
 import RightSidebar from '@/components/RightSidebar';
 import MobileRightSidebar from '@/components/MobileRightSidebar';
 import Breadcrumb from '@/components/Breadcrumb';
@@ -111,14 +110,6 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
   // Track mobile state (default to false for SSR, update on client)
   const [isMobile, setIsMobile] = useState(false);
 
-  const handleConversationSelect = useCallback((id?: number) => {
-    if (id) {
-      router.push(`/explore/${id}`);
-    } else {
-      router.push('/explore');
-    }
-  }, [router]);
-
   // Open right sidebar when explore page loads
   useEffect(() => {
     // dispatch(setRightSidebarCollapsed(true));
@@ -134,13 +125,6 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, [dispatch]);
-
-  const conversationHistory = (
-    <ConversationList
-      onSelectConversation={handleConversationSelect}
-      currentConversationId={conversationId}
-    />
-  );
 
   // Build breadcrumb items for explore page
   const breadcrumbItems = useMemo(() => [
@@ -191,7 +175,6 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
               setSelectedVersion(version);
             }}
             showChat={false}
-            history={conversationHistory}
         />
       )}
       {isMobile === true && (
@@ -205,7 +188,6 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
               setSelectedVersion(version);
             }}
             showChat={false}
-            history={conversationHistory}
         />
       )}
     </HStack>
