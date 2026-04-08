@@ -46,11 +46,12 @@ export function parseLogToMessages(log: ConversationLogEntry[]): any[] {
       // Check if this is the main agent task (contains user message)
       const userMessage = entry.args?.goal || entry.args?.user_message || entry.args?.message;
       if (userMessage && (agent === 'AnalystAgent' || agent === 'DefaultAgent' || agent === 'SlackAgent')) {
-        // User message
+        const attachments = entry.args?.attachments;
         messages.push({
           role: 'user',
           content: userMessage,
-          created_at: entry.created_at
+          created_at: entry.created_at,
+          ...(attachments?.length > 0 ? { attachments } : {}),
         });
       }
 

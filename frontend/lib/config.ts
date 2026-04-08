@@ -32,6 +32,13 @@ interface EnvironmentConfig {
   SLACK_SIGNING_SECRET: string | undefined;
   SLACK_CLIENT_ID: string | undefined;
   SLACK_CLIENT_SECRET: string | undefined;
+  // Object store (S3-compatible file storage)
+  OBJECT_STORE_ENDPOINT: string | undefined;
+  OBJECT_STORE_BUCKET: string | undefined;
+  OBJECT_STORE_REGION: string;
+  OBJECT_STORE_ACCESS_KEY_ID: string | undefined;
+  OBJECT_STORE_SECRET_ACCESS_KEY: string | undefined;
+  OBJECT_STORE_PUBLIC_URL: string | undefined;
 }
 
 const errors: string[] = [];
@@ -82,6 +89,12 @@ const config: EnvironmentConfig = {
   SLACK_SIGNING_SECRET: process.env.SLACK_SIGNING_SECRET,
   SLACK_CLIENT_ID: process.env.SLACK_CLIENT_ID,
   SLACK_CLIENT_SECRET: process.env.SLACK_CLIENT_SECRET,
+  OBJECT_STORE_ENDPOINT: process.env.OBJECT_STORE_ENDPOINT,
+  OBJECT_STORE_BUCKET: process.env.OBJECT_STORE_BUCKET,
+  OBJECT_STORE_REGION: getOptional(process.env.OBJECT_STORE_REGION, 'us-east-1'),
+  OBJECT_STORE_ACCESS_KEY_ID: process.env.OBJECT_STORE_ACCESS_KEY_ID,
+  OBJECT_STORE_SECRET_ACCESS_KEY: process.env.OBJECT_STORE_SECRET_ACCESS_KEY,
+  OBJECT_STORE_PUBLIC_URL: process.env.OBJECT_STORE_PUBLIC_URL,
 };
 
 // Skip validation in test mode or browser (client-side)
@@ -128,3 +141,9 @@ export const DEFAULT_EMAIL_WEBHOOK = config.DEFAULT_EMAIL_WEBHOOK;
 export const SLACK_SIGNING_SECRET = config.SLACK_SIGNING_SECRET;
 export const SLACK_CLIENT_ID = config.SLACK_CLIENT_ID;
 export const SLACK_CLIENT_SECRET = config.SLACK_CLIENT_SECRET;
+export const OBJECT_STORE_ENDPOINT = config.OBJECT_STORE_ENDPOINT;
+export const OBJECT_STORE_BUCKET = config.OBJECT_STORE_BUCKET;
+export const OBJECT_STORE_REGION = config.OBJECT_STORE_REGION;
+export const OBJECT_STORE_ACCESS_KEY_ID = config.OBJECT_STORE_ACCESS_KEY_ID;
+export const OBJECT_STORE_SECRET_ACCESS_KEY = config.OBJECT_STORE_SECRET_ACCESS_KEY;
+export const OBJECT_STORE_PUBLIC_URL = config.OBJECT_STORE_PUBLIC_URL;

@@ -36,6 +36,7 @@ export type UserMessage = {
   role: 'user';
   content: string;
   created_at: string;
+  attachments?: import('@/lib/types').Attachment[];
 };
 
 export type CompletedToolCall = {
@@ -110,8 +111,9 @@ const chatSlice = createSlice({
       agent: string;
       agent_args?: any;
       message?: string;  // Optional initial user message
+      attachments?: import('@/lib/types').Attachment[];
     }>) {
-      const { conversationID, agent, agent_args, message } = action.payload;
+      const { conversationID, agent, agent_args, message, attachments } = action.payload;
 
       // Deactivate all existing conversations
       Object.values(state.conversations).forEach(c => {
@@ -123,7 +125,8 @@ const chatSlice = createSlice({
         messages.push({
           role: 'user',
           content: message,
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
+          ...(attachments?.length ? { attachments } : {}),
         });
       }
 
@@ -164,8 +167,9 @@ const chatSlice = createSlice({
     sendMessage(state, action: PayloadAction<{
       conversationID: number;
       message: string;
+      attachments?: import('@/lib/types').Attachment[];
     }>) {
-      const { conversationID, message } = action.payload;
+      const { conversationID, message, attachments } = action.payload;
       const conv = state.conversations[conversationID];
       if (!conv) return;
 
@@ -173,7 +177,8 @@ const chatSlice = createSlice({
       conv.messages.push({
         role: 'user',
         content: message,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        ...(attachments?.length ? { attachments } : {}),
       });
       conv.executionState = 'WAITING';
       conv.error = undefined;

@@ -397,7 +397,8 @@ export default function ChatInterface({
           agent_name: config.branding.agentName || 'MinusX',
           ...(attachments.length > 0 ? { attachments } : {}),
         },
-        message: userInput
+        message: userInput,
+        attachments: attachments.length > 0 ? attachments : undefined,
       }));
 
       // Navigation will happen via useEffect when conversation forks to real ID
@@ -425,7 +426,8 @@ export default function ChatInterface({
       // Send message
       dispatch(sendMessage({
         conversationID,
-        message: userInput
+        message: userInput,
+        attachments: attachments.length > 0 ? attachments : undefined,
       }));
     }
   };

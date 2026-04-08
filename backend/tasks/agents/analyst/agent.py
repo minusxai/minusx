@@ -194,18 +194,43 @@ class AnalystAgent(Agent):
             parts.append(f"<Attachment {header}>\n{content}\n</Attachment>")
         return "\n".join(parts)
 
+    def _get_image_content_blocks(self) -> list:
+        """Return image content blocks for any image attachments.
+        Uses OpenAI image_url format — litellm translates this to Anthropic format.
+        """
+        blocks = []
+        for att in self.attachments:
+            if att.get("type") != "image":
+                continue
+            url = att.get("content", "")
+            if not url:
+                continue
+            blocks.append({
+                "type": "image_url",
+                "image_url": {"url": url},
+            })
+        return blocks
+
     def _get_user_message(self) -> dict:
         """Generate user message with the goal and app state."""
         app_state_str = json.dumps(self.app_state, separators=(',', ':')) if self.app_state else "null"
         attachments_str = self._format_attachments()
 
-        content = get_prompt(
+        text = get_prompt(
             'default.user',
             app_state=app_state_str,
             goal=self.goal,
             current_date=time.strftime("%Y-%m-%d"),
             attachments=attachments_str
         )
+
+        image_blocks = self._get_image_content_blocks()
+        if image_blocks:
+            # Multimodal message: text first, then image blocks
+            content = [{"type": "text", "text": text}] + image_blocks
+        else:
+            content = text
+
         return {"role": "user", "content": content}
 
     def _get_llm_settings(self) -> LlmSettings:

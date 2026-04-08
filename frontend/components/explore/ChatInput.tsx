@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useRef, KeyboardEvent, useEffect } from 'react';
-import { Box, HStack, VStack, Textarea, IconButton, Icon, Grid, GridItem, Text } from '@chakra-ui/react';
+import { Box, HStack, VStack, Textarea, IconButton, Icon, Grid, GridItem, Text, Spinner } from '@chakra-ui/react';
 import { LuSendHorizontal, LuPaperclip, LuSettings2, LuSquare, LuX } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { selectCompanyName } from '@/store/authSlice';
-import { setSidebarPendingMessage, setSidebarDraft, selectSidebarDraft, setAskForConfirmation, selectChatAttachments, addChatAttachment, removeChatAttachment } from '@/store/uiSlice';
+import { setSidebarPendingMessage, setSidebarDraft, selectSidebarDraft, setAskForConfirmation, selectChatAttachments, addChatAttachment, removeChatAttachment, clearChatAttachments } from '@/store/uiSlice';
 import { Checkbox } from '@/components/ui/checkbox';
 import DatabaseSelector from '@/components/DatabaseSelector';
 import { ContextSelector } from './ContextSelector';
@@ -13,6 +13,7 @@ import { useConfigs } from '@/lib/hooks/useConfigs';
 import { LexicalMentionEditor, LexicalMentionEditorRef } from '@/components/chat/LexicalMentionEditor';
 import { DatabaseWithSchema, Attachment } from '@/lib/types';
 import { extractTextFromDocument, SUPPORTED_DOC_EXTENSIONS } from '@/lib/utils/attachment-extract';
+import { uploadFile } from '@/lib/object-store/client';
 import { toaster } from '@/components/ui/toaster';
 import { Tooltip } from '@/components/ui/tooltip';
 
@@ -58,6 +59,8 @@ export default function ChatInput({
 
   // Use Redux for draft text (persists across unmount)
   const [input, setInput] = useState('');
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [uploadingNames, setUploadingNames] = useState<string[]>([]);
   const attachments = useAppSelector(selectChatAttachments);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<LexicalMentionEditorRef>(null);
@@ -75,24 +78,58 @@ export default function ChatInput({
       onSend(input.trim(), attachments);
       setInput('');
       editorRef.current?.clear();
+      dispatch(clearChatAttachments());
+    }
+  };
+
+  const processFile = async (file: File) => {
+    if (file.type.startsWith('image/')) {
+      setUploadingNames(prev => [...prev, file.name]);
+      try {
+        const { publicUrl } = await uploadFile(file, () => {});
+        dispatch(addChatAttachment({ type: 'image', name: file.name, content: publicUrl, metadata: {} }));
+      } catch (err: any) {
+        toaster.create({ title: err.message || 'Failed to upload image', type: 'error' });
+      } finally {
+        setUploadingNames(prev => prev.filter((_, i) => i !== prev.indexOf(file.name)));
+      }
+    } else {
+      try {
+        const { text, pages, wordCount } = await extractTextFromDocument(file);
+        const metadata: Attachment['metadata'] = {};
+        if (pages) metadata.pages = pages;
+        if (wordCount) metadata.wordCount = wordCount;
+        dispatch(addChatAttachment({ type: 'text', name: file.name, content: text, metadata }));
+      } catch (err: any) {
+        toaster.create({ title: err.message || 'Failed to extract document text', type: 'error' });
+      }
     }
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    // Reset input so re-selecting the same file triggers onChange
+    const files = Array.from(e.target.files ?? []);
     e.target.value = '';
+    await Promise.all(files.map(processFile));
+  };
 
-    try {
-      const { text, pages, wordCount } = await extractTextFromDocument(file);
-      const metadata: Attachment['metadata'] = {};
-      if (pages) metadata.pages = pages;
-      if (wordCount) metadata.wordCount = wordCount;
-      dispatch(addChatAttachment({ type: 'text', name: file.name, content: text, metadata }));
-    } catch (err: any) {
-      toaster.create({ title: err.message || 'Failed to extract document text', type: 'error' });
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (!isAgentRunning) setIsDraggingOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    // Only clear when leaving the box itself, not a child element
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDraggingOver(false);
     }
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDraggingOver(false);
+    if (isAgentRunning) return;
+    const files = Array.from(e.dataTransfer.files ?? []);
+    await Promise.all(files.map(processFile));
   };
 
   const removeAttachment = (index: number) => {
@@ -117,11 +154,15 @@ export default function ChatInput({
         <GridItem colSpan={colSpan} colStart={colStart}>
             <Box
             border="1px solid"
-            borderColor="border.default"
+            borderColor={isDraggingOver ? 'accent.teal' : 'border.default'}
+            boxShadow={isDraggingOver ? '0 0 0 1px var(--chakra-colors-accent-teal)' : undefined}
             borderRadius="md"
             bg="bg.canvas"
             _focusWithin={{ borderColor: 'accent.teal', boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)' }}
             transition="all 0.2s"
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
             >
             <VStack gap={0} align="stretch">
                 {/* Textarea with Mentions Support */}
@@ -137,21 +178,42 @@ export default function ChatInput({
                   />
                 </Box>
 
-                {/* Hidden file input for PDF attachment */}
+                {/* Hidden file input for documents + images */}
                 <input
                   type="file"
-                  accept={SUPPORTED_DOC_EXTENSIONS}
+                  accept={`${SUPPORTED_DOC_EXTENSIONS},image/*`}
+                  multiple
                   ref={fileInputRef}
                   style={{ display: 'none' }}
                   onChange={handleFileSelect}
                 />
 
                 {/* Attachment chips */}
-                {attachments.length > 0 && (
+                {(attachments.length > 0 || uploadingNames.length > 0) && (
                   <HStack px={3} py={1} gap={2} flexWrap="wrap" borderTop="1px solid" borderColor="border.muted">
+                    {uploadingNames.map((name, idx) => (
+                      <HStack
+                        key={`uploading-${idx}`}
+                        aria-label={`Uploading: ${name}`}
+                        bg="accent.teal/20"
+                        borderRadius="md"
+                        border="1px solid"
+                        borderColor="accent.teal"
+                        px={2}
+                        py={1}
+                        gap={1}
+                        fontSize="xs"
+                        fontFamily="mono"
+                        color="white"
+                      >
+                        <Spinner size="xs" color="accent.teal" />
+                        <Text truncate maxW="150px" color="fg.muted">{name}</Text>
+                      </HStack>
+                    ))}
                     {attachments.map((att, idx) => (
                       <HStack
                         key={idx}
+                        aria-label={`Attachment: ${att.name}`}
                         bg="accent.teal/50"
                         borderRadius="md"
                         border={"1px solid"}
@@ -163,6 +225,14 @@ export default function ChatInput({
                         fontFamily="mono"
                         color="white"
                       >
+                        {att.type === 'image' && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={att.content}
+                            alt={att.name}
+                            style={{ width: 20, height: 20, objectFit: 'cover', borderRadius: 2 }}
+                          />
+                        )}
                         <Tooltip content={att.name} positioning={{ placement: 'top' }}>
                           <Text truncate maxW="150px">{att.name}</Text>
                         </Tooltip>
@@ -172,7 +242,7 @@ export default function ChatInput({
                           <Text color="white">({att.metadata.wordCount} words)</Text>
                         ) : null}
                         <IconButton
-                          aria-label="Remove attachment"
+                          aria-label={`Remove attachment ${att.name}`}
                           onClick={() => removeAttachment(idx)}
                           variant="ghost"
                           size="2xs"
@@ -226,9 +296,9 @@ export default function ChatInput({
                 </HStack>
 
                 <HStack gap={1}>
-                  <Tooltip content="Attach additional context (PDF, DOCX, TXT)" positioning={{ placement: 'top' }}>
+                  <Tooltip content="Attach file or image (PDF, DOCX, TXT, PNG, JPG…)" positioning={{ placement: 'top' }}>
                     <IconButton
-                      aria-label="Attach additional context (PDF, DOCX, TXT)"
+                      aria-label="Attach file or image"
                       onClick={() => fileInputRef.current?.click()}
                       disabled={isAgentRunning}
                       variant="ghost"
