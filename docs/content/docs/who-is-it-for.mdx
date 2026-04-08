@@ -1,0 +1,102 @@
+---
+title: Who is MinusX for?
+description: From solo analysts to enterprise data teams — MinusX scales with you
+---
+
+MinusX is built for everyone who works with data — but different features matter at different scales. This page helps you find where you fit and what to focus on first.
+
+---
+
+## The MinusX scale
+
+Think of your setup along two dimensions:
+
+- **Data complexity** — how many sources, how much modeling, how much governance you need
+- **Team size** — how many people consume or produce analytics
+
+{/* TODO: Add a visual 2x2 grid/scatter diagram here */}
+
+|  | Simple data | Complex data |
+|---|---|---|
+| **Large team** | [Scaling startup](#scaling-startup) | [Enterprise data team](#enterprise-data-team) |
+| **Small team / Solo** | [Solo analyst](#solo-analyst) | [Power user](#power-user) |
+
+---
+
+## Solo analyst
+
+**Who you are**: An individual contributor, indie hacker, or early-stage founder who needs quick answers from a database or CSV file.
+
+**What matters most**: Speed. You want to go from question to answer without ceremony.
+
+**Key features to focus on**:
+- [Explore](/docs/bi/explore) — ask questions in natural language, get instant results
+- [Questions](/docs/bi/questions) — save and revisit your analyses
+- [CSV / Google Sheets connections](/docs/data/connections) — upload a file and start querying immediately
+- [Visualization](/docs/bi/visualization) — charts with zero configuration
+
+**Start here**: [Getting Started guide →](/guides/getting-started)
+
+---
+
+## Power user
+
+**Who you are**: A data engineer, analytics engineer, or experienced analyst working with multiple databases, complex schemas, and serious SQL.
+
+**What matters most**: Flexibility and depth. You need the tool to handle real-world data complexity without dumbing things down.
+
+**Key features to focus on**:
+- [DuckDB / BigQuery / PostgreSQL connections](/docs/data/connections) — connect to your actual warehouse
+- [Data Modeling](/docs/data/data-modeling) — create trusted, materialized datasets
+- [Pivot tables](/docs/bi/visualization#pivot-tables) — cross-tabulation with formulas and heatmaps
+- [Advanced viz settings](/docs/bi/visualization#general-viz-settings) — dual-axis, annotations, column formatting
+- [Filters & Parameters](/docs/bi/filters) — dynamic, parameterized queries
+
+**Start here**: [Your First Question →](/guides/first-question)
+
+---
+
+## Scaling startup
+
+**Who you are**: A growing company where multiple people need access to dashboards and reports, but you don't (yet) have a dedicated data team.
+
+**What matters most**: Self-service. Non-technical team members need to find answers without asking an analyst every time.
+
+**Key features to focus on**:
+- [Dashboards](/docs/bi/dashboards) — shared views with interactive filters
+- [Text blocks in dashboards](/docs/bi/dashboards#text-blocks) — add context and commentary alongside charts
+- [Dashboard parameters](/docs/bi/dashboards#dashboard-parameters) — one filter controls all questions
+- [Knowledge Base](/docs/knowledge-base/context) — teach the agent your team's metrics and conventions
+- [Folder organization](/docs/bi) — structure dashboards by team or function
+
+**Start here**: [Creating a Dashboard →](/guides/creating-dashboard)
+
+---
+
+## Enterprise data team
+
+**Who you are**: A data team serving dozens or hundreds of stakeholders across the org, with governance requirements, multiple data sources, and a need for reliability.
+
+**What matters most**: Trust, governance, and scalability. Every number needs to be traceable to a trusted dataset.
+
+**Key features to focus on**:
+- [Data Modeling](/docs/data/data-modeling) — single source of truth with clear grain and business logic
+- [Context hierarchy](/docs/knowledge-base/context#tree-based-whitelisting) — org-wide governance with team-level access control
+- [Evals](/docs/knowledge-base/evals) — measure and track AI accuracy systematically
+- [Proactive Analytics](/docs/proactive) — scheduled reports and threshold-based alerts
+- [Permissions & modes](/docs/installation) — user management and environment isolation
+
+**Start here**: [Knowledge Base Setup →](/guides/knowledge-base-setup)
+
+---
+
+## The bottom line
+
+You don't need to use everything on day one. Start with what matters for your scale, and unlock more as you grow:
+
+1. **Day 1** — Connect a database, ask questions in Explore
+2. **Week 1** — Save questions, build your first dashboard
+3. **Month 1** — Set up the Knowledge Base, run evals, share with your team
+4. **Ongoing** — Add data models, automate with reports and alerts, refine context based on eval results
+
+---
