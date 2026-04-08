@@ -1,6 +1,6 @@
 'use client';
 
-import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen, LuUserPlus, LuClock, LuChevronDown } from 'react-icons/lu';
+import { LuChevronLeft, LuChevronRight, LuHouse, LuLogOut, LuX, LuSettings, LuFileText, LuHeadset, LuGithub, LuEllipsisVertical, LuSun, LuMoon, LuGraduationCap, LuBookOpen, LuUserPlus, LuChevronDown } from 'react-icons/lu';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { Box, Flex, VStack, HStack, Text, IconButton, Icon, Menu, Portal } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -171,7 +171,7 @@ export default function Sidebar() {
       left={0}
       top={0}
       h="100vh"
-      w={isCollapsed ? '72px' : '300px'}
+      w={isCollapsed ? '72px' : '260px'}
       bg="bg.surface"
       borderRight="1px solid"
       borderColor="border.default"
@@ -337,22 +337,7 @@ export default function Sidebar() {
               </Box>
             )}
           </Box>
-        ) : (
-          <Tooltip content="Recent Chats" positioning={{ placement: 'right' }}>
-            <Box
-              px={0}
-              py={2}
-              cursor="pointer"
-              display="flex"
-              justifyContent="center"
-              _hover={{ bg: 'bg.muted' }}
-              borderRadius="md"
-              onClick={() => navigate('/explore')}
-            >
-              <Icon as={LuClock} boxSize={5} color="accent.teal" />
-            </Box>
-          </Tooltip>
-        )}
+        ) : null}
       </VStack>
 
         {/* Collapse button when collapsed */}
