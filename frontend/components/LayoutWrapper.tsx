@@ -1,13 +1,14 @@
 'use client';
 
 import { Box } from '@chakra-ui/react';
-import { ReactNode, Suspense } from 'react';
+import { ReactNode, Suspense, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
-import { useAppSelector } from '@/store/hooks';
+import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import Sidebar from './Sidebar';
 import MobileBottomNav from './MobileBottomNav';
 import { RecordingProvider } from '@/lib/hooks/useRecordingContext';
 import { useRouter } from '@/lib/navigation/use-navigation';
+import { clearViewStack } from '@/store/uiSlice';
 
 interface LayoutWrapperProps {
   children: ReactNode;
@@ -16,9 +17,15 @@ interface LayoutWrapperProps {
 export default function LayoutWrapper({ children }: LayoutWrapperProps) {
   const leftSidebarCollapsed = useAppSelector((state) => state.ui.leftSidebarCollapsed);
   const pathname = usePathname();
+  const dispatch = useAppDispatch();
 
   // Initialize router singleton for Navigate tool
   useRouter();
+
+  // Clear view stack on navigation so overlaid question editors don't persist
+  useEffect(() => {
+    dispatch(clearViewStack());
+  }, [pathname, dispatch]);
 
   // Public routes that should not show sidebar
   const publicRoutes = ['/login', '/create-organisation'];
