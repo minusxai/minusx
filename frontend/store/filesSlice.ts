@@ -739,6 +739,80 @@ const filesSlice = createSlice({
     },
 
     /**
+     * Add a text block (InlineAsset) to a dashboard
+     * - Generate a UUID for the text block
+     * - Add InlineAsset to assets and DashboardLayoutItem to layout
+     */
+    addTextBlockToDashboard(state, action: PayloadAction<{ dashboardId: number }>) {
+      const { dashboardId } = action.payload;
+      const dashboard = state.files[dashboardId];
+      if (!dashboard || dashboard.type !== 'dashboard') return;
+
+      const content = dashboard.content as DocumentContent | null;
+      const changes = dashboard.persistableChanges as Partial<DocumentContent> | undefined;
+      if (!content) return;
+
+      const currentAssets = changes?.assets ?? content.assets ?? [];
+      const currentLayout = changes?.layout ?? content.layout ?? { columns: 12, items: [] };
+
+      const textId = crypto.randomUUID();
+
+      const newAsset: AssetReference = {
+        type: 'text',
+        id: textId,
+        content: '',
+      };
+
+      // Find bottom of grid
+      const maxY = currentLayout.items?.reduce((max: number, item: any) => {
+        return Math.max(max, (item.y ?? 0) + (item.h ?? 4));
+      }, 0) ?? 0;
+
+      const newLayoutItem = {
+        id: textId,
+        x: 0,
+        y: maxY,
+        w: 12,
+        h: 3,
+      };
+
+      state.files[dashboardId].persistableChanges = {
+        ...changes,
+        assets: [...currentAssets, newAsset],
+        layout: {
+          columns: 12,
+          items: [...(currentLayout.items || []), newLayoutItem]
+        }
+      };
+    },
+
+    /**
+     * Update the content of a text block in a dashboard
+     */
+    updateTextBlockContent(state, action: PayloadAction<{ dashboardId: number; textBlockId: string; content: string }>) {
+      const { dashboardId, textBlockId, content: newContent } = action.payload;
+      const dashboard = state.files[dashboardId];
+      if (!dashboard || dashboard.type !== 'dashboard') return;
+
+      const dbContent = dashboard.content as DocumentContent | null;
+      const changes = dashboard.persistableChanges as Partial<DocumentContent> | undefined;
+      if (!dbContent) return;
+
+      const currentAssets = changes?.assets ?? dbContent.assets ?? [];
+      const updatedAssets = currentAssets.map((asset: AssetReference) => {
+        if (asset.type !== 'question' && asset.id === textBlockId) {
+          return { ...asset, content: newContent };
+        }
+        return asset;
+      });
+
+      state.files[dashboardId].persistableChanges = {
+        ...changes,
+        assets: updatedAssets,
+      };
+    },
+
+    /**
      * Add a reference to a question (composed questions)
      * - Check for duplicates (by id and alias)
      * - Single-level only enforced at UI level
@@ -859,6 +933,8 @@ export const {
   removeVirtualFile,
   addFile,
   addQuestionToDashboard,
+  addTextBlockToDashboard,
+  updateTextBlockContent,
   addReferenceToQuestion,
   removeReferenceFromQuestion,
   replaceVirtualIds

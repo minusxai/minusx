@@ -3,7 +3,7 @@
 import { Box, VStack, Text, HStack, Input, IconButton, Button } from '@chakra-ui/react';
 import { Tooltip } from '@/components/ui/tooltip';
 import { QuestionContent } from '@/lib/types';
-import { LuScanSearch, LuSearch, LuPlus } from 'react-icons/lu';
+import { LuScanSearch, LuSearch, LuPlus, LuType } from 'react-icons/lu';
 import { useMemo, useState, useEffect } from 'react';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
@@ -14,6 +14,7 @@ import { pushView } from '@/store/uiSlice';
 interface QuestionBrowserPanelProps {
   folderPath: string;
   onAddQuestion: (questionId: number) => void;
+  onAddTextBlock?: () => void;
   excludedIds?: number[];
   title?: string;
   dashboardId?: number;
@@ -28,6 +29,7 @@ interface QuestionDisplay extends QuestionContent {
 export const QuestionBrowserPanel = ({
   folderPath,
   onAddQuestion,
+  onAddTextBlock,
   excludedIds = [],
   title,
   dashboardId,
@@ -135,24 +137,42 @@ export const QuestionBrowserPanel = ({
         </Box>
       )}
 
-      {/* Create Question Button */}
+      {/* Create Question / Text Block Buttons */}
       <Box p={3} borderBottom="1px solid" borderColor="border.default">
-        <Button
-          type="button"
-          size="sm"
-          width="100%"
-          onClick={(e) => {
-            e.stopPropagation();
-            if (dashboardId !== undefined) {
-              dispatch(pushView({ type: 'create-question', folderPath, dashboardId }));
-            }
-          }}
-          colorPalette="teal"
-          gap={2}
-          aria-label="Create New Question"
-        >
-          <LuPlus /> Create New Question
-        </Button>
+        <VStack gap={2} align="stretch">
+          <Button
+            type="button"
+            size="sm"
+            width="100%"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (dashboardId !== undefined) {
+                dispatch(pushView({ type: 'create-question', folderPath, dashboardId }));
+              }
+            }}
+            colorPalette="teal"
+            gap={2}
+            aria-label="Create New Question"
+          >
+            <LuPlus /> Create New Question
+          </Button>
+          {onAddTextBlock && (
+            <Button
+              type="button"
+              size="sm"
+              width="100%"
+              variant="outline"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddTextBlock();
+              }}
+              gap={2}
+              aria-label="Add text block"
+            >
+              <LuType size={14} /> Add Text Block
+            </Button>
+          )}
+        </VStack>
       </Box>
 
       {/* Header */}

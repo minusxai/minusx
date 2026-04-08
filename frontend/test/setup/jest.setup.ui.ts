@@ -128,6 +128,23 @@ jest.mock('@/components/PublishModal', () => {
 });
 
 // ---------------------------------------------------------------------------
+// react-markdown + remark-gfm → plain <div>
+// ESM-only packages that Jest can't parse. Mock with a simple passthrough
+// that renders children as text (sufficient for UI tests).
+// ---------------------------------------------------------------------------
+jest.mock('react-markdown', () => {
+  const React = require('react');
+  return {
+    __esModule: true,
+    default: ({ children }: any) => React.createElement('div', { 'data-testid': 'markdown' }, children),
+  };
+});
+jest.mock('remark-gfm', () => ({
+  __esModule: true,
+  default: () => {},
+}));
+
+// ---------------------------------------------------------------------------
 // ECharts → <canvas> stub
 // Prevents "HTMLCanvasElement.getContext is not a function" in JSDOM.
 // echarts-init.ts runs echarts.use() at module-load time using echarts/core
