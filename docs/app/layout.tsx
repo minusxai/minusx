@@ -18,7 +18,16 @@ export default function Layout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning className={mono.variable}>
       <body>
-        <RootProvider>{children}</RootProvider>
+        <RootProvider
+          search={{
+            options: {
+              type: 'static',
+              api: '/api/search',
+            },
+          }}
+        >
+          {children}
+        </RootProvider>
       </body>
     </html>
   );
