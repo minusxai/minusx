@@ -1430,14 +1430,19 @@ async def chat_stream(request: ConversationRequest):
             event_queue = asyncio.Queue()
 
             # Callback for LLM content streaming
-            def on_content(content: str, stream_id: str):
-                event = {
-                    "type": "StreamedContent",
-                    "payload": {
-                        "chunk": content
+            def on_content(content: str, stream_id: str, content_type: str = 'text'):
+                if content_type == 'thinking':
+                    event = {
+                        "type": "StreamedThinking",
+                        "payload": {"chunk": content}
                     }
-                }
-                asyncio.create_task(event_queue.put(("StreamedContent", event)))
+                    asyncio.create_task(event_queue.put(("StreamedThinking", event)))
+                else:
+                    event = {
+                        "type": "StreamedContent",
+                        "payload": {"chunk": content}
+                    }
+                    asyncio.create_task(event_queue.put(("StreamedContent", event)))
 
             # Callback for tool call created
             def on_tool_created(task):

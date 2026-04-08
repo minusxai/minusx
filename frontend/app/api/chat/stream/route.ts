@@ -22,7 +22,7 @@ import { UserInterruptError } from '@/lib/errors/user-interrupt-error';
  */
 // Python backend events (no conversationID)
 type PythonStreamingEvent = {
-  type: 'StreamedContent' | 'ToolCreated' | 'ToolCompleted';
+  type: 'StreamedContent' | 'StreamedThinking' | 'ToolCreated' | 'ToolCompleted';
   payload: { chunk: string } | ToolCall | CompletedToolCallFromPython;
 };
 

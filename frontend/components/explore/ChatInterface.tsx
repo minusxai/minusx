@@ -21,7 +21,6 @@ import ExampleQuestions from './message/ExampleQuestions';
 import FileNotFound from '../FileNotFound';
 import { deduplicateMessages } from './message/messageHelpers';
 import SimpleChatMessage from './SimpleChatMessage';
-import { parseThinkingAnswer } from '@/lib/utils/xml-parser';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import { preserveParams } from '@/lib/navigation/url-utils';
 import { selectEffectiveUser } from '@/store/authSlice';
@@ -188,46 +187,24 @@ export default function ChatInterface({
   const streamingInfo = useMemo(() => {
     if (!conversation?.streamedCompletedToolCalls) return { thinkingText: null, toolCalls: [] };
 
+    // Native thinking streamed in real-time (takes priority over legacy XML parsing)
     let thinkingText: string | null = null;
-    const toolCalls: string[] = [];
+    if (conversation.streamedThinking) {
+      const lines = conversation.streamedThinking.split('\n').filter(line => line.trim());
+      thinkingText = lines.length > 2 ? lines.slice(0, 2).join('\n') + '...' : lines.join('\n');
+    }
 
+    const toolCalls: string[] = [];
     for (let i = conversation.streamedCompletedToolCalls.length - 1; i >= 0; i--) {
       const msg = conversation.streamedCompletedToolCalls[i];
       const toolName = msg.function?.name;
-
       if (toolName && toolName !== 'TalkToUser') {
         toolCalls.unshift(toolName);
-      }
-
-      if (!thinkingText && toolName === 'TalkToUser') {
-        let content = '';
-        try {
-          const jsonParsed = typeof msg.content === 'string'
-            ? JSON.parse(msg.content)
-            : msg.content;
-
-          if (jsonParsed?.content) {
-            content = typeof jsonParsed.content === 'string' ? jsonParsed.content : JSON.stringify(jsonParsed.content);
-          } else if (jsonParsed?.answer) {
-            content = typeof jsonParsed.answer === 'string' ? jsonParsed.answer : JSON.stringify(jsonParsed.answer);
-          }
-        } catch (error) {
-          content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-        }
-
-        if (content) {
-          const parsed = parseThinkingAnswer(content);
-          if (parsed && parsed.thinking.length > 0) {
-            const lastThinking = parsed.thinking[parsed.thinking.length - 1];
-            const lines = lastThinking.split('\n').filter(line => line.trim());
-            thinkingText = lines.length > 2 ? lines.slice(0, 2).join('\n') + '...' : lines.join('\n');
-          }
-        }
       }
     }
 
     return { thinkingText, toolCalls };
-  }, [conversation?.streamedCompletedToolCalls]);
+  }, [conversation?.streamedCompletedToolCalls, conversation?.streamedThinking]);
 
 //   console.log('allmessages', allMessages);
 

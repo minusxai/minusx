@@ -317,10 +317,20 @@ async def allm_request(request: ALLMRequest, on_content=None):
         if hasattr(chunk, 'choices') and len(chunk.choices) > 0:
             delta = chunk.choices[0].delta
 
-            # Accumulate native thinking blocks
-            if hasattr(delta, 'thinking_blocks') and delta.thinking_blocks:
-                for block in delta.thinking_blocks:
-                    accumulated_thinking_blocks.append(block)
+            # Collect and stream native thinking blocks from provider_specific_fields
+            if hasattr(delta, 'provider_specific_fields') and delta.provider_specific_fields:
+                thinking_chunk_blocks = delta.provider_specific_fields.get('thinking_blocks', [])
+                for block in thinking_chunk_blocks:
+                    thinking_text = block.get('thinking', '') if isinstance(block, dict) else getattr(block, 'thinking', '')
+                    signature = block.get('signature', '') if isinstance(block, dict) else getattr(block, 'signature', '')
+                    if thinking_text:
+                        accumulated_thinking_blocks.append({'type': 'thinking', 'thinking': thinking_text, 'signature': signature})
+                        if on_content:
+                            on_content(thinking_text, stream_id, 'thinking')
+                    elif signature:
+                        # Signature-only chunk: attach to last thinking block
+                        if accumulated_thinking_blocks:
+                            accumulated_thinking_blocks[-1]['signature'] = signature
 
             # Accumulate and stream content
             if hasattr(delta, 'content') and delta.content:
@@ -389,24 +399,9 @@ async def allm_request(request: ALLMRequest, on_content=None):
     duration = litellm_duration
 
     # Build content blocks array from accumulated data
-    content_blocks = []
+    # Thinking blocks are already normalized dicts; add text block after them
+    content_blocks = list(accumulated_thinking_blocks)
 
-    # Add thinking blocks first (Anthropic requires them before text in multi-turn)
-    for block in accumulated_thinking_blocks:
-        if isinstance(block, dict):
-            thinking_text = block.get("thinking", "")
-            signature = block.get("signature", "")
-        else:
-            thinking_text = getattr(block, "thinking", "")
-            signature = getattr(block, "signature", "")
-        if thinking_text:
-            content_blocks.append({
-                "type": "thinking",
-                "thinking": thinking_text,
-                "signature": signature,
-            })
-
-    # Add text content as a block if present
     if accumulated_content:
         content_blocks.append({
             "type": "text",
