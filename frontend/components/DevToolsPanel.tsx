@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Box, VStack, HStack, Text, IconButton, Button, createListCollection } from '@chakra-ui/react';
 import { SelectRoot, SelectTrigger, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
-import { LuCamera, LuChevronDown, LuChevronRight } from 'react-icons/lu';
+import { LuCamera, LuChevronDown, LuChevronRight, LuDownload, LuLink, LuMonitor, LuServer } from 'react-icons/lu';
 import { AppState } from '@/lib/appState';
 import AppStateViewer from './AppStateViewer';
 import { useScreenshot } from '@/lib/hooks/useScreenshot';
@@ -12,6 +12,12 @@ import { UserInputException, type UserInputProps, type UserInput } from '@/lib/a
 import { getStore } from '@/store/store';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import type { ToolCall, DatabaseWithSchema } from '@/lib/types';
+import { uploadFile } from '@/lib/object-store/client';
+import { aggregateData } from '@/lib/chart/aggregate-data';
+import { buildChartOption, buildPieChartOption, buildFunnelChartOption, buildWaterfallChartOption } from '@/lib/chart/chart-utils';
+import { COLOR_PALETTE } from '@/lib/chart/echarts-theme';
+import * as echarts from 'echarts';
+import type { VizSettings } from '@/lib/types.gen';
 
 interface DevToolsPanelProps {
   appState: AppState | null | undefined;
@@ -212,10 +218,249 @@ function ToolTester() {
   );
 }
 
-export default function DevToolsPanel({ appState }: DevToolsPanelProps) {
+// ── Hidden-canvas ECharts export (matches download button quality) ───────────
+
+function buildEChartsOption(
+  queryResult: import('@/lib/types').QueryResult,
+  vizSettings: VizSettings,
+  colorMode: 'light' | 'dark',
+  width: number,
+  height: number,
+): echarts.EChartsOption | null {
+  const xCols = vizSettings.xCols ?? [];
+  const yCols = vizSettings.yCols ?? [];
+  if (yCols.length === 0 || queryResult.rows.length === 0) return null;
+
+  const chartType = vizSettings.type;
+  const aggregated = aggregateData(
+    queryResult.rows,
+    xCols,
+    yCols,
+    chartType as Parameters<typeof aggregateData>[3],
+  );
+  if (aggregated.xAxisData.length === 0 && aggregated.series.length === 0) return null;
+
+  const yPart = yCols.join(', ');
+  const xPart = xCols.length > 0 ? xCols[0] : '';
+  const splitPart = xCols.length > 1 ? xCols.slice(1).join(', ') : '';
+  const chartTitle = [yPart, xPart && `vs ${xPart}`, splitPart && `split by ${splitPart}`]
+    .filter(Boolean).join(' ') || undefined;
+  const xAxisLabel = xCols.length > 0 ? xCols[0] : undefined;
+  const yAxisLabel = yCols.length === 1 ? yCols[0] : yCols.length > 1 ? yCols.join(', ') : undefined;
+
+  if (chartType === 'pie') {
+    return buildPieChartOption({ xAxisData: aggregated.xAxisData, series: aggregated.series, colorMode, xAxisColumns: xCols, yAxisColumns: yCols, chartTitle, colorPalette: COLOR_PALETTE, columnFormats: vizSettings.columnFormats ?? undefined });
+  }
+  if (chartType === 'funnel') {
+    return buildFunnelChartOption({ xAxisData: aggregated.xAxisData, series: aggregated.series, colorMode, xAxisColumns: xCols, yAxisColumns: yCols, chartTitle, colorPalette: COLOR_PALETTE, columnFormats: vizSettings.columnFormats ?? undefined });
+  }
+  if (chartType === 'waterfall') {
+    return buildWaterfallChartOption({ xAxisData: aggregated.xAxisData, series: aggregated.series, colorMode, xAxisColumns: xCols, yAxisColumns: yCols, chartTitle, colorPalette: COLOR_PALETTE, columnFormats: vizSettings.columnFormats ?? undefined });
+  }
+  return buildChartOption({ xAxisData: aggregated.xAxisData, series: aggregated.series, chartType: chartType as 'line' | 'bar' | 'area' | 'scatter', colorMode, colorPalette: COLOR_PALETTE, containerWidth: width, containerHeight: height, xAxisColumns: xCols, yAxisColumns: yCols, xAxisLabel, yAxisLabel, columnFormats: vizSettings.columnFormats ?? undefined, chartTitle });
+}
+
+async function renderChartToDataUrl(
+  queryResult: import('@/lib/types').QueryResult,
+  vizSettings: VizSettings,
+  colorMode: 'light' | 'dark' = 'dark',
+  width = 512,
+  height = 256,
+): Promise<string | null> {
+  const option = buildEChartsOption(queryResult, vizSettings, colorMode, width, height);
+  if (!option) return null;
+
+  const container = document.createElement('div');
+  container.style.cssText = `width:${width}px;height:${height}px;position:absolute;left:-9999px;top:-9999px;visibility:hidden;`;
+  document.body.appendChild(container);
+
+  try {
+    const bgColor = colorMode === 'dark' ? '#161b22' : '#ffffff';
+    const chart = echarts.init(container, null, { renderer: 'canvas', width, height });
+    chart.setOption({ ...option, animation: false, backgroundColor: bgColor });
+    const dataUrl = chart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: bgColor });
+    chart.dispose();
+    return dataUrl;
+  } finally {
+    document.body.removeChild(container);
+  }
+}
+
+// ── Image Tools test panel ────────────────────────────────────────────────────
+
+type ImageResult = { dataUrl: string; label: string } | { url: string; label: string } | { error: string; label: string };
+
+function ImageToolsPanel({ appState }: { appState: AppState | null | undefined }) {
   const { captureFileView } = useScreenshot();
-  const [isCapturingScreenshot, setIsCapturingScreenshot] = useState(false);
-  const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
+  const [result, setResult] = useState<ImageResult | null>(null);
+  const [busy, setBusy] = useState<string | null>(null); // which button is loading
+  const colorMode = useAppSelector(state => state.ui.colorMode) as 'light' | 'dark';
+  const queryResultsMap = useAppSelector(state => state.queryResults.results);
+
+  if (appState?.type !== 'file') return null;
+  const { fileState } = appState.state;
+  if (fileState.type !== 'question' && fileState.type !== 'dashboard') return null;
+
+  const fileId = fileState.id;
+  const questionContent = fileState.type === 'question' ? (fileState.content as any) : null;
+  const vizSettings: VizSettings | null = questionContent?.vizSettings ?? null;
+  const queryResultId: string | null = (fileState as any).queryResultId ?? null;
+  const queryResult = queryResultId ? queryResultsMap[queryResultId]?.data ?? null : null;
+  const canUseResults = fileState.type === 'question' && !!vizSettings && !!queryResult;
+
+  const run = async (label: string, fn: () => Promise<ImageResult>) => {
+    setBusy(label);
+    setResult(null);
+    try {
+      setResult(await fn());
+    } catch (err: any) {
+      setResult({ error: err.message ?? String(err), label });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleDomCapture = () => run('DOM Capture', async () => {
+    const blob = await captureFileView(fileId);
+    return { dataUrl: URL.createObjectURL(blob), label: 'DOM Capture' };
+  });
+
+  const handleEChartsExport = () => run('ECharts Export', async () => {
+    if (!canUseResults) throw new Error('Need a question with query results and chart viz');
+    const dataUrl = await renderChartToDataUrl(queryResult!, vizSettings!, colorMode);
+    if (!dataUrl) throw new Error('Chart render returned null (unsupported type or empty data)');
+    return { dataUrl, label: 'ECharts Export' };
+  });
+
+  const handleGetUrl = () => run('Get URL', async () => {
+    const blob = await captureFileView(fileId);
+    const file = new File([blob], 'screenshot.png', { type: 'image/png' });
+    const { publicUrl } = await uploadFile(file, undefined, { keyType: 'charts' });
+    return { url: publicUrl, label: 'Get URL' };
+  });
+
+  const handleServerRender = () => run('Server Render', async () => {
+    if (!canUseResults) throw new Error('Need a question with query results and chart viz');
+    const res = await fetch('/api/dev/render-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queryResult, vizSettings, colorMode }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error ?? `Server error ${res.status}`);
+    }
+    const { dataUrl } = await res.json();
+    return { dataUrl, label: 'Server Render' };
+  });
+
+  const download = (dataUrl: string, filename: string) => {
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = filename;
+    a.click();
+  };
+
+  return (
+    <Box borderWidth="1px" borderColor="border.default" borderRadius="md" p={3} bg="bg.surface">
+      <VStack align="stretch" gap={2}>
+        <Text fontSize="xs" fontWeight="600" color="fg.muted">Image Tools</Text>
+        <HStack gap={1} flexWrap="wrap">
+          <Button
+            size="2xs"
+            variant="outline"
+            onClick={handleDomCapture}
+            loading={busy === 'DOM Capture'}
+            aria-label="DOM Capture"
+          >
+            <LuMonitor />DOM
+          </Button>
+          <Button
+            size="2xs"
+            variant="outline"
+            onClick={handleEChartsExport}
+            loading={busy === 'ECharts Export'}
+            disabled={!canUseResults}
+            aria-label="ECharts Export"
+            title={!canUseResults ? 'Need a question with query results and a chart viz type' : undefined}
+          >
+            <LuDownload />ECharts
+          </Button>
+          <Button
+            size="2xs"
+            variant="outline"
+            onClick={handleGetUrl}
+            loading={busy === 'Get URL'}
+            aria-label="Get S3 URL"
+          >
+            <LuLink />S3 URL
+          </Button>
+          <Button
+            size="2xs"
+            variant="outline"
+            onClick={handleServerRender}
+            loading={busy === 'Server Render'}
+            disabled={!canUseResults}
+            aria-label="Server Render"
+            title={!canUseResults ? 'Need a question with query results and a chart viz type' : undefined}
+          >
+            <LuServer />Server
+          </Button>
+        </HStack>
+
+        {result && (
+          <Box borderWidth="1px" borderColor="border.default" borderRadius="sm" overflow="hidden">
+            {'error' in result ? (
+              <Box p={2} bg="accent.danger/10">
+                <Text fontSize="2xs" fontFamily="mono" color="accent.danger">{result.error}</Text>
+              </Box>
+            ) : 'url' in result ? (
+              <Box p={2}>
+                <Text fontSize="2xs" fontFamily="mono" color="fg.muted" mb={1}>{result.label}</Text>
+                <Text
+                  fontSize="2xs"
+                  fontFamily="mono"
+                  color="accent.teal"
+                  cursor="pointer"
+                  wordBreak="break-all"
+                  onClick={() => navigator.clipboard.writeText(result.url)}
+                  title="Click to copy"
+                >
+                  {result.url}
+                </Text>
+              </Box>
+            ) : (
+              <Box>
+                <HStack justify="space-between" px={2} pt={2} pb={1}>
+                  <Text fontSize="2xs" fontFamily="mono" color="fg.muted">{result.label}</Text>
+                  <IconButton
+                    size="2xs"
+                    variant="ghost"
+                    aria-label="Download image"
+                    onClick={() => download(result.dataUrl, `${result.label.toLowerCase().replace(/\s+/g, '-')}.png`)}
+                  >
+                    <LuDownload />
+                  </IconButton>
+                </HStack>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={result.dataUrl}
+                  alt={result.label}
+                  style={{ width: '100%', height: 'auto', display: 'block' }}
+                />
+              </Box>
+            )}
+          </Box>
+        )}
+        <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">
+          DOM: html-to-image capture · ECharts: hidden canvas · S3 URL: DOM→upload · Server: SSR render
+        </Text>
+      </VStack>
+    </Box>
+  );
+}
+
+export default function DevToolsPanel({ appState }: DevToolsPanelProps) {
   const [appStateOpen, setAppStateOpen] = useState(false);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
 
@@ -224,22 +469,6 @@ export default function DevToolsPanel({ appState }: DevToolsPanelProps) {
     fileId !== undefined ? state.files.files[fileId]?.analytics : undefined
   );
 
-  const handleScreenshot = async () => {
-    if (appState?.type !== 'file') return;
-
-    setIsCapturingScreenshot(true);
-    try {
-      const blob = await captureFileView(appState.state.fileState.id, { fullHeight: true });
-      // Revoke previous URL to avoid memory leaks
-      if (screenshotUrl) URL.revokeObjectURL(screenshotUrl);
-      setScreenshotUrl(URL.createObjectURL(blob));
-    } catch (error) {
-      console.error('[DevToolsPanel] Screenshot failed:', error);
-    } finally {
-      setIsCapturingScreenshot(false);
-    }
-  };
-
   return (
     <Box p={4}>
       <VStack align="stretch" gap={3}>
@@ -247,52 +476,8 @@ export default function DevToolsPanel({ appState }: DevToolsPanelProps) {
           Development Mode Active
         </Text>
 
-        {/* Screenshot Capture */}
-        {appState?.type === 'file' && (appState.state.fileState.type === 'question' || appState.state.fileState.type === 'dashboard') && (
-          <Box
-            borderWidth="1px"
-            borderColor="border.default"
-            borderRadius="md"
-            p={3}
-            bg="bg.surface"
-          >
-            <VStack align="stretch" gap={2}>
-              <HStack justify="space-between">
-                <Text fontSize="xs" fontWeight="600" color="fg.muted">
-                  Screenshot
-                </Text>
-                <IconButton
-                  onClick={handleScreenshot}
-                  aria-label="Capture screenshot"
-                  size="xs"
-                  variant="subtle"
-                  loading={isCapturingScreenshot}
-                >
-                  <LuCamera />
-                </IconButton>
-              </HStack>
-              {screenshotUrl ? (
-                <Box
-                  borderWidth="1px"
-                  borderColor="border.default"
-                  borderRadius="sm"
-                  overflow="hidden"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={screenshotUrl}
-                    alt="Screenshot preview"
-                    style={{ width: '100%', height: 'auto' }}
-                  />
-                </Box>
-              ) : (
-                <Text fontSize="2xs" color="fg.subtle">
-                  Capture a screenshot of the current {appState.state.fileState.type}
-                </Text>
-              )}
-            </VStack>
-          </Box>
-        )}
+        {/* Image Tools */}
+        <ImageToolsPanel appState={appState} />
 
         {/* App State (collapsible) */}
         <Box borderWidth="1px" borderColor="border.default" borderRadius="md" bg="bg.surface" overflow="hidden">

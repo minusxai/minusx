@@ -17,7 +17,8 @@ import { useConfigs } from '@/lib/hooks/useConfigs';
 import { Tooltip } from '@/components/ui/tooltip';
 import { toaster } from '@/components/ui/toaster';
 import { clearChatAttachments } from '@/store/uiSlice';
-import { getChartImageUrl } from '@/lib/chart/chart-image-client';
+import { generateImageFromFile } from '@/lib/chart/file-image-client';
+import { useScreenshot } from '@/lib/hooks/useScreenshot';
 import ExampleQuestions from './message/ExampleQuestions';
 import FileNotFound from '../FileNotFound';
 import { deduplicateMessages } from './message/messageHelpers';
@@ -36,65 +37,30 @@ import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 const ChatInput = dynamic(() => import('./ChatInput'), { ssr: false });
 
 /**
- * Build chart image attachments from the current page's app state.
+ * Build a file image attachment from the current page's app state.
  *
- * For question pages: renders the question's chart to JPEG, uploads to S3, returns 1 attachment.
- * For dashboard pages: renders up to 3 question charts, returns multiple attachments.
- * For explore/folder pages or table/pivot viz types: returns [].
+ * Captures the rendered [data-file-id] element via DOM snapshot — exact visual
+ * match to what the user sees (chart, table, pivot, or full dashboard grid).
  *
- * Chart images are sent as image_url vision blocks alongside the user's message,
- * giving Claude visual context of the current chart state.
+ * Returns [] for explore/folder pages that have no file to capture.
  */
-async function buildChartAttachments(
+async function buildFileImageAttachment(
   appState: AppState | null | undefined,
-  // queryResultsSlice entries: { data: QueryResult (lib/types), ... }
-  queryResultsMap: Record<string, { data: any }>,
-  colorMode: 'light' | 'dark',
+  captureFileView: (id: number) => Promise<Blob>,
 ): Promise<import('@/lib/types').Attachment[]> {
   if (appState?.type !== 'file') return [];
 
-  const { fileState, references } = appState.state;
+  const fileId = appState.state.fileState.id;
+  if (!fileId) return [];
 
-  // Collect (queryResultId, vizSettings) pairs to render
-  const targets: Array<{ queryResultId: string; vizSettings: import('@/lib/types.gen').VizSettings }> = [];
-
-  const extractTarget = (fs: typeof fileState) => {
-    const content = fs.content as any;
-    const vizSettings = content?.vizSettings;
-    const queryResultId = fs.queryResultId;
-    if (vizSettings && queryResultId) {
-      targets.push({ queryResultId, vizSettings });
-    }
-  };
-
-  if (fileState.type === 'question') {
-    extractTarget(fileState);
-  } else if (fileState.type === 'dashboard') {
-    // Dashboard references are questions — collect up to 3
-    for (const ref of (references ?? []).slice(0, 3)) {
-      extractTarget(ref);
-    }
+  try {
+    const url = await generateImageFromFile(fileId, captureFileView);
+    if (!url) return [];
+    const att: import('@/lib/types').Attachment = { type: 'image', name: 'screenshot.png', content: url, metadata: {} };
+    return [att];
+  } catch {
+    return []; // Never block sending on capture failure
   }
-
-  if (targets.length === 0) return [];
-
-  const results = await Promise.all(
-    targets.map(async ({ queryResultId, vizSettings }) => {
-      const cacheEntry = queryResultsMap[queryResultId];
-      const queryResult = cacheEntry?.data; // actual QueryResult (columns, types, rows)
-      if (!queryResult) return null;
-      try {
-        const url = await getChartImageUrl(queryResult, vizSettings, colorMode);
-        if (!url) return null;
-        const att: import('@/lib/types').Attachment = { type: 'image', name: 'chart.jpg', content: url, metadata: {} };
-        return att;
-      } catch {
-        return null; // Never block sending on chart render failure
-      }
-    }),
-  );
-
-  return results.filter((r): r is import('@/lib/types').Attachment => r !== null);
 }
 
 interface ChatInterfaceProps {
@@ -191,9 +157,7 @@ export default function ChatInterface({
 
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const userIsAdmin = effectiveUser?.role ? isAdmin(effectiveUser.role) : false;
-  // queryResultsMap values have shape { data: QueryResult, ... } — .data is the actual result
-  const queryResultsMap = useAppSelector(state => state.queryResults.results);
-  const colorMode = useAppSelector(state => state.ui.colorMode) as 'light' | 'dark';
+  const { captureFileView } = useScreenshot();
 
   // Case 1: existing conversation — follow fork chain from loaded conversation
   const forkFollowedConversation = useAppSelector(state => {
@@ -423,10 +387,10 @@ export default function ChatInterface({
       tables: s.tables.map(t => t.table)
     })) || [];
 
-    // Build chart image attachments from current question/dashboard state.
-    // These are uploaded to S3 and sent as image_url vision blocks to Claude.
-    const chartAttachments = await buildChartAttachments(appState, queryResultsMap, colorMode);
-    const allAttachments = [...attachments, ...chartAttachments];
+    // Capture the current file view (chart, table, pivot, or dashboard) as an image.
+    // Uploaded to S3 and sent as image_url vision block to Claude.
+    const fileAttachments = await buildFileImageAttachment(appState, captureFileView);
+    const allAttachments = [...attachments, ...fileAttachments];
 
     // For new conversations (no conversationID yet)
     if (isNewConversation && !conversationID) {
