@@ -59,8 +59,8 @@ export function stripQueryResultId(file: DbFile): DbFile['content'] {
 export function computeQueryResultId(file: DbFile): string | undefined {
   if (file.type !== 'question' || !file.content) return undefined;
   const content = file.content as QuestionContent;
-  if (!content.query || !content.database_name) return undefined;
-  return getQueryHash(content.query, content.parameterValues || {}, content.database_name);
+  if (!content.query || !content.connection_name) return undefined;
+  return getQueryHash(content.query, content.parameterValues || {}, content.connection_name);
 }
 
 /**
@@ -126,8 +126,8 @@ function compressFileState(fs: FileState): CompressedFileState {
   let queryResultId = fs.queryResultId;
   if (fs.type === 'question') {
     const qc = mergedContent as QuestionContent;
-    if (qc?.query && qc?.database_name) {
-      queryResultId = getQueryHash(qc.query, qc.parameterValues || {}, qc.database_name);
+    if (qc?.query && qc?.connection_name) {
+      queryResultId = getQueryHash(qc.query, qc.parameterValues || {}, qc.connection_name);
     }
   }
   // Strip column details from fullSchema for context files to reduce payload size

@@ -24,7 +24,6 @@ class TestPreprocessQuery:
         assert result.endswith("'")
 
     def test_short_param(self):
-        """Even a 2-char param like :x should produce a valid same-length replacement."""
         result = _preprocess_query(":x")
         assert len(result) == 2
 
@@ -38,63 +37,100 @@ class TestPreprocessQuery:
 
 
 class TestValidateSql:
-    """Tests for SQL validation via sqlglot."""
+    """Generic SQL validation — dialects spread across tests for broad coverage."""
 
-    def test_valid_simple_select(self):
-        result = validate_sql("SELECT * FROM foo")
+    def test_valid_simple_select_duckdb(self):
+        result = validate_sql("SELECT * FROM foo", dialect='duckdb')
         assert result.valid is True
         assert result.errors == []
 
+    def test_valid_simple_select_postgres(self):
+        result = validate_sql("SELECT id, name FROM users WHERE active = true", dialect='postgres')
+        assert result.valid is True
+
+    def test_valid_simple_select_bigquery(self):
+        result = validate_sql("SELECT COUNT(*) AS total FROM orders", dialect='bigquery')
+        assert result.valid is True
+
     def test_empty_query(self):
-        result = validate_sql("")
+        result = validate_sql("", dialect='duckdb')
         assert result.valid is True
 
     def test_whitespace_query(self):
-        result = validate_sql("   ")
+        result = validate_sql("   ", dialect='postgres')
         assert result.valid is True
 
-    def test_invalid_keyword(self):
-        result = validate_sql("SELEC * FROM foo")
+    def test_invalid_keyword_duckdb(self):
+        result = validate_sql("SELEC * FROM foo", dialect='duckdb')
         assert result.valid is False
         assert len(result.errors) > 0
 
+    def test_invalid_keyword_postgres(self):
+        result = validate_sql("SELEC * FROM foo", dialect='postgres')
+        assert result.valid is False
+
+    def test_invalid_keyword_bigquery(self):
+        result = validate_sql("SELEC * FROM foo", dialect='bigquery')
+        assert result.valid is False
+
     def test_error_has_position(self):
-        result = validate_sql("SELEC * FROM foo")
+        result = validate_sql("SELEC * FROM foo", dialect='duckdb')
         err = result.errors[0]
         assert err.line >= 1
         assert err.col >= 1
         assert err.end_col > err.col
 
-    def test_params_dont_cause_errors(self):
-        result = validate_sql("SELECT * FROM foo WHERE d > :start_date AND n = :name")
+    def test_params_dont_cause_errors_postgres(self):
+        result = validate_sql("SELECT * FROM foo WHERE d > :start_date AND n = :name", dialect='postgres')
+        assert result.valid is True
+
+    def test_params_dont_cause_errors_bigquery(self):
+        result = validate_sql("SELECT * FROM foo WHERE amount > :min_amount", dialect='bigquery')
         assert result.valid is True
 
     def test_references_dont_cause_errors(self):
-        result = validate_sql("SELECT * FROM @revenue_1 r JOIN @costs_2 c ON r.id = c.id")
+        result = validate_sql("SELECT * FROM @revenue_1 r JOIN @costs_2 c ON r.id = c.id", dialect='duckdb')
         assert result.valid is True
 
     def test_mixed_params_and_references(self):
-        result = validate_sql("SELECT * FROM @rev_1 WHERE d > :start_date")
+        result = validate_sql("SELECT * FROM @rev_1 WHERE d > :start_date", dialect='postgres')
         assert result.valid is True
 
     def test_multi_statement(self):
-        result = validate_sql("SELECT 1; SELECT 2")
-        assert result.valid is True
-
-    def test_dialect_duckdb(self):
-        result = validate_sql("SELECT * FROM read_csv('file.csv')", dialect="duckdb")
-        assert result.valid is True
-
-    def test_dialect_bigquery(self):
-        result = validate_sql("SELECT * FROM `project.dataset.table`", dialect="bigquery")
+        result = validate_sql("SELECT 1; SELECT 2", dialect='duckdb')
         assert result.valid is True
 
     def test_error_positions_not_shifted_by_params(self):
-        """Column positions should map to the original query, not the preprocessed one."""
-        # Put a syntax error after a param — if preprocessing shifted columns, positions would be off
-        result = validate_sql("SELECT * FROM foo WHERE :start_date BETWEEN AND")
+        result = validate_sql("SELECT * FROM foo WHERE :start_date BETWEEN AND", dialect='postgres')
         assert result.valid is False
         assert result.errors[0].line == 1
+
+    # --- Dialect-specific syntax ---
+
+    def test_duckdb_read_csv(self):
+        """DuckDB-specific: read_csv table function."""
+        result = validate_sql("SELECT * FROM read_csv('file.csv')", dialect='duckdb')
+        assert result.valid is True
+
+    def test_duckdb_list_literal(self):
+        """DuckDB-specific: array/list literals."""
+        result = validate_sql("SELECT [1, 2, 3] AS nums", dialect='duckdb')
+        assert result.valid is True
+
+    def test_bigquery_backtick_table(self):
+        """BigQuery-specific: backtick-quoted table names."""
+        result = validate_sql("SELECT * FROM `project.dataset.table`", dialect='bigquery')
+        assert result.valid is True
+
+    def test_bigquery_struct(self):
+        """BigQuery-specific: STRUCT literals."""
+        result = validate_sql("SELECT STRUCT(1 AS a, 'foo' AS b) AS s", dialect='bigquery')
+        assert result.valid is True
+
+    def test_postgres_dollar_quoting(self):
+        """Postgres-specific: dollar-quoted strings."""
+        result = validate_sql("SELECT $$hello world$$ AS greeting", dialect='postgres')
+        assert result.valid is True
 
     # --- Multiline SQL with errors ---
 
@@ -106,7 +142,7 @@ SELECT
     o.total
 JION orders o ON o.user_id = u.id
 WHERE u.active = true
-""")
+""", dialect='duckdb')
         assert result.valid is False
         assert len(result.errors) > 0
 
@@ -119,13 +155,12 @@ FROM (
     WHERE active = true
 
 WHERE id > 10
-""")
+""", dialect='postgres')
         assert result.valid is False
         assert len(result.errors) > 0
 
     def test_multiline_error_reports_correct_line(self):
-        """Error on a later line should report line > 1."""
-        result = validate_sql("SELECT id\nFROM users\nWHERE id >\nORDER BY")
+        result = validate_sql("SELECT id\nFROM users\nWHERE id >\nORDER BY", dialect='bigquery')
         assert result.valid is False
         err = result.errors[0]
         assert err.line > 1
@@ -142,7 +177,7 @@ WITH monthly_revenue AS (
 SELECT *
 FROM monthly_revenue
 ORDER BY month
-""")
+""", dialect='duckdb')
         assert result.valid is False
         assert len(result.errors) > 0
 
@@ -155,12 +190,11 @@ FROM users u
 JOIN orders o ON o.user_id = u.id
 WHERE u.active = true
 WHERE o.created_at > '2024-01-01'
-""")
+""", dialect='postgres')
         assert result.valid is False
         assert len(result.errors) > 0
 
     def test_multiline_valid_complex_query(self):
-        """A valid complex multiline query should pass."""
         result = validate_sql("""\
 WITH active_users AS (
     SELECT id, name, email
@@ -189,11 +223,10 @@ SELECT
 FROM user_orders
 ORDER BY total_spent DESC
 LIMIT 50
-""")
+""", dialect='bigquery')
         assert result.valid is True
 
     def test_multiline_with_params_and_references(self):
-        """Multiline query mixing :params and @references should validate."""
         result = validate_sql("""\
 SELECT
     r.month,
@@ -205,7 +238,7 @@ JOIN @costs_by_month_2 c ON c.month = r.month
 WHERE r.month >= :start_date
     AND r.month <= :end_date
 ORDER BY r.month
-""")
+""", dialect='duckdb')
         assert result.valid is True
 
     def test_multiline_mismatched_parens(self):
@@ -215,6 +248,6 @@ SELECT
     name,
     (CASE WHEN active THEN 'yes' ELSE 'no' AS status
 FROM users
-""")
+""", dialect='postgres')
         assert result.valid is False
         assert len(result.errors) > 0

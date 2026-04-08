@@ -45,7 +45,7 @@ function makeQuestionContent(): QuestionContent {
   return {
     description: 'Test question',
     query: 'SELECT 1',
-    database_name: 'test_db',
+    connection_name: 'test_db',
     parameters: [],
     vizSettings: { type: 'table' },
   };

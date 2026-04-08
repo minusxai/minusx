@@ -134,7 +134,7 @@ describe('Parameterised query execution E2E (real Python backend)', () => {
 
   it('date param with value: forwarded intact to connector', async () => {
     const response = await queryPostHandler(makeQueryRequest({
-      database_name: DUCK_CONN,
+      connection_name: DUCK_CONN,
       query: 'SELECT * FROM orders WHERE created_at > :date_min',
       parameters: { date_min: '2024-01-01' },
     }));
@@ -145,7 +145,7 @@ describe('Parameterised query execution E2E (real Python backend)', () => {
 
   it('number param with value: forwarded intact to connector', async () => {
     const response = await queryPostHandler(makeQueryRequest({
-      database_name: DUCK_CONN,
+      connection_name: DUCK_CONN,
       query: 'SELECT * FROM orders WHERE amount > :min_amount',
       parameters: { min_amount: 100 },
     }));
@@ -156,7 +156,7 @@ describe('Parameterised query execution E2E (real Python backend)', () => {
 
   it('text param with value: forwarded intact to connector', async () => {
     const response = await queryPostHandler(makeQueryRequest({
-      database_name: DUCK_CONN,
+      connection_name: DUCK_CONN,
       query: 'SELECT * FROM users WHERE status = :status',
       parameters: { status: 'active' },
     }));
@@ -167,7 +167,7 @@ describe('Parameterised query execution E2E (real Python backend)', () => {
 
   it('ILIKE param with value: forwarded intact to connector', async () => {
     const response = await queryPostHandler(makeQueryRequest({
-      database_name: DUCK_CONN,
+      connection_name: DUCK_CONN,
       query: 'SELECT * FROM users WHERE name ILIKE :search',
       parameters: { search: 'alice' },
     }));
@@ -179,7 +179,7 @@ describe('Parameterised query execution E2E (real Python backend)', () => {
 
   it('date range with both values: both params forwarded', async () => {
     const response = await queryPostHandler(makeQueryRequest({
-      database_name: DUCK_CONN,
+      connection_name: DUCK_CONN,
       query: 'SELECT * FROM events WHERE ts > :date_min AND ts < :date_max',
       parameters: { date_min: '2024-01-01', date_max: '2024-12-31' },
     }));
@@ -195,7 +195,7 @@ describe('Parameterised query execution E2E (real Python backend)', () => {
 
   it('= null: IR removes condition entirely', async () => {
     const response = await queryPostHandler(makeQueryRequest({
-      database_name: DUCK_CONN,
+      connection_name: DUCK_CONN,
       query: 'SELECT * FROM users WHERE status = :status',
       parameters: { status: null },
     }));
@@ -208,7 +208,7 @@ describe('Parameterised query execution E2E (real Python backend)', () => {
 
   it('> null: IR removes condition entirely', async () => {
     const response = await queryPostHandler(makeQueryRequest({
-      database_name: DUCK_CONN,
+      connection_name: DUCK_CONN,
       query: 'SELECT * FROM orders WHERE created_at > :date_min',
       parameters: { date_min: null },
     }));
@@ -220,7 +220,7 @@ describe('Parameterised query execution E2E (real Python backend)', () => {
 
   it('empty string is a regular value — WHERE condition kept, param forwarded', async () => {
     const response = await queryPostHandler(makeQueryRequest({
-      database_name: DUCK_CONN,
+      connection_name: DUCK_CONN,
       query: 'SELECT * FROM orders WHERE status = :status',
       parameters: { status: '' },
     }));
@@ -232,7 +232,7 @@ describe('Parameterised query execution E2E (real Python backend)', () => {
 
   it('ILIKE null: IR removes condition entirely (not NULL substitution)', async () => {
     const response = await queryPostHandler(makeQueryRequest({
-      database_name: DUCK_CONN,
+      connection_name: DUCK_CONN,
       query: 'SELECT * FROM users WHERE name ILIKE :search',
       parameters: { search: null },
     }));
@@ -245,7 +245,7 @@ describe('Parameterised query execution E2E (real Python backend)', () => {
 
   it('date range one null: removes only the null condition', async () => {
     const response = await queryPostHandler(makeQueryRequest({
-      database_name: DUCK_CONN,
+      connection_name: DUCK_CONN,
       query: 'SELECT * FROM events WHERE ts > :date_min AND ts < :date_max',
       parameters: { date_min: '2024-01-01', date_max: null },
     }));
@@ -259,7 +259,7 @@ describe('Parameterised query execution E2E (real Python backend)', () => {
 
   it('mixed: ILIKE null removed, = value preserved', async () => {
     const response = await queryPostHandler(makeQueryRequest({
-      database_name: DUCK_CONN,
+      connection_name: DUCK_CONN,
       query: 'SELECT * FROM users WHERE name ILIKE :search AND status = :status',
       parameters: { search: null, status: 'active' },
     }));
@@ -272,7 +272,7 @@ describe('Parameterised query execution E2E (real Python backend)', () => {
 
   it('all params null: WHERE removed entirely', async () => {
     const response = await queryPostHandler(makeQueryRequest({
-      database_name: DUCK_CONN,
+      connection_name: DUCK_CONN,
       query: 'SELECT * FROM users WHERE name ILIKE :search AND status = :status',
       parameters: { search: null, status: null },
     }));

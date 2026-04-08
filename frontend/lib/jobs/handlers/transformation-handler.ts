@@ -44,13 +44,13 @@ export const transformationJobHandler: JobHandler = {
           continue;
         }
 
-        if (!question.database_name) {
+        if (!question.connection_name) {
           results.push({ questionId, questionName, schema, view, sql, status: 'error', error: 'Question has no database connection configured' });
           continue;
         }
 
         // Check connection type — DuckDB is read-only, cannot create views
-        const connData = await ConnectionsAPI.getByName(question.database_name, user).catch(() => null);
+        const connData = await ConnectionsAPI.getByName(question.connection_name, user).catch(() => null);
         const connectionType = connData?.connection.type ?? null;
         if (connectionType === 'duckdb') {
           results.push({ questionId, questionName, schema, view, sql, status: 'error', error: 'DuckDB connections do not support transformations (read-only).' });
@@ -66,7 +66,7 @@ export const transformationJobHandler: JobHandler = {
 
         // Execute DDL via Python backend
         try {
-          await runQuery(question.database_name, sql, {}, user);
+          await runQuery(question.connection_name, sql, {}, user);
         } catch (err) {
           const raw = err instanceof Error ? err.message : String(err);
           const error = raw === 'fetch failed'

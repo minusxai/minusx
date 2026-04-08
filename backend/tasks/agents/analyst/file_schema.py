@@ -161,7 +161,7 @@ class QuestionContent(BaseModel):
     vizSettings: VisualizationSettings
     parameters: Optional[List[QuestionParameter]] = None
     parameterValues: Optional[Dict[str, Any]] = None
-    database_name: str = Field(..., description="connection name (empty string if none)")
+    connection_name: str = Field(..., description="connection name (empty string if none)")
     references: Optional[List[QuestionReference]] = None
 
 

@@ -10,7 +10,7 @@ export interface QuestionOption {
   id: number;
   name: string;
   alias: string;      // Pre-generated alias (e.g., "43_revenue_by_month")
-  database_name?: string;
+  connection_name?: string;
 }
 
 /**
@@ -67,7 +67,7 @@ export function useAvailableQuestions(
               id: q.id,
               name: q.name || 'Untitled Question',
               alias: generateReferenceAlias(q.id, q.name || 'untitled'),
-              database_name: content.database_name
+              connection_name: content.connection_name
             };
           });
 
@@ -98,7 +98,7 @@ export function useAvailableQuestions(
       if (excludedIds.includes(q.id)) return false;
 
       // Same connection only (if currentConnectionId is set)
-      if (currentConnectionId && q.database_name !== currentConnectionId) return false;
+      if (currentConnectionId && q.connection_name !== currentConnectionId) return false;
 
       return true;
     });

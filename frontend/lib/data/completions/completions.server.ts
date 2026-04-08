@@ -16,7 +16,7 @@ import {
   ColumnSuggestionsResult,
 } from './types';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
-import { DatabaseWithSchema, QuestionContent } from '@/lib/types';
+import { connectionTypeToDialect, DatabaseWithSchema, QuestionContent } from '@/lib/types';
 import { FilesAPI } from '@/lib/data/files.server';
 import { CTEfyQuery, ResolvedReference } from '@/lib/sql/query-composer';
 import { extractReferencesFromSQL, parseReferenceAlias } from '@/lib/sql/sql-references';
@@ -152,11 +152,13 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
     for (const ref of resolvedReferences) {
       if (!ref.inferredColumns && ref.query) {
         try {
+          const inferDialect = connectionTypeToDialect(context.connectionType ?? '');
           const inferResponse = await pythonBackendFetch('/api/infer-columns', {
             method: 'POST',
             body: JSON.stringify({
               query: ref.query,
               schema_data: context.schemaData || [],
+              dialect: inferDialect,
             }),
           });
           if (inferResponse.ok) {
@@ -255,7 +257,7 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
           query: processedQuery,
           cursor_offset: adjustedCursorOffset,
           schema_data: schemaData,
-          database_name: context.databaseName,
+          connection_name: context.databaseName,
           connection_type: context.connectionType,
         }),
       });
@@ -279,15 +281,12 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
   }
 
   async sqlToIR(options: SqlToIROptions): Promise<SqlToIRResult> {
-    const { sql, databaseName } = options;
+    const { sql, dialect } = options;
 
     try {
       const response = await pythonBackendFetch('/api/sql-to-ir', {
         method: 'POST',
-        body: JSON.stringify({
-          sql,
-          database_name: databaseName,
-        }),
+        body: JSON.stringify({ sql, dialect }),
       });
 
       if (!response.ok) {
@@ -311,13 +310,13 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
   }
 
   async irToSql(options: IRToSqlOptions): Promise<IRToSqlResult> {
-    const { ir } = options;
+    const { ir, dialect } = options;
 
     try {
       // Call Python backend - single source of truth for IR→SQL conversion
       const response = await pythonBackendFetch('/api/ir-to-sql', {
         method: 'POST',
-        body: JSON.stringify({ ir }),
+        body: JSON.stringify({ ir, dialect }),
       });
 
       if (!response.ok) {

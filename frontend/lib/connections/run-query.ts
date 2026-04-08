@@ -42,7 +42,7 @@ export async function runQuery(
   // Fall back to Python backend (handles all non-Node types, and unknown connections)
   const response = await pythonBackendFetch('/api/execute-query', {
     method: 'POST',
-    body: JSON.stringify({ query, parameters: params, database_name: databaseName, ...(parameterTypes && { parameter_types: parameterTypes }) }),
+    body: JSON.stringify({ query, parameters: params, connection_name: databaseName, ...(parameterTypes && { parameter_types: parameterTypes }) }),
   }, user);
 
   if (!response.ok) {

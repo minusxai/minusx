@@ -1131,7 +1131,7 @@
                     "content": {
                         "description": "Weekly average order value",
                         "query": "SELECT \n  DATE_TRUNC('week', created_at) as week_start,\n  AVG(total) as avg_order_value\nFROM orders\nGROUP BY DATE_TRUNC('week', created_at)\nORDER BY week_start",
-                        "database_name": "mxfood",
+                        "connection_name": "mxfood",
                         "vizSettings": {
                             "type": "trend",
                             "xCols": [
@@ -1156,7 +1156,7 @@
                     "content": {
                         "description": "Weekly order count and Revenue",
                         "query": "SELECT \n  DATE_TRUNC('week', created_at) as week,\n  COUNT(*) as orders,\n  SUM(total) as revenue\nFROM orders\nGROUP BY DATE_TRUNC('week', created_at)\nORDER BY week",
-                        "database_name": "mxfood",
+                        "connection_name": "mxfood",
                         "vizSettings": {
                             "type": "line",
                             "xCols": [
@@ -1182,7 +1182,7 @@
                     "content": {
                         "description": "Weekly revenue split by product category (e.g., Pizza, Burgers, etc.)",
                         "query": "SELECT \n  DATE_TRUNC('week', o.created_at) as week_start,\n  pc.category_name,\n  SUM(oi.total_price) as revenue\nFROM orders o\nJOIN order_items oi ON o.order_id = oi.order_id\nJOIN products p ON oi.product_id = p.product_id\nJOIN product_subcategories ps ON p.subcategory_id = ps.subcategory_id\nJOIN product_categories pc ON ps.category_id = pc.category_id\nWHERE o.status = 'completed'\nGROUP BY DATE_TRUNC('week', o.created_at), pc.category_name\nORDER BY week_start, category_name",
-                        "database_name": "mxfood",
+                        "connection_name": "mxfood",
                         "vizSettings": {
                             "type": "bar",
                             "xCols": [
@@ -1208,7 +1208,7 @@
                     "content": {
                         "description": "Pivot table showing average completed orders by day of week and hour of day for the last month",
                         "query": "WITH hourly_counts AS (\n  SELECT \n    DATE_TRUNC('day', created_at) as order_date,\n    CASE DAYOFWEEK(created_at)\n      WHEN 0 THEN 'Sunday'\n      WHEN 1 THEN 'Monday'\n      WHEN 2 THEN 'Tuesday'\n      WHEN 3 THEN 'Wednesday'\n      WHEN 4 THEN 'Thursday'\n      WHEN 5 THEN 'Friday'\n      WHEN 6 THEN 'Saturday'\n    END as day_of_week,\n    CASE \n      WHEN EXTRACT(HOUR FROM created_at) >= 0 AND EXTRACT(HOUR FROM created_at) < 6 THEN '0-6 (Early Morning)'\n      WHEN EXTRACT(HOUR FROM created_at) >= 6 AND EXTRACT(HOUR FROM created_at) < 12 THEN '6-12 (Morning)'\n      WHEN EXTRACT(HOUR FROM created_at) >= 12 AND EXTRACT(HOUR FROM created_at) < 18 THEN '12-18 (Afternoon)'\n      WHEN EXTRACT(HOUR FROM created_at) >= 18 THEN '18-24 (Evening)'\n    END as hour_range,\n    COUNT(*) as order_count\n  FROM orders\n  WHERE status = 'completed'\n    AND created_at >= '2025-12-01'\n GROUP BY order_date, day_of_week, hour_range\n)\nSELECT \n  day_of_week,\n  hour_range,\n  ROUND(AVG(order_count), 1) as avg_orders\nFROM hourly_counts\nGROUP BY day_of_week, hour_range\nORDER BY \n  CASE day_of_week\n    WHEN 'Monday' THEN 1\n    WHEN 'Tuesday' THEN 2\n    WHEN 'Wednesday' THEN 3\n    WHEN 'Thursday' THEN 4\n    WHEN 'Friday' THEN 5\n    WHEN 'Saturday' THEN 6\n    WHEN 'Sunday' THEN 7\n  END,\n  CASE hour_range\n    WHEN '0-6 (Early Morning)' THEN 1\n    WHEN '6-12 (Morning)' THEN 2\n    WHEN '12-18 (Afternoon)' THEN 3\n    WHEN '18-24 (Evening)' THEN 4\n  END",
-                        "database_name": "mxfood",
+                        "connection_name": "mxfood",
                         "vizSettings": {
                             "type": "pivot",
                             "xCols": [
@@ -1248,7 +1248,7 @@
                     "content": {
                         "description": "Completed orders by month",
                         "query": "SELECT DATE_TRUNC('month', created_at) as month, COUNT(*) as orders FROM orders WHERE status = 'completed' GROUP BY 1 ORDER BY 1",
-                        "database_name": "mxfood",
+                        "connection_name": "mxfood",
                         "vizSettings": {
                             "type": "trend",
                             "xCols": [
@@ -1273,7 +1273,7 @@
                     "content": {
                         "description": "Total revenue per month",
                         "query": "SELECT DATE_TRUNC('month', created_at) as month, ROUND(SUM(total), 2) as revenue FROM orders WHERE status = 'completed' GROUP BY DATE_TRUNC('month', created_at) ORDER BY month",
-                        "database_name": "mxfood",
+                        "connection_name": "mxfood",
                         "vizSettings": {
                             "type": "trend",
                             "xCols": [
@@ -1298,7 +1298,7 @@
                     "content": {
                         "description": "Count of unique users who placed orders each month",
                         "query": "SELECT DATE_TRUNC('month', created_at) as month, COUNT(DISTINCT user_id) as active_users FROM orders GROUP BY DATE_TRUNC('month', created_at) ORDER BY month",
-                        "database_name": "mxfood",
+                        "connection_name": "mxfood",
                         "vizSettings": {
                             "type": "trend",
                             "xCols": [
@@ -1323,7 +1323,7 @@
                     "content": {
                         "description": "Number of new user signups each week",
                         "query": "WITH weekly_new_users AS (\n  SELECT \n    DATE_TRUNC('week', created_at) as week,\n    COUNT(*) as new_users\n  FROM users\n  GROUP BY DATE_TRUNC('week', created_at)\n),\nweekly_returning_users AS (\n  SELECT \n    DATE_TRUNC('week', o.created_at) as week,\n    COUNT(DISTINCT o.user_id) as returning_users\n  FROM orders o\n  JOIN users u ON o.user_id = u.user_id\n  WHERE DATE_TRUNC('week', o.created_at) > DATE_TRUNC('week', u.created_at)\n  GROUP BY DATE_TRUNC('week', o.created_at)\n)\nSELECT \n  COALESCE(n.week, r.week) as week,\n  COALESCE(n.new_users, 0) as new_users,\n  COALESCE(r.returning_users, 0) as returning_users\nFROM weekly_new_users n\nFULL OUTER JOIN weekly_returning_users r ON n.week = r.week\nORDER BY week",
-                        "database_name": "mxfood",
+                        "connection_name": "mxfood",
                         "vizSettings": {
                             "type": "area",
                             "xCols": [
@@ -1349,7 +1349,7 @@
                     "content": {
                         "description": "Pie chart showing the breakdown of all users by whether they currently have an active subscription",
                         "query": "SELECT \n  CASE \n    WHEN us.subscription_id IS NOT NULL THEN 'Subscriber'\n    ELSE 'Non-Subscriber'\n  END as user_type,\n  COUNT(DISTINCT u.user_id) as user_count\nFROM users u\nLEFT JOIN user_subscriptions us ON u.user_id = us.user_id\n  AND us.status = 'active'\n  AND us.started_at <= '2025-12-01' \n  AND (us.ended_at IS NULL OR us.ended_at >= '2025-12-01')\nGROUP BY user_type\nORDER BY user_count DESC",
-                        "database_name": "mxfood",
+                        "connection_name": "mxfood",
                         "vizSettings": {
                             "type": "pie",
                             "xCols": [
@@ -1374,7 +1374,7 @@
                     "content": {
                         "description": "Pie chart showing revenue breakdown by platform (iOS, Android, Web) for December 2025",
                         "query": "SELECT \n  platform,\n  ROUND(SUM(total), 2) as revenue\nFROM orders\nWHERE status = 'completed'\n  AND created_at >= '2025-12-01'\n  AND created_at < '2026-01-01'\nGROUP BY platform\nORDER BY revenue DESC",
-                        "database_name": "mxfood",
+                        "connection_name": "mxfood",
                         "vizSettings": {
                             "type": "pie",
                             "xCols": [
@@ -1399,7 +1399,7 @@
                     "content": {
                         "description": "Bar chart showing the top 5 zones by revenue for December 2025",
                         "query": "SELECT \n  z.zone_name,\n  ROUND(SUM(o.total), 2) as revenue\nFROM orders o\nJOIN zones z ON o.zone_id = z.zone_id\nWHERE o.status = 'completed'\n  AND o.created_at >= '2025-12-01'\n  AND o.created_at < '2026-01-01'\nGROUP BY z.zone_name\nORDER BY revenue DESC\nLIMIT 5",
-                        "database_name": "mxfood",
+                        "connection_name": "mxfood",
                         "vizSettings": {
                             "type": "bar",
                             "xCols": [
@@ -1424,7 +1424,7 @@
                     "content": {
                         "description": "Conversion funnel from app open to payment success",
                         "query": "WITH stage_map AS (\n  SELECT * FROM (VALUES ('app_open','App Open',1),('restaurant_view','Restaurant View',2),('add_to_cart','Add to Cart',3),('checkout_started','Checkout Started',4),('payment_success','Payment Success',5)) AS t(event_name, stage, stage_order)\n)\nSELECT m.stage, COALESCE(COUNT(DISTINCT e.session_id), 0) AS users FROM stage_map m LEFT JOIN events e ON e.event_name = m.event_name AND e.event_timestamp >= '2025-06-01' GROUP BY m.stage, m.stage_order ORDER BY m.stage_order;",
-                        "database_name": "mxfood",
+                        "connection_name": "mxfood",
                         "vizSettings": {
                             "type": "funnel",
                             "xCols": [
@@ -1449,7 +1449,7 @@
                     "content": {
                         "description": "Total sessions per day over the last 90 days",
                         "query": "SELECT \n  DATE(event_timestamp) as date,\n  platform,\n  COUNT(DISTINCT session_id) as total_sessions\nFROM events\nWHERE event_timestamp >= '2025-12-01'\nGROUP BY DATE(event_timestamp), platform\nORDER BY date, platform",
-                        "database_name": "mxfood",
+                        "connection_name": "mxfood",
                         "vizSettings": {
                             "type": "bar",
                             "xCols": [
@@ -1475,7 +1475,7 @@
                     "content": {
                         "description": "Daily average number of events per session",
                         "query": "SELECT \n  DATE_TRUNC('month', event_timestamp) as month_start,\n  ROUND(COUNT(*) * 1.0 / COUNT(DISTINCT session_id), 2) as events_per_session,\n  ROUND(COUNT(DISTINCT session_id) * 1.0 / COUNT(DISTINCT user_id), 2) as avg_sessions_per_user_per_week\nFROM events\nWHERE event_timestamp >= '2025-01-01'\nGROUP BY DATE_TRUNC('month', event_timestamp)\nORDER BY month_start",
-                        "database_name": "mxfood",
+                        "connection_name": "mxfood",
                         "vizSettings": {
                             "type": "line",
                             "xCols": [
@@ -1501,7 +1501,7 @@
                     "content": {
                         "description": "Daily conversion rate from app open to payment success",
                         "query": "WITH weekly_funnel AS (\n  SELECT \n    DATE_TRUNC('week', event_timestamp) as week,\n    COUNT(DISTINCT CASE WHEN event_name = 'app_open' THEN user_id END) as app_opens,\n    COUNT(DISTINCT CASE WHEN event_name = 'payment_success' THEN user_id END) as conversions\n  FROM events\n  WHERE event_timestamp >= '2025-12-01'\n  GROUP BY DATE_TRUNC('week', event_timestamp)\n)\nSELECT \n  week,\n  ROUND(conversions * 100.0 / NULLIF(app_opens, 0), 2) as conversion_rate_pct\nFROM weekly_funnel\nWHERE app_opens > 0\nORDER BY week",
-                        "database_name": "mxfood",
+                        "connection_name": "mxfood",
                         "vizSettings": {
                             "type": "bar",
                             "xCols": [
@@ -1779,7 +1779,7 @@
                     "content": {
                         "description": "File read events broken down by mode and file type",
                         "query": "SELECT\n  SPLIT_PART(file_path, '/', 2)  AS mode,\n  file_type,\n  COUNT(*)                        AS events\nFROM file_events\nWHERE event_type = 'read_direct'\nGROUP BY mode, file_type\nORDER BY events DESC",
-                        "database_name": "internals",
+                        "connection_name": "internals",
                         "vizSettings": {
                             "type": "bar",
                             "xCols": [
@@ -1804,7 +1804,7 @@
                     "content": {
                         "description": "Number of files created per day, broken down by mode",
                         "query": "SELECT\n  DATE_TRUNC('day', timestamp)   AS day,\n  SPLIT_PART(file_path, '/', 2)  AS mode,\n  COUNT(*)                        AS files_created\nFROM file_events\nWHERE event_type = 'created'\nGROUP BY day, mode\nORDER BY day",
-                        "database_name": "internals",
+                        "connection_name": "internals",
                         "vizSettings": {
                             "type": "line",
                             "xCols": [
@@ -1829,7 +1829,7 @@
                     "content": {
                         "description": "Top 20 most viewed files",
                         "query": "SELECT\n  file_name,\n  file_path,\n  file_type,\n  COUNT(*) AS views\nFROM file_events\nWHERE event_type = 'read_direct'\nGROUP BY file_name, file_path, file_type\nORDER BY views DESC\nLIMIT 20",
-                        "database_name": "internals",
+                        "connection_name": "internals",
                         "vizSettings": {
                             "type": "table"
                         },
@@ -1848,7 +1848,7 @@
                     "content": {
                         "description": "Top 20 users by total events",
                         "query": "SELECT\n  user_email,\n  user_role,\n  COUNT(*)                                                  AS total_events,\n  COUNT(CASE WHEN event_type = 'read_direct' THEN 1 END)   AS views,\n  COUNT(CASE WHEN event_type = 'updated'     THEN 1 END)   AS edits,\n  COUNT(CASE WHEN event_type = 'created'     THEN 1 END)   AS creates\nFROM file_events\nWHERE user_email IS NOT NULL\nGROUP BY user_email, user_role\nORDER BY total_events DESC\nLIMIT 20",
-                        "database_name": "internals",
+                        "connection_name": "internals",
                         "vizSettings": {
                             "type": "table"
                         },
@@ -1867,7 +1867,7 @@
                     "content": {
                         "description": "Distinct active users per day",
                         "query": "SELECT\n  DATE_TRUNC('day', timestamp) AS day,\n  COUNT(DISTINCT user_email)    AS active_users\nFROM file_events\nGROUP BY day\nORDER BY day",
-                        "database_name": "internals",
+                        "connection_name": "internals",
                         "vizSettings": {
                             "type": "line",
                             "xCols": [
@@ -1892,7 +1892,7 @@
                     "content": {
                         "description": "Total calls, tokens, and cost per LLM model",
                         "query": "SELECT\n  model,\n  COUNT(*)            AS calls,\n  SUM(total_tokens)   AS total_tokens,\n  ROUND(SUM(cost), 4) AS total_cost_usd\nFROM llm_call_events\nGROUP BY model\nORDER BY calls DESC",
-                        "database_name": "internals",
+                        "connection_name": "internals",
                         "vizSettings": {
                             "type": "bar",
                             "xCols": [
@@ -1917,7 +1917,7 @@
                     "content": {
                         "description": "Daily token usage per model",
                         "query": "SELECT\n  DATE_TRUNC('day', timestamp) AS day,\n  model,\n  SUM(total_tokens)             AS tokens\nFROM llm_call_events\nGROUP BY day, model\nORDER BY day",
-                        "database_name": "internals",
+                        "connection_name": "internals",
                         "vizSettings": {
                             "type": "line",
                             "xCols": [
@@ -1942,7 +1942,7 @@
                     "content": {
                         "description": "Weekly LLM cost, call count, and token totals",
                         "query": "SELECT\n  DATE_TRUNC('week', timestamp) AS week,\n  SUM(cost)                      AS total_cost_usd,\n  COUNT(*)                       AS total_calls,\n  SUM(total_tokens)              AS total_tokens\nFROM llm_call_events\nGROUP BY week\nORDER BY week",
-                        "database_name": "internals",
+                        "connection_name": "internals",
                         "vizSettings": {
                             "type": "bar",
                             "xCols": [
@@ -1967,7 +1967,7 @@
                     "content": {
                         "description": "Average duration and token count per LLM model",
                         "query": "SELECT\n  model,\n  COUNT(*)                          AS calls,\n  ROUND(AVG(duration_s), 2)         AS avg_duration_s,\n  ROUND(AVG(total_tokens), 0)       AS avg_tokens\nFROM llm_call_events\nGROUP BY model\nORDER BY calls DESC",
-                        "database_name": "internals",
+                        "connection_name": "internals",
                         "vizSettings": {
                             "type": "table"
                         },

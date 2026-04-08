@@ -101,7 +101,7 @@ export default function TestValueEditor({ value, answerType, onChange, disabled,
     } else if (newSource === 'cannot_answer') {
       onChange({ type: 'cannot_answer' });
     } else if (newSource === 'query_inline') {
-      onChange({ type: 'query', source: 'inline', sql: '', database_name: '', column: undefined, row: undefined });
+      onChange({ type: 'query', source: 'inline', sql: '', connection_name: '', column: undefined, row: undefined });
     } else {
       onChange({ type: 'query', source: 'question', question_id: 0 });
     }
@@ -219,8 +219,8 @@ export default function TestValueEditor({ value, answerType, onChange, disabled,
           <Box>
             <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Connection</Text>
             <DatabaseSelector
-              value={queryInline.database_name}
-              onChange={db => onChange({ ...queryInline, database_name: db })}
+              value={queryInline.connection_name}
+              onChange={({ connection_name: db }) => onChange({ ...queryInline, connection_name: db })}
               size="sm"
             />
           </Box>

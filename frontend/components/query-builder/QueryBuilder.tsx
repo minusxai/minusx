@@ -94,6 +94,7 @@ function IRDebugView({ ir }: { ir: QueryIR | null }) {
 
 interface QueryBuilderProps {
   databaseName: string;
+  dialect: string;
   sql: string;
   onSqlChange: (sql: string) => void;
   onExecute?: () => void;
@@ -105,6 +106,7 @@ interface QueryBuilderProps {
 
 export function QueryBuilder({
   databaseName,
+  dialect,
   sql,
   onSqlChange,
   onExecute,
@@ -156,7 +158,7 @@ export function QueryBuilder({
       setError(null);
 
       try {
-        const result = await CompletionsAPI.sqlToIR({ sql });
+        const result = await CompletionsAPI.sqlToIR({ sql, dialect });
         console.log("[result]", result);
         // Skip compound queries — they're handled by CompoundQueryBuilder
         if (result.ir && isCompoundQueryIR(result.ir)) {
@@ -244,7 +246,7 @@ export function QueryBuilder({
         }
 
         // Otherwise, generate new SQL from IR
-        const result = await CompletionsAPI.irToSql({ ir: ir! });
+        const result = await CompletionsAPI.irToSql({ ir: ir!, dialect });
 
         if (result.success && result.sql) {
           if (result.sql !== lastSqlSent.current) {

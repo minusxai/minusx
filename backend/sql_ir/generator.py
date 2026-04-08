@@ -9,7 +9,17 @@ from typing import Union
 from .ir_types import QueryIR, CompoundQueryIR, SelectColumn, FilterGroup, FilterCondition
 
 
-def ir_to_sql(ir: QueryIR) -> str:
+def _date_trunc_expr(col_ref: str, unit: str, dialect: str) -> str:
+    """Format DATE_TRUNC using the correct argument order for the given dialect.
+
+    BigQuery uses DATE_TRUNC(col, unit); all other dialects use DATE_TRUNC('unit', col).
+    """
+    if dialect == 'bigquery':
+        return f"DATE_TRUNC({col_ref}, {unit})"
+    return f"DATE_TRUNC('{unit}', {col_ref})"
+
+
+def ir_to_sql(ir: QueryIR, dialect: str) -> str:
     """
     Convert QueryIR to SQL string.
 
@@ -20,7 +30,7 @@ def ir_to_sql(ir: QueryIR) -> str:
 
     # SELECT clause with optional DISTINCT
     select_keyword = "SELECT DISTINCT" if ir.distinct else "SELECT"
-    select_col_list = generate_select_column_list(ir)
+    select_col_list = generate_select_column_list(ir, dialect)
     # Format SELECT columns with indentation if multiple columns
     if len(select_col_list) > 1:
         parts.append(f"{select_keyword}\n  " + ",\n  ".join(select_col_list))
@@ -45,22 +55,23 @@ def ir_to_sql(ir: QueryIR) -> str:
 
     # WHERE
     if ir.where and ir.where.conditions:
-        parts.append("WHERE " + generate_filter_group(ir.where))
+        parts.append("WHERE " + generate_filter_group(ir.where, dialect))
 
     # GROUP BY
     if ir.group_by and ir.group_by.columns:
-        parts.append("GROUP BY " + generate_group_by_clause(ir.group_by.columns))
+        parts.append("GROUP BY " + generate_group_by_clause(ir.group_by.columns, dialect))
 
     # HAVING
     if ir.having and ir.having.conditions:
-        parts.append("HAVING " + generate_filter_group(ir.having))
+        parts.append("HAVING " + generate_filter_group(ir.having, dialect))
 
-    # ORDER BY
+    # ORDER BY — omit direction when ASC (default), emit only for DESC
     if ir.order_by:
         order_parts = []
         for col in ir.order_by:
-            col_expr = generate_order_by_expression(col)
-            order_parts.append(f"{col_expr} {col.direction}")
+            col_expr = generate_order_by_expression(col, dialect)
+            direction = f" {col.direction}" if col.direction == "DESC" else ""
+            order_parts.append(f"{col_expr}{direction}")
         parts.append("ORDER BY " + ", ".join(order_parts))
 
     # LIMIT
@@ -76,7 +87,7 @@ def ir_to_sql(ir: QueryIR) -> str:
     return "\n".join(parts)
 
 
-def generate_select_column_list(ir: QueryIR) -> list:
+def generate_select_column_list(ir: QueryIR, dialect: str) -> list:
     """Generate SELECT columns as a list of individual SQL strings."""
     if not ir.select:
         return ["*"]
@@ -85,15 +96,15 @@ def generate_select_column_list(ir: QueryIR) -> list:
     if len(ir.select) == 1 and ir.select[0].column == "*" and ir.select[0].type == "column":
         return ["*"]
 
-    return [generate_select_column(col) for col in ir.select]
+    return [generate_select_column(col, dialect) for col in ir.select]
 
 
-def generate_select_clause(ir: QueryIR) -> str:
+def generate_select_clause(ir: QueryIR, dialect: str) -> str:
     """Generate SELECT column list as a single string."""
-    return ", ".join(generate_select_column_list(ir))
+    return ", ".join(generate_select_column_list(ir, dialect))
 
 
-def generate_select_column(col: SelectColumn) -> str:
+def generate_select_column(col: SelectColumn, dialect: str) -> str:
     """Generate a single SELECT column expression."""
     result = ""
 
@@ -124,7 +135,7 @@ def generate_select_column(col: SelectColumn) -> str:
     elif col.type == "expression":
         col_ref = f"{col.table}.{col.column}" if col.table else col.column
         if col.function == "DATE_TRUNC":
-            result = f"DATE_TRUNC('{col.unit}', {col_ref})"
+            result = _date_trunc_expr(col_ref, col.unit, dialect)
         elif col.function == "DATE":
             result = f"DATE({col_ref})"
         elif col.function == "SPLIT_PART":
@@ -157,7 +168,7 @@ def generate_join_clause(join) -> str:
     elif join.type == "FULL":
         join_type = "FULL OUTER JOIN"
     else:
-        join_type = "INNER JOIN"
+        join_type = "JOIN"
 
     table = join.table.table
     if join.table.schema:
@@ -179,7 +190,7 @@ def generate_join_clause(join) -> str:
     return f"{join_type} {table}"
 
 
-def generate_filter_group(group: FilterGroup) -> str:
+def generate_filter_group(group: FilterGroup, dialect: str) -> str:
     """Generate WHERE/HAVING filter expression."""
     if not group.conditions:
         return ""
@@ -187,15 +198,15 @@ def generate_filter_group(group: FilterGroup) -> str:
     parts = []
     for cond in group.conditions:
         if isinstance(cond, FilterCondition) or hasattr(cond, 'column'):
-            parts.append(generate_filter_condition(cond))
+            parts.append(generate_filter_condition(cond, dialect))
         else:
             # Nested group
-            parts.append("(" + generate_filter_group(cond) + ")")
+            parts.append("(" + generate_filter_group(cond, dialect) + ")")
 
     return f" {group.operator} ".join(parts)
 
 
-def generate_filter_condition(cond: FilterCondition) -> str:
+def generate_filter_condition(cond: FilterCondition, dialect: str) -> str:
     """Generate a single filter condition."""
     # Raw column expression (e.g. SPLIT_PART(col, '-', 1))
     if cond.raw_column:
@@ -225,7 +236,7 @@ def generate_filter_condition(cond: FilterCondition) -> str:
     elif cond.function == "DATE_TRUNC":
         # DATE_TRUNC expression on the left side
         col_ref = f"{cond.table}.{cond.column}" if cond.table else cond.column
-        column = f"DATE_TRUNC('{cond.unit}', {col_ref})"
+        column = _date_trunc_expr(col_ref, cond.unit, dialect)
     else:
         # Regular column
         column = f"{cond.table}.{cond.column}" if cond.table else cond.column
@@ -253,13 +264,13 @@ def generate_filter_condition(cond: FilterCondition) -> str:
     return f"{column} {cond.operator} {format_value(cond.value)}"
 
 
-def generate_group_by_clause(columns) -> str:
+def generate_group_by_clause(columns, dialect: str) -> str:
     """Generate GROUP BY column list."""
     parts = []
     for col in columns:
         col_ref = f"{col.table}.{col.column}" if col.table else col.column
         if col.type == "expression" and col.function == "DATE_TRUNC":
-            parts.append(f"DATE_TRUNC('{col.unit}', {col_ref})")
+            parts.append(_date_trunc_expr(col_ref, col.unit, dialect))
         elif col.type == "expression" and col.function == "DATE":
             parts.append(f"DATE({col_ref})")
         elif col.type == "expression" and col.function == "SPLIT_PART":
@@ -270,7 +281,7 @@ def generate_group_by_clause(columns) -> str:
     return ", ".join(parts)
 
 
-def generate_order_by_expression(col) -> str:
+def generate_order_by_expression(col, dialect: str) -> str:
     """Generate ORDER BY column expression."""
     col_type = getattr(col, "type", "column")
 
@@ -280,7 +291,7 @@ def generate_order_by_expression(col) -> str:
 
     col_ref = f"{col.table}.{col.column}" if col.table else col.column
     if col_type == "expression" and getattr(col, "function", None) == "DATE_TRUNC":
-        return f"DATE_TRUNC('{col.unit}', {col_ref})"
+        return _date_trunc_expr(col_ref, col.unit, dialect)
     if col_type == "expression" and getattr(col, "function", None) == "DATE":
         return f"DATE({col_ref})"
 
@@ -290,7 +301,7 @@ def generate_order_by_expression(col) -> str:
     return col.column
 
 
-def compound_ir_to_sql(ir: CompoundQueryIR) -> str:
+def compound_ir_to_sql(ir: CompoundQueryIR, dialect: str) -> str:
     """Convert CompoundQueryIR (UNION/UNION ALL) to SQL string."""
     if len(ir.queries) < 2:
         raise ValueError("Compound query must have at least 2 queries")
@@ -302,7 +313,7 @@ def compound_ir_to_sql(ir: CompoundQueryIR) -> str:
     for q in ir.queries:
         # Temporarily clear order_by and limit for individual queries
         q_copy = q.model_copy(update={'order_by': None, 'limit': None})
-        query_sqls.append(ir_to_sql(q_copy))
+        query_sqls.append(ir_to_sql(q_copy, dialect))
 
     # Interleave queries with operators
     parts = [query_sqls[0]]
@@ -312,12 +323,13 @@ def compound_ir_to_sql(ir: CompoundQueryIR) -> str:
 
     result = "\n".join(parts)
 
-    # Append compound-level ORDER BY
+    # Append compound-level ORDER BY — omit direction when ASC (default)
     if ir.order_by:
         order_parts = []
         for col in ir.order_by:
-            col_expr = generate_order_by_expression(col)
-            order_parts.append(f"{col_expr} {col.direction}")
+            col_expr = generate_order_by_expression(col, dialect)
+            direction = f" {col.direction}" if col.direction == "DESC" else ""
+            order_parts.append(f"{col_expr}{direction}")
         result += "\nORDER BY " + ", ".join(order_parts)
 
     # Append compound-level LIMIT
@@ -327,15 +339,15 @@ def compound_ir_to_sql(ir: CompoundQueryIR) -> str:
     return result
 
 
-def any_ir_to_sql(ir: Union[QueryIR, CompoundQueryIR, dict]) -> str:
+def any_ir_to_sql(ir: Union[QueryIR, CompoundQueryIR, dict], dialect: str) -> str:
     """Dispatch to the correct generator based on IR type."""
     if isinstance(ir, dict):
         if ir.get('type') == 'compound':
-            return compound_ir_to_sql(CompoundQueryIR.model_validate(ir))
-        return ir_to_sql(QueryIR.model_validate(ir))
+            return compound_ir_to_sql(CompoundQueryIR.model_validate(ir), dialect)
+        return ir_to_sql(QueryIR.model_validate(ir), dialect)
     if isinstance(ir, CompoundQueryIR):
-        return compound_ir_to_sql(ir)
-    return ir_to_sql(ir)
+        return compound_ir_to_sql(ir, dialect)
+    return ir_to_sql(ir, dialect)
 
 
 def format_value(value) -> str:

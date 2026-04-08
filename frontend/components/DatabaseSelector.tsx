@@ -6,10 +6,11 @@ import { useAppSelector } from '@/store/hooks';
 import { selectConnectionsLoading } from '@/store/filesSlice';
 import { LuDatabase } from 'react-icons/lu';
 import GenericSelector, { SelectorOption } from './GenericSelector';
+import { connectionTypeToDialect, FullQuery } from '@/lib/types';
 
 interface DatabaseSelectorProps {
   value: string;
-  onChange: (database_name: string) => void;
+  onChange: (connection: Pick<FullQuery, 'connection_name' | 'dialect'>) => void;
   size?: 'sm' | 'md';
 }
 
@@ -32,10 +33,16 @@ export default function DatabaseSelector({
   // Check if connections are loading from Redux (this fixes the "No connection" flash bug)
   const connectionsLoading = useAppSelector(selectConnectionsLoading);
 
+  const handleChange = (connection_name: string) => {
+    const conn = connectionsMap[connection_name];
+    const dialect = connectionTypeToDialect(conn?.metadata?.type ?? '');
+    onChange({ connection_name, dialect });
+  };
+
   return (
     <GenericSelector
       value={value}
-      onChange={onChange}
+      onChange={handleChange}
       options={options}
       loading={connectionsLoading}
       placeholder="No connection"

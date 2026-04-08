@@ -37,7 +37,7 @@ def _preprocess_query(query: str) -> str:
     return result
 
 
-def validate_sql(query: str, dialect: str = "postgres") -> ValidationResult:
+def validate_sql(query: str, dialect: str) -> ValidationResult:
     """
     Validate SQL syntax and return errors with position info.
 

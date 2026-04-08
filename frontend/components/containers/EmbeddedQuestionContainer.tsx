@@ -73,9 +73,9 @@ export default function EmbeddedQuestionContainer({
   } = useQueryResult(
     localQuestion.query || '',
     queryParams,
-    localQuestion.database_name || '', // Empty string if missing, rely on skip to prevent execution
+    localQuestion.connection_name || '', // Empty string if missing, rely on skip to prevent execution
     localQuestion.references || [],
-    { skip: !localQuestion.query || !localQuestion.database_name } // Skip if no query or no database
+    { skip: !localQuestion.query || !localQuestion.connection_name } // Skip if no query or no database
   );
 
   // Update handler - propagate changes to parent if onChange provided

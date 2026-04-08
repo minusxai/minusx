@@ -31,13 +31,13 @@ async function resolveExpectedValueOnClient(
   let database: string;
   if (value.source === 'inline') {
     sql = value.sql;
-    database = value.database_name;
+    database = value.connection_name;
   } else {
     const [qFile] = await readFiles([value.question_id]);
     const question = qFile?.fileState?.content as QuestionContent | undefined;
-    if (!question?.query || !question.database_name) return null;
+    if (!question?.query || !question.connection_name) return null;
     sql = question.query;
-    database = question.database_name;
+    database = question.connection_name;
   }
 
   const result = await getQueryResult({ query: sql, params: {}, database }, { forceLoad: true });
@@ -56,11 +56,11 @@ async function executeQueryTestOnClient(
   let subjectDb: string;
   if (subject.source === 'inline') {
     subjectSql = subject.sql;
-    subjectDb = subject.database_name;
+    subjectDb = subject.connection_name;
   } else {
     const [qFile] = await readFiles([subject.question_id]);
     const question = qFile?.fileState?.content as QuestionContent | undefined;
-    if (!question?.query || !question.database_name) {
+    if (!question?.query || !question.connection_name) {
       return {
         test,
         passed: false,
@@ -68,7 +68,7 @@ async function executeQueryTestOnClient(
       };
     }
     subjectSql = question.query;
-    subjectDb = question.database_name;
+    subjectDb = question.connection_name;
   }
 
   let rows: Record<string, unknown>[];

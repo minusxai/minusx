@@ -22,7 +22,7 @@ import type { EffectiveUser } from '@/lib/auth/auth-helpers';
  * @example
  * const response = await pythonBackendFetch('/api/execute-query', {
  *   method: 'POST',
- *   body: JSON.stringify({ query, database_name })
+ *   body: JSON.stringify({ query, connection_name })
  * });
  */
 export async function pythonBackendFetch(

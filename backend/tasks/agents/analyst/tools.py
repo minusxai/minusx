@@ -400,7 +400,7 @@ class CreateFile(Tool):
     - path: folder path to create in (e.g. '/org/reports'). Defaults to user's home folder.
     - content: initial content fields merged on top of template defaults.
       Examples by type:
-        question:  {"query": "SELECT 1", "database_name": "default", "vizSettings": {...}}
+        question:  {"query": "SELECT 1", "connection_name": "default", "vizSettings": {...}}
         dashboard: {"description": "My dashboard"}
 
     Returns: {success: true, state: {fileState: {id, name, path, type, isDirty, content}, references: [...], queryResults: [...]}}

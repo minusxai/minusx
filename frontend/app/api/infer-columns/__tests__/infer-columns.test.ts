@@ -57,7 +57,7 @@ describe('Infer Columns - E2E Tests', () => {
             query: TEST_QUESTION_QUERY,
             vizSettings: { type: 'table' },
             parameters: {},
-            database_name: null,
+            connection_name: null,
             references: [],
           }),
           1,
@@ -95,12 +95,12 @@ describe('Infer Columns - E2E Tests', () => {
   // ──────────────────────────────────────────────────────────────────────────
 
   describe('Part A: Python endpoint — static column inference', () => {
-    async function callPython(query: string, schemaData: any[] = []) {
+    async function callPython(query: string, schemaData: any[] = [], dialect = 'duckdb') {
       const port = getPythonPort();
       const res = await fetch(`http://localhost:${port}/api/infer-columns`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, schema_data: schemaData }),
+        body: JSON.stringify({ query, schema_data: schemaData, dialect }),
       });
       expect(res.ok).toBe(true);
       return res.json() as Promise<{ columns: { name: string; type: string }[]; error?: string }>;

@@ -222,7 +222,7 @@ export async function POST(request: NextRequest) {
         } as EvalRunResponse);
       }
       const qContent = qFileResult.data.content as QuestionContent;
-      const qResult = await runQuery(qContent.database_name, qContent.query, {}, user);
+      const qResult = await runQuery(qContent.connection_name, qContent.query, {}, user);
       if (!qResult.rows.length || !qResult.columns.length) {
         return NextResponse.json({
           passed: false,

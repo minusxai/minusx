@@ -52,7 +52,7 @@ function makeQuestion(id: number, name: string) {
     name,
     type: 'question' as const,
     path: `/org/${name}`,
-    content: { query: 'SELECT 1', vizSettings: { type: 'table' as const }, database_name: '' },
+    content: { query: 'SELECT 1', vizSettings: { type: 'table' as const }, connection_name: '' },
     created_at: '2025-01-01T00:00:00Z',
     updated_at: new Date().toISOString(),
     references: [] as number[],

@@ -69,7 +69,7 @@ export default function ExecuteSQLDisplay({ toolCallTuple, databaseName, isCompa
         query: args.query || '',
         vizSettings,
         parameters,
-        database_name: databaseName || ''  // Empty string if no database provided
+        connection_name: databaseName || ''  // Empty string if no database provided
       };
 
       // Use contentToDetails for details-first / content-fallback dispatch.
@@ -172,7 +172,7 @@ export default function ExecuteSQLDisplay({ toolCallTuple, databaseName, isCompa
         </Text>
         {/* {question && isExpanded && (
             <Text fontSize="2xs" color="fg.muted" fontFamily="mono">
-              DB Connection: {question.database_name}
+              DB Connection: {question.connection_name}
             </Text>
           )} */}
           <Icon as={error ? LuX : LuCheck} boxSize={3} color={error ? "accent.danger" : "accent.success"} />

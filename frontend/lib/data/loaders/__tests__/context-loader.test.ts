@@ -1246,7 +1246,7 @@ describe('Context Loader Integration with Versioning', () => {
         description: '',
         vizSettings: { type: 'table' },
         parameters: [],
-        database_name: 'duckdb_main'
+        connection_name: 'duckdb_main'
       };
       const questionId = await DocumentDB.create(
         'question', '/org/my-question', 'question',
@@ -1281,7 +1281,7 @@ describe('Context Loader Integration with Versioning', () => {
       // Question in /org/shared/report-question — outside home, not ancestor
       const questionId = await DocumentDB.create(
         'question', '/org/shared/report-question', 'question',
-        { query: 'SELECT 2', description: '', vizSettings: { type: 'table' }, parameters: [], database_name: 'duckdb_main' } as QuestionContent,
+        { query: 'SELECT 2', description: '', vizSettings: { type: 'table' }, parameters: [], connection_name: 'duckdb_main' } as QuestionContent,
         [], 1
       );
 
@@ -1302,7 +1302,7 @@ describe('Context Loader Integration with Versioning', () => {
       // Direct load (not via reference) of a parent-folder question is still denied
       const questionId = await DocumentDB.create(
         'question', '/org/top-level-question', 'question',
-        { query: 'SELECT 3', description: '', vizSettings: { type: 'table' }, parameters: [], database_name: 'duckdb_main' } as QuestionContent,
+        { query: 'SELECT 3', description: '', vizSettings: { type: 'table' }, parameters: [], connection_name: 'duckdb_main' } as QuestionContent,
         [], 1
       );
 

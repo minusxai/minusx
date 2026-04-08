@@ -95,7 +95,7 @@ function createTestCompany(id: number, name: string, userCount: number, docCount
         name: `Document ${i + 1}`,
         query: 'SELECT 1',
         vizSettings: { type: 'table' as const },
-        database_name: 'default_db'
+        connection_name: 'default_db'
       },
       company_id: id,
       created_at: new Date().toISOString(),
@@ -509,7 +509,7 @@ describe('POST /api/admin/reset-tutorial', () => {
       'INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
       [
         1, 500, 'user-question', '/tutorial/user-question',
-        'question', JSON.stringify({ name: 'user-question', query: 'SELECT 1', vizSettings: { type: 'table' }, database_name: 'mxfood' }),
+        'question', JSON.stringify({ name: 'user-question', query: 'SELECT 1', vizSettings: { type: 'table' }, connection_name: 'mxfood' }),
         JSON.stringify([]), now, now
       ]
     );
@@ -686,7 +686,7 @@ describe('POST /api/admin/reset-tutorial', () => {
       'INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
       [
         2, 500, 'other-question', '/tutorial/other-question',
-        'question', JSON.stringify({ name: 'other-question', query: 'SELECT 2', vizSettings: { type: 'table' }, database_name: 'db' }),
+        'question', JSON.stringify({ name: 'other-question', query: 'SELECT 2', vizSettings: { type: 'table' }, connection_name: 'db' }),
         JSON.stringify([]), now, now
       ]
     );

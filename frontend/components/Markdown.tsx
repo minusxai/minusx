@@ -20,7 +20,7 @@ function InlineChart({ queryData }: { queryData: ReportQueryResult }) {
     query: queryData.query,
     vizSettings: queryData.vizSettings,
     parameters: [],
-    database_name: queryData.connectionId || ''
+    connection_name: queryData.connectionId || ''
   }));
 
   const queryResult = useMemo(() => ({

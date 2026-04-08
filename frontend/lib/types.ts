@@ -650,7 +650,7 @@ export type TestSubject =
       type: 'query';
       source: 'inline';
       sql: string;
-      database_name: string;
+      connection_name: string;
       column?: string;
       row?: RowIndex;
     };
@@ -663,7 +663,7 @@ export type TestOperator = '~' | '=' | '<' | '>' | '<=' | '>=';
 export type TestValue =
   | { type: 'constant'; value: string | number | boolean }
   | { type: 'query'; source?: 'question'; question_id: number; column?: string; row?: RowIndex }
-  | { type: 'query'; source: 'inline'; sql: string; database_name: string; column?: string; row?: RowIndex }
+  | { type: 'query'; source: 'inline'; sql: string; connection_name: string; column?: string; row?: RowIndex }
   /** LLM tests only: test passes iff the agent calls CannotAnswer */
   | { type: 'cannot_answer' };
 
@@ -1211,3 +1211,32 @@ export interface ExecuteQueryDetails extends ToolCallDetails {
   rows?: Record<string, any>[];
   data?: string;  // Markdown table from compressQueryResult (present in historical messages)
 }
+
+// ============================================================================
+// FullQuery — canonical query carrier type
+// Propagated through the stack so dialect is always known alongside connection.
+// ============================================================================
+
+/** Maps DatabaseConnection.type to sqlglot dialect string. Mirrors backend _get_dialect_for_connection(). */
+export function connectionTypeToDialect(type: string): string {
+  const map: Record<string, string> = {
+    duckdb: 'duckdb',
+    bigquery: 'bigquery',
+    postgresql: 'postgres',
+    csv: 'duckdb',
+    'google-sheets': 'duckdb',
+    athena: 'presto',
+  };
+  return map[type] ?? 'duckdb';
+}
+
+/**
+ * Canonical query carrier. Use Pick<FullQuery, ...> at call sites that only need a subset.
+ * Never pass connection_name without dialect — always derive dialect when you have a connection.
+ */
+export type FullQuery = {
+  connection_name: string;
+  dialect: string;
+  query: string;
+  params: Record<string, string | number | null | undefined>;
+};

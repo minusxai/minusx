@@ -108,7 +108,7 @@ describe('editFile - Question Editing Flow', () => {
       'question',
       {
         query: 'SELECT 1',
-        database_name: 'test_db',
+        connection_name: 'test_db',
         parameters: [],
         references: [],
         vizSettings: {
@@ -128,7 +128,7 @@ describe('editFile - Question Editing Flow', () => {
       'question',
       {
         query: 'SELECT 2',
-        database_name: 'test_db',
+        connection_name: 'test_db',
         parameters: [],
         references: [],
         vizSettings: {
@@ -148,7 +148,7 @@ describe('editFile - Question Editing Flow', () => {
       'question',
       {
         query: 'SELECT 3',
-        database_name: 'test_db',
+        connection_name: 'test_db',
         parameters: [],
         references: [],
         vizSettings: {
@@ -266,7 +266,7 @@ describe('editFile - Question Editing Flow', () => {
       fileId,
       changes: {
         content: {
-          database_name: 'new_db'
+          connection_name: 'new_db'
         }
       }
     });
@@ -275,7 +275,7 @@ describe('editFile - Question Editing Flow', () => {
     await waitFor(() => {
       const state = store.getState();
       const content = selectMergedContent(state, fileId) as QuestionContent;
-      return content.query === 'SELECT * FROM test' && content.database_name === 'new_db';
+      return content.query === 'SELECT * FROM test' && content.connection_name === 'new_db';
     }, 1000);
 
     const finalState = store.getState();
@@ -285,13 +285,13 @@ describe('editFile - Question Editing Flow', () => {
     console.log('persistableChanges after multiple edits:', fileState?.persistableChanges);
     expect(fileState?.persistableChanges).toMatchObject({
       query: 'SELECT * FROM test',
-      database_name: 'new_db'
+      connection_name: 'new_db'
     });
 
     // Merged content should have both changes plus original fields
     const mergedContent = selectMergedContent(finalState, fileId) as QuestionContent;
     expect(mergedContent.query).toBe('SELECT * FROM test');
-    expect(mergedContent.database_name).toBe('new_db');
+    expect(mergedContent.connection_name).toBe('new_db');
 
     // File should be dirty
     expect(selectIsDirty(finalState, fileId)).toBe(true);
@@ -429,7 +429,7 @@ describe('editFile - Question content validation', () => {
       'question',
       {
         query: 'SELECT 1',
-        database_name: 'test_db',
+        connection_name: 'test_db',
         parameters: [],
         references: [],
         vizSettings: { type: 'table', xCols: [], yCols: [] }
@@ -460,12 +460,12 @@ describe('editFile - Question content validation', () => {
     expect(result.error).toMatch(/Invalid question content/);
   });
 
-  it('rejects missing database_name field', async () => {
+  it('rejects missing connection_name field', async () => {
     await readFiles([questionId]);
     const result = await editFileStr({
       fileId: questionId,
-      oldMatch: '"database_name":"test_db"',
-      newMatch: '"database_name":null',
+      oldMatch: '"connection_name":"test_db"',
+      newMatch: '"connection_name":null',
     });
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/Invalid question content/);
@@ -723,7 +723,7 @@ describe('CreateFile tool - auto-execute query results', () => {
         fileName: 'Untitled Question',
         content: {
           query: 'SELECT 1',
-          database_name: 'test_db',
+          connection_name: 'test_db',
           parameters: [],
           references: [],
           vizSettings: { type: 'table', xCols: [], yCols: [] },
@@ -745,7 +745,7 @@ describe('CreateFile tool - auto-execute query results', () => {
         name: 'Total Overall Orders',
         content: {
           query: "SELECT COUNT(*) as total_orders FROM orders WHERE status = 'completed'",
-          database_name: 'mxfood',
+          connection_name: 'mxfood',
         },
       }),
       {} as any
@@ -767,7 +767,7 @@ describe('CreateFile tool - content validation', () => {
     fileName: 'Untitled Question',
     content: {
       query: 'SELECT 1',
-      database_name: 'test_db',
+      connection_name: 'test_db',
       parameters: [],
       references: [],
       vizSettings: { type: 'table', xCols: [], yCols: [] },
@@ -822,7 +822,7 @@ describe('CreateFile tool - content validation', () => {
       makeToolCall({
         file_type: 'question',
         name: 'My Query',
-        content: { query: 'SELECT * FROM users', database_name: 'prod' },
+        content: { query: 'SELECT * FROM users', connection_name: 'prod' },
       }),
       {} as any
     );

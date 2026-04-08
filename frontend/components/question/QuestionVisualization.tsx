@@ -357,7 +357,7 @@ export function QuestionVisualization({
                 )}
                 {currentState?.vizSettings?.type === 'table' && (
                   <Box flex="1" minHeight="0" overflow="hidden" display="flex" width={"100%"} alignItems={"stretch"} flexDirection={"column"}>
-                    <TableV2 columns={data.columns} types={data.types} rows={data.rows} sql={currentState?.query} databaseName={currentState?.database_name} />
+                    <TableV2 columns={data.columns} types={data.types} rows={data.rows} sql={currentState?.query} databaseName={currentState?.connection_name} />
                   </Box>
                 )}
                 {(currentState?.vizSettings?.type === 'line' ||
@@ -389,7 +389,7 @@ export function QuestionVisualization({
                       initialPivotConfig={currentState.vizSettings?.pivotConfig ?? undefined}
                       onPivotConfigChange={onPivotConfigChange}
                       sql={currentState?.query}
-                      databaseName={currentState?.database_name}
+                      databaseName={currentState?.connection_name}
                       initialColumnFormats={currentState.vizSettings?.columnFormats ?? undefined}
                       onColumnFormatsChange={onColumnFormatsChange}
                       settingsExpanded={useCompactLayout ? vizSettingsExpanded : undefined}

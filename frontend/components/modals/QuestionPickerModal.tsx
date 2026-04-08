@@ -29,7 +29,7 @@ interface QuestionPickerModalProps {
 interface QuestionOption {
   id: number;
   name: string;
-  database_name?: string;
+  connection_name?: string;
   hasReferences: boolean;
 }
 
@@ -71,7 +71,7 @@ export default function QuestionPickerModal({
           return {
             id: q.id,
             name: q.name || 'Untitled Question',
-            database_name: content.database_name,
+            connection_name: content.connection_name,
             hasReferences: (content.references?.length ?? 0) > 0
           };
         });
@@ -100,7 +100,7 @@ export default function QuestionPickerModal({
       if (excludedIds.includes(q.id)) return false;
 
       // Same connection only (if currentConnectionId is set)
-      if (currentConnectionId && q.database_name !== currentConnectionId) return false;
+      if (currentConnectionId && q.connection_name !== currentConnectionId) return false;
 
       return true;
     });
@@ -179,9 +179,9 @@ export default function QuestionPickerModal({
                           }}
                         >
                           <Text fontWeight="medium" fontSize="sm">{q.name}</Text>
-                          {q.database_name && (
+                          {q.connection_name && (
                             <Text fontSize="xs" color="fg.muted">
-                              Connection: {q.database_name}
+                              Connection: {q.connection_name}
                             </Text>
                           )}
                         </Box>

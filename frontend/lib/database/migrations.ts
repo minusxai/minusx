@@ -1127,6 +1127,24 @@ export const MIGRATIONS: MigrationEntry[] = [
       return data;
     },
   },
+  {
+    dataVersion: 29,
+    description: 'V29: Rename database_name → connection_name in question and dashboard content',
+    dataMigration: (data: InitData) => {
+      for (const companyData of data.companies as CompanyData[]) {
+        for (const doc of companyData.documents as ExportedDocument[]) {
+          if ((doc.type === 'question' || doc.type === 'dashboard') && doc.content && typeof doc.content === 'object') {
+            const content = doc.content as any;
+            if ('database_name' in content && !('connection_name' in content)) {
+              content.connection_name = content.database_name;
+              delete content.database_name;
+            }
+          }
+        }
+      }
+      return data;
+    },
+  },
 ];
 
 /**

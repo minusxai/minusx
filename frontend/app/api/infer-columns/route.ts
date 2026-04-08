@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { handleApiError } from '@/lib/api/api-responses';
 import { FilesAPI } from '@/lib/data/files.server';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
-import { QuestionContent, DatabaseWithSchema } from '@/lib/types';
+import { QuestionContent, DatabaseWithSchema, connectionTypeToDialect } from '@/lib/types';
 import { FileNotFoundError } from '@/lib/errors';
 
 export const dynamic = 'force-dynamic';
@@ -55,17 +55,21 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       return NextResponse.json({ columns: [] });
     }
 
-    // Try to load schema from the question's connection
+    // Try to load schema and dialect from the question's connection
     let schemaData: DatabaseWithSchema[] = [];
-    if (questionContent.database_name) {
+    let dialect = 'duckdb';
+    if (questionContent.connection_name) {
       try {
         const connectionsResult = await FilesAPI.getFiles({ type: 'connection' }, user);
         const connection = connectionsResult.data.find(
-          (f: any) => f.name === questionContent.database_name
+          (f: any) => f.name === questionContent.connection_name
         );
         if (connection) {
           const fullConnection = await FilesAPI.loadFile(connection.id, user);
           const connContent = fullConnection.data?.content as any;
+          if (connContent?.type) {
+            dialect = connectionTypeToDialect(connContent.type);
+          }
           if (connContent?.schema?.schemas) {
             schemaData = [{
               databaseName: connection.name,
@@ -85,6 +89,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       body: JSON.stringify({
         query,
         schema_data: schemaData,
+        dialect,
       }),
     });
 

@@ -200,7 +200,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       {
         description: 'Total revenue by month',
         query: 'SELECT month, SUM(revenue) as total FROM sales GROUP BY month',
-        database_name: 'test_db',
+        connection_name: 'test_db',
         parameters: [],
         vizSettings: {
           type: 'table',
@@ -479,7 +479,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       const editedContent = {
         description: 'Published test description',
         query: 'SELECT id, name FROM products WHERE active = true',
-        database_name: 'test_db',
+        connection_name: 'test_db',
         parameters: [{ name: 'active', type: 'text', value: 'true' }],
         vizSettings: { type: 'line', xCols: ['id'], yCols: ['name'] }
       };
@@ -1045,10 +1045,10 @@ describe('Phase 1: Unified File System API E2E', () => {
 
         // Get current content
         const currentContent = JSON.stringify(questionFile?.content);
-        const databaseMatch = currentContent.match(/"database_name":"[^"]+"/);
+        const databaseMatch = currentContent.match(/"connection_name":"[^"]+"/);
         expect(databaseMatch).toBeTruthy();
 
-        // Try to remove database_name field
+        // Try to remove connection_name field
         const result = await editFileStr({
           fileId: questionId,
           oldMatch: `${databaseMatch![0]},`,
@@ -1058,7 +1058,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         // Verify error
         expect(result.success).toBe(false);
         if (!result.success) {
-          expect(result.error).toContain('database_name');
+          expect(result.error).toContain('connection_name');
           console.log('✓ editFileStr validated required question fields');
           console.log(`Error: ${result.error}`);
         }
@@ -1198,7 +1198,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       it('matches SQL with real newlines in oldMatch', async () => {
         const id = await DocumentDB.create('Multiline SQL', '/org/ec-multiline', 'question', {
           query: 'SELECT month, revenue\nFROM sales\nWHERE year = 2024',
-          database_name: 'test_db',
+          connection_name: 'test_db',
           vizSettings: { type: 'table' as const, xCols: [], yCols: [] },
         } as QuestionContent, [], 1);
         const file = await DocumentDB.getById(id, 1);
@@ -1219,7 +1219,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       it('matches SQL with double-quoted identifiers in oldMatch', async () => {
         const id = await DocumentDB.create('Quoted SQL', '/org/ec-quoted', 'question', {
           query: 'SELECT * FROM "users" WHERE "active" = true',
-          database_name: 'test_db',
+          connection_name: 'test_db',
           vizSettings: { type: 'table' as const, xCols: [], yCols: [] },
         } as QuestionContent, [], 1);
         const file = await DocumentDB.getById(id, 1);
@@ -1241,7 +1241,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       it('matches SQL with backslashes in oldMatch', async () => {
         const id = await DocumentDB.create('Backslash SQL', '/org/ec-backslash', 'question', {
           query: "SELECT * FROM t WHERE name LIKE '%\\_%'",
-          database_name: 'test_db',
+          connection_name: 'test_db',
           vizSettings: { type: 'table' as const, xCols: [], yCols: [] },
         } as QuestionContent, [], 1);
         const file = await DocumentDB.getById(id, 1);
@@ -1263,7 +1263,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       it('matches SQL combining newlines, tabs and double-quoted identifiers', async () => {
         const id = await DocumentDB.create('Combined SQL', '/org/ec-combined', 'question', {
           query: 'SELECT *\n\tFROM "orders"\nWHERE status = "active"',
-          database_name: 'test_db',
+          connection_name: 'test_db',
           vizSettings: { type: 'table' as const, xCols: [], yCols: [] },
         } as QuestionContent, [], 1);
         const file = await DocumentDB.getById(id, 1);
@@ -1291,7 +1291,7 @@ describe('Phase 1: Unified File System API E2E', () => {
           {
             description: 'foo foo',
             query: 'SELECT foo FROM foo_table',
-            database_name: 'test_db',
+            connection_name: 'test_db',
             vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
           } as QuestionContent,
           [],
@@ -1325,7 +1325,7 @@ describe('Phase 1: Unified File System API E2E', () => {
           {
             description: 'unique description here',
             query: 'SELECT month, revenue FROM sales',
-            database_name: 'test_db',
+            connection_name: 'test_db',
             vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
           } as QuestionContent,
           [],
@@ -1358,7 +1358,7 @@ describe('Phase 1: Unified File System API E2E', () => {
           {
             description: 'dup dup',
             query: 'SELECT dup FROM sales',
-            database_name: 'test_db',
+            connection_name: 'test_db',
             vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
           } as QuestionContent,
           [],
@@ -1389,7 +1389,7 @@ describe('Phase 1: Unified File System API E2E', () => {
           {
             description: 'abc abc',
             query: 'SELECT abc FROM abc_table',
-            database_name: 'test_db',
+            connection_name: 'test_db',
             vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
           } as QuestionContent,
           [],
@@ -1434,7 +1434,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         {
           description: 'Sales with limit param',
           query: 'SELECT month, total FROM sales LIMIT :limit',
-          database_name: 'test_db',
+          connection_name: 'test_db',
           parameters: [{ name: 'limit', type: 'number' as const }],
           parameterValues: { limit: 50 },
           vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
@@ -1580,7 +1580,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         {
           description: 'Query has :limit but parameters is empty',
           query: 'SELECT month, total FROM sales LIMIT :limit',
-          database_name: 'test_db',
+          connection_name: 'test_db',
           parameters: [],  // intentionally empty — auto-execute will fail
           vizSettings: { type: 'table' as const, xCols: [], yCols: [] }
         } as QuestionContent,

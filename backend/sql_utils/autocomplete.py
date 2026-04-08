@@ -39,7 +39,7 @@ class AutocompleteRequest(BaseModel):
     query: str
     cursor_offset: int
     schema_data: List[Dict[str, Any]]
-    database_name: Optional[str] = None
+    connection_name: Optional[str] = None
     connection_type: Optional[str] = None
 
 
@@ -47,7 +47,7 @@ def get_completions(
     query: str,
     cursor_offset: int,
     schema_data: List[Dict[str, Any]],
-    database_name: Optional[str] = None,
+    connection_name: Optional[str] = None,
     connection_type: Optional[str] = None,
 ) -> List[CompletionItem]:
     """

@@ -6,6 +6,7 @@ import {
 } from '@chakra-ui/react';
 import { useState, useMemo, useEffect } from 'react';
 import type { TestSubject } from '@/lib/types';
+import { connectionTypeToDialect } from '@/lib/types';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import { useConnections } from '@/lib/hooks/useConnections';
 import DatabaseSelector from '@/components/DatabaseSelector';
@@ -118,13 +119,14 @@ function InlineSubjectEditor({
 }) {
   const [queryMode, setQueryMode] = useState<'gui' | 'sql'>('gui');
   const { connections } = useConnections({ skip: true });
+  const dialect = connectionTypeToDialect(connections[subject.connection_name]?.metadata?.type ?? '');
 
   // Auto-select first connection if none set
   useEffect(() => {
-    if (subject.database_name) return;
+    if (subject.connection_name) return;
     const first = Object.keys(connections)[0];
     if (!first) return;
-    onChange({ ...subject, database_name: first });
+    onChange({ ...subject, connection_name: first });
   }, [connections]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
@@ -132,15 +134,15 @@ function InlineSubjectEditor({
       <Box>
         <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Connection</Text>
         <DatabaseSelector
-          value={subject.database_name}
-          onChange={db => onChange({ ...subject, database_name: db })}
+          value={subject.connection_name}
+          onChange={({ connection_name: db }) => onChange({ ...subject, connection_name: db })}
           size="sm"
         />
       </Box>
       <Box>
         <HStack justify="space-between" mb={1}>
           <Text fontSize="xs" color="fg.muted" fontWeight="500">Query</Text>
-          {subject.database_name && (
+          {subject.connection_name && (
             <QueryModeSelector
               mode={queryMode}
               onModeChange={setQueryMode}
@@ -148,10 +150,11 @@ function InlineSubjectEditor({
             />
           )}
         </HStack>
-        {subject.database_name && queryMode === 'gui' ? (
+        {subject.connection_name && queryMode === 'gui' ? (
           <Box border="1px solid" borderColor="border.muted" borderRadius="md" overflow="hidden">
             <QueryBuilderRoot
-              databaseName={subject.database_name}
+              databaseName={subject.connection_name}
+              dialect={dialect}
               sql={subject.sql}
               onSqlChange={sql => onChange({ ...subject, sql })}
             />
@@ -258,7 +261,7 @@ export default function TestSubjectEditor({ subject, testType, onChange, disable
           <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Connection</Text>
           <DatabaseSelector
             value={llm.connection_id ?? ''}
-            onChange={connection_id => onChange({ ...llm, connection_id: connection_id || undefined })}
+            onChange={({ connection_name: connection_id }) => onChange({ ...llm, connection_id: connection_id || undefined })}
             size="sm"
           />
         </Box>
@@ -272,7 +275,7 @@ export default function TestSubjectEditor({ subject, testType, onChange, disable
   function handleSourceChange(newSource: 'question' | 'inline') {
     if (newSource === currentSource) return;
     if (newSource === 'inline') {
-      onChange({ type: 'query', source: 'inline', sql: '', database_name: '', column: undefined, row: undefined });
+      onChange({ type: 'query', source: 'inline', sql: '', connection_name: '', column: undefined, row: undefined });
     } else {
       onChange({ type: 'query', source: 'question', question_id: defaultQuestionId ?? 0, column: undefined, row: undefined });
     }

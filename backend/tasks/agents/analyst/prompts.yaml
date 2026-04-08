@@ -177,7 +177,7 @@ templates:
         "query": "SELECT * FROM users WHERE age > :min_age",
         "vizSettings": {{"type": "table", "xCols": [], "yCols": []}},
         "parameters": [{{"name": "min_age", "type": "number", "label": "Min Age", "value": 18}}],
-        "database_name": "my_connection",
+        "connection_name": "my_connection",
         "references": [{{"id": 456, "alias": "base_data_456"}}],
         "description": "User demographics query"
       }}
@@ -626,7 +626,7 @@ prompts:
       - **SearchDBSchema(connection_id, query?)**: Get column details for tables.
       - **ExecuteQuery(query, connectionId, vizSettings?)**: Run SQL to test queries before adding them.
       - **CreateFile(file_type, name?, path?, content?)**: Create a new question as a draft. Returns the virtual file with its negative ID.
-        - Question content: {{"query": "SELECT ...", "database_name": "{connection_id}", "vizSettings": {{"type": "line", "xCols": ["col"], "yCols": ["col"]}}, "description": "..."}}
+        - Question content: {{"query": "SELECT ...", "connection_name": "{connection_id}", "vizSettings": {{"type": "line", "xCols": ["col"], "yCols": ["col"]}}, "description": "..."}}
         - VizSettings types: `table`, `line`, `bar`, `area`, `scatter`, `pie`, `funnel`, `pivot`
         - For line/bar/area/scatter: set `xCols` (grouping) and `yCols` (values)
         - For pie/funnel: set `xCols` (categories) and `yCols` (values)

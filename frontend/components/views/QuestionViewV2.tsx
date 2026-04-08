@@ -28,7 +28,7 @@ import {
   LuX,
   LuGripVertical,
 } from 'react-icons/lu';
-import { QuestionContent, QuestionParameter } from '@/lib/types';
+import { QuestionContent, QuestionParameter, connectionTypeToDialect } from '@/lib/types';
 import SqlEditor from '../SqlEditor';
 import ParameterRow from '../ParameterRow';
 import DatabaseSelector from '../DatabaseSelector';
@@ -46,6 +46,7 @@ import { addReferenceToQuestion, removeReferenceFromQuestion, setFile } from '@/
 import { setSqlEditorCollapsed, selectSqlEditorCollapsed, setQuestionCollapsedPanel, selectQuestionCollapsedPanel, selectFileEditMode, selectFileViewMode } from '@/store/uiSlice';
 import { QueryBuilderRoot, QueryModeSelector } from '../query-builder';
 import { FilesAPI } from '@/lib/data/files';
+import { CompletionsAPI } from '@/lib/data/completions/completions';
 
 /**
  * Props for QuestionViewV2
@@ -114,7 +115,8 @@ export default function QuestionViewV2({
   // Get schema data for SQL autocomplete
   const { databases: schemaData } = useSchemaContext(filePath || '/org');
   const { connections } = useConnections();
-  const connectionType = content.database_name ? connections[content.database_name]?.metadata?.type : undefined;
+  const connectionType = content.connection_name ? connections[content.connection_name]?.metadata?.type : undefined;
+  const dialect = connectionTypeToDialect(connectionType ?? '');
 
   // SQL editor collapsed state — persisted in Redux per question so it survives navigation.
   // Default: open in page mode, collapsed in toolcall/embedded mode.
@@ -174,7 +176,7 @@ export default function QuestionViewV2({
   // Get available questions for inline @reference autocomplete
   const { questions: availableQuestions } = useAvailableQuestions(
     questionId,
-    content.database_name,
+    content.connection_name,
     referencedQuestions.map(r => r.id)
   );
 
@@ -217,6 +219,29 @@ export default function QuestionViewV2({
       resizeObserver.disconnect();
     };
   }, []);
+
+  // Proactive GUI compatibility check: run once when the query and dialect are known.
+  // Sets canUseGUI=false (with tooltip reason) if sqlToIR fails, so the GUI button is
+  // already dimmed when the user opens a question — no surprise on mode switch.
+  useEffect(() => {
+    let cancelled = false;
+    const check = !content.query?.trim()
+      ? Promise.resolve<void>(undefined)
+      : CompletionsAPI.sqlToIR({ sql: content.query, dialect }).then(() => undefined);
+
+    check.then(() => {
+      if (cancelled) return;
+      setCanUseGUI(true);
+      setGuiError(null);
+    }).catch((err: unknown) => {
+      if (cancelled) return;
+      setCanUseGUI(false);
+      const msg = err instanceof Error ? err.message : String(err);
+      setGuiError(msg || 'This query cannot be edited in GUI mode');
+    });
+
+    return () => { cancelled = true; };
+  }, [content.query, dialect]);
 
   // Use compact layout when container is narrow (< 700px) - stacked vertical layout
   const useCompactLayout = (containerWidth > 0 && containerWidth < 700) || !fullMode;
@@ -305,8 +330,8 @@ export default function QuestionViewV2({
   };
 
   // Handle database change
-  const handleDatabaseChange = (database: string) => {
-    onChange({ database_name: database });
+  const handleDatabaseChange = ({ connection_name }: Pick<import('@/lib/types').FullQuery, 'connection_name' | 'dialect'>) => {
+    onChange({ connection_name });
   };
 
   // Handle viz type change
@@ -494,7 +519,7 @@ export default function QuestionViewV2({
               onClose={() => setShowQuestionPicker(false)}
               onSelect={handleAddReference}
               currentQuestionId={questionId}
-              currentConnectionId={content.database_name}
+              currentConnectionId={content.connection_name}
               excludedIds={referencedQuestions.map(r => r.id)}
             />
           )}
@@ -583,7 +608,8 @@ export default function QuestionViewV2({
                   <QueryModeSelector
                     mode={queryMode}
                     onModeChange={setQueryMode}
-                    canUseGUI={true}
+                    canUseGUI={canUseGUI}
+                    guiError={guiError ?? undefined}
                   />
                 )}
               </HStack>
@@ -632,7 +658,7 @@ export default function QuestionViewV2({
 
                 {/* Database selector */}
                 <DatabaseSelector
-                  value={content.database_name || ''}
+                  value={content.connection_name || ''}
                   onChange={handleDatabaseChange}
                 />
               </HStack>
@@ -664,7 +690,7 @@ export default function QuestionViewV2({
                         alias: r.alias,
                         query: (r.question!.content as QuestionContent).query
                       }))}
-                    databaseName={content.database_name}
+                    databaseName={content.connection_name}
                     connectionType={connectionType}
                     fillHeight={!useCompactLayout}
                   />
@@ -674,7 +700,8 @@ export default function QuestionViewV2({
                 {queryMode === 'gui' && (
                   <Box flex={1} overflow="auto">
                     <QueryBuilderRoot
-                      databaseName={content.database_name || ''}
+                      databaseName={content.connection_name || ''}
+                      dialect={dialect}
                       sql={content.query}
                       onSqlChange={handleQueryChange}
                       onExecute={handleExecute}
@@ -824,7 +851,7 @@ export default function QuestionViewV2({
                 onValueChange={handleParameterValueChange}
                 onSubmit={handleParametersSubmit}
                 onParametersChange={handleParametersStructuralChange}
-                database={content.database_name}
+                database={content.connection_name}
               />
             )}
             {sqlPreviewId ? (

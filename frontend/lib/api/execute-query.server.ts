@@ -33,7 +33,7 @@ export async function executeQuery(
       body: JSON.stringify({
         query,
         parameters,
-        database_name: connectionId,
+        connection_name: connectionId,
       }),
     }, userOverride);
 

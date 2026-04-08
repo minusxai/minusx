@@ -13,14 +13,12 @@ from .ir_types import (
     OrderByClause,
 )
 from .parser import parse_sql_to_ir, UnsupportedSQLError
-from .validator import validate_ir, validate_sql_features
 from .generator import ir_to_sql, compound_ir_to_sql, any_ir_to_sql
 from .enhanced_validator import (
     validate_sql_for_gui,
-    compare_sql_ast,
+    normalize_sql,
     validate_round_trip,
     ValidationResult,
-    SQLComparisonResult,
 )
 
 __all__ = [
@@ -39,11 +37,8 @@ __all__ = [
     "compound_ir_to_sql",
     "any_ir_to_sql",
     "UnsupportedSQLError",
-    "validate_ir",
-    "validate_sql_features",
     "validate_sql_for_gui",
-    "compare_sql_ast",
+    "normalize_sql",
     "validate_round_trip",
     "ValidationResult",
-    "SQLComparisonResult",
 ]

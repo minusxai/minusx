@@ -49,7 +49,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
   const queryToExecute = lastExecuted || {
     query: mergedContent?.query || '',
     params: mergedContent?.parameterValues || {},
-    database: mergedContent?.database_name || '',
+    database: mergedContent?.connection_name || '',
     references: mergedContent?.references || []
   };
 
@@ -109,7 +109,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
     const newQuery = {
       query: mergedContent.query,
       params: effectiveValues,
-      database: mergedContent.database_name,
+      database: mergedContent.connection_name,
       references: mergedContent.references || []
     };
 
@@ -140,7 +140,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
         lastExecuted: {
           query: mergedContent.query,
           params: mergedContent.parameterValues || {},
-          database: mergedContent.database_name,
+          database: mergedContent.connection_name,
           references: mergedContent.references || []
         }
       }

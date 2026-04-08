@@ -1,4 +1,5 @@
 import type { QuestionReference, QuestionContent, QueryResult } from '@/lib/types';
+import { connectionTypeToDialect } from '@/lib/types';
 import { handleApiError } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
 import { NextRequest, NextResponse } from 'next/server';
@@ -18,7 +19,8 @@ import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
  */
 async function applyNoneParams(
   query: string,
-  params: Record<string, string | number | null>
+  params: Record<string, string | number | null>,
+  dialect: string
 ): Promise<{ sql: string; params: Record<string, string | number> }> {
   const noneSet = new Set(Object.keys(params).filter((k) => params[k] === null));
   const effectiveParams = Object.fromEntries(
@@ -31,7 +33,7 @@ async function applyNoneParams(
   try {
     const irRes = await pythonBackendFetch('/api/sql-to-ir', {
       method: 'POST',
-      body: JSON.stringify({ sql: query }),
+      body: JSON.stringify({ sql: query, dialect }),
     });
     if (irRes.ok) {
       const irData = await irRes.json();
@@ -39,7 +41,7 @@ async function applyNoneParams(
         const transformed = removeNoneParamConditions(irData.ir, noneSet);
         const sqlRes = await pythonBackendFetch('/api/ir-to-sql', {
           method: 'POST',
-          body: JSON.stringify({ ir: transformed }),
+          body: JSON.stringify({ ir: transformed, dialect }),
         });
         if (sqlRes.ok) {
           const sqlData = await sqlRes.json();
@@ -86,7 +88,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     const parseStart = Date.now();
     const body = await request.json();
     console.log(`[QUERY API] JSON parse took ${Date.now() - parseStart}ms`);
-    const { database_name, query, parameters, references, parameterTypes } = body;
+    const { connection_name, query, parameters, references, parameterTypes } = body;
 
     // Convert parameters to Record<string, string | number | null> for backend
     // Handle both array format (QuestionParameter[]) and object format (Record<string, any>)
@@ -100,7 +102,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     }
 
     // Compute hash on raw inputs (matches client-side Redux hash key)
-    const queryHash = getQueryHash(query, paramValues, database_name);
+    const queryHash = getQueryHash(query, paramValues, connection_name);
     // Server cache key includes company+mode to prevent cross-tenant hits
     const serverCacheKey = `${user.companyId}:${user.mode}:${queryHash}`;
 
@@ -108,7 +110,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     const cached = queryCache.get(serverCacheKey);
     if (cached && Date.now() - cached.cachedAt < QUERY_CACHE_TTL_MS) {
       appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
-        queryHash, databaseName: database_name, durationMs: 0,
+        queryHash, databaseName: connection_name, durationMs: 0,
         rowCount: cached.result.rows.length, wasCacheHit: true,
         companyId: user.companyId, userEmail: user.email,
       });
@@ -148,11 +150,23 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         console.log(`[QUERY API] CTE construction took ${Date.now() - cteStart}ms`);
       }
 
+      // Derive dialect from connection type for IR-based None param removal
+      let queryDialect = 'duckdb';
+      try {
+        const connectionsResult = await FilesAPI.getFiles({ type: 'connection' }, user);
+        const conn = connectionsResult.data.find((f: any) => f.name === connection_name);
+        if (conn) {
+          const fullConn = await FilesAPI.loadFile(conn.id, user);
+          const connType = (fullConn.data?.content as any)?.type;
+          if (connType) queryDialect = connectionTypeToDialect(connType);
+        }
+      } catch { /* dialect defaults to duckdb */ }
+
       // Apply None params: remove filter conditions or substitute with NULL
-      const { sql: noneResolvedQuery, params: resolvedParams } = await applyNoneParams(composedQuery, paramValues);
+      const { sql: noneResolvedQuery, params: resolvedParams } = await applyNoneParams(composedQuery, paramValues, queryDialect);
 
       const queryStart = Date.now();
-      const result = await runQuery(database_name, noneResolvedQuery, resolvedParams, user, parameterTypes) as QueryResult & { finalQuery?: string };
+      const result = await runQuery(connection_name, noneResolvedQuery, resolvedParams, user, parameterTypes) as QueryResult & { finalQuery?: string };
       const durationMs = Date.now() - queryStart;
 
       const displayQuery = result.finalQuery ?? noneResolvedQuery;
@@ -163,7 +177,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
       // Publish analytics event (fire-and-forget via registry)
       appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
-        queryHash, databaseName: database_name, durationMs,
+        queryHash, databaseName: connection_name, durationMs,
         rowCount: result.rows.length, wasCacheHit: false,
         companyId: user.companyId, userEmail: user.email,
       });

@@ -454,7 +454,7 @@ registerFrontendTool('EditFile', async (args, _context) => {
     const updatedState = getStore().getState();
     const finalContent = selectMergedContent(updatedState, fileId) as any;
 
-    if (finalContent?.query && finalContent?.database_name) {
+    if (finalContent?.query && finalContent?.connection_name) {
       const params = finalContent.parameterValues || {};
 
       // Auto-execute is best-effort: a failed execution (e.g. no data, bad param) must NOT
@@ -463,7 +463,7 @@ registerFrontendTool('EditFile', async (args, _context) => {
         await getQueryResult({
           query: finalContent.query,
           params,
-          database: finalContent.database_name
+          database: finalContent.connection_name
         });
         // Update lastExecuted so QuestionContainerV2 displays results for the new query.
         // Without this, the component keeps showing results for the old lastExecuted query.
@@ -473,7 +473,7 @@ registerFrontendTool('EditFile', async (args, _context) => {
             lastExecuted: {
               query: finalContent.query,
               params,
-              database: finalContent.database_name,
+              database: finalContent.connection_name,
               references: finalContent.references || []
             }
           }
@@ -591,14 +591,14 @@ registerFrontendTool('CreateFile', async (args, context) => {
     const updatedState = getStore().getState();
     const finalContent = selectMergedContent(updatedState, virtualId) as any;
 
-    if (finalContent?.query && finalContent?.database_name) {
+    if (finalContent?.query && finalContent?.connection_name) {
       const params = finalContent.parameterValues || {};
 
       try {
         await getQueryResult({
           query: finalContent.query,
           params,
-          database: finalContent.database_name
+          database: finalContent.connection_name
         });
         getStore().dispatch(setEphemeral({
           fileId: virtualId as FileId,
@@ -606,7 +606,7 @@ registerFrontendTool('CreateFile', async (args, context) => {
             lastExecuted: {
               query: finalContent.query,
               params,
-              database: finalContent.database_name,
+              database: finalContent.connection_name,
               references: finalContent.references || []
             }
           }

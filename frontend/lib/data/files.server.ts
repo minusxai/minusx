@@ -613,7 +613,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
           query: options.query || '',
           vizSettings: { type: 'table' },
           parameters: [],
-          database_name: defaultDb || ''
+          connection_name: defaultDb || ''
         };
 
         return {

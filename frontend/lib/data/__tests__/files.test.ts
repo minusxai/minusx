@@ -117,7 +117,7 @@ describe('Files Data Layer - getTemplate', () => {
         query: '',
         vizSettings: { type: 'table' },
         parameters: [],
-        database_name: 'default_db'
+        connection_name: 'default_db'
       });
       expect(result.metadata?.availableDatabases).toContain('default_db');
     });
@@ -141,7 +141,7 @@ describe('Files Data Layer - getTemplate', () => {
       );
 
       const content = result.content as QuestionContent;
-      expect(content.database_name).toBe('custom_db');
+      expect(content.connection_name).toBe('custom_db');
     });
   });
 

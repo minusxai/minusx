@@ -61,7 +61,7 @@ const originalFile = {
     query: 'SELECT SUM(amount) FROM orders',
     vizSettings: { type: 'table', xCols: [], yCols: [] },
     parameters: [],
-    database_name: 'test',
+    connection_name: 'test',
   },
   isDirty: false,
 };
@@ -76,7 +76,7 @@ const editedFile = {
     query: "SELECT month, SUM(amount) FROM orders GROUP BY month",
     vizSettings: { type: 'line', xCols: ['month'], yCols: ['amount'] },
     parameters: [],
-    database_name: 'test',
+    connection_name: 'test',
   },
   isDirty: true,
 };

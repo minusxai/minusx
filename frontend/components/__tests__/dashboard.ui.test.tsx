@@ -111,7 +111,7 @@ function makeQuestionDbFile() {
     name: QUESTION_NAME,
     type: 'question' as const,
     path: `/org/${QUESTION_NAME}`,
-    content: { query: 'SELECT 1', vizSettings: { type: 'table' as const }, database_name: '' },
+    content: { query: 'SELECT 1', vizSettings: { type: 'table' as const }, connection_name: '' },
     created_at: '2025-01-01T00:00:00Z',
     updated_at: new Date().toISOString(),
     references: [] as number[],
@@ -127,7 +127,7 @@ function makeQuestionDbFile2() {
     name: 'Regional Revenue',
     type: 'question' as const,
     path: '/org/Regional Revenue',
-    content: { query: 'SELECT region FROM sales GROUP BY region', vizSettings: { type: 'table' as const }, database_name: '' },
+    content: { query: 'SELECT region FROM sales GROUP BY region', vizSettings: { type: 'table' as const }, connection_name: '' },
     created_at: '2025-01-01T00:00:00Z',
     updated_at: new Date().toISOString(),
     references: [] as number[],
@@ -234,7 +234,7 @@ async function insertDashboardAndQuestion(dbPath: string): Promise<void> {
     `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [1, QUESTION_ID, QUESTION_NAME, `/org/${QUESTION_NAME}`, 'question',
-      JSON.stringify({ query: 'SELECT 1', vizSettings: { type: 'table' }, database_name: '' }), '[]', now, now]
+      JSON.stringify({ query: 'SELECT 1', vizSettings: { type: 'table' }, connection_name: '' }), '[]', now, now]
   );
   await db.close();
 }
@@ -251,7 +251,7 @@ async function insertDashboardAndTwoQuestions(dbPath: string): Promise<void> {
     `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [1, QUESTION_ID_2, 'Regional Revenue', '/org/Regional Revenue', 'question',
-      JSON.stringify({ query: 'SELECT region FROM sales GROUP BY region', vizSettings: { type: 'table' }, database_name: '' }),
+      JSON.stringify({ query: 'SELECT region FROM sales GROUP BY region', vizSettings: { type: 'table' }, connection_name: '' }),
       '[]', now, now]
   );
   await db.close();
@@ -275,14 +275,14 @@ async function insertQuestionsWithSharedParams(dbPath: string): Promise<void> {
     `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [1, QUESTION_ID, 'Orders Q', '/org/Orders Q', 'question',
-      JSON.stringify({ query: 'SELECT * FROM orders WHERE order_date >= :start_date', parameters: [], vizSettings: { type: 'table' }, database_name: '' }),
+      JSON.stringify({ query: 'SELECT * FROM orders WHERE order_date >= :start_date', parameters: [], vizSettings: { type: 'table' }, connection_name: '' }),
       '[]', now, now]
   );
   await db.query(
     `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [1, QUESTION_ID_2, 'Revenue Q', '/org/Revenue Q', 'question',
-      JSON.stringify({ query: 'SELECT * FROM revenue WHERE order_date >= :start_date AND region = :region', parameters: [], vizSettings: { type: 'table' }, database_name: '' }),
+      JSON.stringify({ query: 'SELECT * FROM revenue WHERE order_date >= :start_date AND region = :region', parameters: [], vizSettings: { type: 'table' }, connection_name: '' }),
       '[]', now, now]
   );
   await db.close();
@@ -505,7 +505,7 @@ describe('Create new dashboard and question, then publishAll', () => {
       file: {
         id: Q_VID, name: Q_NAME, type: 'question' as const,
         path: `/org/${Q_NAME}`,
-        content: { query: '', vizSettings: { type: 'table' as const }, database_name: '' },
+        content: { query: '', vizSettings: { type: 'table' as const }, connection_name: '' },
         created_at: '', updated_at: '', references: [] as number[],
         version: 1, last_edit_id: null, company_id: 1,
       },
@@ -525,7 +525,7 @@ describe('Create new dashboard and question, then publishAll', () => {
     // Make the question dirty; link it to the dashboard
     testStore.dispatch(setEdit({
       fileId: Q_VID,
-      edits: { query: 'SELECT revenue FROM sales', vizSettings: { type: 'table' as const }, database_name: 'default' },
+      edits: { query: 'SELECT revenue FROM sales', vizSettings: { type: 'table' as const }, connection_name: 'default' },
     }));
     testStore.dispatch(addQuestionToDashboard({ dashboardId: DASH_VID, questionId: Q_VID }));
 
@@ -775,7 +775,7 @@ describe('Dashboard agentic scenarios', () => {
       file: {
         id: Q_VID, name: AGENTIC_Q_NAME, type: 'question' as const,
         path: `/org/${AGENTIC_Q_NAME}`,
-        content: { query: '', vizSettings: { type: 'table' as const }, database_name: '' },
+        content: { query: '', vizSettings: { type: 'table' as const }, connection_name: '' },
         created_at: '', updated_at: '',
         references: [] as number[], version: 1, last_edit_id: null, company_id: 1,
       },
@@ -794,7 +794,7 @@ describe('Dashboard agentic scenarios', () => {
     // Make question dirty (has a real query to save)
     testStore.dispatch(setEdit({
       fileId: Q_VID,
-      edits: { query: 'SELECT 1', vizSettings: { type: 'table' as const }, database_name: 'default' },
+      edits: { query: 'SELECT 1', vizSettings: { type: 'table' as const }, connection_name: 'default' },
     }));
     // Make dashboard dirty (references the virtual question)
     testStore.dispatch(addQuestionToDashboard({ dashboardId: DASH_VID, questionId: Q_VID }));
@@ -1205,7 +1205,7 @@ describe('publishAll retry idempotency', () => {
       file: {
         id: Q_VID, name: Q_RETRY_NAME, type: 'question' as const,
         path: `/org/${Q_RETRY_NAME}`,
-        content: { query: 'SELECT retry FROM data', vizSettings: { type: 'table' as const }, database_name: '' },
+        content: { query: 'SELECT retry FROM data', vizSettings: { type: 'table' as const }, connection_name: '' },
         created_at: '', updated_at: '', references: [] as number[],
         version: 1, last_edit_id: null, company_id: 1,
       },
@@ -1213,7 +1213,7 @@ describe('publishAll retry idempotency', () => {
     }));
     testStore.dispatch(setEdit({
       fileId: Q_VID,
-      edits: { query: 'SELECT retry FROM data', vizSettings: { type: 'table' as const }, database_name: 'default' },
+      edits: { query: 'SELECT retry FROM data', vizSettings: { type: 'table' as const }, connection_name: 'default' },
     }));
     testStore.dispatch(setFile({
       file: {
@@ -1303,7 +1303,7 @@ describe('publishAll error handling', () => {
       file: {
         id: Q_VID, name: 'Q', type: 'question' as const,
         path: '/org/Q',
-        content: { query: '', vizSettings: { type: 'table' as const }, database_name: '' },
+        content: { query: '', vizSettings: { type: 'table' as const }, connection_name: '' },
         created_at: '', updated_at: '', references: [] as number[],
         version: 1, last_edit_id: null, company_id: 1,
       },
@@ -1311,7 +1311,7 @@ describe('publishAll error handling', () => {
     }));
     testStore.dispatch(setEdit({
       fileId: Q_VID,
-      edits: { query: 'SELECT 1', vizSettings: { type: 'table' as const }, database_name: 'default' },
+      edits: { query: 'SELECT 1', vizSettings: { type: 'table' as const }, connection_name: 'default' },
     }));
 
     global.fetch = jest.fn(async (url: string | Request | URL) => {
@@ -1411,7 +1411,7 @@ describe('Mixed real + virtual publishAll', () => {
       file: {
         id: Q_VID, name: 'Mix Query', type: 'question' as const,
         path: '/org/Mix Query',
-        content: { query: '', vizSettings: { type: 'table' as const }, database_name: '' },
+        content: { query: '', vizSettings: { type: 'table' as const }, connection_name: '' },
         created_at: '', updated_at: '', references: [] as number[],
         version: 1, last_edit_id: null, company_id: 1,
       },
@@ -1419,7 +1419,7 @@ describe('Mixed real + virtual publishAll', () => {
     }));
     testStore.dispatch(setEdit({
       fileId: Q_VID,
-      edits: { query: 'SELECT mix FROM data', vizSettings: { type: 'table' as const }, database_name: 'default' },
+      edits: { query: 'SELECT mix FROM data', vizSettings: { type: 'table' as const }, connection_name: 'default' },
     }));
 
     // Real dashboard (id=1, already in DB) referencing the virtual question
@@ -1587,7 +1587,7 @@ describe('Dashboard parameter merging', () => {
       query: 'SELECT * FROM orders WHERE order_date >= :start_date',
       parameters: [],
       vizSettings: { type: 'table' as const },
-      database_name: '',
+      connection_name: '',
     },
     created_at: '2025-01-01T00:00:00Z', updated_at: new Date().toISOString(),
     references: [] as number[], version: 1, last_edit_id: null, company_id: 1,
@@ -1599,7 +1599,7 @@ describe('Dashboard parameter merging', () => {
       query: 'SELECT * FROM revenue WHERE order_date >= :start_date AND region = :region',
       parameters: [],
       vizSettings: { type: 'table' as const },
-      database_name: '',
+      connection_name: '',
     },
     created_at: '2025-01-01T00:00:00Z', updated_at: new Date().toISOString(),
     references: [] as number[], version: 1, last_edit_id: null, company_id: 1,

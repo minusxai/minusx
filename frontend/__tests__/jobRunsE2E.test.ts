@@ -146,7 +146,7 @@ describe('Job Runs E2E', () => {
       'question',
       {
         query: 'SELECT revenue FROM sales',
-        database_name: 'test_conn',
+        connection_name: 'test_conn',
         vizSettings: { type: 'table' },
         parameters: [],
         parameterValues: {},

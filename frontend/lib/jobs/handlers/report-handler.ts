@@ -26,7 +26,7 @@ export const reportJobHandler: JobHandler = {
         const refResult = await FilesAPI.loadFile(ref.reference.id, user);
         const refFile = refResult.data;
         const refFileRefs = (refResult.metadata?.references ?? []);
-        const connectionId = (refFile?.content as any)?.database_name;
+        const connectionId = (refFile?.content as any)?.connection_name;
 
         const appState = refFile
           ? { type: 'file' as const, state: dbFileToCompressedAugmented(refFile, refFileRefs) }

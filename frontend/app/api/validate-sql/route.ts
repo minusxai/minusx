@@ -2,6 +2,7 @@ import { withAuth } from '@/lib/api/with-auth';
 import { NextRequest, NextResponse } from 'next/server';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import { FilesAPI } from '@/lib/data/files.server';
+import { connectionTypeToDialect } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -10,8 +11,8 @@ export const POST = withAuth(async (request: NextRequest, user) => {
   const body = await request.json();
   const { query, databaseName } = body;
 
-  // Resolve connection type from databaseName
-  let dbType = 'postgres';
+  // Resolve dialect from connection type
+  let dialect = 'duckdb';
   if (databaseName) {
     try {
       const connectionsResult = await FilesAPI.getFiles({ type: 'connection' }, user);
@@ -20,7 +21,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         const fullConnection = await FilesAPI.loadFile(connection.id, user);
         const connectionContent = fullConnection.data.content as any;
         if (connectionContent?.type) {
-          dbType = connectionContent.type;
+          dialect = connectionTypeToDialect(connectionContent.type);
         }
       }
     } catch (error) {
@@ -31,7 +32,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
   // Forward to Python backend
   const response = await pythonBackendFetch('/api/validate-sql', {
     method: 'POST',
-    body: JSON.stringify({ query, db_type: dbType }),
+    body: JSON.stringify({ query, dialect }),
   });
 
   const data = await response.json();

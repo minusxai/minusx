@@ -206,7 +206,7 @@ class TestSQLRoundTrip:
         original_sql = "SELECT name, email FROM users WHERE active = true LIMIT 10"
 
         # Parse to IR
-        ir = parse_sql_to_ir(original_sql)
+        ir = parse_sql_to_ir(original_sql, 'duckdb')
 
         # Generate SQL from IR
         generated_sql = ir_to_sql_python(ir)
@@ -225,7 +225,7 @@ class TestSQLRoundTrip:
     def test_ilike_literal_round_trip(self):
         """Test ILIKE with a literal value round-trips correctly"""
         sql = "SELECT name FROM users WHERE email ILIKE '%example%'"
-        ir = parse_sql_to_ir(sql)
+        ir = parse_sql_to_ir(sql, 'duckdb')
         assert ir.where.conditions[0].operator == 'ILIKE'
         out = ir_to_sql_python(ir)
         assert 'ILIKE' in out.upper()
@@ -234,7 +234,7 @@ class TestSQLRoundTrip:
     def test_ilike_param_round_trip(self):
         """Test ILIKE with a named parameter round-trips with :param preserved"""
         sql = "SELECT name FROM users WHERE email ILIKE :search"
-        ir = parse_sql_to_ir(sql)
+        ir = parse_sql_to_ir(sql, 'duckdb')
         cond = ir.where.conditions[0]
         assert cond.operator == 'ILIKE'
         assert cond.param_name == 'search'
@@ -258,7 +258,7 @@ class TestSQLRoundTrip:
         """
 
         # Parse to IR
-        ir = parse_sql_to_ir(original_sql)
+        ir = parse_sql_to_ir(original_sql, 'duckdb')
 
         # Validate IR structure
         assert len(ir.select) == 3
@@ -299,7 +299,7 @@ class TestSQLRoundTrip:
         """
 
         # Parse to IR
-        ir = parse_sql_to_ir(original_sql)
+        ir = parse_sql_to_ir(original_sql, 'duckdb')
 
         # Validate IR
         assert ir.joins is not None
@@ -341,7 +341,7 @@ class TestSemanticEquivalence:
         """Test COUNT(DISTINCT ...) round-trip"""
         sql = "SELECT category, COUNT(DISTINCT user_id) AS unique_users FROM orders GROUP BY category"
 
-        ir = parse_sql_to_ir(sql)
+        ir = parse_sql_to_ir(sql, 'duckdb')
         generated = ir_to_sql_python(ir)
 
         # Verify COUNT(DISTINCT is preserved
@@ -357,7 +357,7 @@ class TestSemanticEquivalence:
         WHERE u.active = true
         """
 
-        ir = parse_sql_to_ir(sql)
+        ir = parse_sql_to_ir(sql, 'duckdb')
         generated = ir_to_sql_python(ir)
 
         # Aliases should be preserved
@@ -370,7 +370,7 @@ class TestSemanticEquivalence:
         """Test IS NULL / IS NOT NULL round-trip"""
         sql = "SELECT * FROM users WHERE deleted_at IS NULL AND email IS NOT NULL"
 
-        ir = parse_sql_to_ir(sql)
+        ir = parse_sql_to_ir(sql, 'duckdb')
         generated = ir_to_sql_python(ir)
 
         assert "IS NULL" in generated
@@ -383,7 +383,7 @@ class TestEdgeCases:
     def test_select_star(self):
         """Test SELECT * round-trip"""
         sql = "SELECT * FROM users"
-        ir = parse_sql_to_ir(sql)
+        ir = parse_sql_to_ir(sql, 'duckdb')
         generated = ir_to_sql_python(ir)
 
         assert "SELECT *" in generated
@@ -392,7 +392,7 @@ class TestEdgeCases:
     def test_no_where_clause(self):
         """Test query without WHERE"""
         sql = "SELECT name, email FROM users ORDER BY name"
-        ir = parse_sql_to_ir(sql)
+        ir = parse_sql_to_ir(sql, 'duckdb')
         generated = ir_to_sql_python(ir)
 
         assert "WHERE" not in generated
@@ -401,7 +401,7 @@ class TestEdgeCases:
     def test_schema_qualified_tables(self):
         """Test schema.table notation"""
         sql = "SELECT * FROM public.users"
-        ir = parse_sql_to_ir(sql)
+        ir = parse_sql_to_ir(sql, 'duckdb')
         generated = ir_to_sql_python(ir)
 
         assert "public.users" in generated
@@ -422,7 +422,7 @@ class TestDateTruncFilters:
         ORDER BY 1
         """
 
-        ir = parse_sql_to_ir(sql)
+        ir = parse_sql_to_ir(sql, 'bigquery')
 
         # SELECT: DATE_TRUNC expression + COUNT(DISTINCT)
         assert len(ir.select) == 2
@@ -476,7 +476,7 @@ class TestDateTruncFilters:
         ORDER BY 1
         """
 
-        ir = parse_sql_to_ir(sql)
+        ir = parse_sql_to_ir(sql, 'bigquery')
 
         # WHERE: both conditions present
         assert ir.where is not None
@@ -516,7 +516,7 @@ class TestDateTruncFilters:
         ORDER BY 2 DESC
         """
 
-        ir = parse_sql_to_ir(sql)
+        ir = parse_sql_to_ir(sql, 'duckdb')
 
         # WHERE: OR group with IS NULL and > CURRENT_TIMESTAMP
         assert ir.where is not None
@@ -561,7 +561,7 @@ class TestComplexExpressions:
   FROM new_customers
   GROUP BY 1"""
 
-        ir = parse_sql_to_ir(sql)
+        ir = parse_sql_to_ir(sql, 'duckdb')
 
         # All 4 columns present
         assert len(ir.select) == 4
@@ -588,7 +588,7 @@ class TestComplexExpressions:
         assert len(ir.group_by.columns) == 1
 
         # Round-trip: generate SQL and verify it parses back
-        regenerated = any_ir_to_sql(ir)
+        regenerated = any_ir_to_sql(ir, 'duckdb')
         assert 'STRPTIME' in regenerated
         assert 'GROUP BY' in regenerated
         assert 'COUNT(*)' in regenerated
@@ -607,14 +607,14 @@ class TestComplexExpressions:
 FROM new_customers
 GROUP BY DATE_TRUNC('MONTH', STRPTIME(acquisition_date, '%B %-d, %Y'))"""
 
-        ir = parse_sql_to_ir(sql)
+        ir = parse_sql_to_ir(sql, 'duckdb')
 
         assert len(ir.select) == 5
         assert ir.group_by is not None
         assert len(ir.group_by.columns) == 1
         assert 'STRPTIME' in ir.group_by.columns[0].column
 
-        regenerated = any_ir_to_sql(ir)
+        regenerated = any_ir_to_sql(ir, 'duckdb')
         assert 'GROUP BY' in regenerated
         assert 'STRPTIME' in regenerated
 
@@ -625,7 +625,7 @@ class TestCompoundQueries:
     def test_simple_union(self):
         """Test basic UNION of two queries."""
         sql = "SELECT name FROM users UNION SELECT name FROM admins"
-        ir = parse_sql_to_ir(sql)
+        ir = parse_sql_to_ir(sql, 'duckdb')
 
         assert isinstance(ir, CompoundQueryIR)
         assert ir.type == 'compound'
@@ -639,7 +639,7 @@ class TestCompoundQueries:
     def test_union_all(self):
         """Test UNION ALL preserves duplicates operator."""
         sql = "SELECT id, name FROM t1 UNION ALL SELECT id, name FROM t2"
-        ir = parse_sql_to_ir(sql)
+        ir = parse_sql_to_ir(sql, 'duckdb')
 
         assert isinstance(ir, CompoundQueryIR)
         assert ir.operators == ['UNION ALL']
@@ -649,7 +649,7 @@ class TestCompoundQueries:
     def test_triple_union(self):
         """Test three queries with mixed UNION and UNION ALL."""
         sql = "SELECT a FROM t1 UNION SELECT a FROM t2 UNION ALL SELECT a FROM t3"
-        ir = parse_sql_to_ir(sql)
+        ir = parse_sql_to_ir(sql, 'duckdb')
 
         assert isinstance(ir, CompoundQueryIR)
         assert len(ir.queries) == 3
@@ -658,7 +658,7 @@ class TestCompoundQueries:
     def test_union_with_order_by_and_limit(self):
         """Test compound query with ORDER BY and LIMIT on the result."""
         sql = "SELECT name FROM users UNION ALL SELECT name FROM admins ORDER BY name LIMIT 10"
-        ir = parse_sql_to_ir(sql)
+        ir = parse_sql_to_ir(sql, 'duckdb')
 
         assert isinstance(ir, CompoundQueryIR)
         assert ir.order_by is not None
@@ -673,10 +673,10 @@ class TestCompoundQueries:
     def test_union_round_trip(self):
         """Test SQL → IR → SQL round-trip for compound queries."""
         sql = "SELECT name, email FROM users WHERE active = true UNION ALL SELECT name, email FROM admins WHERE role = 'admin'"
-        ir = parse_sql_to_ir(sql)
+        ir = parse_sql_to_ir(sql, 'duckdb')
 
         assert isinstance(ir, CompoundQueryIR)
-        regenerated = any_ir_to_sql(ir)
+        regenerated = any_ir_to_sql(ir, 'duckdb')
         norm = normalize_sql(regenerated)
 
         assert "UNION ALL" in norm
@@ -687,7 +687,7 @@ class TestCompoundQueries:
     def test_union_with_where_clauses(self):
         """Test that individual queries in UNION preserve their WHERE clauses."""
         sql = "SELECT name FROM users WHERE active = true UNION SELECT name FROM admins WHERE role = 'superadmin'"
-        ir = parse_sql_to_ir(sql)
+        ir = parse_sql_to_ir(sql, 'duckdb')
 
         assert isinstance(ir, CompoundQueryIR)
         assert ir.queries[0].where is not None
@@ -696,7 +696,7 @@ class TestCompoundQueries:
     def test_simple_query_still_returns_query_ir(self):
         """Ensure simple queries still return QueryIR, not CompoundQueryIR."""
         sql = "SELECT id, name FROM users WHERE id > 5"
-        ir = parse_sql_to_ir(sql)
+        ir = parse_sql_to_ir(sql, 'duckdb')
 
         assert not isinstance(ir, CompoundQueryIR)
         assert ir.from_.table == 'users'
@@ -704,7 +704,7 @@ class TestCompoundQueries:
     def test_compound_serialization_type_field(self):
         """Test that serialized IR includes the type discriminator."""
         sql = "SELECT a FROM t1 UNION SELECT a FROM t2"
-        ir = parse_sql_to_ir(sql)
+        ir = parse_sql_to_ir(sql, 'duckdb')
         dumped = ir.model_dump(by_alias=True)
 
         assert dumped['type'] == 'compound'
