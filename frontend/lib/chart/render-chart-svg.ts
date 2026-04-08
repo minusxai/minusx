@@ -41,6 +41,8 @@ export interface RenderChartOptions {
   colorMode?: 'light' | 'dark';
   /** Path to logo file for footer. Used by server-side renderChartToPng only. */
   logoPath?: string;
+  /** Override auto-generated chart title (e.g. use the file/question name). */
+  titleOverride?: string;
 }
 
 function buildChartTitle(xCols: string[], yCols: string[]): string | undefined {
@@ -76,6 +78,7 @@ export function renderChartToSvg(
     width = 512,
     height = 256,
     colorMode = 'dark',
+    titleOverride,
   } = options;
 
   const chartType = vizSettings.type;
@@ -102,7 +105,7 @@ export function renderChartToSvg(
     return null;
   }
 
-  const chartTitle = buildChartTitle(xCols, yCols);
+  const chartTitle = titleOverride || buildChartTitle(xCols, yCols);
   const xAxisLabel = xCols.length > 0 ? xCols[0] : undefined;
   const yAxisLabel = yCols.length === 1 ? yCols[0] : yCols.length > 1 ? yCols.join(', ') : undefined;
 

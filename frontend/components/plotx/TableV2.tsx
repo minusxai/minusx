@@ -864,6 +864,7 @@ export const TableV2 = ({ columns: colNames, types, rows, pageSize: _fixedPageSi
             borderColor="border.default"
             _hover={{ bg: 'bg.subtle', borderColor: 'border.emphasized' }}
             onClick={downloadCsv}
+            data-dev-hide-in-capture="true"
           >
             <Icon as={LuDownload} boxSize={3} />
             CSV

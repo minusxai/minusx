@@ -73,7 +73,7 @@ function svgToPngBuffer(svg: string): Buffer {
 export async function renderChartToJpeg(
   queryResult: QueryResult,
   vizSettings: VizSettings,
-  options: { width?: number; height?: number; colorMode?: 'light' | 'dark'; logoPath?: string } = {},
+  options: import('./render-chart-svg').RenderChartOptions = {},
 ): Promise<Buffer | null> {
   const width = options.width ?? 512;
   const height = options.height ?? 256;

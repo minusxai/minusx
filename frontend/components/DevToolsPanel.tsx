@@ -3,10 +3,9 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Box, VStack, HStack, Text, IconButton, Button, createListCollection } from '@chakra-ui/react';
 import { SelectRoot, SelectTrigger, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
-import { LuCamera, LuChevronDown, LuChevronRight, LuDownload, LuLink, LuMonitor, LuServer } from 'react-icons/lu';
+import { LuChevronDown, LuChevronRight, LuDownload, LuLink, LuServer } from 'react-icons/lu';
 import { AppState } from '@/lib/appState';
 import AppStateViewer from './AppStateViewer';
-import { useScreenshot } from '@/lib/hooks/useScreenshot';
 import { getRegisteredToolNames, executeToolCall } from '@/lib/api/tool-handlers';
 import { UserInputException, type UserInputProps, type UserInput } from '@/lib/api/user-input-exception';
 import { getStore } from '@/store/store';
@@ -18,6 +17,7 @@ import { buildChartOption, buildPieChartOption, buildFunnelChartOption, buildWat
 import { COLOR_PALETTE } from '@/lib/chart/echarts-theme';
 import * as echarts from 'echarts';
 import type { VizSettings } from '@/lib/types.gen';
+import { RENDERABLE_CHART_TYPES } from '@/lib/chart/render-chart-svg';
 
 interface DevToolsPanelProps {
   appState: AppState | null | undefined;
@@ -226,6 +226,7 @@ function buildEChartsOption(
   colorMode: 'light' | 'dark',
   width: number,
   height: number,
+  titleOverride?: string,
 ): echarts.EChartsOption | null {
   const xCols = vizSettings.xCols ?? [];
   const yCols = vizSettings.yCols ?? [];
@@ -240,11 +241,13 @@ function buildEChartsOption(
   );
   if (aggregated.xAxisData.length === 0 && aggregated.series.length === 0) return null;
 
-  const yPart = yCols.join(', ');
-  const xPart = xCols.length > 0 ? xCols[0] : '';
-  const splitPart = xCols.length > 1 ? xCols.slice(1).join(', ') : '';
-  const chartTitle = [yPart, xPart && `vs ${xPart}`, splitPart && `split by ${splitPart}`]
-    .filter(Boolean).join(' ') || undefined;
+  // Use question name if provided; fall back to auto-generated axis description
+  const autoTitle = [
+    yCols.join(', '),
+    xCols.length > 0 && `vs ${xCols[0]}`,
+    xCols.length > 1 && `split by ${xCols.slice(1).join(', ')}`,
+  ].filter(Boolean).join(' ') || undefined;
+  const chartTitle = titleOverride || autoTitle;
   const xAxisLabel = xCols.length > 0 ? xCols[0] : undefined;
   const yAxisLabel = yCols.length === 1 ? yCols[0] : yCols.length > 1 ? yCols.join(', ') : undefined;
 
@@ -266,8 +269,9 @@ async function renderChartToDataUrl(
   colorMode: 'light' | 'dark' = 'dark',
   width = 512,
   height = 256,
+  titleOverride?: string,
 ): Promise<string | null> {
-  const option = buildEChartsOption(queryResult, vizSettings, colorMode, width, height);
+  const option = buildEChartsOption(queryResult, vizSettings, colorMode, width, height, titleOverride);
   if (!option) return null;
 
   const container = document.createElement('div');
@@ -278,7 +282,8 @@ async function renderChartToDataUrl(
     const bgColor = colorMode === 'dark' ? '#161b22' : '#ffffff';
     const chart = echarts.init(container, null, { renderer: 'canvas', width, height });
     chart.setOption({ ...option, animation: false, backgroundColor: bgColor });
-    const dataUrl = chart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: bgColor });
+    // excludeComponents ensures toolbox never appears in the exported image
+    const dataUrl = chart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: bgColor, excludeComponents: ['toolbox'] });
     chart.dispose();
     return dataUrl;
   } finally {
@@ -286,27 +291,172 @@ async function renderChartToDataUrl(
   }
 }
 
+/** Stack multiple raw data URLs vertically on a canvas, return a PNG data URL. */
+async function stackImagesRaw(dataUrls: string[]): Promise<string> {
+  const images = await Promise.all(dataUrls.map(url => loadImage(url)));
+  const width = Math.max(...images.map(i => i.naturalWidth));
+  const totalHeight = images.reduce((sum, i) => sum + i.naturalHeight, 0);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = totalHeight;
+  const ctx = canvas.getContext('2d')!;
+
+  let y = 0;
+  for (const img of images) {
+    ctx.drawImage(img, 0, y);
+    y += img.naturalHeight;
+  }
+  return canvas.toDataURL('image/png');
+}
+
+/** Render all dashboard charts client-side and stack them vertically. */
+async function renderDashboardToDataUrl(
+  charts: Array<{ queryResult: import('@/lib/types').QueryResult; vizSettings: VizSettings; name?: string }>,
+  colorMode: 'light' | 'dark',
+  width: number,
+  height: number,
+): Promise<string | null> {
+  const rawUrls = await Promise.all(
+    charts.map(({ queryResult, vizSettings, name }) =>
+      renderChartToDataUrl(queryResult, vizSettings, colorMode, width, height, name)
+    )
+  );
+  const valid = rawUrls.filter((u): u is string => u !== null);
+  if (valid.length === 0) return null;
+  return stackImagesRaw(valid);
+}
+
+// ── Image post-processing ─────────────────────────────────────────────────────
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Failed to load image: ${src}`));
+    img.src = src;
+  });
+}
+
+/**
+ * Draw any image source onto a canvas scaled to fit within maxWidth (preserving
+ * aspect ratio), optionally overlay a semi-transparent MinusX watermark,
+ * then encode as JPEG and return an object URL.
+ *
+ * Height is derived from the source aspect ratio, not fixed — so dashboards
+ * render at full height without cropping.
+ */
+async function toJpegObjectUrl(
+  source: Blob | string,
+  maxWidth: number,
+  addWatermark: boolean,
+  colorMode: 'light' | 'dark',
+): Promise<string> {
+  const isBlobSrc = source instanceof Blob;
+  const srcUrl = isBlobSrc ? URL.createObjectURL(source) : source;
+
+  try {
+    const img = await loadImage(srcUrl);
+
+    // Scale to maxWidth, preserve aspect ratio
+    const scale = Math.min(1, maxWidth / img.naturalWidth);
+    const canvasW = Math.round(img.naturalWidth * scale);
+    const canvasH = Math.round(img.naturalHeight * scale);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = canvasW;
+    canvas.height = canvasH;
+    const ctx = canvas.getContext('2d')!;
+
+    ctx.fillStyle = colorMode === 'dark' ? '#161b22' : '#ffffff';
+    ctx.fillRect(0, 0, canvasW, canvasH);
+    ctx.drawImage(img, 0, 0, canvasW, canvasH);
+
+    if (addWatermark) {
+      try {
+        const logoSrc = colorMode === 'dark' ? '/logox.svg' : '/logox_dark.svg';
+        const logo = await loadImage(logoSrc);
+        const logoH = Math.max(12, Math.round(canvasH * 0.08));
+        const logoW = Math.round(logoH * (logo.naturalWidth / (logo.naturalHeight || 1)));
+        const pad = Math.round(canvasH * 0.03);
+        ctx.globalAlpha = 0.45; // semi-transparent overlay
+        ctx.drawImage(logo, canvasW - logoW - pad, canvasH - logoH - pad, logoW, logoH);
+        ctx.globalAlpha = 1;
+      } catch {
+        // logo failed — output image without watermark
+      }
+    }
+
+    return await new Promise<string>((resolve, reject) => {
+      canvas.toBlob(
+        blob => (blob ? resolve(URL.createObjectURL(blob)) : reject(new Error('Canvas toBlob failed'))),
+        'image/jpeg',
+        0.85,
+      );
+    });
+  } finally {
+    if (isBlobSrc) URL.revokeObjectURL(srcUrl);
+  }
+}
+
 // ── Image Tools test panel ────────────────────────────────────────────────────
 
-type ImageResult = { dataUrl: string; label: string } | { url: string; label: string } | { error: string; label: string };
+type ImageResult =
+  | { kind: 'image'; dataUrl: string; label: string }
+  | { kind: 'url'; url: string; label: string }
+  | { kind: 'both'; dataUrl: string; url: string; label: string }
+  | { kind: 'error'; error: string; label: string };
+
+const inputStyle: React.CSSProperties = {
+  width: 52,
+  padding: '2px 4px',
+  borderRadius: 4,
+  border: '1px solid var(--chakra-colors-border-default)',
+  background: 'transparent',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 11,
+  color: 'inherit',
+};
+
+const checkboxStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontFamily: 'var(--font-mono)', cursor: 'pointer', userSelect: 'none' };
 
 function ImageToolsPanel({ appState }: { appState: AppState | null | undefined }) {
-  const { captureFileView } = useScreenshot();
+  const [imgWidth, setImgWidth] = useState(256);
+  const [imgHeight, setImgHeight] = useState(128);
+  const [addWatermark, setAddWatermark] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
   const [result, setResult] = useState<ImageResult | null>(null);
-  const [busy, setBusy] = useState<string | null>(null); // which button is loading
   const colorMode = useAppSelector(state => state.ui.colorMode) as 'light' | 'dark';
   const queryResultsMap = useAppSelector(state => state.queryResults.results);
 
   if (appState?.type !== 'file') return null;
-  const { fileState } = appState.state;
+  const { fileState, references } = appState.state;
   if (fileState.type !== 'question' && fileState.type !== 'dashboard') return null;
 
-  const fileId = fileState.id;
   const questionContent = fileState.type === 'question' ? (fileState.content as any) : null;
   const vizSettings: VizSettings | null = questionContent?.vizSettings ?? null;
   const queryResultId: string | null = (fileState as any).queryResultId ?? null;
-  const queryResult = queryResultId ? queryResultsMap[queryResultId]?.data ?? null : null;
-  const canUseResults = fileState.type === 'question' && !!vizSettings && !!queryResult;
+  const queryResult = queryResultId ? (queryResultsMap[queryResultId]?.data ?? null) : null;
+
+  // Single chart: question with renderable viz and data
+  const singleChart = fileState.type === 'question' && !!vizSettings && !!queryResult && RENDERABLE_CHART_TYPES.has(vizSettings.type)
+    ? { queryResult, vizSettings, name: fileState.name || undefined }
+    : null;
+
+  // Dashboard charts: renderable questions with data
+  const dashboardCharts = fileState.type === 'dashboard'
+    ? (references ?? []).flatMap(ref => {
+        const vs = (ref.content as any)?.vizSettings as VizSettings | undefined;
+        const qrId = (ref as any).queryResultId as string | undefined;
+        const qr = qrId ? (queryResultsMap[qrId]?.data ?? null) : null;
+        if (vs && qr && RENDERABLE_CHART_TYPES.has(vs.type)) return [{ vizSettings: vs, queryResult: qr, name: ref.name || undefined }];
+        return [];
+      })
+    : [];
+
+  const hasCharts = !!(singleChart ?? dashboardCharts.length > 0);
+  const noChartHint = 'No renderable charts with data found';
 
   const run = async (label: string, fn: () => Promise<ImageResult>) => {
     setBusy(label);
@@ -314,50 +464,67 @@ function ImageToolsPanel({ appState }: { appState: AppState | null | undefined }
     try {
       setResult(await fn());
     } catch (err: any) {
-      setResult({ error: err.message ?? String(err), label });
+      setResult({ kind: 'error', error: err.message ?? String(err), label });
     } finally {
       setBusy(null);
     }
   };
 
-  const handleDomCapture = () => run('DOM Capture', async () => {
-    const blob = await captureFileView(fileId);
-    return { dataUrl: URL.createObjectURL(blob), label: 'DOM Capture' };
+  /** Render question or dashboard to a raw PNG data URL using hidden canvas. */
+  const renderRaw = async (): Promise<string> => {
+    if (singleChart) {
+      const url = await renderChartToDataUrl(singleChart.queryResult, singleChart.vizSettings, colorMode, imgWidth, imgHeight, singleChart.name);
+      if (!url) throw new Error('Render returned null — unsupported viz type or empty data');
+      return url;
+    }
+    const url = await renderDashboardToDataUrl(dashboardCharts, colorMode, imgWidth, imgHeight);
+    if (!url) throw new Error('No charts rendered successfully');
+    return url;
+  };
+
+  const handleECharts = () => run('ECharts', async () => {
+    const rawUrl = await renderRaw();
+    const dataUrl = await toJpegObjectUrl(rawUrl, imgWidth, addWatermark, colorMode);
+    return { kind: 'image' as const, dataUrl, label: 'ECharts' };
   });
 
-  const handleEChartsExport = () => run('ECharts Export', async () => {
-    if (!canUseResults) throw new Error('Need a question with query results and chart viz');
-    const dataUrl = await renderChartToDataUrl(queryResult!, vizSettings!, colorMode);
-    if (!dataUrl) throw new Error('Chart render returned null (unsupported type or empty data)');
-    return { dataUrl, label: 'ECharts Export' };
-  });
-
-  const handleGetUrl = () => run('Get URL', async () => {
-    const blob = await captureFileView(fileId);
-    const file = new File([blob], 'screenshot.png', { type: 'image/png' });
+  const handleS3ECharts = () => run('S3 ECharts', async () => {
+    const rawUrl = await renderRaw();
+    const jpegUrl = await toJpegObjectUrl(rawUrl, imgWidth, addWatermark, colorMode);
+    const jpegBlob = await fetch(jpegUrl).then(r => r.blob());
+    URL.revokeObjectURL(jpegUrl);
+    const file = new File([jpegBlob], 'chart.jpg', { type: 'image/jpeg' });
     const { publicUrl } = await uploadFile(file, undefined, { keyType: 'charts' });
-    return { url: publicUrl, label: 'Get URL' };
+    return { kind: 'url' as const, url: publicUrl, label: 'S3 ECharts' };
   });
 
-  const handleServerRender = () => run('Server Render', async () => {
-    if (!canUseResults) throw new Error('Need a question with query results and chart viz');
+  const handleServer = () => run('Server', async () => {
+    const payload = singleChart
+      ? { mode: 'single' as const, queryResult: singleChart.queryResult, vizSettings: singleChart.vizSettings, titleOverride: singleChart.name, colorMode, width: imgWidth, height: imgHeight }
+      : { mode: 'dashboard' as const, charts: dashboardCharts.map(c => ({ ...c, titleOverride: c.name })), colorMode, width: imgWidth, height: imgHeight };
+
     const res = await fetch('/api/dev/render-image', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ queryResult, vizSettings, colorMode }),
+      body: JSON.stringify(payload),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.error ?? `Server error ${res.status}`);
     }
-    const { dataUrl } = await res.json();
-    return { dataUrl, label: 'Server Render' };
+    const { dataUrl: rawDataUrl } = await res.json();
+    const dataUrl = addWatermark ? await toJpegObjectUrl(rawDataUrl, imgWidth, true, colorMode) : rawDataUrl;
+
+    const jpegBlob = await fetch(dataUrl).then(r => r.blob());
+    const file = new File([jpegBlob], 'server-render.jpg', { type: 'image/jpeg' });
+    const { publicUrl } = await uploadFile(file, undefined, { keyType: 'charts' });
+    return { kind: 'both' as const, dataUrl, url: publicUrl, label: 'Server' };
   });
 
-  const download = (dataUrl: string, filename: string) => {
+  const triggerDownload = (dataUrl: string, label: string) => {
     const a = document.createElement('a');
     a.href = dataUrl;
-    a.download = filename;
+    a.download = `${label.toLowerCase().replace(/\s+/g, '-')}.jpg`;
     a.click();
   };
 
@@ -365,67 +532,49 @@ function ImageToolsPanel({ appState }: { appState: AppState | null | undefined }
     <Box borderWidth="1px" borderColor="border.default" borderRadius="md" p={3} bg="bg.surface">
       <VStack align="stretch" gap={2}>
         <Text fontSize="xs" fontWeight="600" color="fg.muted">Image Tools</Text>
+
+        {/* Dimensions */}
+        <HStack gap={2} align="center">
+          <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">W</Text>
+          <input type="number" value={imgWidth} min={64} max={2048}
+            onChange={e => setImgWidth(Number(e.target.value))} style={inputStyle} aria-label="Image width" />
+          <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">H</Text>
+          <input type="number" value={imgHeight} min={64} max={2048}
+            onChange={e => setImgHeight(Number(e.target.value))} style={inputStyle} aria-label="Image height" />
+          <label style={checkboxStyle}>
+            <input type="checkbox" checked={addWatermark} onChange={e => setAddWatermark(e.target.checked)} aria-label="Add watermark" />
+            <Text fontSize="2xs" color="fg.muted">Watermark</Text>
+          </label>
+        </HStack>
+
+        {/* Action buttons */}
         <HStack gap={1} flexWrap="wrap">
-          <Button
-            size="2xs"
-            variant="outline"
-            onClick={handleDomCapture}
-            loading={busy === 'DOM Capture'}
-            aria-label="DOM Capture"
-          >
-            <LuMonitor />DOM
-          </Button>
-          <Button
-            size="2xs"
-            variant="outline"
-            onClick={handleEChartsExport}
-            loading={busy === 'ECharts Export'}
-            disabled={!canUseResults}
-            aria-label="ECharts Export"
-            title={!canUseResults ? 'Need a question with query results and a chart viz type' : undefined}
-          >
+          <Button size="2xs" variant="outline" onClick={handleECharts} loading={busy === 'ECharts'}
+            disabled={!hasCharts} title={!hasCharts ? noChartHint : undefined} aria-label="ECharts export">
             <LuDownload />ECharts
           </Button>
-          <Button
-            size="2xs"
-            variant="outline"
-            onClick={handleGetUrl}
-            loading={busy === 'Get URL'}
-            aria-label="Get S3 URL"
-          >
-            <LuLink />S3 URL
+          <Button size="2xs" variant="outline" onClick={handleS3ECharts} loading={busy === 'S3 ECharts'}
+            disabled={!hasCharts} title={!hasCharts ? noChartHint : undefined} aria-label="S3 ECharts upload">
+            <LuLink />S3
           </Button>
-          <Button
-            size="2xs"
-            variant="outline"
-            onClick={handleServerRender}
-            loading={busy === 'Server Render'}
-            disabled={!canUseResults}
-            aria-label="Server Render"
-            title={!canUseResults ? 'Need a question with query results and a chart viz type' : undefined}
-          >
+          <Button size="2xs" variant="outline" onClick={handleServer} loading={busy === 'Server'}
+            disabled={!hasCharts} title={!hasCharts ? noChartHint : undefined} aria-label="Server render">
             <LuServer />Server
           </Button>
         </HStack>
 
+        {/* Result */}
         {result && (
           <Box borderWidth="1px" borderColor="border.default" borderRadius="sm" overflow="hidden">
-            {'error' in result ? (
+            {result.kind === 'error' ? (
               <Box p={2} bg="accent.danger/10">
                 <Text fontSize="2xs" fontFamily="mono" color="accent.danger">{result.error}</Text>
               </Box>
-            ) : 'url' in result ? (
+            ) : result.kind === 'url' ? (
               <Box p={2}>
                 <Text fontSize="2xs" fontFamily="mono" color="fg.muted" mb={1}>{result.label}</Text>
-                <Text
-                  fontSize="2xs"
-                  fontFamily="mono"
-                  color="accent.teal"
-                  cursor="pointer"
-                  wordBreak="break-all"
-                  onClick={() => navigator.clipboard.writeText(result.url)}
-                  title="Click to copy"
-                >
+                <Text fontSize="2xs" fontFamily="mono" color="accent.teal" cursor="pointer" wordBreak="break-all"
+                  onClick={() => navigator.clipboard.writeText(result.url)} title="Click to copy">
                   {result.url}
                 </Text>
               </Box>
@@ -433,28 +582,25 @@ function ImageToolsPanel({ appState }: { appState: AppState | null | undefined }
               <Box>
                 <HStack justify="space-between" px={2} pt={2} pb={1}>
                   <Text fontSize="2xs" fontFamily="mono" color="fg.muted">{result.label}</Text>
-                  <IconButton
-                    size="2xs"
-                    variant="ghost"
-                    aria-label="Download image"
-                    onClick={() => download(result.dataUrl, `${result.label.toLowerCase().replace(/\s+/g, '-')}.png`)}
-                  >
-                    <LuDownload />
-                  </IconButton>
+                  <HStack gap={1}>
+                    {result.kind === 'both' && (
+                      <Text fontSize="2xs" fontFamily="mono" color="accent.teal" cursor="pointer"
+                        onClick={() => navigator.clipboard.writeText(result.url)} title="Click to copy URL">
+                        S3 ↗
+                      </Text>
+                    )}
+                    <IconButton size="2xs" variant="ghost" aria-label="Download image"
+                      onClick={() => triggerDownload(result.dataUrl, result.label)}>
+                      <LuDownload />
+                    </IconButton>
+                  </HStack>
                 </HStack>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={result.dataUrl}
-                  alt={result.label}
-                  style={{ width: '100%', height: 'auto', display: 'block' }}
-                />
+                <img src={result.dataUrl} alt={result.label} style={{ width: '100%', height: 'auto', display: 'block' }} />
               </Box>
             )}
           </Box>
         )}
-        <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">
-          DOM: html-to-image capture · ECharts: hidden canvas · S3 URL: DOM→upload · Server: SSR render
-        </Text>
       </VStack>
     </Box>
   );
