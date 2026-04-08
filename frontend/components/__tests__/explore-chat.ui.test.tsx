@@ -180,9 +180,11 @@ describe('Explore page: submit question → agent responds → see answer → to
       // (AnalystAgent does NOT have TalkToUser in its toolset — never mock it as a tool_call)
       await mockServer.configure({
         response: {
-          content:
-            '<thinking>Let me think through this step by step. The user is asking about the data.</thinking>' +
-            '<answer>Based on the data, the answer is 42.</answer>',
+          content: 'Based on the data, the answer is 42.',
+          content_blocks: [
+            { type: 'thinking', thinking: 'Let me think through this step by step. The user is asking about the data.', signature: '' },
+            { type: 'text', text: 'Based on the data, the answer is 42.' },
+          ],
           role: 'assistant',
           finish_reason: 'stop',
         },
@@ -239,7 +241,7 @@ describe('Explore page: submit question → agent responds → see answer → to
         )
       );
 
-      // Final answer from <answer> block is visible in the DOM
+      // Final answer is visible in the DOM
       const answerBlock = await screen.findByLabelText('Answer block');
       expect(answerBlock).toHaveTextContent(/the answer is 42/i);
 

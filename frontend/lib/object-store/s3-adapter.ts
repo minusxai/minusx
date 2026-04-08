@@ -33,9 +33,10 @@ export class S3Adapter implements ObjectStore {
   private readonly publicUrlBase: string;
 
   constructor() {
-    if (!OBJECT_STORE_BUCKET) throw new Error('OBJECT_STORE_BUCKET is required when OBJECT_STORE_PROVIDER=s3');
-    if (!OBJECT_STORE_ACCESS_KEY_ID) throw new Error('OBJECT_STORE_ACCESS_KEY_ID is required when OBJECT_STORE_PROVIDER=s3');
-    if (!OBJECT_STORE_SECRET_ACCESS_KEY) throw new Error('OBJECT_STORE_SECRET_ACCESS_KEY is required when OBJECT_STORE_PROVIDER=s3');
+    const COMMON_ERROR = 'Image Upload is not supported.'
+    if (!OBJECT_STORE_BUCKET) throw new Error(COMMON_ERROR);
+    if (!OBJECT_STORE_ACCESS_KEY_ID) throw new Error(COMMON_ERROR);
+    if (!OBJECT_STORE_SECRET_ACCESS_KEY) throw new Error(COMMON_ERROR);
 
     this.bucket = OBJECT_STORE_BUCKET;
     this.publicUrlBase =

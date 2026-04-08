@@ -12,19 +12,22 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
   const [toolCall, toolMessage] = toolCallTuple;
   let content;
   let citations: any[] = [];
+  let nativeThinkingBlocks: string[] = [];
 
   try {
     const jsonParsed = typeof toolMessage.content === 'string'
       ? JSON.parse(toolMessage.content)
       : toolMessage.content;
 
-    // NEW: Handle content_blocks array format (from LiteLLM streaming)
+    // Handle content_blocks array format (from LiteLLM streaming)
     if (jsonParsed?.content_blocks && Array.isArray(jsonParsed.content_blocks)) {
-      // Extract text content from text blocks
       const textBlocks: string[] = [];
 
       for (const block of jsonParsed.content_blocks) {
-        if (block.type === 'text' && block.text) {
+        if (block.type === 'thinking' && block.thinking) {
+          // Native adaptive thinking block
+          nativeThinkingBlocks.push(block.thinking);
+        } else if (block.type === 'text' && block.text) {
           textBlocks.push(block.text);
 
           // Extract citations from this text block (if embedded)
@@ -65,11 +68,18 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
     citations = [];
   }
 
-  const parsed = parseThinkingAnswer(content);
+  // Backward compat: old messages used <thinking>/<answer> XML tags in the text content
+  const legacyParsed = nativeThinkingBlocks.length === 0 ? parseThinkingAnswer(content) : null;
 
-  // Determine if we should show citations with thinking or answer
-  const hasAnswer = parsed?.answer && parsed.answer.length > 0 && parsed.answer.some(a => a.trim().length > 0);
-  const hasThinking = parsed?.thinking && parsed.thinking.length > 0;
+  const hasNativeThinking = nativeThinkingBlocks.length > 0;
+  const hasLegacyThinking = !!legacyParsed?.thinking?.length;
+  const hasThinking = hasNativeThinking || hasLegacyThinking;
+
+  // For legacy messages, use the parsed answer blocks; for new messages use content directly
+  const hasAnswer = legacyParsed
+    ? legacyParsed.answer.length > 0 && legacyParsed.answer.some(a => a.trim().length > 0)
+    : !!content;
+
   const showCitationsWithThinking = !hasAnswer && hasThinking && showThinking;
   const showCitationsWithAnswer = hasAnswer;
 
@@ -152,27 +162,16 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
     );
   };
 
-  // Fallback: if no <thinking>/<answer> tags were found, render raw content directly
-  if (!parsed && content) {
-    return (
-            <>
-            <GridItem
-                colSpan={12}
-                colStart={1}
-                my={2}
-            >
-                <Box px={3} py={1}>
-                    <Markdown context={markdownContext}>{content}</Markdown>
-                </Box>
-            </GridItem>
-            {citations.length > 0 && renderCitations(false)}
-            </>
-    );
-  }
+  // Determine what thinking blocks to show
+  const thinkingToRender = hasNativeThinking ? nativeThinkingBlocks : (legacyParsed?.thinking ?? []);
+
+  // Determine what answer content to render
+  const answerBlocks = legacyParsed ? legacyParsed.answer : (content ? [content] : []);
 
   return (
             <>
-            {showThinking && parsed?.thinking.map((block, idx) => (
+            {/* Native or legacy thinking blocks */}
+            {showThinking && thinkingToRender.map((block, idx) => (
                 <GridItem
                     key={`thinking-${idx}`}
                     colSpan={12}
@@ -191,19 +190,20 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
             {/* Show citations with thinking if no answer exists */}
             {showCitationsWithThinking && renderCitations(true)}
 
-            {parsed?.unparsed && (
+            {/* Legacy unparsed content (content before first XML tag) */}
+            {legacyParsed?.unparsed && (
                 <GridItem
                     key={`unparsed`}
                     colSpan={12}
                     colStart={1}
                 >
                     <Box px={3} py={1}>
-                        <Markdown context={markdownContext}>{parsed?.unparsed}</Markdown>
+                        <Markdown context={markdownContext}>{legacyParsed.unparsed}</Markdown>
                     </Box>
                 </GridItem>
             )}
 
-            {parsed?.answer.map((block, idx) => (
+            {answerBlocks.map((block, idx) => (
                 <GridItem
                     key={`answer-${idx}`}
                     colSpan={12}

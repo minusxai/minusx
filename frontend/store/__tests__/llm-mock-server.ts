@@ -53,6 +53,12 @@ export interface ALLMRequest {
 
 export interface LLMResponse {
   content: string;
+  content_blocks?: Array<{
+    type: 'text' | 'thinking' | string;
+    text?: string;
+    thinking?: string;
+    signature?: string;
+  }>;
   role: 'assistant';
   tool_calls?: Array<{
     id: string;

@@ -71,6 +71,7 @@ export function useConversation(conversationId?: number) {
             executionState: 'FINISHED',
             pending_tool_calls: [],
             streamedCompletedToolCalls: [],
+            streamedThinking: '',
             agent,
             agent_args
           },

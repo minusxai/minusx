@@ -233,8 +233,10 @@ async def allm_request(request: ALLMRequest, on_content=None):
 
     elif 'claude' in completion_request["model"]:
         completion_request["max_completion_tokens"] = MAX_TOKENS * 2
-        completion_request["temperature"] = 0
+        completion_request["temperature"] = 1  # Required when thinking is enabled
         completion_request["tool_choice"] = "auto"
+        completion_request["thinking"] = {"type": "adaptive"}
+        completion_request["output_config"] = {"effort": "low"}
 
         # Add cache checkpoints (up to 4 allowed by Anthropic)
         msgs = request.messages
@@ -301,6 +303,12 @@ async def allm_request(request: ALLMRequest, on_content=None):
     # Accumulate streaming response
     accumulated_content = ""
     accumulated_tool_calls = []  # List to hold tool calls by index
+    # Each thinking block is accumulated as a single unit: text builds up across many deltas,
+    # then a final signature delta closes it. Keeping them as separate WIP accumulators avoids
+    # storing dozens of partial-text blocks that Anthropic rejects on the next turn.
+    _current_thinking_text = ""
+    _current_thinking_signature = ""
+    accumulated_thinking_blocks = []  # Finalized complete thinking blocks
     usage = None
     finish_reason = None
     cost = 0.0  # Default to 0.0 if not provided in stream
@@ -313,6 +321,30 @@ async def allm_request(request: ALLMRequest, on_content=None):
         # Get delta from first choice
         if hasattr(chunk, 'choices') and len(chunk.choices) > 0:
             delta = chunk.choices[0].delta
+
+            # Collect and stream native thinking blocks from provider_specific_fields.
+            # Anthropic streams thinking as many text deltas followed by one signature delta.
+            # We accumulate into a single block so the final stored entry has complete
+            # text + valid signature (empty signature → Anthropic rejects on next turn).
+            if hasattr(delta, 'provider_specific_fields') and delta.provider_specific_fields:
+                thinking_chunk_blocks = delta.provider_specific_fields.get('thinking_blocks', [])
+                for block in thinking_chunk_blocks:
+                    thinking_text = block.get('thinking', '') if isinstance(block, dict) else getattr(block, 'thinking', '')
+                    signature = block.get('signature', '') if isinstance(block, dict) else getattr(block, 'signature', '')
+                    if thinking_text:
+                        _current_thinking_text += thinking_text
+                        if on_content:
+                            on_content(thinking_text, stream_id, 'thinking')
+                    if signature:
+                        # Signature closes this thinking block — finalize it
+                        _current_thinking_signature = signature
+                        accumulated_thinking_blocks.append({
+                            'type': 'thinking',
+                            'thinking': _current_thinking_text,
+                            'signature': _current_thinking_signature,
+                        })
+                        _current_thinking_text = ""
+                        _current_thinking_signature = ""
 
             # Accumulate and stream content
             if hasattr(delta, 'content') and delta.content:
@@ -381,9 +413,9 @@ async def allm_request(request: ALLMRequest, on_content=None):
     duration = litellm_duration
 
     # Build content blocks array from accumulated data
-    content_blocks = []
+    # Thinking blocks are already normalized dicts; add text block after them
+    content_blocks = list(accumulated_thinking_blocks)
 
-    # Add text content as a block if present
     if accumulated_content:
         content_blocks.append({
             "type": "text",

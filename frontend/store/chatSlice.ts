@@ -63,7 +63,7 @@ interface PendingToolCall {
 type StreamingEvent =
   | {
       conversationID: number;
-      type: 'StreamedContent' | 'ToolCreated' | 'ToolCompleted';
+      type: 'StreamedContent' | 'StreamedThinking' | 'ToolCreated' | 'ToolCompleted';
       payload: { chunk: string } | ToolCall | CompletedToolCall;
     }
   | {
@@ -85,6 +85,7 @@ export interface Conversation {
 
   // Streaming state (ephemeral) - built from streaming events
   streamedCompletedToolCalls: CompletedToolCall[];
+  streamedThinking: string; // Native thinking accumulated during streaming
 
   // For temp conversations (negative IDs): points to the real conversation ID created by backend
   forkedConversationID?: number;
@@ -140,6 +141,7 @@ const chatSlice = createSlice({
         agent,
         agent_args: agent_args || {},
         streamedCompletedToolCalls: [],
+        streamedThinking: '',
         active: true  // Mark new conversation as active
       };
     },
@@ -218,6 +220,7 @@ const chatSlice = createSlice({
           conversationID: newConversationID,
           // streamedCompletedToolCalls: conv.streamedCompletedToolCalls || [],
           streamedCompletedToolCalls: [],
+        streamedThinking: '',
           forkedConversationID: undefined // Real conversations don't have this
         };
 
@@ -349,8 +352,16 @@ const chatSlice = createSlice({
         }
       }
 
+      if (type === 'StreamedThinking') {
+        const { chunk } = payload as { chunk: string };
+        conv.streamedThinking = (conv.streamedThinking || '') + chunk;
+      }
+
       if (type === 'StreamedContent') {
         const { chunk } = payload as { chunk: string };
+        // Thinking is complete once text starts — clear it so the indicator disappears
+        // and the next LLM call's thinking starts fresh (fixes accumulation across turns)
+        conv.streamedThinking = '';
         const lastEntry = conv.streamedCompletedToolCalls[conv.streamedCompletedToolCalls.length - 1];
 
         if (!lastEntry || lastEntry.function?.name !== 'TalkToUser') {
@@ -382,6 +393,7 @@ const chatSlice = createSlice({
       const conv = state.conversations[conversationID];
       if (conv) {
         conv.streamedCompletedToolCalls = [];
+        conv.streamedThinking = '';
       }
     },
 
