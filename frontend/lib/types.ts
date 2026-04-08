@@ -243,6 +243,7 @@ export interface ContextContent extends BaseFileContent {
   recipients?: AlertRecipient[];
   /** Scheduling gate: 'live' = runs on schedule, 'draft' = manual only (default when absent) */
   status?: 'live' | 'draft';
+  suppressUntil?: string;               // ISO date "YYYY-MM-DD"; cron skips until end of this date
 }
 
 export type UserRole = 'admin' | 'editor' | 'viewer';
@@ -432,6 +433,7 @@ export interface ReportContent extends BaseFileContent {
 
   // Scheduling gate: 'live' = runs on schedule, 'draft' = manual only (default when absent)
   status?: 'live' | 'draft';
+  suppressUntil?: string;               // ISO date "YYYY-MM-DD"; cron skips until end of this date
 
   // When to run
   schedule: ReportSchedule;
@@ -534,6 +536,7 @@ export interface AlertContent extends BaseFileContent {
   notifyOn?: 'any_fail' | 'all_fail';   // when to fire notification (default: 'any_fail')
   recipients?: AlertRecipient[];
   status?: 'live' | 'draft';
+  suppressUntil?: string;               // ISO date "YYYY-MM-DD"; cron skips until end of this date
 }
 
 // Job run types (from job_runs table)
@@ -709,6 +712,7 @@ export interface TransformationContent extends BaseFileContent {
   recipients?: AlertRecipient[];
   /** Scheduling gate: 'live' = runs on schedule, 'draft' = manual only (default when absent) */
   status?: 'live' | 'draft';
+  suppressUntil?: string;               // ISO date "YYYY-MM-DD"; cron skips until end of this date
 }
 
 // Per-transform execution result (stored inside RunFileContent.output)

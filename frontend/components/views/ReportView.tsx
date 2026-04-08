@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { preserveParams } from '@/lib/navigation/url-utils';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
 import { SchedulePicker } from '@/components/shared/SchedulePicker';
+import { SuppressPicker } from '@/components/shared/SuppressPicker';
 import { StatusBanner } from '@/components/shared/StatusBanner';
 import { RunNowHeader, type RunOptions } from '@/components/shared/RunNowHeader';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
@@ -231,6 +232,13 @@ export default function ReportView({
               <SchedulePicker
                 schedule={{ cron: report.schedule?.cron || '0 9 * * 1', timezone: report.schedule?.timezone || 'America/New_York' }}
                 onChange={(s) => onChange({ schedule: s })}
+                editMode={editMode}
+              />
+
+              {/* Suppress Card */}
+              <SuppressPicker
+                suppressUntil={report.suppressUntil}
+                onChange={(val) => onChange({ suppressUntil: val })}
                 editMode={editMode}
               />
 

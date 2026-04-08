@@ -128,6 +128,13 @@ async function runForCompany(
       const content = jobFile.content as AlertContent | null;
       if (!content || !jobDef.isActive(content)) { skipped++; continue; }
 
+      // Skip if suppressed (cron runs only; manual "Run Now" bypasses this entirely).
+      if (content.suppressUntil) {
+        const suppressEnd = new Date(content.suppressUntil);
+        suppressEnd.setHours(23, 59, 59, 999);
+        if (suppressEnd >= now) { skipped++; continue; }
+      }
+
       if (jobDef.job_type === 'alert') {
         const alert = content as AlertContent;
         if (!alert.schedule?.cron) { skipped++; continue; }
