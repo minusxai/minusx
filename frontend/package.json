@@ -21,6 +21,8 @@
     "validate-data": "npm run --silent export-db | npm run --silent validate-db"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1026.0",
+    "@aws-sdk/s3-request-presigner": "^3.1026.0",
     "@chakra-ui/react": "^3.30.0",
     "@duckdb/duckdb-wasm": "^1.30.0",
     "@duckdb/node-api": "^1.4.4-r.3",

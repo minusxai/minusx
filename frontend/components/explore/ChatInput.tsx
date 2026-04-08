@@ -13,6 +13,7 @@ import { useConfigs } from '@/lib/hooks/useConfigs';
 import { LexicalMentionEditor, LexicalMentionEditorRef } from '@/components/chat/LexicalMentionEditor';
 import { DatabaseWithSchema, Attachment } from '@/lib/types';
 import { extractTextFromDocument, SUPPORTED_DOC_EXTENSIONS } from '@/lib/utils/attachment-extract';
+import { uploadFile } from '@/lib/object-store/client';
 import { toaster } from '@/components/ui/toaster';
 import { Tooltip } from '@/components/ui/tooltip';
 
@@ -84,14 +85,23 @@ export default function ChatInput({
     // Reset input so re-selecting the same file triggers onChange
     e.target.value = '';
 
-    try {
-      const { text, pages, wordCount } = await extractTextFromDocument(file);
-      const metadata: Attachment['metadata'] = {};
-      if (pages) metadata.pages = pages;
-      if (wordCount) metadata.wordCount = wordCount;
-      dispatch(addChatAttachment({ type: 'text', name: file.name, content: text, metadata }));
-    } catch (err: any) {
-      toaster.create({ title: err.message || 'Failed to extract document text', type: 'error' });
+    if (file.type.startsWith('image/')) {
+      try {
+        const { publicUrl } = await uploadFile(file, () => {});
+        dispatch(addChatAttachment({ type: 'image', name: file.name, content: publicUrl, metadata: {} }));
+      } catch (err: any) {
+        toaster.create({ title: err.message || 'Failed to upload image', type: 'error' });
+      }
+    } else {
+      try {
+        const { text, pages, wordCount } = await extractTextFromDocument(file);
+        const metadata: Attachment['metadata'] = {};
+        if (pages) metadata.pages = pages;
+        if (wordCount) metadata.wordCount = wordCount;
+        dispatch(addChatAttachment({ type: 'text', name: file.name, content: text, metadata }));
+      } catch (err: any) {
+        toaster.create({ title: err.message || 'Failed to extract document text', type: 'error' });
+      }
     }
   };
 
@@ -137,10 +147,10 @@ export default function ChatInput({
                   />
                 </Box>
 
-                {/* Hidden file input for PDF attachment */}
+                {/* Hidden file input for documents + images */}
                 <input
                   type="file"
-                  accept={SUPPORTED_DOC_EXTENSIONS}
+                  accept={`${SUPPORTED_DOC_EXTENSIONS},image/*`}
                   ref={fileInputRef}
                   style={{ display: 'none' }}
                   onChange={handleFileSelect}
@@ -152,6 +162,7 @@ export default function ChatInput({
                     {attachments.map((att, idx) => (
                       <HStack
                         key={idx}
+                        aria-label={`Attachment: ${att.name}`}
                         bg="accent.teal/50"
                         borderRadius="md"
                         border={"1px solid"}
@@ -163,6 +174,14 @@ export default function ChatInput({
                         fontFamily="mono"
                         color="white"
                       >
+                        {att.type === 'image' && (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={att.content}
+                            alt={att.name}
+                            style={{ width: 20, height: 20, objectFit: 'cover', borderRadius: 2 }}
+                          />
+                        )}
                         <Tooltip content={att.name} positioning={{ placement: 'top' }}>
                           <Text truncate maxW="150px">{att.name}</Text>
                         </Tooltip>
@@ -172,7 +191,7 @@ export default function ChatInput({
                           <Text color="white">({att.metadata.wordCount} words)</Text>
                         ) : null}
                         <IconButton
-                          aria-label="Remove attachment"
+                          aria-label={`Remove attachment ${att.name}`}
                           onClick={() => removeAttachment(idx)}
                           variant="ghost"
                           size="2xs"
@@ -226,9 +245,9 @@ export default function ChatInput({
                 </HStack>
 
                 <HStack gap={1}>
-                  <Tooltip content="Attach additional context (PDF, DOCX, TXT)" positioning={{ placement: 'top' }}>
+                  <Tooltip content="Attach file or image (PDF, DOCX, TXT, PNG, JPG…)" positioning={{ placement: 'top' }}>
                     <IconButton
-                      aria-label="Attach additional context (PDF, DOCX, TXT)"
+                      aria-label="Attach file or image"
                       onClick={() => fileInputRef.current?.click()}
                       disabled={isAgentRunning}
                       variant="ghost"

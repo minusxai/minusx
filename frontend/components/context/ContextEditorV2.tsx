@@ -8,7 +8,8 @@
 
 import { Box, VStack, Heading, HStack, Button, Text, Badge, Menu, Input, Dialog, Field, Portal, Collapsible, Icon, Switch, Tabs } from '@chakra-ui/react';
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { LuCircleAlert, LuCircleCheck, LuPlus, LuTrash2, LuChevronDown, LuGlobe, LuChevronRight } from 'react-icons/lu';
+import { LuCircleAlert, LuCircleCheck, LuPlus, LuTrash2, LuChevronDown, LuGlobe, LuChevronRight, LuImage } from 'react-icons/lu';
+import { uploadFile } from '@/lib/object-store/client';
 import { ContextContent, DatabaseContext, WhitelistItem, ContextVersion, PublishedVersions, DocEntry, Test } from '@/lib/types';
 import { SchedulePicker } from '@/components/shared/SchedulePicker';
 import { DeliveryCard } from '@/components/shared/DeliveryPicker';
@@ -24,6 +25,7 @@ import ChildPathSelector from '../ChildPathSelector';
 import Editor, { DiffEditor } from '@monaco-editor/react';
 import Markdown from '../Markdown';
 import DocumentHeader from '../DocumentHeader';
+import { toaster } from '@/components/ui/toaster';
 import { useAppSelector } from '@/store/hooks';
 import { selectConnectionsLoading } from '@/store/filesSlice';
 import { HIDDEN_SYSTEM_FOLDERS } from '@/lib/mode/path-resolver';
@@ -117,6 +119,38 @@ export default function ContextEditorV2({
   const [expandedDocs, setExpandedDocs] = useState<Set<number>>(() => new Set([0])); // First entry expanded by default
   // null = default (editor + preview side by side), 'editor' = editor only, 'preview' = preview only, 'diff' = diff side by side
   const [docViewModes, setDocViewModes] = useState<Record<number, 'editor' | 'preview' | 'diff' | null>>({});
+
+  // Image upload: one hidden file input shared across all doc entries
+  const imageUploadInputRef = useRef<HTMLInputElement>(null);
+  const imageUploadTargetIndex = useRef<number | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const docEditorRefs = useRef<Record<number, any>>({});
+
+  const handleImageUploadClick = useCallback((index: number) => {
+    imageUploadTargetIndex.current = index;
+    imageUploadInputRef.current?.click();
+  }, []);
+
+  const handleImageFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || imageUploadTargetIndex.current === null) return;
+
+    const targetIndex = imageUploadTargetIndex.current;
+    try {
+      const { publicUrl } = await uploadFile(file);
+      const markdownSnippet = `![${file.name}](${publicUrl})`;
+      const editor = docEditorRefs.current[targetIndex];
+      if (editor) {
+        const selection = editor.getSelection();
+        editor.executeEdits('image-upload', [{ range: selection, text: markdownSnippet }]);
+        editor.focus();
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to upload image';
+      toaster.create({ title: message, type: 'error' });
+    }
+  }, []);
 
   // Get connections loading state from Redux (for loading indicator)
   const isLoading = useAppSelector(selectConnectionsLoading);
@@ -370,6 +404,16 @@ export default function ContextEditorV2({
 
   return (
     <VStack gap={6} align="stretch" p={3}>
+      {/* Hidden file input shared across all markdown editors for image upload */}
+      <input
+        aria-label="Upload image to insert in documentation"
+        type="file"
+        accept="image/*"
+        ref={imageUploadInputRef}
+        style={{ display: 'none' }}
+        onChange={handleImageFileSelect}
+      />
+
       {/* Document Header */}
       <Box borderBottomWidth="1px" borderColor="border.muted" pb={2} position="sticky" top={0} zIndex={10} bg="bg.canvas" mx={-3} px={3}>
         <DocumentHeader
@@ -896,32 +940,44 @@ export default function ContextEditorV2({
                             />
                           </Box>
 
-                          {/* Toolbar: view mode */}
-                          <HStack px={3} py={1.5} bg="bg.muted" borderBottom="1px solid" borderColor="border.default" gap={1}>
-                            <Button
-                              size="xs"
-                              variant={docView === 'editor' ? 'solid' : 'ghost'}
-                              onClick={() => setDocViewMode(index, docView === 'editor' ? null : 'editor')}
-                            >
-                              Editor
-                            </Button>
-                            <Button
-                              size="xs"
-                              variant={docView === 'preview' ? 'solid' : 'ghost'}
-                              onClick={() => setDocViewMode(index, docView === 'preview' ? null : 'preview')}
-                            >
-                              Preview
-                            </Button>
-                            {originalDocs?.[index] != null && (
+                          {/* Toolbar: view mode + image upload */}
+                          <HStack px={3} py={1.5} bg="bg.muted" borderBottom="1px solid" borderColor="border.default" gap={1} justify="space-between">
+                            <HStack gap={1}>
                               <Button
                                 size="xs"
-                                variant={docView === 'diff' ? 'solid' : 'ghost'}
-                                onClick={() => setDocViewMode(index, docView === 'diff' ? null : 'diff')}
-                                disabled={!hasDiff}
+                                variant={docView === 'editor' ? 'solid' : 'ghost'}
+                                onClick={() => setDocViewMode(index, docView === 'editor' ? null : 'editor')}
                               >
-                                Diff
+                                Editor
                               </Button>
-                            )}
+                              <Button
+                                size="xs"
+                                variant={docView === 'preview' ? 'solid' : 'ghost'}
+                                onClick={() => setDocViewMode(index, docView === 'preview' ? null : 'preview')}
+                              >
+                                Preview
+                              </Button>
+                              {originalDocs?.[index] != null && (
+                                <Button
+                                  size="xs"
+                                  variant={docView === 'diff' ? 'solid' : 'ghost'}
+                                  onClick={() => setDocViewMode(index, docView === 'diff' ? null : 'diff')}
+                                  disabled={!hasDiff}
+                                >
+                                  Diff
+                                </Button>
+                              )}
+                            </HStack>
+                            <Button
+                              aria-label="Upload image"
+                              size="xs"
+                              variant="ghost"
+                              onClick={() => handleImageUploadClick(index)}
+                              title="Insert image"
+                            >
+                              <LuImage />
+                              Image
+                            </Button>
                           </HStack>
 
                           {/* Preview-only mode */}
@@ -948,6 +1004,7 @@ export default function ContextEditorV2({
                                 language="markdown"
                                 value={docEntry.content}
                                 onChange={(value) => handleMarkdownChange(index, value || '')}
+                                onMount={(editor) => { docEditorRefs.current[index] = editor; }}
                                 theme={colorMode === 'dark' ? 'vs-dark' : 'light'}
                                 options={{
                                   minimap: { enabled: false },
