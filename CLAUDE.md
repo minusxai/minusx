@@ -9,18 +9,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **This is non-negotiable. Every feature and refactor MUST follow one of these two flows.**
 
 ### New features — Red → Green
-1. **Write the test first.** It must fail (red) before any implementation exists.
-2. **Run it and confirm it fails.** Never skip this step — a test that never fails proves nothing.
-3. **Implement the feature** until the test passes (green).
-4. **Run the full suite** to confirm nothing regressed.
+1. Write the failing test first (red). Confirm it fails before implementing.
+2. Implement until the test passes (green).
+3. Run the full suite to confirm no regressions.
 
 ### Refactoring — Blue → Red → Blue
-1. **Write (or identify) tests that cover the existing behaviour.** They must pass (blue).
-2. **Remove or break the old implementation.** Run the tests and confirm they now fail (red). This proves the tests actually guard the behaviour.
-3. **Re-implement using the new approach** until all tests pass again (blue).
-4. **Run the full suite** to confirm nothing regressed.
+1. Identify tests covering existing behaviour — they must pass (blue).
+2. Break the old implementation and confirm tests fail (red). This proves the tests guard the behaviour.
+3. Re-implement until all tests pass (blue). Run the full suite.
 
-> If you skip the red step, you cannot trust the test. A green test that was never red is not a test — it's decoration.
+> A green test that was never red is not a test — it's decoration.
 
 ---
 
@@ -84,21 +82,6 @@ Exports all documents to STDOUT for version control or sharing.
 1. Export: `npm run export-db`
 2. Edit: Modify `lib/database/init-data.json`
 3. Re-initialize: `npm run import-db -- --replace-db=y`
-
-**Advanced: Selective company import:**
-```bash
-cd frontend
-npm run import-db -- path/to/export.json.gz    # Interactive selection from custom file
-npm run import-db                              # Safe default: init if missing, skip if exists
-cat backup.json | npm run import-db -- --stdin --replace-db=y  # Pipe from stdin
-```
-
-The `import-db` script supports:
-- **--stdin**: Read JSON from stdin instead of file path
-- **--default**: Use `lib/database/init-data.json` as input (automatic if no file)
-- **--all**: Auto-select all companies (automatic with --default)
-- **--replace-db=y**: Replace database if exists (skip confirmation)
-- **--replace-db=n**: Exit early if database exists (DEFAULT - safe for restarts)
 
 ### Database Migrations
 
@@ -193,23 +176,7 @@ The configs system provides per-company configuration stored as database documen
 - If config document doesn't exist, falls back to hardcoded `COMPANY_BRANDING` object
 - Partial configs supported: only specified fields override, others use defaults
 
-**Client Usage**:
-```typescript
-import { useConfigs } from '@/lib/hooks/useConfigs';
-import { getCompanyBranding } from '@/lib/branding/whitelabel';
-import { useAppSelector } from '@/store/hooks';
-
-const { branding } = useConfigs();
-const companyName = useAppSelector(state => state.auth.user?.companyName);
-
-// Use branding from Redux if available, fall back to hardcoded
-const finalBranding = branding || getCompanyBranding(companyName);
-
-// Access branding properties
-const logoSrc = colorMode === 'dark' ? finalBranding.logoDark : finalBranding.logoLight;
-const agentName = finalBranding.agentName;
-const displayName = finalBranding.displayName;
-```
+**Client Usage**: `useConfigs()` hook returns `{ branding }` from Redux. Fall back to `getCompanyBranding(companyName)` from `lib/branding/whitelabel.ts` if not loaded.
 
 **File References**
 - Files can reference other files (e.g., dashboards reference questions)
@@ -287,22 +254,6 @@ minusx/
 - **Container/View separation**: Containers (smart) connect to Redux, Views (dumb) are pure presentation
 - **Composition over inheritance**: Build complex UIs from simple, reusable components
 - **Single responsibility**: Each component should do one thing well
-
-**ESLint Configuration**
-To prevent inline imports, add this to your `.eslintrc`:
-```json
-{
-  "rules": {
-    "no-restricted-syntax": [
-      "error",
-      {
-        "selector": "ImportExpression",
-        "message": "Dynamic imports are not allowed. Use static imports at the top of the file. Inline imports indicate circular dependencies or poor architecture."
-      }
-    ]
-  }
-}
-```
 
 **Progressive Onboarding (GettingStartedV2)**
 - `components/GettingStartedV2.tsx` - Progressive onboarding banner/empty state
@@ -393,34 +344,6 @@ The application supports mode-based file system isolation, similar to the `as_us
 
 **Pattern consistency**: Mode follows exact same propagation pattern as `as_user` for architectural consistency.
 
-### First-Use Onboarding Flow
-
-The `/hello-world` page guides new users through setup. All onboarding state logic is centralized in `frontend/app/hello-world/onboarding-state.ts`.
-
-**Onboarding stages** (detected from connections/contexts/questions in org mode):
-1. No connections → `/hello-world` (welcome: choose demo or connect)
-2. Connection exists, no context → `/hello-world?step=context&connectionName=...`
-3. Connection + context, no questions → `/hello-world?step=generating&connectionName=...`
-4. All exist → onboarding complete, normal home redirect
-
-**Routing**: Detection runs in three places (all calling `detectOnboardingState` from `onboarding-state.ts`):
-- `middleware.ts` — server-side on `/`, `/p/org*`, `/hello-world` (without step param)
-- `app/page.tsx` — client-side navigation to `/`
-- `HelloWorldContent.tsx` — auto-detect when on `/hello-world` without URL step param
-
-**Key pattern**: The hello-world page acts as a context file page during the "Describe" step:
-- Context file is eagerly created on mount (or found if it already exists)
-- `setNavigation({ pathname: '/f/{contextFileId}' })` is dispatched so `selectAppState` resolves to the context file — this allows the agent's EditFile tool to work
-- `RightSidebar` is rendered as a page-level sibling (same layout as `FileLayout`) with `appStateOverride` and `sectionIds` props
-- `sectionIds` prop on RightSidebar allows overriding which sections to show (skips auto-detection)
-
-**Key files:**
-- `frontend/app/hello-world/onboarding-state.ts` — centralized state detection, URL param read/write, step labels
-- `frontend/app/hello-world/HelloWorldContent.tsx` — wizard UI with welcome screen + 3 steps
-- `frontend/app/hello-world/components/StepConnection.tsx` — embeds ConnectionContainerV2 with `onSaveSuccess` + `hideCancel`
-- `frontend/app/hello-world/components/StepContext.tsx` — schema browser + Monaco markdown editor, syncs with Redux when agent edits
-- `frontend/app/hello-world/components/StepGenerating.tsx` — placeholder "You're all set" page
-
 ### Parameter System
 - **Syntax**: `:paramName` in SQL queries (e.g., `:limit`, `:start_date`)
 - **Types**: `text`, `number`, `date`
@@ -468,17 +391,6 @@ interface VizSettings {
 - `components/question/QuestionVisualization.tsx` - Routes to Table or ChartBuilder
 - `lib/chart/chart-utils.ts` - Shared chart utilities (formatting, axis calculations)
 
-**Pivot Table Architecture**:
-- Pivot uses its own config (`PivotConfig`) instead of `xCols`/`yCols`: `rows` (dimension columns for row headers), `columns` (dimension columns for column headers), `values` (measures with per-value `AggregationFunction`: SUM/AVG/COUNT/MIN/MAX)
-- `ChartBuilder.tsx` branches on `chartType === 'pivot'`: renders `PivotAxisBuilder` instead of X/Y drop zones, calls `aggregatePivotData()` instead of `aggregateData()`, passes `PivotData` to `PivotTable`
-- `PivotTable.tsx` renders multi-level nested row/column headers via `rowSpan`/`colSpan`, subtotal rows at group boundaries, collapsible groups (toggle on subtotal rows), teal heatmap gradient, row/column/grand totals
-- Config changes propagate: `PivotAxisBuilder` → `ChartBuilder` → `QuestionVisualization` → `QuestionViewV2` → saved to `vizSettings.pivotConfig`
-
-**Aggregation Logic** (`ChartBuilder.tsx` → `aggregateData()`):
-- Groups rows by X-axis columns, sums Y-axis columns
-- For multiple X columns: reorders by cardinality for `line/bar/area/scatter`, honors original order for `pie/funnel`
-- Returns `{ xAxisData: string[], series: Array<{name, data}> }` format
-
 **Adding a New Viz Type**:
 1. Add type to `VizSettings.type` union in `lib/types.ts`
 2. Create renderer component in `components/plotx/` (receives `ChartProps`)
@@ -488,40 +400,10 @@ interface VizSettings {
 6. Add type to `handleVizTypeChange` in `QuestionViewV2.tsx`
 7. Export from `components/plotx/index.ts`
 
-### Chat API Integration
-The application uses an internal orchestration API for AI-powered chat functionality.
-
-**Architecture:**
-- **Frontend**: ChatInterface component → POST /api/chat
-- **Backend**: Next.js API route handles orchestration + automatic tool execution
-- **Python**: FastAPI backend (port 8001) executes agent logic
-- **Storage**: Conversations stored as files in SQLite (/logs/conversations/)
-
-**API Flow:**
-1. User sends message → ChatInterface → POST /api/chat
-2. Next.js loads conversation log from file storage
-3. Forwards to Python backend with full context
-4. Python executes agent + tools (server-side automatic loop)
-5. Returns completed_tool_calls and updated log
-6. Next.js appends to conversation file (with fork detection)
-7. Frontend updates Redux state and UI
-
-**Key Features:**
-- Server-side automatic tool execution
-- Append-only conversation log with conflict detection
-- Conversation forking for concurrent edits
-- Redux state management for reactivity
-
 ## Development Workflow
 
 ### Database Schema Changes
-When modifying SQLite schema:
-1. Update schema in `lib/database/documents-db.ts`
-2. Update TypeScript interfaces in `lib/types.ts`
-3. Export current data: `npm run export-db`
-4. Modify migration or init script
-5. Re-initialize: `npm run import-db -- --replace-db=y`
-6. Test with existing seed data
+Update `lib/database/schema.ts` + `lib/database/postgres-schema.ts` (must stay in sync), update `lib/types.ts`, add a migration entry, then re-initialize: `npm run import-db -- --replace-db=y`.
 
 ### Adding Next.js API Routes
 
@@ -667,7 +549,7 @@ See `store/__tests__/test-utils.ts` for available utilities and `chatE2E.test.ts
 
 **Test Ports:** Tests use ports 8002-8006 (distinct from dev servers on 3000 and 8001). Always check for stale test processes before running tests.
 
-For component-level UI interaction tests (React rendering, user events, DOM assertions), use the `*.ui.test.tsx` naming convention with the JSDOM runner instead (`npx jest --config jest.config.ui.js`). See `components/__tests__/dashboard.ui.test.tsx` for the reference pattern (real SQLite DB + real Next.js route handlers, no Python backend required).
+For component-level UI interaction tests (React rendering, user events, DOM assertions), use the `*.ui.test.tsx` naming convention with the JSDOM runner instead (`npx jest --config jest.config.ui.js`). See `components/__tests__/explore-chat.ui.test.tsx` for the reference pattern (Python backend, LLM mock server, Redux, async agent flow, `waitFor` assertions); see `components/__tests__/agent-creates-files.ui.test.tsx` for tool-execution patterns.
 
 **UI test element queries: `aria-label` ONLY.** Never use `getByRole`, `getByText`, `getByPlaceholderText`, `getByTestId`, or any other query strategy. Every interactive element must be located exclusively via `getByLabelText` / `findByLabelText` (which matches `aria-label`). If an element lacks an `aria-label`, add one to the component — do not work around it with a different query.
 
