@@ -20,7 +20,6 @@ import { getSidebarSection, SidebarSectionMetadata } from '@/lib/ui/sidebar-sect
 export interface MobileRightSidebarProps {
   title?: string;
   filePath?: string;
-  history?: ReactNode;
   showChat?: boolean;
   contextVersion?: number;  // Selected context version (admin testing)
   selectedContextPath?: string | null;  // Selected context path for dropdown
@@ -30,7 +29,6 @@ export interface MobileRightSidebarProps {
 export default function MobileRightSidebar({
   title = "Misc Info",
   filePath = '/',
-  history,
   showChat = false,
   contextVersion,
   selectedContextPath,
@@ -86,9 +84,6 @@ export default function MobileRightSidebar({
     sections.push(getSidebarSection('documentation'));
   }
 
-  if (history !== undefined) {
-    sections.push(getSidebarSection('history'));
-  }
 
   if (devMode) {
     sections.push(getSidebarSection('dev'));
@@ -291,16 +286,6 @@ export default function MobileRightSidebar({
                   ) : (
                     <Text fontSize="sm" color="fg.muted" fontFamily="mono">
                       No documentation available
-                    </Text>
-                  )}
-                </Box>
-              )}
-
-              {activeSection === 'history' && (
-                <Box p={4}>
-                  {history || (
-                    <Text fontSize="sm" color="fg.muted" fontFamily="mono">
-                      No history yet
                     </Text>
                   )}
                 </Box>
