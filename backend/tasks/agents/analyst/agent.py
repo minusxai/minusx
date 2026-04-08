@@ -291,9 +291,9 @@ class AnalystAgent(Agent):
             # context even longer and leave the thread ending with a bare
             # assistant message, which the Anthropic API rejects.
             if finish_reason in ("stop", "length"):
-                response = {
-                    "success": True
-                }
+                response = {"success": True}
+                if content_blocks:
+                    response["content_blocks"] = content_blocks
                 if content:
                     response["content"] = content
                     response["citations"] = citations
