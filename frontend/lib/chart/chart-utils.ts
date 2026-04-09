@@ -1014,7 +1014,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   // Resolve format configs for axes
   const { xDateFormat, yPrefix, ySuffix } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
 
-  // Determine consistent Y-axis scale across all series
+  // Determine consistent Y-axis scale across all series (per-axis when dual axis)
   const yScale = getNumberScale(series)
 
   const positiveScatterXValues = chartType === 'scatter'
@@ -1044,6 +1044,15 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   // Dual Y-axis: explicitly enabled via axisConfig.dualAxis + yRightCols
   const useDualYAxis = axisConfig?.dualAxis === true && yRightCols && yRightCols.length > 0
   const yAxisAssignments = useDualYAxis ? assignSeriesToYRightCols(series, yRightCols) : series.map(() => 0)
+
+  // Per-axis scales for dual axis mode
+  const yScaleLeft = useDualYAxis
+    ? getNumberScale(series.filter((_, i) => yAxisAssignments[i] === 0))
+    : yScale
+  const yScaleRight = useDualYAxis
+    ? getNumberScale(series.filter((_, i) => yAxisAssignments[i] === 1))
+    : yScale
+
   const resolvedYAxisLabel = axisConfig?.yTitle?.trim() || yAxisLabel
 
   // Calculate max length for Y-axis names based on available height
@@ -1167,13 +1176,17 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           }
         }
         // Left Y-axis (or no dual axis) → bar
-        return {
-          ...baseConfig,
-          type: 'bar' as const,
-          itemStyle: {
-            ...baseConfig.itemStyle,
-            opacity: seriesOpacity ?? 0.5,
-          },
+        {
+          const stackGroup = useDualYAxis ? (yAxisAssignments[index] === 0 ? 'left' : 'right') : 'total'
+          return {
+            ...baseConfig,
+            type: 'bar' as const,
+            ...(isStacked ? { stack: stackGroup } : {}),
+            itemStyle: {
+              ...baseConfig.itemStyle,
+              opacity: seriesOpacity ?? 0.5,
+            },
+          }
         }
       case 'scatter':
         return {
@@ -1275,6 +1288,10 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
     : {}
   const yAxisFormatter = (value: number) =>
     applyPrefixSuffix(formatWithScale(value, yScale), yPrefix, ySuffix)
+  const yAxisFormatterLeft = (value: number) =>
+    applyPrefixSuffix(formatWithScale(value, yScaleLeft), yPrefix, ySuffix)
+  const yAxisFormatterRight = (value: number) =>
+    applyPrefixSuffix(formatWithScale(value, yScaleRight), yPrefix, ySuffix)
   const yLogRangeProps = yScaleType === 'log' && (yMin === undefined || yMax === undefined)
     ? getLogExtent(positiveScatterYValues)
     : {}
@@ -1291,7 +1308,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           ...yExtraProps,
           ...yLogRangeProps,
           ...yRangeProps,
-          axisLabel: { formatter: yAxisFormatter },
+          axisLabel: { formatter: yAxisFormatterLeft },
         },
         {
           type: yAxisType,
@@ -1300,7 +1317,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           ...yExtraProps,
           ...yLogRangeProps,
           ...yRangeProps,
-          axisLabel: { formatter: yAxisFormatter },
+          axisLabel: { formatter: yAxisFormatterRight },
         },
       ]
       : {

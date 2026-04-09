@@ -79,7 +79,7 @@ export const StyleConfigPopover = ({ chartType, styleConfig, numSeries, onChange
   const popoverRef = useRef<HTMLDivElement>(null)
 
   const supportsMarkerSize = chartType === 'scatter' || chartType === 'line' || chartType === 'combo'
-  const supportsStacking = chartType === 'bar' || chartType === 'area'
+  const supportsStacking = chartType === 'bar' || chartType === 'area' || chartType === 'combo'
   const seriesCount = useMemo(() => Math.min(Math.max(numSeries, 1), COLOR_PALETTE.length), [numSeries])
   const selectedOpacity = styleConfig?.opacity == null ? 1 : styleConfig.opacity
   const isStacked = styleConfig?.stacked ?? true
