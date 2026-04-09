@@ -2,16 +2,22 @@
 
 import { useState, useMemo, useCallback } from 'react'
 import { Box, Table as ChakraTable, Icon } from '@chakra-ui/react'
+import { Tooltip } from '@/components/ui/tooltip'
 import { LuChevronUp, LuChevronRight, LuSquareFunction } from 'react-icons/lu'
 import { formatLargeNumber, formatNumber, formatDateValue, applyPrefixSuffix } from '@/lib/chart/chart-utils'
 import type { PivotData, FormulaResults } from '@/lib/chart/pivot-utils'
+import { useAppSelector } from '@/store/hooks'
 import type { ColumnFormatConfig } from '@/lib/types'
+
+type HeatmapScale = 'red-yellow-green' | 'green' | 'blue'
 
 interface PivotTableProps {
   pivotData: PivotData
   showRowTotals?: boolean
   showColTotals?: boolean
   showHeatmap?: boolean
+  compact?: boolean
+  heatmapScale?: HeatmapScale
   emptyMessage?: string
   rowDimNames?: string[]
   colDimNames?: string[]
@@ -44,6 +50,8 @@ export const PivotTable = ({
   showRowTotals = false,
   showColTotals = true,
   showHeatmap = true,
+  compact = false,
+  heatmapScale = 'red-yellow-green',
   emptyMessage,
   rowDimNames,
   colDimNames,
@@ -52,6 +60,8 @@ export const PivotTable = ({
   columnFormats,
   valueColumns,
 }: PivotTableProps) => {
+  const colorMode = useAppSelector((state) => state.ui.colorMode) as 'light' | 'dark'
+  const isDark = colorMode === 'dark'
   const { rowHeaders, columnHeaders, cells, rowTotals, valueLabels } = pivotData
 
   // Format a numeric cell value using per-value-column decimal/prefix/suffix config
@@ -107,29 +117,85 @@ export const PivotTable = ({
     return { minValue: min, maxValue: max }
   }, [cells])
 
-  const getCellBg = (value: number): string | undefined => {
+  const getCellBg = useCallback((value: number): string | undefined => {
     if (!showHeatmap) return undefined
     if (maxValue === minValue) return 'accent.teal/75'
     const normalized = (value - minValue) / (maxValue - minValue)
-    // Smooth gradient: red (low) → yellow (mid) → teal (high)
-    // Using RGB interpolation with two stops
-    const alpha = 0.55
+    const alpha = compact ? 0.85 : 0.55
     let r: number, g: number, b: number
-    if (normalized < 0.5) {
-      const t = normalized / 0.5
-      // Red (200, 60, 60) → Yellow (210, 180, 60)
-      r = Math.round(200 + t * 10)
-      g = Math.round(60 + t * 120)
-      b = 60
+
+    if (heatmapScale === 'green') {
+      if (isDark) {
+        // Dark mode green: near-black → #0e4429 → #26a641 → #4aea64
+        if (normalized < 0.33) {
+          const t = normalized / 0.33
+          r = Math.round(5 + 9 * t); g = Math.round(10 + 58 * t); b = Math.round(5 + 36 * t)
+        } else if (normalized < 0.66) {
+          const t = (normalized - 0.33) / 0.33
+          r = Math.round(0 + 38 * t); g = Math.round(109 + 57 * t); b = Math.round(50 + 15 * t)
+        } else {
+          const t = (normalized - 0.66) / 0.34
+          r = Math.round(38 + 36 * t); g = Math.round(166 + 68 * t); b = Math.round(65 + 35 * t)
+        }
+      } else {
+        // GitHub light mode green: #ebedf0 → #9be9a8 → #40c463 → #30a14e → #216e39
+        if (normalized < 0.25) {
+          const t = normalized / 0.25
+          r = Math.round(235 - t * 80); g = Math.round(237 - t * 4); b = Math.round(240 - t * 72)
+        } else if (normalized < 0.5) {
+          const t = (normalized - 0.25) / 0.25
+          r = Math.round(155 - t * 91); g = Math.round(233 - t * 37); b = Math.round(168 - t * 69)
+        } else if (normalized < 0.75) {
+          const t = (normalized - 0.5) / 0.25
+          r = Math.round(64 - t * 16); g = Math.round(196 - t * 35); b = Math.round(99 - t * 21)
+        } else {
+          const t = (normalized - 0.75) / 0.25
+          r = Math.round(48 - t * 15); g = Math.round(161 - t * 51); b = Math.round(78 - t * 21)
+        }
+      }
+    } else if (heatmapScale === 'blue') {
+      if (isDark) {
+        // Dark mode blue: #0a1929 → #0d47a1 → #2196f3 → #6ec6ff
+        if (normalized < 0.33) {
+          const t = normalized / 0.33
+          r = Math.round(10 + 3 * t); g = Math.round(25 + 46 * t); b = Math.round(41 + 120 * t)
+        } else if (normalized < 0.66) {
+          const t = (normalized - 0.33) / 0.33
+          r = Math.round(13 + 20 * t); g = Math.round(71 + 79 * t); b = Math.round(161 + 82 * t)
+        } else {
+          const t = (normalized - 0.66) / 0.34
+          r = Math.round(33 + 77 * t); g = Math.round(150 + 48 * t); b = Math.round(243 + 12 * t)
+        }
+      } else {
+        // Light mode blue: #eef3ff → #a8c8f0 → #5a9bd5 → #2a6cb8
+        if (normalized < 0.33) {
+          const t = normalized / 0.33
+          r = Math.round(238 - t * 70); g = Math.round(243 - t * 43); b = Math.round(255 - t * 15)
+        } else if (normalized < 0.66) {
+          const t = (normalized - 0.33) / 0.33
+          r = Math.round(168 - t * 78); g = Math.round(200 - t * 45); b = Math.round(240 - t * 27)
+        } else {
+          const t = (normalized - 0.66) / 0.34
+          r = Math.round(90 - t * 48); g = Math.round(155 - t * 47); b = Math.round(213 - t * 29)
+        }
+      }
     } else {
-      const t = (normalized - 0.5) / 0.5
-      // Yellow (210, 180, 60) → Teal (45, 160, 140)
-      r = Math.round(210 - t * 165)
-      g = Math.round(180 - t * 20)
-      b = Math.round(60 + t * 80)
+      // red-yellow-green (default)
+      if (normalized < 0.5) {
+        const t = normalized / 0.5
+        r = Math.round(200 + t * 10)
+        g = Math.round(60 + t * 120)
+        b = 60
+      } else {
+        const t = (normalized - 0.5) / 0.5
+        r = Math.round(210 - t * 165)
+        g = Math.round(180 - t * 20)
+        b = Math.round(60 + t * 80)
+      }
     }
+
     return `rgba(${r}, ${g}, ${b}, ${alpha})`
-  }
+  }, [showHeatmap, minValue, maxValue, compact, heatmapScale, isDark])
 
   // Column entries: interleave regular data columns with formula columns
   const columnEntries = useMemo((): ColEntry[] => {
@@ -555,6 +621,48 @@ export const PivotTable = ({
     onCellClick?.(filters, valueLabel, event)
   }, [rowHeaders, columnHeaders, rowDimNames, colDimNames, numValues, valueLabels, onCellClick])
 
+  // Compact mode: build tooltip content for a cell given row/col context
+  const buildTooltipContent = useCallback((value: number, rowIndex: number, cellIndex: number, valueIndex?: number): React.ReactNode => {
+    const dims: { label: string; value: string }[] = []
+    if (rowDimNames && rowHeaders[rowIndex]) {
+      rowDimNames.forEach((dimName, i) => {
+        if (i < rowHeaders[rowIndex].length) dims.push({ label: dimName, value: fmtHeader(rowHeaders[rowIndex][i], rowDimNames?.[i]) })
+      })
+    }
+    const colKeyIndex = Math.floor(cellIndex / numValues)
+    if (colDimNames && columnHeaders[colKeyIndex]) {
+      colDimNames.forEach((dimName, i) => {
+        if (i < columnHeaders[colKeyIndex].length) dims.push({ label: dimName, value: fmtHeader(columnHeaders[colKeyIndex][i], colDimNames?.[i]) })
+      })
+    }
+    const formattedValue = fmt(value, valueIndex)
+    const cellBg = getCellBg(value)
+    return (
+      <Box fontFamily="mono" fontSize="xs">
+        {dims.length > 0 && (
+          <Box fontWeight="600" mb={1}>
+            {dims.map(d => d.value).join(' · ')}
+          </Box>
+        )}
+        <Box display="flex" alignItems="center" gap={2}>
+          <Box w="10px" h="10px" borderRadius="full" flexShrink={0} bg={cellBg ?? 'fg.subtle'} />
+          <Box color="fg.muted">{valueLabels[valueIndex ?? 0] || 'Value'}</Box>
+          <Box fontWeight="700" ml="auto">{formattedValue}</Box>
+        </Box>
+      </Box>
+    )
+  }, [rowHeaders, columnHeaders, rowDimNames, colDimNames, numValues, fmtHeader, fmt, getCellBg, valueLabels])
+
+  // Compact mode sizing
+  const COMPACT_CELL_SIZE = 18
+  const headerBg = 'bg.muted'
+
+  // Fixed width for frozen row-dimension columns so sticky left offsets align
+  const ROW_DIM_COL_W = 120
+
+  // Tooltip styling for compact mode (ECharts-like)
+  const tooltipContentProps = { bg: 'bg.panel', color: 'fg.default', boxShadow: 'lg', borderRadius: 'md', border: '1px solid', borderColor: 'border.muted', px: 3, py: 2 }
+
   if (cells.length === 0 || (cells.length > 0 && cells[0].length === 0)) {
     return (
       <Box color="fg.subtle" fontSize="sm" textAlign="center" py={8}>
@@ -570,32 +678,38 @@ export const PivotTable = ({
 
   const colFormulas = formulaResults?.columnFormulas ?? []
   const hasColFormulas = colFormulas.length > 0
-
-  // Fixed width for frozen row-dimension columns so sticky left offsets align
-  const ROW_DIM_COL_W = 120
   const getLeftOffset = (dimIdx: number) => dimIdx * ROW_DIM_COL_W
   const isLastDim = (_dimIdx: number) => false  // Always show right border on all dimension columns
-  // Extra padding on the last frozen column to cover sub-pixel gaps
-  const dimColWidth = (dimIdx: number) => isLastDim(dimIdx) ? ROW_DIM_COL_W + 2 : ROW_DIM_COL_W
 
   // Helper: render cells for a row using columnEntries
   const renderDataCells = (rowIndex: number) => {
     return columnEntries.map((entry, i) => {
       if (entry.type === 'data') {
-        return (
+        const value = cells[rowIndex][entry.cellIndex]
+        const cellContent = compact ? null : fmt(value, entry.cellIndex % numValues)
+        const cell = (
           <ChakraTable.Cell
             key={`col-${i}`}
             textAlign="right"
             fontFamily="mono"
-            fontSize="sm"
-            bg={getCellBg(cells[rowIndex][entry.cellIndex])}
+            fontSize={compact ? '2xs' : 'sm'}
+            bg={getCellBg(value)}
             cursor="pointer"
             onClick={(e) => handlePivotCellClick(rowIndex, entry.cellIndex, e)}
             _hover={{ outline: '2px solid', outlineColor: 'accent.teal', outlineOffset: '-2px' }}
+            {...(compact ? { p: 0, w: `${COMPACT_CELL_SIZE}px`, minW: `${COMPACT_CELL_SIZE}px`, maxW: `${COMPACT_CELL_SIZE}px`, h: `${COMPACT_CELL_SIZE}px` } : {})}
           >
-            {fmt(cells[rowIndex][entry.cellIndex], entry.cellIndex % numValues)}
+            {cellContent}
           </ChakraTable.Cell>
         )
+        if (compact) {
+          return (
+            <Tooltip key={`col-${i}`} content={buildTooltipContent(value, rowIndex, entry.cellIndex, entry.cellIndex % numValues)} positioning={{ placement: 'top' }} contentProps={tooltipContentProps}>
+              {cell}
+            </Tooltip>
+          )
+        }
+        return cell
       }
       // formula-col
       const val = colFormulas[entry.formulaIdx].rowValues[rowIndex][entry.valueIdx]
@@ -604,11 +718,12 @@ export const PivotTable = ({
           key={`col-${i}`}
           textAlign="right"
           fontFamily="mono"
-          fontSize="sm"
+          fontSize={compact ? '2xs' : 'sm'}
           bg="accent.secondary/12"
           fontStyle="italic"
+          {...(compact ? { p: 0, w: `${COMPACT_CELL_SIZE}px`, minW: `${COMPACT_CELL_SIZE}px`, maxW: `${COMPACT_CELL_SIZE}px`, h: `${COMPACT_CELL_SIZE}px` } : {})}
         >
-          {fmt(val, entry.valueIdx)}
+          {compact ? null : fmt(val, entry.valueIdx)}
         </ChakraTable.Cell>
       )
     })
@@ -704,12 +819,18 @@ export const PivotTable = ({
       height="100%"
       overflow="auto"
       borderRadius="md"
+      css={{
+        '&::-webkit-scrollbar': { width: '8px', height: '8px' },
+        '&::-webkit-scrollbar-track': { background: 'transparent' },
+        '&::-webkit-scrollbar-thumb': { background: 'var(--chakra-colors-fg-subtle)', borderRadius: '4px' },
+        '&::-webkit-scrollbar-thumb:hover': { background: 'var(--chakra-colors-fg-muted)' },
+      }}
     >
-      <ChakraTable.Root size="sm" css={{ borderCollapse: 'separate', borderSpacing: 0, '& td, & th': { borderBottom: '1px solid', borderColor: 'var(--chakra-colors-fg-subtle)' } }}>
-        <ChakraTable.Header position="sticky" top={0} zIndex={5} bg="bg.emphasis">
+      <ChakraTable.Root size="sm" css={{ borderCollapse: 'separate', borderSpacing: compact ? '3px' : 0, ...(compact ? { '& td, & th': { borderBottom: 'none', borderRadius: '3px' } } : { '& td, & th': { borderBottom: '1px solid', borderColor: 'var(--chakra-colors-fg-subtle)' } }) }}>
+        <ChakraTable.Header position="sticky" top={0} zIndex={5} bg={headerBg}>
           {/* Column header rows */}
           {augmentedColHeaderRows.map((headerRow, rowIdx) => (
-            <ChakraTable.Row key={rowIdx} bg="bg.emphasis">
+            <ChakraTable.Row key={rowIdx} bg={headerBg}>
               {/* Row dimension name headers */}
               {rowIdx === 0 && numRowDims > 0 && (
                 Array.from({ length: numRowDims }, (_, dimIdx) => (
@@ -717,20 +838,22 @@ export const PivotTable = ({
                     key={`dim-${dimIdx}`}
                     rowSpan={numHeaderRows}
                     fontWeight="700"
-                    fontSize="xs"
+                    fontSize={compact ? '2xs' : 'xs'}
+                    fontFamily={compact ? 'mono' : undefined}
                     textTransform="uppercase"
-                    letterSpacing="0.05em"
+                    letterSpacing={compact ? undefined : '0.05em'}
                     color="fg.muted"
                     borderRight={isLastDim(dimIdx) ? undefined : '1px solid'}
                     borderColor="border.muted"
 
                     position="sticky"
                     left={`${getLeftOffset(dimIdx)}px`}
-                    bg="bg.emphasis"
+                    bg={headerBg}
                     zIndex={4}
                     w={`${ROW_DIM_COL_W}px`}
                     minW={`${ROW_DIM_COL_W}px`}
                     maxW={`${ROW_DIM_COL_W}px`}
+                    {...(compact ? { p: '1px 4px' } : {})}
                   >
                     {rowDimNames?.[dimIdx] || ''}
                   </ChakraTable.ColumnHeader>
@@ -744,24 +867,38 @@ export const PivotTable = ({
                   colSpan={hdr.colSpan}
                   rowSpan={hdr.rowSpan}
                   fontWeight="700"
-                  fontSize="xs"
+                  fontSize={compact ? '2xs' : 'xs'}
                   textTransform="uppercase"
-                  letterSpacing="0.05em"
-                  color={hdr.isFormula ? 'accent.secondary' : 'fg.muted'}
+                  letterSpacing={compact ? undefined : '0.05em'}
+                  color={hdr.isFormula ? 'accent.secondary' : compact ? 'fg.default' : 'fg.muted'}
                   textAlign="center"
-                  minW="80px"
+                  minW={compact ? `${COMPACT_CELL_SIZE}px` : '80px'}
                   borderBottom={rowIdx < numHeaderRows - 1 ? '1px solid' : undefined}
                   borderColor="border.muted"
                   zIndex={3}
-                  bg={hdr.isFormula ? 'accent.secondary/12' : 'bg.emphasis'}
+                  bg={hdr.isFormula ? 'accent.secondary/12' : 'bg.muted'}
                   fontStyle={hdr.isFormula ? 'italic' : undefined}
+                  {...(compact ? { px: 0, py: '4px', w: `${COMPACT_CELL_SIZE}px` } : {})}
                 >
-                  {hdr.isFormula ? (
+                  {compact ? (
+                    <Box display="flex" justifyContent="center" w="100%">
+                      <Box
+                        css={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
+                        transform="rotate(180deg)"
+                        fontSize="2xs"
+                        fontFamily="mono"
+                        whiteSpace="nowrap"
+                        lineHeight={1}
+                      >
+                        {hdr.label}
+                      </Box>
+                    </Box>
+                  ) : hdr.isFormula ? (
                     <Box display="inline-flex" alignItems="center" gap={1} justifyContent="center">
                       <Icon fontSize="md" color="accent.secondary">
                         <LuSquareFunction />
                       </Icon>
-                    
+
                       {hdr.label}
                     </Box>
                   ) : hdr.label}
@@ -792,7 +929,7 @@ export const PivotTable = ({
 
           {/* If no column dimensions, still show a header row with value labels */}
           {augmentedColHeaderRows.length === 0 && (
-            <ChakraTable.Row bg="bg.emphasis">
+            <ChakraTable.Row bg={headerBg}>
               {numRowDims > 0 && (
                 Array.from({ length: numRowDims }, (_, dimIdx) => (
                   <ChakraTable.ColumnHeader
@@ -807,7 +944,7 @@ export const PivotTable = ({
 
                     position="sticky"
                     left={`${getLeftOffset(dimIdx)}px`}
-                    bg="bg.emphasis"
+                    bg={headerBg}
                     zIndex={4}
                     w={`${ROW_DIM_COL_W}px`}
                     minW={`${ROW_DIM_COL_W}px`}
@@ -828,7 +965,7 @@ export const PivotTable = ({
                   textAlign="right"
                   minW="80px"
                   zIndex={3}
-                  bg="bg.emphasis"
+                  bg={headerBg}
                 >
                   {vl}
                 </ChakraTable.ColumnHeader>
@@ -949,7 +1086,7 @@ export const PivotTable = ({
 
                     position="sticky"
                     left={`${getLeftOffset(S)}px`}
-                    bg="bg.muted"
+                    bg={headerBg}
                     zIndex={2}
                     cursor="pointer"
                     onClick={() => toggleGroup(groupKey)}
@@ -1011,18 +1148,20 @@ export const PivotTable = ({
                       key={`dim-${dimIdx}`}
                       rowSpan={spanInfo.rowSpan}
                       fontWeight="600"
-                      fontSize="sm"
+                      fontSize={compact ? '2xs' : 'sm'}
+                      fontFamily={compact ? 'mono' : undefined}
                       borderRight={isLastDim(dimIdx) ? undefined : '1px solid'}
                       borderColor="border.muted"
 
                       position="sticky"
                       left={`${getLeftOffset(dimIdx)}px`}
-                      bg="bg.muted"
+                      bg={headerBg}
                       zIndex={2}
                       verticalAlign="top"
                       w={`${ROW_DIM_COL_W}px`}
                       minW={`${ROW_DIM_COL_W}px`}
                       maxW={`${ROW_DIM_COL_W}px`}
+                      {...(compact ? { p: '1px 4px', whiteSpace: 'nowrap', h: `${COMPACT_CELL_SIZE}px` } : {})}
                     >
                       {fmtHeader(rowHeaders[rowIndex][dimIdx], rowDimNames?.[dimIdx])}
                     </ChakraTable.Cell>
@@ -1031,33 +1170,46 @@ export const PivotTable = ({
 
                 {/* Data cells (interleaved with formula columns if applicable) */}
                 {hasColFormulas ? renderDataCells(rowIndex) : (
-                  cells[rowIndex].map((value, colIndex) => (
-                    <ChakraTable.Cell
-                      key={colIndex}
-                      textAlign="right"
-                      fontFamily="mono"
-                      fontSize="sm"
-                      bg={getCellBg(value)}
-                      cursor="pointer"
-                      onClick={(e) => handlePivotCellClick(rowIndex, colIndex, e)}
-                      _hover={{ outline: '2px solid', outlineColor: 'accent.teal', outlineOffset: '-2px' }}
-                    >
-                      {fmt(value, colIndex % numValues)}
-                    </ChakraTable.Cell>
-                  ))
+                  cells[rowIndex].map((value, colIndex) => {
+                    const cell = (
+                      <ChakraTable.Cell
+                        key={colIndex}
+                        textAlign="right"
+                        fontFamily="mono"
+                        fontSize={compact ? '2xs' : 'sm'}
+                        bg={getCellBg(value)}
+                        cursor="pointer"
+                        onClick={(e) => handlePivotCellClick(rowIndex, colIndex, e)}
+                        _hover={{ outline: '2px solid', outlineColor: 'accent.teal', outlineOffset: '-2px' }}
+                        {...(compact ? { p: 0, w: `${COMPACT_CELL_SIZE}px`, minW: `${COMPACT_CELL_SIZE}px`, maxW: `${COMPACT_CELL_SIZE}px`, h: `${COMPACT_CELL_SIZE}px` } : {})}
+                      >
+                        {compact ? null : fmt(value, colIndex % numValues)}
+                      </ChakraTable.Cell>
+                    )
+                    if (compact) {
+                      return (
+                        <Tooltip key={colIndex} content={buildTooltipContent(value, rowIndex, colIndex, colIndex % numValues)} positioning={{ placement: 'top' }} contentProps={tooltipContentProps}>
+                          {cell}
+                        </Tooltip>
+                      )
+                    }
+                    return cell
+                  })
                 )}
 
-                {/* Row total - only show on subtotal/formula rows, not data rows */}
+                {/* Row total */}
                 {showRowTotals && (
                   <ChakraTable.Cell
                     textAlign="right"
                     fontFamily="mono"
-                    fontSize="sm"
+                    fontSize={compact ? '2xs' : 'sm'}
                     borderLeft="1px solid"
                     borderColor="border.default"
                     bg="accent.teal/5"
                     color="fg.subtle"
-                  />
+                  >
+                    {fmt(rowTotals[rowIndex])}
+                  </ChakraTable.Cell>
                 )}
               </ChakraTable.Row>
             )

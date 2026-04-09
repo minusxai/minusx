@@ -575,6 +575,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
               showRowTotals={pivotConfig?.showRowTotals !== false}
               showColTotals={pivotConfig?.showColumnTotals !== false}
               showHeatmap={pivotConfig?.showHeatmap !== false}
+              compact={pivotConfig?.compact === true}
+              heatmapScale={(pivotConfig?.heatmapScale as 'red-yellow-green' | 'green' | 'blue') ?? 'red-yellow-green'}
               rowDimNames={pivotConfig?.rows.map(col => columnFormats[col]?.alias || col)}
               colDimNames={pivotConfig?.columns.map(col => columnFormats[col]?.alias || col)}
               formulaResults={formulaResults}

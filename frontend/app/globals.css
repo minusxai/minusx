@@ -29,6 +29,7 @@ body {
   height: 20px !important;
   background-color: #16a085 !important;
   border-radius: 2px 0 2px 0 !important;
+  z-index: 2 !important;
   /* box-shadow: 0 0 10px rgba(22, 160, 133, 0.5) !important; */
   /* transition: all 0.2s ease !important; */
 }

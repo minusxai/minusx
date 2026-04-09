@@ -78,6 +78,14 @@ export type Showcolumntotals = boolean | null;
  */
 export type Showheatmap = boolean | null;
 /**
+ * compact heatmap mode: hides cell values, shows only colored squares with tooltips, and uses smaller cells — like a GitHub contribution graph
+ */
+export type Compact = boolean | null;
+/**
+ * heatmap color scale: 'red-yellow-green' (default), 'green' (single-hue like GitHub), 'blue' (single-hue blue)
+ */
+export type Heatmapscale = string | null;
+/**
  * formulas combining top-level row dimension values
  */
 export type Rowformulas = PivotFormula[] | null;
@@ -305,6 +313,8 @@ export interface PivotConfig {
   showRowTotals?: Showrowtotals;
   showColumnTotals?: Showcolumntotals;
   showHeatmap?: Showheatmap;
+  compact?: Compact;
+  heatmapScale?: Heatmapscale;
   rowFormulas?: Rowformulas;
   columnFormulas?: Columnformulas;
 }

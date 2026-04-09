@@ -62,6 +62,8 @@ class PivotConfig(BaseModel):
     showRowTotals: Optional[bool] = Field(None, description="show row totals column")
     showColumnTotals: Optional[bool] = Field(None, description="show column totals row")
     showHeatmap: Optional[bool] = Field(None, description="show heatmap conditional formatting")
+    compact: Optional[bool] = Field(None, description="compact heatmap mode: hides cell values, shows only colored squares with tooltips, and uses smaller cells — like a GitHub contribution graph")
+    heatmapScale: Optional[str] = Field(None, description="heatmap color scale: 'red-yellow-green' (default), 'green' (single-hue like GitHub), 'blue' (single-hue blue)")
     rowFormulas: Optional[List[PivotFormula]] = Field(None, description="formulas combining top-level row dimension values")
     columnFormulas: Optional[List[PivotFormula]] = Field(None, description="formulas combining top-level column dimension values")
 
