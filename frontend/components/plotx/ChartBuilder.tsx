@@ -393,7 +393,14 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     if (chartType === 'pie' || chartType === 'funnel' || chartType === 'radar') {
       const xValue = params.name as string
 
-      if (xAxisColumns.length === 1) {
+      if (chartType === 'pie' && xAxisColumns.length === 2 && params.seriesName === 'Outer') {
+        // Nested pie outer ring: name is "PrimaryX — SplitByValue"
+        const parts = xValue.split(' — ')
+        if (parts.length === 2) {
+          filters[xAxisColumns[0]] = parts[0]
+          filters[xAxisColumns[1]] = parts[1]
+        }
+      } else if (xAxisColumns.length === 1) {
         filters[xAxisColumns[0]] = xValue
       } else if (xAxisColumns.length > 1) {
         if (axisMapping) {

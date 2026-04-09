@@ -38,7 +38,7 @@ export function getVizConstraintError(
 
     case 'pie':
       if (xColCount < 1) return { error: 'Pie charts require at least 1 X-axis column for grouping.' }
-      if (xColCount > 1) return { error: 'Pie charts support only a single X-axis column. Remove extra columns from the X axis to continue.' }
+      if (xColCount > 2) return { error: 'Pie charts support at most 2 X-axis columns (category + split). Remove extra columns from the X axis to continue.' }
       if (yColCount > 1) return { error: 'Pie charts support only a single Y-axis column. Remove extra columns from the Y axis to continue.' }
       return { error: null }
 
