@@ -13,12 +13,9 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import type { ToolCall, DatabaseWithSchema } from '@/lib/types';
 import { uploadFile } from '@/lib/object-store/client';
 import { toJpegObjectUrl } from '@/lib/chart/render-chart-client';
-import { aggregateData } from '@/lib/chart/aggregate-data';
-import { buildChartOption, buildPieChartOption, buildFunnelChartOption, buildWaterfallChartOption } from '@/lib/chart/chart-utils';
-import { COLOR_PALETTE } from '@/lib/chart/echarts-theme';
-import * as echarts from 'echarts';
 import type { VizSettings } from '@/lib/types.gen';
 import { RENDERABLE_CHART_TYPES } from '@/lib/chart/render-chart-svg';
+import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client';
 
 interface DevToolsPanelProps {
   appState: AppState | null | undefined;
@@ -219,80 +216,6 @@ function ToolTester() {
   );
 }
 
-// ── Hidden-canvas ECharts export (matches download button quality) ───────────
-
-function buildEChartsOption(
-  queryResult: import('@/lib/types').QueryResult,
-  vizSettings: VizSettings,
-  colorMode: 'light' | 'dark',
-  width: number,
-  height: number,
-  titleOverride?: string,
-): echarts.EChartsOption | null {
-  const xCols = vizSettings.xCols ?? [];
-  const yCols = vizSettings.yCols ?? [];
-  if (yCols.length === 0 || queryResult.rows.length === 0) return null;
-
-  const chartType = vizSettings.type;
-  const aggregated = aggregateData(
-    queryResult.rows,
-    xCols,
-    yCols,
-    chartType as Parameters<typeof aggregateData>[3],
-  );
-  if (aggregated.xAxisData.length === 0 && aggregated.series.length === 0) return null;
-
-  // Use question name if provided; fall back to auto-generated axis description
-  const autoTitle = [
-    yCols.join(', '),
-    xCols.length > 0 && `vs ${xCols[0]}`,
-    xCols.length > 1 && `split by ${xCols.slice(1).join(', ')}`,
-  ].filter(Boolean).join(' ') || undefined;
-  const chartTitle = titleOverride || autoTitle;
-  const xAxisLabel = xCols.length > 0 ? xCols[0] : undefined;
-  const yAxisLabel = yCols.length === 1 ? yCols[0] : yCols.length > 1 ? yCols.join(', ') : undefined;
-
-  if (chartType === 'pie') {
-    return buildPieChartOption({ xAxisData: aggregated.xAxisData, series: aggregated.series, colorMode, xAxisColumns: xCols, yAxisColumns: yCols, chartTitle, colorPalette: COLOR_PALETTE, columnFormats: vizSettings.columnFormats ?? undefined });
-  }
-  if (chartType === 'funnel') {
-    return buildFunnelChartOption({ xAxisData: aggregated.xAxisData, series: aggregated.series, colorMode, xAxisColumns: xCols, yAxisColumns: yCols, chartTitle, colorPalette: COLOR_PALETTE, columnFormats: vizSettings.columnFormats ?? undefined });
-  }
-  if (chartType === 'waterfall') {
-    return buildWaterfallChartOption({ xAxisData: aggregated.xAxisData, series: aggregated.series, colorMode, xAxisColumns: xCols, yAxisColumns: yCols, chartTitle, colorPalette: COLOR_PALETTE, columnFormats: vizSettings.columnFormats ?? undefined });
-  }
-  return buildChartOption({ xAxisData: aggregated.xAxisData, series: aggregated.series, chartType: chartType as 'line' | 'bar' | 'area' | 'scatter', colorMode, colorPalette: COLOR_PALETTE, containerWidth: width, containerHeight: height, xAxisColumns: xCols, yAxisColumns: yCols, xAxisLabel, yAxisLabel, columnFormats: vizSettings.columnFormats ?? undefined, chartTitle });
-}
-
-async function renderChartToDataUrl(
-  queryResult: import('@/lib/types').QueryResult,
-  vizSettings: VizSettings,
-  colorMode: 'light' | 'dark' = 'dark',
-  width = 512,
-  height = 256,
-  titleOverride?: string,
-): Promise<string | null> {
-  const option = buildEChartsOption(queryResult, vizSettings, colorMode, width, height, titleOverride);
-  if (!option) return null;
-
-  const container = document.createElement('div');
-  container.style.cssText = `width:${width}px;height:${height}px;position:absolute;left:-9999px;top:-9999px;visibility:hidden;`;
-  document.body.appendChild(container);
-
-  try {
-    const bgColor = colorMode === 'dark' ? '#161b22' : '#ffffff';
-    const chart = echarts.init(container, null, { renderer: 'canvas', width, height });
-    chart.setOption({ ...option, animation: false, backgroundColor: bgColor });
-    // excludeComponents ensures toolbox never appears in the exported image
-    const dataUrl = chart.getDataURL({ type: 'png', pixelRatio: 2, backgroundColor: bgColor, excludeComponents: ['toolbox'] });
-    chart.dispose();
-    return dataUrl;
-  } finally {
-    document.body.removeChild(container);
-  }
-}
-
-
 // ── Image Tools test panel ────────────────────────────────────────────────────
 
 type ImageItem = { label: string; dataUrl?: string; url?: string };
@@ -361,46 +284,25 @@ function ImageToolsPanel({ appState }: { appState: AppState | null | undefined }
     }
   };
 
-  /** Render all charts to raw PNG data URLs — same dimensions as the server path. */
-  const renderAllRaw = async (): Promise<Array<{ rawUrl: string; label: string }>> => {
-    const w = imgWidth;
-    const h = Math.round(w * 0.5625); // 16:9
-
-    if (singleChart) {
-      const url = await renderChartToDataUrl(singleChart.queryResult, singleChart.vizSettings, colorMode, w, h, singleChart.name);
-      if (!url) throw new Error('Render returned null — unsupported viz type or empty data');
-      return [{ rawUrl: url, label: singleChart.name ?? 'Chart' }];
-    }
-
-    const results: Array<{ rawUrl: string; label: string }> = [];
-    for (const c of dashboardCharts) {
-      const url = await renderChartToDataUrl(c.queryResult, c.vizSettings, colorMode, w, h, c.name);
-      if (url) results.push({ rawUrl: url, label: c.name ?? 'Chart' });
-    }
-    if (results.length === 0) throw new Error('No charts rendered successfully');
-    return results;
-  };
+  const chartInputs = singleChart
+    ? [{ queryResult: singleChart.queryResult, vizSettings: singleChart.vizSettings, titleOverride: singleChart.name }]
+    : dashboardCharts.map(c => ({ queryResult: c.queryResult, vizSettings: c.vizSettings, titleOverride: c.name }));
 
   const handleECharts = () => run('ECharts', async () => {
-    const raws = await renderAllRaw();
-    const items: ImageItem[] = [];
-    for (const { rawUrl, label } of raws) {
-      const dataUrl = await toJpegObjectUrl(rawUrl, imgWidth, addWatermark, colorMode);
-      items.push({ label, dataUrl });
-    }
-    return { kind: 'items' as const, items };
+    const rendered = await clientChartImageRenderer.renderCharts(chartInputs, { width: imgWidth, colorMode, addWatermark });
+    if (rendered.length === 0) throw new Error('No charts rendered — unsupported viz type or empty data');
+    return { kind: 'items' as const, items: rendered.map(r => ({ label: r.label, dataUrl: r.dataUrl })) };
   });
 
   const handleS3ECharts = () => run('S3 ECharts', async () => {
-    const raws = await renderAllRaw();
+    const rendered = await clientChartImageRenderer.renderCharts(chartInputs, { width: imgWidth, colorMode, addWatermark });
+    if (rendered.length === 0) throw new Error('No charts rendered — unsupported viz type or empty data');
     const items: ImageItem[] = [];
-    for (const { rawUrl, label } of raws) {
-      const jpegUrl = await toJpegObjectUrl(rawUrl, imgWidth, addWatermark, colorMode);
-      const jpegBlob = await fetch(jpegUrl).then(r => r.blob());
-      URL.revokeObjectURL(jpegUrl);
+    for (const r of rendered) {
+      const jpegBlob = await fetch(r.dataUrl).then(res => res.blob());
       const file = new File([jpegBlob], 'chart.jpg', { type: 'image/jpeg' });
       const { publicUrl } = await uploadFile(file, undefined, { keyType: 'charts' });
-      items.push({ label, url: publicUrl });
+      items.push({ label: r.label, url: publicUrl });
     }
     return { kind: 'items' as const, items };
   });

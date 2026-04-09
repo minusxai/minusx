@@ -7,7 +7,7 @@ import { getSlackSigningSecret } from '@/lib/integrations/slack/config';
 import { buildSlackAgentArgs } from '@/lib/integrations/slack/context';
 import { resolveBaseUrl } from '@/lib/jobs/job-utils';
 import { extractSlackReply, extractQueryCharts, markdownToSlackMrkdwn, buildSlackReplyBlocks, normalizeSlackPrompt } from '@/lib/integrations/slack/messages';
-import { renderChartToJpeg } from '@/lib/chart/render-chart';
+import { serverChartImageRenderer } from '@/lib/chart/ChartImageRenderer.server';
 import { buildHomeView, buildWelcomeBlocks, shouldSendWelcome } from '@/lib/integrations/slack/welcome';
 import {
   findSlackInstallationByTeam,
@@ -191,19 +191,22 @@ export async function processSlackEvent(
 
       // Upload chart images first (max 2) so they appear before the text reply
       const queryCharts = extractQueryCharts(result.logDiff);
-      for (const chart of queryCharts) {
+      const renderedCharts = await serverChartImageRenderer.renderCharts(
+        queryCharts.map(c => ({ queryResult: c.queryResult, vizSettings: c.vizSettings })),
+        { width: 1024, colorMode: 'dark', addWatermark: true },
+      ).catch(err => { console.warn('[Slack] Chart rendering failed:', err); return []; });
+      for (const rendered of renderedCharts) {
         try {
-          const chartJpeg = await renderChartToJpeg(chart.queryResult, chart.vizSettings, { width: 1024, height: 576 });
-          if (chartJpeg) {
-            await uploadSlackFile(installation.bot.bot_token, {
-              channel: ev.channel,
-              threadTs,
-              filename: 'chart.jpg',
-              fileData: chartJpeg,
-            });
-          }
+          const base64Data = rendered.dataUrl.replace(/^data:image\/\w+;base64,/, '');
+          const chartJpeg = Buffer.from(base64Data, 'base64');
+          await uploadSlackFile(installation.bot.bot_token, {
+            channel: ev.channel,
+            threadTs,
+            filename: 'chart.jpg',
+            fileData: chartJpeg,
+          });
         } catch (err) {
-          console.warn('[Slack] Chart rendering/upload failed:', err);
+          console.warn('[Slack] Chart upload failed:', err);
         }
       }
 

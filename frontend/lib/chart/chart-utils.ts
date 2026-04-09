@@ -3,7 +3,6 @@ import type { EChartsType } from 'echarts/core'
 import { withMinusXTheme } from './echarts-theme'
 import type { ColumnFormatConfig, AxisConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types'
 import type { CompanyBranding } from '@/lib/branding/whitelabel'
-import { toJpegObjectUrl } from '@/lib/chart/render-chart-client'
 
 // Chart props interface
 export interface ChartProps {
@@ -26,6 +25,7 @@ export interface ChartProps {
   styleConfig?: VisualizationStyleConfig
   annotations?: ChartAnnotation[]
   exportBranding?: Partial<CompanyBranding>
+  onDownloadImage?: () => Promise<void>
 }
 
 interface AnnotationGraphicsConfig {
@@ -56,6 +56,7 @@ interface SpecialChartOptionConfig {
   styleConfig?: VisualizationStyleConfig
   exportBranding?: Partial<CompanyBranding>
   downloadCsv?: () => void
+  onDownloadImage?: () => Promise<void>
 }
 
 interface FunnelChartOptionConfig extends SpecialChartOptionConfig {
@@ -286,6 +287,7 @@ export const buildPieChartOption = ({
   styleConfig,
   exportBranding,
   downloadCsv,
+  onDownloadImage,
 }: SpecialChartOptionConfig): EChartsOption => {
   const { fmtName, fmtValue } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
 
@@ -308,12 +310,13 @@ export const buildPieChartOption = ({
 
   const baseOption: EChartsOption = {
     ...(chartTitle ? { title: { text: chartTitle, left: 'center', top: 5, show: showChartTitle } } : {}),
-    ...(downloadCsv ? {
+    ...((downloadCsv || onDownloadImage) ? {
       toolbox: buildToolbox({
         colorMode,
         downloadCsv,
         chartTitle,
         exportBranding,
+        onDownloadImage,
       }),
     } : {}),
     tooltip: {
@@ -396,6 +399,7 @@ export const buildFunnelChartOption = ({
   styleConfig,
   exportBranding,
   downloadCsv,
+  onDownloadImage,
   orientation = 'horizontal',
 }: FunnelChartOptionConfig): EChartsOption => {
   const { fmtName, fmtValue } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
@@ -423,12 +427,13 @@ export const buildFunnelChartOption = ({
 
   const baseOption: EChartsOption = {
     ...(chartTitle ? { title: { text: chartTitle, left: 'center', top: 5, show: showChartTitle } } : {}),
-    ...(downloadCsv ? {
+    ...((downloadCsv || onDownloadImage) ? {
       toolbox: buildToolbox({
         colorMode,
         downloadCsv,
         chartTitle,
         exportBranding,
+        onDownloadImage,
       }),
     } : {}),
     tooltip: {
@@ -515,6 +520,7 @@ export const buildWaterfallChartOption = ({
   styleConfig,
   exportBranding,
   downloadCsv,
+  onDownloadImage,
 }: SpecialChartOptionConfig): EChartsOption => {
   const { fmtName, fmtValue, yPrefix, ySuffix } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
   const yScale = getNumberScale(series)
@@ -547,12 +553,13 @@ export const buildWaterfallChartOption = ({
 
   const baseOption: EChartsOption = {
     ...(chartTitle ? { title: { text: chartTitle, left: 'center', top: 5, show: showChartTitle } } : {}),
-    ...(downloadCsv ? {
+    ...((downloadCsv || onDownloadImage) ? {
       toolbox: buildToolbox({
         colorMode,
         downloadCsv,
         chartTitle,
         exportBranding,
+        onDownloadImage,
       }),
     } : {}),
     tooltip: {
@@ -875,50 +882,37 @@ export const getTimestamp = () => {
 
 interface ChartToolboxConfig {
   colorMode: 'light' | 'dark'
-  downloadCsv: () => void
+  downloadCsv?: () => void
   chartTitle?: string
   exportBranding?: Partial<CompanyBranding>
+  onDownloadImage?: () => Promise<void>
 }
 
 // Build toolbox configuration for charts (PNG + CSV download)
 export const buildToolbox = ({
   colorMode,
   downloadCsv,
-  chartTitle,
+  onDownloadImage,
 }: ChartToolboxConfig) => ({
   feature: {
-    mySaveAsImage: {
-      show: true,
-      title: '',
-      icon: `image://data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${colorMode === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10l-3.1-3.1a2 2 0 0 0-2.814.014L6 21"/><path d="m14 19 3 3v-5.5"/><path d="m17 22 3-3"/><circle cx="9" cy="9" r="2"/></svg>`)}`,
-      onclick: function (this: { ecModel: { scheduler: { ecInstance: any } } }) {
-        void (async () => {
-          const chart = this.ecModel?.scheduler?.ecInstance
-          if (!chart) return
-
-          const chartUrl = chart.getDataURL({
-            type: 'png',
-            pixelRatio: 2,
-            backgroundColor: colorMode === 'dark' ? '#161b22' : '#ffffff',
-            excludeComponents: ['toolbox'],
-          })
-
-          const exportUrl = await toJpegObjectUrl(chartUrl, window.innerWidth, true, colorMode)
-
-          const link = document.createElement('a')
-          link.href = exportUrl
-          link.download = `chart-${getTimestamp()}.jpg`
-          link.click()
-          URL.revokeObjectURL(exportUrl)
-        })()
+    ...(onDownloadImage ? {
+      mySaveAsImage: {
+        show: true,
+        title: '',
+        icon: `image://data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${colorMode === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10l-3.1-3.1a2 2 0 0 0-2.814.014L6 21"/><path d="m14 19 3 3v-5.5"/><path d="m17 22 3-3"/><circle cx="9" cy="9" r="2"/></svg>`)}`,
+        onclick: function () {
+          void onDownloadImage()
+        },
       },
-    },
-    myDownloadCsv: {
-      show: true,
-      title: '',
-      icon: `image://data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${colorMode === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>`)}`,
-      onclick: downloadCsv,
-    },
+    } : {}),
+    ...(downloadCsv ? {
+      myDownloadCsv: {
+        show: true,
+        title: '',
+        icon: `image://data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${colorMode === 'dark' ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>`)}`,
+        onclick: downloadCsv,
+      },
+    } : {}),
   },
   itemSize: 16,
   itemGap: 12,
@@ -998,10 +992,11 @@ interface BaseChartConfig {
   styleConfig?: VisualizationStyleConfig
   annotations?: ChartAnnotation[]
   exportBranding?: Partial<CompanyBranding>
+  onDownloadImage?: () => Promise<void>
 }
 
 export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
-  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, yRightCols, xAxisColumns, pointMeta, tooltipColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig, styleConfig, annotations, exportBranding } = config
+  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, yRightCols, xAxisColumns, pointMeta, tooltipColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig, styleConfig, annotations, exportBranding, onDownloadImage } = config
   const xScaleType = axisConfig?.xScale ?? 'linear'
   const yScaleType = axisConfig?.yScale ?? 'linear'
   const xMin = axisConfig?.xMin ?? undefined
@@ -1407,6 +1402,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
       downloadCsv,
       chartTitle,
       exportBranding,
+      onDownloadImage,
     }),
     tooltip: chartType === 'scatter'
       ? {

@@ -13,7 +13,7 @@ interface FunnelPlotProps extends ChartProps {
 }
 
 export const FunnelPlot = (props: FunnelPlotProps) => {
-  const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns, chartTitle, showChartTitle = true, colorPalette: customPalette, styleConfig, exportBranding } = props
+  const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns, chartTitle, showChartTitle = true, colorPalette: customPalette, styleConfig, exportBranding, onDownloadImage } = props
   const colorMode = useAppSelector((state) => state.ui.colorMode)
   const { containerRef, containerWidth, containerHeight, chartEvents } = useChartContainer(onChartClick)
   const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>('horizontal')
@@ -53,9 +53,10 @@ export const FunnelPlot = (props: FunnelPlotProps) => {
       styleConfig,
       exportBranding,
       downloadCsv,
+      onDownloadImage,
       orientation,
     })
-  }, [xAxisData, series, colorMode, containerWidth, containerHeight, orientation, columnFormats, xAxisColumns, yAxisColumns, chartTitle, showChartTitle, customPalette, styleConfig, exportBranding])
+  }, [xAxisData, series, colorMode, containerWidth, containerHeight, orientation, columnFormats, xAxisColumns, yAxisColumns, chartTitle, showChartTitle, customPalette, styleConfig, exportBranding, onDownloadImage])
 
   if ((xAxisColumns?.length ?? 0) > 1) {
     return <ChartError message="Funnel charts support only a single X-axis column. Remove extra columns from the X axis to continue." />
