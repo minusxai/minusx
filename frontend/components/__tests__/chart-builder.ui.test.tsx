@@ -43,7 +43,7 @@ describe('ChartBuilder axis selection', () => {
       />
     )
 
-    expect(screen.getByText('250.0')).toBeInTheDocument()
+    expect(screen.getByText('250')).toBeInTheDocument()
   })
 
   it('preserves an explicitly empty Y axis instead of auto-selecting a fallback column', () => {

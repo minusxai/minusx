@@ -171,17 +171,19 @@ export const formatLargeNumber = (value: number): string => {
   const absValue = Math.abs(value)
   const sign = value < 0 ? '-' : ''
 
+  const fmt = (n: number) => parseFloat(n.toFixed(2)).toString()
+
   if (absValue >= 1e9) {
-    return `${sign}${(absValue / 1e9).toFixed(1)}B`
+    return `${sign}${fmt(absValue / 1e9)}B`
   }
   if (absValue >= 1e6) {
-    return `${sign}${(absValue / 1e6).toFixed(1)}M`
+    return `${sign}${fmt(absValue / 1e6)}M`
   }
   if (absValue >= 1e3) {
-    return `${sign}${(absValue / 1e3).toFixed(1)}k`
+    return `${sign}${fmt(absValue / 1e3)}k`
   }
 
-  return `${sign}${absValue.toFixed(1)}`
+  return `${sign}${fmt(absValue)}`
 }
 
 // Determine a consistent scale suffix based on the max absolute value across all series
@@ -1012,9 +1014,13 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   const logMinorGridColor = colorMode === 'dark' ? 'rgba(208, 215, 222, 0.5)' : 'rgba(48, 54, 61, 0.5)'
 
   // Resolve format configs for axes
-  const { xDateFormat, yPrefix, ySuffix } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
+  const { xDateFormat, yPrefix, ySuffix, yDecimalPoints } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
+  // Resolve separate prefix/suffix for right Y-axis in dual-axis mode
+  const { yPrefix: yPrefixRight, ySuffix: ySuffixRight, yDecimalPoints: yDecimalPointsRight } = yRightCols && yRightCols.length > 0
+    ? resolveChartFormats(columnFormats, undefined, yRightCols)
+    : { yPrefix, ySuffix, yDecimalPoints }
 
-  // Determine consistent Y-axis scale across all series
+  // Determine consistent Y-axis scale across all series (per-axis when dual axis)
   const yScale = getNumberScale(series)
 
   const positiveScatterXValues = chartType === 'scatter'
@@ -1044,6 +1050,15 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   // Dual Y-axis: explicitly enabled via axisConfig.dualAxis + yRightCols
   const useDualYAxis = axisConfig?.dualAxis === true && yRightCols && yRightCols.length > 0
   const yAxisAssignments = useDualYAxis ? assignSeriesToYRightCols(series, yRightCols) : series.map(() => 0)
+
+  // Per-axis scales for dual axis mode
+  const yScaleLeft = useDualYAxis
+    ? getNumberScale(series.filter((_, i) => yAxisAssignments[i] === 0))
+    : yScale
+  const yScaleRight = useDualYAxis
+    ? getNumberScale(series.filter((_, i) => yAxisAssignments[i] === 1))
+    : yScale
+
   const resolvedYAxisLabel = axisConfig?.yTitle?.trim() || yAxisLabel
 
   // Calculate max length for Y-axis names based on available height
@@ -1167,13 +1182,17 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           }
         }
         // Left Y-axis (or no dual axis) → bar
-        return {
-          ...baseConfig,
-          type: 'bar' as const,
-          itemStyle: {
-            ...baseConfig.itemStyle,
-            opacity: seriesOpacity ?? 0.5,
-          },
+        {
+          const stackGroup = useDualYAxis ? (yAxisAssignments[index] === 0 ? 'left' : 'right') : 'total'
+          return {
+            ...baseConfig,
+            type: 'bar' as const,
+            ...(isStacked ? { stack: stackGroup } : {}),
+            itemStyle: {
+              ...baseConfig.itemStyle,
+              opacity: seriesOpacity ?? 0.5,
+            },
+          }
         }
       case 'scatter':
         return {
@@ -1275,6 +1294,10 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
     : {}
   const yAxisFormatter = (value: number) =>
     applyPrefixSuffix(formatWithScale(value, yScale), yPrefix, ySuffix)
+  const yAxisFormatterLeft = (value: number) =>
+    applyPrefixSuffix(formatWithScale(value, yScaleLeft), yPrefix, ySuffix)
+  const yAxisFormatterRight = (value: number) =>
+    applyPrefixSuffix(formatWithScale(value, yScaleRight), yPrefixRight, ySuffixRight)
   const yLogRangeProps = yScaleType === 'log' && (yMin === undefined || yMax === undefined)
     ? getLogExtent(positiveScatterYValues)
     : {}
@@ -1282,30 +1305,41 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
     ...(yMin !== undefined ? { min: yMin } : {}),
     ...(yMax !== undefined ? { max: yMax } : {}),
   }
+  // Estimate nameGap based on longest formatted tick label width
+  const estimateNameGap = (formatter: (v: number) => string, scale: NumberScale): number => {
+    // Sample a few representative values to find the widest label
+    const sampleValues = [0, scale.divisor, scale.divisor * 5, scale.divisor * 10]
+    const maxLen = Math.max(...sampleValues.map(v => formatter(v).length))
+    // ~7px per character + 10px padding
+    return Math.max(25, maxLen * 7 + 10)
+  }
   const yAxisConfig = useDualYAxis
     ? [
         {
           type: yAxisType,
           name: getAxisName(0),
+          nameGap: estimateNameGap(yAxisFormatterLeft, yScaleLeft),
           position: 'left' as const,
           ...yExtraProps,
           ...yLogRangeProps,
           ...yRangeProps,
-          axisLabel: { formatter: yAxisFormatter },
+          axisLabel: { formatter: yAxisFormatterLeft },
         },
         {
           type: yAxisType,
           name: getAxisName(1),
+          nameGap: estimateNameGap(yAxisFormatterRight, yScaleRight),
           position: 'right' as const,
           ...yExtraProps,
           ...yLogRangeProps,
           ...yRangeProps,
-          axisLabel: { formatter: yAxisFormatter },
+          axisLabel: { formatter: yAxisFormatterRight },
         },
       ]
       : {
         type: yAxisType,
         name: wrapAxisName(resolvedYAxisLabel, maxAxisNameLength),
+        nameGap: estimateNameGap(yAxisFormatter, yScale),
         ...yExtraProps,
         ...yLogRangeProps,
         ...yRangeProps,
@@ -1477,11 +1511,21 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
             const header = xDateFormat ? formatDateValue(raw, xDateFormat) : isDate ? formatDateValue(raw, 'short') : raw
             const nonZeroItems = items.filter((p: any) => typeof p.value === 'number' ? p.value !== 0 : true)
             const rows = nonZeroItems.map((p: any) => {
-              // Resolve per-series prefix/suffix: try matching series name to a Y column
-              const colCfg = columnFormats?.[p.seriesName]
-              const seriesPrefix = colCfg?.prefix || yPrefix
-              const seriesSuffix = colCfg?.suffix || ySuffix
-              const val = typeof p.value === 'number' ? applyPrefixSuffix(formatWithScale(p.value, yScale), seriesPrefix, seriesSuffix) : String(p.value)
+              // Resolve per-series format config: use column name stripped of axis indicator
+              const baseSeriesName = p.seriesName?.replace(/ \([LR]\)$/, '') ?? ''
+              const colCfg = columnFormats?.[baseSeriesName] ?? columnFormats?.[p.seriesName]
+              const isRightAxis = p.encode?.yAxisIndex === 1 || p.axisIndex === 1 || (useDualYAxis && yRightCols?.includes(baseSeriesName))
+              const seriesPrefix = colCfg?.prefix ?? (isRightAxis ? yPrefixRight : yPrefix)
+              const seriesSuffix = colCfg?.suffix ?? (isRightAxis ? ySuffixRight : ySuffix)
+              const seriesScale = isRightAxis ? yScaleRight : (useDualYAxis ? yScaleLeft : yScale)
+              let val: string
+              if (typeof p.value === 'number') {
+                const dp = colCfg?.decimalPoints ?? undefined
+                const formatted = dp !== undefined ? formatNumber(p.value, dp) : formatWithScale(p.value, seriesScale)
+                val = applyPrefixSuffix(formatted, seriesPrefix, seriesSuffix)
+              } else {
+                val = String(p.value)
+              }
               return `<tr><td>${p.marker} ${p.seriesName}</td><td style="text-align:right;padding-left:12px;font-weight:600">${val}</td></tr>`
             })
             return `${header}<table style="width:100%">${rows.join('')}</table>`

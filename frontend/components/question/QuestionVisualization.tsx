@@ -182,7 +182,7 @@ export function QuestionVisualization({
               flexShrink={0}
             >
               <LuSettings size={14} />
-              Viz Settings
+              {vizSettingsExpanded ? 'Hide Viz Config' : 'Show Viz Config'}
               {vizSettingsExpanded ? <LuChevronUp size={14} /> : <LuChevronDown size={14} />}
             </Button>
           )}
