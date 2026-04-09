@@ -171,17 +171,19 @@ export const formatLargeNumber = (value: number): string => {
   const absValue = Math.abs(value)
   const sign = value < 0 ? '-' : ''
 
+  const fmt = (n: number) => parseFloat(n.toFixed(2)).toString()
+
   if (absValue >= 1e9) {
-    return `${sign}${(absValue / 1e9).toFixed(1)}B`
+    return `${sign}${fmt(absValue / 1e9)}B`
   }
   if (absValue >= 1e6) {
-    return `${sign}${(absValue / 1e6).toFixed(1)}M`
+    return `${sign}${fmt(absValue / 1e6)}M`
   }
   if (absValue >= 1e3) {
-    return `${sign}${(absValue / 1e3).toFixed(1)}k`
+    return `${sign}${fmt(absValue / 1e3)}k`
   }
 
-  return `${sign}${absValue.toFixed(1)}`
+  return `${sign}${fmt(absValue)}`
 }
 
 // Determine a consistent scale suffix based on the max absolute value across all series

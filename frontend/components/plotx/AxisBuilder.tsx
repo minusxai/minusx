@@ -55,7 +55,7 @@ const AxisSettingsPanel = ({ axis, axisConfig, onChange }: {
 
   return (
     <VStack align="stretch" gap={2.5} minW={0}>
-      <HStack gap={4} align="center" justify="space-between">
+      <HStack gap={4} align="center" justify={axis === 'y' ? 'space-between' : 'flex-end'}>
         {axis === 'y' && (
           <HStack gap={2} align="center">
             <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
