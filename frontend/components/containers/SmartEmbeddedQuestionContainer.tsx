@@ -182,6 +182,7 @@ function SmartEmbeddedQuestionContainerInner({
             inset={0}
             cursor="move"
             zIndex={1}
+            css={{ clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 24px), calc(100% - 24px) 100%, 0 100%)' }}
           />
           <HStack
             className="edit-actions"
