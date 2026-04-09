@@ -18,7 +18,6 @@ import { RunNowHeader, type RunOptions } from '@/components/shared/RunNowHeader'
 import TestList from '../test/TestList';
 import ContextRunView from '../views/ContextRunView';
 import type { JobRun } from '@/lib/types';
-import { NativeSelect } from '@chakra-ui/react';
 import { serializeDatabases, parseDatabasesYaml, canDeleteVersion } from '@/lib/context/context-utils';
 import SchemaTreeView from '../SchemaTreeView';
 import ChildPathSelector from '../ChildPathSelector';
