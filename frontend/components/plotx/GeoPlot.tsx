@@ -19,10 +19,16 @@ interface GeoPlotProps {
   height?: number | string
 }
 
-/** Default no-tile background style for GeoJSON-only mode */
+/** Border colors: close to white in dark, close to black in light */
+const GEO_BORDER = {
+  light: '#2a2a2a',
+  dark: '#d0d0d0',
+}
+
+/** Default style for unmatched regions */
 const GEO_ONLY_STYLE = {
-  light: { fillColor: '#e0e0e0', weight: 1, color: '#999', fillOpacity: 0.3 } as L.PathOptions,
-  dark: { fillColor: '#2d333b', weight: 1, color: '#555', fillOpacity: 0.3 } as L.PathOptions,
+  light: { fillColor: '#D0D7DE', weight: 0.5, color: GEO_BORDER.light, fillOpacity: 0.25 } as L.PathOptions,
+  dark: { fillColor: '#30363D', weight: 0.5, color: GEO_BORDER.dark, fillOpacity: 0.3 } as L.PathOptions,
 }
 
 export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
@@ -82,9 +88,9 @@ export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
             if (val === undefined) return { ...GEO_ONLY_STYLE[colorMode], fillOpacity: 0.1 }
             return {
               fillColor: getColorScale(val, min, max, colorMode, geoConfig.colorScale),
-              weight: 1,
-              color: colorMode === 'dark' ? '#555' : '#999',
-              fillOpacity: 0.75,
+              weight: 0.5,
+              color: GEO_BORDER[colorMode],
+              fillOpacity: 0.8,
             }
           },
           onEachFeature: (feature, layer) => {

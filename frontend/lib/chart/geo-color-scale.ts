@@ -53,27 +53,36 @@ export const COLOR_SCALES = [
 
 export type ColorScaleKey = typeof COLOR_SCALES[number]['key']
 
-/** Low→high endpoints per scale, per color mode */
-const SCALE_PALETTES: Record<ColorScaleKey, Record<'light' | 'dark', { low: string; high: string }>> = {
+/** 3-stop palettes per scale, per color mode: [low, mid, high] */
+const SCALE_PALETTES: Record<ColorScaleKey, Record<'light' | 'dark', [string, string, string]>> = {
   'green': {
-    light: { low: '#ebedf0', high: '#216e39' },
-    dark: { low: '#1a3a2a', high: '#40c463' },
+    light: ['#ebedf0', '#40c463', '#216e39'],
+    dark: ['#161b22', '#2ea043', '#40c463'],
   },
   'blue': {
-    light: { low: '#eef3ff', high: '#2a6cb8' },
-    dark: { low: '#1a2a3a', high: '#5a9bd5' },
+    light: ['#eef3ff', '#5a9bd5', '#2a6cb8'],
+    dark: ['#161b22', '#3d7bbf', '#5a9bd5'],
   },
   'red-yellow-green': {
-    light: { low: '#c83c3c', high: '#2da08c' },
-    dark: { low: '#8b2020', high: '#2da08c' },
+    light: ['#c83c3c', '#d2b43c', '#2da08c'],
+    dark: ['#8b2020', '#b89a30', '#2da08c'],
   },
 }
 
 const DEFAULT_SCALE: ColorScaleKey = 'green'
 
+/** Interpolate through a 3-stop gradient: low→mid (t 0–0.5), mid→high (t 0.5–1) */
+function interpolate3(stops: [string, string, string], t: number): string {
+  const clamped = Math.max(0, Math.min(1, t))
+  if (clamped <= 0.5) {
+    return interpolateColor(stops[0], stops[1], clamped * 2)
+  }
+  return interpolateColor(stops[1], stops[2], (clamped - 0.5) * 2)
+}
+
 /**
- * Map a numeric value to a hex color on a sequential scale.
- * Returns a color between the low and high ends of the selected palette.
+ * Map a numeric value to a hex color on a 3-stop sequential scale.
+ * Interpolates low → mid → high for richer color transitions.
  */
 export function getColorScale(
   value: number,
@@ -83,10 +92,10 @@ export function getColorScale(
   scale?: string | null,
 ): string {
   const scaleKey = (scale && scale in SCALE_PALETTES ? scale : DEFAULT_SCALE) as ColorScaleKey
-  const palette = SCALE_PALETTES[scaleKey][colorMode]
-  if (min === max) return palette.low
+  const stops = SCALE_PALETTES[scaleKey][colorMode]
+  if (min === max) return stops[0]
   const t = (value - min) / (max - min)
-  return interpolateColor(palette.low, palette.high, t)
+  return interpolate3(stops, t)
 }
 
 /**

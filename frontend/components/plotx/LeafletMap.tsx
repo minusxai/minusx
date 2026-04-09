@@ -12,6 +12,12 @@ const TILE_URLS = {
 
 const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>'
 
+/** Map container background matching the app theme */
+const MAP_BG = {
+  light: '#F5F7FA',  // bg.canvas light
+  dark: '#0D1117',   // bg.canvas dark
+}
+
 interface LeafletMapProps {
   layers: L.Layer[]
   center?: [number, number]
@@ -121,5 +127,5 @@ export function LeafletMap({
     }
   }, [fitBounds])
 
-  return <div ref={containerRef} style={style} />
+  return <div ref={containerRef} style={{ ...style, background: MAP_BG[colorMode] }} />
 }
