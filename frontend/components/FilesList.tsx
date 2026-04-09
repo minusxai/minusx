@@ -570,7 +570,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
                               </HStack>
 
                               {/* Type Label — hide when section already indicates the type */}
-                              {(section.key === '_other' || section.key === 'folder') && (
+                              {section.key === '_other' && (
                               <Box w="120px" display={{ base: 'none', md: 'block' }}>
                                 <Text
                                   fontSize="xs"
