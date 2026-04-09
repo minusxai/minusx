@@ -47,11 +47,6 @@ export const RadarPlot = (props: RadarPlotProps) => {
     })
   }, [xAxisData, series, colorMode, containerWidth, containerHeight, columnFormats, xAxisColumns, yAxisColumns, chartTitle, showChartTitle, customPalette, styleConfig, exportBranding, onDownloadImage])
 
-  if ((xAxisColumns?.length ?? 0) > 1) {
-    return <ChartError message="Radar charts support only a single X-axis column. Remove extra columns from the X axis to continue." />
-  }
-
-
   if (!isValidChartData(xAxisData, series)) {
     return (
       <Box color="fg.subtle" fontSize="sm" textAlign="center" py={8}>

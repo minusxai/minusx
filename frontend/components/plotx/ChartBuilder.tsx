@@ -490,6 +490,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
         return null
       case 'radar':
         if (xAxisColumns.length < 1) return 'Radar charts require at least 1 X-axis column for indicators.'
+        if (xAxisColumns.length > 1 && allYColumns.length > 1) return 'Radar charts support either multiple X columns (split-by) with 1 Y column, or 1 X column with multiple Y columns — not both.'
+        if (xAxisColumns.length > 2) return 'Radar charts support at most 2 X-axis columns (indicators + split-by).'
         return null
       default:
         return null
