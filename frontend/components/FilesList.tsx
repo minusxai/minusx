@@ -14,6 +14,7 @@ import { Link } from '@/components/ui/Link';
 import DashboardUsageBadge from './DashboardUsageBadge';
 import { moveFile } from '@/lib/api/file-state';
 import BulkMoveFileModal from './BulkMoveFileModal';
+import { canDeleteFileType } from '@/lib/auth/access-rules.client';
 
 interface FilesListProps {
   files: DbFile[];
@@ -100,11 +101,12 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
     ? files
     : files.filter(f => selectedTypes.includes(f.type));
 
-  // Group files into sections: folders, dashboards, questions, other
-  const SECTION_ORDER = ['folder', 'dashboard', 'question', '_other'] as const;
+  // Group files into sections: knowledge base, dashboards, folders, questions, other
+  const SECTION_ORDER = ['context', 'dashboard', 'folder', 'question', '_other'] as const;
   type SectionKey = typeof SECTION_ORDER[number];
 
   const SECTION_LABELS: Record<SectionKey, string> = {
+    context: 'Knowledge Base',
     folder: 'Folders',
     dashboard: 'Dashboards',
     question: 'Questions',
@@ -113,6 +115,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
 
   const sections = useMemo(() => {
     const groups: Record<SectionKey, DbFile[]> = {
+      context: [],
       folder: [],
       dashboard: [],
       question: [],
@@ -120,7 +123,8 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
     };
 
     filtered.forEach(f => {
-      if (f.type === 'folder') groups.folder.push(f);
+      if (f.type === 'context') groups.context.push(f);
+      else if (f.type === 'folder') groups.folder.push(f);
       else if (f.type === 'dashboard') groups.dashboard.push(f);
       else if (f.type === 'question') groups.question.push(f);
       else groups._other.push(f);
@@ -136,11 +140,11 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
       .filter(s => s.files.length > 0);
   }, [filtered]);
 
-  // Track collapsed sections — dashboard always open, others closed unless they're the only section
+  // Track collapsed sections — knowledge base is always open, dashboards/folders open by default
   const [collapsedSections, setCollapsedSections] = useState<Set<SectionKey>>(new Set(['question', '_other']));
 
-  // If no folder/dashboard sections exist, force-open the remaining sections
-  const hasPrimarySections = sections.some(s => s.key === 'folder' || s.key === 'dashboard');
+  // If no primary sections exist, force-open the remaining sections
+  const hasPrimarySections = sections.some(s => s.key === 'context' || s.key === 'dashboard' || s.key === 'folder');
   const effectiveCollapsed = hasPrimarySections
     ? collapsedSections
     : new Set([...collapsedSections].filter(k => !sections.some(s => s.key === k)));
@@ -181,7 +185,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
 
   // Drag and drop handlers
   const handleDragStart = (e: React.DragEvent, file: DbFile) => {
-    if (file.type === 'folder') return; // Don't allow dragging folders for now
+    if (file.type === 'folder' || !canDeleteFileType(file.type)) return;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('fileId', file.id.toString());
     setDraggedFileId(file.id);
@@ -418,8 +422,9 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
       ) : (
         <VStack gap={0} align="stretch">
           {sections.map((section, sectionIdx) => {
-            const isCollapsed = effectiveCollapsed.has(section.key);
-            const showHeader = true;
+            const isCollapsible = section.key !== 'context';
+            const isCollapsed = isCollapsible && effectiveCollapsed.has(section.key);
+            const showHeader = isCollapsible;
             // Get representative metadata for section icon/color
             const sectionMeta = section.key !== '_other'
               ? FILE_TYPE_METADATA[section.key as keyof typeof FILE_TYPE_METADATA]
@@ -430,54 +435,49 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
                 {/* Section Header */}
                 {showHeader && (
                   <HStack
-                    px={4}
-                    py={3}
+                    px={3}
+                    py={1.5}
                     cursor="pointer"
                     onClick={() => toggleSection(section.key)}
-                    bg="bg.muted"
-                    _hover={{ bg: 'bg.emphasized' }}
-                    borderRadius="md"
+                    _hover={{ bg: 'bg.subtle' }}
+                    borderRadius="sm"
                     transition="background 0.15s"
                     userSelect="none"
-                    mt={sectionIdx > 0 ? 2 : 0}
-                    // mb={1}
-                    borderBottom="1px solid"
-                    borderColor="border.muted"
+                    mt={sectionIdx > 0 ? 1 : 0}
                     aria-label={`${section.label} section`}
                   >
                     <Icon
                       as={isCollapsed ? LuChevronRight : LuChevronDown}
-                      boxSize={4.5}
+                      boxSize={3.5}
                       color={sectionMeta?.color || 'fg.muted'}
                     />
-                    {sectionMeta && (
-                      <Icon
-                        as={sectionMeta.icon}
-                        boxSize={5}
-                        color={sectionMeta.color}
-                      />
-                    )}
                     <Text
-                      fontSize="sm"
-                      fontWeight="800"
-                      color="fg.default"
+                      fontSize="2xs"
+                      fontWeight="600"
+                      color="fg.muted"
                       textTransform="uppercase"
                       letterSpacing="0.05em"
                     >
                       {section.label}
                     </Text>
-                    <Text
-                      fontSize="xs"
-                      fontWeight="600"
-                      color="fg.muted"
-                      fontFamily="mono"
-                      bg="bg.muted"
-                      px={2}
-                      py={0.5}
+                    <Flex
+                      align="center"
+                      justify="center"
+                      boxSize={4}
                       borderRadius="full"
+                      bg={sectionMeta?.color ? `${sectionMeta.color}/10` : 'bg.emphasized'}
+                      flexShrink={0}
                     >
-                      {section.files.length}
-                    </Text>
+                      <Text
+                        fontSize="2xs"
+                        color={sectionMeta?.color || 'fg.muted'}
+                        fontFamily="mono"
+                        lineHeight="1"
+                      >
+                        {section.files.length}
+                      </Text>
+                    </Flex>
+                    <Box flex="1" h="1px" bg="border.muted" />
                   </HStack>
                 )}
 
@@ -528,9 +528,9 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
                               _hover={{
                                 bg: selectionMode ? 'accent.teal/5' : dropTargetId === file.id && file.type === 'folder' ? 'accent.teal/20' : 'bg.surface',
                               }}
-                              cursor={selectionMode ? 'pointer' : file.type === 'folder' ? 'pointer' : 'grab'}
+                              cursor="pointer"
                               _active={{
-                                cursor: selectionMode ? 'pointer' : file.type === 'folder' ? 'pointer' : 'grabbing',
+                                cursor: 'pointer',
                               }}
                               transition="all 0.15s"
                               aria-label={file.name}
@@ -570,7 +570,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
                               </HStack>
 
                               {/* Type Label — hide when section already indicates the type */}
-                              {(section.key === '_other' || section.key === 'folder') && (
+                              {section.key === '_other' && (
                               <Box w="120px" display={{ base: 'none', md: 'block' }}>
                                 <Text
                                   fontSize="xs"
@@ -664,9 +664,9 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
                                 bg: selectionMode ? 'accent.teal/5' : dropTargetId === file.id && file.type === 'folder' ? 'accent.teal/20' : 'bg.elevated',
                                 borderColor: selectionMode && selectedFileIds.has(file.id) ? 'accent.teal' : dropTargetId === file.id && file.type === 'folder' ? 'accent.teal' : getFileTypeMetadata(file.type).color,
                               }}
-                              cursor={selectionMode ? 'pointer' : file.type === 'folder' ? 'pointer' : 'grab'}
+                              cursor="pointer"
                               _active={{
-                                cursor: selectionMode ? 'pointer' : file.type === 'folder' ? 'pointer' : 'grabbing',
+                                cursor: 'pointer',
                               }}
                               transition="all 0.15s"
                               align="center"

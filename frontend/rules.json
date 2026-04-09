@@ -47,8 +47,8 @@
     {
       "type": "deletionBlocklist",
       "role": "*",
-      "blockedTypes": ["config", "styles"],
-      "reason": "These file types are critical system files and cannot be deleted"
+      "blockedTypes": ["config", "styles", "context"],
+      "reason": "These file types are critical system files and cannot be deleted or moved"
     }
   ]
 }
