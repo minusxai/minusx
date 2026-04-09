@@ -112,7 +112,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
         queryHash, databaseName: connection_name, durationMs: 0,
         rowCount: cached.result.rows.length, wasCacheHit: true,
-        companyId: user.companyId, userEmail: user.email,
+        companyId: user.companyId, mode: user.mode, userEmail: user.email,
       });
       console.log(`[QUERY API] Cache hit. Total request time: ${Date.now() - startTime}ms`);
       return NextResponse.json({ success: true, data: { ...cached.result, cachedAt: cached.cachedAt }, finalQuery: cached.finalQuery });
@@ -179,7 +179,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
         queryHash, databaseName: connection_name, durationMs,
         rowCount: result.rows.length, wasCacheHit: false,
-        companyId: user.companyId, userEmail: user.email,
+        companyId: user.companyId, mode: user.mode, userEmail: user.email,
       });
 
       return { ...result, cachedAt, _finalQuery: displayQuery };
