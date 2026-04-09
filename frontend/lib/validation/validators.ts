@@ -37,6 +37,14 @@ export function validateCompanyName(name: string): ValidationResult {
     };
   }
 
+  const previewSubdomain = trimmedName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  if (previewSubdomain.startsWith('mx-')) {
+    return {
+      valid: false,
+      error: 'Company name generates a reserved subdomain prefix',
+    };
+  }
+
   return { valid: true };
 }
 

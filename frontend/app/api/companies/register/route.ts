@@ -78,6 +78,11 @@ export async function POST(request: NextRequest) {
       return ApiErrors.badRequest('Company name must contain at least one alphanumeric character');
     }
 
+    // Block reserved subdomain prefixes
+    if (subdomain.startsWith('mx-')) {
+      return ApiErrors.badRequest('Subdomain prefix "mx-" is reserved');
+    }
+
     // Check if subdomain is already taken
     const existingSubdomain = await CompanyDB.getBySubdomain(subdomain);
     if (existingSubdomain) {
