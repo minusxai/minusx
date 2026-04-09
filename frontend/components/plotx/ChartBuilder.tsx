@@ -214,11 +214,17 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     return `${firstName} (+${remaining})`
   }, [getDisplayName])
 
-  // Handle drop on X axis
-  const handleDropX = useCallback((col: string) => {
-    if (!xAxisColumns.includes(col)) {
-      onAxisChange?.([...xAxisColumns, col], yAxisColumns)
-    }
+  // Handle drop on X Axis (primary): demotes current primary to Split By
+  const handleDropXPrimary = useCallback((col: string) => {
+    if (xAxisColumns[0] === col) return
+    const remaining = xAxisColumns.filter(c => c !== col)
+    onAxisChange?.([col, ...remaining], yAxisColumns)
+  }, [xAxisColumns, yAxisColumns, onAxisChange])
+
+  // Handle drop on Split By: appends to grouping columns
+  const handleDropSplitBy = useCallback((col: string) => {
+    if (xAxisColumns.includes(col)) return
+    onAxisChange?.([...xAxisColumns, col], yAxisColumns)
   }, [xAxisColumns, yAxisColumns, onAxisChange])
 
   // Handle drop on Y axis
@@ -228,8 +234,13 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     }
   }, [yAxisColumns, xAxisColumns, onAxisChange])
 
-  // Remove column from axis
-  const removeFromX = useCallback((column: string) => {
+  // Remove from X Axis (primary): rest shift up
+  const removeFromXPrimary = useCallback((column: string) => {
+    onAxisChange?.(xAxisColumns.filter(c => c !== column), yAxisColumns)
+  }, [xAxisColumns, yAxisColumns, onAxisChange])
+
+  // Remove from Split By
+  const removeFromSplitBy = useCallback((column: string) => {
     onAxisChange?.(xAxisColumns.filter(c => c !== column), yAxisColumns)
   }, [xAxisColumns, yAxisColumns, onAxisChange])
 
@@ -260,12 +271,19 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
 
   // Build axis zones for AxisBuilder
   const chartZones: AxisZone[] = useMemo(() => {
-    const xZone: AxisZone = {
+    const xAxisZone: AxisZone = {
       label: 'X Axis',
-      items: xAxisColumns.map(col => ({ column: col })),
-      emptyText: 'Drop columns here',
-      onDrop: handleDropX,
-      onRemove: removeFromX,
+      items: xAxisColumns.length > 0 ? [{ column: xAxisColumns[0] }] : [],
+      emptyText: 'Drop a column here',
+      onDrop: handleDropXPrimary,
+      onRemove: removeFromXPrimary,
+    }
+    const splitByZone: AxisZone = {
+      label: 'Split By',
+      items: xAxisColumns.slice(1).map(col => ({ column: col })),
+      emptyText: 'Group into series',
+      onDrop: handleDropSplitBy,
+      onRemove: removeFromSplitBy,
     }
     const tooltipZone: AxisZone = {
       label: 'Tooltip',
@@ -277,7 +295,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
 
     if (isDualAxis) {
       return [
-        xZone,
+        xAxisZone,
+        splitByZone,
         {
           label: 'Y Left',
           items: yAxisColumns.map(col => ({ column: col })),
@@ -297,7 +316,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     }
 
     return [
-      xZone,
+      xAxisZone,
+      splitByZone,
       {
         label: 'Y Axis',
         items: yAxisColumns.map(col => ({ column: col })),
@@ -307,7 +327,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
       },
       tooltipZone,
     ]
-  }, [xAxisColumns, yAxisColumns, yRightColumns, isDualAxis, tooltipColumns, handleDropX, handleDropY, handleDropYRight, handleDropTooltip, removeFromX, removeFromY, removeFromYRight, removeFromTooltip])
+  }, [xAxisColumns, yAxisColumns, yRightColumns, isDualAxis, tooltipColumns, handleDropXPrimary, handleDropSplitBy, handleDropY, handleDropYRight, handleDropTooltip, removeFromXPrimary, removeFromSplitBy, removeFromY, removeFromYRight, removeFromTooltip])
 
   // Aggregate data — combine left + right Y columns so all series are produced
   const allYColumns = useMemo(() => {

@@ -167,7 +167,7 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
     xAxis: false,
     yAxis: false,
     style: false,
-    annotations: false,
+    annotations: true,
   })
   const isTouchDevice = useIsTouchDevice()
   // Track whether a drop landed on a zone (set in onDrop, read in onDragEnd)
@@ -257,6 +257,7 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
     letterSpacing: '0.05em',
     border: '1px solid',
     transition: 'all 0.15s',
+    cursor: 'pointer',
   }
 
   const togglePanel = (key: 'xAxis' | 'yAxis' | 'style' | 'annotations') => {
@@ -359,7 +360,7 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
       {(!hasSettingsTab || activeTab === 'fields') && (
         <Box display="flex" gap={3} alignItems="stretch" minWidth={0}>
           {zones.map(zone => {
-            const zoneFlex = zone.label === 'X Axis' || zone.label === 'Y Axis' ? 2 : 1
+            const zoneFlex = zone.label === 'Y Axis' ? 2 : 1
             return (
               <Box key={zone.label} minW={0} flex={zoneFlex} display="flex" alignItems="stretch">
                 <DropZone
