@@ -17,8 +17,10 @@ import { useConfigs } from '@/lib/hooks/useConfigs';
 import { Tooltip } from '@/components/ui/tooltip';
 import { toaster } from '@/components/ui/toaster';
 import { clearChatAttachments } from '@/store/uiSlice';
-import { generateImageFromFile } from '@/lib/chart/file-image-client';
-import { useScreenshot } from '@/lib/hooks/useScreenshot';
+import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client';
+import { RENDERABLE_CHART_TYPES } from '@/lib/chart/render-chart-svg';
+import { uploadFile } from '@/lib/object-store/client';
+import type { VizSettings } from '@/lib/types.gen';
 import ExampleQuestions from './message/ExampleQuestions';
 import FileNotFound from '../FileNotFound';
 import { deduplicateMessages } from './message/messageHelpers';
@@ -37,27 +39,60 @@ import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 const ChatInput = dynamic(() => import('./ChatInput'), { ssr: false });
 
 /**
- * Build a file image attachment from the current page's app state.
+ * Render chart images for the current file (question or dashboard) and upload to S3.
  *
- * Captures the rendered [data-file-id] element via DOM snapshot — exact visual
- * match to what the user sees (chart, table, pivot, or full dashboard grid).
+ * Question → one chart image.
+ * Dashboard → one image per renderable chart that has data (multiple images).
  *
- * Returns [] for explore/folder pages that have no file to capture.
+ * Returns [] when the page has no renderable charts (explore/folder/table/pivot pages).
+ * Never throws — chart capture failure must not block the user from sending.
  */
-async function buildFileImageAttachment(
+async function buildChartAttachments(
   appState: AppState | null | undefined,
-  captureFileView: (id: number) => Promise<Blob>,
+  queryResultsMap: Record<string, { data: any }>,
+  colorMode: 'light' | 'dark',
 ): Promise<import('@/lib/types').Attachment[]> {
   if (appState?.type !== 'file') return [];
+  const { fileState, references } = appState.state;
 
-  const fileId = appState.state.fileState.id;
-  if (!fileId) return [];
+  type ChartInput = { queryResult: any; vizSettings: VizSettings; titleOverride?: string };
+  let inputs: ChartInput[];
+
+  if (fileState.type === 'question') {
+    const vizSettings = (fileState.content as any)?.vizSettings as VizSettings | undefined;
+    const queryResultId = (fileState as any).queryResultId as string | undefined;
+    const queryResult = queryResultId ? queryResultsMap[queryResultId]?.data : undefined;
+    if (!vizSettings || !queryResult || !RENDERABLE_CHART_TYPES.has(vizSettings.type)) return [];
+    inputs = [{ queryResult, vizSettings, titleOverride: fileState.name || undefined }];
+  } else if (fileState.type === 'dashboard') {
+    inputs = (references ?? []).flatMap(ref => {
+      const vizSettings = (ref.content as any)?.vizSettings as VizSettings | undefined;
+      const queryResultId = (ref as any).queryResultId as string | undefined;
+      const queryResult = queryResultId ? queryResultsMap[queryResultId]?.data : undefined;
+      if (!vizSettings || !queryResult || !RENDERABLE_CHART_TYPES.has(vizSettings.type)) return [];
+      return [{ queryResult, vizSettings, titleOverride: ref.name || undefined }] as ChartInput[];
+    });
+  } else {
+    return [];
+  }
+
+  if (inputs.length === 0) return [];
 
   try {
-    const url = await generateImageFromFile(fileId, captureFileView);
-    if (!url) return [];
-    const att: import('@/lib/types').Attachment = { type: 'image', name: 'screenshot.png', content: url, metadata: {} };
-    return [att];
+    const rendered = await clientChartImageRenderer.renderCharts(inputs, {
+      width: 512,
+      colorMode,
+      addWatermark: false,
+    });
+
+    const attachments: import('@/lib/types').Attachment[] = [];
+    for (const r of rendered) {
+      const blob = await fetch(r.dataUrl).then(res => res.blob());
+      const file = new File([blob], 'chart.jpg', { type: 'image/jpeg' });
+      const { publicUrl } = await uploadFile(file, undefined, { keyType: 'charts' });
+      attachments.push({ type: 'image', name: r.label || 'chart.jpg', content: publicUrl, metadata: {} });
+    }
+    return attachments;
   } catch {
     return []; // Never block sending on capture failure
   }
@@ -157,7 +192,8 @@ export default function ChatInterface({
 
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const userIsAdmin = effectiveUser?.role ? isAdmin(effectiveUser.role) : false;
-  const { captureFileView } = useScreenshot();
+  const queryResultsMap = useAppSelector(state => state.queryResults.results);
+  const colorMode = useAppSelector(state => state.ui.colorMode) as 'light' | 'dark';
 
   // Case 1: existing conversation — follow fork chain from loaded conversation
   const forkFollowedConversation = useAppSelector(state => {
@@ -387,9 +423,9 @@ export default function ChatInterface({
       tables: s.tables.map(t => t.table)
     })) || [];
 
-    // Capture the current file view (chart, table, pivot, or dashboard) as an image.
-    // Uploaded to S3 and sent as image_url vision block to Claude.
-    const fileAttachments = await buildFileImageAttachment(appState, captureFileView);
+    // Render chart images for the current file and upload to S3.
+    // Question: 1 image. Dashboard: one image per chart with data.
+    const fileAttachments = await buildChartAttachments(appState, queryResultsMap, colorMode);
     const allAttachments = [...attachments, ...fileAttachments];
 
     // For new conversations (no conversationID yet)
