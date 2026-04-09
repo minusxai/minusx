@@ -81,7 +81,7 @@ export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
             const val = valueMap.get(name)
             if (val === undefined) return { ...GEO_ONLY_STYLE[colorMode], fillOpacity: 0.1 }
             return {
-              fillColor: getColorScale(val, min, max, colorMode),
+              fillColor: getColorScale(val, min, max, colorMode, geoConfig.colorScale),
               weight: 1,
               color: colorMode === 'dark' ? '#555' : '#999',
               fillOpacity: 0.75,

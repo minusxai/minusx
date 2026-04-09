@@ -1,4 +1,4 @@
-import { getColorScale, getRadiusScale, interpolateColor } from '@/lib/chart/geo-color-scale'
+import { getColorScale, getRadiusScale, interpolateColor, COLOR_SCALES } from '@/lib/chart/geo-color-scale'
 
 describe('interpolateColor', () => {
   it('returns start color at t=0', () => {
@@ -54,6 +54,45 @@ describe('getColorScale', () => {
     // They may or may not differ, but both should be valid
     expect(light).toMatch(/^#[0-9a-f]{6}$/)
     expect(dark).toMatch(/^#[0-9a-f]{6}$/)
+  })
+
+  it('uses different colors for different scale keys', () => {
+    const green = getColorScale(80, 0, 100, 'light', 'green')
+    const blue = getColorScale(80, 0, 100, 'light', 'blue')
+    const ryg = getColorScale(80, 0, 100, 'light', 'red-yellow-green')
+    expect(green).not.toBe(blue)
+    expect(blue).not.toBe(ryg)
+  })
+
+  it('falls back to default scale for unknown key', () => {
+    const defaultColor = getColorScale(50, 0, 100, 'light')
+    const unknownColor = getColorScale(50, 0, 100, 'light', 'nonexistent')
+    expect(unknownColor).toBe(defaultColor)
+  })
+
+  it('falls back to default scale for null/undefined', () => {
+    const defaultColor = getColorScale(50, 0, 100, 'light')
+    const nullColor = getColorScale(50, 0, 100, 'light', null)
+    const undefColor = getColorScale(50, 0, 100, 'light', undefined)
+    expect(nullColor).toBe(defaultColor)
+    expect(undefColor).toBe(defaultColor)
+  })
+})
+
+describe('COLOR_SCALES', () => {
+  it('has at least 2 scale options', () => {
+    expect(COLOR_SCALES.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('each scale has key, label, and 3 colors', () => {
+    for (const scale of COLOR_SCALES) {
+      expect(scale.key).toBeTruthy()
+      expect(scale.label).toBeTruthy()
+      expect(scale.colors).toHaveLength(3)
+      for (const c of scale.colors) {
+        expect(c).toMatch(/^#[0-9a-fA-F]{6}$/)
+      }
+    }
   })
 })
 

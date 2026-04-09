@@ -350,30 +350,11 @@ export const PivotAxisBuilder = ({
                 <Text fontSize="xs" color="fg.muted">Compact (GitHub Style)</Text>
               </Checkbox>
               {config.showHeatmap !== false && (
-                <HStack gap={1} ml={2}>
-                  <Text fontSize="xs" color="fg.muted">Scale:</Text>
-                  {([
-                    { key: 'red-yellow-green', label: 'RYG', colors: ['#c83c3c', '#d2b43c', '#2da08c'] },
-                    { key: 'green', label: 'Green', colors: ['#ebedf0', '#40c463', '#216e39'] },
-                    { key: 'blue', label: 'Blue', colors: ['#eef3ff', '#5a9bd5', '#2a6cb8'] },
-                  ] as const).map(({ key, colors }) => (
-                    <Box
-                      key={key}
-                      w="56px"
-                      h="16px"
-                      borderRadius="sm"
-                      cursor="pointer"
-                      border="2px solid"
-                      borderColor={(config.heatmapScale ?? 'red-yellow-green') === key ? 'accent.teal' : 'transparent'}
-                      _hover={{ borderColor: 'accent.teal/50' }}
-                      transition="all 0.15s"
-                      onClick={() => onPivotConfigChange({ ...config, heatmapScale: key })}
-                      style={{
-                        background: `linear-gradient(to right, ${colors.join(', ')})`,
-                      }}
-                    />
-                  ))}
-                </HStack>
+                <ColorScalePicker
+                  value={config.heatmapScale}
+                  defaultScale="red-yellow-green"
+                  onChange={(scale) => onPivotConfigChange({ ...config, heatmapScale: scale })}
+                />
               )}
             </HStack>
           )}
