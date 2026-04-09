@@ -2,7 +2,8 @@ import type { EChartsOption } from 'echarts'
 import type { EChartsType } from 'echarts/core'
 import { withMinusXTheme } from './echarts-theme'
 import type { ColumnFormatConfig, AxisConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types'
-import { getBrandLogoUrl, type CompanyBranding } from '@/lib/branding/whitelabel'
+import type { CompanyBranding } from '@/lib/branding/whitelabel'
+import { toJpegObjectUrl } from '@/lib/chart/render-chart-client'
 
 // Chart props interface
 export interface ChartProps {
@@ -871,170 +872,6 @@ export const getTimestamp = () => {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`
 }
 
-const loadImage = (src: string): Promise<HTMLImageElement> => new Promise((resolve, reject) => {
-  const image = new Image()
-  image.crossOrigin = 'anonymous'
-  image.onload = () => resolve(image)
-  image.onerror = reject
-  image.src = src
-})
-
-const fitTextToWidth = (ctx: CanvasRenderingContext2D, text: string, maxWidth: number) => {
-  if (ctx.measureText(text).width <= maxWidth) return text
-
-  const ellipsis = '...'
-  for (let i = text.length - 1; i > 0; i--) {
-    const candidate = `${text.slice(0, i).trimEnd()}${ellipsis}`
-    if (ctx.measureText(candidate).width <= maxWidth) {
-      return candidate
-    }
-  }
-
-  return ellipsis
-}
-
-const getExportTitleSegments = (title: string, colorMode: 'light' | 'dark') => {
-  const connectorColors = {
-    vs: colorMode === 'dark' ? '#4ec9b0' : '#0f766e',
-    split: colorMode === 'dark' ? '#f6ad55' : '#b45309',
-  }
-
-  const segments: Array<{ text: string; color: string }> = []
-  const splitByToken = ' split by '
-  const vsToken = ' vs '
-
-  const splitIndex = title.indexOf(splitByToken)
-  const mainTitle = splitIndex >= 0 ? title.slice(0, splitIndex) : title
-  const splitSuffix = splitIndex >= 0 ? title.slice(splitIndex + splitByToken.length) : ''
-
-  const vsIndex = mainTitle.indexOf(vsToken)
-  if (vsIndex >= 0) {
-    const left = mainTitle.slice(0, vsIndex)
-    const right = mainTitle.slice(vsIndex + vsToken.length)
-    if (left) segments.push({ text: left, color: 'currentColor' })
-    segments.push({ text: ' vs ', color: connectorColors.vs })
-    if (right) segments.push({ text: right, color: 'currentColor' })
-  } else if (mainTitle) {
-    segments.push({ text: mainTitle, color: 'currentColor' })
-  }
-
-  if (splitIndex >= 0) {
-    segments.push({ text: ' split by ', color: connectorColors.split })
-    if (splitSuffix) {
-      segments.push({ text: splitSuffix, color: 'currentColor' })
-    }
-  }
-
-  return segments
-}
-
-const composeChartExportUrl = async ({
-  chartDataUrl,
-  chartTitle,
-  colorMode,
-  branding,
-}: {
-  chartDataUrl: string
-  chartTitle?: string
-  colorMode: 'light' | 'dark'
-  branding?: Partial<CompanyBranding>
-}) => {
-  const chartImage = await loadImage(chartDataUrl)
-  const canvas = document.createElement('canvas')
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return chartDataUrl
-
-  const theme = colorMode === 'dark'
-    ? {
-        background: '#161b22',
-        border: 'rgba(230, 237, 243, 0.14)',
-        title: '#f0f6fc',
-      }
-    : {
-        background: '#ffffff',
-        border: 'rgba(13, 17, 23, 0.10)',
-        title: '#0d1117',
-      }
-
-  let logoImage: HTMLImageElement | null = null
-  try {
-    const logoUrl = getBrandLogoUrl(branding, colorMode)
-    logoImage = await loadImage(logoUrl)
-  } catch {
-    logoImage = null
-  }
-
-  const hasHeader = Boolean(chartTitle)
-  const headerHeight = hasHeader ? 92 : 0
-  const horizontalPadding = 36
-  const footerPadding = 24
-  const logoSize = logoImage ? 34 : 0
-  const footerAgentName = branding?.agentName?.trim() || ''
-  const maxTextWidth = chartImage.width - horizontalPadding * 2
-
-  canvas.width = chartImage.width
-  canvas.height = chartImage.height + headerHeight
-
-  ctx.fillStyle = theme.background
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
-
-  if (hasHeader) {
-    ctx.strokeStyle = theme.border
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.moveTo(0, headerHeight)
-    ctx.lineTo(canvas.width, headerHeight)
-    ctx.stroke()
-
-    const titleText = chartTitle?.trim() || ''
-    const titleSegments = getExportTitleSegments(titleText, colorMode)
-    ctx.font = '700 28px JetBrains Mono, Consolas, Monaco, Courier New, monospace'
-    ctx.textBaseline = 'middle'
-    ctx.textAlign = 'left'
-
-    const totalWidth = titleSegments.reduce((sum, segment) => {
-      const measuredText = fitTextToWidth(ctx, segment.text, maxTextWidth)
-      return sum + ctx.measureText(measuredText).width
-    }, 0)
-
-    let cursorX = Math.max(horizontalPadding, (canvas.width - totalWidth) / 2)
-    const titleY = headerHeight / 2
-
-    for (const segment of titleSegments) {
-      const segmentText = fitTextToWidth(ctx, segment.text, maxTextWidth)
-      ctx.fillStyle = segment.color === 'currentColor' ? theme.title : segment.color
-      ctx.fillText(segmentText, cursorX, titleY)
-      cursorX += ctx.measureText(segmentText).width
-    }
-  }
-
-  ctx.drawImage(chartImage, 0, headerHeight, chartImage.width, chartImage.height)
-
-  if (logoImage) {
-    const logoX = canvas.width - footerPadding - logoSize
-    const logoY = canvas.height - footerPadding - logoSize
-    ctx.drawImage(logoImage, logoX, logoY, logoSize, logoSize)
-  }
-
-  if (footerAgentName) {
-    ctx.font = '700 36px JetBrains Mono, Consolas, Monaco, Courier New, monospace'
-    ctx.textBaseline = 'middle'
-    ctx.textAlign = 'right'
-    ctx.fillStyle = colorMode === 'dark' ? '#FFFFFF' : 'rgba(13, 17, 23, 0.78)'
-
-    const textRight = logoImage
-      ? canvas.width - footerPadding - logoSize - 10
-      : canvas.width - footerPadding
-    const textY = logoImage
-      ? canvas.height - footerPadding - logoSize / 2
-      : canvas.height - footerPadding - 23
-    const maxFooterTextWidth = Math.max(80, canvas.width - horizontalPadding * 2 - logoSize - 12)
-    const footerText = fitTextToWidth(ctx, footerAgentName, maxFooterTextWidth)
-    ctx.fillText(footerText, textRight, textY)
-  }
-
-  return canvas.toDataURL('image/png')
-}
 
 interface ChartToolboxConfig {
   colorMode: 'light' | 'dark'
@@ -1048,7 +885,6 @@ export const buildToolbox = ({
   colorMode,
   downloadCsv,
   chartTitle,
-  exportBranding,
 }: ChartToolboxConfig) => ({
   feature: {
     mySaveAsImage: {
@@ -1060,48 +896,20 @@ export const buildToolbox = ({
           const chart = this.ecModel?.scheduler?.ecInstance
           if (!chart) return
 
-          const option = chart.getOption?.() ?? {}
-          const currentTitle = Array.isArray(option.title) ? option.title[0] : option.title
-          const currentLegend = Array.isArray(option.legend) ? option.legend[0] : option.legend
-          const titleWasVisible = Boolean(chartTitle && currentTitle && currentTitle.show !== false)
-          const originalLegendTop = currentLegend?.top
+          const chartUrl = chart.getDataURL({
+            type: 'png',
+            pixelRatio: 2,
+            backgroundColor: colorMode === 'dark' ? '#161b22' : '#ffffff',
+            excludeComponents: ['toolbox'],
+          })
 
-          if (titleWasVisible) {
-            chart.setOption({
-              title: { show: false },
-              ...(currentLegend ? { legend: { top: 10 } } : {}),
-            }, false)
-          }
+          const exportUrl = await toJpegObjectUrl(chartUrl, window.innerWidth, true, colorMode)
 
-          try {
-            const chartUrl = chart.getDataURL({
-              type: 'png',
-              pixelRatio: 2,
-              backgroundColor: colorMode === 'dark' ? '#161b22' : '#ffffff',
-              excludeComponents: ['toolbox'],
-            })
-
-            const exportUrl = await composeChartExportUrl({
-              chartDataUrl: chartUrl,
-              chartTitle,
-              colorMode,
-              branding: exportBranding,
-            })
-
-            const link = document.createElement('a')
-            link.href = exportUrl
-            link.download = `chart-${getTimestamp()}.png`
-            link.click()
-          } finally {
-            if (titleWasVisible) {
-              chart.setOption({
-                title: { show: currentTitle?.show ?? true },
-                ...(currentLegend
-                  ? { legend: { top: originalLegendTop ?? 35 } }
-                  : {}),
-              }, false)
-            }
-          }
+          const link = document.createElement('a')
+          link.href = exportUrl
+          link.download = `chart-${getTimestamp()}.jpg`
+          link.click()
+          URL.revokeObjectURL(exportUrl)
         })()
       },
     },

@@ -193,7 +193,7 @@ export async function processSlackEvent(
       const queryCharts = extractQueryCharts(result.logDiff);
       for (const chart of queryCharts) {
         try {
-          const chartJpeg = await renderChartToJpeg(chart.queryResult, chart.vizSettings);
+          const chartJpeg = await renderChartToJpeg(chart.queryResult, chart.vizSettings, { width: 1024, height: 576 });
           if (chartJpeg) {
             await uploadSlackFile(installation.bot.bot_token, {
               channel: ev.channel,

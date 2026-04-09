@@ -12,6 +12,7 @@ import { getStore } from '@/store/store';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import type { ToolCall, DatabaseWithSchema } from '@/lib/types';
 import { uploadFile } from '@/lib/object-store/client';
+import { toJpegObjectUrl } from '@/lib/chart/render-chart-client';
 import { aggregateData } from '@/lib/chart/aggregate-data';
 import { buildChartOption, buildPieChartOption, buildFunnelChartOption, buildWaterfallChartOption } from '@/lib/chart/chart-utils';
 import { COLOR_PALETTE } from '@/lib/chart/echarts-theme';
@@ -288,80 +289,6 @@ async function renderChartToDataUrl(
     return dataUrl;
   } finally {
     document.body.removeChild(container);
-  }
-}
-
-
-// ── Image post-processing ─────────────────────────────────────────────────────
-
-function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error(`Failed to load image: ${src}`));
-    img.src = src;
-  });
-}
-
-/**
- * Draw any image source onto a canvas scaled to fit within maxWidth (preserving
- * aspect ratio), optionally overlay a semi-transparent MinusX watermark,
- * then encode as JPEG and return an object URL.
- *
- * Height is derived from the source aspect ratio, not fixed — so dashboards
- * render at full height without cropping.
- */
-async function toJpegObjectUrl(
-  source: Blob | string,
-  maxWidth: number,
-  addWatermark: boolean,
-  colorMode: 'light' | 'dark',
-): Promise<string> {
-  const isBlobSrc = source instanceof Blob;
-  const srcUrl = isBlobSrc ? URL.createObjectURL(source) : source;
-
-  try {
-    const img = await loadImage(srcUrl);
-
-    // Scale to maxWidth, preserve aspect ratio
-    const scale = Math.min(1, maxWidth / img.naturalWidth);
-    const canvasW = Math.round(img.naturalWidth * scale);
-    const canvasH = Math.round(img.naturalHeight * scale);
-
-    const canvas = document.createElement('canvas');
-    canvas.width = canvasW;
-    canvas.height = canvasH;
-    const ctx = canvas.getContext('2d')!;
-
-    ctx.fillStyle = colorMode === 'dark' ? '#161b22' : '#ffffff';
-    ctx.fillRect(0, 0, canvasW, canvasH);
-    ctx.drawImage(img, 0, 0, canvasW, canvasH);
-
-    if (addWatermark) {
-      try {
-        const logoSrc = colorMode === 'dark' ? '/logox.svg' : '/logox_dark.svg';
-        const logo = await loadImage(logoSrc);
-        const logoH = Math.max(12, Math.round(canvasH * 0.08));
-        const logoW = Math.round(logoH * (logo.naturalWidth / (logo.naturalHeight || 1)));
-        const pad = Math.round(canvasH * 0.03);
-        ctx.globalAlpha = 0.45; // semi-transparent overlay
-        ctx.drawImage(logo, canvasW - logoW - pad, canvasH - logoH - pad, logoW, logoH);
-        ctx.globalAlpha = 1;
-      } catch {
-        // logo failed — output image without watermark
-      }
-    }
-
-    return await new Promise<string>((resolve, reject) => {
-      canvas.toBlob(
-        blob => (blob ? resolve(URL.createObjectURL(blob)) : reject(new Error('Canvas toBlob failed'))),
-        'image/jpeg',
-        0.85,
-      );
-    });
-  } finally {
-    if (isBlobSrc) URL.revokeObjectURL(srcUrl);
   }
 }
 
