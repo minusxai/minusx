@@ -1,7 +1,7 @@
 'use client';
 
 import {
-  VStack, HStack, Text, Input, Textarea, NativeSelect,
+  VStack, HStack, Text, Input, Textarea,
   Box, Combobox, Portal, createListCollection
 } from '@chakra-ui/react';
 import { useState, useMemo, useEffect } from 'react';
@@ -12,6 +12,7 @@ import { useConnections } from '@/lib/hooks/useConnections';
 import DatabaseSelector from '@/components/DatabaseSelector';
 import { QueryModeSelector, QueryBuilderRoot } from '@/components/query-builder';
 import SqlEditor from '@/components/SqlEditor';
+import SimpleSelect from './SimpleSelect';
 
 interface TestSubjectEditorProps {
   subject: TestSubject;
@@ -221,6 +222,11 @@ export default function TestSubjectEditor({ subject, testType, onChange, disable
     onChange({ ...llm, connection_id: firstConnection });
   }, [testType, connections]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const columnOptions = useMemo(
+    () => [{ value: '', label: '-- first column --' }, ...inferredColumns.map(col => ({ value: col, label: col }))],
+    [inferredColumns],
+  );
+
   if (testType === 'llm') {
     const llm = subject.type === 'llm' ? subject : { type: 'llm' as const, prompt: '', context: { type: 'explore' as const } };
 
@@ -245,17 +251,12 @@ export default function TestSubjectEditor({ subject, testType, onChange, disable
         </Box>
         <Box>
           <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Context</Text>
-          <NativeSelect.Root size="sm" disabled={disabled}>
-            <NativeSelect.Field
-              value={llm.context.type}
-              onChange={e => onChange({ ...llm, context: { type: e.target.value as 'explore' } })}
-            >
-              {contextOptions.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </NativeSelect.Field>
-            <NativeSelect.Indicator />
-          </NativeSelect.Root>
+          <SimpleSelect
+            value={llm.context.type}
+            onChange={v => onChange({ ...llm, context: { type: v as 'explore' } })}
+            options={contextOptions}
+            disabled={disabled}
+          />
         </Box>
         <Box>
           <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Connection</Text>
@@ -281,58 +282,64 @@ export default function TestSubjectEditor({ subject, testType, onChange, disable
     }
   }
 
+  const sourceOptions = [
+    { value: 'question', label: 'Question' },
+    { value: 'inline', label: 'Inline SQL' },
+  ];
+
   return (
     <VStack align="stretch" gap={2}>
-      {/* Source toggle */}
-      <Box>
-        <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Source</Text>
-        <NativeSelect.Root size="sm" disabled={disabled}>
-          <NativeSelect.Field
-            value={currentSource}
-            onChange={e => handleSourceChange(e.target.value as 'question' | 'inline')}
-          >
-            <option value="question">Question</option>
-            <option value="inline">Inline SQL</option>
-          </NativeSelect.Field>
-          <NativeSelect.Indicator />
-        </NativeSelect.Root>
-      </Box>
-
+      {/* Source + Question on same row for question source */}
       {currentSource === 'inline' ? (
-        <InlineSubjectEditor
-          subject={subject as Extract<TestSubject, { source: 'inline' }>}
-          onChange={onChange}
-          disabled={disabled}
-        />
+        <>
+          <HStack gap={2} align="flex-end">
+            <Box w="120px" flexShrink={0}>
+              <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Source</Text>
+              <SimpleSelect
+                value={currentSource}
+                onChange={v => handleSourceChange(v as 'question' | 'inline')}
+                options={sourceOptions}
+                disabled={disabled}
+              />
+            </Box>
+          </HStack>
+          <InlineSubjectEditor
+            subject={subject as Extract<TestSubject, { source: 'inline' }>}
+            onChange={onChange}
+            disabled={disabled}
+          />
+        </>
       ) : (
         <>
-          <Box>
-            <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Question</Text>
-            <QuestionPicker
-              selectedId={query.question_id || null}
-              onSelect={id => onChange({ ...query, question_id: id, column: undefined })}
-              disabled={disabled}
-            />
-          </Box>
+          <HStack gap={2} align="flex-end">
+            <Box w="120px" flexShrink={0}>
+              <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Source</Text>
+              <SimpleSelect
+                value={currentSource}
+                onChange={v => handleSourceChange(v as 'question' | 'inline')}
+                options={sourceOptions}
+                disabled={disabled}
+              />
+            </Box>
+            <Box flex={1}>
+              <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Question</Text>
+              <QuestionPicker
+                selectedId={query.question_id || null}
+                onSelect={id => onChange({ ...query, question_id: id, column: undefined })}
+                disabled={disabled}
+              />
+            </Box>
+          </HStack>
           <HStack gap={2}>
             <Box flex={1}>
               <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Column</Text>
               {inferredColumns.length > 0 ? (
-                <NativeSelect.Root size="sm" disabled={disabled}>
-                  <NativeSelect.Field
-                    value={query.column ?? ''}
-                    onChange={e => onChange({ ...query, column: e.target.value || undefined })}
-                    bg="bg.surface"
-                    fontSize="xs"
-                    fontFamily="mono"
-                  >
-                    <option value="">— first column —</option>
-                    {inferredColumns.map(col => (
-                      <option key={col} value={col}>{col}</option>
-                    ))}
-                  </NativeSelect.Field>
-                  <NativeSelect.Indicator />
-                </NativeSelect.Root>
+                <SimpleSelect
+                  value={query.column ?? ''}
+                  onChange={v => onChange({ ...query, column: v || undefined })}
+                  options={columnOptions}
+                  disabled={disabled}
+                />
               ) : (
                 <Input
                   value={query.column ?? ''}

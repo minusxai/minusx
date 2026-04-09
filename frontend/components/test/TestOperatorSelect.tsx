@@ -1,7 +1,8 @@
 'use client';
 
-import { NativeSelect } from '@chakra-ui/react';
+import { useMemo } from 'react';
 import type { TestAnswerType, TestOperator } from '@/lib/types';
+import SimpleSelect from './SimpleSelect';
 
 const ALL_OPERATORS: { value: TestOperator; label: string }[] = [
   { value: '=',  label: '= (equals)' },
@@ -30,17 +31,17 @@ export default function TestOperatorSelect({ answerType, value, onChange, disabl
   // If current value isn't allowed for this answerType, reset to '='
   const safeValue: TestOperator = allowed.includes(value) ? value : '=';
 
+  const options = useMemo(
+    () => ALL_OPERATORS.filter(op => allowed.includes(op.value)),
+    [allowed],
+  );
+
   return (
-    <NativeSelect.Root size="sm" disabled={disabled}>
-      <NativeSelect.Field
-        value={safeValue}
-        onChange={e => onChange(e.target.value as TestOperator)}
-      >
-        {ALL_OPERATORS.filter(op => allowed.includes(op.value)).map(op => (
-          <option key={op.value} value={op.value}>{op.label}</option>
-        ))}
-      </NativeSelect.Field>
-      <NativeSelect.Indicator />
-    </NativeSelect.Root>
+    <SimpleSelect
+      value={safeValue}
+      onChange={v => onChange(v as TestOperator)}
+      options={options}
+      disabled={disabled}
+    />
   );
 }
