@@ -90,7 +90,7 @@ async function buildChartAttachments(
       const blob = await fetch(r.dataUrl).then(res => res.blob());
       const file = new File([blob], 'chart.jpg', { type: 'image/jpeg' });
       const { publicUrl } = await uploadFile(file, undefined, { keyType: 'charts' });
-      attachments.push({ type: 'image', name: r.label || 'chart.jpg', content: publicUrl, metadata: {} });
+      attachments.push({ type: 'image', name: r.label || 'chart.jpg', content: publicUrl, metadata: { auto: true } });
     }
     return attachments;
   } catch {

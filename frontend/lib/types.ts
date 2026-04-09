@@ -163,7 +163,7 @@ export type Attachment = {
   type: 'text' | 'image';
   name: string;
   content: string;
-  metadata?: { pages?: number; wordCount?: number };
+  metadata?: { pages?: number; wordCount?: number; auto?: boolean };
 };
 
 // Context.md types (database schema whitelisting)
