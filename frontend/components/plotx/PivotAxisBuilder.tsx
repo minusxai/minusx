@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Box, HStack, VStack, Text } from '@chakra-ui/react'
 import { Checkbox } from '@/components/ui/checkbox'
-import { LuChevronDown } from 'react-icons/lu'
+import { LuChevronDown, LuChevronRight, LuLayoutGrid, LuSettings2 } from 'react-icons/lu'
 import { resolveColumnType } from './AxisComponents'
 import { AxisBuilder, type AxisZone } from './AxisBuilder'
 import { FormulaBuilder, type DimensionInfo } from './FormulaBuilder'
@@ -229,99 +229,172 @@ export const PivotAxisBuilder = ({
   const showRowFormulas = config.rows.length > 0 && availableRowValues && availableRowValues.length >= 2
   const showColFormulas = config.columns.length > 0 && availableColumnValues && availableColumnValues.length >= 2
 
+  const [activeTab, setActiveTab] = useState<'fields' | 'settings'>('fields')
+  const [collapsedPanels, setCollapsedPanels] = useState<Record<string, boolean>>({
+    options: false,
+    formulas: false,
+  })
+
+  const togglePanel = (key: string) => {
+    setCollapsedPanels(prev => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  const renderSettingsCard = (title: string, panelKey: string, children: React.ReactNode) => {
+    const collapsed = collapsedPanels[panelKey]
+    return (
+      <VStack
+        align="stretch"
+        gap={collapsed ? 0 : 2.5}
+        p={3}
+        bg="bg.surface"
+        borderRadius="md"
+        border="2px dashed"
+        borderColor="border.muted"
+        minW={0}
+      >
+        <HStack justify="space-between" align="center">
+          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
+            {title}
+          </Text>
+          <button
+            onClick={() => togglePanel(panelKey)}
+            aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
+            style={{
+              color: 'var(--chakra-colors-fg-subtle)',
+              background: 'transparent',
+              border: 'none',
+              padding: 0,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+            }}
+          >
+            {collapsed ? <LuChevronRight size={14} /> : <LuChevronDown size={14} />}
+          </button>
+        </HStack>
+        {!collapsed && children}
+      </VStack>
+    )
+  }
+
   return (
     <VStack align="stretch" gap={0}>
-      <AxisBuilder columns={columns} types={types} zones={zones} columnFormats={columnFormats} onColumnFormatChange={onColumnFormatChange} />
-      <Box px={3} pt={2} pb={3} bg="bg.canvas" borderBottom="1px solid" borderColor="border.muted" display="flex" flexDirection="column" gap={3}>
-        <HStack gap={4}>
-          {config.columns.length >= 2 && (
-            <Checkbox
-              checked={config.showRowTotals !== false}
-              onCheckedChange={(e) => onPivotConfigChange({ ...config, showRowTotals: e.checked })}
-              size="sm"
-            >
-              <Text fontSize="xs" color="fg.muted">Row Totals</Text>
-            </Checkbox>
-          )}
-          {config.rows.length >= 2 && (
-            <Checkbox
-              checked={config.showColumnTotals !== false}
-              onCheckedChange={(e) => onPivotConfigChange({ ...config, showColumnTotals: e.checked })}
-              size="sm"
-            >
-              <Text fontSize="xs" color="fg.muted">Column Totals</Text>
-            </Checkbox>
-          )}
-          <Checkbox
-            checked={config.showHeatmap !== false}
-            onCheckedChange={(e) => onPivotConfigChange({ ...config, showHeatmap: e.checked })}
-            size="sm"
-          >
-            <Text fontSize="xs" color="fg.muted">Heatmap</Text>
-          </Checkbox>
-          <Checkbox
-            checked={config.compact === true}
-            onCheckedChange={(e) => onPivotConfigChange({ ...config, compact: e.checked })}
-            size="sm"
-          >
-            <Text fontSize="xs" color="fg.muted">Compact</Text>
-          </Checkbox>
-        </HStack>
-        {(showRowFormulas || showColFormulas) && (
+      {/* Tab bar */}
+      <HStack gap={2} justify="flex-start" px={3} pt={3} pb={1} bg="bg.canvas">
+        {([{ key: 'fields', icon: LuLayoutGrid, label: 'Fields' }, { key: 'settings', icon: LuSettings2, label: 'Settings' }] as const).map(({ key, icon: Icon, label }) => (
           <HStack
-            gap={4}
-            align="stretch"
-            pt={3}
-            borderTop="1px dashed"
-            borderColor="border.muted"
+            key={key}
+            as="button"
+            gap={1}
+            px={2}
+            py={1}
+            cursor="pointer"
+            bg="transparent"
+            color={activeTab === key ? 'accent.teal' : 'fg.subtle'}
+            borderBottom="2px solid"
+            borderColor={activeTab === key ? 'accent.teal' : 'transparent'}
+            _hover={{ color: 'accent.teal' }}
+            transition="all 0.15s"
+            onClick={() => setActiveTab(key)}
+            borderRadius={0}
           >
-            {/* Row Formulas */}
-            <Box flex={1} minW={0}>
-              {showRowFormulas ? (
-                <FormulaBuilder
-                  axis="row"
-                  formulas={config.rowFormulas || []}
-                  availableValues={availableRowValues!}
-                  dimensionName={config.rows[0]}
-                  onChange={(formulas: PivotFormula[]) => onPivotConfigChange({ ...config, rowFormulas: formulas })}
-                  dimensions={rowDimensions}
-                  getValuesAtLevel={getRowValuesAtLevel}
-                />
-              ) : (
-                <VStack align="start" gap={0}>
-                  <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em" color="fg.subtle">
-                    Row Formulas
-                  </Text>
-                  <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Add row dimensions first</Text>
-                </VStack>
-              )}
-            </Box>
-
-            {/* Vertical separator */}
-            <Box width="1px" bg="border.muted" alignSelf="stretch" />
-
-            {/* Column Formulas */}
-            <Box flex={1} minW={0}>
-              {showColFormulas ? (
-                <FormulaBuilder
-                  axis="column"
-                  formulas={config.columnFormulas || []}
-                  availableValues={availableColumnValues!}
-                  dimensionName={config.columns[0]}
-                  onChange={(formulas: PivotFormula[]) => onPivotConfigChange({ ...config, columnFormulas: formulas })}
-                />
-              ) : (
-                <VStack align="start" gap={0}>
-                  <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em" color="fg.subtle">
-                    Column Formulas
-                  </Text>
-                  <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Add column dimensions first</Text>
-                </VStack>
-              )}
-            </Box>
+            <Box as={Icon} fontSize="xs" />
+            <Text fontSize="2xs" fontFamily="mono" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em">
+              {label}
+            </Text>
           </HStack>
-        )}
-      </Box>
+        ))}
+      </HStack>
+
+      {/* Fields tab — AxisBuilder renders its own styled container */}
+      {activeTab === 'fields' && (
+        <AxisBuilder columns={columns} types={types} zones={zones} columnFormats={columnFormats} onColumnFormatChange={onColumnFormatChange} />
+      )}
+
+      {/* Settings tab */}
+      {activeTab === 'settings' && (
+        <Box p={3} bg="bg.canvas" display="flex" flexDirection="column" gap={3}>
+          {renderSettingsCard('Options', 'options',
+            <HStack gap={4} flexWrap="wrap">
+              {config.columns.length >= 2 && (
+                <Checkbox
+                  checked={config.showRowTotals !== false}
+                  onCheckedChange={(e) => onPivotConfigChange({ ...config, showRowTotals: e.checked })}
+                  size="sm"
+                >
+                  <Text fontSize="xs" color="fg.muted">Row Totals</Text>
+                </Checkbox>
+              )}
+              {config.rows.length >= 2 && (
+                <Checkbox
+                  checked={config.showColumnTotals !== false}
+                  onCheckedChange={(e) => onPivotConfigChange({ ...config, showColumnTotals: e.checked })}
+                  size="sm"
+                >
+                  <Text fontSize="xs" color="fg.muted">Column Totals</Text>
+                </Checkbox>
+              )}
+              <Checkbox
+                checked={config.showHeatmap !== false}
+                onCheckedChange={(e) => onPivotConfigChange({ ...config, showHeatmap: e.checked })}
+                size="sm"
+              >
+                <Text fontSize="xs" color="fg.muted">Heatmap</Text>
+              </Checkbox>
+              <Checkbox
+                checked={config.compact === true}
+                onCheckedChange={(e) => onPivotConfigChange({ ...config, compact: e.checked })}
+                size="sm"
+              >
+                <Text fontSize="xs" color="fg.muted">Compact</Text>
+              </Checkbox>
+            </HStack>
+          )}
+          {(showRowFormulas || showColFormulas) && renderSettingsCard('Formulas', 'formulas',
+            <HStack gap={4} align="stretch">
+              <Box flex={1} minW={0}>
+                {showRowFormulas ? (
+                  <FormulaBuilder
+                    axis="row"
+                    formulas={config.rowFormulas || []}
+                    availableValues={availableRowValues!}
+                    dimensionName={config.rows[0]}
+                    onChange={(formulas: PivotFormula[]) => onPivotConfigChange({ ...config, rowFormulas: formulas })}
+                    dimensions={rowDimensions}
+                    getValuesAtLevel={getRowValuesAtLevel}
+                  />
+                ) : (
+                  <VStack align="start" gap={0}>
+                    <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em" color="fg.subtle">
+                      Row Formulas
+                    </Text>
+                    <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Add row dimensions first</Text>
+                  </VStack>
+                )}
+              </Box>
+              <Box width="1px" bg="border.muted" alignSelf="stretch" />
+              <Box flex={1} minW={0}>
+                {showColFormulas ? (
+                  <FormulaBuilder
+                    axis="column"
+                    formulas={config.columnFormulas || []}
+                    availableValues={availableColumnValues!}
+                    dimensionName={config.columns[0]}
+                    onChange={(formulas: PivotFormula[]) => onPivotConfigChange({ ...config, columnFormulas: formulas })}
+                  />
+                ) : (
+                  <VStack align="start" gap={0}>
+                    <Text fontSize="xs" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em" color="fg.subtle">
+                      Column Formulas
+                    </Text>
+                    <Text fontSize="xs" color="fg.subtle" fontStyle="italic">Add column dimensions first</Text>
+                  </VStack>
+                )}
+              </Box>
+            </HStack>
+          )}
+        </Box>
+      )}
     </VStack>
   )
 }
