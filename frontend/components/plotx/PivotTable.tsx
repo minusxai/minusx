@@ -8,12 +8,15 @@ import { formatLargeNumber, formatNumber, formatDateValue, applyPrefixSuffix } f
 import type { PivotData, FormulaResults } from '@/lib/chart/pivot-utils'
 import type { ColumnFormatConfig } from '@/lib/types'
 
+type HeatmapScale = 'red-yellow-green' | 'green' | 'blue'
+
 interface PivotTableProps {
   pivotData: PivotData
   showRowTotals?: boolean
   showColTotals?: boolean
   showHeatmap?: boolean
   compact?: boolean
+  heatmapScale?: HeatmapScale
   emptyMessage?: string
   rowDimNames?: string[]
   colDimNames?: string[]
@@ -47,6 +50,7 @@ export const PivotTable = ({
   showColTotals = true,
   showHeatmap = true,
   compact = false,
+  heatmapScale = 'red-yellow-green',
   emptyMessage,
   rowDimNames,
   colDimNames,
@@ -110,29 +114,40 @@ export const PivotTable = ({
     return { minValue: min, maxValue: max }
   }, [cells])
 
-  const getCellBg = (value: number): string | undefined => {
+  const getCellBg = useCallback((value: number): string | undefined => {
     if (!showHeatmap) return undefined
     if (maxValue === minValue) return 'accent.teal/75'
     const normalized = (value - minValue) / (maxValue - minValue)
-    // Smooth gradient: red (low) → yellow (mid) → teal (high)
-    // Using RGB interpolation with two stops
     const alpha = compact ? 0.85 : 0.55
     let r: number, g: number, b: number
-    if (normalized < 0.5) {
-      const t = normalized / 0.5
-      // Red (200, 60, 60) → Yellow (210, 180, 60)
-      r = Math.round(200 + t * 10)
-      g = Math.round(60 + t * 120)
-      b = 60
+
+    if (heatmapScale === 'green') {
+      // Single-hue green (GitHub-style): light → dark green
+      r = Math.round(235 - normalized * 195)
+      g = Math.round(245 - normalized * 100)
+      b = Math.round(235 - normalized * 195)
+    } else if (heatmapScale === 'blue') {
+      // Single-hue blue: light → dark blue
+      r = Math.round(235 - normalized * 195)
+      g = Math.round(235 - normalized * 135)
+      b = Math.round(255 - normalized * 55)
     } else {
-      const t = (normalized - 0.5) / 0.5
-      // Yellow (210, 180, 60) → Teal (45, 160, 140)
-      r = Math.round(210 - t * 165)
-      g = Math.round(180 - t * 20)
-      b = Math.round(60 + t * 80)
+      // red-yellow-green (default)
+      if (normalized < 0.5) {
+        const t = normalized / 0.5
+        r = Math.round(200 + t * 10)
+        g = Math.round(60 + t * 120)
+        b = 60
+      } else {
+        const t = (normalized - 0.5) / 0.5
+        r = Math.round(210 - t * 165)
+        g = Math.round(180 - t * 20)
+        b = Math.round(60 + t * 80)
+      }
     }
+
     return `rgba(${r}, ${g}, ${b}, ${alpha})`
-  }
+  }, [showHeatmap, minValue, maxValue, compact, heatmapScale])
 
   // Column entries: interleave regular data columns with formula columns
   const columnEntries = useMemo((): ColEntry[] => {
@@ -560,31 +575,44 @@ export const PivotTable = ({
 
   // Compact mode: build tooltip content for a cell given row/col context
   const buildTooltipContent = useCallback((value: number, rowIndex: number, cellIndex: number, valueIndex?: number): React.ReactNode => {
-    const parts: string[] = []
+    const dims: { label: string; value: string }[] = []
     if (rowDimNames && rowHeaders[rowIndex]) {
       rowDimNames.forEach((dimName, i) => {
-        if (i < rowHeaders[rowIndex].length) parts.push(`${dimName}: ${fmtHeader(rowHeaders[rowIndex][i], rowDimNames?.[i])}`)
+        if (i < rowHeaders[rowIndex].length) dims.push({ label: dimName, value: fmtHeader(rowHeaders[rowIndex][i], rowDimNames?.[i]) })
       })
     }
     const colKeyIndex = Math.floor(cellIndex / numValues)
     if (colDimNames && columnHeaders[colKeyIndex]) {
       colDimNames.forEach((dimName, i) => {
-        if (i < columnHeaders[colKeyIndex].length) parts.push(`${dimName}: ${fmtHeader(columnHeaders[colKeyIndex][i], colDimNames?.[i])}`)
+        if (i < columnHeaders[colKeyIndex].length) dims.push({ label: dimName, value: fmtHeader(columnHeaders[colKeyIndex][i], colDimNames?.[i]) })
       })
     }
-    parts.push(`Value: ${fmt(value, valueIndex)}`)
+    const formattedValue = fmt(value, valueIndex)
+    const cellBg = getCellBg(value)
     return (
-      <Box fontSize="xs" fontFamily="mono" whiteSpace="pre-line">
-        {parts.join('\n')}
+      <Box fontFamily="mono" fontSize="xs">
+        {dims.length > 0 && (
+          <Box fontWeight="600" mb={1}>
+            {dims.map(d => d.value).join(' · ')}
+          </Box>
+        )}
+        <Box display="flex" alignItems="center" gap={2}>
+          <Box w="10px" h="10px" borderRadius="full" flexShrink={0} bg={cellBg ?? 'fg.subtle'} />
+          <Box color="fg.muted">{valueLabels[valueIndex ?? 0] || 'Value'}</Box>
+          <Box fontWeight="700" ml="auto">{formattedValue}</Box>
+        </Box>
       </Box>
     )
-  }, [rowHeaders, columnHeaders, rowDimNames, colDimNames, numValues, fmtHeader, fmt])
+  }, [rowHeaders, columnHeaders, rowDimNames, colDimNames, numValues, fmtHeader, fmt, getCellBg, valueLabels])
 
   // Compact mode sizing
   const COMPACT_CELL_SIZE = 18
 
   // Fixed width for frozen row-dimension columns so sticky left offsets align
   const ROW_DIM_COL_W = 120
+
+  // Tooltip styling for compact mode (ECharts-like)
+  const tooltipContentProps = { bg: 'bg.panel', color: 'fg.default', boxShadow: 'lg', borderRadius: 'md', border: '1px solid', borderColor: 'border.muted', px: 3, py: 2 }
 
   if (cells.length === 0 || (cells.length > 0 && cells[0].length === 0)) {
     return (
@@ -603,8 +631,6 @@ export const PivotTable = ({
   const hasColFormulas = colFormulas.length > 0
   const getLeftOffset = (dimIdx: number) => dimIdx * ROW_DIM_COL_W
   const isLastDim = (_dimIdx: number) => false  // Always show right border on all dimension columns
-  // Extra padding on the last frozen column to cover sub-pixel gaps
-  const dimColWidth = (dimIdx: number) => isLastDim(dimIdx) ? ROW_DIM_COL_W + 2 : ROW_DIM_COL_W
 
   // Helper: render cells for a row using columnEntries
   const renderDataCells = (rowIndex: number) => {
@@ -629,7 +655,7 @@ export const PivotTable = ({
         )
         if (compact) {
           return (
-            <Tooltip key={`col-${i}`} content={buildTooltipContent(value, rowIndex, entry.cellIndex, entry.cellIndex % numValues)} positioning={{ placement: 'top' }}>
+            <Tooltip key={`col-${i}`} content={buildTooltipContent(value, rowIndex, entry.cellIndex, entry.cellIndex % numValues)} positioning={{ placement: 'top' }} contentProps={tooltipContentProps}>
               {cell}
             </Tooltip>
           )
@@ -1107,7 +1133,7 @@ export const PivotTable = ({
                     )
                     if (compact) {
                       return (
-                        <Tooltip key={colIndex} content={buildTooltipContent(value, rowIndex, colIndex, colIndex % numValues)} positioning={{ placement: 'top' }}>
+                        <Tooltip key={colIndex} content={buildTooltipContent(value, rowIndex, colIndex, colIndex % numValues)} positioning={{ placement: 'top' }} contentProps={tooltipContentProps}>
                           {cell}
                         </Tooltip>
                       )

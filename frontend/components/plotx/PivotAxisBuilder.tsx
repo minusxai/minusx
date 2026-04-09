@@ -348,6 +348,34 @@ export const PivotAxisBuilder = ({
               >
                 <Text fontSize="xs" color="fg.muted">Compact</Text>
               </Checkbox>
+              {config.showHeatmap !== false && (
+                <HStack gap={1} ml={2}>
+                  <Text fontSize="xs" color="fg.muted">Scale:</Text>
+                  {([
+                    { key: 'red-yellow-green', label: 'RYG', colors: ['#c83c3c', '#d2b43c', '#2da08c'] },
+                    { key: 'green', label: 'Green', colors: ['#ddf0dd', '#28a745'] },
+                    { key: 'blue', label: 'Blue', colors: ['#dde5ff', '#3c64c8'] },
+                  ] as const).map(({ key, colors }) => (
+                    <Box
+                      key={key}
+                      w="56px"
+                      h="16px"
+                      borderRadius="sm"
+                      cursor="pointer"
+                      border="2px solid"
+                      borderColor={(config.heatmapScale ?? 'red-yellow-green') === key ? 'accent.teal' : 'transparent'}
+                      _hover={{ borderColor: 'accent.teal/50' }}
+                      transition="all 0.15s"
+                      onClick={() => onPivotConfigChange({ ...config, heatmapScale: key })}
+                      style={{
+                        background: colors.length === 2
+                          ? `linear-gradient(to right, ${colors[0]}, ${colors[1]})`
+                          : `linear-gradient(to right, ${colors[0]}, ${colors[1]}, ${colors[2]})`,
+                      }}
+                    />
+                  ))}
+                </HStack>
+              )}
             </HStack>
           )}
           {(showRowFormulas || showColFormulas) && renderSettingsCard('Formulas', 'formulas',

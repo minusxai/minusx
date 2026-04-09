@@ -377,6 +377,11 @@ templates:
       - **rows**: dimension columns for row headers
       - **columns**: dimension columns for column headers
       - **values**: measures — each has `column` and `aggFunction` (SUM, AVG, COUNT, MIN, MAX)
+      - **showRowTotals**: show row totals column (default: false)
+      - **showColumnTotals**: show column subtotals (default: false, requires 2+ row dims)
+      - **showHeatmap**: show heatmap conditional formatting (default: true)
+      - **heatmapScale**: color scale — `"red-yellow-green"` (default), `"green"` (GitHub-style single-hue), `"blue"` (single-hue blue)
+      - **compact**: when true, hides cell values and shows only colored squares with tooltips — like a GitHub contribution graph. Best for large date×category pivots where the pattern matters more than exact numbers. Automatically enables heatmap.
       - Renders multi-level nested row/column headers, subtotals, collapsible groups, and heatmap
 
   skill_composed_questions:
