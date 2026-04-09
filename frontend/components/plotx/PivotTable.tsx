@@ -116,7 +116,7 @@ export const PivotTable = ({
     const normalized = (value - minValue) / (maxValue - minValue)
     // Smooth gradient: red (low) → yellow (mid) → teal (high)
     // Using RGB interpolation with two stops
-    const alpha = 0.55
+    const alpha = compact ? 0.85 : 0.55
     let r: number, g: number, b: number
     if (normalized < 0.5) {
       const t = normalized / 0.5
@@ -574,7 +574,7 @@ export const PivotTable = ({
     }
     parts.push(`Value: ${fmt(value, valueIndex)}`)
     return (
-      <Box fontSize="xs" whiteSpace="pre-line">
+      <Box fontSize="xs" fontFamily="mono" whiteSpace="pre-line">
         {parts.join('\n')}
       </Box>
     )
@@ -582,10 +582,9 @@ export const PivotTable = ({
 
   // Compact mode sizing
   const COMPACT_CELL_SIZE = 18
-  const COMPACT_ROW_DIM_W = 80
 
   // Fixed width for frozen row-dimension columns so sticky left offsets align
-  const ROW_DIM_COL_W = compact ? COMPACT_ROW_DIM_W : 120
+  const ROW_DIM_COL_W = 120
 
   if (cells.length === 0 || (cells.length > 0 && cells[0].length === 0)) {
     return (
@@ -759,6 +758,7 @@ export const PivotTable = ({
                     rowSpan={numHeaderRows}
                     fontWeight="700"
                     fontSize={compact ? '2xs' : 'xs'}
+                    fontFamily={compact ? 'mono' : undefined}
                     textTransform="uppercase"
                     letterSpacing={compact ? undefined : '0.05em'}
                     color="fg.muted"
@@ -797,14 +797,27 @@ export const PivotTable = ({
                   zIndex={3}
                   bg={hdr.isFormula ? 'accent.secondary/12' : 'bg.emphasis'}
                   fontStyle={hdr.isFormula ? 'italic' : undefined}
-                  {...(compact ? { p: '1px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxW: `${COMPACT_CELL_SIZE * Math.max(hdr.colSpan, 1)}px` } : {})}
+                  {...(compact ? { px: 0, py: '4px', w: `${COMPACT_CELL_SIZE}px` } : {})}
                 >
-                  {hdr.isFormula ? (
+                  {compact ? (
+                    <Box display="flex" justifyContent="center" w="100%">
+                      <Box
+                        css={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}
+                        transform="rotate(180deg)"
+                        fontSize="2xs"
+                        fontFamily="mono"
+                        whiteSpace="nowrap"
+                        lineHeight={1}
+                      >
+                        {hdr.label}
+                      </Box>
+                    </Box>
+                  ) : hdr.isFormula ? (
                     <Box display="inline-flex" alignItems="center" gap={1} justifyContent="center">
                       <Icon fontSize="md" color="accent.secondary">
                         <LuSquareFunction />
                       </Icon>
-                    
+
                       {hdr.label}
                     </Box>
                   ) : hdr.label}
@@ -1055,6 +1068,7 @@ export const PivotTable = ({
                       rowSpan={spanInfo.rowSpan}
                       fontWeight="600"
                       fontSize={compact ? '2xs' : 'sm'}
+                      fontFamily={compact ? 'mono' : undefined}
                       borderRight={isLastDim(dimIdx) ? undefined : '1px solid'}
                       borderColor="border.muted"
 
@@ -1066,7 +1080,7 @@ export const PivotTable = ({
                       w={`${ROW_DIM_COL_W}px`}
                       minW={`${ROW_DIM_COL_W}px`}
                       maxW={`${ROW_DIM_COL_W}px`}
-                      {...(compact ? { p: '1px 4px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } : {})}
+                      {...(compact ? { p: '1px 4px', whiteSpace: 'nowrap' } : {})}
                     >
                       {fmtHeader(rowHeaders[rowIndex][dimIdx], rowDimNames?.[dimIdx])}
                     </ChakraTable.Cell>
