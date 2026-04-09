@@ -2,8 +2,8 @@
  * MCP Server Factory
  *
  * Creates a per-session McpServer instance that closes over the authenticated
- * EffectiveUser. Registers SearchDBSchema and ExecuteQuery tools, reusing
- * existing handler logic from tool-handlers.server.ts.
+ * EffectiveUser. Registers tools for schema search, query execution, file
+ * search, and file reading, reusing existing handler logic.
  */
 
 import 'server-only';
@@ -14,11 +14,14 @@ import { FilesAPI } from '@/lib/data/files.server';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { connectionLoader } from '@/lib/data/loaders/connection-loader';
 import { ConnectionContent } from '@/lib/types';
+import type { FileType } from '@/lib/ui/file-metadata';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { searchDatabaseSchema } from '@/lib/search/schema-search';
 import { executeQuery as execQuery } from '@/lib/api/execute-query.server';
 import { getNodeConnector } from '@/lib/connections';
 import { compressQueryResult } from '@/lib/api/file-state';
+import { searchFilesInFolder } from '@/lib/search/file-search';
+import { dbFileToCompressedAugmented } from '@/lib/api/compress-augmented';
 
 export type McpToolCallResult = { content: Array<{ type: 'text'; text: string }> };
 export type OnToolCall = (tool: string, args: Record<string, unknown>, result: McpToolCallResult) => void;
@@ -31,20 +34,39 @@ export type OnToolCall = (tool: string, args: Record<string, unknown>, result: M
  * @param onToolCall - Optional callback invoked after each tool completes (used for session logging).
  */
 export function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCall): McpServer {
-  const server = new McpServer({
-    name: 'minusx',
-    version: '1.0.0',
-  });
+  const server = new McpServer(
+    {
+      name: 'minusx',
+      version: '1.0.0',
+    },
+    {
+      instructions: [
+        'MinusX is a an agentic BI tool with questions (SQL queries + visualizations) and dashboards (collections of questions).',
+        '',
+        'URL patterns:',
+        '- Files (questions, dashboards, etc.): /f/{id}  (e.g. /f/189)',
+        '- Folders: /folder/{path}  (e.g. /folder/org/revenue)',
+        '- Explore (ad-hoc SQL): /explore',
+        '',
+        'Files are identified by integer IDs. The `path` field (e.g. /org/elo-by-organization) is for display only.',
+        'Use SearchFiles to find files by name/content, then ReadFiles to get full details.',
+        'Use ListAllConnections to discover available databases, then SearchDBSchema and ExecuteQuery to work with data.',
+        'As of now, you cannot create / modify files in the BI tool via MCP, only read/search existing ones. Future versions may add write capabilities.',
+      ].join('\n'),
+    }
+  );
 
   // -----------------------------------------------------------------------
   // SearchDBSchema
   // -----------------------------------------------------------------------
-  server.tool(
+  server.registerTool(
     'SearchDBSchema',
-    'Search database schema for tables, columns, and relationships. Use string search for keywords, or JSONPath (starting with $) for structured queries.',
     {
-      connection_id: z.string().describe('Database connection ID'),
-      query: z.string().optional().describe('Search query (string) or JSONPath expression (starting with $). Omit for full schema.'),
+      description: 'Search database schema for tables, columns, and relationships. Use string search for keywords, or JSONPath (starting with $) for structured queries.',
+      inputSchema: {
+        connection_id: z.string().describe('Database connection ID'),
+        query: z.string().optional().describe('Search query (string) or JSONPath expression (starting with $). Omit for full schema.'),
+      },
     },
     async ({ connection_id, query }: { connection_id: string; query?: string }) => {
       const connectionPath = resolvePath(user.mode, `/database/${connection_id}`);
@@ -74,13 +96,15 @@ export function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCall): M
   // -----------------------------------------------------------------------
   // ExecuteQuery
   // -----------------------------------------------------------------------
-  server.tool(
+  server.registerTool(
     'ExecuteQuery',
-    'Execute a SQL query against a database connection. Returns columns, types, and rows.',
     {
-      query: z.string().describe('SQL query to execute'),
-      connection_id: z.string().describe('Database connection ID'),
-      parameters: z.record(z.string(), z.union([z.string(), z.number()])).optional().describe('Query parameters (e.g., { "limit": 10 })'),
+      description: 'Execute a SQL query against a database connection. Returns columns, types, and rows.',
+      inputSchema: {
+        query: z.string().describe('SQL query to execute'),
+        connection_id: z.string().describe('Database connection ID'),
+        parameters: z.record(z.string(), z.union([z.string(), z.number()])).optional().describe('Query parameters (e.g., { "limit": 10 })'),
+      },
     },
     async ({ query, connection_id, parameters }: { query: string; connection_id: string; parameters?: Record<string, string | number> }) => {
       const params: Record<string, string | number> = parameters || {};
@@ -119,10 +143,11 @@ export function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCall): M
   // -----------------------------------------------------------------------
   // ListAllConnections
   // -----------------------------------------------------------------------
-  server.tool(
+  server.registerTool(
     'ListAllConnections',
-    'List all available database connections with their names and types.',
-    {},
+    {
+      description: 'List all available database connections with their names and types.',
+    },
     async () => {
       const { connections } = await ConnectionsAPI.listAll(user);
       const result: McpToolCallResult = {
@@ -136,6 +161,76 @@ export function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCall): M
         ],
       };
       onToolCall?.('ListAllConnections', {}, result);
+      return result;
+    }
+  );
+
+  // -----------------------------------------------------------------------
+  // SearchFiles
+  // -----------------------------------------------------------------------
+  server.registerTool(
+    'SearchFiles',
+    {
+      description: 'Search files (questions, dashboards) by name, description, or content. Returns ranked results with match snippets.',
+      inputSchema: {
+        query: z.string().describe('Search term to find in file names, descriptions, and content'),
+        file_types: z.array(z.string()).optional().describe("File types to search: 'question', 'dashboard'. Default: both"),
+        folder_path: z.string().optional().describe("Folder path to search within (default: user's home folder)"),
+        limit: z.number().optional().describe('Maximum number of results to return (default: 20)'),
+        offset: z.number().optional().describe('Number of results to skip for pagination (default: 0)'),
+      },
+    },
+    async ({ query, file_types, folder_path, limit, offset }: {
+      query: string;
+      file_types?: string[];
+      folder_path?: string;
+      limit?: number;
+      offset?: number;
+    }) => {
+      const searchResult = await searchFilesInFolder(
+        {
+          query,
+          file_types: file_types as FileType[] | undefined,
+          folder_path,
+          depth: 999,
+          limit: limit ?? 20,
+          offset: offset ?? 0,
+          visibility: 'all',
+        },
+        user
+      );
+
+      const result: McpToolCallResult = {
+        content: [{ type: 'text' as const, text: JSON.stringify({ success: true, ...searchResult }) }],
+      };
+      onToolCall?.('SearchFiles', { query, file_types, folder_path, limit, offset }, result);
+      return result;
+    }
+  );
+
+  // -----------------------------------------------------------------------
+  // ReadFiles
+  // -----------------------------------------------------------------------
+  server.registerTool(
+    'ReadFiles',
+    {
+      description: 'Load one or more files by ID with their full content. Returns complete JSON including name, path, type, and content.',
+      inputSchema: {
+        fileIds: z.array(z.number()).describe('Array of file IDs to load'),
+      },
+    },
+    async ({ fileIds }: { fileIds: number[] }) => {
+      const fileResults = await Promise.all(
+        fileIds.map(id => FilesAPI.loadFile(id, user).catch(() => null))
+      );
+      const validFiles = fileResults
+        .filter((r): r is NonNullable<typeof r> => r != null)
+        .map(r => dbFileToCompressedAugmented(r.data));
+
+      const result: McpToolCallResult = {
+        content: [{ type: 'text' as const, text: JSON.stringify({ success: true, files: validFiles }) }],
+      };
+      onToolCall?.('ReadFiles', { fileIds }, result);
       return result;
     }
   );
