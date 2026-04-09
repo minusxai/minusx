@@ -327,7 +327,7 @@ export const ZoneChip = ({ column, type, onRemove, extra, formatConfig, onFormat
   const chipRef = useRef<HTMLDivElement>(null)
 
   const displayName = formatConfig?.alias || column
-  const hasFormat = formatConfig && (formatConfig.alias || formatConfig.decimalPoints !== undefined || formatConfig.dateFormat)
+  const hasFormat = formatConfig && (formatConfig.alias || formatConfig.decimalPoints !== undefined || formatConfig.dateFormat || formatConfig.prefix || formatConfig.suffix)
 
   // Close popover on click outside
   useEffect(() => {
