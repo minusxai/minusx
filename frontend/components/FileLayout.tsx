@@ -67,7 +67,7 @@ export default function FileLayout(props: FileLayoutProps) {
   for (let i = 0; i < pathParts.length; i++) {
     accumulatedPath += '/' + pathParts[i];
     breadcrumbItems.push({
-      label: pathParts[i] === currentMode ? config.branding.displayName : pathParts[i],
+      label: pathParts[i] === currentMode ? config.branding.displayName : decodeURIComponent(pathParts[i]),
       href: `/p${accumulatedPath}`
     });
   }

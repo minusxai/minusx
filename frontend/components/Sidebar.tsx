@@ -106,7 +106,7 @@ export default function Sidebar() {
   // Supports both /p/... (folder) and /f/[id] (file) routes
   const currentPath = useMemo(() => {
     if (pathname.startsWith('/p/')) {
-      return pathname.replace('/p', '');
+      return decodeURIComponent(pathname.replace('/p', ''));
     }
     if (currentFilePath) {
       // Extract parent path from file's path

@@ -25,7 +25,7 @@ export default function MobileNewFileSheet({ onClose }: MobileNewFileSheetProps)
   // Extract current path for folder modal and new files
   const currentPath = useMemo(() => {
     if (pathname.startsWith('/p/')) {
-      return pathname.replace('/p', '');
+      return decodeURIComponent(pathname.replace('/p', ''));
     }
     if (currentFile?.path) {
       const pathParts = currentFile.path.split('/');

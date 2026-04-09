@@ -179,7 +179,7 @@ export default function ContextEditorV2({
         if (segments.length !== 1) return false; // Immediate child only
         return !hiddenNames.has(segments[0]); // Exclude system folders
       })
-      .map(f => f.path);
+      .map(f => decodeURIComponent(f.path));
 
     return Array.from(new Set(children)).sort();
   }, [file?.path, filesState]);
