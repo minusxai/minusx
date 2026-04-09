@@ -21,6 +21,7 @@ import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client'
 import { RENDERABLE_CHART_TYPES } from '@/lib/chart/render-chart-svg';
 import { uploadFile } from '@/lib/object-store/client';
 import type { VizSettings } from '@/lib/types.gen';
+import type { QueryResult as ReduxQueryResult } from '@/store/queryResultsSlice';
 import ExampleQuestions from './message/ExampleQuestions';
 import FileNotFound from '../FileNotFound';
 import { deduplicateMessages } from './message/messageHelpers';
@@ -38,62 +39,100 @@ import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 // eslint-disable-next-line no-restricted-syntax
 const ChatInput = dynamic(() => import('./ChatInput'), { ssr: false });
 
+// Per-chart S3 URL cache: cacheKey → public S3 URL.
+// Key encodes queryResultId + updatedAt (for freshness) + vizSettings + titleOverride + colorMode.
+// Lives at module scope so it persists across re-renders and consecutive messages.
+// Safe: this is a 'use client' module — module-level state is per browser tab (single user).
+// eslint-disable-next-line no-restricted-syntax
+const chartUrlCache = new Map<string, string>();
+
+function buildChartCacheKey(
+  queryResultId: string | undefined,
+  updatedAt: number | undefined,
+  vizSettings: VizSettings,
+  titleOverride: string | undefined,
+  colorMode: 'light' | 'dark',
+): string {
+  return `${queryResultId ?? ''}|${updatedAt ?? 0}|${JSON.stringify(vizSettings)}|${titleOverride ?? ''}|${colorMode}`;
+}
+
+type ChartEntry = {
+  queryResult: any;
+  vizSettings: VizSettings;
+  titleOverride?: string;
+  queryResultId?: string;
+  updatedAt?: number;
+};
+
 /**
  * Render chart images for the current file (question or dashboard) and upload to S3.
  *
  * Question → one chart image.
  * Dashboard → one image per renderable chart that has data (multiple images).
  *
+ * Results are cached by (queryResultId, updatedAt, vizSettings, titleOverride, colorMode) so
+ * repeated sends with the same data skip rendering and re-upload entirely.
+ *
  * Returns [] when the page has no renderable charts (explore/folder/table/pivot pages).
  * Never throws — chart capture failure must not block the user from sending.
  */
 async function buildChartAttachments(
   appState: AppState | null | undefined,
-  queryResultsMap: Record<string, { data: any }>,
+  queryResultsMap: Record<string, ReduxQueryResult>,
   colorMode: 'light' | 'dark',
 ): Promise<import('@/lib/types').Attachment[]> {
   if (appState?.type !== 'file') return [];
   const { fileState, references } = appState.state;
 
-  type ChartInput = { queryResult: any; vizSettings: VizSettings; titleOverride?: string };
-  let inputs: ChartInput[];
+  let entries: ChartEntry[];
 
   if (fileState.type === 'question') {
     const vizSettings = (fileState.content as any)?.vizSettings as VizSettings | undefined;
     const queryResultId = (fileState as any).queryResultId as string | undefined;
-    const queryResult = queryResultId ? queryResultsMap[queryResultId]?.data : undefined;
+    const qr = queryResultId ? queryResultsMap[queryResultId] : undefined;
+    const queryResult = qr?.data;
     if (!vizSettings || !queryResult || !RENDERABLE_CHART_TYPES.has(vizSettings.type)) return [];
-    inputs = [{ queryResult, vizSettings, titleOverride: fileState.name || undefined }];
+    entries = [{ queryResult, vizSettings, titleOverride: fileState.name || undefined, queryResultId, updatedAt: qr?.updatedAt }];
   } else if (fileState.type === 'dashboard') {
-    inputs = (references ?? []).flatMap(ref => {
+    entries = (references ?? []).flatMap(ref => {
       const vizSettings = (ref.content as any)?.vizSettings as VizSettings | undefined;
       const queryResultId = (ref as any).queryResultId as string | undefined;
-      const queryResult = queryResultId ? queryResultsMap[queryResultId]?.data : undefined;
+      const qr = queryResultId ? queryResultsMap[queryResultId] : undefined;
+      const queryResult = qr?.data;
       if (!vizSettings || !queryResult || !RENDERABLE_CHART_TYPES.has(vizSettings.type)) return [];
-      return [{ queryResult, vizSettings, titleOverride: ref.name || undefined }] as ChartInput[];
+      return [{ queryResult, vizSettings, titleOverride: ref.name || undefined, queryResultId, updatedAt: qr?.updatedAt }] as ChartEntry[];
     });
   } else {
     return [];
   }
 
-  if (inputs.length === 0) return [];
+  if (entries.length === 0) return [];
 
   try {
-    const rendered = await clientChartImageRenderer.renderCharts(inputs, {
-      width: 512,
-      colorMode,
-      addWatermark: false,
-    });
-
+    // Process each chart independently and in parallel so cache hits return immediately
+    // while misses render + upload concurrently.
     const attachments = await Promise.all(
-      rendered.map(async r => {
-        const blob = await fetch(r.dataUrl).then(res => res.blob());
+      entries.map(async ({ queryResult, vizSettings, titleOverride, queryResultId, updatedAt }) => {
+        const cacheKey = buildChartCacheKey(queryResultId, updatedAt, vizSettings, titleOverride, colorMode);
+        const cachedUrl = chartUrlCache.get(cacheKey);
+        if (cachedUrl) {
+          return { type: 'image' as const, name: titleOverride || 'chart.jpg', content: cachedUrl, metadata: { auto: true } };
+        }
+
+        const [rendered] = await clientChartImageRenderer.renderCharts(
+          [{ queryResult, vizSettings, titleOverride }],
+          { width: 512, colorMode, addWatermark: false },
+        );
+        if (!rendered) return null;
+
+        const blob = await fetch(rendered.dataUrl).then(res => res.blob());
         const file = new File([blob], 'chart.jpg', { type: 'image/jpeg' });
         const { publicUrl } = await uploadFile(file, undefined, { keyType: 'charts' });
-        return { type: 'image' as const, name: r.label || 'chart.jpg', content: publicUrl, metadata: { auto: true } };
+        chartUrlCache.set(cacheKey, publicUrl);
+        return { type: 'image' as const, name: rendered.label || 'chart.jpg', content: publicUrl, metadata: { auto: true } };
       })
     );
-    return attachments;
+    return attachments.filter(a => a !== null) as import('@/lib/types').Attachment[];
   } catch {
     return []; // Never block sending on capture failure
   }
