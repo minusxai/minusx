@@ -21,7 +21,7 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const { canDeleteFileType } = useAccessRules();
-  const canDelete = canDeleteFileType(fileType);
+  const canDeleteOrMove = canDeleteFileType(fileType);
 
   const handleDeleteClick = () => {
     setIsDeleteDialogOpen(true);
@@ -106,21 +106,23 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
                 </HStack>
               </Menu.Item>
             )}
-            <Menu.Item
-              value="move"
-              cursor="pointer"
-              borderRadius="sm"
-              px={3}
-              py={2}
-              _hover={{ bg: 'bg.muted' }}
-              onClick={() => setIsMoveModalOpen(true)}
-            >
-              <HStack gap={2}>
-                <Icon as={LuFolderInput} boxSize={4} />
-                <span>Move</span>
-              </HStack>
-            </Menu.Item>
-            {canDelete && (
+            {canDeleteOrMove && (
+              <Menu.Item
+                value="move"
+                cursor="pointer"
+                borderRadius="sm"
+                px={3}
+                py={2}
+                _hover={{ bg: 'bg.muted' }}
+                onClick={() => setIsMoveModalOpen(true)}
+              >
+                <HStack gap={2}>
+                  <Icon as={LuFolderInput} boxSize={4} />
+                  <span>Move</span>
+                </HStack>
+              </Menu.Item>
+            )}
+            {canDeleteOrMove && (
               <Menu.Item
                 value="delete"
                 color="fg.error"

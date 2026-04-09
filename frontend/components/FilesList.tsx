@@ -14,6 +14,7 @@ import { Link } from '@/components/ui/Link';
 import DashboardUsageBadge from './DashboardUsageBadge';
 import { moveFile } from '@/lib/api/file-state';
 import BulkMoveFileModal from './BulkMoveFileModal';
+import { canDeleteFileType } from '@/lib/auth/access-rules.client';
 
 interface FilesListProps {
   files: DbFile[];
@@ -184,7 +185,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
 
   // Drag and drop handlers
   const handleDragStart = (e: React.DragEvent, file: DbFile) => {
-    if (file.type === 'folder') return; // Don't allow dragging folders for now
+    if (file.type === 'folder' || !canDeleteFileType(file.type)) return;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('fileId', file.id.toString());
     setDraggedFileId(file.id);
