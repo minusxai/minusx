@@ -528,9 +528,9 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
                               _hover={{
                                 bg: selectionMode ? 'accent.teal/5' : dropTargetId === file.id && file.type === 'folder' ? 'accent.teal/20' : 'bg.surface',
                               }}
-                              cursor={selectionMode ? 'pointer' : file.type === 'folder' ? 'pointer' : 'grab'}
+                              cursor="pointer"
                               _active={{
-                                cursor: selectionMode ? 'pointer' : file.type === 'folder' ? 'pointer' : 'grabbing',
+                                cursor: 'pointer',
                               }}
                               transition="all 0.15s"
                               aria-label={file.name}
@@ -664,9 +664,9 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
                                 bg: selectionMode ? 'accent.teal/5' : dropTargetId === file.id && file.type === 'folder' ? 'accent.teal/20' : 'bg.elevated',
                                 borderColor: selectionMode && selectedFileIds.has(file.id) ? 'accent.teal' : dropTargetId === file.id && file.type === 'folder' ? 'accent.teal' : getFileTypeMetadata(file.type).color,
                               }}
-                              cursor={selectionMode ? 'pointer' : file.type === 'folder' ? 'pointer' : 'grab'}
+                              cursor="pointer"
                               _active={{
-                                cursor: selectionMode ? 'pointer' : file.type === 'folder' ? 'pointer' : 'grabbing',
+                                cursor: 'pointer',
                               }}
                               transition="all 0.15s"
                               align="center"
