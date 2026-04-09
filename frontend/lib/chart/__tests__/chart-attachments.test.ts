@@ -20,7 +20,7 @@ jest.mock('@/lib/object-store/client', () => ({
 }));
 
 jest.mock('@/lib/chart/render-chart-svg', () => ({
-  RENDERABLE_CHART_TYPES: new Set(['bar', 'line', 'area', 'scatter', 'pie', 'funnel', 'waterfall']),
+  RENDERABLE_CHART_TYPES: new Set(['bar', 'line', 'area', 'scatter', 'pie', 'funnel', 'waterfall', 'radar']),
 }));
 
 import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client';

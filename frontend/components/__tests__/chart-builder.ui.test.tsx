@@ -160,6 +160,36 @@ describe('ChartBuilder viz type constraints', () => {
 
     expect(screen.getByText(/funnel charts require at least 1 X-axis column/i)).toBeInTheDocument()
   })
+
+  it('radar chart shows error with no X-axis columns', () => {
+    renderWithProviders(
+      <ChartBuilder
+        columns={columns}
+        types={types}
+        rows={rows}
+        chartType="radar"
+        initialXCols={[]}
+        initialYCols={['revenue']}
+      />
+    )
+
+    expect(screen.getByText(/radar charts require at least 1 X-axis column/i)).toBeInTheDocument()
+  })
+
+  it('radar chart does not show constraint error with valid config', () => {
+    renderWithProviders(
+      <ChartBuilder
+        columns={columns}
+        types={types}
+        rows={rows}
+        chartType="radar"
+        initialXCols={['month']}
+        initialYCols={['revenue']}
+      />
+    )
+
+    expect(screen.queryByText(/radar charts require/i)).not.toBeInTheDocument()
+  })
 })
 
 describe('ChartBuilder dual axis', () => {
