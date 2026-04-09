@@ -28,7 +28,8 @@ export type VisualizationType =
   | "pivot"
   | "trend"
   | "waterfall"
-  | "combo";
+  | "combo"
+  | "radar";
 /**
  * list of column names in the x axis (for non-pivot chart types)
  */

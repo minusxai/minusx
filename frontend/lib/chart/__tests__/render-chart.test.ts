@@ -93,6 +93,31 @@ describe('renderChartToSvg', () => {
     });
   });
 
+  describe('radar chart', () => {
+    it('renders a valid SVG string', () => {
+      const vizSettings: VizSettings = {
+        type: 'radar',
+        xCols: ['month'],
+        yCols: ['revenue'],
+      };
+
+      const svg = renderChartToSvg(SAMPLE_QUERY_RESULT, vizSettings);
+      expect(svg).toContain('<svg');
+      expect(svg).toContain('</svg>');
+    });
+
+    it('renders with multiple y columns', () => {
+      const vizSettings: VizSettings = {
+        type: 'radar',
+        xCols: ['month'],
+        yCols: ['revenue', 'cost'],
+      };
+
+      const svg = renderChartToSvg(SAMPLE_QUERY_RESULT, vizSettings);
+      expect(svg).toContain('<svg');
+    });
+  });
+
   describe('area chart', () => {
     it('renders a valid SVG string', () => {
       const vizSettings: VizSettings = {

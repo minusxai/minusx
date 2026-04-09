@@ -167,7 +167,7 @@ templates:
         "description": "User demographics query"
       }}
       ```
-      - **VizSettings**: `table`, `line`, `bar`, `area`, `scatter`, `funnel`, `pie`, `pivot`. Use `LoadSkill("visualizations")` for complex configs.
+      - **VizSettings**: `table`, `line`, `bar`, `area`, `scatter`, `funnel`, `pie`, `radar`, `pivot`. Use `LoadSkill("visualizations")` for complex configs.
       - **Parameters**: `:paramName` syntax in SQL. Use `LoadSkill("parameters")` for types, sources, and dashboard merging, and complex scenarios.
       - **References**: `@alias` syntax for composed questions. Use `LoadSkill("composed_questions")` for details.
 
@@ -341,11 +341,11 @@ templates:
       - **Never** match query + parameters in one oldMatch — JSON key order is not guaranteed.
 
   skill_visualizations:
-    description: "VizSettings types (line, bar, area, scatter, funnel, pie, pivot), xCols/yCols config, pivot table pivotConfig. Basic vizSettings are covered in the questions skill, but Load this skill for complex visualizations and options."
+    description: "VizSettings types (line, bar, area, scatter, funnel, pie, radar, pivot), xCols/yCols config, pivot table pivotConfig. Basic vizSettings are covered in the questions skill, but Load this skill for complex visualizations and options."
     content: |
       ## Skill: Visualizations
 
-      **VizSettings types**: `table`, `line`, `bar`, `area`, `scatter`, `funnel`, `pie`, `pivot`
+      **VizSettings types**: `table`, `line`, `bar`, `area`, `scatter`, `funnel`, `pie`, `radar`, `pivot`
 
       ### Standard Charts (line, bar, area, scatter)
       - `xCols`: grouping columns — the first one is used as x-axis, rest as grouping cols
@@ -355,6 +355,14 @@ templates:
       ### Categorical Charts (funnel, pie)
       - Same `xCols`/`yCols` pattern
       - For multiple X columns: honors original order (unlike line/bar which reorder by cardinality)
+
+      ### Radar Charts (radar)
+      - Same `xCols`/`yCols` pattern as categorical charts
+      - X columns become the "spokes" (indicators/dimensions) of the radar
+      - Y columns provide the values plotted on each spoke
+      - Best for comparing multiple metrics across categories (e.g., skill ratings, product attributes)
+      - Requires at least 3 X-axis categories to be meaningful
+      - Example: `{{"type": "radar", "xCols": ["metric"], "yCols": ["score"]}}`
 
       ### Table
       - No axis configuration needed: `{{"type": "table"}}`
@@ -522,6 +530,7 @@ prompts:
     - Use `pie` for proportional breakdowns (e.g., market share)
     - Use `scatter` for correlations between two numeric columns
     - Use `funnel` for sequential stage data (e.g., conversion funnel)
+    - Use `radar` for multi-dimensional comparison (e.g., comparing products across several attributes)
     - Use `table` (or omit vizSettings) when a chart would not add value — e.g., single-row results, lookups, or lists of text
     - Always set `xCols` and `yCols` appropriately when using a chart type
     - The chart image is rendered server-side and posted alongside your text reply — you do not need to mention the chart explicitly

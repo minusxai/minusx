@@ -369,7 +369,8 @@ export function QuestionVisualization({
                   currentState?.vizSettings?.type === 'pivot' ||
                   currentState?.vizSettings?.type === 'trend' ||
                   currentState?.vizSettings?.type === 'waterfall' ||
-                  currentState?.vizSettings?.type === 'combo') && (
+                  currentState?.vizSettings?.type === 'combo' ||
+                  currentState?.vizSettings?.type === 'radar') && (
                   <Box flex="1" width="100%" overflow="hidden" minHeight="0" display="flex">
                     <ChartBuilder
                       columns={data.columns}

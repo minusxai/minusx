@@ -26,6 +26,7 @@ class VisualizationType(str, Enum):
     TREND = "trend"
     WATERFALL = "waterfall"
     COMBO = "combo"
+    RADAR = "radar"
 
 class AggregationFunction(str, Enum):
     SUM = "SUM"

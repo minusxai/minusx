@@ -3,14 +3,14 @@ import { Box } from '@chakra-ui/react'
 import { useAppSelector } from '@/store/hooks'
 import { ChartHost } from './ChartHost'
 import { useChartContainer } from './useChartContainer'
-import { buildPieChartOption, isValidChartData, type ChartProps } from '@/lib/chart/chart-utils'
+import { buildRadarChartOption, isValidChartData, type ChartProps } from '@/lib/chart/chart-utils'
 import { downloadChartCsv } from './build-chart-download'
 
-interface PiePlotProps extends ChartProps {
+interface RadarPlotProps extends ChartProps {
   emptyMessage?: string
 }
 
-export const PiePlot = (props: PiePlotProps) => {
+export const RadarPlot = (props: RadarPlotProps) => {
   const { xAxisData, series, emptyMessage, onChartClick, columnFormats, yAxisColumns, xAxisColumns, chartTitle, showChartTitle = true, colorPalette: customPalette, styleConfig, exportBranding, onDownloadImage } = props
   const colorMode = useAppSelector((state) => state.ui.colorMode)
   const { containerRef, containerWidth, containerHeight, chartEvents } = useChartContainer(onChartClick)
@@ -20,24 +20,16 @@ export const PiePlot = (props: PiePlotProps) => {
       return {}
     }
 
-    const pieData = xAxisData.map((name, index) => {
-      const value = series.reduce((sum, s) => {
-        const val = s.data[index]
-        return sum + (typeof val === 'number' && !isNaN(val) ? val : 0)
-      }, 0)
-      return { name, value }
-    })
-    const total = pieData.reduce((sum, item) => sum + item.value, 0)
-
     const downloadCsv = () => {
-      downloadChartCsv(['Name', 'Value', 'Percent'], pieData.map(item => [
-        item.name,
-        item.value,
-        `${((item.value / total) * 100).toFixed(1)}%`,
-      ]))
+      const headers = ['Indicator', ...series.map(s => s.name)]
+      const rows = xAxisData.map((name, i) => [
+        name,
+        ...series.map(s => s.data[i] ?? 0),
+      ])
+      downloadChartCsv(headers, rows)
     }
 
-    return buildPieChartOption({
+    return buildRadarChartOption({
       xAxisData,
       series,
       colorMode,
@@ -57,7 +49,7 @@ export const PiePlot = (props: PiePlotProps) => {
   if (!isValidChartData(xAxisData, series)) {
     return (
       <Box color="fg.subtle" fontSize="sm" textAlign="center" py={8}>
-        {emptyMessage || 'No data available for pie chart'}
+        {emptyMessage || 'No data available for radar chart'}
       </Box>
     )
   }

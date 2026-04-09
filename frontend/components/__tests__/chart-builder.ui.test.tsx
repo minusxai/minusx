@@ -160,6 +160,79 @@ describe('ChartBuilder viz type constraints', () => {
 
     expect(screen.getByText(/funnel charts require at least 1 X-axis column/i)).toBeInTheDocument()
   })
+
+  it('radar chart shows error with no X-axis columns', () => {
+    renderWithProviders(
+      <ChartBuilder
+        columns={columns}
+        types={types}
+        rows={rows}
+        chartType="radar"
+        initialXCols={[]}
+        initialYCols={['revenue']}
+      />
+    )
+
+    expect(screen.getByText(/radar charts require at least 1 X-axis column/i)).toBeInTheDocument()
+  })
+
+  it('radar chart shows error with multiple X and multiple Y columns', () => {
+    renderWithProviders(
+      <ChartBuilder
+        columns={columns}
+        types={types}
+        rows={rows}
+        chartType="radar"
+        initialXCols={['month', 'category']}
+        initialYCols={['revenue', 'orders']}
+      />
+    )
+
+    expect(screen.getByText(/radar charts support either multiple X columns/i)).toBeInTheDocument()
+  })
+
+  it('radar chart allows 2 X columns with 1 Y column (split-by)', () => {
+    const radarRows = [
+      { month: '2026-01', category: 'A', revenue: 100, orders: 10 },
+      { month: '2026-02', category: 'A', revenue: 200, orders: 20 },
+      { month: '2026-03', category: 'B', revenue: 150, orders: 15 },
+    ]
+    renderWithProviders(
+      <ChartBuilder
+        columns={columns}
+        types={types}
+        rows={radarRows}
+        chartType="radar"
+        initialXCols={['month', 'category']}
+        initialYCols={['revenue']}
+      />
+    )
+
+    // No constraint error — only the min-3-categories info from RadarPlot is acceptable
+    expect(screen.queryByText(/radar charts require/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/radar charts support either/i)).not.toBeInTheDocument()
+  })
+
+  it('radar chart allows 1 X column with multiple Y columns', () => {
+    const radarRows = [
+      { month: '2026-01', category: 'A', revenue: 100, orders: 10 },
+      { month: '2026-02', category: 'A', revenue: 200, orders: 20 },
+      { month: '2026-03', category: 'B', revenue: 150, orders: 15 },
+    ]
+    renderWithProviders(
+      <ChartBuilder
+        columns={columns}
+        types={types}
+        rows={radarRows}
+        chartType="radar"
+        initialXCols={['month']}
+        initialYCols={['revenue', 'orders']}
+      />
+    )
+
+    expect(screen.queryByText(/radar charts require/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/radar charts support either/i)).not.toBeInTheDocument()
+  })
 })
 
 describe('ChartBuilder dual axis', () => {

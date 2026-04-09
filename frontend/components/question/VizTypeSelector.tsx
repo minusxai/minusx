@@ -17,6 +17,7 @@ import {
   LuTrendingUp,
   LuChartNoAxesColumn,
   LuChartNoAxesCombined,
+  LuRadar,
 } from 'react-icons/lu';
 import type { VizSettings } from '@/lib/types';
 
@@ -38,6 +39,7 @@ const VIZ_TYPES: VizTypeOption[] = [
   { type: 'pivot', icon: <LuTable2 size={18} />, label: 'Pivot table' },
   { type: 'trend', icon: <LuTrendingUp size={18} />, label: 'Trend' },
   { type: 'waterfall', icon: <LuChartNoAxesColumn size={18} />, label: 'Waterfall chart' },
+  { type: 'radar', icon: <LuRadar size={18} />, label: 'Radar chart' },
 ];
 
 interface VizTypeSelectorProps {

@@ -7,7 +7,7 @@ import { CHART_COLORS, COLOR_PALETTE } from '@/lib/chart/echarts-theme'
 import type { VisualizationStyleConfig } from '@/lib/types'
 
 interface StyleConfigPopoverProps {
-  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo'
+  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo' | 'radar'
   styleConfig?: VisualizationStyleConfig
   numSeries: number
   onChange: (config: VisualizationStyleConfig) => void

@@ -9,7 +9,7 @@
  */
 import * as echarts from 'echarts';
 import { aggregateData } from './aggregate-data';
-import { buildChartOption, buildFunnelChartOption, buildPieChartOption, buildWaterfallChartOption } from './chart-utils';
+import { buildChartOption, buildFunnelChartOption, buildPieChartOption, buildRadarChartOption, buildWaterfallChartOption } from './chart-utils';
 import { COLOR_PALETTE } from './echarts-theme';
 import type { QueryResult } from '@/lib/types';
 import type { VizSettings } from '@/lib/types.gen';
@@ -20,15 +20,15 @@ try {
   // eslint-disable-next-line @typescript-eslint/no-require-imports, no-restricted-syntax -- dynamic require needed: echarts sub-path exports are ESM-only and break Jest's CJS transform
   const r = require;
   const { SVGRenderer } = r('echarts/renderers');
-  const { TitleComponent, LegendComponent, TooltipComponent, GridComponent } = r('echarts/components');
-  const { BarChart, LineChart, PieChart, ScatterChart, FunnelChart } = r('echarts/charts');
-  echarts.use([SVGRenderer, TitleComponent, LegendComponent, TooltipComponent, GridComponent, BarChart, LineChart, PieChart, ScatterChart, FunnelChart]);
+  const { TitleComponent, LegendComponent, TooltipComponent, GridComponent, RadarComponent } = r('echarts/components');
+  const { BarChart, LineChart, PieChart, ScatterChart, FunnelChart, RadarChart } = r('echarts/charts');
+  echarts.use([SVGRenderer, TitleComponent, LegendComponent, TooltipComponent, GridComponent, RadarComponent, BarChart, LineChart, PieChart, ScatterChart, FunnelChart, RadarChart]);
 } catch {
   // Full echarts bundle already includes everything — no registration needed
 }
 
 // eslint-disable-next-line no-restricted-syntax -- immutable constant set of renderable chart types
-export const RENDERABLE_CHART_TYPES = new Set(['line', 'bar', 'area', 'scatter', 'pie', 'funnel', 'waterfall']);
+export const RENDERABLE_CHART_TYPES = new Set(['line', 'bar', 'area', 'scatter', 'pie', 'funnel', 'waterfall', 'radar']);
 
 export const BG_COLORS = {
   dark: '#161b22',
@@ -135,6 +135,17 @@ export function renderChartToSvg(
     });
   } else if (chartType === 'waterfall') {
     option = buildWaterfallChartOption({
+      xAxisData: aggregated.xAxisData,
+      series: aggregated.series,
+      colorMode,
+      xAxisColumns: xCols,
+      yAxisColumns: yCols,
+      chartTitle,
+      colorPalette: COLOR_PALETTE,
+      columnFormats: vizSettings.columnFormats ?? undefined,
+    });
+  } else if (chartType === 'radar') {
+    option = buildRadarChartOption({
       xAxisData: aggregated.xAxisData,
       series: aggregated.series,
       colorMode,

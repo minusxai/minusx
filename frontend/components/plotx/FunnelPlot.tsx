@@ -4,7 +4,6 @@ import { LuArrowRightLeft } from 'react-icons/lu'
 import { useAppSelector } from '@/store/hooks'
 import { ChartHost } from './ChartHost'
 import { useChartContainer } from './useChartContainer'
-import { ChartError } from './ChartError'
 import { buildFunnelChartOption, isValidChartData, type ChartProps } from '@/lib/chart/chart-utils'
 import { downloadChartCsv } from './build-chart-download'
 
@@ -57,14 +56,6 @@ export const FunnelPlot = (props: FunnelPlotProps) => {
       orientation,
     })
   }, [xAxisData, series, colorMode, containerWidth, containerHeight, orientation, columnFormats, xAxisColumns, yAxisColumns, chartTitle, showChartTitle, customPalette, styleConfig, exportBranding, onDownloadImage])
-
-  if ((xAxisColumns?.length ?? 0) > 1) {
-    return <ChartError message="Funnel charts support only a single X-axis column. Remove extra columns from the X axis to continue." />
-  }
-
-  if ((yAxisColumns?.length ?? 0) > 1) {
-    return <ChartError message="Funnel charts support only a single Y-axis column. Remove extra columns from the Y axis to continue." />
-  }
 
   if (!isValidChartData(xAxisData, series)) {
     return (

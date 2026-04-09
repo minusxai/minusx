@@ -13,6 +13,7 @@ import { PivotAxisBuilder } from './PivotAxisBuilder'
 import { SingleValue } from './SingleValue'
 import { TrendPlot } from './TrendPlot'
 import { WaterfallPlot } from './WaterfallPlot'
+import { RadarPlot } from './RadarPlot'
 import { ComboPlot } from './ComboPlot'
 import { ChartError } from './ChartError'
 import { DrillDownCard, type DrillDownState } from './DrillDownCard'
@@ -23,6 +24,7 @@ import { aggregatePivotData, computeFormulas, getUniqueTopLevelRowValues, getUni
 import type { PivotConfig, ColumnFormatConfig, AxisConfig, VisualizationStyleConfig } from '@/lib/types'
 import type { VizSettings } from '@/lib/types.gen'
 import { getTimestamp } from '@/lib/chart/chart-utils'
+import { getVizConstraintError } from '@/lib/chart/viz-constraints'
 import { getEffectiveColorPalette } from '@/lib/chart/echarts-theme'
 import { StyleConfigPopover } from './StyleConfigPopover'
 import { AnnotationEditor } from './AnnotationEditor'
@@ -35,7 +37,7 @@ interface ChartBuilderProps {
   columns: string[]
   types: string[]
   rows: Record<string, any>[]
-  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo'
+  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo' | 'radar'
   initialXCols?: string[]
   initialYCols?: string[]
   initialYRightCols?: string[]
@@ -388,7 +390,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     const filters: Record<string, string> = {}
     let yColumn: string | undefined
 
-    if (chartType === 'pie' || chartType === 'funnel') {
+    if (chartType === 'pie' || chartType === 'funnel' || chartType === 'radar') {
       const xValue = params.name as string
 
       if (xAxisColumns.length === 1) {
@@ -470,27 +472,11 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     link.click()
   }, [columns, types, rows, chartType, xAxisColumns, yAxisColumns, columnFormats, colorMode])
 
-  // Viz type constraint validation
-  const constraintError = useMemo((): string | null => {
-    switch (chartType) {
-      case 'combo':
-        if (allYColumns.length < 2) return 'Combo charts require at least 2 Y-axis columns (first becomes bar, rest become lines).'
-        if (xAxisColumns.length < 1) return 'Combo charts require at least 1 X-axis column.'
-        return null
-      case 'waterfall':
-        if (xAxisColumns.length > 1) return 'Waterfall charts support only a single X-axis column. Remove extra columns from the X axis to continue.'
-        if (allYColumns.length > 1) return 'Waterfall charts support only a single Y-axis column. Remove extra columns from the Y axis to continue.'
-        return null
-      case 'pie':
-        if (xAxisColumns.length < 1) return 'Pie charts require at least 1 X-axis column for grouping.'
-        return null
-      case 'funnel':
-        if (xAxisColumns.length < 1) return 'Funnel charts require at least 1 X-axis column for grouping.'
-        return null
-      default:
-        return null
-    }
-  }, [chartType, xAxisColumns.length, allYColumns.length])
+  // Viz type constraint validation (centralized in viz-constraints.ts)
+  const constraint = useMemo(() => {
+    return getVizConstraintError(chartType, { xColCount: xAxisColumns.length, yColCount: allYColumns.length, xDataCount: aggregatedData.xAxisData.length })
+  }, [chartType, xAxisColumns.length, allYColumns.length, aggregatedData.xAxisData.length])
+  const constraintError = constraint.error
 
   const hasData = allYColumns.length > 0
 
@@ -661,7 +647,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
         {/* Chart Display */}
         <Box flex="1" overflow="hidden" display="flex" flexDirection="column" minHeight="0">
           {constraintError ? (
-            <ChartError message={constraintError} />
+            <ChartError message={constraintError} variant={constraint.variant} />
           ) : hasData ? (
             <>
               {/* Show SingleValue when no X-axis columns selected */}
@@ -693,7 +679,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       onDownloadImage,
                     }
                     if (chartType === 'trend') return <TrendPlot series={aggregatedData.series} columnFormats={columnFormats} yAxisColumns={yAxisColumns} xAxisColumns={xAxisColumns} />
-                    const plotMap = { line: LinePlot, bar: BarPlot, combo: ComboPlot, area: AreaPlot, scatter: ScatterPlot, funnel: FunnelPlot, pie: PiePlot, waterfall: WaterfallPlot } as const
+                    const plotMap = { line: LinePlot, bar: BarPlot, combo: ComboPlot, area: AreaPlot, scatter: ScatterPlot, funnel: FunnelPlot, pie: PiePlot, waterfall: WaterfallPlot, radar: RadarPlot } as const
                     const Plot = plotMap[chartType as keyof typeof plotMap]
                     if (Plot) return <Plot {...sharedProps} />
                     return null
