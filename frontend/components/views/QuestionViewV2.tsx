@@ -335,7 +335,7 @@ export default function QuestionViewV2({
   };
 
   // Handle viz type change
-  const handleVizTypeChange = (type: 'table' | 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo' | 'radar') => {
+  const handleVizTypeChange = (type: 'table' | 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo' | 'radar' | 'geo') => {
     onChange({ vizSettings: { ...content.vizSettings, type } });
   };
 
@@ -371,6 +371,11 @@ export default function QuestionViewV2({
   // Handle pivot config change
   const handlePivotConfigChange = (pivotConfig: import('@/lib/types').PivotConfig) => {
     onChange({ vizSettings: { ...content.vizSettings, pivotConfig } });
+  };
+
+  // Handle geo config change
+  const handleGeoConfigChange = (geoConfig: import('@/lib/types.gen').GeoConfig) => {
+    onChange({ vizSettings: { ...content.vizSettings, geoConfig } });
   };
 
   // Handle column formats change
@@ -943,6 +948,7 @@ export default function QuestionViewV2({
                 onYRightColsChange={handleYRightColsChange}
                 onTooltipColsChange={handleTooltipColsChange}
                 onPivotConfigChange={handlePivotConfigChange}
+                onGeoConfigChange={handleGeoConfigChange}
                 onColumnFormatsChange={handleColumnFormatsChange}
                 onStyleConfigChange={handleStyleConfigChange}
                 onAxisConfigChange={handleAxisConfigChange}

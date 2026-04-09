@@ -15,6 +15,8 @@ import { TrendPlot } from './TrendPlot'
 import { WaterfallPlot } from './WaterfallPlot'
 import { RadarPlot } from './RadarPlot'
 import { ComboPlot } from './ComboPlot'
+import { GeoPlot } from './GeoPlot'
+import { GeoAxisBuilder } from './GeoAxisBuilder'
 import { ChartError } from './ChartError'
 import { DrillDownCard, type DrillDownState } from './DrillDownCard'
 import { AxisBuilder, type AxisZone } from './AxisBuilder'
@@ -22,6 +24,7 @@ import { resolveColumnType } from './AxisComponents'
 import { aggregateData } from '@/lib/chart/aggregate-data'
 import { aggregatePivotData, computeFormulas, getUniqueTopLevelRowValues, getUniqueTopLevelColumnValues, getUniqueRowValuesAtLevel } from '@/lib/chart/pivot-utils'
 import type { PivotConfig, ColumnFormatConfig, AxisConfig, VisualizationStyleConfig } from '@/lib/types'
+import type { GeoConfig } from '@/lib/types.gen'
 import type { VizSettings } from '@/lib/types.gen'
 import { getTimestamp } from '@/lib/chart/chart-utils'
 import { getVizConstraintError } from '@/lib/chart/viz-constraints'
@@ -37,7 +40,7 @@ interface ChartBuilderProps {
   columns: string[]
   types: string[]
   rows: Record<string, any>[]
-  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo' | 'radar'
+  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo' | 'radar' | 'geo'
   initialXCols?: string[]
   initialYCols?: string[]
   initialYRightCols?: string[]
@@ -48,6 +51,8 @@ interface ChartBuilderProps {
   fillHeight?: boolean
   initialPivotConfig?: PivotConfig
   onPivotConfigChange?: (config: PivotConfig) => void
+  initialGeoConfig?: GeoConfig
+  onGeoConfigChange?: (config: GeoConfig) => void
   sql?: string
   databaseName?: string
   initialColumnFormats?: Record<string, ColumnFormatConfig>
@@ -71,7 +76,7 @@ interface GroupedColumns {
   categories: string[]
 }
 
-export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, initialYRightCols, onAxisChange, onYRightColsChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, annotations, onAnnotationsChange, exportBranding }: ChartBuilderProps) => {
+export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, initialYRightCols, onAxisChange, onYRightColsChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, initialGeoConfig, onGeoConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, annotations, onAnnotationsChange, exportBranding }: ChartBuilderProps) => {
   const colorMode = useAppSelector((state) => state.ui.colorMode) as 'light' | 'dark'
   const colorPalette = useMemo(() => getEffectiveColorPalette(styleConfig?.colors), [styleConfig?.colors])
 
@@ -528,6 +533,34 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     if (!pivotData) return []
     return getUniqueRowValuesAtLevel(pivotData, level, parentValues)
   }, [pivotData])
+
+  // Geo mode: completely different layout (Leaflet, not ECharts)
+  const isGeo = chartType === 'geo'
+  if (isGeo) {
+    const handleGeoConfigChangeInternal = (config: GeoConfig) => {
+      onGeoConfigChange?.(config)
+    }
+
+    return (
+      <Box display="flex" flexDirection="column" gap={0} height="100%" width="100%">
+        {showAxisBuilder && settingsExpandedProp && (
+          <GeoAxisBuilder
+            columns={columns}
+            types={types}
+            geoConfig={initialGeoConfig}
+            onGeoConfigChange={handleGeoConfigChangeInternal}
+          />
+        )}
+        <Box flex="1" overflow="hidden" display="flex" minHeight="0">
+          <GeoPlot
+            rows={rows}
+            columns={columns}
+            geoConfig={initialGeoConfig ?? { subType: 'choropleth' }}
+          />
+        </Box>
+      </Box>
+    )
+  }
 
   // For pivot, we consider having data when pivotConfig has values
   const isPivot = chartType === 'pivot'

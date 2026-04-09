@@ -18,6 +18,7 @@ import {
   LuChartNoAxesColumn,
   LuChartNoAxesCombined,
   LuRadar,
+  LuGlobe,
 } from 'react-icons/lu';
 import type { VizSettings } from '@/lib/types';
 
@@ -40,6 +41,7 @@ const VIZ_TYPES: VizTypeOption[] = [
   { type: 'trend', icon: <LuTrendingUp size={18} />, label: 'Trend' },
   { type: 'waterfall', icon: <LuChartNoAxesColumn size={18} />, label: 'Waterfall chart' },
   { type: 'radar', icon: <LuRadar size={18} />, label: 'Radar chart' },
+  { type: 'geo', icon: <LuGlobe size={18} />, label: 'Geo map' },
 ];
 
 interface VizTypeSelectorProps {

@@ -27,6 +27,26 @@ class VisualizationType(str, Enum):
     WATERFALL = "waterfall"
     COMBO = "combo"
     RADAR = "radar"
+    GEO = "geo"
+
+class GeoSubType(str, Enum):
+    CHOROPLETH = "choropleth"
+    POINTS = "points"
+    BUBBLE = "bubble"
+    LINES = "lines"
+    HEATMAP = "heatmap"
+
+class GeoConfig(BaseModel):
+    """Configuration for geo map visualization."""
+    subType: GeoSubType = Field(..., description="geo visualization sub-type")
+    mapName: Optional[str] = Field(None, description="base map name: 'world', 'us-states', 'india-states' (for choropleth)")
+    regionCol: Optional[str] = Field(None, description="column matching GeoJSON feature names (choropleth)")
+    valueCol: Optional[str] = Field(None, description="numeric value column (color for choropleth, size for bubble)")
+    latCol: Optional[str] = Field(None, description="latitude column")
+    lngCol: Optional[str] = Field(None, description="longitude column")
+    latCol2: Optional[str] = Field(None, description="destination latitude (lines only)")
+    lngCol2: Optional[str] = Field(None, description="destination longitude (lines only)")
+    showTiles: Optional[bool] = Field(False, description="toggle tile layer on/off")
 
 class AggregationFunction(str, Enum):
     SUM = "SUM"
@@ -117,6 +137,7 @@ class VisualizationSettings(BaseModel):
     annotations: Optional[List[ChartAnnotation]] = Field(None, description="annotations for cartesian charts. Each annotation specifies x, series, and text.")
     colors: Optional[Dict[str, str]] = Field(None, description="deprecated legacy color overrides. Use styleConfig.colors instead.")
     axisConfig: Optional[AxisConfig] = Field(None, description="axis configuration for scale type (linear or log). Only set when user explicitly requests log scale.")
+    geoConfig: Optional[GeoConfig] = Field(None, description="geo map configuration (only used when type is 'geo')")
     model_config = {
         "populate_by_name": True,
         "title": "VizSettings"
