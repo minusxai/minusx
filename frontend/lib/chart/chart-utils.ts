@@ -276,6 +276,16 @@ export const isValidChartData = (xAxisData?: string[], series?: Array<{ name: st
   return !!(xAxisData && xAxisData.length > 0 && series && series.length > 0)
 }
 
+/** Lighten a hex color by mixing it towards white. `amount` 0–1 (0 = original, 1 = white). */
+const lightenHex = (hex: string, amount: number): string => {
+  const rgb = hexToRgb(hex)
+  if (!rgb) return hex
+  const r = Math.round(rgb.r + (255 - rgb.r) * amount)
+  const g = Math.round(rgb.g + (255 - rgb.g) * amount)
+  const b = Math.round(rgb.b + (255 - rgb.b) * amount)
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
+}
+
 export const buildPieChartOption = ({
   xAxisData,
   series,
@@ -292,8 +302,12 @@ export const buildPieChartOption = ({
   onDownloadImage,
 }: SpecialChartOptionConfig): EChartsOption => {
   const { fmtName, fmtValue } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
+  const borderColor = colorMode === 'dark' ? '#1a1a1a' : '#ffffff'
+  const labelColor = colorMode === 'dark' ? '#ffffff' : '#1a1a1a'
+  const opacityStyle = styleConfig?.opacity != null ? { opacity: styleConfig.opacity } : {}
 
-  const pieData = xAxisData.map((name, index) => {
+  // Inner/summary data: one slice per xAxisData entry, summing all series
+  const innerData = xAxisData.map((name, index) => {
     const value = series.reduce((sum, item) => {
       const point = item.data[index]
       return sum + (typeof point === 'number' && !isNaN(point) ? point : 0)
@@ -301,14 +315,119 @@ export const buildPieChartOption = ({
     return { name: fmtName(name), value }
   })
 
-  const total = pieData.reduce((sum, item) => sum + item.value, 0)
-  const coloredData = pieData.map((item, index) => ({
+  const total = innerData.reduce((sum, item) => sum + item.value, 0)
+  const isNested = series.length > 1
+
+  const coloredInnerData = innerData.map((item, index) => ({
     ...item,
-    itemStyle: {
-      color: colorPalette[index % colorPalette.length],
-      ...(styleConfig?.opacity != null ? { opacity: styleConfig.opacity } : {}),
-    },
+    itemStyle: { color: colorPalette[index % colorPalette.length], ...opacityStyle },
   }))
+
+  // Build series array
+  const pieSeries: any[] = []
+
+  if (isNested) {
+    // Inner ring: category totals
+    pieSeries.push({
+      name: 'Inner',
+      type: 'pie',
+      radius: ['0%', '35%'],
+      center: ['50%', '55%'],
+      avoidLabelOverlap: true,
+      itemStyle: { borderRadius: 6, borderColor, borderWidth: 2 },
+      label: {
+        show: true,
+        position: 'inside',
+        formatter: (params: any) => params.name,
+        fontSize: 11,
+        color: labelColor,
+        textBorderColor: 'transparent',
+        textBorderWidth: 0,
+        textShadowColor: 'transparent',
+        textShadowBlur: 0,
+      },
+      emphasis: {
+        label: { show: true, fontSize: 13, fontWeight: 'bold', textBorderColor: 'transparent', textBorderWidth: 0, textShadowColor: 'transparent', textShadowBlur: 0 },
+      },
+      data: coloredInnerData,
+    })
+
+    // Outer ring: one slice per (xAxisData entry × series), skip zero-value slices
+    const outerData: any[] = []
+    xAxisData.forEach((xName, xIdx) => {
+      const parentColor = colorPalette[xIdx % colorPalette.length]
+      series.forEach((s, sIdx) => {
+        const val = s.data[xIdx]
+        const value = typeof val === 'number' && !isNaN(val) ? val : 0
+        if (value === 0) return
+        // Spread lighter shades across series within this parent
+        const lightenAmount = 0.15 + (sIdx / Math.max(series.length, 1)) * 0.45
+        outerData.push({
+          name: `${fmtName(xName)} — ${s.name}`,
+          value,
+          itemStyle: { color: lightenHex(parentColor, lightenAmount), ...opacityStyle },
+        })
+      })
+    })
+
+    pieSeries.push({
+      name: 'Outer',
+      type: 'pie',
+      radius: ['42%', '70%'],
+      center: ['50%', '55%'],
+      avoidLabelOverlap: true,
+      itemStyle: { borderRadius: 10, borderColor, borderWidth: 2 },
+      label: {
+        show: true,
+        position: 'outside',
+        formatter: (params: any) => {
+          const percent = ((params.value / total) * 100).toFixed(1)
+          return `${params.name}\n${percent}%`
+        },
+        textBorderColor: 'transparent',
+        textBorderWidth: 0,
+        textShadowColor: 'transparent',
+        textShadowBlur: 0,
+        color: labelColor,
+      },
+      labelLine: { show: true, length: 15, length2: 10 },
+      emphasis: {
+        label: { show: true, fontSize: 14, fontWeight: 'bold', textBorderColor: 'transparent', textBorderWidth: 0, textShadowColor: 'transparent', textShadowBlur: 0 },
+      },
+      data: outerData,
+    })
+  } else {
+    // Single-level pie (existing behavior)
+    pieSeries.push({
+      name: 'Pie',
+      type: 'pie',
+      radius: ['30%', '70%'],
+      center: ['50%', '55%'],
+      avoidLabelOverlap: true,
+      itemStyle: { borderRadius: 10, borderColor, borderWidth: 2 },
+      label: {
+        show: true,
+        position: 'outside',
+        formatter: (params: any) => {
+          const percent = ((params.value / total) * 100).toFixed(1)
+          return `${params.name}\n${percent}%`
+        },
+        textBorderColor: 'transparent',
+        textBorderWidth: 0,
+        textShadowColor: 'transparent',
+        textShadowBlur: 0,
+        color: labelColor,
+      },
+      labelLine: { show: true, length: 15, length2: 10 },
+      emphasis: {
+        label: { show: true, fontSize: 14, fontWeight: 'bold', textBorderColor: 'transparent', textBorderWidth: 0, textShadowColor: 'transparent', textShadowBlur: 0 },
+      },
+      data: coloredInnerData,
+    })
+  }
+
+  // Legend: show inner categories for nested, all slices for single
+  const legendData = innerData.map(d => d.name)
 
   const baseOption: EChartsOption = {
     ...(chartTitle ? { title: { text: chartTitle, left: 'center', top: 5, show: showChartTitle } } : {}),
@@ -332,57 +451,14 @@ export const buildPieChartOption = ({
       },
     },
     legend: {
-      data: pieData.map(d => d.name),
+      data: legendData,
       top: chartTitle && showChartTitle ? 35 : 10,
       orient: 'horizontal',
       type: 'scroll',
       pageIconSize: 10,
       pageTextStyle: { fontSize: 10 },
     },
-    series: [
-      {
-        name: 'Pie',
-        type: 'pie',
-        radius: ['30%', '70%'],
-        center: ['50%', '55%'],
-        avoidLabelOverlap: true,
-        itemStyle: {
-          borderRadius: 10,
-          borderColor: colorMode === 'dark' ? '#1a1a1a' : '#ffffff',
-          borderWidth: 2,
-        },
-        label: {
-          show: true,
-          position: 'outside',
-          formatter: (params: any) => {
-            const percent = ((params.value / total) * 100).toFixed(1)
-            return `${params.name}\n${percent}%`
-          },
-          textBorderColor: 'transparent',
-          textBorderWidth: 0,
-          textShadowColor: 'transparent',
-          textShadowBlur: 0,
-          color: colorMode === 'dark' ? '#ffffff' : '#1a1a1a',
-        },
-        labelLine: {
-          show: true,
-          length: 15,
-          length2: 10,
-        },
-        emphasis: {
-          label: {
-            show: true,
-            fontSize: 14,
-            fontWeight: 'bold',
-            textBorderColor: 'transparent',
-            textBorderWidth: 0,
-            textShadowColor: 'transparent',
-            textShadowBlur: 0,
-          },
-        },
-        data: coloredData,
-      },
-    ],
+    series: pieSeries,
   }
 
   return withMinusXTheme(baseOption, colorMode)
