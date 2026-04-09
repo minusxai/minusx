@@ -346,7 +346,7 @@ export const PivotAxisBuilder = ({
                 onCheckedChange={(e) => onPivotConfigChange({ ...config, compact: e.checked })}
                 size="sm"
               >
-                <Text fontSize="xs" color="fg.muted">Compact</Text>
+                <Text fontSize="xs" color="fg.muted">Compact (GitHub Style)</Text>
               </Checkbox>
               {config.showHeatmap !== false && (
                 <HStack gap={1} ml={2}>
