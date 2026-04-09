@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Text, VStack, HStack, Input, Button, Flex, Portal, Switch, NativeSelect } from '@chakra-ui/react';
+import { Box, Text, VStack, HStack, Input, Button, Flex, Portal, Switch } from '@chakra-ui/react';
 import type { CheckedChangeDetails } from '@zag-js/switch';
 import { AlertContent, JobRun, Test } from '@/lib/types';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -16,6 +16,7 @@ import { selectIsDirty } from '@/store/filesSlice';
 import { createListCollection } from '@chakra-ui/react';
 import AlertRunContainerV2 from '@/components/containers/AlertRunContainerV2';
 import TestList from '@/components/test/TestList';
+import SimpleSelect from '@/components/test/SimpleSelect';
 
 interface AlertViewProps {
   alert: AlertContent;
@@ -186,18 +187,18 @@ export default function AlertView({
                   </HStack>
                   <HStack gap={2}>
                     <Text fontSize="xs" color="fg.muted">Notify when</Text>
-                    <NativeSelect.Root size="xs" w="120px" disabled={!editMode}>
-                      <NativeSelect.Field
+                    <Box w="180px">
+                      <SimpleSelect
                         value={alert.notifyOn ?? 'any_fail'}
-                        onChange={e => onChange({ notifyOn: e.target.value as 'any_fail' | 'all_fail' })}
-                        fontSize="xs"
-                        bg="bg.surface"
-                      >
-                        <option value="any_fail">any test fails</option>
-                        <option value="all_fail">all tests fail</option>
-                      </NativeSelect.Field>
-                      <NativeSelect.Indicator />
-                    </NativeSelect.Root>
+                        onChange={v => onChange({ notifyOn: v as 'any_fail' | 'all_fail' })}
+                        options={[
+                          { value: 'any_fail', label: 'any test fails' },
+                          { value: 'all_fail', label: 'all tests fail' },
+                        ]}
+                        disabled={!editMode}
+                        size="sm"
+                      />
+                    </Box>
                   </HStack>
                 </HStack>
                 <TestList

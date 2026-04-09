@@ -27,10 +27,11 @@ interface TestRowProps {
   defaultQuestionId?: number;
   onChange: (test: Test) => void;
   onDelete: () => void;
+  defaultOpen?: boolean;
 }
 
-function TestRow({ test, index, editMode, forcedType, defaultQuestionId, onChange, onDelete }: TestRowProps) {
-  const [open, setOpen] = useState(false);
+function TestRow({ test, index, editMode, forcedType, defaultQuestionId, onChange, onDelete, defaultOpen }: TestRowProps) {
+  const [open, setOpen] = useState(defaultOpen ?? false);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<TestRunResult | null>(null);
 
@@ -169,7 +170,10 @@ interface TestListProps {
 }
 
 export default function TestList({ tests, onChange, editMode = false, forcedType, defaultQuestionId, alwaysShowAdd, addLabel = 'Add test' }: TestListProps) {
+  const [newlyAddedIndex, setNewlyAddedIndex] = useState<number | null>(null);
+
   function handleAdd() {
+    setNewlyAddedIndex(tests.length);
     onChange([...tests, makeDefaultTest(forcedType ?? 'query', defaultQuestionId)]);
   }
 
@@ -199,6 +203,7 @@ export default function TestList({ tests, onChange, editMode = false, forcedType
           defaultQuestionId={defaultQuestionId}
           onChange={updated => handleChange(i, updated)}
           onDelete={() => handleDelete(i)}
+          defaultOpen={i === newlyAddedIndex}
         />
       ))}
       {showAdd && (

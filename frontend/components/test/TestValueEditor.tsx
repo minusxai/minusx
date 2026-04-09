@@ -1,13 +1,14 @@
 'use client';
 
 import {
-  VStack, HStack, Text, Input, Textarea, NativeSelect,
+  VStack, HStack, Text, Input, Textarea,
   Box, Combobox, Portal, createListCollection
 } from '@chakra-ui/react';
 import { useState, useMemo } from 'react';
 import type { TestAnswerType, TestValue } from '@/lib/types';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import DatabaseSelector from '@/components/DatabaseSelector';
+import SimpleSelect from './SimpleSelect';
 
 function QuestionPicker({
   selectedId,
@@ -111,75 +112,100 @@ export default function TestValueEditor({ value, answerType, onChange, disabled,
   const queryQuestion = value.type === 'query' && value.source !== 'inline' ? value : null;
   const queryInline = value.type === 'query' && value.source === 'inline' ? value : null;
 
+  const binaryOptions = [
+    { value: 'true', label: 'True (yes)' },
+    { value: 'false', label: 'False (no)' },
+  ];
+
   return (
     <VStack align="stretch" gap={2}>
-      {showSourcePicker && (
+      {/* Constant: value source + expected value on one row */}
+      {value.type === 'constant' && (
+        <HStack gap={2} align="flex-end">
+          {showSourcePicker && (
+            <Box w="120px" flexShrink={0}>
+              <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Value source</Text>
+              <SimpleSelect
+                value={selectorValue}
+                onChange={handleSourceChange}
+                options={valueSourceOptions}
+                disabled={disabled}
+              />
+            </Box>
+          )}
+          <Box flex={1}>
+            <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Expected value</Text>
+            {answerType === 'binary' ? (
+              <SimpleSelect
+                value={String(value.value)}
+                onChange={v => onChange({ type: 'constant', value: v === 'true' })}
+                options={binaryOptions}
+                disabled={disabled}
+              />
+            ) : answerType === 'number' ? (
+              <Input
+                type="number"
+                value={String(value.value)}
+                onChange={e => onChange({ type: 'constant', value: parseFloat(e.target.value) || 0 })}
+                size="sm"
+                bg="bg.surface"
+                fontSize="xs"
+                fontFamily="mono"
+                disabled={disabled}
+              />
+            ) : (
+              <Input
+                value={String(value.value)}
+                onChange={e => onChange({ type: 'constant', value: e.target.value })}
+                placeholder="expected value"
+                size="sm"
+                bg="bg.surface"
+                fontSize="xs"
+                maxLength={100}
+                disabled={disabled}
+              />
+            )}
+          </Box>
+        </HStack>
+      )}
+
+      {/* cannot_answer: just the source picker */}
+      {value.type === 'cannot_answer' && showSourcePicker && (
         <Box>
           <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Value source</Text>
-          <NativeSelect.Root size="sm" disabled={disabled}>
-            <NativeSelect.Field
-              value={selectorValue}
-              onChange={e => handleSourceChange(e.target.value)}
-            >
-              {valueSourceOptions.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </NativeSelect.Field>
-            <NativeSelect.Indicator />
-          </NativeSelect.Root>
+          <SimpleSelect
+            value={selectorValue}
+            onChange={handleSourceChange}
+            options={valueSourceOptions}
+            disabled={disabled}
+          />
         </Box>
       )}
 
-      {value.type === 'constant' && (
-        <Box>
-          <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Expected value</Text>
-          {answerType === 'binary' ? (
-            <NativeSelect.Root size="sm" disabled={disabled}>
-              <NativeSelect.Field
-                value={String(value.value)}
-                onChange={e => onChange({ type: 'constant', value: e.target.value === 'true' })}
-              >
-                <option value="true">True (yes)</option>
-                <option value="false">False (no)</option>
-              </NativeSelect.Field>
-              <NativeSelect.Indicator />
-            </NativeSelect.Root>
-          ) : answerType === 'number' ? (
-            <Input
-              type="number"
-              value={String(value.value)}
-              onChange={e => onChange({ type: 'constant', value: parseFloat(e.target.value) || 0 })}
-              size="sm"
-              bg="bg.surface"
-              fontSize="xs"
-              fontFamily="mono"
-              disabled={disabled}
-            />
-          ) : (
-            <Input
-              value={String(value.value)}
-              onChange={e => onChange({ type: 'constant', value: e.target.value })}
-              placeholder="expected value"
-              size="sm"
-              bg="bg.surface"
-              fontSize="xs"
-              maxLength={100}
-              disabled={disabled}
-            />
-          )}
-        </Box>
-      )}
-
+      {/* Query question: source picker + question on one row, column+row on next */}
       {queryQuestion && (
         <>
-          <Box>
-            <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Question</Text>
-            <QuestionPicker
-              selectedId={queryQuestion.question_id || null}
-              onSelect={id => onChange({ ...queryQuestion, question_id: id })}
-              disabled={disabled}
-            />
-          </Box>
+          <HStack gap={2} align="flex-end">
+            {showSourcePicker && (
+              <Box w="120px" flexShrink={0}>
+                <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Value source</Text>
+                <SimpleSelect
+                  value={selectorValue}
+                  onChange={handleSourceChange}
+                  options={valueSourceOptions}
+                  disabled={disabled}
+                />
+              </Box>
+            )}
+            <Box flex={1}>
+              <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Question</Text>
+              <QuestionPicker
+                selectedId={queryQuestion.question_id || null}
+                onSelect={id => onChange({ ...queryQuestion, question_id: id })}
+                disabled={disabled}
+              />
+            </Box>
+          </HStack>
           <HStack gap={2}>
             <Box flex={1}>
               <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Column</Text>
@@ -214,16 +240,30 @@ export default function TestValueEditor({ value, answerType, onChange, disabled,
         </>
       )}
 
+      {/* Query inline: source picker then inline editor */}
       {queryInline && (
         <>
-          <Box>
-            <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Connection</Text>
-            <DatabaseSelector
-              value={queryInline.connection_name}
-              onChange={({ connection_name: db }) => onChange({ ...queryInline, connection_name: db })}
-              size="sm"
-            />
-          </Box>
+          {showSourcePicker && (
+            <Box>
+              <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Value source</Text>
+              <SimpleSelect
+                value={selectorValue}
+                onChange={handleSourceChange}
+                options={valueSourceOptions}
+                disabled={disabled}
+              />
+            </Box>
+          )}
+          <HStack gap={2} align="flex-end">
+            <Box flex={1}>
+              <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">Connection</Text>
+              <DatabaseSelector
+                value={queryInline.connection_name}
+                onChange={({ connection_name: db }) => onChange({ ...queryInline, connection_name: db })}
+                size="sm"
+              />
+            </Box>
+          </HStack>
           <Box>
             <Text fontSize="xs" color="fg.muted" mb={1} fontWeight="500">SQL</Text>
             <Textarea
