@@ -7,6 +7,7 @@ import { LuChevronDown, LuChevronRight, LuLayoutGrid, LuSettings2 } from 'react-
 import { resolveColumnType } from './AxisComponents'
 import { AxisBuilder, type AxisZone } from './AxisBuilder'
 import { FormulaBuilder, type DimensionInfo } from './FormulaBuilder'
+import { ColorScalePicker } from './ColorScalePicker'
 import type { PivotConfig, PivotValueConfig, PivotFormula, AggregationFunction, ColumnFormatConfig } from '@/lib/types'
 
 const AGG_FUNCTIONS: AggregationFunction[] = ['SUM', 'AVG', 'COUNT', 'MIN', 'MAX']

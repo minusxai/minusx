@@ -1,9 +1,17 @@
 /**
  * Color and radius scaling utilities for geo visualizations.
+ * Uses CHART_COLORS from the shared theme for consistency.
  */
+
+import { CHART_COLORS } from './echarts-theme'
 
 const MIN_RADIUS = 4
 const MAX_RADIUS = 30
+
+/** Primary color for geo markers (points, bubbles, lines) */
+export const GEO_MARKER_COLOR = CHART_COLORS.teal
+/** Secondary color for geo markers in dark mode */
+export const GEO_MARKER_COLOR_DARK = CHART_COLORS.turquoise
 
 /** Parse hex color to [r, g, b] */
 function hexToRgb(hex: string): [number, number, number] {
@@ -33,23 +41,49 @@ export function interpolateColor(startHex: string, endHex: string, t: number): s
   )
 }
 
-/** Color palettes for choropleth: [low, high] */
-const PALETTES = {
-  light: { low: '#d4edda', high: '#155724' },
-  dark: { low: '#1a3a2a', high: '#48d483' },
+/**
+ * Shared color scale definitions — used by both geo choropleth and pivot heatmap.
+ * Each scale defines gradient colors for display + low/high endpoints for interpolation.
+ */
+export const COLOR_SCALES = [
+  { key: 'green', label: 'Green', colors: ['#ebedf0', '#40c463', '#216e39'] as const },
+  { key: 'blue', label: 'Blue', colors: ['#eef3ff', '#5a9bd5', '#2a6cb8'] as const },
+  { key: 'red-yellow-green', label: 'RYG', colors: ['#c83c3c', '#d2b43c', '#2da08c'] as const },
+] as const
+
+export type ColorScaleKey = typeof COLOR_SCALES[number]['key']
+
+/** Low→high endpoints per scale, per color mode */
+const SCALE_PALETTES: Record<ColorScaleKey, Record<'light' | 'dark', { low: string; high: string }>> = {
+  'green': {
+    light: { low: '#ebedf0', high: '#216e39' },
+    dark: { low: '#1a3a2a', high: '#40c463' },
+  },
+  'blue': {
+    light: { low: '#eef3ff', high: '#2a6cb8' },
+    dark: { low: '#1a2a3a', high: '#5a9bd5' },
+  },
+  'red-yellow-green': {
+    light: { low: '#c83c3c', high: '#2da08c' },
+    dark: { low: '#8b2020', high: '#2da08c' },
+  },
 }
+
+const DEFAULT_SCALE: ColorScaleKey = 'green'
 
 /**
  * Map a numeric value to a hex color on a sequential scale.
- * Returns a color between the low and high ends of the palette.
+ * Returns a color between the low and high ends of the selected palette.
  */
 export function getColorScale(
   value: number,
   min: number,
   max: number,
   colorMode: 'light' | 'dark',
+  scale?: string | null,
 ): string {
-  const palette = PALETTES[colorMode]
+  const scaleKey = (scale && scale in SCALE_PALETTES ? scale : DEFAULT_SCALE) as ColorScaleKey
+  const palette = SCALE_PALETTES[scaleKey][colorMode]
   if (min === max) return palette.low
   const t = (value - min) / (max - min)
   return interpolateColor(palette.low, palette.high, t)

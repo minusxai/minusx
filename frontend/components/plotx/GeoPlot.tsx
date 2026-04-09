@@ -6,7 +6,7 @@ import 'leaflet.heat'
 import { LeafletMap } from './LeafletMap'
 import { ChartError } from './ChartError'
 import { loadGeoJSON, MAP_DEFAULTS, type MapName } from '@/lib/chart/geo-data'
-import { getColorScale, getRadiusScale } from '@/lib/chart/geo-color-scale'
+import { getColorScale, getRadiusScale, GEO_MARKER_COLOR, GEO_MARKER_COLOR_DARK } from '@/lib/chart/geo-color-scale'
 import { getGeoConstraintError } from '@/lib/chart/geo-constraints'
 import { useAppSelector } from '@/store/hooks'
 import type { GeoConfig } from '@/lib/types.gen'
@@ -20,11 +20,9 @@ interface GeoPlotProps {
 }
 
 /** Default no-tile background style for GeoJSON-only mode */
-const GEO_ONLY_STYLE: L.PathOptions = {
-  fillColor: '#e0e0e0',
-  weight: 1,
-  color: '#999',
-  fillOpacity: 0.3,
+const GEO_ONLY_STYLE = {
+  light: { fillColor: '#e0e0e0', weight: 1, color: '#999', fillOpacity: 0.3 } as L.PathOptions,
+  dark: { fillColor: '#2d333b', weight: 1, color: '#555', fillOpacity: 0.3 } as L.PathOptions,
 }
 
 export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
@@ -81,7 +79,7 @@ export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
           style: (feature) => {
             const name = String(feature?.properties?.name ?? '').toLowerCase()
             const val = valueMap.get(name)
-            if (val === undefined) return { ...GEO_ONLY_STYLE, fillOpacity: 0.1 }
+            if (val === undefined) return { ...GEO_ONLY_STYLE[colorMode], fillOpacity: 0.1 }
             return {
               fillColor: getColorScale(val, min, max, colorMode),
               weight: 1,
@@ -128,8 +126,8 @@ export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
 
           const marker = L.circleMarker([lat, lng], {
             radius,
-            fillColor: '#16a085',
-            color: colorMode === 'dark' ? '#48d483' : '#16a085',
+            fillColor: GEO_MARKER_COLOR,
+            color: colorMode === 'dark' ? GEO_MARKER_COLOR_DARK : GEO_MARKER_COLOR,
             weight: 1,
             fillOpacity: 0.7,
           })
@@ -165,7 +163,7 @@ export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
           if (isNaN(lat1) || isNaN(lng1) || isNaN(lat2) || isNaN(lng2)) continue
 
           const line = L.polyline([[lat1, lng1], [lat2, lng2]], {
-            color: colorMode === 'dark' ? '#48d483' : '#16a085',
+            color: colorMode === 'dark' ? GEO_MARKER_COLOR_DARK : GEO_MARKER_COLOR,
             weight: 2,
             opacity: 0.7,
           })

@@ -246,6 +246,10 @@ export type Lngcol2 = string | null;
  * toggle tile layer on/off
  */
 export type Showtiles = boolean | null;
+/**
+ * choropleth color scale: 'green' (default), 'blue', 'red-yellow-green'
+ */
+export type Colorscale = string | null;
 export type Parameters = QuestionParameter[] | null;
 export type Name2 = string;
 export type ParameterType = "text" | "number" | "date";
@@ -437,6 +441,7 @@ export interface GeoConfig {
   latCol2?: Latcol2;
   lngCol2?: Lngcol2;
   showTiles?: Showtiles;
+  colorScale?: Colorscale;
 }
 export interface QuestionParameter {
   name: Name2;

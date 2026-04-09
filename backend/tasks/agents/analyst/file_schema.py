@@ -47,6 +47,7 @@ class GeoConfig(BaseModel):
     latCol2: Optional[str] = Field(None, description="destination latitude (lines only)")
     lngCol2: Optional[str] = Field(None, description="destination longitude (lines only)")
     showTiles: Optional[bool] = Field(False, description="toggle tile layer on/off")
+    colorScale: Optional[str] = Field(None, description="choropleth color scale: 'green' (default), 'blue', 'red-yellow-green'")
 
 class AggregationFunction(str, Enum):
     SUM = "SUM"
