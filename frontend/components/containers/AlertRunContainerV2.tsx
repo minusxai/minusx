@@ -6,17 +6,19 @@
  * AlertRunView is the reusable presentation component for alert run data.
  * AlertRunContainerV2 is the smart container that loads file data and delegates to AlertRunView.
  */
-import { Box, Text, VStack, HStack, Badge, Separator } from '@chakra-ui/react';
-import { useState } from 'react';
+import { Box, Text, VStack, HStack, Badge, Separator, Button } from '@chakra-ui/react';
+import { useState, useCallback } from 'react';
 import { LuChevronDown, LuChevronRight, LuClock, LuTimer, LuHash } from 'react-icons/lu';
 import { useFile } from '@/lib/hooks/file-state-hooks';
-import type { AlertOutput, AlertRunContent, MessageAttemptLog, RunFileContent, RunMessageRecord, TestRunResult } from '@/lib/types';
+import { editFile, publishFile } from '@/lib/api/file-state';
+import type { AlertContent, AlertOutput, AlertRunContent, MessageAttemptLog, RunFileContent, RunMessageRecord, TestRunResult } from '@/lib/types';
 import TestRunResultsList from '@/components/test/TestRunResultsList';
 import type { FileId } from '@/store/filesSlice';
 import type { FileViewMode } from '@/lib/ui/fileComponents';
-import { LuBell, LuExternalLink, LuMail, LuMessageCircle, LuSettings } from 'react-icons/lu';
+import { LuBell, LuCirclePause, LuExternalLink, LuMail, LuMessageCircle, LuSettings } from 'react-icons/lu';
 import Link from 'next/link';
 import { preserveParams } from '@/lib/navigation/url-utils';
+import DatePicker from '@/components/DatePicker';
 
 /* ------------------------------------------------------------------ */
 /*  Shared sub-components                                              */
@@ -216,6 +218,10 @@ export interface AlertRunViewProps {
   messages?: RunMessageRecord[];
   fileId: FileId;
   inline?: boolean;
+  /** Current suppressUntil value from the parent alert */
+  suppressUntil?: string;
+  /** Called with a date string to snooze, or '' to clear */
+  onSnooze?: (value: string) => void;
 }
 
 export function AlertRunView({
@@ -232,6 +238,8 @@ export function AlertRunView({
   messages,
   fileId,
   inline,
+  suppressUntil,
+  onSnooze,
 }: AlertRunViewProps) {
   const durationMs = completedAt
     ? new Date(completedAt).getTime() - new Date(startedAt).getTime()
@@ -393,6 +401,88 @@ export function AlertRunView({
             />
           )}
         </HStack>
+
+        {/* Snooze section — only shown on standalone (non-inline) alert runs with a parent alert */}
+        {!inline && onSnooze && (
+          <SnoozeSection suppressUntil={suppressUntil} onSnooze={onSnooze} />
+        )}
+      </VStack>
+    </Box>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  SnoozeSection                                                      */
+/* ------------------------------------------------------------------ */
+
+function isSuppressActive(suppressUntil: string | undefined): boolean {
+  if (!suppressUntil) return false;
+  const end = new Date(suppressUntil);
+  end.setHours(23, 59, 59, 999);
+  return end >= new Date();
+}
+
+function SnoozeSection({ suppressUntil, onSnooze }: { suppressUntil?: string; onSnooze: (value: string) => void }) {
+  const [pendingDate, setPendingDate] = useState('');
+  const suppressed = isSuppressActive(suppressUntil);
+
+  // Parse as local date to avoid timezone off-by-one
+  const suppressedDisplay = (() => {
+    if (!suppressUntil) return '';
+    const [y, m, d] = suppressUntil.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  })();
+
+  return (
+    <Box
+      p={5}
+      bg="bg.muted"
+      borderRadius="lg"
+      border="1px solid"
+      borderColor="border.muted"
+    >
+      <VStack align="stretch" gap={3}>
+        <HStack gap={2}>
+          <LuCirclePause size={14} color={suppressed ? 'var(--chakra-colors-orange-fg)' : 'var(--chakra-colors-fg-muted)'} />
+          <Text fontSize="xs" fontWeight="700" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
+            {suppressed ? `Snoozed until ${suppressedDisplay}` : 'Snooze this alert'}
+          </Text>
+        </HStack>
+        <Text fontSize="xs" color="fg.muted">
+          {suppressed
+            ? 'Scheduled runs will be skipped until this date. Manual runs are not affected.'
+            : 'Pause scheduled runs for this alert until a specific date.'}
+        </Text>
+        <HStack gap={2}>
+          {suppressed ? (
+            <Button
+              aria-label="Clear snooze"
+              size="sm"
+              colorPalette="orange"
+              onClick={() => onSnooze('')}
+            >
+              Clear Snooze
+            </Button>
+          ) : (
+            <>
+              <DatePicker
+                value={pendingDate || undefined}
+                onChange={setPendingDate}
+                placeholder="Pick a date"
+                ariaLabel="Snooze until date"
+              />
+              <Button
+                aria-label="Confirm snooze"
+                size="sm"
+                colorPalette="orange"
+                disabled={!pendingDate}
+                onClick={() => { if (pendingDate) { onSnooze(pendingDate); setPendingDate(''); } }}
+              >
+                Snooze
+              </Button>
+            </>
+          )}
+        </HStack>
       </VStack>
     </Box>
   );
@@ -411,6 +501,25 @@ interface AlertRunContainerV2Props {
 export default function AlertRunContainerV2({ fileId, inline }: AlertRunContainerV2Props) {
   const { fileState: file } = useFile(fileId) ?? {};
 
+  // Extract parent alert ID from run content
+  const parentAlertId = (() => {
+    if (!file?.content) return undefined;
+    if ('job_type' in file.content) {
+      return (file.content as RunFileContent).output?.alertId;
+    }
+    return (file.content as AlertRunContent).alertId;
+  })();
+
+  // Load the parent alert to read/update its suppressUntil
+  const { fileState: parentAlert } = useFile(parentAlertId ?? null) ?? {};
+  const parentContent = parentAlert?.content as AlertContent | undefined;
+
+  const handleSnooze = useCallback(async (value: string) => {
+    if (!parentAlertId) return;
+    editFile({ fileId: parentAlertId, changes: { content: { suppressUntil: value } } });
+    await publishFile({ fileId: parentAlertId });
+  }, [parentAlertId]);
+
   if (!file || file.loading) {
     return <Box p={4} color="fg.muted">Loading run details...</Box>;
   }
@@ -418,6 +527,11 @@ export default function AlertRunContainerV2({ fileId, inline }: AlertRunContaine
   if (!file.content) {
     return <Box p={4} color="fg.muted">Run details not available.</Box>;
   }
+
+  const snoozeProps = parentAlertId ? {
+    suppressUntil: parentContent?.suppressUntil,
+    onSnooze: handleSnooze,
+  } : {};
 
   // Detect shape: new RunFileContent has job_type field
   const isNewFormat = 'job_type' in file.content;
@@ -439,6 +553,7 @@ export default function AlertRunContainerV2({ fileId, inline }: AlertRunContaine
         messages={run.messages}
         fileId={fileId}
         inline={inline}
+        {...snoozeProps}
       />
     );
   }
@@ -458,6 +573,7 @@ export default function AlertRunContainerV2({ fileId, inline }: AlertRunContaine
       error={run.error}
       fileId={fileId}
       inline={inline}
+      {...snoozeProps}
     />
   );
 }
