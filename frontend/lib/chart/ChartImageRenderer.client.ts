@@ -14,6 +14,7 @@ import {
   buildChartOption,
   buildPieChartOption,
   buildFunnelChartOption,
+  buildRadarChartOption,
   buildWaterfallChartOption,
 } from '@/lib/chart/chart-utils'
 import { COLOR_PALETTE } from '@/lib/chart/echarts-theme'
@@ -65,6 +66,7 @@ function buildEChartsOption(
   if (chartType === 'pie') return buildPieChartOption(sharedArgs)
   if (chartType === 'funnel') return buildFunnelChartOption(sharedArgs)
   if (chartType === 'waterfall') return buildWaterfallChartOption(sharedArgs)
+  if (chartType === 'radar') return buildRadarChartOption(sharedArgs)
 
   return buildChartOption({
     ...sharedArgs,
