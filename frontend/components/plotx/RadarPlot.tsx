@@ -3,7 +3,6 @@ import { Box } from '@chakra-ui/react'
 import { useAppSelector } from '@/store/hooks'
 import { ChartHost } from './ChartHost'
 import { useChartContainer } from './useChartContainer'
-import { ChartError } from './ChartError'
 import { buildRadarChartOption, isValidChartData, type ChartProps } from '@/lib/chart/chart-utils'
 import { downloadChartCsv } from './build-chart-download'
 
@@ -53,10 +52,6 @@ export const RadarPlot = (props: RadarPlotProps) => {
         {emptyMessage || 'No data available for radar chart'}
       </Box>
     )
-  }
-
-  if (xAxisData.length < 3) {
-    return <ChartError variant="info" message="Radar charts need at least 3 categories to display meaningfully. Add more data or choose a different chart type." />
   }
 
   return (

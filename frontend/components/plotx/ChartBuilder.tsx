@@ -24,6 +24,7 @@ import { aggregatePivotData, computeFormulas, getUniqueTopLevelRowValues, getUni
 import type { PivotConfig, ColumnFormatConfig, AxisConfig, VisualizationStyleConfig } from '@/lib/types'
 import type { VizSettings } from '@/lib/types.gen'
 import { getTimestamp } from '@/lib/chart/chart-utils'
+import { getVizConstraintError } from '@/lib/chart/viz-constraints'
 import { getEffectiveColorPalette } from '@/lib/chart/echarts-theme'
 import { StyleConfigPopover } from './StyleConfigPopover'
 import { AnnotationEditor } from './AnnotationEditor'
@@ -471,32 +472,11 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     link.click()
   }, [columns, types, rows, chartType, xAxisColumns, yAxisColumns, columnFormats, colorMode])
 
-  // Viz type constraint validation
-  const constraintError = useMemo((): string | null => {
-    switch (chartType) {
-      case 'combo':
-        if (allYColumns.length < 2) return 'Combo charts require at least 2 Y-axis columns (first becomes bar, rest become lines).'
-        if (xAxisColumns.length < 1) return 'Combo charts require at least 1 X-axis column.'
-        return null
-      case 'waterfall':
-        if (xAxisColumns.length > 1) return 'Waterfall charts support only a single X-axis column. Remove extra columns from the X axis to continue.'
-        if (allYColumns.length > 1) return 'Waterfall charts support only a single Y-axis column. Remove extra columns from the Y axis to continue.'
-        return null
-      case 'pie':
-        if (xAxisColumns.length < 1) return 'Pie charts require at least 1 X-axis column for grouping.'
-        return null
-      case 'funnel':
-        if (xAxisColumns.length < 1) return 'Funnel charts require at least 1 X-axis column for grouping.'
-        return null
-      case 'radar':
-        if (xAxisColumns.length < 1) return 'Radar charts require at least 1 X-axis column for indicators.'
-        if (xAxisColumns.length > 1 && allYColumns.length > 1) return 'Radar charts support either multiple X columns (split-by) with 1 Y column, or 1 X column with multiple Y columns — not both.'
-        if (xAxisColumns.length > 2) return 'Radar charts support at most 2 X-axis columns (indicators + split-by).'
-        return null
-      default:
-        return null
-    }
-  }, [chartType, xAxisColumns.length, allYColumns.length])
+  // Viz type constraint validation (centralized in viz-constraints.ts)
+  const constraint = useMemo(() => {
+    return getVizConstraintError(chartType, { xColCount: xAxisColumns.length, yColCount: allYColumns.length, xDataCount: aggregatedData.xAxisData.length })
+  }, [chartType, xAxisColumns.length, allYColumns.length, aggregatedData.xAxisData.length])
+  const constraintError = constraint.error
 
   const hasData = allYColumns.length > 0
 
@@ -667,7 +647,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
         {/* Chart Display */}
         <Box flex="1" overflow="hidden" display="flex" flexDirection="column" minHeight="0">
           {constraintError ? (
-            <ChartError message={constraintError} />
+            <ChartError message={constraintError} variant={constraint.variant} />
           ) : hasData ? (
             <>
               {/* Show SingleValue when no X-axis columns selected */}
