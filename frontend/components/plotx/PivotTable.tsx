@@ -655,6 +655,7 @@ export const PivotTable = ({
 
   // Compact mode sizing
   const COMPACT_CELL_SIZE = 18
+  const headerBg = 'bg.muted'
 
   // Fixed width for frozen row-dimension columns so sticky left offsets align
   const ROW_DIM_COL_W = 120
@@ -818,12 +819,18 @@ export const PivotTable = ({
       height="100%"
       overflow="auto"
       borderRadius="md"
+      css={{
+        '&::-webkit-scrollbar': { width: '8px', height: '8px' },
+        '&::-webkit-scrollbar-track': { background: 'transparent' },
+        '&::-webkit-scrollbar-thumb': { background: 'var(--chakra-colors-fg-subtle)', borderRadius: '4px' },
+        '&::-webkit-scrollbar-thumb:hover': { background: 'var(--chakra-colors-fg-muted)' },
+      }}
     >
-      <ChakraTable.Root size="sm" css={{ borderCollapse: 'separate', borderSpacing: compact ? '1px' : 0, ...(compact ? { '& td, & th': { borderBottom: 'none', borderRadius: '2px' } } : { '& td, & th': { borderBottom: '1px solid', borderColor: 'var(--chakra-colors-fg-subtle)' } }) }}>
-        <ChakraTable.Header position="sticky" top={0} zIndex={5} bg="bg.muted">
+      <ChakraTable.Root size="sm" css={{ borderCollapse: 'separate', borderSpacing: compact ? '3px' : 0, ...(compact ? { '& td, & th': { borderBottom: 'none', borderRadius: '3px' } } : { '& td, & th': { borderBottom: '1px solid', borderColor: 'var(--chakra-colors-fg-subtle)' } }) }}>
+        <ChakraTable.Header position="sticky" top={0} zIndex={5} bg={headerBg}>
           {/* Column header rows */}
           {augmentedColHeaderRows.map((headerRow, rowIdx) => (
-            <ChakraTable.Row key={rowIdx} bg="bg.muted">
+            <ChakraTable.Row key={rowIdx} bg={headerBg}>
               {/* Row dimension name headers */}
               {rowIdx === 0 && numRowDims > 0 && (
                 Array.from({ length: numRowDims }, (_, dimIdx) => (
@@ -841,7 +848,7 @@ export const PivotTable = ({
 
                     position="sticky"
                     left={`${getLeftOffset(dimIdx)}px`}
-                    bg="bg.muted"
+                    bg={headerBg}
                     zIndex={4}
                     w={`${ROW_DIM_COL_W}px`}
                     minW={`${ROW_DIM_COL_W}px`}
@@ -922,7 +929,7 @@ export const PivotTable = ({
 
           {/* If no column dimensions, still show a header row with value labels */}
           {augmentedColHeaderRows.length === 0 && (
-            <ChakraTable.Row bg="bg.muted">
+            <ChakraTable.Row bg={headerBg}>
               {numRowDims > 0 && (
                 Array.from({ length: numRowDims }, (_, dimIdx) => (
                   <ChakraTable.ColumnHeader
@@ -937,7 +944,7 @@ export const PivotTable = ({
 
                     position="sticky"
                     left={`${getLeftOffset(dimIdx)}px`}
-                    bg="bg.muted"
+                    bg={headerBg}
                     zIndex={4}
                     w={`${ROW_DIM_COL_W}px`}
                     minW={`${ROW_DIM_COL_W}px`}
@@ -958,7 +965,7 @@ export const PivotTable = ({
                   textAlign="right"
                   minW="80px"
                   zIndex={3}
-                  bg="bg.muted"
+                  bg={headerBg}
                 >
                   {vl}
                 </ChakraTable.ColumnHeader>
@@ -1079,7 +1086,7 @@ export const PivotTable = ({
 
                     position="sticky"
                     left={`${getLeftOffset(S)}px`}
-                    bg="bg.muted"
+                    bg={headerBg}
                     zIndex={2}
                     cursor="pointer"
                     onClick={() => toggleGroup(groupKey)}
@@ -1148,13 +1155,13 @@ export const PivotTable = ({
 
                       position="sticky"
                       left={`${getLeftOffset(dimIdx)}px`}
-                      bg="bg.muted"
+                      bg={headerBg}
                       zIndex={2}
                       verticalAlign="top"
                       w={`${ROW_DIM_COL_W}px`}
                       minW={`${ROW_DIM_COL_W}px`}
                       maxW={`${ROW_DIM_COL_W}px`}
-                      {...(compact ? { p: '1px 4px', whiteSpace: 'nowrap' } : {})}
+                      {...(compact ? { p: '1px 4px', whiteSpace: 'nowrap', h: `${COMPACT_CELL_SIZE}px` } : {})}
                     >
                       {fmtHeader(rowHeaders[rowIndex][dimIdx], rowDimNames?.[dimIdx])}
                     </ChakraTable.Cell>
