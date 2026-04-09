@@ -3,15 +3,19 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { Box, VStack, HStack, Text, IconButton, Button, createListCollection } from '@chakra-ui/react';
 import { SelectRoot, SelectTrigger, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
-import { LuCamera, LuChevronDown, LuChevronRight } from 'react-icons/lu';
+import { LuChevronDown, LuChevronRight, LuDownload, LuLink, LuServer } from 'react-icons/lu';
 import { AppState } from '@/lib/appState';
 import AppStateViewer from './AppStateViewer';
-import { useScreenshot } from '@/lib/hooks/useScreenshot';
 import { getRegisteredToolNames, executeToolCall } from '@/lib/api/tool-handlers';
 import { UserInputException, type UserInputProps, type UserInput } from '@/lib/api/user-input-exception';
 import { getStore } from '@/store/store';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import type { ToolCall, DatabaseWithSchema } from '@/lib/types';
+import { uploadFile } from '@/lib/object-store/client';
+import { toJpegObjectUrl } from '@/lib/chart/render-chart-client';
+import type { VizSettings } from '@/lib/types.gen';
+import { RENDERABLE_CHART_TYPES } from '@/lib/chart/render-chart-svg';
+import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client';
 
 interface DevToolsPanelProps {
   appState: AppState | null | undefined;
@@ -212,10 +216,228 @@ function ToolTester() {
   );
 }
 
+// ── Image Tools test panel ────────────────────────────────────────────────────
+
+type ImageItem = { label: string; dataUrl?: string; url?: string };
+type ImageResult =
+  | { kind: 'items'; items: ImageItem[] }
+  | { kind: 'error'; error: string; label: string };
+
+const inputStyle: React.CSSProperties = {
+  width: 52,
+  padding: '2px 4px',
+  borderRadius: 4,
+  border: '1px solid var(--chakra-colors-border-default)',
+  background: 'transparent',
+  fontFamily: 'var(--font-mono)',
+  fontSize: 11,
+  color: 'inherit',
+};
+
+const checkboxStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontFamily: 'var(--font-mono)', cursor: 'pointer', userSelect: 'none' };
+
+function ImageToolsPanel({ appState }: { appState: AppState | null | undefined }) {
+  const [imgWidth, setImgWidth] = useState(512);
+  const [addWatermark, setAddWatermark] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [result, setResult] = useState<ImageResult | null>(null);
+  const colorMode = useAppSelector(state => state.ui.colorMode) as 'light' | 'dark';
+  const queryResultsMap = useAppSelector(state => state.queryResults.results);
+
+  if (appState?.type !== 'file') return null;
+  const { fileState, references } = appState.state;
+  if (fileState.type !== 'question' && fileState.type !== 'dashboard') return null;
+
+  const questionContent = fileState.type === 'question' ? (fileState.content as any) : null;
+  const vizSettings: VizSettings | null = questionContent?.vizSettings ?? null;
+  const queryResultId: string | null = (fileState as any).queryResultId ?? null;
+  const queryResult = queryResultId ? (queryResultsMap[queryResultId]?.data ?? null) : null;
+
+  // Single chart: question with renderable viz and data
+  const singleChart = fileState.type === 'question' && !!vizSettings && !!queryResult && RENDERABLE_CHART_TYPES.has(vizSettings.type)
+    ? { queryResult, vizSettings, name: fileState.name || undefined }
+    : null;
+
+  // Dashboard charts: renderable questions with data
+  const dashboardCharts = fileState.type === 'dashboard'
+    ? (references ?? []).flatMap(ref => {
+        const vs = (ref.content as any)?.vizSettings as VizSettings | undefined;
+        const qrId = (ref as any).queryResultId as string | undefined;
+        const qr = qrId ? (queryResultsMap[qrId]?.data ?? null) : null;
+        if (vs && qr && RENDERABLE_CHART_TYPES.has(vs.type)) return [{ vizSettings: vs, queryResult: qr, name: ref.name || undefined }];
+        return [];
+      })
+    : [];
+
+  const hasCharts = !!(singleChart || dashboardCharts.length > 0);
+  const noChartHint = 'No renderable charts with data found';
+
+  const run = async (label: string, fn: () => Promise<ImageResult>) => {
+    setBusy(label);
+    setResult(null);
+    try {
+      setResult(await fn());
+    } catch (err: any) {
+      setResult({ kind: 'error', error: err.message ?? String(err), label });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const chartInputs = singleChart
+    ? [{ queryResult: singleChart.queryResult, vizSettings: singleChart.vizSettings, titleOverride: singleChart.name }]
+    : dashboardCharts.map(c => ({ queryResult: c.queryResult, vizSettings: c.vizSettings, titleOverride: c.name }));
+
+  const handleECharts = () => run('ECharts', async () => {
+    const rendered = await clientChartImageRenderer.renderCharts(chartInputs, { width: imgWidth, colorMode, addWatermark });
+    if (rendered.length === 0) throw new Error('No charts rendered — unsupported viz type or empty data');
+    return { kind: 'items' as const, items: rendered.map(r => ({ label: r.label, dataUrl: r.dataUrl })) };
+  });
+
+  const handleS3ECharts = () => run('S3 ECharts', async () => {
+    const rendered = await clientChartImageRenderer.renderCharts(chartInputs, { width: imgWidth, colorMode, addWatermark });
+    if (rendered.length === 0) throw new Error('No charts rendered — unsupported viz type or empty data');
+    const items: ImageItem[] = [];
+    for (const r of rendered) {
+      const jpegBlob = await fetch(r.dataUrl).then(res => res.blob());
+      const file = new File([jpegBlob], 'chart.jpg', { type: 'image/jpeg' });
+      const { publicUrl } = await uploadFile(file, undefined, { keyType: 'charts' });
+      items.push({ label: r.label, url: publicUrl });
+    }
+    return { kind: 'items' as const, items };
+  });
+
+  const handleServer = () => run('Server', async () => {
+    const serverW = imgWidth;
+    const serverH = Math.round(serverW * 0.5625); // 16:9
+    const res = await fetch('/api/dev/render-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(
+        singleChart
+          ? { mode: 'single' as const, queryResult: singleChart.queryResult, vizSettings: singleChart.vizSettings, titleOverride: singleChart.name, colorMode, width: serverW, height: serverH }
+          : { mode: 'dashboard' as const, charts: dashboardCharts.map(c => ({ queryResult: c.queryResult, vizSettings: c.vizSettings, titleOverride: c.name })), colorMode, width: serverW, height: serverH },
+      ),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error ?? `Server error ${res.status}`);
+    }
+
+    const items: ImageItem[] = [];
+
+    if (singleChart) {
+      const { dataUrl: rawDataUrl } = await res.json() as { dataUrl: string };
+      const dataUrl = addWatermark ? await toJpegObjectUrl(rawDataUrl, imgWidth, true, colorMode) : rawDataUrl;
+      const jpegBlob = await fetch(dataUrl).then(r => r.blob());
+      const file = new File([jpegBlob], 'server-render.jpg', { type: 'image/jpeg' });
+      const { publicUrl } = await uploadFile(file, undefined, { keyType: 'charts' });
+      items.push({ label: singleChart.name ?? 'Chart', dataUrl, url: publicUrl });
+    } else {
+      const { images } = await res.json() as { images: string[] };
+      for (let i = 0; i < images.length; i++) {
+        const rawDataUrl = images[i];
+        const label = dashboardCharts[i]?.name ?? `Chart ${i + 1}`;
+        const dataUrl = addWatermark ? await toJpegObjectUrl(rawDataUrl, imgWidth, true, colorMode) : rawDataUrl;
+        const jpegBlob = await fetch(dataUrl).then(r => r.blob());
+        const file = new File([jpegBlob], `server-render-${i}.jpg`, { type: 'image/jpeg' });
+        const { publicUrl } = await uploadFile(file, undefined, { keyType: 'charts' });
+        items.push({ label, dataUrl, url: publicUrl });
+      }
+    }
+
+    return { kind: 'items' as const, items };
+  });
+
+  const triggerDownload = (dataUrl: string, label: string) => {
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = `${label.toLowerCase().replace(/\s+/g, '-')}.jpg`;
+    a.click();
+  };
+
+  return (
+    <Box borderWidth="1px" borderColor="border.default" borderRadius="md" p={3} bg="bg.surface">
+      <VStack align="stretch" gap={2}>
+        <Text fontSize="xs" fontWeight="600" color="fg.muted">Image Tools</Text>
+
+        {/* Dimensions + watermark */}
+        <HStack gap={2} align="center">
+          <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">Max W</Text>
+          <input type="number" value={imgWidth} min={64} max={2048}
+            onChange={e => setImgWidth(Number(e.target.value))} style={inputStyle} aria-label="Max image width" />
+          <label style={checkboxStyle}>
+            <input type="checkbox" checked={addWatermark} onChange={e => setAddWatermark(e.target.checked)} aria-label="Add watermark" />
+            <Text fontSize="2xs" color="fg.muted">Watermark</Text>
+          </label>
+        </HStack>
+
+        {/* Action buttons */}
+        <HStack gap={1} flexWrap="wrap">
+          <Button size="2xs" variant="outline" onClick={handleECharts} loading={busy === 'ECharts'}
+            disabled={!hasCharts} title={!hasCharts ? noChartHint : undefined} aria-label="ECharts export">
+            <LuDownload />ECharts
+          </Button>
+          <Button size="2xs" variant="outline" onClick={handleS3ECharts} loading={busy === 'S3 ECharts'}
+            disabled={!hasCharts} title={!hasCharts ? noChartHint : undefined} aria-label="S3 ECharts upload">
+            <LuLink />S3
+          </Button>
+          <Button size="2xs" variant="outline" onClick={handleServer} loading={busy === 'Server'}
+            disabled={!hasCharts} title={!hasCharts ? noChartHint : undefined} aria-label="Server render">
+            <LuServer />Server
+          </Button>
+        </HStack>
+
+        {/* Result: one card per chart */}
+        {result && (
+          <VStack gap={2} align="stretch">
+            {result.kind === 'error' ? (
+              <Box p={2} bg="accent.danger/10" borderRadius="sm" borderWidth="1px" borderColor="border.default">
+                <Text fontSize="2xs" fontFamily="mono" color="accent.danger">{result.error}</Text>
+              </Box>
+            ) : (
+              result.items.map((item, i) => (
+                <Box key={i} borderWidth="1px" borderColor="border.default" borderRadius="sm" overflow="hidden">
+                  <HStack justify="space-between" px={2} pt={2} pb={1}>
+                    <Text fontSize="2xs" fontFamily="mono" color="fg.muted">{item.label}</Text>
+                    <HStack gap={1}>
+                      {item.url && (
+                        <Text fontSize="2xs" fontFamily="mono" color="accent.teal" cursor="pointer"
+                          onClick={() => navigator.clipboard.writeText(item.url!)} title="Click to copy URL">
+                          S3 ↗
+                        </Text>
+                      )}
+                      {item.dataUrl && (
+                        <IconButton size="2xs" variant="ghost" aria-label="Download image"
+                          onClick={() => triggerDownload(item.dataUrl!, item.label)}>
+                          <LuDownload />
+                        </IconButton>
+                      )}
+                    </HStack>
+                  </HStack>
+                  {item.dataUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={item.dataUrl} alt={item.label} style={{ width: '100%', height: 'auto', display: 'block' }} />
+                  )}
+                  {!item.dataUrl && item.url && (
+                    <Box px={2} pb={2}>
+                      <Text fontSize="2xs" fontFamily="mono" color="accent.teal" cursor="pointer" wordBreak="break-all"
+                        onClick={() => navigator.clipboard.writeText(item.url!)} title="Click to copy">
+                        {item.url}
+                      </Text>
+                    </Box>
+                  )}
+                </Box>
+              ))
+            )}
+          </VStack>
+        )}
+      </VStack>
+    </Box>
+  );
+}
+
 export default function DevToolsPanel({ appState }: DevToolsPanelProps) {
-  const { captureFileView } = useScreenshot();
-  const [isCapturingScreenshot, setIsCapturingScreenshot] = useState(false);
-  const [screenshotUrl, setScreenshotUrl] = useState<string | null>(null);
   const [appStateOpen, setAppStateOpen] = useState(false);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
 
@@ -224,22 +446,6 @@ export default function DevToolsPanel({ appState }: DevToolsPanelProps) {
     fileId !== undefined ? state.files.files[fileId]?.analytics : undefined
   );
 
-  const handleScreenshot = async () => {
-    if (appState?.type !== 'file') return;
-
-    setIsCapturingScreenshot(true);
-    try {
-      const blob = await captureFileView(appState.state.fileState.id, { fullHeight: true });
-      // Revoke previous URL to avoid memory leaks
-      if (screenshotUrl) URL.revokeObjectURL(screenshotUrl);
-      setScreenshotUrl(URL.createObjectURL(blob));
-    } catch (error) {
-      console.error('[DevToolsPanel] Screenshot failed:', error);
-    } finally {
-      setIsCapturingScreenshot(false);
-    }
-  };
-
   return (
     <Box p={4}>
       <VStack align="stretch" gap={3}>
@@ -247,52 +453,8 @@ export default function DevToolsPanel({ appState }: DevToolsPanelProps) {
           Development Mode Active
         </Text>
 
-        {/* Screenshot Capture */}
-        {appState?.type === 'file' && (appState.state.fileState.type === 'question' || appState.state.fileState.type === 'dashboard') && (
-          <Box
-            borderWidth="1px"
-            borderColor="border.default"
-            borderRadius="md"
-            p={3}
-            bg="bg.surface"
-          >
-            <VStack align="stretch" gap={2}>
-              <HStack justify="space-between">
-                <Text fontSize="xs" fontWeight="600" color="fg.muted">
-                  Screenshot
-                </Text>
-                <IconButton
-                  onClick={handleScreenshot}
-                  aria-label="Capture screenshot"
-                  size="xs"
-                  variant="subtle"
-                  loading={isCapturingScreenshot}
-                >
-                  <LuCamera />
-                </IconButton>
-              </HStack>
-              {screenshotUrl ? (
-                <Box
-                  borderWidth="1px"
-                  borderColor="border.default"
-                  borderRadius="sm"
-                  overflow="hidden"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={screenshotUrl}
-                    alt="Screenshot preview"
-                    style={{ width: '100%', height: 'auto' }}
-                  />
-                </Box>
-              ) : (
-                <Text fontSize="2xs" color="fg.subtle">
-                  Capture a screenshot of the current {appState.state.fileState.type}
-                </Text>
-              )}
-            </VStack>
-          </Box>
-        )}
+        {/* Image Tools */}
+        <ImageToolsPanel appState={appState} />
 
         {/* App State (collapsible) */}
         <Box borderWidth="1px" borderColor="border.default" borderRadius="md" bg="bg.surface" overflow="hidden">

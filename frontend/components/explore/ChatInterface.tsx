@@ -17,6 +17,7 @@ import { useConfigs } from '@/lib/hooks/useConfigs';
 import { Tooltip } from '@/components/ui/tooltip';
 import { toaster } from '@/components/ui/toaster';
 import { clearChatAttachments } from '@/store/uiSlice';
+import { buildChartAttachments } from '@/lib/chart/chart-attachments';
 import ExampleQuestions from './message/ExampleQuestions';
 import FileNotFound from '../FileNotFound';
 import { deduplicateMessages } from './message/messageHelpers';
@@ -125,9 +126,12 @@ export default function ChatInterface({
   const [showThinking, setShowThinking] = useState<boolean>(false)
   const [showToolInspector, setShowToolInspector] = useState(false)
   const [continueChatConfirmed, setContinueChatConfirmed] = useState(false)
+  const [isPreparing, setIsPreparing] = useState(false)
 
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const userIsAdmin = effectiveUser?.role ? isAdmin(effectiveUser.role) : false;
+  const queryResultsMap = useAppSelector(state => state.queryResults.results);
+  const colorMode = useAppSelector(state => state.ui.colorMode) as 'light' | 'dark';
 
   // Case 1: existing conversation — follow fork chain from loaded conversation
   const forkFollowedConversation = useAppSelector(state => {
@@ -357,6 +361,14 @@ export default function ChatInterface({
       tables: s.tables.map(t => t.table)
     })) || [];
 
+    // Render chart images for the current file and upload to S3.
+    // Question: 1 image. Dashboard: one image per chart with data.
+    // Show preparing indicator so user knows something is happening after pressing send.
+    setIsPreparing(true);
+    const fileAttachments = await buildChartAttachments(appState, queryResultsMap, colorMode);
+    setIsPreparing(false);
+    const allAttachments = [...attachments, ...fileAttachments];
+
     // For new conversations (no conversationID yet)
     if (isNewConversation && !conversationID) {
       // Create conversation with temp ID (negative) and initial message
@@ -372,7 +384,7 @@ export default function ChatInterface({
           app_state: appState,
           city: config.city,
           agent_name: config.branding.agentName || 'MinusX',
-          ...(attachments.length > 0 ? { attachments } : {}),
+          ...(allAttachments.length > 0 ? { attachments: allAttachments } : {}),
         },
         message: userInput,
         attachments: attachments.length > 0 ? attachments : undefined,
@@ -396,7 +408,7 @@ export default function ChatInterface({
           app_state: appState,
           city: config.city,
           agent_name: config.branding.agentName || 'MinusX',
-          ...(attachments.length > 0 ? { attachments } : {}),
+          ...(allAttachments.length > 0 ? { attachments: allAttachments } : {}),
         }
       }));
 
@@ -839,6 +851,7 @@ export default function ChatInterface({
               onSend={handleSendMessage}
               onStop={handleStopAgent}
               isAgentRunning={isAgentRunning || isStreaming}
+              isPreparing={isPreparing}
               disabled={isLoading}
               databaseName={selectedDatabase || ''}
               onDatabaseChange={handleDatabaseChange}

@@ -46,7 +46,7 @@ const SimpleChatMessage = React.memo(function SimpleChatMessage({ message, datab
 
   if (isUser) {
     const userMsg = message as import('@/store/chatSlice').UserMessage;
-    const imageAttachments = userMsg.attachments?.filter(a => a.type === 'image') ?? [];
+    const imageAttachments = userMsg.attachments?.filter(a => a.type === 'image' && !a.metadata?.auto) ?? [];
 
     return(
     <Grid

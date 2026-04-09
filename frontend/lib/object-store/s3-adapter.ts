@@ -68,6 +68,16 @@ export class S3Adapter implements ObjectStore {
     return { uploadUrl, publicUrl };
   }
 
+  async put(key: string, body: Buffer, contentType: string): Promise<string> {
+    await this.client.send(new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    }));
+    return `${this.publicUrlBase}/${key}`;
+  }
+
   async delete(key: string): Promise<void> {
     await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
   }

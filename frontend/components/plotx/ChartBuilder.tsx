@@ -21,11 +21,15 @@ import { resolveColumnType } from './AxisComponents'
 import { aggregateData } from '@/lib/chart/aggregate-data'
 import { aggregatePivotData, computeFormulas, getUniqueTopLevelRowValues, getUniqueTopLevelColumnValues, getUniqueRowValuesAtLevel } from '@/lib/chart/pivot-utils'
 import type { PivotConfig, ColumnFormatConfig, AxisConfig, VisualizationStyleConfig } from '@/lib/types'
+import type { VizSettings } from '@/lib/types.gen'
+import { getTimestamp } from '@/lib/chart/chart-utils'
 import { getEffectiveColorPalette } from '@/lib/chart/echarts-theme'
 import { StyleConfigPopover } from './StyleConfigPopover'
 import { AnnotationEditor } from './AnnotationEditor'
 import type { CompanyBranding } from '@/lib/branding/whitelabel'
 import type { ChartAnnotation } from '@/lib/types'
+import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client'
+import { useAppSelector } from '@/store/hooks'
 
 interface ChartBuilderProps {
   columns: string[]
@@ -66,6 +70,7 @@ interface GroupedColumns {
 }
 
 export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, initialYRightCols, onAxisChange, onYRightColsChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, annotations, onAnnotationsChange, exportBranding }: ChartBuilderProps) => {
+  const colorMode = useAppSelector((state) => state.ui.colorMode) as 'light' | 'dark'
   const colorPalette = useMemo(() => getEffectiveColorPalette(styleConfig?.colors), [styleConfig?.colors])
 
   // Group columns by type
@@ -425,6 +430,26 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     setDrillDown({ filters, yColumn, position: { x, y } })
   }, [chartType, xAxisColumns, yAxisColumns, aggregatedData, axisMapping, sql])
 
+  // Download image: render current chart to JPEG and trigger browser download
+  const onDownloadImage = useCallback(async () => {
+    const queryResult = { columns, types, rows }
+    const vizSettings: VizSettings = {
+      type: chartType as VizSettings['type'],
+      xCols: xAxisColumns,
+      yCols: yAxisColumns,
+      columnFormats: Object.keys(columnFormats).length > 0 ? columnFormats : undefined,
+    }
+    const rendered = await clientChartImageRenderer.renderCharts(
+      [{ queryResult, vizSettings }],
+      { width: window.innerWidth, colorMode, addWatermark: true },
+    )
+    if (rendered.length === 0) return
+    const link = document.createElement('a')
+    link.href = rendered[0].dataUrl
+    link.download = `chart-${getTimestamp()}.jpg`
+    link.click()
+  }, [columns, types, rows, chartType, xAxisColumns, yAxisColumns, columnFormats, colorMode])
+
   // Viz type constraint validation
   const constraintError = useMemo((): string | null => {
     switch (chartType) {
@@ -643,6 +668,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       styleConfig,
                       annotations,
                       exportBranding,
+                      onDownloadImage,
                     }
                     if (chartType === 'trend') return <TrendPlot series={aggregatedData.series} columnFormats={columnFormats} yAxisColumns={yAxisColumns} xAxisColumns={xAxisColumns} />
                     const plotMap = { line: LinePlot, bar: BarPlot, combo: ComboPlot, area: AreaPlot, scatter: ScatterPlot, funnel: FunnelPlot, pie: PiePlot, waterfall: WaterfallPlot } as const

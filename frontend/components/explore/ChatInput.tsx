@@ -22,6 +22,7 @@ interface ChatInputProps {
   onStop: () => void;
   isAgentRunning: boolean;
   disabled?: boolean;
+  isPreparing?: boolean;
   databaseName: string;
   onDatabaseChange: (name: string) => void;
   container?: 'page' | 'sidebar';
@@ -39,6 +40,7 @@ export default function ChatInput({
   onStop,
   isAgentRunning,
   disabled = false,
+  isPreparing = false,
   databaseName,
   onDatabaseChange,
   container = 'page',
@@ -64,6 +66,18 @@ export default function ChatInput({
   const attachments = useAppSelector(selectChatAttachments);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const editorRef = useRef<LexicalMentionEditorRef>(null);
+  const prevIsPreparingRef = useRef(false);
+
+  // Clear input only after preparation completes (isPreparing: true → false)
+  // so the text stays visible (greyed) while chart images are being uploaded.
+  useEffect(() => {
+    if (prevIsPreparingRef.current && !isPreparing) {
+      setInput('');
+      editorRef.current?.clear();
+      dispatch(clearChatAttachments());
+    }
+    prevIsPreparingRef.current = isPreparing;
+  }, [isPreparing, dispatch]);
   // Handle pending message from SearchBar — wait for connections/context to finish loading
   // before sending, so the message isn't discarded by the loading guard in handleSendMessage.
   useEffect(() => {
@@ -74,11 +88,10 @@ export default function ChatInput({
   }, [pendingMessage, container, dispatch, onSend, connectionsLoading, contextsLoading]);
 
   const handleSend = () => {
-    if (input.trim() && !disabled && !isAgentRunning && !connectionsLoading && !contextsLoading) {
+    if (input.trim() && !disabled && !isPreparing && !isAgentRunning && !connectionsLoading && !contextsLoading) {
       onSend(input.trim(), attachments);
-      setInput('');
-      editorRef.current?.clear();
-      dispatch(clearChatAttachments());
+      // Don't clear here — input stays greyed while isPreparing=true,
+      // then cleared by the useEffect when isPreparing transitions to false.
     }
   };
 
@@ -158,8 +171,10 @@ export default function ChatInput({
             boxShadow={isDraggingOver ? '0 0 0 1px var(--chakra-colors-accent-teal)' : undefined}
             borderRadius="md"
             bg="bg.canvas"
-            _focusWithin={{ borderColor: 'accent.teal', boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)' }}
+            _focusWithin={isPreparing ? undefined : { borderColor: 'accent.teal', boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)' }}
             transition="all 0.2s"
+            opacity={isPreparing ? 0.5 : 1}
+            pointerEvents={isPreparing ? 'none' : undefined}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
@@ -171,7 +186,7 @@ export default function ChatInput({
                     ref={editorRef}
                     placeholder={isAgentRunning ? `${agentName} is thinking...` : `Ask ${agentName} anything!`}
                     databaseName={databaseName}
-                    disabled={disabled || isAgentRunning}
+                    disabled={disabled || isPreparing || isAgentRunning}
                     onSubmit={handleSend}
                     onChange={setInput}
                     whitelistedSchemas={whitelistedSchemas}
@@ -313,7 +328,9 @@ export default function ChatInput({
                     </IconButton>
                   </Tooltip>
 
-                  {isAgentRunning ? (
+                  {isPreparing ? (
+                    <Spinner size="sm" color="accent.teal" flexShrink={0} />
+                  ) : isAgentRunning ? (
                     <IconButton
                       aria-label="Stop agent"
                       onClick={onStop}
