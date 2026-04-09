@@ -13,6 +13,7 @@ import { PivotAxisBuilder } from './PivotAxisBuilder'
 import { SingleValue } from './SingleValue'
 import { TrendPlot } from './TrendPlot'
 import { WaterfallPlot } from './WaterfallPlot'
+import { RadarPlot } from './RadarPlot'
 import { ComboPlot } from './ComboPlot'
 import { ChartError } from './ChartError'
 import { DrillDownCard, type DrillDownState } from './DrillDownCard'
@@ -35,7 +36,7 @@ interface ChartBuilderProps {
   columns: string[]
   types: string[]
   rows: Record<string, any>[]
-  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo'
+  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo' | 'radar'
   initialXCols?: string[]
   initialYCols?: string[]
   initialYRightCols?: string[]
@@ -388,7 +389,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     const filters: Record<string, string> = {}
     let yColumn: string | undefined
 
-    if (chartType === 'pie' || chartType === 'funnel') {
+    if (chartType === 'pie' || chartType === 'funnel' || chartType === 'radar') {
       const xValue = params.name as string
 
       if (xAxisColumns.length === 1) {
@@ -486,6 +487,9 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
         return null
       case 'funnel':
         if (xAxisColumns.length < 1) return 'Funnel charts require at least 1 X-axis column for grouping.'
+        return null
+      case 'radar':
+        if (xAxisColumns.length < 1) return 'Radar charts require at least 1 X-axis column for indicators.'
         return null
       default:
         return null
@@ -693,7 +697,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       onDownloadImage,
                     }
                     if (chartType === 'trend') return <TrendPlot series={aggregatedData.series} columnFormats={columnFormats} yAxisColumns={yAxisColumns} xAxisColumns={xAxisColumns} />
-                    const plotMap = { line: LinePlot, bar: BarPlot, combo: ComboPlot, area: AreaPlot, scatter: ScatterPlot, funnel: FunnelPlot, pie: PiePlot, waterfall: WaterfallPlot } as const
+                    const plotMap = { line: LinePlot, bar: BarPlot, combo: ComboPlot, area: AreaPlot, scatter: ScatterPlot, funnel: FunnelPlot, pie: PiePlot, waterfall: WaterfallPlot, radar: RadarPlot } as const
                     const Plot = plotMap[chartType as keyof typeof plotMap]
                     if (Plot) return <Plot {...sharedProps} />
                     return null

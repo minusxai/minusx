@@ -6,7 +6,7 @@
 import * as echarts from 'echarts/core';
 
 // Chart types used: line/area (LineChart), bar/waterfall (BarChart), scatter, pie, funnel
-import { LineChart, BarChart, ScatterChart, PieChart, FunnelChart } from 'echarts/charts';
+import { LineChart, BarChart, ScatterChart, PieChart, FunnelChart, RadarChart } from 'echarts/charts';
 
 // Components used across all chart files
 import {
@@ -16,6 +16,7 @@ import {
   LegendComponent,    // legend: { data: [...] }
   ToolboxComponent,   // toolbox: { feature: { ... } } (PNG + CSV download)
   GraphicComponent,   // graphic: [...] custom annotation overlays
+  RadarComponent,     // radar: { indicator: [...] } coordinate system
 } from 'echarts/components';
 
 // Features for label layout (pie outside labels) and animated transitions
@@ -30,12 +31,14 @@ echarts.use([
   ScatterChart,
   PieChart,
   FunnelChart,
+  RadarChart,
   TitleComponent,
   TooltipComponent,
   GridComponent,
   LegendComponent,
   ToolboxComponent,
   GraphicComponent,
+  RadarComponent,
   LabelLayout,
   UniversalTransition,
   CanvasRenderer,
