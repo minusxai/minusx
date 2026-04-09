@@ -291,41 +291,6 @@ async function renderChartToDataUrl(
   }
 }
 
-/** Stack multiple raw data URLs vertically on a canvas, return a PNG data URL. */
-async function stackImagesRaw(dataUrls: string[]): Promise<string> {
-  const images = await Promise.all(dataUrls.map(url => loadImage(url)));
-  const width = Math.max(...images.map(i => i.naturalWidth));
-  const totalHeight = images.reduce((sum, i) => sum + i.naturalHeight, 0);
-
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = totalHeight;
-  const ctx = canvas.getContext('2d')!;
-
-  let y = 0;
-  for (const img of images) {
-    ctx.drawImage(img, 0, y);
-    y += img.naturalHeight;
-  }
-  return canvas.toDataURL('image/png');
-}
-
-/** Render all dashboard charts client-side and stack them vertically. */
-async function renderDashboardToDataUrl(
-  charts: Array<{ queryResult: import('@/lib/types').QueryResult; vizSettings: VizSettings; name?: string }>,
-  colorMode: 'light' | 'dark',
-  width: number,
-  height: number,
-): Promise<string | null> {
-  const rawUrls = await Promise.all(
-    charts.map(({ queryResult, vizSettings, name }) =>
-      renderChartToDataUrl(queryResult, vizSettings, colorMode, width, height, name)
-    )
-  );
-  const valid = rawUrls.filter((u): u is string => u !== null);
-  if (valid.length === 0) return null;
-  return stackImagesRaw(valid);
-}
 
 // ── Image post-processing ─────────────────────────────────────────────────────
 
@@ -400,12 +365,28 @@ async function toJpegObjectUrl(
   }
 }
 
+/** Walk the [data-file-id] subtree to find all live ECharts instances and their pixel sizes. */
+function findLiveChartDimensions(): Array<{ width: number; height: number }> {
+  const container = document.querySelector('[data-file-id]');
+  if (!container) return [];
+  const dims: Array<{ width: number; height: number }> = [];
+  for (const div of Array.from(container.querySelectorAll('div'))) {
+    try {
+      const inst = echarts.getInstanceByDom(div as HTMLDivElement);
+      if (inst) {
+        const r = div.getBoundingClientRect();
+        if (r.width > 10 && r.height > 10) dims.push({ width: Math.round(r.width), height: Math.round(r.height) });
+      }
+    } catch { /* not an echarts container */ }
+  }
+  return dims;
+}
+
 // ── Image Tools test panel ────────────────────────────────────────────────────
 
+type ImageItem = { label: string; dataUrl?: string; url?: string };
 type ImageResult =
-  | { kind: 'image'; dataUrl: string; label: string }
-  | { kind: 'url'; url: string; label: string }
-  | { kind: 'both'; dataUrl: string; url: string; label: string }
+  | { kind: 'items'; items: ImageItem[] }
   | { kind: 'error'; error: string; label: string };
 
 const inputStyle: React.CSSProperties = {
@@ -423,7 +404,6 @@ const checkboxStyle: React.CSSProperties = { display: 'flex', alignItems: 'cente
 
 function ImageToolsPanel({ appState }: { appState: AppState | null | undefined }) {
   const [imgWidth, setImgWidth] = useState(256);
-  const [imgHeight, setImgHeight] = useState(128);
   const [addWatermark, setAddWatermark] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [result, setResult] = useState<ImageResult | null>(null);
@@ -455,7 +435,7 @@ function ImageToolsPanel({ appState }: { appState: AppState | null | undefined }
       })
     : [];
 
-  const hasCharts = !!(singleChart ?? dashboardCharts.length > 0);
+  const hasCharts = !!(singleChart || dashboardCharts.length > 0);
   const noChartHint = 'No renderable charts with data found';
 
   const run = async (label: string, fn: () => Promise<ImageResult>) => {
@@ -470,55 +450,100 @@ function ImageToolsPanel({ appState }: { appState: AppState | null | undefined }
     }
   };
 
-  /** Render question or dashboard to a raw PNG data URL using hidden canvas. */
-  const renderRaw = async (): Promise<string> => {
+  /** Render all charts to raw PNG data URLs via hidden canvas. One item per chart.
+   *  Render dimensions come from the live DOM chart sizes (exact match to what the user sees).
+   *  Falls back to a sensible 16:9 size at least 512px wide if no live instance is found.
+   */
+  const renderAllRaw = async (): Promise<Array<{ rawUrl: string; label: string }>> => {
+    const liveDims = findLiveChartDimensions();
+    const dimAt = (i: number) => {
+      if (liveDims[i]) return liveDims[i];
+      const w = Math.max(imgWidth, 512);
+      return { width: w, height: Math.round(w * 0.5625) }; // 16:9 fallback
+    };
+
     if (singleChart) {
-      const url = await renderChartToDataUrl(singleChart.queryResult, singleChart.vizSettings, colorMode, imgWidth, imgHeight, singleChart.name);
+      const { width, height } = dimAt(0);
+      const url = await renderChartToDataUrl(singleChart.queryResult, singleChart.vizSettings, colorMode, width, height, singleChart.name);
       if (!url) throw new Error('Render returned null — unsupported viz type or empty data');
-      return url;
+      return [{ rawUrl: url, label: singleChart.name ?? 'Chart' }];
     }
-    const url = await renderDashboardToDataUrl(dashboardCharts, colorMode, imgWidth, imgHeight);
-    if (!url) throw new Error('No charts rendered successfully');
-    return url;
+    const results: Array<{ rawUrl: string; label: string }> = [];
+    for (let i = 0; i < dashboardCharts.length; i++) {
+      const c = dashboardCharts[i];
+      const { width, height } = dimAt(i);
+      const url = await renderChartToDataUrl(c.queryResult, c.vizSettings, colorMode, width, height, c.name);
+      if (url) results.push({ rawUrl: url, label: c.name ?? 'Chart' });
+    }
+    if (results.length === 0) throw new Error('No charts rendered successfully');
+    return results;
   };
 
   const handleECharts = () => run('ECharts', async () => {
-    const rawUrl = await renderRaw();
-    const dataUrl = await toJpegObjectUrl(rawUrl, imgWidth, addWatermark, colorMode);
-    return { kind: 'image' as const, dataUrl, label: 'ECharts' };
+    const raws = await renderAllRaw();
+    const items: ImageItem[] = [];
+    for (const { rawUrl, label } of raws) {
+      const dataUrl = await toJpegObjectUrl(rawUrl, imgWidth, addWatermark, colorMode);
+      items.push({ label, dataUrl });
+    }
+    return { kind: 'items' as const, items };
   });
 
   const handleS3ECharts = () => run('S3 ECharts', async () => {
-    const rawUrl = await renderRaw();
-    const jpegUrl = await toJpegObjectUrl(rawUrl, imgWidth, addWatermark, colorMode);
-    const jpegBlob = await fetch(jpegUrl).then(r => r.blob());
-    URL.revokeObjectURL(jpegUrl);
-    const file = new File([jpegBlob], 'chart.jpg', { type: 'image/jpeg' });
-    const { publicUrl } = await uploadFile(file, undefined, { keyType: 'charts' });
-    return { kind: 'url' as const, url: publicUrl, label: 'S3 ECharts' };
+    const raws = await renderAllRaw();
+    const items: ImageItem[] = [];
+    for (const { rawUrl, label } of raws) {
+      const jpegUrl = await toJpegObjectUrl(rawUrl, imgWidth, addWatermark, colorMode);
+      const jpegBlob = await fetch(jpegUrl).then(r => r.blob());
+      URL.revokeObjectURL(jpegUrl);
+      const file = new File([jpegBlob], 'chart.jpg', { type: 'image/jpeg' });
+      const { publicUrl } = await uploadFile(file, undefined, { keyType: 'charts' });
+      items.push({ label, url: publicUrl });
+    }
+    return { kind: 'items' as const, items };
   });
 
   const handleServer = () => run('Server', async () => {
-    const payload = singleChart
-      ? { mode: 'single' as const, queryResult: singleChart.queryResult, vizSettings: singleChart.vizSettings, titleOverride: singleChart.name, colorMode, width: imgWidth, height: imgHeight }
-      : { mode: 'dashboard' as const, charts: dashboardCharts.map(c => ({ ...c, titleOverride: c.name })), colorMode, width: imgWidth, height: imgHeight };
-
+    // Render at 2× imgWidth (min 800) server-side so text doesn't truncate; client scales down.
+    const serverW = Math.max(imgWidth * 2, 800);
+    const serverH = Math.round(serverW * 0.5625); // 16:9
     const res = await fetch('/api/dev/render-image', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(
+        singleChart
+          ? { mode: 'single' as const, queryResult: singleChart.queryResult, vizSettings: singleChart.vizSettings, titleOverride: singleChart.name, colorMode, width: serverW, height: serverH }
+          : { mode: 'dashboard' as const, charts: dashboardCharts.map(c => ({ queryResult: c.queryResult, vizSettings: c.vizSettings, titleOverride: c.name })), colorMode, width: serverW, height: serverH },
+      ),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.error ?? `Server error ${res.status}`);
     }
-    const { dataUrl: rawDataUrl } = await res.json();
-    const dataUrl = addWatermark ? await toJpegObjectUrl(rawDataUrl, imgWidth, true, colorMode) : rawDataUrl;
 
-    const jpegBlob = await fetch(dataUrl).then(r => r.blob());
-    const file = new File([jpegBlob], 'server-render.jpg', { type: 'image/jpeg' });
-    const { publicUrl } = await uploadFile(file, undefined, { keyType: 'charts' });
-    return { kind: 'both' as const, dataUrl, url: publicUrl, label: 'Server' };
+    const items: ImageItem[] = [];
+
+    if (singleChart) {
+      const { dataUrl: rawDataUrl } = await res.json() as { dataUrl: string };
+      const dataUrl = addWatermark ? await toJpegObjectUrl(rawDataUrl, imgWidth, true, colorMode) : rawDataUrl;
+      const jpegBlob = await fetch(dataUrl).then(r => r.blob());
+      const file = new File([jpegBlob], 'server-render.jpg', { type: 'image/jpeg' });
+      const { publicUrl } = await uploadFile(file, undefined, { keyType: 'charts' });
+      items.push({ label: singleChart.name ?? 'Chart', dataUrl, url: publicUrl });
+    } else {
+      const { images } = await res.json() as { images: string[] };
+      for (let i = 0; i < images.length; i++) {
+        const rawDataUrl = images[i];
+        const label = dashboardCharts[i]?.name ?? `Chart ${i + 1}`;
+        const dataUrl = addWatermark ? await toJpegObjectUrl(rawDataUrl, imgWidth, true, colorMode) : rawDataUrl;
+        const jpegBlob = await fetch(dataUrl).then(r => r.blob());
+        const file = new File([jpegBlob], `server-render-${i}.jpg`, { type: 'image/jpeg' });
+        const { publicUrl } = await uploadFile(file, undefined, { keyType: 'charts' });
+        items.push({ label, dataUrl, url: publicUrl });
+      }
+    }
+
+    return { kind: 'items' as const, items };
   });
 
   const triggerDownload = (dataUrl: string, label: string) => {
@@ -533,14 +558,11 @@ function ImageToolsPanel({ appState }: { appState: AppState | null | undefined }
       <VStack align="stretch" gap={2}>
         <Text fontSize="xs" fontWeight="600" color="fg.muted">Image Tools</Text>
 
-        {/* Dimensions */}
+        {/* Dimensions + watermark */}
         <HStack gap={2} align="center">
-          <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">W</Text>
+          <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">Max W</Text>
           <input type="number" value={imgWidth} min={64} max={2048}
-            onChange={e => setImgWidth(Number(e.target.value))} style={inputStyle} aria-label="Image width" />
-          <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">H</Text>
-          <input type="number" value={imgHeight} min={64} max={2048}
-            onChange={e => setImgHeight(Number(e.target.value))} style={inputStyle} aria-label="Image height" />
+            onChange={e => setImgWidth(Number(e.target.value))} style={inputStyle} aria-label="Max image width" />
           <label style={checkboxStyle}>
             <input type="checkbox" checked={addWatermark} onChange={e => setAddWatermark(e.target.checked)} aria-label="Add watermark" />
             <Text fontSize="2xs" color="fg.muted">Watermark</Text>
@@ -563,43 +585,49 @@ function ImageToolsPanel({ appState }: { appState: AppState | null | undefined }
           </Button>
         </HStack>
 
-        {/* Result */}
+        {/* Result: one card per chart */}
         {result && (
-          <Box borderWidth="1px" borderColor="border.default" borderRadius="sm" overflow="hidden">
+          <VStack gap={2} align="stretch">
             {result.kind === 'error' ? (
-              <Box p={2} bg="accent.danger/10">
+              <Box p={2} bg="accent.danger/10" borderRadius="sm" borderWidth="1px" borderColor="border.default">
                 <Text fontSize="2xs" fontFamily="mono" color="accent.danger">{result.error}</Text>
               </Box>
-            ) : result.kind === 'url' ? (
-              <Box p={2}>
-                <Text fontSize="2xs" fontFamily="mono" color="fg.muted" mb={1}>{result.label}</Text>
-                <Text fontSize="2xs" fontFamily="mono" color="accent.teal" cursor="pointer" wordBreak="break-all"
-                  onClick={() => navigator.clipboard.writeText(result.url)} title="Click to copy">
-                  {result.url}
-                </Text>
-              </Box>
             ) : (
-              <Box>
-                <HStack justify="space-between" px={2} pt={2} pb={1}>
-                  <Text fontSize="2xs" fontFamily="mono" color="fg.muted">{result.label}</Text>
-                  <HStack gap={1}>
-                    {result.kind === 'both' && (
-                      <Text fontSize="2xs" fontFamily="mono" color="accent.teal" cursor="pointer"
-                        onClick={() => navigator.clipboard.writeText(result.url)} title="Click to copy URL">
-                        S3 ↗
-                      </Text>
-                    )}
-                    <IconButton size="2xs" variant="ghost" aria-label="Download image"
-                      onClick={() => triggerDownload(result.dataUrl, result.label)}>
-                      <LuDownload />
-                    </IconButton>
+              result.items.map((item, i) => (
+                <Box key={i} borderWidth="1px" borderColor="border.default" borderRadius="sm" overflow="hidden">
+                  <HStack justify="space-between" px={2} pt={2} pb={1}>
+                    <Text fontSize="2xs" fontFamily="mono" color="fg.muted">{item.label}</Text>
+                    <HStack gap={1}>
+                      {item.url && (
+                        <Text fontSize="2xs" fontFamily="mono" color="accent.teal" cursor="pointer"
+                          onClick={() => navigator.clipboard.writeText(item.url!)} title="Click to copy URL">
+                          S3 ↗
+                        </Text>
+                      )}
+                      {item.dataUrl && (
+                        <IconButton size="2xs" variant="ghost" aria-label="Download image"
+                          onClick={() => triggerDownload(item.dataUrl!, item.label)}>
+                          <LuDownload />
+                        </IconButton>
+                      )}
+                    </HStack>
                   </HStack>
-                </HStack>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={result.dataUrl} alt={result.label} style={{ width: '100%', height: 'auto', display: 'block' }} />
-              </Box>
+                  {item.dataUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={item.dataUrl} alt={item.label} style={{ width: '100%', height: 'auto', display: 'block' }} />
+                  )}
+                  {!item.dataUrl && item.url && (
+                    <Box px={2} pb={2}>
+                      <Text fontSize="2xs" fontFamily="mono" color="accent.teal" cursor="pointer" wordBreak="break-all"
+                        onClick={() => navigator.clipboard.writeText(item.url!)} title="Click to copy">
+                        {item.url}
+                      </Text>
+                    </Box>
+                  )}
+                </Box>
+              ))
             )}
-          </Box>
+          </VStack>
         )}
       </VStack>
     </Box>

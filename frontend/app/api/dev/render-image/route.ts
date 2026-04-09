@@ -10,7 +10,6 @@
  * Used exclusively by DevToolsPanel to compare server render vs client render quality.
  */
 import { NextRequest, NextResponse } from 'next/server';
-import sharp from 'sharp';
 import { renderChartToJpeg } from '@/lib/chart/render-chart';
 import { handleApiError } from '@/lib/api/api-responses';
 import type { QueryResult } from '@/lib/types';
@@ -70,16 +69,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'All charts failed to render' }, { status: 422 });
     }
 
-    // Stack all chart images vertically
-    const totalHeight = buffers.length * height;
-    const composited = await sharp({
-      create: { width, height: totalHeight, channels: 3, background: colorMode === 'dark' ? '#161b22' : '#ffffff' },
-    })
-      .composite(buffers.map((buf, i) => ({ input: buf, top: i * height, left: 0 })))
-      .jpeg({ quality: 85 })
-      .toBuffer();
-
-    return NextResponse.json({ dataUrl: `data:image/jpeg;base64,${composited.toString('base64')}` });
+    // Return each chart as a separate image (client stacks/displays them individually)
+    const images = buffers.map(buf => `data:image/jpeg;base64,${buf.toString('base64')}`);
+    return NextResponse.json({ images });
   } catch (error) {
     return handleApiError(error);
   }
