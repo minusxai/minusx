@@ -17,10 +17,7 @@ import { useConfigs } from '@/lib/hooks/useConfigs';
 import { Tooltip } from '@/components/ui/tooltip';
 import { toaster } from '@/components/ui/toaster';
 import { clearChatAttachments } from '@/store/uiSlice';
-import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client';
-import { RENDERABLE_CHART_TYPES } from '@/lib/chart/render-chart-svg';
-import { uploadFile } from '@/lib/object-store/client';
-import type { VizSettings } from '@/lib/types.gen';
+import { buildChartAttachments, prewarmChartDataUrls } from '@/lib/chart/chart-attachments';
 import type { QueryResult as ReduxQueryResult } from '@/store/queryResultsSlice';
 import ExampleQuestions from './message/ExampleQuestions';
 import FileNotFound from '../FileNotFound';
@@ -38,105 +35,6 @@ import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 // circular dependency workaround.
 // eslint-disable-next-line no-restricted-syntax
 const ChatInput = dynamic(() => import('./ChatInput'), { ssr: false });
-
-// Per-chart S3 URL cache: cacheKey → public S3 URL.
-// Key encodes queryResultId + updatedAt (for freshness) + vizSettings + titleOverride + colorMode.
-// Lives at module scope so it persists across re-renders and consecutive messages.
-// Safe: this is a 'use client' module — module-level state is per browser tab (single user).
-// eslint-disable-next-line no-restricted-syntax
-const chartUrlCache = new Map<string, string>();
-
-function buildChartCacheKey(
-  queryResultId: string | undefined,
-  updatedAt: number | undefined,
-  vizSettings: VizSettings,
-  titleOverride: string | undefined,
-  colorMode: 'light' | 'dark',
-): string {
-  return `${queryResultId ?? ''}|${updatedAt ?? 0}|${JSON.stringify(vizSettings)}|${titleOverride ?? ''}|${colorMode}`;
-}
-
-type ChartEntry = {
-  queryResult: any;
-  vizSettings: VizSettings;
-  titleOverride?: string;
-  queryResultId?: string;
-  updatedAt?: number;
-};
-
-/**
- * Render chart images for the current file (question or dashboard) and upload to S3.
- *
- * Question → one chart image.
- * Dashboard → one image per renderable chart that has data (multiple images).
- *
- * Results are cached by (queryResultId, updatedAt, vizSettings, titleOverride, colorMode) so
- * repeated sends with the same data skip rendering and re-upload entirely.
- *
- * Returns [] when the page has no renderable charts (explore/folder/table/pivot pages).
- * Never throws — chart capture failure must not block the user from sending.
- */
-async function buildChartAttachments(
-  appState: AppState | null | undefined,
-  queryResultsMap: Record<string, ReduxQueryResult>,
-  colorMode: 'light' | 'dark',
-): Promise<import('@/lib/types').Attachment[]> {
-  if (appState?.type !== 'file') return [];
-  const { fileState, references } = appState.state;
-
-  let entries: ChartEntry[];
-
-  if (fileState.type === 'question') {
-    const vizSettings = (fileState.content as any)?.vizSettings as VizSettings | undefined;
-    const queryResultId = (fileState as any).queryResultId as string | undefined;
-    const qr = queryResultId ? queryResultsMap[queryResultId] : undefined;
-    const queryResult = qr?.data;
-    if (!vizSettings || !queryResult || !RENDERABLE_CHART_TYPES.has(vizSettings.type)) return [];
-    entries = [{ queryResult, vizSettings, titleOverride: fileState.name || undefined, queryResultId, updatedAt: qr?.updatedAt }];
-  } else if (fileState.type === 'dashboard') {
-    entries = (references ?? []).flatMap(ref => {
-      const vizSettings = (ref.content as any)?.vizSettings as VizSettings | undefined;
-      const queryResultId = (ref as any).queryResultId as string | undefined;
-      const qr = queryResultId ? queryResultsMap[queryResultId] : undefined;
-      const queryResult = qr?.data;
-      if (!vizSettings || !queryResult || !RENDERABLE_CHART_TYPES.has(vizSettings.type)) return [];
-      return [{ queryResult, vizSettings, titleOverride: ref.name || undefined, queryResultId, updatedAt: qr?.updatedAt }] as ChartEntry[];
-    });
-  } else {
-    return [];
-  }
-
-  if (entries.length === 0) return [];
-
-  try {
-    // Process each chart independently and in parallel so cache hits return immediately
-    // while misses render + upload concurrently.
-    const attachments = await Promise.all(
-      entries.map(async ({ queryResult, vizSettings, titleOverride, queryResultId, updatedAt }) => {
-        const cacheKey = buildChartCacheKey(queryResultId, updatedAt, vizSettings, titleOverride, colorMode);
-        const cachedUrl = chartUrlCache.get(cacheKey);
-        if (cachedUrl) {
-          return { type: 'image' as const, name: titleOverride || 'chart.jpg', content: cachedUrl, metadata: { auto: true } };
-        }
-
-        const [rendered] = await clientChartImageRenderer.renderCharts(
-          [{ queryResult, vizSettings, titleOverride }],
-          { width: 512, colorMode, addWatermark: false },
-        );
-        if (!rendered) return null;
-
-        const blob = await fetch(rendered.dataUrl).then(res => res.blob());
-        const file = new File([blob], 'chart.jpg', { type: 'image/jpeg' });
-        const { publicUrl } = await uploadFile(file, undefined, { keyType: 'charts' });
-        chartUrlCache.set(cacheKey, publicUrl);
-        return { type: 'image' as const, name: rendered.label || 'chart.jpg', content: publicUrl, metadata: { auto: true } };
-      })
-    );
-    return attachments.filter(a => a !== null) as import('@/lib/types').Attachment[];
-  } catch {
-    return []; // Never block sending on capture failure
-  }
-}
 
 interface ChatInterfaceProps {
   conversationId?: number;  // Optional file ID: if provided, load existing conversation
@@ -235,6 +133,41 @@ export default function ChatInterface({
   const userIsAdmin = effectiveUser?.role ? isAdmin(effectiveUser.role) : false;
   const queryResultsMap = useAppSelector(state => state.queryResults.results);
   const colorMode = useAppSelector(state => state.ui.colorMode) as 'light' | 'dark';
+
+  // Stable refs so the pre-warm effect can capture the latest values without them being deps.
+  const appStateRef = useRef(appState);
+  appStateRef.current = appState;
+  const queryResultsMapRef = useRef(queryResultsMap);
+  queryResultsMapRef.current = queryResultsMap;
+
+  // Compact digest of the updatedAt timestamps for charts on this page.
+  // Changes only when relevant data refreshes — prevents the effect from firing for
+  // unrelated query-result updates happening elsewhere in the app.
+  const relevantUpdatedAts = useMemo(() => {
+    if (appState?.type !== 'file') return '';
+    const { fileState, references } = appState.state;
+    const ids: string[] = [];
+    if (fileState.type === 'question') {
+      const id = (fileState as any).queryResultId as string | undefined;
+      if (id) ids.push(id);
+    } else if (fileState.type === 'dashboard') {
+      (references ?? []).forEach(ref => {
+        const id = (ref as any).queryResultId as string | undefined;
+        if (id) ids.push(id);
+      });
+    }
+    return ids.map(id => `${id}:${queryResultsMap[id]?.updatedAt ?? 0}`).join(',');
+  }, [appState, queryResultsMap]);
+
+  // Pre-warm the render cache (level 1) silently when chart data loads or refreshes.
+  // Renders charts to data URLs in the background — no S3 upload, nothing wasted if the user
+  // never sends. On first Send, only the upload step remains (~200–500 ms vs full render+upload).
+  useEffect(() => {
+    if (!relevantUpdatedAts) return;
+    prewarmChartDataUrls(appStateRef.current, queryResultsMapRef.current, colorMode).catch(() => {});
+    // appState/queryResultsMap captured via refs; relevantUpdatedAts encodes all chart data changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [relevantUpdatedAts, colorMode]);
 
   // Case 1: existing conversation — follow fork chain from loaded conversation
   const forkFollowedConversation = useAppSelector(state => {
