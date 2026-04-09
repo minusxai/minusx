@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { Box, HStack, VStack, Text, Switch } from '@chakra-ui/react'
-import { LuChevronDown, LuChevronRight } from 'react-icons/lu'
+import { LuChevronDown, LuChevronRight, LuLayoutGrid, LuSettings2 } from 'react-icons/lu'
 import { ColumnChip, DropZone, ZoneChip, resolveColumnType, useIsTouchDevice } from './AxisComponents'
 import type { ColumnFormatConfig, AxisConfig } from '@/lib/types'
 
@@ -304,9 +304,39 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
 
   return (
     <Box display="flex" flexDirection="column" gap={4} width="100%" p={3} bg="bg.canvas" borderBottom="1px solid" borderColor="border.muted">
-      <HStack gap={2} flexWrap="wrap" justifyContent="space-between">
+      {/* Tab bar + column chips on same row */}
+      {hasSettingsTab && (
+        <HStack gap={2} justify="flex-start">
+          {([{ key: 'fields', icon: LuLayoutGrid, label: 'Fields' }, { key: 'settings', icon: LuSettings2, label: 'Settings' }] as const).map(({ key, icon: Icon, label }) => (
+            <HStack
+              key={key}
+              as="button"
+              gap={1}
+              px={2}
+              py={1}
+              cursor="pointer"
+              bg="transparent"
+              color={activeTab === key ? 'accent.teal' : 'fg.subtle'}
+              borderBottom="2px solid"
+              borderColor={activeTab === key ? 'accent.teal' : 'transparent'}
+              _hover={{ color: 'accent.teal' }}
+              transition="all 0.15s"
+              onClick={() => setActiveTab(key)}
+              borderRadius={0}
+            >
+              <Box as={Icon} fontSize="xs" />
+              <Text fontSize="2xs" fontFamily="mono" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em">
+                {label}
+              </Text>
+            </HStack>
+          ))}
+        </HStack>
+      )}
+
+      {(!hasSettingsTab || activeTab === 'fields') && (
+        <>
         <HStack gap={2} flexWrap="wrap">
-          {(!hasSettingsTab || activeTab === 'fields') && columns.map(col => (
+          {columns.map(col => (
             <ColumnChip
               key={col}
               column={col}
@@ -320,40 +350,8 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
               onMobileSelect={() => handleMobileSelect(col)}
             />
           ))}
-        </HStack>
-        <HStack gap={2}>
           {children}
-          {hasSettingsTab && (
-            <>
-              <Box
-                as="button"
-                {...tabButtonStyles}
-                bg="transparent"
-                color={activeTab === 'fields' ? 'accent.teal' : 'fg.subtle'}
-                borderColor={activeTab === 'fields' ? 'accent.teal' : 'transparent'}
-                _hover={{ color: 'accent.teal' }}
-                onClick={() => setActiveTab('fields')}
-              >
-                Fields
-              </Box>
-              <Box
-                as="button"
-                {...tabButtonStyles}
-                bg="transparent"
-                color={activeTab === 'settings' ? 'accent.teal' : 'fg.subtle'}
-                borderColor={activeTab === 'settings' ? 'accent.teal' : 'transparent'}
-                _hover={{ color: 'accent.teal' }}
-                onClick={() => setActiveTab('settings')}
-              >
-                Settings
-              </Box>
-            </>
-          )}
         </HStack>
-      </HStack>
-
-      {(!hasSettingsTab || activeTab === 'fields') && (
-        <>
 
         {isTouchDevice && selectedColumnForMobile && (
           <Box p={2} bg="accent.teal/10" borderRadius="md" textAlign="center">
@@ -437,7 +435,6 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
           </VStack>
         </Box>
       )}
-
     </Box>
   )
 }
