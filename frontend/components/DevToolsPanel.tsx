@@ -365,22 +365,6 @@ async function toJpegObjectUrl(
   }
 }
 
-/** Walk the [data-file-id] subtree to find all live ECharts instances and their pixel sizes. */
-function findLiveChartDimensions(): Array<{ width: number; height: number }> {
-  const container = document.querySelector('[data-file-id]');
-  if (!container) return [];
-  const dims: Array<{ width: number; height: number }> = [];
-  for (const div of Array.from(container.querySelectorAll('div'))) {
-    try {
-      const inst = echarts.getInstanceByDom(div as HTMLDivElement);
-      if (inst) {
-        const r = div.getBoundingClientRect();
-        if (r.width > 10 && r.height > 10) dims.push({ width: Math.round(r.width), height: Math.round(r.height) });
-      }
-    } catch { /* not an echarts container */ }
-  }
-  return dims;
-}
 
 // ── Image Tools test panel ────────────────────────────────────────────────────
 
@@ -403,7 +387,7 @@ const inputStyle: React.CSSProperties = {
 const checkboxStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontFamily: 'var(--font-mono)', cursor: 'pointer', userSelect: 'none' };
 
 function ImageToolsPanel({ appState }: { appState: AppState | null | undefined }) {
-  const [imgWidth, setImgWidth] = useState(256);
+  const [imgWidth, setImgWidth] = useState(512);
   const [addWatermark, setAddWatermark] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [result, setResult] = useState<ImageResult | null>(null);
@@ -450,29 +434,20 @@ function ImageToolsPanel({ appState }: { appState: AppState | null | undefined }
     }
   };
 
-  /** Render all charts to raw PNG data URLs via hidden canvas. One item per chart.
-   *  Render dimensions come from the live DOM chart sizes (exact match to what the user sees).
-   *  Falls back to a sensible 16:9 size at least 512px wide if no live instance is found.
-   */
+  /** Render all charts to raw PNG data URLs — same dimensions as the server path. */
   const renderAllRaw = async (): Promise<Array<{ rawUrl: string; label: string }>> => {
-    const liveDims = findLiveChartDimensions();
-    const dimAt = (i: number) => {
-      if (liveDims[i]) return liveDims[i];
-      const w = Math.max(imgWidth, 512);
-      return { width: w, height: Math.round(w * 0.5625) }; // 16:9 fallback
-    };
+    const w = imgWidth;
+    const h = Math.round(w * 0.5625); // 16:9
 
     if (singleChart) {
-      const { width, height } = dimAt(0);
-      const url = await renderChartToDataUrl(singleChart.queryResult, singleChart.vizSettings, colorMode, width, height, singleChart.name);
+      const url = await renderChartToDataUrl(singleChart.queryResult, singleChart.vizSettings, colorMode, w, h, singleChart.name);
       if (!url) throw new Error('Render returned null — unsupported viz type or empty data');
       return [{ rawUrl: url, label: singleChart.name ?? 'Chart' }];
     }
+
     const results: Array<{ rawUrl: string; label: string }> = [];
-    for (let i = 0; i < dashboardCharts.length; i++) {
-      const c = dashboardCharts[i];
-      const { width, height } = dimAt(i);
-      const url = await renderChartToDataUrl(c.queryResult, c.vizSettings, colorMode, width, height, c.name);
+    for (const c of dashboardCharts) {
+      const url = await renderChartToDataUrl(c.queryResult, c.vizSettings, colorMode, w, h, c.name);
       if (url) results.push({ rawUrl: url, label: c.name ?? 'Chart' });
     }
     if (results.length === 0) throw new Error('No charts rendered successfully');
@@ -504,8 +479,7 @@ function ImageToolsPanel({ appState }: { appState: AppState | null | undefined }
   });
 
   const handleServer = () => run('Server', async () => {
-    // Render at 2× imgWidth (min 800) server-side so text doesn't truncate; client scales down.
-    const serverW = Math.max(imgWidth * 2, 800);
+    const serverW = imgWidth;
     const serverH = Math.round(serverW * 0.5625); // 16:9
     const res = await fetch('/api/dev/render-image', {
       method: 'POST',
