@@ -46,7 +46,7 @@ const AxisSettingsPanel = ({ axis, axisConfig, onChange }: {
     fontFamily: 'var(--fonts-mono, monospace)',
     padding: '4px 8px',
     width: '100%',
-    border: '1px solid var(--colors-border-muted, #333)',
+    border: '1px dashed var(--colors-border-muted, #333)',
     borderRadius: '4px',
     background: 'var(--colors-bg-surface, transparent)',
     color: 'var(--colors-fg-default, inherit)',
@@ -55,47 +55,29 @@ const AxisSettingsPanel = ({ axis, axisConfig, onChange }: {
 
   return (
     <VStack align="stretch" gap={2.5} minW={0}>
-      {axis === 'y' && (
-        <HStack gap={2} align="center">
+      <HStack gap={4} align="center" justify="space-between">
+        {axis === 'y' && (
+          <HStack gap={2} align="center">
+            <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
+              Dual Y-axis
+            </Text>
+            <Switch.Root
+              size="sm"
+              checked={!!axisConfig.dualAxis}
+              onCheckedChange={(e) => { onChange({ ...axisConfig, dualAxis: e.checked || null }) }}
+              colorPalette="teal"
+            >
+              <Switch.HiddenInput aria-label="Dual Y-axis toggle" />
+              <Switch.Control>
+                <Switch.Thumb />
+              </Switch.Control>
+            </Switch.Root>
+          </HStack>
+        )}
+        <HStack gap={1} align="center">
           <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
-            Dual Y-axis
+            Scale
           </Text>
-          <Switch.Root
-            size="sm"
-            checked={!!axisConfig.dualAxis}
-            onCheckedChange={(e) => { onChange({ ...axisConfig, dualAxis: e.checked || null }) }}
-            colorPalette="teal"
-          >
-            <Switch.HiddenInput aria-label="Dual Y-axis toggle" />
-            <Switch.Control>
-              <Switch.Thumb />
-            </Switch.Control>
-          </Switch.Root>
-        </HStack>
-      )}
-      {axis === 'y' && (
-        <Box>
-          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
-            Title
-          </Text>
-          <input
-            type="text"
-            placeholder="auto"
-            value={currentTitle}
-            onChange={(e) => {
-              const value = e.target.value
-              onChange({ ...axisConfig, yTitle: value || null })
-            }}
-            onClick={(e) => e.stopPropagation()}
-            style={inputStyle}
-          />
-        </Box>
-      )}
-      <Box>
-        <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
-          Scale
-        </Text>
-        <HStack gap={1}>
           {(['linear', 'log'] as const).map(scale => (
             <Box
               key={scale}
@@ -119,8 +101,26 @@ const AxisSettingsPanel = ({ axis, axisConfig, onChange }: {
             </Box>
           ))}
         </HStack>
-      </Box>
-      <HStack gap={2}>
+      </HStack>
+      <HStack gap={2} align="flex-end">
+        {axis === 'y' && (
+          <Box flex={2}>
+            <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+              Title
+            </Text>
+            <input
+              type="text"
+              placeholder="auto"
+              value={currentTitle}
+              onChange={(e) => {
+                const value = e.target.value
+                onChange({ ...axisConfig, yTitle: value || null })
+              }}
+              onClick={(e) => e.stopPropagation()}
+              style={inputStyle}
+            />
+          </Box>
+        )}
         <Box flex={1}>
           <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
             Min
@@ -249,13 +249,13 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
   const tabButtonStyles = {
     px: 2.5,
     py: 1,
-    borderRadius: 'md',
     fontSize: '2xs',
     fontFamily: 'mono',
     fontWeight: '700',
     textTransform: 'uppercase' as const,
     letterSpacing: '0.05em',
-    border: '1px solid',
+    borderBottom: '2px solid',
+    borderRadius: 0,
     transition: 'all 0.15s',
     cursor: 'pointer',
   }
@@ -306,7 +306,7 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
     <Box display="flex" flexDirection="column" gap={4} width="100%" p={3} bg="bg.canvas" borderBottom="1px solid" borderColor="border.muted">
       <HStack gap={2} flexWrap="wrap" justifyContent="space-between">
         <HStack gap={2} flexWrap="wrap">
-          {columns.map(col => (
+          {(!hasSettingsTab || activeTab === 'fields') && columns.map(col => (
             <ColumnChip
               key={col}
               column={col}
@@ -321,43 +321,48 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
             />
           ))}
         </HStack>
-        {children}
+        <HStack gap={2}>
+          {children}
+          {hasSettingsTab && (
+            <>
+              <Box
+                as="button"
+                {...tabButtonStyles}
+                bg="transparent"
+                color={activeTab === 'fields' ? 'accent.teal' : 'fg.subtle'}
+                borderColor={activeTab === 'fields' ? 'accent.teal' : 'transparent'}
+                _hover={{ color: 'accent.teal' }}
+                onClick={() => setActiveTab('fields')}
+              >
+                Fields
+              </Box>
+              <Box
+                as="button"
+                {...tabButtonStyles}
+                bg="transparent"
+                color={activeTab === 'settings' ? 'accent.teal' : 'fg.subtle'}
+                borderColor={activeTab === 'settings' ? 'accent.teal' : 'transparent'}
+                _hover={{ color: 'accent.teal' }}
+                onClick={() => setActiveTab('settings')}
+              >
+                Settings
+              </Box>
+            </>
+          )}
+        </HStack>
       </HStack>
 
-      {isTouchDevice && selectedColumnForMobile && (
-        <Box p={2} bg="accent.teal/10" borderRadius="md" textAlign="center">
-          <Text fontSize="xs" fontWeight="600" color="accent.teal">
-            Tap a zone below to add &quot;{selectedColumnForMobile}&quot;
-          </Text>
-        </Box>
-      )}
-
-      {hasSettingsTab && (
-        <HStack gap={2} justify="flex-end">
-          <Box
-            as="button"
-            {...tabButtonStyles}
-            bg={activeTab === 'fields' ? 'accent.teal' : 'bg.surface'}
-            color={activeTab === 'fields' ? 'white' : 'fg.subtle'}
-            borderColor={activeTab === 'fields' ? 'accent.teal' : 'border.muted'}
-            onClick={() => setActiveTab('fields')}
-          >
-            Fields
-          </Box>
-          <Box
-            as="button"
-            {...tabButtonStyles}
-            bg={activeTab === 'settings' ? 'accent.teal' : 'bg.surface'}
-            color={activeTab === 'settings' ? 'white' : 'fg.subtle'}
-            borderColor={activeTab === 'settings' ? 'accent.teal' : 'border.muted'}
-            onClick={() => setActiveTab('settings')}
-          >
-            Settings
-          </Box>
-        </HStack>
-      )}
-
       {(!hasSettingsTab || activeTab === 'fields') && (
+        <>
+
+        {isTouchDevice && selectedColumnForMobile && (
+          <Box p={2} bg="accent.teal/10" borderRadius="md" textAlign="center">
+            <Text fontSize="xs" fontWeight="600" color="accent.teal">
+              Tap a zone below to add &quot;{selectedColumnForMobile}&quot;
+            </Text>
+          </Box>
+        )}
+
         <Box display="flex" gap={3} alignItems="stretch" minWidth={0}>
           {zones.map(zone => {
             const zoneFlex = zone.label === 'Y Axis' ? 2 : 1
@@ -401,6 +406,7 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
             )
           })}
         </Box>
+        </>
       )}
 
       {hasSettingsTab && activeTab === 'settings' && (
