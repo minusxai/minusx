@@ -25,7 +25,6 @@ jest.mock('@/lib/auth/auth-helpers', () => ({
 // Mock the entire object-store module so the route never touches real S3
 jest.mock('@/lib/object-store', () => {
   const { randomUUID } = require('crypto');
-  const { extname } = require('path');
   return {
     createObjectStore: jest.fn(() => ({
       getUploadUrl: jest.fn(async ({ key }: { key: string }) => ({
@@ -34,8 +33,7 @@ jest.mock('@/lib/object-store', () => {
       })),
       delete: jest.fn(),
     })),
-    generateUploadKey: (companyId: number, filename: string) => {
-      const ext = extname(filename).toLowerCase();
+    generateUploadKey: ({ companyId, ext }: { companyId: number; userId: number; mode: string; type: string; ext: string }) => {
       return `${companyId}/${randomUUID()}${ext}`;
     },
   };

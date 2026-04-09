@@ -107,16 +107,16 @@ export const clientChartImageRenderer: IChartImageRenderer = {
   async renderCharts(inputs: ChartInput[], options: ChartRenderOptions): Promise<RenderedChart[]> {
     const { width, colorMode, addWatermark } = options
     const height = Math.round(width * 0.5625) // 16:9
-    const results: RenderedChart[] = []
 
-    for (const { queryResult, vizSettings, titleOverride } of inputs) {
-      const rawUrl = await renderSingleChartToDataUrl(queryResult, vizSettings, colorMode, width, height, titleOverride)
-      if (!rawUrl) continue
-      const dataUrl = await toJpegObjectUrl(rawUrl, width, addWatermark, colorMode)
-      const label = titleOverride ?? vizSettings.type
-      results.push({ label, dataUrl })
-    }
+    const settled = await Promise.all(
+      inputs.map(async ({ queryResult, vizSettings, titleOverride }) => {
+        const rawUrl = await renderSingleChartToDataUrl(queryResult, vizSettings, colorMode, width, height, titleOverride)
+        if (!rawUrl) return null
+        const dataUrl = await toJpegObjectUrl(rawUrl, width, addWatermark, colorMode)
+        return { label: titleOverride ?? vizSettings.type, dataUrl } satisfies RenderedChart
+      })
+    )
 
-    return results
+    return settled.filter((r): r is RenderedChart => r !== null)
   },
 }

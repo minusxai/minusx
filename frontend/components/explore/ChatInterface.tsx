@@ -85,13 +85,14 @@ async function buildChartAttachments(
       addWatermark: false,
     });
 
-    const attachments: import('@/lib/types').Attachment[] = [];
-    for (const r of rendered) {
-      const blob = await fetch(r.dataUrl).then(res => res.blob());
-      const file = new File([blob], 'chart.jpg', { type: 'image/jpeg' });
-      const { publicUrl } = await uploadFile(file, undefined, { keyType: 'charts' });
-      attachments.push({ type: 'image', name: r.label || 'chart.jpg', content: publicUrl, metadata: { auto: true } });
-    }
+    const attachments = await Promise.all(
+      rendered.map(async r => {
+        const blob = await fetch(r.dataUrl).then(res => res.blob());
+        const file = new File([blob], 'chart.jpg', { type: 'image/jpeg' });
+        const { publicUrl } = await uploadFile(file, undefined, { keyType: 'charts' });
+        return { type: 'image' as const, name: r.label || 'chart.jpg', content: publicUrl, metadata: { auto: true } };
+      })
+    );
     return attachments;
   } catch {
     return []; // Never block sending on capture failure
@@ -189,6 +190,7 @@ export default function ChatInterface({
   const [showThinking, setShowThinking] = useState<boolean>(false)
   const [showToolInspector, setShowToolInspector] = useState(false)
   const [continueChatConfirmed, setContinueChatConfirmed] = useState(false)
+  const [isPreparing, setIsPreparing] = useState(false)
 
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const userIsAdmin = effectiveUser?.role ? isAdmin(effectiveUser.role) : false;
@@ -425,7 +427,10 @@ export default function ChatInterface({
 
     // Render chart images for the current file and upload to S3.
     // Question: 1 image. Dashboard: one image per chart with data.
+    // Show preparing indicator so user knows something is happening after pressing send.
+    setIsPreparing(true);
     const fileAttachments = await buildChartAttachments(appState, queryResultsMap, colorMode);
+    setIsPreparing(false);
     const allAttachments = [...attachments, ...fileAttachments];
 
     // For new conversations (no conversationID yet)
@@ -910,6 +915,7 @@ export default function ChatInterface({
               onSend={handleSendMessage}
               onStop={handleStopAgent}
               isAgentRunning={isAgentRunning || isStreaming}
+              isPreparing={isPreparing}
               disabled={isLoading}
               databaseName={selectedDatabase || ''}
               onDatabaseChange={handleDatabaseChange}
