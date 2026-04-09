@@ -1015,6 +1015,10 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
 
   // Resolve format configs for axes
   const { xDateFormat, yPrefix, ySuffix } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
+  // Resolve separate prefix/suffix for right Y-axis in dual-axis mode
+  const { yPrefix: yPrefixRight, ySuffix: ySuffixRight } = yRightCols && yRightCols.length > 0
+    ? resolveChartFormats(columnFormats, undefined, yRightCols)
+    : { yPrefix, ySuffix }
 
   // Determine consistent Y-axis scale across all series (per-axis when dual axis)
   const yScale = getNumberScale(series)
@@ -1293,7 +1297,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   const yAxisFormatterLeft = (value: number) =>
     applyPrefixSuffix(formatWithScale(value, yScaleLeft), yPrefix, ySuffix)
   const yAxisFormatterRight = (value: number) =>
-    applyPrefixSuffix(formatWithScale(value, yScaleRight), yPrefix, ySuffix)
+    applyPrefixSuffix(formatWithScale(value, yScaleRight), yPrefixRight, ySuffixRight)
   const yLogRangeProps = yScaleType === 'log' && (yMin === undefined || yMax === undefined)
     ? getLogExtent(positiveScatterYValues)
     : {}
