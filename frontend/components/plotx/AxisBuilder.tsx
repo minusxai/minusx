@@ -303,7 +303,7 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
   }
 
   return (
-    <Box display="flex" flexDirection="column" gap={4} width="100%" p={3} bg="bg.canvas" borderBottom="1px solid" borderColor="border.muted">
+    <Box display="flex" flexDirection="column" gap={4} width="100%" p={3} bg="bg.canvas" border="1px dashed" borderColor="border.muted" borderRadius="md">
       {/* Tab bar + column chips on same row */}
       {hasSettingsTab && (
         <HStack gap={2} justify="flex-start">
