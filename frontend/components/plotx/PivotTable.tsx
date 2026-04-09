@@ -126,27 +126,58 @@ export const PivotTable = ({
 
     if (heatmapScale === 'green') {
       if (isDark) {
-        // Dark mode: dark muted green → bright green
-        r = Math.round(20 + normalized * 20)
-        g = Math.round(35 + normalized * 130)
-        b = Math.round(20 + normalized * 25)
+        // Dark mode green: near-black → #0e4429 → #26a641 → #4aea64
+        if (normalized < 0.33) {
+          const t = normalized / 0.33
+          r = Math.round(5 + 9 * t); g = Math.round(10 + 58 * t); b = Math.round(5 + 36 * t)
+        } else if (normalized < 0.66) {
+          const t = (normalized - 0.33) / 0.33
+          r = Math.round(0 + 38 * t); g = Math.round(109 + 57 * t); b = Math.round(50 + 15 * t)
+        } else {
+          const t = (normalized - 0.66) / 0.34
+          r = Math.round(38 + 36 * t); g = Math.round(166 + 68 * t); b = Math.round(65 + 35 * t)
+        }
       } else {
-        // Light mode: light → dark green
-        r = Math.round(235 - normalized * 195)
-        g = Math.round(245 - normalized * 100)
-        b = Math.round(235 - normalized * 195)
+        // GitHub light mode green: #ebedf0 → #9be9a8 → #40c463 → #30a14e → #216e39
+        if (normalized < 0.25) {
+          const t = normalized / 0.25
+          r = Math.round(235 - t * 80); g = Math.round(237 - t * 4); b = Math.round(240 - t * 72)
+        } else if (normalized < 0.5) {
+          const t = (normalized - 0.25) / 0.25
+          r = Math.round(155 - t * 91); g = Math.round(233 - t * 37); b = Math.round(168 - t * 69)
+        } else if (normalized < 0.75) {
+          const t = (normalized - 0.5) / 0.25
+          r = Math.round(64 - t * 16); g = Math.round(196 - t * 35); b = Math.round(99 - t * 21)
+        } else {
+          const t = (normalized - 0.75) / 0.25
+          r = Math.round(48 - t * 15); g = Math.round(161 - t * 51); b = Math.round(78 - t * 21)
+        }
       }
     } else if (heatmapScale === 'blue') {
       if (isDark) {
-        // Dark mode: dark muted blue → bright blue
-        r = Math.round(15 + normalized * 30)
-        g = Math.round(25 + normalized * 75)
-        b = Math.round(50 + normalized * 150)
+        // Dark mode blue: #0a1929 → #0d47a1 → #2196f3 → #6ec6ff
+        if (normalized < 0.33) {
+          const t = normalized / 0.33
+          r = Math.round(10 + 3 * t); g = Math.round(25 + 46 * t); b = Math.round(41 + 120 * t)
+        } else if (normalized < 0.66) {
+          const t = (normalized - 0.33) / 0.33
+          r = Math.round(13 + 20 * t); g = Math.round(71 + 79 * t); b = Math.round(161 + 82 * t)
+        } else {
+          const t = (normalized - 0.66) / 0.34
+          r = Math.round(33 + 77 * t); g = Math.round(150 + 48 * t); b = Math.round(243 + 12 * t)
+        }
       } else {
-        // Light mode: light → dark blue
-        r = Math.round(235 - normalized * 195)
-        g = Math.round(235 - normalized * 135)
-        b = Math.round(255 - normalized * 55)
+        // Light mode blue: #eef3ff → #a8c8f0 → #5a9bd5 → #2a6cb8
+        if (normalized < 0.33) {
+          const t = normalized / 0.33
+          r = Math.round(238 - t * 70); g = Math.round(243 - t * 43); b = Math.round(255 - t * 15)
+        } else if (normalized < 0.66) {
+          const t = (normalized - 0.33) / 0.33
+          r = Math.round(168 - t * 78); g = Math.round(200 - t * 45); b = Math.round(240 - t * 27)
+        } else {
+          const t = (normalized - 0.66) / 0.34
+          r = Math.round(90 - t * 48); g = Math.round(155 - t * 47); b = Math.round(213 - t * 29)
+        }
       }
     } else {
       // red-yellow-green (default)

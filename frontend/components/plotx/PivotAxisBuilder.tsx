@@ -353,8 +353,8 @@ export const PivotAxisBuilder = ({
                   <Text fontSize="xs" color="fg.muted">Scale:</Text>
                   {([
                     { key: 'red-yellow-green', label: 'RYG', colors: ['#c83c3c', '#d2b43c', '#2da08c'] },
-                    { key: 'green', label: 'Green', colors: ['#ddf0dd', '#28a745'] },
-                    { key: 'blue', label: 'Blue', colors: ['#dde5ff', '#3c64c8'] },
+                    { key: 'green', label: 'Green', colors: ['#ebedf0', '#40c463', '#216e39'] },
+                    { key: 'blue', label: 'Blue', colors: ['#eef3ff', '#5a9bd5', '#2a6cb8'] },
                   ] as const).map(({ key, colors }) => (
                     <Box
                       key={key}
@@ -368,9 +368,7 @@ export const PivotAxisBuilder = ({
                       transition="all 0.15s"
                       onClick={() => onPivotConfigChange({ ...config, heatmapScale: key })}
                       style={{
-                        background: colors.length === 2
-                          ? `linear-gradient(to right, ${colors[0]}, ${colors[1]})`
-                          : `linear-gradient(to right, ${colors[0]}, ${colors[1]}, ${colors[2]})`,
+                        background: `linear-gradient(to right, ${colors.join(', ')})`,
                       }}
                     />
                   ))}
