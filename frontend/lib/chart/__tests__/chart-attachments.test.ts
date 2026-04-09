@@ -1,14 +1,12 @@
 /**
- * chart-attachments — two-level cache lifecycle tests
+ * chart-attachments — S3 URL cache lifecycle tests
  *
  * Verifies:
- *  1. prewarmChartDataUrls renders but does NOT upload
- *  2. buildChartAttachments after prewarm uploads but does NOT re-render
- *  3. buildChartAttachments on second Send returns cached S3 URL (no render, no upload)
- *  4. Cold-start buildChartAttachments (no prewarm) renders AND uploads in one shot
- *  5. Data refresh (new updatedAt) invalidates both cache levels — prewarm re-renders
- *  6. Non-chart page (explore / folder / table viz) returns []
- *  7. Dashboard produces one attachment per renderable chart
+ *  1. First Send renders AND uploads
+ *  2. Second Send returns cached S3 URL (no render, no upload)
+ *  3. Data refresh (new updatedAt) invalidates cache — re-renders and re-uploads
+ *  4. Non-chart pages (explore / folder / table viz) return []
+ *  5. Dashboard produces one attachment per renderable chart, skipping non-chart types
  */
 
 jest.mock('@/lib/chart/ChartImageRenderer.client', () => ({
@@ -27,11 +25,7 @@ jest.mock('@/lib/chart/render-chart-svg', () => ({
 
 import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client';
 import { uploadFile } from '@/lib/object-store/client';
-import {
-  buildChartAttachments,
-  prewarmChartDataUrls,
-  clearChartCaches,
-} from '@/lib/chart/chart-attachments';
+import { buildChartAttachments, clearChartCaches } from '@/lib/chart/chart-attachments';
 import type { AppState } from '@/lib/appState';
 import type { QueryResult as ReduxQueryResult } from '@/store/queryResultsSlice';
 
@@ -97,7 +91,7 @@ beforeEach(() => {
   mockRenderCharts.mockResolvedValue([{ label: 'Revenue Chart', dataUrl: MOCK_DATA_URL }]);
   mockUploadFile.mockResolvedValue({ publicUrl: MOCK_PUBLIC_URL });
 
-  // fetch(dataUrl).then(res => res.blob()) used in buildChartAttachments
+  // fetch(dataUrl).then(res => res.blob()) used inside buildChartAttachments
   global.fetch = jest.fn().mockResolvedValue({
     blob: () => Promise.resolve(new Blob(['fake'], { type: 'image/jpeg' })),
   }) as any;
@@ -105,43 +99,10 @@ beforeEach(() => {
 
 // ---- tests ------------------------------------------------------------------
 
-describe('prewarmChartDataUrls', () => {
-  it('renders but does not upload to S3', async () => {
-    const appState = makeAppState();
-    const qrMap = makeQueryResultsMap();
+describe('first Send', () => {
+  it('renders and uploads, returns attachment with S3 URL', async () => {
+    const attachments = await buildChartAttachments(makeAppState(), makeQueryResultsMap(), 'dark');
 
-    await prewarmChartDataUrls(appState, qrMap, 'dark');
-
-    expect(mockRenderCharts).toHaveBeenCalledTimes(1);
-    expect(mockUploadFile).not.toHaveBeenCalled();
-  });
-
-  it('does not re-render on second call with the same data', async () => {
-    const appState = makeAppState();
-    const qrMap = makeQueryResultsMap();
-
-    await prewarmChartDataUrls(appState, qrMap, 'dark');
-    await prewarmChartDataUrls(appState, qrMap, 'dark');
-
-    expect(mockRenderCharts).toHaveBeenCalledTimes(1);
-  });
-
-  it('does nothing for non-chart pages', async () => {
-    const appState: AppState = { type: 'explore', state: null };
-    await prewarmChartDataUrls(appState, {}, 'dark');
-    expect(mockRenderCharts).not.toHaveBeenCalled();
-  });
-});
-
-describe('buildChartAttachments — after prewarm (level-1 cache hit)', () => {
-  it('uploads but does not re-render', async () => {
-    const appState = makeAppState();
-    const qrMap = makeQueryResultsMap();
-
-    await prewarmChartDataUrls(appState, qrMap, 'dark');  // render: 1, upload: 0
-    const attachments = await buildChartAttachments(appState, qrMap, 'dark'); // render: still 1, upload: 1
-
-    // Only one render total (from prewarm), one upload total (from build)
     expect(mockRenderCharts).toHaveBeenCalledTimes(1);
     expect(mockUploadFile).toHaveBeenCalledTimes(1);
     expect(attachments).toHaveLength(1);
@@ -153,15 +114,13 @@ describe('buildChartAttachments — after prewarm (level-1 cache hit)', () => {
   });
 });
 
-describe('buildChartAttachments — second Send (level-2 cache hit)', () => {
+describe('second Send (cache hit)', () => {
   it('returns cached S3 URL without render or upload', async () => {
     const appState = makeAppState();
     const qrMap = makeQueryResultsMap();
 
-    // First send: cold start → render + upload (level-2 cache populated)
-    await buildChartAttachments(appState, qrMap, 'dark');
-    // Second send: level-2 hit — no render, no upload
-    const attachments = await buildChartAttachments(appState, qrMap, 'dark');
+    await buildChartAttachments(appState, qrMap, 'dark'); // first: render + upload
+    const attachments = await buildChartAttachments(appState, qrMap, 'dark'); // second: cache hit
 
     // Exactly 1 render and 1 upload across both sends
     expect(mockRenderCharts).toHaveBeenCalledTimes(1);
@@ -170,80 +129,57 @@ describe('buildChartAttachments — second Send (level-2 cache hit)', () => {
   });
 });
 
-describe('buildChartAttachments — cold start (no prewarm)', () => {
-  it('renders AND uploads in one shot', async () => {
+describe('cache invalidation on data refresh', () => {
+  it('re-renders and re-uploads when updatedAt changes', async () => {
+    const appState = makeAppState();
+
+    await buildChartAttachments(appState, makeQueryResultsMap('qr-hash-001', 1000), 'dark');
+
+    const newUrl = 'https://s3.example.com/charts/new.jpg';
+    mockRenderCharts.mockResolvedValue([{ label: 'Revenue Chart', dataUrl: MOCK_DATA_URL }]);
+    mockUploadFile.mockResolvedValue({ publicUrl: newUrl });
+
+    const attachments = await buildChartAttachments(appState, makeQueryResultsMap('qr-hash-001', 2000), 'dark');
+
+    expect(mockRenderCharts).toHaveBeenCalledTimes(2);
+    expect(mockUploadFile).toHaveBeenCalledTimes(2);
+    expect(attachments[0].content).toBe(newUrl);
+  });
+
+  it('colorMode change produces a separate cache entry', async () => {
     const appState = makeAppState();
     const qrMap = makeQueryResultsMap();
 
-    const attachments = await buildChartAttachments(appState, qrMap, 'dark');
+    await buildChartAttachments(appState, qrMap, 'dark');
+    await buildChartAttachments(appState, qrMap, 'light');
 
-    expect(mockRenderCharts).toHaveBeenCalledTimes(1);
-    expect(mockUploadFile).toHaveBeenCalledTimes(1);
-    expect(attachments).toHaveLength(1);
-    expect(attachments[0].content).toBe(MOCK_PUBLIC_URL);
-  });
-});
-
-describe('cache invalidation on data refresh', () => {
-  it('re-renders after updatedAt changes', async () => {
-    const appState = makeAppState();
-    const qrMapV1 = makeQueryResultsMap('qr-hash-001', 1000);
-    const qrMapV2 = makeQueryResultsMap('qr-hash-001', 2000); // new updatedAt
-
-    await prewarmChartDataUrls(appState, qrMapV1, 'dark');
-    expect(mockRenderCharts).toHaveBeenCalledTimes(1);
-
-    jest.clearAllMocks();
-    mockRenderCharts.mockResolvedValue([{ label: 'Revenue Chart', dataUrl: MOCK_DATA_URL }]);
-
-    await prewarmChartDataUrls(appState, qrMapV2, 'dark');
-    expect(mockRenderCharts).toHaveBeenCalledTimes(1); // re-rendered for new data
-  });
-
-  it('re-uploads after updatedAt changes (level-2 cache invalidated)', async () => {
-    const appState = makeAppState();
-    const qrMapV1 = makeQueryResultsMap('qr-hash-001', 1000);
-    const qrMapV2 = makeQueryResultsMap('qr-hash-001', 2000);
-
-    // Prime level-2 cache
-    await buildChartAttachments(appState, qrMapV1, 'dark');
-    jest.clearAllMocks();
-    mockRenderCharts.mockResolvedValue([{ label: 'Revenue Chart', dataUrl: MOCK_DATA_URL }]);
-    mockUploadFile.mockResolvedValue({ publicUrl: 'https://s3.example.com/charts/new.jpg' });
-
-    // New data — different cache key
-    const attachments = await buildChartAttachments(appState, qrMapV2, 'dark');
-
-    expect(mockRenderCharts).toHaveBeenCalledTimes(1);
-    expect(mockUploadFile).toHaveBeenCalledTimes(1);
-    expect(attachments[0].content).toBe('https://s3.example.com/charts/new.jpg');
+    // Different colorMode → different cache key → both render + upload
+    expect(mockRenderCharts).toHaveBeenCalledTimes(2);
+    expect(mockUploadFile).toHaveBeenCalledTimes(2);
   });
 });
 
 describe('non-renderable pages', () => {
-  it('returns [] for explore page (no appState)', async () => {
+  it('returns [] for explore page (null appState)', async () => {
     const result = await buildChartAttachments(null, {}, 'dark');
     expect(result).toEqual([]);
     expect(mockRenderCharts).not.toHaveBeenCalled();
   });
 
   it('returns [] for table viz type', async () => {
-    const appState = makeAppState({ vizType: 'table' });
-    const qrMap = makeQueryResultsMap();
-    const result = await buildChartAttachments(appState, qrMap, 'dark');
+    const result = await buildChartAttachments(makeAppState({ vizType: 'table' }), makeQueryResultsMap(), 'dark');
     expect(result).toEqual([]);
     expect(mockRenderCharts).not.toHaveBeenCalled();
   });
 
   it('returns [] when queryResult not yet loaded', async () => {
-    const appState = makeAppState({ queryResultId: 'qr-not-in-map' });
-    const result = await buildChartAttachments(appState, {}, 'dark');
+    const result = await buildChartAttachments(makeAppState({ queryResultId: 'not-in-map' }), {}, 'dark');
     expect(result).toEqual([]);
   });
 });
 
 describe('dashboard with multiple charts', () => {
-  it('produces one attachment per renderable chart', async () => {
+  it('renders one attachment per renderable chart, skips table type', async () => {
     const dashboardAppState: AppState = {
       type: 'file',
       state: {
@@ -257,29 +193,17 @@ describe('dashboard with multiple charts', () => {
         },
         references: [
           {
-            id: 1,
-            name: 'Chart A',
-            path: '/org/Chart A',
-            type: 'question',
-            isDirty: false,
+            id: 1, name: 'Chart A', path: '/org/Chart A', type: 'question', isDirty: false,
             queryResultId: 'qr-a',
             content: { vizSettings: { type: 'bar', xCols: ['x'], yCols: ['y'] } } as any,
           },
           {
-            id: 2,
-            name: 'Chart B',
-            path: '/org/Chart B',
-            type: 'question',
-            isDirty: false,
+            id: 2, name: 'Chart B', path: '/org/Chart B', type: 'question', isDirty: false,
             queryResultId: 'qr-b',
             content: { vizSettings: { type: 'line', xCols: ['x'], yCols: ['y'] } } as any,
           },
           {
-            id: 3,
-            name: 'Table C',
-            path: '/org/Table C',
-            type: 'question',
-            isDirty: false,
+            id: 3, name: 'Table C', path: '/org/Table C', type: 'question', isDirty: false,
             queryResultId: 'qr-c',
             content: { vizSettings: { type: 'table', xCols: [], yCols: [] } } as any,
           },
@@ -289,9 +213,9 @@ describe('dashboard with multiple charts', () => {
     };
 
     const qrMap: Record<string, ReduxQueryResult> = {
-      'qr-a': { query: 'SELECT 1', params: {}, database: 'test', data: { columns: ['x', 'y'], types: ['varchar', 'number'], rows: [['a', 1]] }, updatedAt: 1000, loading: false, error: null },
-      'qr-b': { query: 'SELECT 2', params: {}, database: 'test', data: { columns: ['x', 'y'], types: ['varchar', 'number'], rows: [['b', 2]] }, updatedAt: 1000, loading: false, error: null },
-      'qr-c': { query: 'SELECT 3', params: {}, database: 'test', data: { columns: ['x', 'y'], types: ['varchar', 'number'], rows: [['c', 3]] }, updatedAt: 1000, loading: false, error: null },
+      'qr-a': { query: 'S1', params: {}, database: 'test', data: { columns: ['x', 'y'], types: ['varchar', 'number'], rows: [['a', 1]] }, updatedAt: 1000, loading: false, error: null },
+      'qr-b': { query: 'S2', params: {}, database: 'test', data: { columns: ['x', 'y'], types: ['varchar', 'number'], rows: [['b', 2]] }, updatedAt: 1000, loading: false, error: null },
+      'qr-c': { query: 'S3', params: {}, database: 'test', data: { columns: ['x', 'y'], types: ['varchar', 'number'], rows: [['c', 3]] }, updatedAt: 1000, loading: false, error: null },
     };
 
     mockRenderCharts
@@ -303,8 +227,7 @@ describe('dashboard with multiple charts', () => {
 
     const attachments = await buildChartAttachments(dashboardAppState, qrMap, 'dark');
 
-    // Chart A + Chart B rendered; table (Chart C) skipped
-    expect(mockRenderCharts).toHaveBeenCalledTimes(2);
+    expect(mockRenderCharts).toHaveBeenCalledTimes(2); // Chart A + B; table skipped
     expect(mockUploadFile).toHaveBeenCalledTimes(2);
     expect(attachments).toHaveLength(2);
     expect(attachments.map(a => a.content)).toEqual([

@@ -17,8 +17,7 @@ import { useConfigs } from '@/lib/hooks/useConfigs';
 import { Tooltip } from '@/components/ui/tooltip';
 import { toaster } from '@/components/ui/toaster';
 import { clearChatAttachments } from '@/store/uiSlice';
-import { buildChartAttachments, prewarmChartDataUrls } from '@/lib/chart/chart-attachments';
-import type { QueryResult as ReduxQueryResult } from '@/store/queryResultsSlice';
+import { buildChartAttachments } from '@/lib/chart/chart-attachments';
 import ExampleQuestions from './message/ExampleQuestions';
 import FileNotFound from '../FileNotFound';
 import { deduplicateMessages } from './message/messageHelpers';
@@ -133,41 +132,6 @@ export default function ChatInterface({
   const userIsAdmin = effectiveUser?.role ? isAdmin(effectiveUser.role) : false;
   const queryResultsMap = useAppSelector(state => state.queryResults.results);
   const colorMode = useAppSelector(state => state.ui.colorMode) as 'light' | 'dark';
-
-  // Stable refs so the pre-warm effect can capture the latest values without them being deps.
-  const appStateRef = useRef(appState);
-  appStateRef.current = appState;
-  const queryResultsMapRef = useRef(queryResultsMap);
-  queryResultsMapRef.current = queryResultsMap;
-
-  // Compact digest of the updatedAt timestamps for charts on this page.
-  // Changes only when relevant data refreshes — prevents the effect from firing for
-  // unrelated query-result updates happening elsewhere in the app.
-  const relevantUpdatedAts = useMemo(() => {
-    if (appState?.type !== 'file') return '';
-    const { fileState, references } = appState.state;
-    const ids: string[] = [];
-    if (fileState.type === 'question') {
-      const id = (fileState as any).queryResultId as string | undefined;
-      if (id) ids.push(id);
-    } else if (fileState.type === 'dashboard') {
-      (references ?? []).forEach(ref => {
-        const id = (ref as any).queryResultId as string | undefined;
-        if (id) ids.push(id);
-      });
-    }
-    return ids.map(id => `${id}:${queryResultsMap[id]?.updatedAt ?? 0}`).join(',');
-  }, [appState, queryResultsMap]);
-
-  // Pre-warm the render cache (level 1) silently when chart data loads or refreshes.
-  // Renders charts to data URLs in the background — no S3 upload, nothing wasted if the user
-  // never sends. On first Send, only the upload step remains (~200–500 ms vs full render+upload).
-  useEffect(() => {
-    if (!relevantUpdatedAts) return;
-    prewarmChartDataUrls(appStateRef.current, queryResultsMapRef.current, colorMode).catch(() => {});
-    // appState/queryResultsMap captured via refs; relevantUpdatedAts encodes all chart data changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [relevantUpdatedAts, colorMode]);
 
   // Case 1: existing conversation — follow fork chain from loaded conversation
   const forkFollowedConversation = useAppSelector(state => {
