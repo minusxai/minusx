@@ -435,54 +435,49 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
                 {/* Section Header */}
                 {showHeader && (
                   <HStack
-                    px={4}
-                    py={3}
+                    px={3}
+                    py={1.5}
                     cursor="pointer"
                     onClick={() => toggleSection(section.key)}
-                    bg="bg.muted"
-                    _hover={{ bg: 'bg.emphasized' }}
-                    borderRadius="md"
+                    _hover={{ bg: 'bg.subtle' }}
+                    borderRadius="sm"
                     transition="background 0.15s"
                     userSelect="none"
-                    mt={sectionIdx > 0 ? 2 : 0}
-                    // mb={1}
-                    borderBottom="1px solid"
-                    borderColor="border.muted"
+                    mt={sectionIdx > 0 ? 1 : 0}
                     aria-label={`${section.label} section`}
                   >
                     <Icon
                       as={isCollapsed ? LuChevronRight : LuChevronDown}
-                      boxSize={4.5}
+                      boxSize={3.5}
                       color={sectionMeta?.color || 'fg.muted'}
                     />
-                    {sectionMeta && (
-                      <Icon
-                        as={sectionMeta.icon}
-                        boxSize={5}
-                        color={sectionMeta.color}
-                      />
-                    )}
                     <Text
-                      fontSize="sm"
-                      fontWeight="800"
-                      color="fg.default"
+                      fontSize="2xs"
+                      fontWeight="600"
+                      color="fg.muted"
                       textTransform="uppercase"
                       letterSpacing="0.05em"
                     >
                       {section.label}
                     </Text>
-                    <Text
-                      fontSize="xs"
-                      fontWeight="600"
-                      color="fg.muted"
-                      fontFamily="mono"
-                      bg="bg.muted"
-                      px={2}
-                      py={0.5}
+                    <Flex
+                      align="center"
+                      justify="center"
+                      boxSize={4}
                       borderRadius="full"
+                      bg={sectionMeta?.color ? `${sectionMeta.color}/10` : 'bg.emphasized'}
+                      flexShrink={0}
                     >
-                      {section.files.length}
-                    </Text>
+                      <Text
+                        fontSize="2xs"
+                        color={sectionMeta?.color || 'fg.muted'}
+                        fontFamily="mono"
+                        lineHeight="1"
+                      >
+                        {section.files.length}
+                      </Text>
+                    </Flex>
+                    <Box flex="1" h="1px" bg="border.muted" />
                   </HStack>
                 )}
 
