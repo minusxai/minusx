@@ -259,6 +259,13 @@ export const PivotAxisBuilder = ({
           >
             <Text fontSize="xs" color="fg.muted">Heatmap</Text>
           </Checkbox>
+          <Checkbox
+            checked={config.compact === true}
+            onCheckedChange={(e) => onPivotConfigChange({ ...config, compact: e.checked })}
+            size="sm"
+          >
+            <Text fontSize="xs" color="fg.muted">Compact</Text>
+          </Checkbox>
         </HStack>
         {(showRowFormulas || showColFormulas) && (
           <HStack
