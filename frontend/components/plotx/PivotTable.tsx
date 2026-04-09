@@ -6,6 +6,7 @@ import { Tooltip } from '@/components/ui/tooltip'
 import { LuChevronUp, LuChevronRight, LuSquareFunction } from 'react-icons/lu'
 import { formatLargeNumber, formatNumber, formatDateValue, applyPrefixSuffix } from '@/lib/chart/chart-utils'
 import type { PivotData, FormulaResults } from '@/lib/chart/pivot-utils'
+import { useAppSelector } from '@/store/hooks'
 import type { ColumnFormatConfig } from '@/lib/types'
 
 type HeatmapScale = 'red-yellow-green' | 'green' | 'blue'
@@ -59,6 +60,8 @@ export const PivotTable = ({
   columnFormats,
   valueColumns,
 }: PivotTableProps) => {
+  const colorMode = useAppSelector((state) => state.ui.colorMode) as 'light' | 'dark'
+  const isDark = colorMode === 'dark'
   const { rowHeaders, columnHeaders, cells, rowTotals, valueLabels } = pivotData
 
   // Format a numeric cell value using per-value-column decimal/prefix/suffix config
@@ -122,15 +125,29 @@ export const PivotTable = ({
     let r: number, g: number, b: number
 
     if (heatmapScale === 'green') {
-      // Single-hue green (GitHub-style): light → dark green
-      r = Math.round(235 - normalized * 195)
-      g = Math.round(245 - normalized * 100)
-      b = Math.round(235 - normalized * 195)
+      if (isDark) {
+        // Dark mode: dark muted green → bright green
+        r = Math.round(20 + normalized * 20)
+        g = Math.round(35 + normalized * 130)
+        b = Math.round(20 + normalized * 25)
+      } else {
+        // Light mode: light → dark green
+        r = Math.round(235 - normalized * 195)
+        g = Math.round(245 - normalized * 100)
+        b = Math.round(235 - normalized * 195)
+      }
     } else if (heatmapScale === 'blue') {
-      // Single-hue blue: light → dark blue
-      r = Math.round(235 - normalized * 195)
-      g = Math.round(235 - normalized * 135)
-      b = Math.round(255 - normalized * 55)
+      if (isDark) {
+        // Dark mode: dark muted blue → bright blue
+        r = Math.round(15 + normalized * 30)
+        g = Math.round(25 + normalized * 75)
+        b = Math.round(50 + normalized * 150)
+      } else {
+        // Light mode: light → dark blue
+        r = Math.round(235 - normalized * 195)
+        g = Math.round(235 - normalized * 135)
+        b = Math.round(255 - normalized * 55)
+      }
     } else {
       // red-yellow-green (default)
       if (normalized < 0.5) {
@@ -147,7 +164,7 @@ export const PivotTable = ({
     }
 
     return `rgba(${r}, ${g}, ${b}, ${alpha})`
-  }, [showHeatmap, minValue, maxValue, compact, heatmapScale])
+  }, [showHeatmap, minValue, maxValue, compact, heatmapScale, isDark])
 
   // Column entries: interleave regular data columns with formula columns
   const columnEntries = useMemo((): ColEntry[] => {
@@ -772,10 +789,10 @@ export const PivotTable = ({
       borderRadius="md"
     >
       <ChakraTable.Root size="sm" css={{ borderCollapse: 'separate', borderSpacing: compact ? '1px' : 0, ...(compact ? { '& td, & th': { borderBottom: 'none', borderRadius: '2px' } } : { '& td, & th': { borderBottom: '1px solid', borderColor: 'var(--chakra-colors-fg-subtle)' } }) }}>
-        <ChakraTable.Header position="sticky" top={0} zIndex={5} bg="bg.emphasis">
+        <ChakraTable.Header position="sticky" top={0} zIndex={5} bg="bg.muted">
           {/* Column header rows */}
           {augmentedColHeaderRows.map((headerRow, rowIdx) => (
-            <ChakraTable.Row key={rowIdx} bg="bg.emphasis">
+            <ChakraTable.Row key={rowIdx} bg="bg.muted">
               {/* Row dimension name headers */}
               {rowIdx === 0 && numRowDims > 0 && (
                 Array.from({ length: numRowDims }, (_, dimIdx) => (
@@ -793,7 +810,7 @@ export const PivotTable = ({
 
                     position="sticky"
                     left={`${getLeftOffset(dimIdx)}px`}
-                    bg="bg.emphasis"
+                    bg="bg.muted"
                     zIndex={4}
                     w={`${ROW_DIM_COL_W}px`}
                     minW={`${ROW_DIM_COL_W}px`}
@@ -815,13 +832,13 @@ export const PivotTable = ({
                   fontSize={compact ? '2xs' : 'xs'}
                   textTransform="uppercase"
                   letterSpacing={compact ? undefined : '0.05em'}
-                  color={hdr.isFormula ? 'accent.secondary' : 'fg.muted'}
+                  color={hdr.isFormula ? 'accent.secondary' : compact ? 'fg.default' : 'fg.muted'}
                   textAlign="center"
                   minW={compact ? `${COMPACT_CELL_SIZE}px` : '80px'}
                   borderBottom={rowIdx < numHeaderRows - 1 ? '1px solid' : undefined}
                   borderColor="border.muted"
                   zIndex={3}
-                  bg={hdr.isFormula ? 'accent.secondary/12' : 'bg.emphasis'}
+                  bg={hdr.isFormula ? 'accent.secondary/12' : 'bg.muted'}
                   fontStyle={hdr.isFormula ? 'italic' : undefined}
                   {...(compact ? { px: 0, py: '4px', w: `${COMPACT_CELL_SIZE}px` } : {})}
                 >
@@ -874,7 +891,7 @@ export const PivotTable = ({
 
           {/* If no column dimensions, still show a header row with value labels */}
           {augmentedColHeaderRows.length === 0 && (
-            <ChakraTable.Row bg="bg.emphasis">
+            <ChakraTable.Row bg="bg.muted">
               {numRowDims > 0 && (
                 Array.from({ length: numRowDims }, (_, dimIdx) => (
                   <ChakraTable.ColumnHeader
@@ -889,7 +906,7 @@ export const PivotTable = ({
 
                     position="sticky"
                     left={`${getLeftOffset(dimIdx)}px`}
-                    bg="bg.emphasis"
+                    bg="bg.muted"
                     zIndex={4}
                     w={`${ROW_DIM_COL_W}px`}
                     minW={`${ROW_DIM_COL_W}px`}
@@ -910,7 +927,7 @@ export const PivotTable = ({
                   textAlign="right"
                   minW="80px"
                   zIndex={3}
-                  bg="bg.emphasis"
+                  bg="bg.muted"
                 >
                   {vl}
                 </ChakraTable.ColumnHeader>
