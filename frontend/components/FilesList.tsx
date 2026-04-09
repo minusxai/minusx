@@ -100,11 +100,12 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
     ? files
     : files.filter(f => selectedTypes.includes(f.type));
 
-  // Group files into sections: folders, dashboards, questions, other
-  const SECTION_ORDER = ['folder', 'dashboard', 'question', '_other'] as const;
+  // Group files into sections: knowledge base, dashboards, folders, questions, other
+  const SECTION_ORDER = ['context', 'dashboard', 'folder', 'question', '_other'] as const;
   type SectionKey = typeof SECTION_ORDER[number];
 
   const SECTION_LABELS: Record<SectionKey, string> = {
+    context: 'Knowledge Base',
     folder: 'Folders',
     dashboard: 'Dashboards',
     question: 'Questions',
@@ -113,6 +114,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
 
   const sections = useMemo(() => {
     const groups: Record<SectionKey, DbFile[]> = {
+      context: [],
       folder: [],
       dashboard: [],
       question: [],
@@ -120,7 +122,8 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
     };
 
     filtered.forEach(f => {
-      if (f.type === 'folder') groups.folder.push(f);
+      if (f.type === 'context') groups.context.push(f);
+      else if (f.type === 'folder') groups.folder.push(f);
       else if (f.type === 'dashboard') groups.dashboard.push(f);
       else if (f.type === 'question') groups.question.push(f);
       else groups._other.push(f);
@@ -136,11 +139,11 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
       .filter(s => s.files.length > 0);
   }, [filtered]);
 
-  // Track collapsed sections — dashboard always open, others closed unless they're the only section
+  // Track collapsed sections — knowledge base is always open, dashboards/folders open by default
   const [collapsedSections, setCollapsedSections] = useState<Set<SectionKey>>(new Set(['question', '_other']));
 
-  // If no folder/dashboard sections exist, force-open the remaining sections
-  const hasPrimarySections = sections.some(s => s.key === 'folder' || s.key === 'dashboard');
+  // If no primary sections exist, force-open the remaining sections
+  const hasPrimarySections = sections.some(s => s.key === 'context' || s.key === 'dashboard' || s.key === 'folder');
   const effectiveCollapsed = hasPrimarySections
     ? collapsedSections
     : new Set([...collapsedSections].filter(k => !sections.some(s => s.key === k)));
@@ -418,8 +421,9 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
       ) : (
         <VStack gap={0} align="stretch">
           {sections.map((section, sectionIdx) => {
-            const isCollapsed = effectiveCollapsed.has(section.key);
-            const showHeader = true;
+            const isCollapsible = section.key !== 'context';
+            const isCollapsed = isCollapsible && effectiveCollapsed.has(section.key);
+            const showHeader = isCollapsible;
             // Get representative metadata for section icon/color
             const sectionMeta = section.key !== '_other'
               ? FILE_TYPE_METADATA[section.key as keyof typeof FILE_TYPE_METADATA]
