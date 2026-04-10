@@ -18,7 +18,7 @@ export function getGeoConstraintError(
 
   switch (config.subType) {
     case 'choropleth': {
-      if (!config.mapName) return { error: 'Select a base map for the choropleth.' }
+      if (!config.mapName) return { error: 'Select a GeoJSON map for the choropleth.' }
       if (!config.regionCol) return { error: 'Region Column is required for choropleth.' }
       if (!has(config.regionCol)) return { error: `Region Column "${config.regionCol}" not found in data.` }
       if (!config.valueCol) return { error: 'Value Column is required for choropleth.' }

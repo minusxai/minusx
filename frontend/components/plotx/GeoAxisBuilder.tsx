@@ -267,7 +267,7 @@ export function GeoAxisBuilder({
                     }}
                     size="sm"
                   >
-                    <Text fontSize="xs" color="fg.muted">Base Map</Text>
+                    <Text fontSize="xs" color="fg.muted">GeoJSON Map</Text>
                   </Checkbox>
                   {!!config.mapName && (
                     <SelectRoot
@@ -301,7 +301,7 @@ export function GeoAxisBuilder({
                   onCheckedChange={(e) => updateConfig({ showTiles: !!e.checked })}
                   size="sm"
                 >
-                  <Text fontSize="xs" color="fg.muted">Show Map Tiles</Text>
+                  <Text fontSize="xs" color="fg.muted">OpenStreetMap Tiles</Text>
                 </Checkbox>
               </HStack>
 

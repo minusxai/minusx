@@ -12,9 +12,9 @@ export async function loadGeoJSON(mapName: string): Promise<FeatureCollection> {
 }
 
 export const MAP_OPTIONS = [
-  { value: 'world', label: 'World Countries' },
-  { value: 'us-states', label: 'US States' },
-  { value: 'india-states', label: 'India States' },
+  { value: 'world', label: 'World (Countries)' },
+  { value: 'us-states', label: 'US (States)' },
+  { value: 'india-states', label: 'India (States)' },
 ] as const
 
 export type MapName = typeof MAP_OPTIONS[number]['value']
