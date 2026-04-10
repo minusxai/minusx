@@ -105,7 +105,7 @@ export async function buildChartAttachments(
 
         const [rendered] = await clientChartImageRenderer.renderCharts(
           [{ queryResult, vizSettings, titleOverride }],
-          { width: 512, colorMode, addWatermark: false },
+          { width: 512, colorMode, addWatermark: false, padding: false },
         );
         if (!rendered) return null;
 

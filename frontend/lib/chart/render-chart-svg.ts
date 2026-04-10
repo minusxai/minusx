@@ -43,6 +43,9 @@ export interface RenderChartOptions {
   logoPath?: string;
   /** Override auto-generated chart title (e.g. use the file/question name). */
   titleOverride?: string;
+  /** When true, adds a bottom footer strip so the logo sits inside it rather
+   *  than overlapping chart content. Default: false. */
+  padding?: boolean;
 }
 
 function buildChartTitle(xCols: string[], yCols: string[]): string | undefined {

@@ -17,7 +17,7 @@ const NO_LOGO = '/dev/null/no-logo'
 
 export const serverChartImageRenderer: IChartImageRenderer = {
   async renderCharts(inputs: ChartInput[], options: ChartRenderOptions): Promise<RenderedChart[]> {
-    const { width, colorMode, addWatermark } = options
+    const { width, colorMode, addWatermark, padding } = options
     const height = Math.round(width * 0.5625) // 16:9
     const logoPath = addWatermark ? undefined : NO_LOGO
     const results: RenderedChart[] = []
@@ -29,6 +29,7 @@ export const serverChartImageRenderer: IChartImageRenderer = {
         colorMode,
         logoPath,
         titleOverride,
+        padding,
       })
       if (!buf) continue
       const label = titleOverride ?? vizSettings.type

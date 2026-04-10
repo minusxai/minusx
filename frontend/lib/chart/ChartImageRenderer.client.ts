@@ -107,14 +107,14 @@ async function renderSingleChartToDataUrl(
 
 export const clientChartImageRenderer: IChartImageRenderer = {
   async renderCharts(inputs: ChartInput[], options: ChartRenderOptions): Promise<RenderedChart[]> {
-    const { width, colorMode, addWatermark } = options
+    const { width, colorMode, addWatermark, padding } = options
     const height = Math.round(width * 0.5625) // 16:9
 
     const settled = await Promise.all(
       inputs.map(async ({ queryResult, vizSettings, titleOverride }) => {
         const rawUrl = await renderSingleChartToDataUrl(queryResult, vizSettings, colorMode, width, height, titleOverride)
         if (!rawUrl) return null
-        const dataUrl = await toJpegObjectUrl(rawUrl, width, addWatermark, colorMode)
+        const dataUrl = await toJpegObjectUrl(rawUrl, width, addWatermark, colorMode, padding)
         return { label: titleOverride ?? vizSettings.type, dataUrl } satisfies RenderedChart
       })
     )

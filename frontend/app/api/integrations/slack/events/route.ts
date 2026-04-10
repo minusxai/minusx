@@ -193,7 +193,7 @@ export async function processSlackEvent(
       const queryCharts = extractQueryCharts(result.logDiff);
       const renderedCharts = await serverChartImageRenderer.renderCharts(
         queryCharts.map(c => ({ queryResult: c.queryResult, vizSettings: c.vizSettings })),
-        { width: 1024, colorMode: 'dark', addWatermark: true },
+        { width: 1024, colorMode: 'dark', addWatermark: true, padding: true },
       ).catch(err => { console.warn('[Slack] Chart rendering failed:', err); return []; });
       for (const rendered of renderedCharts) {
         try {

@@ -22,13 +22,15 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 
 /**
  * Scale a chart image to fit within maxWidth (preserving aspect ratio),
- * optionally overlay a semi-transparent MinusX logo watermark in the
- * bottom-right corner, then encode as JPEG and return an object URL.
+ * optionally add a bottom padding strip with a semi-transparent logo watermark
+ * in the bottom-right corner, then encode as JPEG and return an object URL.
  *
  * @param source       Raw image — data URL string or Blob (e.g. PNG from ECharts getDataURL)
  * @param maxWidth     Scale output down to at most this width; never upscales
- * @param addWatermark Overlay semi-transparent logo in bottom-right corner
+ * @param addWatermark Include the MinusX logo
  * @param colorMode    Controls background fill colour and logo variant (dark/light)
+ * @param padding      When true, logo is placed in a dedicated bottom strip rather than
+ *                     overlapping chart content. Strip height = logoH + pad (bottom-right corner).
  * @returns            Object URL pointing to the encoded JPEG blob
  */
 export async function toJpegObjectUrl(
@@ -36,6 +38,7 @@ export async function toJpegObjectUrl(
   maxWidth: number,
   addWatermark: boolean,
   colorMode: 'light' | 'dark',
+  padding?: boolean,
 ): Promise<string> {
   const isBlobSrc = source instanceof Blob;
   const srcUrl = isBlobSrc ? URL.createObjectURL(source) : source;
@@ -47,24 +50,45 @@ export async function toJpegObjectUrl(
     const canvasW = Math.round(img.naturalWidth * scale);
     const canvasH = Math.round(img.naturalHeight * scale);
 
+    // When padding=true, add a constant-height footer strip of P px.
+    // The watermark is sized to 60% of P and centred in the bottom-right P×P square,
+    // so it always fits inside the padding area with equal gaps on all four sides.
+    const P = 48; // constant padding in px — footerH, right gap, and logo bounding box are all P
+    const footerH = padding && addWatermark ? P : 0;
+
     const canvas = document.createElement('canvas');
     canvas.width = canvasW;
-    canvas.height = canvasH;
+    canvas.height = canvasH + footerH;
     const ctx = canvas.getContext('2d')!;
 
-    ctx.fillStyle = colorMode === 'dark' ? '#161b22' : '#ffffff';
-    ctx.fillRect(0, 0, canvasW, canvasH);
+    const bg = colorMode === 'dark' ? '#161b22' : '#ffffff';
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, canvasW, canvasH + footerH);
     ctx.drawImage(img, 0, 0, canvasW, canvasH);
 
     if (addWatermark) {
       try {
         const logoSrc = colorMode === 'dark' ? '/logox.svg' : '/logox_dark.svg';
         const logo = await loadImage(logoSrc);
-        const logoH = Math.max(12, Math.round(canvasH * 0.08));
-        const logoW = Math.round(logoH * (logo.naturalWidth / (logo.naturalHeight || 1)));
-        const pad = Math.round(canvasH * 0.03);
-        ctx.globalAlpha = 0.45;
-        ctx.drawImage(logo, canvasW - logoW - pad, canvasH - logoH - pad, logoW, logoH);
+        const aspect = logo.naturalWidth / (logo.naturalHeight || 1);
+        ctx.globalAlpha = 0.65;
+        if (padding) {
+          // Logo sized to 60% of P, centred in the bottom-right P×P square.
+          // With a square logo (logox is 65×65) this gives equal gaps on all four sides.
+          const logoSize = Math.round(P * 0.6); // fits within P with 20% gap each side
+          const logoW = Math.round(logoSize * aspect);
+          const logoH = logoSize;
+          const logoX = (canvasW - P) + Math.floor((P - logoW) / 2);
+          const logoY = canvasH      + Math.floor((P - logoH) / 2);
+          ctx.drawImage(logo, logoX, logoY, logoW, logoH);
+        } else {
+          // Watermark overlaps chart at bottom-right (original behaviour).
+          const overlapSize = Math.max(18, Math.min(28, Math.round(canvasH * 0.05)));
+          const logoH = overlapSize;
+          const logoW = Math.round(logoH * aspect);
+          const gap = 14;
+          ctx.drawImage(logo, canvasW - logoW - gap, canvasH - logoH - gap, logoW, logoH);
+        }
         ctx.globalAlpha = 1;
       } catch {
         // Logo failed — output image without watermark
