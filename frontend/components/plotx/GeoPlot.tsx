@@ -236,9 +236,47 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColo
           const val = valueMap.get(name)
           if (val === undefined) return
 
-          // Get centroid of the region
-          const bounds = (layer as L.Polygon).getBounds()
-          const center = bounds.getCenter()
+          // Compute polygon centroid using the signed-area formula
+          const center = (() => {
+            const geom = geoJsonLayer.feature.geometry as unknown as { type: string; coordinates: number[][][] | number[][][][] }
+            // Collect outer rings: Polygon → [ring], MultiPolygon → [ring, ring, ...]
+            const rings: number[][][] =
+              geom.type === 'MultiPolygon'
+                ? (geom.coordinates as number[][][][]).map(poly => poly[0])
+                : geom.type === 'Polygon'
+                  ? [geom.coordinates[0] as number[][]]
+                  : []
+
+            // Find the ring with the largest absolute area (main landmass)
+            let bestRing = rings[0]
+            let bestArea = 0
+            for (const ring of rings) {
+              let a = 0
+              for (let i = 0; i < ring.length - 1; i++) {
+                a += ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1]
+              }
+              if (Math.abs(a) > Math.abs(bestArea)) { bestArea = a; bestRing = ring }
+            }
+
+            if (!bestRing || bestRing.length < 3) return (layer as L.Polygon).getBounds().getCenter()
+
+            // Signed-area centroid of the largest ring
+            let cx = 0, cy = 0, a = 0
+            for (let i = 0; i < bestRing.length - 1; i++) {
+              const [x0, y0] = bestRing[i]
+              const [x1, y1] = bestRing[i + 1]
+              const cross = x0 * y1 - x1 * y0
+              a += cross
+              cx += (x0 + x1) * cross
+              cy += (y0 + y1) * cross
+            }
+            if (Math.abs(a) < 1e-10) return (layer as L.Polygon).getBounds().getCenter()
+            a *= 0.5
+            cx /= (6 * a)
+            cy /= (6 * a)
+            // GeoJSON coordinates are [lng, lat]
+            return L.latLng(cy, cx)
+          })()
 
           const colFmt = geoConfig.valueCol ? columnFormats[geoConfig.valueCol] : undefined
           const formattedVal = applyPrefixSuffix(
