@@ -14,9 +14,9 @@ export { TrendPlot } from './TrendPlot'
 export { WaterfallPlot } from './WaterfallPlot'
 export { ComboPlot } from './ComboPlot'
 export { RadarPlot } from './RadarPlot'
-export { GeoPlot } from './GeoPlot'
 export { GeoAxisBuilder } from './GeoAxisBuilder'
-export { LeafletMap } from './LeafletMap'
+// GeoPlot and LeafletMap import leaflet which accesses window at module load time.
+// Import them via next/dynamic with ssr:false at the call site instead of from this barrel.
 export { ColorScalePicker } from './ColorScalePicker'
 export { ChartError } from './ChartError'
 export { ChartBuilder } from './ChartBuilder'

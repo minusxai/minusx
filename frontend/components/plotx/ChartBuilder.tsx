@@ -15,7 +15,6 @@ import { TrendPlot } from './TrendPlot'
 import { WaterfallPlot } from './WaterfallPlot'
 import { RadarPlot } from './RadarPlot'
 import { ComboPlot } from './ComboPlot'
-import { GeoPlot } from './GeoPlot'
 import { GeoAxisBuilder } from './GeoAxisBuilder'
 import { ChartError } from './ChartError'
 import { DrillDownCard, type DrillDownState } from './DrillDownCard'
@@ -35,6 +34,12 @@ import type { CompanyBranding } from '@/lib/branding/whitelabel'
 import type { ChartAnnotation } from '@/lib/types'
 import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client'
 import { useAppSelector } from '@/store/hooks'
+import dynamic from 'next/dynamic'
+
+// GeoPlot imports leaflet.heat which accesses `window` at module evaluation time — ssr:false prevents
+// this module from being evaluated on the server during Next.js prerendering.
+// eslint-disable-next-line no-restricted-syntax
+const GeoPlot = dynamic(() => import('./GeoPlot').then((m) => ({ default: m.GeoPlot })), { ssr: false })
 
 interface ChartBuilderProps {
   columns: string[]
