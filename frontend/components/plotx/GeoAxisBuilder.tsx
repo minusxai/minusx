@@ -122,7 +122,7 @@ export function GeoAxisBuilder({
       emptyText,
       items: config[field] ? [{ column: config[field] as string }] : [],
       onDrop: (col: string) => updateConfig({ [field]: col }),
-      onRemove: () => updateConfig({ [field]: undefined }),
+      onRemove: () => updateConfig({ [field]: null }),
     }),
     [config, updateConfig],
   )

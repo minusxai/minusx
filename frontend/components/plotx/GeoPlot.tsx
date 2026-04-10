@@ -27,8 +27,32 @@ const GEO_BORDER = {
 
 /** Default style for unmatched regions */
 const GEO_ONLY_STYLE = {
-  light: { fillColor: '#D0D7DE', weight: 0.5, color: GEO_BORDER.light, fillOpacity: 0.25 } as L.PathOptions,
-  dark: { fillColor: '#30363D', weight: 0.5, color: GEO_BORDER.dark, fillOpacity: 0.3 } as L.PathOptions,
+  light: { fillColor: '#D0D7DE', weight: 0.3, color: '#ccc', fillOpacity: 0.15 } as L.PathOptions,
+  dark: { fillColor: '#30363D', weight: 0.3, color: '#555', fillOpacity: 0.15 } as L.PathOptions,
+}
+
+/** Generate intermediate points along a great-circle arc */
+function greatCircleArc(lat1: number, lng1: number, lat2: number, lng2: number, numPoints = 50): [number, number][] {
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const toDeg = (r: number) => (r * 180) / Math.PI
+  const φ1 = toRad(lat1), λ1 = toRad(lng1)
+  const φ2 = toRad(lat2), λ2 = toRad(lng2)
+  const d = 2 * Math.asin(Math.sqrt(
+    Math.sin((φ2 - φ1) / 2) ** 2 +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin((λ2 - λ1) / 2) ** 2,
+  ))
+  if (d < 1e-10) return [[lat1, lng1], [lat2, lng2]]
+  const points: [number, number][] = []
+  for (let i = 0; i <= numPoints; i++) {
+    const f = i / numPoints
+    const a = Math.sin((1 - f) * d) / Math.sin(d)
+    const b = Math.sin(f * d) / Math.sin(d)
+    const x = a * Math.cos(φ1) * Math.cos(λ1) + b * Math.cos(φ2) * Math.cos(λ2)
+    const y = a * Math.cos(φ1) * Math.sin(λ1) + b * Math.cos(φ2) * Math.sin(λ2)
+    const z = a * Math.sin(φ1) + b * Math.sin(φ2)
+    points.push([toDeg(Math.atan2(z, Math.sqrt(x * x + y * y))), toDeg(Math.atan2(y, x))])
+  }
+  return points
 }
 
 export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
@@ -171,7 +195,10 @@ export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
       case 'lines': {
         if (!geoConfig.latCol || !geoConfig.lngCol || !geoConfig.latCol2 || !geoConfig.lngCol2) break
 
-        const polylines: L.Polyline[] = []
+        const lineColor = colorMode === 'dark' ? GEO_MARKER_COLOR_DARK : GEO_MARKER_COLOR
+        const lineLayers: L.Layer[] = []
+        const allLatLngs: L.LatLng[] = []
+
         for (const row of rows) {
           const lat1 = Number(row[geoConfig.latCol])
           const lng1 = Number(row[geoConfig.lngCol])
@@ -179,18 +206,42 @@ export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
           const lng2 = Number(row[geoConfig.lngCol2])
           if (isNaN(lat1) || isNaN(lng1) || isNaN(lat2) || isNaN(lng2)) continue
 
-          const line = L.polyline([[lat1, lng1], [lat2, lng2]], {
-            color: colorMode === 'dark' ? GEO_MARKER_COLOR_DARK : GEO_MARKER_COLOR,
+          // Arc line
+          const arcPoints = greatCircleArc(lat1, lng1, lat2, lng2)
+          const line = L.polyline(arcPoints, {
+            color: lineColor,
             weight: 2,
             opacity: 0.7,
           })
-          polylines.push(line)
+          lineLayers.push(line)
+
+          // Start point
+          const start = L.circleMarker([lat1, lng1], {
+            radius: 3,
+            fillColor: lineColor,
+            color: lineColor,
+            weight: 1,
+            fillOpacity: 0.9,
+          })
+          lineLayers.push(start)
+
+          // End point
+          const end = L.circleMarker([lat2, lng2], {
+            radius: 3,
+            fillColor: lineColor,
+            color: lineColor,
+            weight: 1,
+            fillOpacity: 0.9,
+          })
+          lineLayers.push(end)
+
+          allLatLngs.push(L.latLng(lat1, lng1), L.latLng(lat2, lng2))
         }
 
-        if (polylines.length > 0) {
-          const group = L.layerGroup(polylines)
+        if (lineLayers.length > 0) {
+          const group = L.layerGroup(lineLayers)
           builtLayers.push(group)
-          const lineBounds = L.latLngBounds(polylines.flatMap((p) => p.getLatLngs() as L.LatLng[]))
+          const lineBounds = L.latLngBounds(allLatLngs)
           builtBounds = builtBounds ? builtBounds.extend(lineBounds) : lineBounds
         }
         break
