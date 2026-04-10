@@ -44,6 +44,7 @@ interface QuestionVisualizationProps {
   onYRightColsChange?: (yRightCols: string[]) => void;
   onTooltipColsChange?: (cols: string[]) => void;
   onPivotConfigChange?: (config: PivotConfig) => void;
+  onGeoConfigChange?: (config: import('@/lib/types.gen').GeoConfig) => void;
   onColumnFormatsChange?: (formats: Record<string, ColumnFormatConfig>) => void;
   onStyleConfigChange?: (config: VisualizationStyleConfig) => void;
   onAxisConfigChange?: (config: import('@/lib/types').AxisConfig) => void;
@@ -131,6 +132,7 @@ export function QuestionVisualization({
   onYRightColsChange,
   onTooltipColsChange,
   onPivotConfigChange,
+  onGeoConfigChange,
   onColumnFormatsChange,
   onStyleConfigChange,
   onAxisConfigChange,
@@ -149,6 +151,13 @@ export function QuestionVisualization({
 
   const [vizSettingsExpanded, setVizSettingsExpanded] = useState(false);
 
+  const handleVizTypeChangeWithAutoExpand = (type: VizSettings['type']) => {
+    if (type !== 'table') {
+      setVizSettingsExpanded(true);
+    }
+    onVizTypeChange(type);
+  };
+
   if (!currentState) {
     return null;
   }
@@ -166,7 +175,7 @@ export function QuestionVisualization({
           <Box flexShrink={1} minWidth={0}>
             <VizTypeSelector
               value={currentState?.vizSettings?.type || 'table'}
-              onChange={onVizTypeChange}
+              onChange={handleVizTypeChangeWithAutoExpand}
               orientation={config.viz.typesButtonsOrientation}
             />
           </Box>
@@ -370,7 +379,8 @@ export function QuestionVisualization({
                   currentState?.vizSettings?.type === 'trend' ||
                   currentState?.vizSettings?.type === 'waterfall' ||
                   currentState?.vizSettings?.type === 'combo' ||
-                  currentState?.vizSettings?.type === 'radar') && (
+                  currentState?.vizSettings?.type === 'radar' ||
+                  currentState?.vizSettings?.type === 'geo') && (
                   <Box flex="1" width="100%" overflow="hidden" minHeight="0" display="flex">
                     <ChartBuilder
                       columns={data.columns}
@@ -389,6 +399,8 @@ export function QuestionVisualization({
                       fillHeight={true}
                       initialPivotConfig={currentState.vizSettings?.pivotConfig ?? undefined}
                       onPivotConfigChange={onPivotConfigChange}
+                      initialGeoConfig={currentState.vizSettings?.geoConfig ?? undefined}
+                      onGeoConfigChange={onGeoConfigChange}
                       sql={currentState?.query}
                       databaseName={currentState?.connection_name}
                       initialColumnFormats={currentState.vizSettings?.columnFormats ?? undefined}

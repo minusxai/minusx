@@ -167,7 +167,7 @@ templates:
         "description": "User demographics query"
       }}
       ```
-      - **VizSettings**: `table`, `line`, `bar`, `area`, `scatter`, `funnel`, `pie`, `radar`, `pivot`. Use `LoadSkill("visualizations")` for complex configs.
+      - **VizSettings**: `table`, `line`, `bar`, `area`, `scatter`, `funnel`, `pie`, `radar`, `pivot`, `geo`. Use `LoadSkill("visualizations")` for complex configs.
       - **Parameters**: `:paramName` syntax in SQL. Use `LoadSkill("parameters")` for types, sources, and dashboard merging, and complex scenarios.
       - **References**: `@alias` syntax for composed questions. Use `LoadSkill("composed_questions")` for details.
 
@@ -341,11 +341,11 @@ templates:
       - **Never** match query + parameters in one oldMatch — JSON key order is not guaranteed.
 
   skill_visualizations:
-    description: "VizSettings types (line, bar, area, scatter, funnel, pie, radar, pivot), xCols/yCols config, pivot table pivotConfig. Basic vizSettings are covered in the questions skill, but Load this skill for complex visualizations and options."
+    description: "VizSettings types (line, bar, area, scatter, funnel, pie, radar, pivot, geo), xCols/yCols config, pivot table pivotConfig, geo map geoConfig. Basic vizSettings are covered in the questions skill, but Load this skill for complex visualizations and options."
     content: |
       ## Skill: Visualizations
 
-      **VizSettings types**: `table`, `line`, `bar`, `area`, `scatter`, `funnel`, `pie`, `radar`, `pivot`
+      **VizSettings types**: `table`, `line`, `bar`, `area`, `scatter`, `funnel`, `pie`, `radar`, `pivot`, `geo`
 
       ### Standard Charts (line, bar, area, scatter)
       - `xCols`: grouping columns — the first one is used as x-axis, rest as grouping cols
@@ -391,6 +391,37 @@ templates:
       - **heatmapScale**: color scale — `"red-yellow-green"` (default), `"green"` (GitHub-style single-hue), `"blue"` (single-hue blue)
       - **compact**: when true, hides cell values and shows only colored squares with tooltips — like a GitHub contribution graph. Best for large date×category pivots where the pattern matters more than exact numbers. Automatically enables heatmap.
       - Renders multi-level nested row/column headers, subtotals, collapsible groups, and heatmap
+
+      ### Geo Map
+      When `type` is `"geo"`, use `geoConfig` instead of `xCols`/`yCols`. Four sub-types:
+
+      **Choropleth** — color-filled regions by value:
+      ```json
+      {{"type": "geo", "geoConfig": {{"subType": "choropleth", "mapName": "us-states", "regionCol": "state", "valueCol": "revenue"}}}}
+      ```
+      - `mapName`: `"world"`, `"us-states"`, or `"india-states"`
+      - `colorScale`: `"green"` (default), `"blue"`, `"red-yellow-green"`
+
+      **Points** — lat/lng markers with optional bubble sizing:
+      ```json
+      {{"type": "geo", "geoConfig": {{"subType": "points", "latCol": "lat", "lngCol": "lng", "valueCol": "population"}}}}
+      ```
+      - `valueCol` is optional — omit for uniform-size dots
+
+      **Lines** — arc lines between origin/destination pairs:
+      ```json
+      {{"type": "geo", "geoConfig": {{"subType": "lines", "latCol": "origin_lat", "lngCol": "origin_lng", "latCol2": "dest_lat", "lngCol2": "dest_lng"}}}}
+      ```
+
+      **Heatmap** — density heatmap with optional intensity:
+      ```json
+      {{"type": "geo", "geoConfig": {{"subType": "heatmap", "latCol": "lat", "lngCol": "lng", "valueCol": "intensity"}}}}
+      ```
+      - `colorScale`: same options as choropleth
+
+      **Shared options** (all sub-types):
+      - `showTiles`: `true`/`false` — show OpenStreetMap tile layer (default: false)
+      - `mapName`: optional for non-choropleth — adds country/state outlines as background
 
   skill_composed_questions:
     description: "Composed Questions (Question References) — @alias syntax for referencing other questions as CTEs in SQL. Read this skill for guidelines on how to use question references in your SQL queries, or if the SQL you are looking at contains question references(@alias)"
@@ -626,7 +657,7 @@ prompts:
       - **ExecuteQuery(query, connectionId, vizSettings?)**: Run SQL to test queries before adding them.
       - **CreateFile(file_type, name?, path?, content?)**: Create a new question as a draft. Returns the virtual file with its negative ID.
         - Question content: {{"query": "SELECT ...", "connection_name": "{connection_id}", "vizSettings": {{"type": "line", "xCols": ["col"], "yCols": ["col"]}}, "description": "..."}}
-        - VizSettings types: `table`, `line`, `bar`, `area`, `scatter`, `pie`, `funnel`, `pivot`
+        - VizSettings types: `table`, `line`, `bar`, `area`, `scatter`, `pie`, `funnel`, `pivot`, `geo`
         - For line/bar/area/scatter: set `xCols` (grouping) and `yCols` (values)
         - For pie/funnel: set `xCols` (categories) and `yCols` (values)
         - For table: no axis config needed

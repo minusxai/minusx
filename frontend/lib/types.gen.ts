@@ -29,7 +29,8 @@ export type VisualizationType =
   | "trend"
   | "waterfall"
   | "combo"
-  | "radar";
+  | "radar"
+  | "geo";
 /**
  * list of column names in the x axis (for non-pivot chart types)
  */
@@ -209,6 +210,46 @@ export type Ytitle = string | null;
  * enable dual Y-axis mode. When true, yRightCols in VizSettings determines which columns go on the right axis.
  */
 export type Dualaxis = boolean | null;
+/**
+ * geo visualization sub-type
+ */
+export type GeoSubType = "choropleth" | "points" | "lines" | "heatmap";
+/**
+ * base map name: 'world', 'us-states', 'india-states' (for choropleth)
+ */
+export type Mapname = string | null;
+/**
+ * column matching GeoJSON feature names (choropleth)
+ */
+export type Regioncol = string | null;
+/**
+ * numeric value column (color for choropleth, size for bubble)
+ */
+export type Valuecol = string | null;
+/**
+ * latitude column
+ */
+export type Latcol = string | null;
+/**
+ * longitude column
+ */
+export type Lngcol = string | null;
+/**
+ * destination latitude (lines only)
+ */
+export type Latcol2 = string | null;
+/**
+ * destination longitude (lines only)
+ */
+export type Lngcol2 = string | null;
+/**
+ * toggle tile layer on/off
+ */
+export type Showtiles = boolean | null;
+/**
+ * choropleth color scale: 'green' (default), 'blue', 'red-yellow-green'
+ */
+export type Colorscale = string | null;
 export type Parameters = QuestionParameter[] | null;
 export type Name2 = string;
 export type ParameterType = "text" | "number" | "date";
@@ -303,6 +344,10 @@ export interface VizSettings {
    * axis configuration for scale type (linear or log). Only set when user explicitly requests log scale.
    */
   axisConfig?: AxisConfig | null;
+  /**
+   * geo map configuration (only used when type is 'geo')
+   */
+  geoConfig?: GeoConfig | null;
 }
 /**
  * Configuration for pivot table visualization.
@@ -382,6 +427,21 @@ export interface AxisConfig {
   yMax?: Ymax;
   yTitle?: Ytitle;
   dualAxis?: Dualaxis;
+}
+/**
+ * Configuration for geo map visualization.
+ */
+export interface GeoConfig {
+  subType: GeoSubType;
+  mapName?: Mapname;
+  regionCol?: Regioncol;
+  valueCol?: Valuecol;
+  latCol?: Latcol;
+  lngCol?: Lngcol;
+  latCol2?: Latcol2;
+  lngCol2?: Lngcol2;
+  showTiles?: Showtiles;
+  colorScale?: Colorscale;
 }
 export interface QuestionParameter {
   name: Name2;

@@ -55,6 +55,10 @@ export function getVizConstraintError(
       if (xDataCount != null && xDataCount < 3) return { error: 'Radar charts need at least 3 categories to display meaningfully. Add more data or choose a different chart type.', variant: 'info' }
       return { error: null }
 
+    case 'geo':
+      // Geo validates via its own getGeoConstraintError in geo-constraints.ts
+      return { error: null }
+
     default:
       return { error: null }
   }

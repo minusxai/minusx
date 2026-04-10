@@ -12,7 +12,7 @@ export const aggregateData = (
   rows: Record<string, any>[],
   xAxisColumns: string[],
   yAxisColumns: string[],
-  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo' | 'radar',
+  chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo' | 'radar' | 'geo',
   tooltipColumns: string[] = []
 ): AggregatedData => {
   if (yAxisColumns.length === 0) {
