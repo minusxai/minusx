@@ -99,6 +99,18 @@ export function getColorScale(
 }
 
 /**
+ * Convert a color scale to a leaflet.heat gradient object (0→1 stops).
+ */
+export function getHeatGradient(
+  colorMode: 'light' | 'dark',
+  scale?: string | null,
+): Record<number, string> {
+  const scaleKey = (scale && scale in SCALE_PALETTES ? scale : DEFAULT_SCALE) as ColorScaleKey
+  const [low, mid, high] = SCALE_PALETTES[scaleKey][colorMode]
+  return { 0: low, 0.5: mid, 1: high }
+}
+
+/**
  * Map a numeric value to a circle radius between MIN_RADIUS and MAX_RADIUS.
  * Clamps values outside [min, max].
  */

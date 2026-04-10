@@ -6,7 +6,7 @@ import 'leaflet.heat'
 import { LeafletMap } from './LeafletMap'
 import { ChartError } from './ChartError'
 import { loadGeoJSON, MAP_DEFAULTS, type MapName } from '@/lib/chart/geo-data'
-import { getColorScale, getRadiusScale, GEO_MARKER_COLOR, GEO_MARKER_COLOR_DARK } from '@/lib/chart/geo-color-scale'
+import { getColorScale, getRadiusScale, getHeatGradient, GEO_MARKER_COLOR, GEO_MARKER_COLOR_DARK } from '@/lib/chart/geo-color-scale'
 import { getGeoConstraintError } from '@/lib/chart/geo-constraints'
 import { useAppSelector } from '@/store/hooks'
 import type { GeoConfig } from '@/lib/types.gen'
@@ -326,6 +326,7 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], height }: 
             radius: 25,
             blur: 15,
             maxZoom: 10,
+            gradient: getHeatGradient(colorMode, geoConfig.colorScale),
           })
           builtLayers.push(heat)
           const heatBounds = L.latLngBounds(heatPoints.map(([lat, lng]) => [lat, lng] as [number, number]))

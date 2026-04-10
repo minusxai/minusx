@@ -300,8 +300,8 @@ export function GeoAxisBuilder({
                 </Checkbox>
               </HStack>
 
-              {/* Color scale (choropleth only) */}
-              {config.subType === 'choropleth' && (
+              {/* Color scale (choropleth & heatmap) */}
+              {(config.subType === 'choropleth' || config.subType === 'heatmap') && (
                 <ColorScalePicker
                   value={config.colorScale}
                   defaultScale="green"
