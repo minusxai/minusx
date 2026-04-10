@@ -131,35 +131,55 @@ export function GeoAxisBuilder({
     [config, updateConfig],
   )
 
+  const tooltipZone: AxisZone = useMemo(() => ({
+    label: 'Tooltip',
+    items: tooltipCols.filter(c => columns.includes(c)).map(col => ({ column: col })),
+    emptyText: 'Drop columns for tooltip',
+    onDrop: (col: string) => {
+      if (!tooltipCols.includes(col)) {
+        onTooltipColsChange?.([...tooltipCols, col])
+      }
+    },
+    onRemove: (col: string) => {
+      onTooltipColsChange?.(tooltipCols.filter(c => c !== col))
+    },
+  }), [tooltipCols, columns, onTooltipColsChange])
+
   const zones: AxisZone[] = useMemo(() => {
+    let subTypeZones: AxisZone[]
     switch (config.subType) {
       case 'choropleth':
-        return [
+        subTypeZones = [
           makeZone('Region', 'regionCol', 'Drop region column'),
           makeZone('Value', 'valueCol', 'Drop value column'),
         ]
+        break
       case 'points':
-        return [
+        subTypeZones = [
           makeZone('Latitude', 'latCol', 'Drop lat column'),
           makeZone('Longitude', 'lngCol', 'Drop lng column'),
           makeZone('Size (optional)', 'valueCol', 'Drop value for bubble sizing'),
         ]
+        break
       case 'lines':
-        return [
+        subTypeZones = [
           makeZone('Origin Lat', 'latCol', 'Drop origin lat'),
           makeZone('Origin Lng', 'lngCol', 'Drop origin lng'),
           makeZone('Dest Lat', 'latCol2', 'Drop dest lat'),
           makeZone('Dest Lng', 'lngCol2', 'Drop dest lng'),
         ]
+        break
       case 'heatmap':
-        return [
+        subTypeZones = [
           makeZone('Latitude', 'latCol', 'Drop lat column'),
           makeZone('Longitude', 'lngCol', 'Drop lng column'),
           makeZone('Intensity (optional)', 'valueCol', 'Drop value column'),
         ]
+        break
       default:
-        return []
+        subTypeZones = []
     }
+    return [...subTypeZones, tooltipZone]
   }, [config.subType, makeZone])
 
   return (

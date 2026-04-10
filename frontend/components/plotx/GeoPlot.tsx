@@ -16,6 +16,7 @@ interface GeoPlotProps {
   rows: Record<string, unknown>[]
   columns: string[]
   geoConfig: GeoConfig
+  tooltipCols?: string[]
   height?: number | string
 }
 
@@ -94,7 +95,7 @@ function greatCircleArc(lat1: number, lng1: number, lat2: number, lng2: number, 
   return points
 }
 
-export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
+export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], height }: GeoPlotProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode) as 'light' | 'dark'
   const [geoJsonData, setGeoJsonData] = useState<FeatureCollection | null>(null)
   const [geoJsonError, setGeoJsonError] = useState<string | null>(null)
@@ -122,6 +123,12 @@ export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
   // Build Leaflet layers from data
   const { layers, bounds } = useMemo(() => {
     if (hasError) return { layers: [], bounds: undefined }
+
+    /** Build extra tooltip rows from user-configured tooltipCols */
+    const extraTooltipRows = (row: Record<string, unknown>): Array<{ key: string; value: string }> =>
+      tooltipCols
+        .filter(col => row[col] != null)
+        .map(col => ({ key: col, value: typeof row[col] === 'number' ? Number(row[col]).toLocaleString() : String(row[col]) }))
 
     const builtLayers: L.Layer[] = []
     let builtBounds: L.LatLngBounds | undefined
@@ -169,8 +176,11 @@ export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
             const name = String(feature?.properties?.name ?? '')
             const val = valueMap.get(name.toLowerCase())
             if (val !== undefined) {
+              // Find the matching row to get extra tooltip cols
+              const matchRow = rows.find(r => String(r[geoConfig.regionCol!] ?? '').toLowerCase() === name.toLowerCase())
+              const ttRows = [{ key: geoConfig.valueCol!, value: val.toLocaleString() }, ...(matchRow ? extraTooltipRows(matchRow) : [])]
               layer.bindTooltip(
-                geoTooltipHtml([{ key: geoConfig.valueCol!, value: val.toLocaleString() }], name, colorMode),
+                geoTooltipHtml(ttRows, name, colorMode),
                 GEO_TOOLTIP_OPTIONS,
               )
             }
@@ -215,12 +225,13 @@ export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
           })
 
           // Tooltip
-          const tooltipRows: Array<{ key: string; value: string }> = []
+          const pointTtRows: Array<{ key: string; value: string }> = []
           if (geoConfig.valueCol && row[geoConfig.valueCol] != null) {
-            tooltipRows.push({ key: geoConfig.valueCol, value: Number(row[geoConfig.valueCol]).toLocaleString() })
+            pointTtRows.push({ key: geoConfig.valueCol, value: Number(row[geoConfig.valueCol]).toLocaleString() })
           }
-          tooltipRows.push({ key: 'Location', value: `${lat.toFixed(4)}, ${lng.toFixed(4)}` })
-          marker.bindTooltip(geoTooltipHtml(tooltipRows, null, colorMode), GEO_TOOLTIP_OPTIONS)
+          pointTtRows.push(...extraTooltipRows(row))
+          pointTtRows.push({ key: 'Location', value: `${lat.toFixed(4)}, ${lng.toFixed(4)}` })
+          marker.bindTooltip(geoTooltipHtml(pointTtRows, null, colorMode), GEO_TOOLTIP_OPTIONS)
 
           markers.push(marker)
         }
@@ -256,13 +267,14 @@ export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
             opacity: 0.7,
           })
           // Line tooltip
-          const lineTooltipRows: Array<{ key: string; value: string }> = [
+          const lineTtRows: Array<{ key: string; value: string }> = [
             { key: 'Origin', value: `${lat1.toFixed(2)}, ${lng1.toFixed(2)}` },
             { key: 'Dest', value: `${lat2.toFixed(2)}, ${lng2.toFixed(2)}` },
+            ...extraTooltipRows(row),
           ]
           const cityName = columns.find(c => c !== geoConfig.latCol && c !== geoConfig.lngCol && c !== geoConfig.latCol2 && c !== geoConfig.lngCol2)
           const header = cityName && row[cityName] != null ? String(row[cityName]) : null
-          line.bindTooltip(geoTooltipHtml(lineTooltipRows, header, colorMode), GEO_TOOLTIP_OPTIONS)
+          line.bindTooltip(geoTooltipHtml(lineTtRows, header, colorMode), GEO_TOOLTIP_OPTIONS)
           lineLayers.push(line)
 
           // Start point
@@ -324,7 +336,7 @@ export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
     }
 
     return { layers: builtLayers, bounds: builtBounds }
-  }, [rows, geoConfig, effectiveGeoJsonData, colorMode, hasError])
+  }, [rows, geoConfig, effectiveGeoJsonData, colorMode, hasError, tooltipCols])
 
   if (hasError) {
     return <ChartError variant="info" message={constraint.error!} />

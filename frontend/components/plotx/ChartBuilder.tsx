@@ -549,6 +549,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
             types={types}
             geoConfig={initialGeoConfig}
             onGeoConfigChange={handleGeoConfigChangeInternal}
+            tooltipCols={tooltipColumns}
+            onTooltipColsChange={onTooltipColsChange}
           />
         )}
         <Box flex="1" overflow="hidden" display="flex" minHeight="0">
@@ -556,6 +558,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
             rows={rows}
             columns={columns}
             geoConfig={initialGeoConfig ?? { subType: 'choropleth' }}
+            tooltipCols={tooltipColumns}
           />
         </Box>
       </Box>
