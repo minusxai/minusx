@@ -34,10 +34,15 @@ import queryResultsReducer from '../queryResultsSlice';
 import authReducer from '../authSlice';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
-import type { QuestionContent, DocumentContent, UserRole } from '@/lib/types';
+import type { QuestionContent, DocumentContent, UserRole, ContextContent, ConnectionContent } from '@/lib/types';
 import type { CompressedAugmentedFile } from '@/lib/types';
 import type { Mode } from '@/lib/mode/mode-types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
+import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
+import { buildSlackAgentArgs } from '@/lib/integrations/slack/context';
+import { getWhitelistedSchemaForUser, getDocumentationForUser } from '@/lib/sql/schema-filter';
+import { resolveHomeFolderSync, resolvePath } from '@/lib/mode/path-resolver';
+import { selectDatabase } from '@/lib/utils/database-selector';
 import {
   readFiles,
   selectAugmentedFiles,
@@ -468,4 +473,188 @@ describe('Client-Server File State Parity', () => {
     );
     expect(postPublishServer[0]).toEqual(postPublishClient);
   });
-});
+
+  // ============================================================================
+  // Agent Args Parity
+  //
+  // Verifies that buildServerAgentArgs() — the shared base used by all server-
+  // initiated agents (Slack, Report, TestAgent, Alerts) — produces schema and
+  // context identical to what the client-side AnalystAgent derives from the
+  // same DB state via the same pure functions (getWhitelistedSchemaForUser,
+  // getDocumentationForUser, selectDatabase).
+  //
+  // Three invariants:
+  //   1. AnalystAgent parity — server matches client pure-function output
+  //   2. Slack — buildSlackAgentArgs produces correct full args + app_state
+  //   3. Context eval override — contextFileId loads THAT context's schema/docs
+  // ============================================================================
+
+  describe('Agent Args Parity', () => {
+    let agentUser: EffectiveUser;
+    // loadedContext is what FilesAPI returns after the context loader runs.
+    // The loader overwrites fullSchema from real connections; in tests there is
+    // no real DuckDB so fullSchema will be []. Both sides go through the same
+    // pipeline, so parity is the invariant (not a specific non-empty value).
+    let loadedContext: ContextContent;
+    let secondContextId: number;
+
+    beforeAll(async () => {
+      const companyId = 1;
+      const FilesAPI = (await import('@/lib/data/files.server')).FilesAPI;
+
+      // Seed a connection at /org/database/test-conn (type='duckdb')
+      await DocumentDB.create(
+        'test-conn',
+        '/org/database/test-conn',
+        'connection',
+        { type: 'duckdb', config: {} } as ConnectionContent,
+        [],
+        companyId
+      );
+
+      // Seed a primary context with known whitelist + docs.
+      await DocumentDB.create('test-context', '/org/test-context', 'context', {
+        published: { all: 1 },
+        versions: [{
+          version: 1,
+          databases: [{ databaseName: 'test-conn', whitelist: [{ type: 'schema', name: 'main' }] }],
+          docs: [{ content: 'Agent documentation for testing', draft: false }],
+          createdAt: new Date().toISOString(),
+          createdBy: 1,
+        }],
+      } as ContextContent, [], companyId);
+
+      // Seed a second context with distinct docs — used for the contextFileId override test.
+      secondContextId = await DocumentDB.create('eval-context', '/org/eval-context', 'context', {
+        published: { all: 1 },
+        versions: [{
+          version: 1,
+          databases: [{ databaseName: 'test-conn', whitelist: [{ type: 'schema', name: 'main' }] }],
+          docs: [{ content: 'Eval-specific context documentation', draft: false }],
+          createdAt: new Date().toISOString(),
+          createdBy: 1,
+        }],
+      } as ContextContent, [], companyId);
+
+      // home_folder='' → resolveHomeFolderSync('org', '') → '/org' (mode root)
+      agentUser = {
+        userId: 1,
+        email: 'test@example.com',
+        name: 'Test User',
+        role: 'admin',
+        home_folder: '',
+        companyId: 1,
+        companyName: 'test-company',
+        mode: 'org',
+      };
+
+      // Load the primary context through FilesAPI (same pipeline buildServerAgentArgs uses)
+      // so loadedContext.fullSchema reflects what the loader actually computed.
+      const result = await FilesAPI.loadFileByPath('/org/test-context', agentUser);
+      loadedContext = result.data.content as ContextContent;
+    });
+
+    // ── Test 1: AnalystAgent parity ──────────────────────────────────────────
+    //
+    // ChatInterface (client) builds agent_args schema/context via:
+    //   databases = getWhitelistedSchemaForUser(contextContent, userId)   ← no currentPath for explore
+    //   selectedDb = selectDatabase(databases, null)
+    //   schema     = databases.find(selectedDb)?.schemas.map(...)
+    //   context    = getDocumentationForUser(contextContent, userId)
+    //
+    // buildServerAgentArgs (server) uses the same pure functions internally.
+    // For contexts without childPaths restrictions (the common case and all
+    // seeded test data), omitting currentPath produces identical output to
+    // passing effectiveHomeFolder — so both paths agree.
+    it('AnalystAgent parity: server schema/context matches client pure-function output', async () => {
+      const args = await buildServerAgentArgs(agentUser);
+
+      expect(args.connection_id).toBe('test-conn');
+      expect(args.selected_database_info).toEqual({ name: 'test-conn', dialect: 'duckdb' });
+
+      // Replicate exactly what ChatInterface does on the explore page (no currentPath).
+      const clientDatabases = getWhitelistedSchemaForUser(loadedContext, agentUser.userId);
+      const selectedDbName = selectDatabase(clientDatabases, null);
+      const selectedDb = clientDatabases.find(d => d.databaseName === selectedDbName) ?? clientDatabases[0];
+      const clientSchema = selectedDb
+        ? selectedDb.schemas.map(s => ({ schema: s.schema, tables: s.tables.map(t => t.table) }))
+        : [];
+      const clientContext = getDocumentationForUser(loadedContext, agentUser.userId);
+
+      // Server output must equal client pure-function output.
+      expect(args.schema).toEqual(clientSchema);
+      expect(args.context).toBe(clientContext);
+      // Docs survive the context loader (unlike fullSchema which is overwritten).
+      expect(args.context).toContain('Agent documentation for testing');
+    });
+
+    // ── Test 2: Slack — all agent_args fields ────────────────────────────────
+    //
+    // buildSlackAgentArgs is called with a real Slack user (who has a home_folder).
+    // It must produce correct connection, schema, context, AND add app_state: { type: 'slack' }.
+    it('buildSlackAgentArgs: all fields correct for Slack user', async () => {
+      // Slack users have a real home_folder from their user profile.
+      const slackUser: EffectiveUser = {
+        ...agentUser,
+        userId: 1,
+        home_folder: 'sales',  // resolves to /org/sales
+      };
+
+      const slack = await buildSlackAgentArgs(slackUser);
+
+      // ── connection fields ──
+      expect(slack.connection_id).toBe('test-conn');
+      expect(slack.selected_database_info).toEqual({ name: 'test-conn', dialect: 'duckdb' });
+
+      // ── schema + context must match the same pipeline as buildServerAgentArgs ──
+      const effectiveHomeFolder = resolveHomeFolderSync(slackUser.mode, slackUser.home_folder || '');
+      // Nearest context for /org/sales → falls back to first available (/org/test-context)
+      const { FilesAPI } = await import('@/lib/data/files.server');
+      const contextFiles = (await FilesAPI.getFiles(
+        { type: 'context', paths: [resolvePath(slackUser.mode, '/')], depth: -1 },
+        slackUser
+      )).data;
+      const { findNearestContextPath } = await import('@/lib/context/context-utils');
+      const nearestPath = findNearestContextPath(contextFiles.map(f => f.path), effectiveHomeFolder);
+      const resolvedContext = nearestPath
+        ? (await FilesAPI.loadFileByPath(nearestPath, slackUser)).data.content as ContextContent
+        : loadedContext;
+
+      const whitelisted = getWhitelistedSchemaForUser(resolvedContext, slackUser.userId, effectiveHomeFolder);
+      const selectedDbName = selectDatabase(whitelisted, null);
+      const selectedDb = whitelisted.find(d => d.databaseName === selectedDbName) ?? whitelisted[0];
+      const expectedSchema = selectedDb
+        ? selectedDb.schemas.map(s => ({ schema: s.schema, tables: s.tables.map(t => t.table) }))
+        : [];
+      const expectedContext = getDocumentationForUser(resolvedContext, slackUser.userId);
+
+      expect(slack.schema).toEqual(expectedSchema);
+      expect(slack.context).toBe(expectedContext);
+      expect(slack.context).toContain('Agent documentation for testing');
+
+      // ── Slack-specific field ──
+      expect(slack.app_state).toEqual({ type: 'slack' });
+    });
+
+    // ── Test 3: context eval override — contextFileId ────────────────────────
+    //
+    // context-handler.ts passes { contextFileId: parseInt(jobId) } so the
+    // TestAgent receives schema/docs from the context file being evaluated,
+    // not from the nearest ancestor of the cron user's home folder.
+    it('buildServerAgentArgs with contextFileId: uses specified context file, not nearest ancestor', async () => {
+      // Without override: picks /org/test-context (nearest / first available).
+      const baseArgs = await buildServerAgentArgs(agentUser);
+      expect(baseArgs.context).toContain('Agent documentation for testing');
+      expect(baseArgs.context).not.toContain('Eval-specific context documentation');
+
+      // With override: must use the second context's docs regardless of path.
+      const overriddenArgs = await buildServerAgentArgs(agentUser, { contextFileId: secondContextId });
+      expect(overriddenArgs.context).toContain('Eval-specific context documentation');
+      expect(overriddenArgs.context).not.toContain('Agent documentation for testing');
+
+      // Connection fields are independent of the context override.
+      expect(overriddenArgs.connection_id).toBe(baseArgs.connection_id);
+      expect(overriddenArgs.selected_database_info).toEqual(baseArgs.selected_database_info);
+    });
+  }); // end Agent Args Parity
+}); // end Client-Server File State Parity

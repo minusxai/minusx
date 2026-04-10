@@ -10,7 +10,7 @@ import { join } from 'path';
 import { unlinkSync, existsSync } from 'fs';
 import { ChildProcess } from 'child_process';
 import treeKill from 'tree-kill';
-import { createEmptyDatabase } from '@/scripts/create-empty-db';
+import { createNewCompany } from '@/lib/database/import-export';
 import chatReducer from '../chatSlice';
 import { chatListenerMiddleware } from '../chatListener';
 import { waitForPortRelease } from './port-manager';
@@ -69,22 +69,10 @@ export async function initTestDatabase(dbPath: string = join(process.cwd(), 'dat
     if (existsSync(file)) unlinkSync(file);
   });
 
-  // Create fresh database
-  await createEmptyDatabase(dbPath);
-
-  // Seed with test company
-  const { createAdapter } = await import('@/lib/database/adapter/factory');
-  const db = await createAdapter({ type: 'sqlite', sqlitePath: dbPath });
-  await db.query('INSERT INTO companies (id, name, display_name, subdomain) VALUES ($1, $2, $3, $4)', [
-    1, 'test-company', 'Test Company', 'test-company'
-  ]);
-  // Seed root folder documents so file creation in /org passes parent-folder validation.
-  // Mirrors production: both 'org' and 'tutorial' mode folders are created on company init.
-  await db.query(
-    'INSERT INTO files (company_id, id, name, path, type, content, file_references, version, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)',
-    [1, 1, 'org', '/org', 'folder', '{"description":""}', '[]', 1]
-  );
-  await db.close();
+  // Seed via createNewCompany — uses company-template.json, same as production.
+  // Pass dbPath explicitly so this always writes to the correct test DB regardless
+  // of whether the caller has mocked @/lib/database/db-config.
+  await createNewCompany('test-company', 'Test User', 'test@example.com', 'password', 'test-company', dbPath);
 }
 
 /**

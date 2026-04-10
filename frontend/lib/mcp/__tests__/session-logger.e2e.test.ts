@@ -69,13 +69,7 @@ const TOOL_RESULT: McpToolCallResult = {
 
 beforeAll(async () => {
   await initTestDatabase(DB_PATH);
-  const db = await createAdapter({ type: 'sqlite', sqlitePath: DB_PATH });
-  const now = new Date().toISOString();
-  await db.query(
-    'INSERT INTO users (company_id, id, email, name, password_hash, home_folder, role, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-    [1, 1, 'test@example.com', 'Test User', null, '/org', 'admin', now, now],
-  );
-  await db.close();
+  // test@example.com admin user is created by initTestDatabase via company-template.json
 });
 
 afterAll(async () => {

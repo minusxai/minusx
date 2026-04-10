@@ -148,10 +148,10 @@ describe('Access Tokens E2E - Public File Sharing', () => {
   const TEST_COMPANY_ID = 1;
   const ADMIN_USER_ID = 1;
   const VIEWER_USER_ID = 2;
-  const TEST_QUESTION_ID = 100;
-  const TEST_DASHBOARD_ID = 101;
-  const REFERENCED_QUESTION_1_ID = 102;
-  const REFERENCED_QUESTION_2_ID = 103;
+  const TEST_QUESTION_ID = 1000;
+  const TEST_DASHBOARD_ID = 1001;
+  const REFERENCED_QUESTION_1_ID = 1002;
+  const REFERENCED_QUESTION_2_ID = 1003;
 
   /**
    * TEST 1: Happy Path - Create token and access Question
@@ -811,25 +811,20 @@ async function seedTestData(dbPath: string) {
   const { createAdapter } = await import('@/lib/database/adapter/factory');
   const db = await createAdapter({ type: 'sqlite', sqlitePath: dbPath });
 
-  // Create admin user (composite key: company_id, id)
-  await db.query(`
-    INSERT INTO users (company_id, id, email, name, password_hash, home_folder, role)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `, [1, 1, 'admin@test.com', 'Admin User', 'hash', '/', 'admin']);
-
-  // Create viewer user (for view_as)
+  // Admin user (id=1) already created by initTestDatabase via company-template.json.
+  // Only create the viewer user (id=2) which is not in the template.
   await db.query(`
     INSERT INTO users (company_id, id, email, name, password_hash, home_folder, role)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `, [1, 2, 'viewer@test.com', 'Viewer User', 'hash', '/org', 'viewer']);
 
-  // Create test question (composite key: company_id, id)
+  // Create test question (IDs ≥ 1000 to avoid template range 1-107)
   await db.query(`
     INSERT INTO files (company_id, id, name, path, type, content)
     VALUES (?, ?, ?, ?, ?, ?)
   `, [
     1,
-    100,
+    1000,
     'Test Question',
     '/org/test-question',
     'question',
@@ -846,7 +841,7 @@ async function seedTestData(dbPath: string) {
     VALUES (?, ?, ?, ?, ?, ?)
   `, [
     1,
-    102,
+    1002,
     'Question 1',
     '/org/question-1',
     'question',
@@ -862,7 +857,7 @@ async function seedTestData(dbPath: string) {
     VALUES (?, ?, ?, ?, ?, ?)
   `, [
     1,
-    103,
+    1003,
     'Question 2',
     '/org/question-2',
     'question',
@@ -879,20 +874,20 @@ async function seedTestData(dbPath: string) {
     VALUES (?, ?, ?, ?, ?, ?)
   `, [
     1,
-    101,
+    1001,
     'Test Dashboard',
     '/org/test-dashboard',
     'dashboard',
     JSON.stringify({
       name: 'Test Dashboard',
       assets: [
-        { type: 'question', id: 102 },
-        { type: 'question', id: 103 }
+        { type: 'question', id: 1002 },
+        { type: 'question', id: 1003 }
       ],
       layout: {
         items: [
-          { id: 102, x: 0, y: 0, w: 6, h: 4 },
-          { id: 103, x: 6, y: 0, w: 6, h: 4 }
+          { id: 1002, x: 0, y: 0, w: 6, h: 4 },
+          { id: 1003, x: 6, y: 0, w: 6, h: 4 }
         ]
       }
     })

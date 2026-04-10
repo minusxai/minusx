@@ -1,5 +1,6 @@
 import 'server-only';
 import { FilesAPI } from '@/lib/data/files.server';
+import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
 import { runChatOrchestration } from '@/lib/chat/run-orchestration';
 import { resolveBaseUrl } from '@/lib/jobs/job-utils';
 import { getAppStateServer } from '@/lib/api/file-state.server';
@@ -44,18 +45,19 @@ export const reportJobHandler: JobHandler = {
 
     const primaryConnectionId = enrichedReferences.find(r => r.connection_id)?.connection_id;
 
+    const baseArgs = await buildServerAgentArgs(user);
+
     // Run the ReportAgent via the full Python↔Next.js orchestration loop
     const { log } = await runChatOrchestration({
       agent: 'ReportAgent',
       agent_args: {
+        ...baseArgs,
         report_id: reportId,
         report_name: reportName,
         references: enrichedReferences,
         report_prompt: report.reportPrompt,
         emails: [],  // Delivery handled via RunFileContent.messages below
-        connection_id: primaryConnectionId,
-        schema: [],
-        context: '',
+        connection_id: primaryConnectionId || baseArgs.connection_id,
       },
       user,
       userMessage: `Execute report: ${reportName}`,
