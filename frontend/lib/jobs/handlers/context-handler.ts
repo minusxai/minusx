@@ -12,7 +12,9 @@ export const contextJobHandler: JobHandler = {
 
     // Use the first whitelisted database as the default connection for LLM tests
     const defaultConnectionId = context.databases?.[0]?.databaseName ?? '';
-    const runner = createServerRunner(user, defaultConnectionId);
+    // Pass the context file's own ID so the TestAgent receives schema and docs
+    // from THIS context file, not from the nearest ancestor of the cron user's home folder.
+    const runner = createServerRunner(user, defaultConnectionId, { contextFileId: parseInt(jobId) });
     const results = await Promise.all(tests.map(t => runner.execute(t)));
 
     const output: ContextOutput = { results };

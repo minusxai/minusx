@@ -39,14 +39,33 @@ function flattenSchemaForPrompt(
   }));
 }
 
+export interface BuildServerAgentArgsOptions {
+  /**
+   * When provided, load this specific context file for schema/docs instead of
+   * resolving the nearest ancestor context for the user's home folder.
+   *
+   * Use case: context eval jobs — the TestAgent should receive the schema and
+   * documentation from the context file being evaluated, not from whatever
+   * context happens to be nearest to the cron user's home folder.
+   */
+  contextFileId?: number;
+}
+
 /**
  * Build the base agent_args fields shared by all server-initiated conversations.
  *
  * Resolves connection, whitelisted schema, and context documentation for the
  * user by loading from the DB — the same data the client sends when starting
  * a chat from the explore page or file page.
+ *
+ * @param options.contextFileId — override: load this specific context file
+ *   instead of resolving the nearest ancestor. Used by context eval jobs so
+ *   the TestAgent receives the evaluated context's own schema/docs.
  */
-export async function buildServerAgentArgs(user: EffectiveUser): Promise<ServerAgentArgs> {
+export async function buildServerAgentArgs(
+  user: EffectiveUser,
+  options?: BuildServerAgentArgsOptions
+): Promise<ServerAgentArgs> {
   const { connections } = await listAllConnections(user, false);
   const selectedConnectionName = selectDatabase(connections, null);
   const selectedConnection = connections.find((c) => c.name === selectedConnectionName) ?? connections[0];
@@ -55,22 +74,33 @@ export async function buildServerAgentArgs(user: EffectiveUser): Promise<ServerA
   let documentation: string | undefined;
 
   try {
-    const modePath = resolvePath(user.mode, '/');
     const effectiveHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder || '');
-    const { data: contextFiles } = await FilesAPI.getFiles(
-      { type: 'context', paths: [modePath], depth: -1 },
-      user
-    );
-    const nearestContextPath = findNearestContextPath(
-      contextFiles.map((f) => f.path),
-      effectiveHomeFolder
-    );
+    let contextContent: ContextContent | undefined;
 
-    if (nearestContextPath) {
-      const contextResult = await FilesAPI.loadFileByPath(nearestContextPath, user);
-      const context = contextResult.data.content as ContextContent;
-      databases = getWhitelistedSchemaForUser(context, user.userId, effectiveHomeFolder);
-      documentation = getDocumentationForUser(context, user.userId);
+    if (options?.contextFileId != null) {
+      // Context eval path: use the specific context file being evaluated.
+      const contextResult = await FilesAPI.loadFile(options.contextFileId, user);
+      contextContent = contextResult.data?.content as ContextContent | undefined;
+    } else {
+      // General path: find the context file nearest to the user's home folder.
+      const modePath = resolvePath(user.mode, '/');
+      const { data: contextFiles } = await FilesAPI.getFiles(
+        { type: 'context', paths: [modePath], depth: -1 },
+        user
+      );
+      const nearestContextPath = findNearestContextPath(
+        contextFiles.map((f) => f.path),
+        effectiveHomeFolder
+      );
+      if (nearestContextPath) {
+        const contextResult = await FilesAPI.loadFileByPath(nearestContextPath, user);
+        contextContent = contextResult.data.content as ContextContent;
+      }
+    }
+
+    if (contextContent) {
+      databases = getWhitelistedSchemaForUser(contextContent, user.userId, effectiveHomeFolder);
+      documentation = getDocumentationForUser(contextContent, user.userId);
     }
   } catch {
     // Proceed without context — agent can still use SearchDBSchema tool

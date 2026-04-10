@@ -12,7 +12,7 @@
 import 'server-only';
 import { FilesAPI } from '@/lib/data/files.server';
 import { runQuery } from '@/lib/connections/run-query';
-import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
+import { buildServerAgentArgs, type BuildServerAgentArgsOptions } from '@/lib/chat/agent-args.server';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import { orchestratePendingTools } from '@/app/api/chat/orchestrator';
 import '@/app/api/chat/tool-handlers.server';
@@ -135,7 +135,8 @@ async function executeQueryTest(
 async function executeLLMTest(
   test: Test & { type: 'llm' },
   user: EffectiveUser,
-  defaultConnectionId: string
+  defaultConnectionId: string,
+  options?: BuildServerAgentArgsOptions
 ): Promise<TestRunResult> {
   const subject = test.subject as Extract<typeof test.subject, { type: 'llm' }>;
 
@@ -146,7 +147,7 @@ async function executeLLMTest(
     app_state = await getAppStateServer(subject.context.file_id, user, { executeQueries: true });
   }
 
-  const baseArgs = await buildServerAgentArgs(user);
+  const baseArgs = await buildServerAgentArgs(user, options);
   const agentArgs = {
     ...baseArgs,
     goal: subject.prompt,
@@ -263,15 +264,20 @@ async function executeLLMTest(
  *
  * @param user                The effective user (for auth + file access)
  * @param defaultConnectionId Default connection to use for LLM tests without an explicit connection
+ * @param options             Optional agent args overrides (e.g. contextFileId for context eval jobs)
  */
-export function createServerRunner(user: EffectiveUser, defaultConnectionId: string): TestRunner {
+export function createServerRunner(
+  user: EffectiveUser,
+  defaultConnectionId: string,
+  options?: BuildServerAgentArgsOptions
+): TestRunner {
   return {
     async execute(test: Test): Promise<TestRunResult> {
       try {
         if (test.type === 'query') {
           return executeQueryTest(test as Test & { type: 'query' }, user);
         }
-        return executeLLMTest(test as Test & { type: 'llm' }, user, defaultConnectionId);
+        return executeLLMTest(test as Test & { type: 'llm' }, user, defaultConnectionId, options);
       } catch (err) {
         return {
           test,
