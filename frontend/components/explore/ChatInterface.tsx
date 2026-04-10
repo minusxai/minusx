@@ -384,6 +384,7 @@ export default function ChatInterface({
           app_state: appState,
           city: config.city,
           agent_name: config.branding.agentName || 'MinusX',
+          ...(config.allowedVizTypes ? { allowed_viz_types: config.allowedVizTypes } : {}),
           ...(allAttachments.length > 0 ? { attachments: allAttachments } : {}),
         },
         message: userInput,
@@ -408,6 +409,7 @@ export default function ChatInterface({
           app_state: appState,
           city: config.city,
           agent_name: config.branding.agentName || 'MinusX',
+          ...(config.allowedVizTypes ? { allowed_viz_types: config.allowedVizTypes } : {}),
           ...(allAttachments.length > 0 ? { attachments: allAttachments } : {}),
         }
       }));

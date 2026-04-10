@@ -21,6 +21,7 @@ import {
   LuMapPinned,
 } from 'react-icons/lu';
 import type { VizSettings } from '@/lib/types';
+import { useConfigs } from '@/lib/hooks/useConfigs';
 
 interface VizTypeOption {
   type: VizSettings['type'];
@@ -28,7 +29,7 @@ interface VizTypeOption {
   label: string;
 }
 
-const VIZ_TYPES: VizTypeOption[] = [
+const ALL_VIZ_TYPES: VizTypeOption[] = [
   { type: 'table', icon: <LuGrid3X3 size={18} />, label: 'Table view' },
   { type: 'line', icon: <LuChartLine size={18} />, label: 'Line chart' },
   { type: 'bar', icon: <LuChartColumn size={18} />, label: 'Bar chart' },
@@ -55,6 +56,12 @@ export function VizTypeSelector({
   onChange,
   orientation = 'vertical'
 }: VizTypeSelectorProps) {
+  const { config } = useConfigs();
+  const allowedVizTypes = config.allowedVizTypes;
+  const vizTypes = allowedVizTypes
+    ? ALL_VIZ_TYPES.filter(v => allowedVizTypes.includes(v.type))
+    : ALL_VIZ_TYPES;
+
   const Container = orientation === 'horizontal' ? HStack : VStack;
 
   return (
@@ -66,7 +73,7 @@ export function VizTypeSelector({
       h={'100%'}
       flexWrap={orientation === 'horizontal' ? 'wrap' : undefined}
     >
-      {VIZ_TYPES.map(({ type, icon, label }) => {
+      {vizTypes.map(({ type, icon, label }) => {
         const isActive = value === type;
 
         return (

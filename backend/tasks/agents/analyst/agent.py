@@ -90,6 +90,7 @@ class AnalystAgent(Agent):
         city: Optional[str] = None,
         agent_name: Optional[str] = None,
         attachments: Optional[List[dict]] = None,
+        allowed_viz_types: Optional[List[str]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
@@ -102,6 +103,7 @@ class AnalystAgent(Agent):
         self.home_folder = home_folder or "/"
         self.city = city
         self.attachments = attachments or []
+        self.allowed_viz_types = allowed_viz_types
         self.tool_thread: List[dict] = []  # Conversation thread with tool calls/responses
         self.child_count = 0
 
@@ -166,6 +168,8 @@ class AnalystAgent(Agent):
         preloaded_names = self._get_preloaded_skill_names()
         preloaded_set = set(preloaded_names)
 
+        allowed_viz_types_str = ", ".join(self.allowed_viz_types) if self.allowed_viz_types else "all"
+
         content = get_prompt(
             'default.system',
             schema=self.schema,
@@ -174,6 +178,7 @@ class AnalystAgent(Agent):
             home_folder=self.home_folder,
             max_steps=max_steps,
             agent_name=self.agent_name,
+            allowed_viz_types=allowed_viz_types_str,
             skills_catalog=self._build_skills_catalog(preloaded_set),
             preloaded_skills=self._build_preloaded_skills_content(preloaded_names)
         )
