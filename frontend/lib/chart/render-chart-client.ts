@@ -50,11 +50,11 @@ export async function toJpegObjectUrl(
     const canvasW = Math.round(img.naturalWidth * scale);
     const canvasH = Math.round(img.naturalHeight * scale);
 
-    // When padding=true, compute footer strip dimensions upfront so canvas can be sized correctly.
-    // pad is the margin used on all sides: right edge, and symmetrically above/below the logo.
-    const logoH = Math.max(12, Math.round(canvasH * 0.08));
-    const pad   = Math.round(canvasH * 0.05);           // 5% of chart height (was 3%)
-    const footerH = padding && addWatermark ? logoH + pad * 2 : 0; // equal top+bottom padding
+    // When padding=true, add a constant-height footer strip of P px.
+    // The watermark is sized to 60% of P and centred in the bottom-right P×P square,
+    // so it always fits inside the padding area with equal gaps on all four sides.
+    const P = 48; // constant padding in px — footerH, right gap, and logo bounding box are all P
+    const footerH = padding && addWatermark ? P : 0;
 
     const canvas = document.createElement('canvas');
     canvas.width = canvasW;
@@ -70,15 +70,24 @@ export async function toJpegObjectUrl(
       try {
         const logoSrc = colorMode === 'dark' ? '/logox.svg' : '/logox_dark.svg';
         const logo = await loadImage(logoSrc);
-        const logoW = Math.round(logoH * (logo.naturalWidth / (logo.naturalHeight || 1)));
+        const aspect = logo.naturalWidth / (logo.naturalHeight || 1);
         ctx.globalAlpha = 0.65;
         if (padding) {
-          // Watermark sits inside the footer strip: centred vertically, right-aligned with pad.
-          const logoY = canvasH + Math.floor((footerH - logoH) / 2);
-          ctx.drawImage(logo, canvasW - logoW - pad, logoY, logoW, logoH);
+          // Logo sized to 60% of P, centred in the bottom-right P×P square.
+          // With a square logo (logox is 65×65) this gives equal gaps on all four sides.
+          const logoSize = Math.round(P * 0.6); // fits within P with 20% gap each side
+          const logoW = Math.round(logoSize * aspect);
+          const logoH = logoSize;
+          const logoX = (canvasW - P) + Math.floor((P - logoW) / 2);
+          const logoY = canvasH      + Math.floor((P - logoH) / 2);
+          ctx.drawImage(logo, logoX, logoY, logoW, logoH);
         } else {
           // Watermark overlaps chart at bottom-right (original behaviour).
-          ctx.drawImage(logo, canvasW - logoW - pad, canvasH - logoH - pad, logoW, logoH);
+          const overlapSize = Math.max(18, Math.min(28, Math.round(canvasH * 0.05)));
+          const logoH = overlapSize;
+          const logoW = Math.round(logoH * aspect);
+          const gap = 14;
+          ctx.drawImage(logo, canvasW - logoW - gap, canvasH - logoH - gap, logoW, logoH);
         }
         ctx.globalAlpha = 1;
       } catch {
