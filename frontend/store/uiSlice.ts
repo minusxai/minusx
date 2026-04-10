@@ -38,7 +38,7 @@ const initialState: UIState = {
   rightSidebarCollapsed: true,
   rightSidebarWidth: 400,
   colorMode: 'dark',
-  devMode: IS_DEV,
+  devMode: false,
   sidebarPendingMessage: null,
   activeSidebarSection: null,
   askForConfirmation: false,

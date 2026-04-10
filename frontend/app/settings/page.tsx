@@ -5,7 +5,8 @@ import { Box, VStack, Text, Flex, Switch, Button, Heading, Container, Tabs } fro
 import { LuRefreshCw } from 'react-icons/lu';
 import { ColorModeButton } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { setAskForConfirmation, setShowDebug, setShowJson, setShowAllErrorToasts, setShowAdvanced } from '@/store/uiSlice';
+import { setAskForConfirmation, setShowDebug, setShowJson, setShowAllErrorToasts, setShowAdvanced, setDevMode } from '@/store/uiSlice';
+import { IS_DEV } from '@/lib/constants';
 import RecordingControl from '@/components/RecordingControl';
 import DataManagementSection from '@/components/DataManagementSection';
 import { ChannelsSection } from '@/components/settings/ChannelsSection';
@@ -133,6 +134,7 @@ function SettingsContent() {
   const [isClearing, setIsClearing] = useState(false);
   const [isTestingError, setIsTestingError] = useState(false);
   const showAdvanced = useAppSelector((state) => state.ui.showAdvanced);
+  const devMode = useAppSelector((state) => state.ui.devMode);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -251,6 +253,18 @@ function SettingsContent() {
         />
       ),
       visible: isAdmin,
+    },
+    {
+      tab: 'dev',
+      title: 'Dev Tools Panel',
+      description: 'Show the Dev Tools section in the sidebar (always on in development)',
+      control: (
+        <SwitchControl
+          checked={devMode}
+          onChange={(checked) => dispatch(setDevMode(checked))}
+        />
+      ),
+      visible: !IS_DEV,
     },
     {
       tab: 'dev',

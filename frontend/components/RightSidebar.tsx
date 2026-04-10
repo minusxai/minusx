@@ -5,6 +5,7 @@ import { Box, VStack, HStack, Text, Icon, IconButton } from '@chakra-ui/react';
 import { LuChevronRight, LuChevronLeft, LuGripVertical, LuChevronDown, LuMessageSquare, LuLayers } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setRightSidebarCollapsed, setRightSidebarWidth, setActiveSidebarSection, selectRightSidebarUIState } from '@/store/uiSlice';
+import { IS_DEV } from '@/lib/constants';
 import { setFiles } from '@/store/filesSlice';
 import { createSelector } from '@reduxjs/toolkit';
 import type { RootState } from '@/store/store';
@@ -443,7 +444,7 @@ export default function RightSidebar({
     sections.push(getSidebarSection('question-references'));
   }
 
-  if (devMode) {
+  if (IS_DEV || devMode) {
     sections.push(getSidebarSection('dev'));
   }
 
