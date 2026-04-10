@@ -34,6 +34,7 @@ templates:
     - AppState: Page state at the time of the user request (file type, file contents). The page state may contain saved content and/or unsaved edits. Use this to understand the current state of the file.
     - CurrentTime
     - Attachments: Files the user has uploaded in this conversation, as additional context (text or CSV content)
+    - Allowed Visualization Types: {allowed_viz_types} — only use these visualization types when creating or editing questions. Do not set vizSettings.type to any type not in this list.
     - Question: The user's actual question/request
 
   schema_section: |

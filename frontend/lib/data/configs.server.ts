@@ -8,6 +8,7 @@ import { Mode, DEFAULT_MODE } from '@/lib/mode/mode-types';
 import { validateWebhook } from '@/lib/messaging/webhook-executor';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { immutableSet } from '@/lib/utils/immutable-collections';
+import type { VisualizationType } from '@/lib/types';
 
 export interface GetConfigsResult {
   config: CompanyConfig;
@@ -126,6 +127,13 @@ export function validateCompanyConfig(content: unknown): content is Partial<Comp
     }
   }
 
+  // If allowedVizTypes exists, validate its structure
+  if (config.allowedVizTypes !== undefined) {
+    if (!validateAllowedVizTypes(config.allowedVizTypes)) {
+      return false;
+    }
+  }
+
   // If setupWizard exists, validate its structure
   if (config.setupWizard !== undefined) {
     const sw = config.setupWizard as any;
@@ -143,6 +151,18 @@ export function validateCompanyConfig(content: unknown): content is Partial<Comp
   }
 
   return true;
+}
+
+const VALID_VIZ_TYPES: readonly VisualizationType[] = [
+  'table', 'bar', 'line', 'scatter', 'area', 'funnel', 'pie', 'pivot', 'trend', 'waterfall', 'combo', 'radar', 'geo'
+];
+
+/**
+ * Validate allowedVizTypes: must be a non-empty array of valid VisualizationType strings
+ */
+function validateAllowedVizTypes(value: unknown): value is VisualizationType[] {
+  if (!Array.isArray(value) || value.length === 0) return false;
+  return value.every(item => typeof item === 'string' && (VALID_VIZ_TYPES as readonly string[]).includes(item));
 }
 
 const VALID_ROLES = ['admin', 'editor', 'viewer'] as const;

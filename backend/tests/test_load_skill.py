@@ -20,6 +20,7 @@ def _get_system_prompt(preloaded_skill_names=None, **overrides):
         'connection_id': 'test',
         'home_folder': '/org',
         'max_steps': 10,
+        'allowed_viz_types': 'all',
         'skills_catalog': AnalystAgent._build_skills_catalog(preloaded_set),
         'preloaded_skills': AnalystAgent._build_preloaded_skills_content(preloaded_skill_names),
     }
