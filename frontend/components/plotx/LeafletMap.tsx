@@ -64,6 +64,7 @@ export function LeafletMap({
       zoom,
       zoomControl: true,
       attributionControl: false,
+      boxZoom: false,
     })
 
     mapRef.current = map
@@ -142,6 +143,22 @@ export function LeafletMap({
         .leaflet-top,
         .leaflet-bottom {
           z-index: 499 !important;
+        }
+        .leaflet-interactive:focus {
+          outline: none !important;
+        }
+        .choropleth-value-label {
+          background: transparent !important;
+          border: none !important;
+        }
+        .choropleth-value-label span {
+          display: block;
+          transform: translate(-50%, -50%);
+          font-family: JetBrains Mono, Consolas, monospace;
+          font-size: 10px;
+          font-weight: 600;
+          white-space: nowrap;
+          pointer-events: none;
         }
       `}</style>
       <div ref={containerRef} style={{ ...style, background: MAP_BG[colorMode] }} />
