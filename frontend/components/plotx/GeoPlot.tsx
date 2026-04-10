@@ -17,6 +17,7 @@ interface GeoPlotProps {
   columns: string[]
   geoConfig: GeoConfig
   tooltipCols?: string[]
+  markerColor?: string
   height?: number | string
 }
 
@@ -65,10 +66,16 @@ const GEO_TOOLTIP_OPTIONS: L.TooltipOptions = {
   className: 'geo-tooltip-custom',
 }
 
-/** Default style for unmatched regions */
-const GEO_ONLY_STYLE = {
-  light: { fillColor: '#D0D7DE', weight: 0.3, color: '#ccc', fillOpacity: 0.15 } as L.PathOptions,
-  dark: { fillColor: '#30363D', weight: 0.3, color: '#555', fillOpacity: 0.15 } as L.PathOptions,
+/** Default style for background regions — subtle for lines, more visible for others */
+function getGeoOnlyStyle(colorMode: 'light' | 'dark', isLines: boolean): L.PathOptions {
+  if (isLines) {
+    return colorMode === 'light'
+      ? { fillColor: '#D0D7DE', weight: 0.3, color: '#ccc', fillOpacity: 0.1 }
+      : { fillColor: '#30363D', weight: 0.3, color: '#555', fillOpacity: 0.1 }
+  }
+  return colorMode === 'light'
+    ? { fillColor: '#D0D7DE', weight: 0.5, color: '#aaa', fillOpacity: 0.25 }
+    : { fillColor: '#30363D', weight: 0.5, color: '#666', fillOpacity: 0.3 }
 }
 
 /** Generate intermediate points along a great-circle arc */
@@ -95,7 +102,7 @@ function greatCircleArc(lat1: number, lng1: number, lat2: number, lng2: number, 
   return points
 }
 
-export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], height }: GeoPlotProps) {
+export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColor, height }: GeoPlotProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode) as 'light' | 'dark'
   const [geoJsonData, setGeoJsonData] = useState<FeatureCollection | null>(null)
   const [geoJsonError, setGeoJsonError] = useState<string | null>(null)
@@ -120,6 +127,8 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], height }: 
   // Reset GeoJSON data when not needed (derived, not in effect)
   const effectiveGeoJsonData = needsGeoJson ? geoJsonData : null
 
+  const effectiveMarkerColor = markerColor ?? (colorMode === 'dark' ? GEO_MARKER_COLOR_DARK : GEO_MARKER_COLOR)
+
   // Build Leaflet layers from data
   const { layers, bounds } = useMemo(() => {
     if (hasError) return { layers: [], bounds: undefined }
@@ -136,7 +145,7 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], height }: 
     // For non-choropleth, add GeoJSON as a background outline layer if available
     if (geoConfig.subType !== 'choropleth' && effectiveGeoJsonData) {
       const bgLayer = L.geoJSON(effectiveGeoJsonData, {
-        style: () => GEO_ONLY_STYLE[colorMode],
+        style: () => getGeoOnlyStyle(colorMode, geoConfig.subType === 'lines'),
       })
       builtLayers.push(bgLayer)
       builtBounds = bgLayer.getBounds()
@@ -164,7 +173,7 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], height }: 
           style: (feature) => {
             const name = String(feature?.properties?.name ?? '').toLowerCase()
             const val = valueMap.get(name)
-            if (val === undefined) return { ...GEO_ONLY_STYLE[colorMode], fillOpacity: 0.1 }
+            if (val === undefined) return { ...getGeoOnlyStyle(colorMode, false), fillOpacity: 0.1 }
             return {
               fillColor: getColorScale(val, min, max, colorMode, geoConfig.colorScale),
               weight: 0.5,
@@ -218,8 +227,8 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], height }: 
 
           const marker = L.circleMarker([lat, lng], {
             radius,
-            fillColor: GEO_MARKER_COLOR,
-            color: colorMode === 'dark' ? GEO_MARKER_COLOR_DARK : GEO_MARKER_COLOR,
+            fillColor: effectiveMarkerColor,
+            color: effectiveMarkerColor,
             weight: 1,
             fillOpacity: 0.7,
           })
@@ -248,7 +257,7 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], height }: 
       case 'lines': {
         if (!geoConfig.latCol || !geoConfig.lngCol || !geoConfig.latCol2 || !geoConfig.lngCol2) break
 
-        const lineColor = colorMode === 'dark' ? GEO_MARKER_COLOR_DARK : GEO_MARKER_COLOR
+        const lineColor = effectiveMarkerColor
         const lineLayers: L.Layer[] = []
         const allLatLngs: L.LatLng[] = []
 
@@ -337,7 +346,7 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], height }: 
     }
 
     return { layers: builtLayers, bounds: builtBounds }
-  }, [rows, geoConfig, effectiveGeoJsonData, colorMode, hasError, tooltipCols])
+  }, [rows, geoConfig, effectiveGeoJsonData, colorMode, hasError, tooltipCols, effectiveMarkerColor])
 
   if (hasError) {
     return <ChartError variant="info" message={constraint.error!} />

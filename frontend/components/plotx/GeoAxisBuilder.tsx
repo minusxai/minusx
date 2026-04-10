@@ -10,6 +10,7 @@ import {
 } from 'react-icons/lu'
 import { AxisBuilder, type AxisZone } from './AxisBuilder'
 import { ColorScalePicker } from './ColorScalePicker'
+import { ColorPicker } from './ColorPicker'
 import { MAP_OPTIONS } from '@/lib/chart/geo-data'
 import type { GeoConfig, GeoSubType } from '@/lib/types.gen'
 
@@ -31,6 +32,8 @@ interface GeoAxisBuilderProps {
   onGeoConfigChange: (config: GeoConfig) => void
   tooltipCols?: string[]
   onTooltipColsChange?: (cols: string[]) => void
+  colorOverrides?: Record<string, string>
+  onColorOverridesChange?: (overrides: Record<string, string>) => void
 }
 
 const DEFAULT_CONFIG: GeoConfig = { subType: 'choropleth', showTiles: false, mapName: 'us-states' }
@@ -42,6 +45,8 @@ export function GeoAxisBuilder({
   onGeoConfigChange,
   tooltipCols = [],
   onTooltipColsChange,
+  colorOverrides = {},
+  onColorOverridesChange,
 }: GeoAxisBuilderProps) {
   const config = geoConfig ?? DEFAULT_CONFIG
 
@@ -249,7 +254,7 @@ export function GeoAxisBuilder({
 
       {/* Settings tab — base map, tiles, color scale */}
       {activeTab === 'settings' && (
-        <Box p={3} bg="bg.canvas" display="flex" flexDirection="column" gap={3}>
+        <Box p={3} bg="bg.canvas" display="flex" flexDirection="column" gap={3} position="relative" zIndex={500}>
           {renderSettingsCard('Geo Settings', 'geo',
             <VStack align="stretch" gap={3}>
               <HStack gap={4} flexWrap="wrap" align="center">
@@ -307,6 +312,17 @@ export function GeoAxisBuilder({
                   defaultScale="green"
                   onChange={(scale) => updateConfig({ colorScale: scale })}
                 />
+              )}
+
+              {/* Marker color (points & lines) */}
+              {(config.subType === 'points' || config.subType === 'lines') && onColorOverridesChange && (
+                <Box alignSelf="flex-start">
+                  <ColorPicker
+                    colorOverrides={colorOverrides}
+                    numSeries={1}
+                    onChange={onColorOverridesChange}
+                  />
+                </Box>
               )}
             </VStack>
           )}

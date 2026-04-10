@@ -551,6 +551,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
             onGeoConfigChange={handleGeoConfigChangeInternal}
             tooltipCols={tooltipColumns}
             onTooltipColsChange={onTooltipColsChange}
+            colorOverrides={styleConfig?.colors ?? {}}
+            onColorOverridesChange={(colors) => onStyleConfigChange?.({ ...styleConfig, colors })}
           />
         )}
         <Box flex="1" overflow="hidden" display="flex" minHeight="0">
@@ -559,6 +561,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
             columns={columns}
             geoConfig={initialGeoConfig ?? { subType: 'choropleth' }}
             tooltipCols={tooltipColumns}
+            markerColor={colorPalette[0]}
           />
         </Box>
       </Box>

@@ -139,6 +139,10 @@ export function LeafletMap({
         .geo-tooltip-custom::before {
           display: none !important;
         }
+        .leaflet-top,
+        .leaflet-bottom {
+          z-index: 499 !important;
+        }
       `}</style>
       <div ref={containerRef} style={{ ...style, background: MAP_BG[colorMode] }} />
     </>
