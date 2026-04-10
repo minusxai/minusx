@@ -50,21 +50,21 @@ export async function toJpegObjectUrl(
     const canvasW = Math.round(img.naturalWidth * scale);
     const canvasH = Math.round(img.naturalHeight * scale);
 
-    // When padding=true, add a constant-height footer strip of P px.
-    // The watermark is sized to 60% of P and centred in the bottom-right P×P square,
-    // so it always fits inside the padding area with equal gaps on all four sides.
-    const P = 48; // constant padding in px — footerH, right gap, and logo bounding box are all P
-    const footerH = padding && addWatermark ? P : 0;
+    // When padding=true, add a constant P px strip on both top and bottom so the
+    // chart is symmetrically framed. The watermark sits in the bottom-right P×P square.
+    const P = 48; // constant padding in px
+    const topPad    = padding && addWatermark ? P : 0;
+    const bottomPad = padding && addWatermark ? P : 0;
 
     const canvas = document.createElement('canvas');
     canvas.width = canvasW;
-    canvas.height = canvasH + footerH;
+    canvas.height = topPad + canvasH + bottomPad;
     const ctx = canvas.getContext('2d')!;
 
     const bg = colorMode === 'dark' ? '#161b22' : '#ffffff';
     ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, canvasW, canvasH + footerH);
-    ctx.drawImage(img, 0, 0, canvasW, canvasH);
+    ctx.fillRect(0, 0, canvasW, topPad + canvasH + bottomPad);
+    ctx.drawImage(img, 0, topPad, canvasW, canvasH);
 
     if (addWatermark) {
       try {
@@ -79,7 +79,7 @@ export async function toJpegObjectUrl(
           const logoW = Math.round(logoSize * aspect);
           const logoH = logoSize;
           const logoX = (canvasW - P) + Math.floor((P - logoW) / 2);
-          const logoY = canvasH      + Math.floor((P - logoH) / 2);
+          const logoY = (topPad + canvasH) + Math.floor((P - logoH) / 2); // centred in bottom P strip
           ctx.drawImage(logo, logoX, logoY, logoW, logoH);
         } else {
           // Watermark overlaps chart at bottom-right (original behaviour).
