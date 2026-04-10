@@ -1,15 +1,16 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import L from 'leaflet'
 import 'leaflet.heat'
 import { LeafletMap } from './LeafletMap'
 import { ChartError } from './ChartError'
 import { loadGeoJSON, MAP_DEFAULTS, type MapName } from '@/lib/chart/geo-data'
 import { getColorScale, getRadiusScale, getHeatGradient, GEO_MARKER_COLOR, GEO_MARKER_COLOR_DARK } from '@/lib/chart/geo-color-scale'
+import { formatNumber, applyPrefixSuffix } from '@/lib/chart/chart-utils'
 import { getGeoConstraintError } from '@/lib/chart/geo-constraints'
 import { useAppSelector } from '@/store/hooks'
-import type { GeoConfig } from '@/lib/types.gen'
+import type { GeoConfig, ColumnFormatConfig } from '@/lib/types.gen'
 import type { FeatureCollection } from 'geojson'
 
 interface GeoPlotProps {
@@ -19,6 +20,7 @@ interface GeoPlotProps {
   tooltipCols?: string[]
   markerColor?: string
   height?: number | string
+  columnFormats?: Record<string, ColumnFormatConfig>
 }
 
 /** Border colors: close to white in dark, close to black in light */
@@ -102,10 +104,11 @@ function greatCircleArc(lat1: number, lng1: number, lat2: number, lng2: number, 
   return points
 }
 
-export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColor, height }: GeoPlotProps) {
+export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColor, height, columnFormats = {} }: GeoPlotProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode) as 'light' | 'dark'
   const [geoJsonData, setGeoJsonData] = useState<FeatureCollection | null>(null)
   const [geoJsonError, setGeoJsonError] = useState<string | null>(null)
+  const selectedLayerRef = useRef<L.Layer | null>(null)
 
   // Validate config
   const constraint = getGeoConstraintError(geoConfig, columns)
@@ -169,18 +172,21 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColo
           }
         }
 
+        const defaultStyle = (feature: GeoJSON.Feature | undefined): L.PathOptions => {
+          const name = String(feature?.properties?.name ?? '').toLowerCase()
+          const val = valueMap.get(name)
+          if (val === undefined) return { ...getGeoOnlyStyle(colorMode, false), fillOpacity: 0.1 }
+          return {
+            fillColor: getColorScale(val, min, max, colorMode, geoConfig.colorScale),
+            weight: 0.5,
+            color: GEO_BORDER[colorMode],
+            fillOpacity: 0.8,
+          }
+        }
+
+        // eslint-disable-next-line react-hooks/refs -- ref used in click handler, not during render
         const geoLayer = L.geoJSON(effectiveGeoJsonData, {
-          style: (feature) => {
-            const name = String(feature?.properties?.name ?? '').toLowerCase()
-            const val = valueMap.get(name)
-            if (val === undefined) return { ...getGeoOnlyStyle(colorMode, false), fillOpacity: 0.1 }
-            return {
-              fillColor: getColorScale(val, min, max, colorMode, geoConfig.colorScale),
-              weight: 0.5,
-              color: GEO_BORDER[colorMode],
-              fillOpacity: 0.8,
-            }
-          },
+          style: defaultStyle,
           onEachFeature: (feature, layer) => {
             const name = String(feature?.properties?.name ?? '')
             const val = valueMap.get(name.toLowerCase())
@@ -193,11 +199,107 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColo
                 GEO_TOOLTIP_OPTIONS,
               )
             }
+
+            // Click to highlight region border
+            layer.on('click', () => {
+              // Reset previously selected
+              if (selectedLayerRef.current && selectedLayerRef.current !== layer) {
+                (selectedLayerRef.current as L.GeoJSON).setStyle(defaultStyle((selectedLayerRef.current as unknown as { feature: GeoJSON.Feature }).feature))
+              }
+              // Highlight clicked region
+              if (selectedLayerRef.current === layer) {
+                (layer as L.GeoJSON).setStyle(defaultStyle(feature))
+                selectedLayerRef.current = null
+              } else {
+                (layer as L.GeoJSON).setStyle({
+                  weight: 2.5,
+                  color: colorMode === 'light' ? '#1a73e8' : '#ffffff',
+                  fillOpacity: 0.9,
+                })
+                if (!(layer instanceof L.Marker)) {
+                  (layer as L.Path).bringToFront()
+                }
+                selectedLayerRef.current = layer
+              }
+            })
           },
         })
 
         builtLayers.push(geoLayer)
         builtBounds = geoLayer.getBounds()
+
+        // Add value labels at region centroids
+        const labelLayers: L.Marker[] = []
+        geoLayer.eachLayer((layer) => {
+          const geoJsonLayer = layer as L.GeoJSON & { feature: GeoJSON.Feature }
+          const name = String(geoJsonLayer.feature?.properties?.name ?? '').toLowerCase()
+          const val = valueMap.get(name)
+          if (val === undefined) return
+
+          // Compute polygon centroid using the signed-area formula
+          const center = (() => {
+            const geom = geoJsonLayer.feature.geometry as unknown as { type: string; coordinates: number[][][] | number[][][][] }
+            // Collect outer rings: Polygon → [ring], MultiPolygon → [ring, ring, ...]
+            const rings: number[][][] =
+              geom.type === 'MultiPolygon'
+                ? (geom.coordinates as number[][][][]).map(poly => poly[0])
+                : geom.type === 'Polygon'
+                  ? [geom.coordinates[0] as number[][]]
+                  : []
+
+            // Find the ring with the largest absolute area (main landmass)
+            let bestRing = rings[0]
+            let bestArea = 0
+            for (const ring of rings) {
+              let a = 0
+              for (let i = 0; i < ring.length - 1; i++) {
+                a += ring[i][0] * ring[i + 1][1] - ring[i + 1][0] * ring[i][1]
+              }
+              if (Math.abs(a) > Math.abs(bestArea)) { bestArea = a; bestRing = ring }
+            }
+
+            if (!bestRing || bestRing.length < 3) return (layer as L.Polygon).getBounds().getCenter()
+
+            // Signed-area centroid of the largest ring
+            let cx = 0, cy = 0, a = 0
+            for (let i = 0; i < bestRing.length - 1; i++) {
+              const [x0, y0] = bestRing[i]
+              const [x1, y1] = bestRing[i + 1]
+              const cross = x0 * y1 - x1 * y0
+              a += cross
+              cx += (x0 + x1) * cross
+              cy += (y0 + y1) * cross
+            }
+            if (Math.abs(a) < 1e-10) return (layer as L.Polygon).getBounds().getCenter()
+            a *= 0.5
+            cx /= (6 * a)
+            cy /= (6 * a)
+            // GeoJSON coordinates are [lng, lat]
+            return L.latLng(cy, cx)
+          })()
+
+          const colFmt = geoConfig.valueCol ? columnFormats[geoConfig.valueCol] : undefined
+          const formattedVal = applyPrefixSuffix(
+            formatNumber(val, colFmt?.decimalPoints ?? undefined),
+            colFmt?.prefix,
+            colFmt?.suffix,
+          )
+
+          const labelMarker = L.marker(center, {
+            icon: L.divIcon({
+              className: 'choropleth-value-label',
+              html: `<span style="color:${colorMode === 'dark' ? '#fff' : '#1a1a1a'}">${formattedVal}</span>`,
+              iconSize: [0, 0],
+              iconAnchor: [0, 0],
+            }),
+            interactive: false,
+          })
+          labelLayers.push(labelMarker)
+        })
+
+        if (labelLayers.length > 0) {
+          builtLayers.push(L.layerGroup(labelLayers))
+        }
         break
       }
 
@@ -346,7 +448,7 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColo
     }
 
     return { layers: builtLayers, bounds: builtBounds }
-  }, [rows, geoConfig, effectiveGeoJsonData, colorMode, hasError, tooltipCols, effectiveMarkerColor])
+  }, [rows, geoConfig, effectiveGeoJsonData, colorMode, hasError, tooltipCols, effectiveMarkerColor, columnFormats])
 
   if (hasError) {
     return <ChartError variant="info" message={constraint.error!} />

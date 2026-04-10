@@ -574,6 +574,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
             geoConfig={initialGeoConfig ?? { subType: 'choropleth' }}
             tooltipCols={tooltipColumns}
             markerColor={colorPalette[0]}
+            columnFormats={columnFormats}
           />
         </Box>
       </Box>
