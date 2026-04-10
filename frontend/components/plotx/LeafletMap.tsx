@@ -127,5 +127,20 @@ export function LeafletMap({
     }
   }, [fitBounds])
 
-  return <div ref={containerRef} style={{ ...style, background: MAP_BG[colorMode] }} />
+  return (
+    <>
+      <style>{`
+        .geo-tooltip-custom {
+          background: transparent !important;
+          border: none !important;
+          box-shadow: none !important;
+          padding: 0 !important;
+        }
+        .geo-tooltip-custom::before {
+          display: none !important;
+        }
+      `}</style>
+      <div ref={containerRef} style={{ ...style, background: MAP_BG[colorMode] }} />
+    </>
+  )
 }

@@ -29,6 +29,8 @@ interface GeoAxisBuilderProps {
   types: string[]
   geoConfig?: GeoConfig
   onGeoConfigChange: (config: GeoConfig) => void
+  tooltipCols?: string[]
+  onTooltipColsChange?: (cols: string[]) => void
 }
 
 const DEFAULT_CONFIG: GeoConfig = { subType: 'choropleth', showTiles: false, mapName: 'us-states' }
@@ -38,6 +40,8 @@ export function GeoAxisBuilder({
   types,
   geoConfig,
   onGeoConfigChange,
+  tooltipCols = [],
+  onTooltipColsChange,
 }: GeoAxisBuilderProps) {
   const config = geoConfig ?? DEFAULT_CONFIG
 

@@ -152,7 +152,7 @@ export function QuestionVisualization({
   const [vizSettingsExpanded, setVizSettingsExpanded] = useState(false);
 
   const handleVizTypeChangeWithAutoExpand = (type: VizSettings['type']) => {
-    if (type === 'geo') {
+    if (type !== 'table') {
       setVizSettingsExpanded(true);
     }
     onVizTypeChange(type);

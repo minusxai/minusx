@@ -25,6 +25,45 @@ const GEO_BORDER = {
   dark: '#d0d0d0',
 }
 
+const TOOLTIP_STYLE = {
+  light: {
+    bg: 'rgba(255,255,255,0.95)',
+    border: '#D0D7DE',
+    fg: '#0D1117',
+    fgMuted: '#57606A',
+  },
+  dark: {
+    bg: 'rgba(22,27,34,0.95)',
+    border: '#30363D',
+    fg: '#E6EDF3',
+    fgMuted: '#8B949E',
+  },
+}
+
+function geoTooltipHtml(
+  rows: Array<{ key: string; value: string }>,
+  header: string | null,
+  colorMode: 'light' | 'dark',
+): string {
+  const t = TOOLTIP_STYLE[colorMode]
+  const headerHtml = header
+    ? `<div style="font-weight:700;margin-bottom:4px;color:${t.fg}">${header}</div>`
+    : ''
+  const rowsHtml = rows.map(
+    (r) =>
+      `<tr><td style="padding:1px 10px 1px 0;color:${t.fgMuted};white-space:nowrap">${r.key}</td><td style="text-align:right;font-weight:600;color:${t.fg};white-space:nowrap">${r.value}</td></tr>`,
+  ).join('')
+  return `<div style="font-family:JetBrains Mono,Consolas,monospace;font-size:12px;background:${t.bg};color:${t.fg};border:1px solid ${t.border};border-radius:4px;padding:6px 8px;box-shadow:0 2px 8px rgba(0,0,0,0.15)">${headerHtml}<table style="border-collapse:collapse">${rowsHtml}</table></div>`
+}
+
+const GEO_TOOLTIP_OPTIONS: L.TooltipOptions = {
+  sticky: true,
+  direction: 'top',
+  offset: [0, -8],
+  opacity: 1,
+  className: 'geo-tooltip-custom',
+}
+
 /** Default style for unmatched regions */
 const GEO_ONLY_STYLE = {
   light: { fillColor: '#D0D7DE', weight: 0.3, color: '#ccc', fillOpacity: 0.15 } as L.PathOptions,
@@ -130,7 +169,10 @@ export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
             const name = String(feature?.properties?.name ?? '')
             const val = valueMap.get(name.toLowerCase())
             if (val !== undefined) {
-              layer.bindTooltip(`${name}: ${val.toLocaleString()}`, { sticky: true })
+              layer.bindTooltip(
+                geoTooltipHtml([{ key: geoConfig.valueCol!, value: val.toLocaleString() }], name, colorMode),
+                GEO_TOOLTIP_OPTIONS,
+              )
             }
           },
         })
@@ -173,12 +215,12 @@ export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
           })
 
           // Tooltip
-          const parts: string[] = []
+          const tooltipRows: Array<{ key: string; value: string }> = []
           if (geoConfig.valueCol && row[geoConfig.valueCol] != null) {
-            parts.push(`${geoConfig.valueCol}: ${Number(row[geoConfig.valueCol]).toLocaleString()}`)
+            tooltipRows.push({ key: geoConfig.valueCol, value: Number(row[geoConfig.valueCol]).toLocaleString() })
           }
-          parts.push(`${lat.toFixed(4)}, ${lng.toFixed(4)}`)
-          marker.bindTooltip(parts.join('<br>'), { sticky: true })
+          tooltipRows.push({ key: 'Location', value: `${lat.toFixed(4)}, ${lng.toFixed(4)}` })
+          marker.bindTooltip(geoTooltipHtml(tooltipRows, null, colorMode), GEO_TOOLTIP_OPTIONS)
 
           markers.push(marker)
         }
@@ -213,6 +255,14 @@ export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
             weight: 2,
             opacity: 0.7,
           })
+          // Line tooltip
+          const lineTooltipRows: Array<{ key: string; value: string }> = [
+            { key: 'Origin', value: `${lat1.toFixed(2)}, ${lng1.toFixed(2)}` },
+            { key: 'Dest', value: `${lat2.toFixed(2)}, ${lng2.toFixed(2)}` },
+          ]
+          const cityName = columns.find(c => c !== geoConfig.latCol && c !== geoConfig.lngCol && c !== geoConfig.latCol2 && c !== geoConfig.lngCol2)
+          const header = cityName && row[cityName] != null ? String(row[cityName]) : null
+          line.bindTooltip(geoTooltipHtml(lineTooltipRows, header, colorMode), GEO_TOOLTIP_OPTIONS)
           lineLayers.push(line)
 
           // Start point
