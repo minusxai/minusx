@@ -460,23 +460,44 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
                     >
                       {section.label}
                     </Text>
-                    <Flex
-                      align="center"
-                      justify="center"
-                      boxSize={4}
-                      borderRadius="full"
-                      bg={sectionMeta?.color ? `${sectionMeta.color}/10` : 'bg.emphasized'}
-                      flexShrink={0}
-                    >
-                      <Text
-                        fontSize="2xs"
-                        color={sectionMeta?.color || 'fg.muted'}
-                        fontFamily="mono"
-                        lineHeight="1"
+                    {isCollapsed ? (
+                      <Flex
+                        align="center"
+                        justify="center"
+                        px={2}
+                        py={0.5}
+                        borderRadius="full"
+                        bg={sectionMeta?.color ? `${sectionMeta.color}/10` : 'bg.emphasized'}
+                        flexShrink={0}
                       >
-                        {section.files.length}
-                      </Text>
-                    </Flex>
+                        <Text
+                          fontSize="2xs"
+                          color={sectionMeta?.color || 'fg.muted'}
+                          fontFamily="mono"
+                          lineHeight="1"
+                        >
+                          Show {section.files.length} Files
+                        </Text>
+                      </Flex>
+                    ) : (
+                      <Flex
+                        align="center"
+                        justify="center"
+                        boxSize={4}
+                        borderRadius="full"
+                        bg={sectionMeta?.color ? `${sectionMeta.color}/10` : 'bg.emphasized'}
+                        flexShrink={0}
+                      >
+                        <Text
+                          fontSize="2xs"
+                          color={sectionMeta?.color || 'fg.muted'}
+                          fontFamily="mono"
+                          lineHeight="1"
+                        >
+                          {section.files.length}
+                        </Text>
+                      </Flex>
+                    )}
                     <Box flex="1" h="1px" bg="border.muted" />
                   </HStack>
                 )}
