@@ -63,7 +63,7 @@ describe('DELETE /api/files/[id]', () => {
   beforeAll(async () => {
     await initTestDatabase(dbPath);
     await DocumentDB.create('subfolder', '/org/subfolder', 'folder', { description: '' }, [], COMPANY_ID);
-    await DocumentDB.create('configs', '/org/configs', 'folder', { description: '' }, [], COMPANY_ID);
+    // /org/configs is created by initTestDatabase via company-template.json
   });
 
   afterAll(async () => {
@@ -99,9 +99,9 @@ describe('DELETE /api/files/[id]', () => {
   });
 
   it('returns 403 when trying to delete a protected file type', async () => {
-    // Insert a config file directly (bypassing FilesAPI create guards) to test the delete guard
+    // Use a unique path to avoid conflicting with the template-seeded /org/configs/config
     const configId = await DocumentDB.create(
-      'config.json', '/org/configs/config', 'config', {} as any, [], COMPANY_ID
+      'config-protected', '/org/configs/config-protected', 'config', {} as any, [], COMPANY_ID
     );
     const res = await deleteFile(configId);
     expect(res.status).toBe(403);

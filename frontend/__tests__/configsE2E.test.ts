@@ -90,8 +90,7 @@ describe('POST /api/configs', () => {
 
   beforeAll(async () => {
     await initTestDatabase(dbPath);
-    // Seed /org/configs folder so the config path parent exists
-    await DocumentDB.create('configs', '/org/configs', 'folder', { description: '' }, [], 1);
+    // /org/configs folder is created by initTestDatabase via company-template.json
   });
 
   afterAll(async () => {

@@ -50,20 +50,14 @@ async function addSlackTestFixtures(dbPath: string): Promise<void> {
   const db = await createAdapter({ type: 'sqlite', sqlitePath: dbPath });
   const now = new Date().toISOString();
 
-  // Determine next safe file ID after the seeded /org folder (id=1)
+  // Determine next safe file ID after template-seeded files
   const { rows: [{ next_id }] } = await db.query<{ next_id: number }>(
     'SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM files WHERE company_id = 1',
     []
   );
 
-  // /org/configs folder (parent required by FilesAPI but not by DocumentDB.create direct calls)
-  await db.query(
-    `INSERT INTO files (company_id, id, name, path, type, content, file_references, version, created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-    [1, next_id, 'configs', '/org/configs', 'folder', '{}', '[]', 1, now, now]
-  );
-
-  // Config file at /org/configs/config containing the slack bot
+  // /org/configs folder and /org/configs/config already exist (created by initTestDatabase
+  // via company-template.json). Update the config content with the slack bot configuration.
   const configContent = {
     bots: [{
       type: 'slack',
@@ -78,16 +72,16 @@ async function addSlackTestFixtures(dbPath: string): Promise<void> {
     }],
   };
   await db.query(
-    `INSERT INTO files (company_id, id, name, path, type, content, file_references, version, created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-    [1, next_id + 1, 'config', '/org/configs/config', 'config', JSON.stringify(configContent), '[]', 1, now, now]
+    `UPDATE files SET content = $1 WHERE company_id = 1 AND path = $2`,
+    [JSON.stringify(configContent), '/org/configs/config']
   );
 
-  // MinusX user whose email matches the Slack user
+  // MinusX user whose email matches the Slack user.
+  // id=1 is already created by initTestDatabase (template admin), so use id=2.
   await db.query(
     `INSERT INTO users (id, email, name, password_hash, phone, state, home_folder, role, company_id, created_at, updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-    [1, TEST_EMAIL, 'Slack Test User', null, null, null, '', 'viewer', 1, now, now]
+    [2, TEST_EMAIL, 'Slack Test User', null, null, null, '', 'viewer', 1, now, now]
   );
 
   await db.close();

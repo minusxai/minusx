@@ -10,7 +10,6 @@ import { join } from 'path';
 import { unlinkSync, existsSync } from 'fs';
 import { ChildProcess } from 'child_process';
 import treeKill from 'tree-kill';
-import { createEmptyDatabase } from '@/scripts/create-empty-db';
 import { createNewCompany } from '@/lib/database/import-export';
 import chatReducer from '../chatSlice';
 import { chatListenerMiddleware } from '../chatListener';
@@ -71,8 +70,9 @@ export async function initTestDatabase(dbPath: string = join(process.cwd(), 'dat
   });
 
   // Seed via createNewCompany — uses company-template.json, same as production.
-  // DB_PATH is mocked per-test to dbPath, so this writes to the correct test DB.
-  await createNewCompany('test-company', 'Test User', 'test@example.com', 'password', 'test-company');
+  // Pass dbPath explicitly so this always writes to the correct test DB regardless
+  // of whether the caller has mocked @/lib/database/db-config.
+  await createNewCompany('test-company', 'Test User', 'test@example.com', 'password', 'test-company', dbPath);
 }
 
 /**

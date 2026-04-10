@@ -518,10 +518,11 @@ export async function createNewCompany(
   adminName: string,
   adminEmail: string,
   adminPassword: string,
-  subdomain: string
+  subdomain: string,
+  dbPath: string = DB_PATH
 ): Promise<{ companyId: number; userId: number; adminEmail: string }> {
   // Get the next available company ID
-  const nextCompanyId = await getNextCompanyId();
+  const nextCompanyId = await getNextCompanyId(dbPath);
 
   // Hash password
   const passwordHash = await hashPassword(adminPassword);
@@ -552,7 +553,7 @@ export async function createNewCompany(
   }
 
   // Use surgical import to add this specific company without affecting others
-  await importToDatabase(DB_PATH, initData, [nextCompanyId]);
+  await importToDatabase(dbPath, initData, [nextCompanyId]);
 
   // Return the created company and user info
   return {
@@ -566,10 +567,10 @@ export async function createNewCompany(
  * Get the next available company ID
  * Returns 1 if no companies exist, otherwise max(id) + 1
  */
-export async function getNextCompanyId(): Promise<number> {
+export async function getNextCompanyId(dbPath: string = DB_PATH): Promise<number> {
   const dbType = getDbType();
   const db = dbType === 'sqlite'
-    ? await createAdapter({ type: 'sqlite', sqlitePath: DB_PATH })
+    ? await createAdapter({ type: 'sqlite', sqlitePath: dbPath })
     : await createAdapter({ type: 'postgres', postgresConnectionString: POSTGRES_URL });
 
   try {
