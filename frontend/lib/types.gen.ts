@@ -213,7 +213,7 @@ export type Dualaxis = boolean | null;
 /**
  * geo visualization sub-type
  */
-export type GeoSubType = "choropleth" | "points" | "bubble" | "lines" | "heatmap";
+export type GeoSubType = "choropleth" | "points" | "lines" | "heatmap";
 /**
  * base map name: 'world', 'us-states', 'india-states' (for choropleth)
  */

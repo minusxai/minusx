@@ -48,19 +48,17 @@ describe('getGeoConstraintError', () => {
       const result = getGeoConstraintError(config, columns)
       expect(result.error).toBeNull()
     })
-  })
 
-  describe('bubble', () => {
-    it('requires latCol, lngCol, and valueCol', () => {
-      const config: GeoConfig = { subType: 'bubble', latCol: 'lat', lngCol: 'lng' }
-      const result = getGeoConstraintError(config, columns)
-      expect(result.error).toContain('Value')
-    })
-
-    it('passes with valid config', () => {
-      const config: GeoConfig = { subType: 'bubble', latCol: 'lat', lngCol: 'lng', valueCol: 'revenue' }
+    it('passes with optional valueCol for bubble sizing', () => {
+      const config: GeoConfig = { subType: 'points', latCol: 'lat', lngCol: 'lng', valueCol: 'revenue' }
       const result = getGeoConstraintError(config, columns)
       expect(result.error).toBeNull()
+    })
+
+    it('errors when optional valueCol not in columns', () => {
+      const config: GeoConfig = { subType: 'points', latCol: 'lat', lngCol: 'lng', valueCol: 'missing' }
+      const result = getGeoConstraintError(config, columns)
+      expect(result.error).toBeTruthy()
     })
   })
 

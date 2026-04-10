@@ -32,7 +32,6 @@ class VisualizationType(str, Enum):
 class GeoSubType(str, Enum):
     CHOROPLETH = "choropleth"
     POINTS = "points"
-    BUBBLE = "bubble"
     LINES = "lines"
     HEATMAP = "heatmap"
 

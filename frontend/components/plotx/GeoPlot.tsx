@@ -40,9 +40,9 @@ export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
   const constraint = getGeoConstraintError(geoConfig, columns)
   const hasError = constraint.error !== null
 
-  const needsGeoJson = geoConfig.subType === 'choropleth' && !!geoConfig.mapName
+  const needsGeoJson = !!geoConfig.mapName
 
-  // Load GeoJSON for choropleth
+  // Load GeoJSON when mapName is set (choropleth fills it, others use it as background outline)
   useEffect(() => {
     if (!needsGeoJson) return
 
@@ -62,6 +62,15 @@ export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
 
     const builtLayers: L.Layer[] = []
     let builtBounds: L.LatLngBounds | undefined
+
+    // For non-choropleth, add GeoJSON as a background outline layer if available
+    if (geoConfig.subType !== 'choropleth' && effectiveGeoJsonData) {
+      const bgLayer = L.geoJSON(effectiveGeoJsonData, {
+        style: () => GEO_ONLY_STYLE[colorMode],
+      })
+      builtLayers.push(bgLayer)
+      builtBounds = bgLayer.getBounds()
+    }
 
     switch (geoConfig.subType) {
       case 'choropleth': {
@@ -107,15 +116,16 @@ export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
         break
       }
 
-      case 'points':
-      case 'bubble': {
+      case 'points': {
         if (!geoConfig.latCol || !geoConfig.lngCol) break
 
+        // If valueCol is set, use bubble sizing; otherwise fixed-size points
+        const hasBubble = !!geoConfig.valueCol
         let min = Infinity
         let max = -Infinity
-        if (geoConfig.subType === 'bubble' && geoConfig.valueCol) {
+        if (hasBubble) {
           for (const row of rows) {
-            const val = Number(row[geoConfig.valueCol])
+            const val = Number(row[geoConfig.valueCol!])
             if (!isNaN(val)) { min = Math.min(min, val); max = Math.max(max, val) }
           }
         }
@@ -126,8 +136,8 @@ export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
           const lng = Number(row[geoConfig.lngCol])
           if (isNaN(lat) || isNaN(lng)) continue
 
-          const radius = geoConfig.subType === 'bubble' && geoConfig.valueCol
-            ? getRadiusScale(Number(row[geoConfig.valueCol]), min, max)
+          const radius = hasBubble
+            ? getRadiusScale(Number(row[geoConfig.valueCol!]), min, max)
             : 5
 
           const marker = L.circleMarker([lat, lng], {
@@ -152,7 +162,8 @@ export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
         if (markers.length > 0) {
           const group = L.layerGroup(markers)
           builtLayers.push(group)
-          builtBounds = L.latLngBounds(markers.map((m) => m.getLatLng()))
+          const pointBounds = L.latLngBounds(markers.map((m) => m.getLatLng()))
+          builtBounds = builtBounds ? builtBounds.extend(pointBounds) : pointBounds
         }
         break
       }
@@ -179,8 +190,8 @@ export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
         if (polylines.length > 0) {
           const group = L.layerGroup(polylines)
           builtLayers.push(group)
-          const allPoints = polylines.flatMap((p) => p.getLatLngs() as L.LatLng[])
-          builtBounds = L.latLngBounds(allPoints)
+          const lineBounds = L.latLngBounds(polylines.flatMap((p) => p.getLatLngs() as L.LatLng[]))
+          builtBounds = builtBounds ? builtBounds.extend(lineBounds) : lineBounds
         }
         break
       }
@@ -204,7 +215,8 @@ export function GeoPlot({ rows, columns, geoConfig, height }: GeoPlotProps) {
             maxZoom: 10,
           })
           builtLayers.push(heat)
-          builtBounds = L.latLngBounds(heatPoints.map(([lat, lng]) => [lat, lng] as [number, number]))
+          const heatBounds = L.latLngBounds(heatPoints.map(([lat, lng]) => [lat, lng] as [number, number]))
+          builtBounds = builtBounds ? builtBounds.extend(heatBounds) : heatBounds
         }
         break
       }

@@ -151,6 +151,13 @@ export function QuestionVisualization({
 
   const [vizSettingsExpanded, setVizSettingsExpanded] = useState(false);
 
+  const handleVizTypeChangeWithAutoExpand = (type: VizSettings['type']) => {
+    if (type === 'geo') {
+      setVizSettingsExpanded(true);
+    }
+    onVizTypeChange(type);
+  };
+
   if (!currentState) {
     return null;
   }
@@ -168,7 +175,7 @@ export function QuestionVisualization({
           <Box flexShrink={1} minWidth={0}>
             <VizTypeSelector
               value={currentState?.vizSettings?.type || 'table'}
-              onChange={onVizTypeChange}
+              onChange={handleVizTypeChangeWithAutoExpand}
               orientation={config.viz.typesButtonsOrientation}
             />
           </Box>

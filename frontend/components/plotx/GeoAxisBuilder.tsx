@@ -5,7 +5,7 @@ import { Box, HStack, VStack, Text, Portal, createListCollection } from '@chakra
 import { Checkbox } from '@/components/ui/checkbox'
 import { SelectRoot, SelectTrigger, SelectValueText, SelectPositioner, SelectContent, SelectItem } from '@/components/ui/select'
 import {
-  LuMap, LuMapPin, LuCircleDot, LuRoute, LuFlame,
+  LuMap, LuMapPin, LuRoute, LuFlame,
   LuLayoutGrid, LuSettings2, LuChevronDown, LuChevronRight,
 } from 'react-icons/lu'
 import { AxisBuilder, type AxisZone } from './AxisBuilder'
@@ -16,7 +16,6 @@ import type { GeoConfig, GeoSubType } from '@/lib/types.gen'
 const SUB_TYPES: Array<{ value: GeoSubType; icon: React.ElementType; label: string }> = [
   { value: 'choropleth', icon: LuMap, label: 'Choropleth' },
   { value: 'points', icon: LuMapPin, label: 'Points' },
-  { value: 'bubble', icon: LuCircleDot, label: 'Bubble' },
   { value: 'lines', icon: LuRoute, label: 'Lines' },
   { value: 'heatmap', icon: LuFlame, label: 'Heatmap' },
 ]
@@ -32,7 +31,7 @@ interface GeoAxisBuilderProps {
   onGeoConfigChange: (config: GeoConfig) => void
 }
 
-const DEFAULT_CONFIG: GeoConfig = { subType: 'choropleth', showTiles: false }
+const DEFAULT_CONFIG: GeoConfig = { subType: 'choropleth', showTiles: false, mapName: 'us-states' }
 
 export function GeoAxisBuilder({
   columns,
@@ -63,13 +62,15 @@ export function GeoAxisBuilder({
 
   const handleSubTypeChange = useCallback(
     (subType: GeoSubType) => {
+      // Choropleth requires a mapName; others keep it if already set but don't require it
       onGeoConfigChange({
         subType,
         showTiles: config.showTiles,
-        mapName: subType === 'choropleth' ? (config.mapName ?? 'us-states') : undefined,
+        mapName: subType === 'choropleth' ? (config.mapName ?? 'us-states') : config.mapName,
+        colorScale: config.colorScale,
       })
     },
-    [config.showTiles, config.mapName, onGeoConfigChange],
+    [config.showTiles, config.mapName, config.colorScale, onGeoConfigChange],
   )
 
   const togglePanel = (key: string) => {
@@ -137,12 +138,7 @@ export function GeoAxisBuilder({
         return [
           makeZone('Latitude', 'latCol', 'Drop lat column'),
           makeZone('Longitude', 'lngCol', 'Drop lng column'),
-        ]
-      case 'bubble':
-        return [
-          makeZone('Latitude', 'latCol', 'Drop lat column'),
-          makeZone('Longitude', 'lngCol', 'Drop lng column'),
-          makeZone('Value', 'valueCol', 'Drop value column'),
+          makeZone('Size (optional)', 'valueCol', 'Drop value for bubble sizing'),
         ]
       case 'lines':
         return [
@@ -155,7 +151,7 @@ export function GeoAxisBuilder({
         return [
           makeZone('Latitude', 'latCol', 'Drop lat column'),
           makeZone('Longitude', 'lngCol', 'Drop lng column'),
-          makeZone('Intensity', 'valueCol', 'Drop value (optional)'),
+          makeZone('Intensity (optional)', 'valueCol', 'Drop value column'),
         ]
       default:
         return []
@@ -164,6 +160,37 @@ export function GeoAxisBuilder({
 
   return (
     <VStack align="stretch" gap={0}>
+      {/* Map sub-type selector */}
+      <Box px={3} pt={3} pb={1} bg="bg.canvas">
+        <Text fontSize="2xs" fontFamily="mono" fontWeight="700" textTransform="uppercase" letterSpacing="0.05em" color="fg.subtle" mb={1.5}>
+          Map Subtypes
+        </Text>
+        <HStack gap={1} flexWrap="wrap">
+          {SUB_TYPES.map(({ value, icon: Icon, label }) => {
+            const isActive = config.subType === value
+            return (
+              <HStack
+                key={value}
+                aria-label={`Geo sub-type ${label}`}
+                gap={1}
+                px={2}
+                py={1}
+                borderRadius="md"
+                cursor="pointer"
+                bg={isActive ? 'accent.teal/15' : 'transparent'}
+                color={isActive ? 'accent.teal' : 'fg.muted'}
+                _hover={{ bg: isActive ? 'accent.teal/20' : 'bg.subtle' }}
+                transition="all 0.15s"
+                onClick={() => handleSubTypeChange(value)}
+              >
+                <Icon size={14} />
+                <Text fontSize="xs" fontWeight={isActive ? '700' : '500'}>{label}</Text>
+              </HStack>
+            )
+          })}
+        </HStack>
+      </Box>
+
       {/* Tab bar */}
       <HStack gap={2} justify="flex-start" px={3} pt={3} pb={1} bg="bg.canvas">
         {([{ key: 'fields', icon: LuLayoutGrid, label: 'Fields' }, { key: 'settings', icon: LuSettings2, label: 'Settings' }] as const).map(({ key, icon: Icon, label }) => (
@@ -191,56 +218,32 @@ export function GeoAxisBuilder({
         ))}
       </HStack>
 
-      {/* Fields tab — AxisBuilder renders its own styled container */}
+      {/* Fields tab — column drop zones */}
       {activeTab === 'fields' && (
         <AxisBuilder columns={columns} types={types} zones={zones} />
       )}
 
-      {/* Settings tab */}
+      {/* Settings tab — base map, tiles, color scale */}
       {activeTab === 'settings' && (
         <Box p={3} bg="bg.canvas" display="flex" flexDirection="column" gap={3}>
           {renderSettingsCard('Geo Settings', 'geo',
             <VStack align="stretch" gap={3}>
-              {/* Sub-type selector */}
-              <VStack align="stretch" gap={1}>
-                <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em">
-                  Map Type
-                </Text>
-                <HStack gap={1} flexWrap="wrap">
-                  {SUB_TYPES.map(({ value, icon: Icon, label }) => {
-                    const isActive = config.subType === value
-                    return (
-                      <HStack
-                        key={value}
-                        aria-label={`Geo sub-type ${label}`}
-                        gap={1}
-                        px={2}
-                        py={1}
-                        borderRadius="md"
-                        cursor="pointer"
-                        bg={isActive ? 'accent.teal/15' : 'transparent'}
-                        color={isActive ? 'accent.teal' : 'fg.muted'}
-                        _hover={{ bg: isActive ? 'accent.teal/20' : 'bg.subtle' }}
-                        transition="all 0.15s"
-                        onClick={() => handleSubTypeChange(value)}
-                      >
-                        <Icon size={14} />
-                        <Text fontSize="xs" fontWeight={isActive ? '700' : '500'}>{label}</Text>
-                      </HStack>
-                    )
-                  })}
-                </HStack>
-              </VStack>
-
-              {/* Map options row */}
               <HStack gap={4} flexWrap="wrap" align="center">
-                {/* Map selector (choropleth only) */}
-                {config.subType === 'choropleth' && (
-                  <HStack gap={2} align="center">
-                    <Text fontSize="xs" fontWeight="600" color="fg.muted" whiteSpace="nowrap">Base Map</Text>
+                {/* Base Map checkbox + dropdown */}
+                <HStack gap={2} align="center">
+                  <Checkbox
+                    checked={!!config.mapName}
+                    onCheckedChange={(e) => {
+                      updateConfig({ mapName: e.checked ? (config.mapName || 'us-states') : null })
+                    }}
+                    size="sm"
+                  >
+                    <Text fontSize="xs" color="fg.muted">Base Map</Text>
+                  </Checkbox>
+                  {!!config.mapName && (
                     <SelectRoot
                       collection={mapCollection}
-                      value={config.mapName ? [config.mapName] : []}
+                      value={[config.mapName]}
                       onValueChange={(e) => updateConfig({ mapName: e.value[0] || undefined })}
                       size="sm"
                       width="180px"
@@ -260,8 +263,8 @@ export function GeoAxisBuilder({
                         </SelectPositioner>
                       </Portal>
                     </SelectRoot>
-                  </HStack>
-                )}
+                  )}
+                </HStack>
 
                 {/* Tiles toggle */}
                 <Checkbox
