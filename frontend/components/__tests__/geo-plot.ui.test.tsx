@@ -22,6 +22,7 @@ const mockLayerGroup = {
 const mockGeoJsonLayer = {
   addTo: jest.fn().mockReturnThis(),
   getBounds: jest.fn().mockReturnValue({ isValid: () => true }),
+  eachLayer: jest.fn(),
 }
 
 jest.mock('leaflet', () => ({
