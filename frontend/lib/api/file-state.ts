@@ -106,7 +106,9 @@ function buildEffectiveReference(refFile: FileState, inheritedParams: Record<str
   return {
     ...stripped,
     queryResultId: effectiveQueryResultId,
-    content: { ...content },
+    // Propagate effective params into content so compressFileState recomputes the hash
+    // from inherited values, not the question's standalone defaults.
+    content: { ...content, parameterValues: effectiveParamsDict },
   };
 }
 

@@ -5,6 +5,7 @@ import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { FilesAPI } from '@/lib/data/files.server';
 import { runQuery } from '@/lib/connections/run-query';
 import { createServerRunner } from '@/lib/tests/server';
+import { getAppStateServer } from '@/lib/api/file-state.server';
 import { EvalItem, BinaryAssertion, NumberAssertion, DatabaseWithSchema, QuestionContent, ConversationLogEntry, Test } from '@/lib/types';
 import { orchestratePendingTools } from '@/app/api/chat/orchestrator';
 import '@/app/api/chat/tool-handlers.server';
@@ -56,17 +57,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ passed: false, error: 'eval_item or test is required' } as EvalRunResponse, { status: 400 });
     }
 
-    // Build app_state from eval_item.app_state
+    // Build app_state from eval_item.app_state using unified server utilities
+    // This provides consistent CompressedAugmentedFile format with parameter inheritance
     let app_state: Record<string, unknown> | null = null;
     if (eval_item.app_state.type === 'file') {
-      const fileResult = await FilesAPI.loadFile(eval_item.app_state.file_id, user).catch(() => null);
-      if (fileResult) {
-        const file = fileResult.data;
-        app_state = {
-          type: 'file',
-          file: { id: file.id, name: file.name, path: file.path, type: file.type, content: file.content }
-        };
-      }
+      app_state = await getAppStateServer(eval_item.app_state.file_id, user, { executeQueries: true });
     }
 
     // Build the Python chat request
