@@ -18,7 +18,7 @@ import { searchFilesInFolder } from '@/lib/search/file-search';
 import { executeQuery as execQuery } from '@/lib/api/execute-query.server';
 import { getNodeConnector } from '@/lib/connections';
 import { compressQueryResult } from '@/lib/api/file-state';
-import { dbFileToCompressedAugmented } from '@/lib/api/compress-augmented';
+import { readFilesServer } from '@/lib/api/file-state.server';
 
 // ============================================================================
 // Tool Implementations
@@ -161,16 +161,15 @@ registerTool('ExecuteQuery', async (args, user) => {
 /**
  * ReadFiles — server-side fallback.
  * Reads files directly from SQLite instead of the Redux store.
- * No Redux updates; the result is returned to the LLM only.
+ * Uses readFilesServer() for consistent behavior with client-side:
+ * - Includes references with parameter inheritance
+ * - Computes effective queryResultIds
  */
 registerToolFallback('ReadFiles', async (args, user) => {
   const { fileIds } = args as { fileIds: number[] };
-  const fileResults = await Promise.all(
-    fileIds.map(id => FilesAPI.loadFile(id, user).catch(() => null))
-  );
-  const validFiles = fileResults.filter((r): r is NonNullable<typeof r> => r != null).map(r => r.data);
+  const files = await readFilesServer(fileIds, user, { executeQueries: false });
   return {
-    content: { success: true, files: validFiles.map(f => dbFileToCompressedAugmented(f)) },
+    content: { success: true, files },
     details: { success: true },
   };
 });

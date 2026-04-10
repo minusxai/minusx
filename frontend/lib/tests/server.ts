@@ -16,7 +16,7 @@ import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import { orchestratePendingTools } from '@/app/api/chat/orchestrator';
 import '@/app/api/chat/tool-handlers.server';
-import { dbFileToCompressedAugmented } from '@/lib/api/compress-augmented';
+import { getAppStateServer } from '@/lib/api/file-state.server';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { PythonChatResponse, CompletedToolCallPayload, CompletedToolCallFromPython } from '@/lib/chat-orchestration';
 import type {
@@ -139,14 +139,11 @@ async function executeLLMTest(
 ): Promise<TestRunResult> {
   const subject = test.subject as Extract<typeof test.subject, { type: 'llm' }>;
 
-  // Build app_state for the Python agent
+  // Build app_state for the Python agent using unified server utilities
+  // executeQueries: true so the agent has query results available
   let app_state: Record<string, unknown> | null = null;
   if (subject.context.type === 'file') {
-    const fileResult = await FilesAPI.loadFile(subject.context.file_id, user);
-    if (fileResult.data) {
-      const refs = fileResult.metadata?.references ?? [];
-      app_state = { type: 'file', state: dbFileToCompressedAugmented(fileResult.data, refs) };
-    }
+    app_state = await getAppStateServer(subject.context.file_id, user, { executeQueries: true });
   }
 
   const resolvedHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder || '');

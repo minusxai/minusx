@@ -21,7 +21,7 @@ import { executeQuery as execQuery } from '@/lib/api/execute-query.server';
 import { getNodeConnector } from '@/lib/connections';
 import { compressQueryResult } from '@/lib/api/file-state';
 import { searchFilesInFolder } from '@/lib/search/file-search';
-import { dbFileToCompressedAugmented } from '@/lib/api/compress-augmented';
+import { readFilesServer } from '@/lib/api/file-state.server';
 
 export type McpToolCallResult = { content: Array<{ type: 'text'; text: string }> };
 export type OnToolCall = (tool: string, args: Record<string, unknown>, result: McpToolCallResult) => void;
@@ -220,15 +220,13 @@ export function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCall): M
       },
     },
     async ({ fileIds }: { fileIds: number[] }) => {
-      const fileResults = await Promise.all(
-        fileIds.map(id => FilesAPI.loadFile(id, user).catch(() => null))
-      );
-      const validFiles = fileResults
-        .filter((r): r is NonNullable<typeof r> => r != null)
-        .map(r => dbFileToCompressedAugmented(r.data));
+      // Use readFilesServer for consistent behavior with client-side:
+      // - Includes references with parameter inheritance
+      // - Computes effective queryResultIds
+      const files = await readFilesServer(fileIds, user, { executeQueries: false });
 
       const result: McpToolCallResult = {
-        content: [{ type: 'text' as const, text: JSON.stringify({ success: true, files: validFiles }) }],
+        content: [{ type: 'text' as const, text: JSON.stringify({ success: true, files }) }],
       };
       onToolCall?.('ReadFiles', { fileIds }, result);
       return result;

@@ -2,7 +2,7 @@ import 'server-only';
 import { FilesAPI } from '@/lib/data/files.server';
 import { runChatOrchestration } from '@/lib/chat/run-orchestration';
 import { resolveBaseUrl } from '@/lib/jobs/job-utils';
-import { dbFileToCompressedAugmented } from '@/lib/api/compress-augmented';
+import { getAppStateServer } from '@/lib/api/file-state.server';
 import type { ReportContent, ReportOutput, ReportRunContent, JobHandlerResult, JobRunnerInput } from '@/lib/types';
 import type { JobHandler } from '../job-registry';
 
@@ -19,18 +19,18 @@ export const reportJobHandler: JobHandler = {
     // Load reference files from DB and build CompressedAugmentedFile for each.
     // The Python AnalystAgent expects app_state: { type: 'file', state: CompressedAugmentedFile }
     // — the same shape ChatInterface builds client-side via compressAugmentedFile().
-    // dbFileToCompressedAugmented handles the DbFile → CompressedAugmentedFile pipeline,
-    // including passing the file's own references (e.g. questions inside a dashboard).
+    // getAppStateServer handles the full pipeline including:
+    // - Parameter inheritance for dashboards
+    // - Query execution with inherited params
     const enrichedReferences = await Promise.all(
       (report.references || []).map(async (ref) => {
+        // Load file for metadata (name, path, connection_id)
         const refResult = await FilesAPI.loadFile(ref.reference.id, user);
         const refFile = refResult.data;
-        const refFileRefs = (refResult.metadata?.references ?? []);
         const connectionId = (refFile?.content as any)?.connection_name;
 
-        const appState = refFile
-          ? { type: 'file' as const, state: dbFileToCompressedAugmented(refFile, refFileRefs) }
-          : null;
+        // Build app state with query execution enabled for reports
+        const appState = await getAppStateServer(ref.reference.id, user, { executeQueries: true });
 
         return {
           ...ref,
