@@ -12,7 +12,7 @@
 import 'server-only';
 import { FilesAPI } from '@/lib/data/files.server';
 import { runQuery } from '@/lib/connections/run-query';
-import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
+import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import { orchestratePendingTools } from '@/app/api/chat/orchestrator';
 import '@/app/api/chat/tool-handlers.server';
@@ -146,15 +146,13 @@ async function executeLLMTest(
     app_state = await getAppStateServer(subject.context.file_id, user, { executeQueries: true });
   }
 
-  const resolvedHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder || '');
+  const baseArgs = await buildServerAgentArgs(user);
   const agentArgs = {
+    ...baseArgs,
     goal: subject.prompt,
     assertion: { type: answerTypeToPythonAssertion(test.answerType) },
-    schema: [],  // no schema context for standalone test — agent uses SearchDBSchema
-    context: '',
-    connection_id: subject.connection_id || defaultConnectionId,
+    connection_id: subject.connection_id || defaultConnectionId || baseArgs.connection_id,
     app_state,
-    home_folder: resolvedHomeFolder,
   };
 
   // Run the agent loop (same pattern as /api/evals route)

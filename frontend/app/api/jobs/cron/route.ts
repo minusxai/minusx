@@ -16,6 +16,7 @@ import { JobRunsDB } from '@/lib/database/job-runs-db';
 import { CompanyDB } from '@/lib/database/company-db';
 import { FilesAPI } from '@/lib/data/files.server';
 import { resolvePath } from '@/lib/mode/path-resolver';
+import type { Mode } from '@/lib/mode/mode-types';
 import { JOB_DEFINITIONS } from '@/lib/jobs/job-definitions';
 import { JOB_HANDLERS } from '@/lib/jobs/job-registry';
 import { getConfigsByCompanyId } from '@/lib/data/configs.server';
@@ -175,7 +176,11 @@ async function runForCompany(
       const previousRuns = await JobRunsDB.getByJobId(jobId, jobDef.job_type, user.companyId, 10);
       const startedAt = new Date().toISOString();
 
-      const runPath = resolvePath(user.mode, `/logs/runs/${Date.now()}`);
+      // Derive mode from the job file's path (first segment: /org/... → 'org')
+      const jobMode = (jobFile.path.split('/').filter(Boolean)[0] ?? user.mode) as Mode;
+      const jobUser: EffectiveUser = { ...user, mode: jobMode };
+
+      const runPath = resolvePath(jobMode, `/logs/runs/${Date.now()}`);
       const initialContent: RunFileContent = { job_type: jobDef.job_type, status: 'running', startedAt };
       let runFileId: number;
       let runFileName: string;
@@ -184,7 +189,7 @@ async function runForCompany(
       try {
         const createResult = await FilesAPI.createFile(
           { name: `run-${jobId}-${jobDef.job_type}`, path: runPath, type: 'alert_run', content: initialContent, references: [jobFile.id], options: { createPath: true } },
-          user
+          jobUser
         );
         runFileId = createResult.data.id;
         runFileName = createResult.data.name;
@@ -202,7 +207,7 @@ async function runForCompany(
       try {
         const result = await handler.execute(
           { runFileId, jobId, jobType: jobDef.job_type, file: content, previousRuns },
-          user
+          jobUser
         );
 
         const messages: RunMessageRecord[] = result.messages.map((m) => ({ ...m, status: 'pending' }));
@@ -210,9 +215,9 @@ async function runForCompany(
           job_type: jobDef.job_type, status: 'success', startedAt,
           completedAt: new Date().toISOString(), output: result.output, messages,
         };
-        await FilesAPI.saveFile(runFileId, runFileName, runFilePath, successContent, [jobFile.id], user);
+        await FilesAPI.saveFile(runFileId, runFileName, runFilePath, successContent, [jobFile.id], jobUser);
 
-        const { config } = await getConfigsByCompanyId(user.companyId, user.mode);
+        const { config } = await getConfigsByCompanyId(jobUser.companyId, jobUser.mode);
         const _emailRaw = config.messaging?.webhooks?.find(w => w.type === 'email_alert');
         const emailWebhook = _emailRaw ? resolveWebhook(_emailRaw) : null;
         const _phoneRaw = config.messaging?.webhooks?.find(w => w.type === 'phone_alert');
@@ -253,7 +258,7 @@ async function runForCompany(
         }
 
         if (messages.length > 0) {
-          await FilesAPI.saveFile(runFileId, runFileName, runFilePath, { ...successContent, messages }, [jobFile.id], user);
+          await FilesAPI.saveFile(runFileId, runFileName, runFilePath, { ...successContent, messages }, [jobFile.id], jobUser);
         }
 
         await JobRunsDB.complete(runId, 'SUCCESS');
@@ -264,7 +269,7 @@ async function runForCompany(
           job_type: jobDef.job_type, status: 'failure', startedAt,
           completedAt: new Date().toISOString(), error: errorMessage,
         };
-        await FilesAPI.saveFile(runFileId, runFileName, runFilePath, failureContent, [jobFile.id], user);
+        await FilesAPI.saveFile(runFileId, runFileName, runFilePath, failureContent, [jobFile.id], jobUser);
         await JobRunsDB.complete(runId, 'FAILURE', errorMessage);
         failed++;
       }
@@ -272,9 +277,9 @@ async function runForCompany(
   }
 
   if (failed > 0) {
-    appEventRegistry.publish(AppEvents.JOB_CRON_FAILED, { companyId, mode: 'org', triggered, skipped, failed });
+    appEventRegistry.publish(AppEvents.JOB_CRON_FAILED, { companyId, mode: user.mode, triggered, skipped, failed });
   } else if (triggered > 0) {
-    appEventRegistry.publish(AppEvents.JOB_CRON_SUCCEEDED, { companyId, mode: 'org', triggered, skipped });
+    appEventRegistry.publish(AppEvents.JOB_CRON_SUCCEEDED, { companyId, mode: user.mode, triggered, skipped });
   }
 
   return { triggered, skipped, failed };

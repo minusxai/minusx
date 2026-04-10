@@ -34,10 +34,14 @@ import queryResultsReducer from '../queryResultsSlice';
 import authReducer from '../authSlice';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
 import { DocumentDB } from '@/lib/database/documents-db';
-import type { QuestionContent, DocumentContent, UserRole } from '@/lib/types';
+import type { QuestionContent, DocumentContent, UserRole, ContextContent, ConnectionContent } from '@/lib/types';
 import type { CompressedAugmentedFile } from '@/lib/types';
 import type { Mode } from '@/lib/mode/mode-types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
+import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
+import { buildSlackAgentArgs } from '@/lib/integrations/slack/context';
+import { getWhitelistedSchemaForUser, getDocumentationForUser } from '@/lib/sql/schema-filter';
+import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
 import {
   readFiles,
   selectAugmentedFiles,
@@ -468,4 +472,107 @@ describe('Client-Server File State Parity', () => {
     );
     expect(postPublishServer[0]).toEqual(postPublishClient);
   });
-});
+
+  // ============================================================================
+  // Agent Args Parity
+//
+// Verifies that buildServerAgentArgs() — the shared base used by all server-
+// initiated agents (Slack, Report, Test, Alert) — produces the same schema
+// and context that the client-side AnalystAgent derives from the same DB state.
+//
+// Parity invariants:
+//   buildServerAgentArgs(user).schema
+//     === flattenSchemaForPrompt(getWhitelistedSchemaForUser(ctx, userId, hf))
+//
+//   buildServerAgentArgs(user).context
+//     === getDocumentationForUser(ctx, userId)
+//
+//   buildSlackAgentArgs(user) === { ...buildServerAgentArgs(user), app_state: { type: 'slack' } }
+// ============================================================================
+
+describe('Agent Args Parity', () => {
+  let agentUser: EffectiveUser;
+  // loadedContext is what the DB actually returns after the context loader runs
+  // (fullSchema is computed from real connections, not from what we seeded).
+  // We use this for parity assertions so both sides go through the same pipeline.
+  let loadedContext: ContextContent;
+
+  beforeAll(async () => {
+    const companyId = 1;
+
+    // Seed a connection at /org/database/test-conn (type='duckdb')
+    await DocumentDB.create(
+      'test-conn',
+      '/org/database/test-conn',
+      'connection',
+      { type: 'duckdb', config: {} } as ConnectionContent,
+      [],
+      companyId
+    );
+
+    // Seed a context with known whitelist + docs.
+    // Note: the context loader overwrites fullSchema from real connections.
+    // In tests there is no real DuckDB, so fullSchema will be empty — that's
+    // fine because we assert parity (both sides use the same DB-loaded context).
+    await DocumentDB.create('test-context', '/org/test-context', 'context', {
+      published: { all: 1 },
+      versions: [{
+        version: 1,
+        databases: [{ databaseName: 'test-conn', whitelist: [{ type: 'schema', name: 'main' }] }],
+        docs: [{ content: 'Agent documentation for testing', draft: false }],
+        createdAt: new Date().toISOString(),
+        createdBy: 1,
+      }],
+    } as ContextContent, [], companyId);
+
+    // home_folder='' → resolveHomeFolderSync('org', '') → '/org' (mode root)
+    agentUser = {
+      userId: 1,
+      email: 'test@example.com',
+      name: 'Test User',
+      role: 'admin',
+      home_folder: '',
+      companyId: 1,
+      companyName: 'test-company',
+      mode: 'org',
+    };
+
+    // Load the context through the same FilesAPI pipeline buildServerAgentArgs uses,
+    // so loadedContext.fullSchema reflects what the loader actually computed.
+    const { FilesAPI } = await import('@/lib/data/files.server');
+    const result = await FilesAPI.loadFileByPath('/org/test-context', agentUser);
+    loadedContext = result.data.content as ContextContent;
+  });
+
+  it('buildServerAgentArgs: schema and context match pure-function output for same DB context', async () => {
+    const args = await buildServerAgentArgs(agentUser);
+
+    expect(args.connection_id).toBe('test-conn');
+    expect(args.selected_database_info).toEqual({ name: 'test-conn', dialect: 'duckdb' });
+
+    // Both sides use the same DB-loaded context — parity is the invariant, not a specific value.
+    const effectiveHomeFolder = resolveHomeFolderSync(agentUser.mode, agentUser.home_folder || '');
+    const whitelisted = getWhitelistedSchemaForUser(loadedContext, agentUser.userId, effectiveHomeFolder);
+    const expectedSchema = whitelisted.flatMap(db =>
+      db.schemas.map(s => ({ schema: s.schema, tables: s.tables.map(t => t.table) }))
+    );
+    expect(args.schema).toEqual(expectedSchema);
+
+    // Context docs come from the version's docs array, not fullSchema — these work in tests.
+    const expectedContext = getDocumentationForUser(loadedContext, agentUser.userId);
+    expect(args.context).toBe(expectedContext);
+    expect(args.context).toContain('Agent documentation for testing');
+  });
+
+  it('buildSlackAgentArgs: delegates to buildServerAgentArgs and adds app_state.type=slack', async () => {
+    const base = await buildServerAgentArgs(agentUser);
+    const slack = await buildSlackAgentArgs(agentUser);
+
+    expect(slack.schema).toEqual(base.schema);
+    expect(slack.context).toBe(base.context);
+    expect(slack.connection_id).toBe(base.connection_id);
+    expect(slack.selected_database_info).toEqual(base.selected_database_info);
+    expect(slack.app_state).toEqual({ type: 'slack' });
+  });
+}); // end Agent Args Parity
+}); // end Client-Server File State Parity
