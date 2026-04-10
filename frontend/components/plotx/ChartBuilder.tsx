@@ -470,7 +470,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     }
     const rendered = await clientChartImageRenderer.renderCharts(
       [{ queryResult, vizSettings }],
-      { width: window.innerWidth, colorMode, addWatermark: true },
+      { width: window.innerWidth, colorMode, addWatermark: true, padding: true },
     )
     if (rendered.length === 0) return
     const link = document.createElement('a')

@@ -87,22 +87,24 @@ export async function renderChartToJpeg(
 
   const chartPng = svgToPngBuffer(svg);
 
+  const padding = options.padding ?? false;
   const logoSize = 24;
-  const footerHeight = 36;
-  const totalHeight = height + footerHeight;
+  const footerHeight = 64;  // logo (24) + 20px top + 20px bottom
+  const totalHeight = padding ? height + footerHeight : height;
   const bgColor = BG_COLORS[colorMode];
 
   const layers: sharp.OverlayOptions[] = [
     { input: chartPng, top: 0, left: 0 },
   ];
 
-  if (fs.existsSync(logoPath)) {
+  if (padding && fs.existsSync(logoPath)) {
     try {
       const logoBuf = await sharp(logoPath).resize(logoSize, logoSize).png().toBuffer();
       layers.push({
         input: logoBuf,
+        // Centre vertically in footer strip, right-aligned with 20px from edge
         top: height + Math.floor((footerHeight - logoSize) / 2),
-        left: width - 16 - logoSize,
+        left: width - 20 - logoSize,
       });
     } catch {
       // Logo load failed — continue without it

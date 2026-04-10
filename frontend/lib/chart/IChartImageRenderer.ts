@@ -11,6 +11,9 @@ export interface ChartRenderOptions {
   width: number
   colorMode: 'light' | 'dark'
   addWatermark: boolean
+  /** When true, adds a bottom strip equal to the watermark height so the logo
+   *  sits inside the strip rather than overlapping chart content. */
+  padding?: boolean
 }
 
 export interface RenderedChart {
