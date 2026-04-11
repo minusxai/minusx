@@ -80,6 +80,10 @@ export function LeafletMap({
       resizeObserver.unobserve(currentContainer)
       resizeObserver.disconnect()
       map.remove()
+      // Clear Leaflet's internal stamps from the container so React StrictMode's
+      // double-mount doesn't find stale _leaflet_pos/_leaflet_id on the DOM node
+      // and crash when trying to position layers from the previous instance.
+      delete (currentContainer as any)._leaflet_id
       mapRef.current = null
       tileLayerRef.current = null
       dataLayerGroupRef.current = null
