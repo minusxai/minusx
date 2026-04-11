@@ -34,17 +34,31 @@ import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { encodeFileStr, decodeFileStr } from '@/lib/api/file-encoding';
 import type { RootState } from '@/store/store';
-import type { AugmentedFile, FileState, QueryResult, QuestionContent, FileType, DbFile, QuestionReference } from '@/lib/types';
+import type { AugmentedFile, FileState, QueryResult, QuestionContent, FileType, DbFile } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
 import { validateFileState } from '@/lib/validation/content-validators';
 import { deepMerge, generateDiff } from '@/lib/utils/deep-merge';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
+import type {
+  ReadFilesOptions,
+  ReadFilesByCriteriaOptions,
+  ReadFolderOptions,
+  ReadFolderResult,
+  QueryExecutionParams,
+  GetQueryResultOptions,
+} from '@/lib/api/file-state-interface';
 
-interface ReadFilesOptions {
-  ttl?: number;      // Time-to-live in ms (default: CACHE_TTL.FILE)
-  skip?: boolean;    // Skip loading (return from Redux only)
-}
+export type {
+  IFileStateRead,
+  ReadFilesOptions,
+  ReadFilesByCriteriaOptions,
+  ReadFolderOptions,
+  ReadFolderResult,
+  QueryExecutionParams,
+  GetQueryResultOptions,
+} from '@/lib/api/file-state-interface';
+
 
 /**
  * Global promise manager for in-flight file fetches
@@ -166,19 +180,6 @@ export async function readFiles(
   return selectAugmentedFiles(getStore().getState(), fileIds);
 }
 
-/**
- * Options for readFilesByCriteria
- */
-export interface ReadFilesByCriteriaOptions {
-  criteria: {
-    paths?: string[];
-    type?: FileType;
-    depth?: number;
-  };
-  ttl?: number;
-  skip?: boolean;
-  partial?: boolean;  // If true, return metadata only (faster)
-}
 
 /**
  * ReadFilesByCriteria - Load files by criteria (path, type, depth)
@@ -1094,23 +1095,6 @@ export async function createFolder(
 // Read Folder
 // ============================================================================
 
-/**
- * Options for reading a folder
- */
-export interface ReadFolderOptions {
-  depth?: number;      // 1 = direct children, -1 = all descendants (default: 1)
-  ttl?: number;        // Time-to-live in ms (default: CACHE_TTL.FOLDER)
-  forceLoad?: boolean; // Force fresh load, bypassing cache (default: false)
-}
-
-/**
- * Result of reading a folder
- */
-export interface ReadFolderResult {
-  files: FileState[];  // Child files (filtered by permissions)
-  loading: boolean;
-  error: LoadError | null;
-}
 
 /**
  * readFolder - Load folder contents with TTL caching and permission filtering
@@ -1244,25 +1228,6 @@ async function filterFilesByPermissions(files: FileState[]): Promise<FileState[]
 // Get Query Result
 // ============================================================================
 
-/**
- * Options for query execution
- */
-export interface GetQueryResultOptions {
-  ttl?: number;        // Time-to-live in ms (default: CACHE_TTL.QUERY)
-  skip?: boolean;      // Skip execution (default: false)
-  forceLoad?: boolean; // Bypass TTL cache and re-execute even if fresh (default: false)
-}
-
-/**
- * Query execution parameters
- */
-export interface QueryExecutionParams {
-  query: string;
-  params: Record<string, any>;
-  database: string;
-  references?: QuestionReference[];  // For CTE composition
-  parameterTypes?: Record<string, 'text' | 'number' | 'date'>;  // Declared types for asyncpg coercion
-}
 
 /**
  * Global promise manager for in-flight queries

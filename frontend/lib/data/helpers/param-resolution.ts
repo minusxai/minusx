@@ -13,22 +13,24 @@ import { getQueryHash } from '@/lib/utils/query-hash';
 import type { DocumentContent, QuestionContent, QuestionParameter, QueryResult } from '@/lib/types';
 
 /**
- * Extracts the initial inherited params for the root file being augmented.
- *
- * Dashboards store their current effective parameter values in
- * content.parameterValues (a flat {name: value} dict). These are the values
- * the user has set (or the question defaults where not overridden), and they
- * cascade to every embedded reference.
- *
- * For questions viewed on their own page there is no parent, so we return {}
- * and each question uses its own saved parameter defaults.
+ * Extracts inherited params from a file's content directly.
+ * Shared by both client (via selectMergedContent) and server (via DbFile.content).
+ * Dashboards pass their parameterValues down to all references; everything else returns {}.
  */
-export function getRootParams(state: RootState, fileState: FileState): Record<string, any> {
-  if (fileState.type === 'dashboard') {
-    const content = selectMergedContent(state, fileState.id) as DocumentContent;
-    return content?.parameterValues || {};
+export function getRootParamsFromContent(type: string, content: any): Record<string, any> {
+  if (type === 'dashboard') {
+    return (content as DocumentContent)?.parameterValues || {};
   }
   return {};
+}
+
+/**
+ * Extracts the initial inherited params for the root file being augmented.
+ * Client-side version: reads merged content (including unsaved edits) from Redux.
+ */
+export function getRootParams(state: RootState, fileState: FileState): Record<string, any> {
+  const content = selectMergedContent(state, fileState.id);
+  return getRootParamsFromContent(fileState.type, content);
 }
 
 /**
