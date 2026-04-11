@@ -4,6 +4,7 @@
 
 export interface ScreenshotOptions {
   pixelRatio?: number;         // Retina scaling (default: 2)
+  maxWidth?: number;           // Cap output width in px; pixelRatio is derived automatically
   backgroundColor?: string;    // Background color
   quality?: number;            // JPEG quality (0-1, default: 1.0)
   format?: 'png' | 'jpeg';     // Output format (default: 'png')

@@ -224,9 +224,11 @@ const checkboxStyle: React.CSSProperties = { display: 'flex', alignItems: 'cente
 
 function ImageToolsPanel({ fileId }: { fileId: number | undefined }) {
   const [webLink, setWebLink] = useState(false);
+  const [limit256, setLimit256] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<ImageResult | null>(null);
-  const { captureFileView, blobToDataURL, download } = useScreenshot();
+  const screenshotOptions = limit256 ? { maxWidth: 256 } : undefined;
+  const { captureFileView, blobToDataURL, download } = useScreenshot(screenshotOptions);
 
   if (fileId === undefined) return null;
 
@@ -237,7 +239,7 @@ function ImageToolsPanel({ fileId }: { fileId: number | undefined }) {
       const blob = await captureFileView(fileId, { fullHeight: true });
       const dataUrl = await blobToDataURL(blob);
       const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
-      download(blob, `screenshot-${ts}.png`);
+      download(blob, `screenshot-${ts}.jpg`);
 
       let url: string | undefined;
       if (webLink) {
@@ -261,6 +263,10 @@ function ImageToolsPanel({ fileId }: { fileId: number | undefined }) {
           <label style={checkboxStyle}>
             <input type="checkbox" checked={webLink} onChange={e => setWebLink(e.target.checked)} aria-label="Upload to S3 and return web link" />
             <Text fontSize="2xs" color="fg.muted">Web link</Text>
+          </label>
+          <label style={checkboxStyle}>
+            <input type="checkbox" checked={limit256} onChange={e => setLimit256(e.target.checked)} aria-label="Limit width to 256px" />
+            <Text fontSize="2xs" color="fg.muted">256px</Text>
           </label>
         </HStack>
 

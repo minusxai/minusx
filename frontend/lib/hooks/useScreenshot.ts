@@ -5,7 +5,7 @@
  * Works with ECharts (canvas-based) out of the box.
  */
 import { useCallback } from 'react';
-import { toBlob, toPng } from 'html-to-image';
+import { toJpeg, toPng } from 'html-to-image'; // toPng used when format: 'png' is set
 import { useAppSelector } from '@/store/hooks';
 import { ScreenshotOptions, ScreenshotResult } from '../screenshot/types';
 
@@ -19,13 +19,22 @@ export function useScreenshot(options?: ScreenshotOptions) {
   const captureElement = useCallback(async (element: HTMLElement): Promise<Blob> => {
     const defaultBgColor = colorMode === 'dark' ? '#0D1117' : '#FAFBFC';
 
-    const blob = await toBlob(element, {
-      pixelRatio: options?.pixelRatio ?? 0.75,
+    const pixelRatio = options?.maxWidth != null
+      ? options.maxWidth / element.offsetWidth
+      : (options?.pixelRatio ?? 0.75);
+
+    const format = options?.format ?? 'jpeg';
+    const capture = format === 'png' ? toPng : toJpeg;
+    const blobFromDataURL = (dataURL: string) =>
+      fetch(dataURL).then(r => r.blob());
+
+    const dataURL = await capture(element, {
+      pixelRatio,
       backgroundColor: options?.backgroundColor ?? defaultBgColor,
       filter: options?.filter,
-      quality: options?.quality ?? 1.0,
-      cacheBust: true, // Prevent caching issues
+      quality: options?.quality ?? 0.9,
     });
+    const blob = await blobFromDataURL(dataURL);
 
     if (!blob) throw new Error('Screenshot capture failed');
     return blob;
@@ -140,20 +149,14 @@ export function useScreenshot(options?: ScreenshotOptions) {
    */
   const captureElementWithMetadata = useCallback(async (element: HTMLElement): Promise<ScreenshotResult> => {
     const blob = await captureElement(element);
-    const dataURL = await toPng(element, {
-      pixelRatio: options?.pixelRatio ?? 0.75,
-      backgroundColor: options?.backgroundColor ?? (colorMode === 'dark' ? '#0D1117' : '#FAFBFC'),
-      filter: options?.filter,
-      quality: options?.quality ?? 1.0,
-      cacheBust: true,
+    const dataURL = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
     });
-
-    return {
-      blob,
-      dataURL,
-      timestamp: new Date().toISOString()
-    };
-  }, [captureElement, colorMode, options]);
+    return { blob, dataURL, timestamp: new Date().toISOString() };
+  }, [captureElement]);
 
   /**
    * Download helper - triggers browser download
