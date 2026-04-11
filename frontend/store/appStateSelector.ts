@@ -3,7 +3,8 @@ import type { RootState } from './store';
 import type { FileState } from './filesSlice';
 import type { AppState } from '@/lib/appState';
 import { isHiddenSystemPath } from '@/lib/mode/path-resolver';
-import { selectAugmentedFiles, compressAugmentedFile } from '@/lib/api/file-state';
+import { selectAugmentedFiles } from '@/lib/store/file-selectors';
+import { compressAugmentedFile } from '@/lib/api/compress-augmented';
 import { computePathState } from './navigationSlice';
 
 /**

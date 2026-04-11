@@ -34,132 +34,12 @@ import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { encodeFileStr, decodeFileStr } from '@/lib/api/file-encoding';
 import type { RootState } from '@/store/store';
-import type { AugmentedFile, FileState, QueryResult, QuestionContent, QuestionParameter, FileType, DocumentContent, DbFile, QuestionReference } from '@/lib/types';
+import type { AugmentedFile, FileState, QueryResult, QuestionContent, FileType, DbFile, QuestionReference } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
 import { validateFileState } from '@/lib/validation/content-validators';
-
-export { selectDirtyFiles } from '@/store/filesSlice';
-export { ConflictError } from '@/lib/data/files';
-export { compressAugmentedFile, compressQueryResult } from '@/lib/api/compress-augmented';
-
-/**
- * Extracts the initial inherited params for the root file being augmented.
- *
- * Dashboards store their current effective parameter values in
- * content.parameterValues (a flat {name: value} dict). These are the values
- * the user has set (or the question defaults where not overridden), and they
- * cascade to every embedded reference.
- *
- * For questions viewed on their own page there is no parent, so we return {}
- * and each question uses its own saved parameter defaults.
- */
-function getRootParams(state: RootState, fileState: FileState): Record<string, any> {
-  if (fileState.type === 'dashboard') {
-    const content = selectMergedContent(state, fileState.id) as DocumentContent;
-    return content?.parameterValues || {};
-  }
-  return {};
-}
-
-/**
- * Resolves effective parameter values for a question.
- * Merges the question's own parameterValues with inherited params (inherited wins).
- * Returns a dict filtered to only params the question defines.
- *
- * Only params the question itself defines are included; unrelated inherited
- * params are dropped (prevents sibling-question param pollution in the hash).
- */
-function resolveEffectiveParams(
-  parameters: QuestionParameter[],
-  ownParamValues: Record<string, any>,
-  inheritedParams: Record<string, any>
-): Record<string, any> {
-  const dict: Record<string, any> = {};
-  for (const p of parameters) {
-    dict[p.name] = Object.prototype.hasOwnProperty.call(inheritedParams, p.name)
-      ? inheritedParams[p.name]
-      : (ownParamValues[p.name] ?? '');
-  }
-  return dict;
-}
-
-/**
- * Builds an effective FileState for a reference viewed in a parent's context.
- *   - Strips ephemeralChanges: the reference's transient state (lastExecuted, etc.)
- *     pertains to its own page, not to the parent context.
- *   - Patches question parameters to reflect effective inherited values.
- *     queryResultIDs are computed here from the effective params.
- */
-function buildEffectiveReference(refFile: FileState, inheritedParams: Record<string, any>): FileState {
-  const stripped = { ...refFile, ephemeralChanges: {} };
-  if (refFile.type !== 'question' || !refFile.content) return stripped;
-  const content = refFile.content as QuestionContent;
-
-  const ownParamValues = content.parameterValues ?? {};
-  const effectiveParamsDict = content.parameters?.length
-    ? resolveEffectiveParams(content.parameters, ownParamValues, inheritedParams)
-    : {};
-  const effectiveQueryResultId = content.query && content.connection_name
-    ? getQueryHash(content.query, effectiveParamsDict, content.connection_name)
-    : refFile.queryResultId;
-  return {
-    ...stripped,
-    queryResultId: effectiveQueryResultId,
-    // Propagate effective params into content so compressFileState recomputes the hash
-    // from inherited values, not the question's standalone defaults.
-    content: { ...content, parameterValues: effectiveParamsDict },
-  };
-}
-
-/**
- * Recursively collects query results for a file and all its references,
- * cascading inherited params down the hierarchy.
- *
- * Mental model: params always flow down the reference stack.
- * - A dashboard passes its parameterValues to its questions.
- * - A question passes those same params to any questions it references.
- * - Each file uses inheritedParams as overrides for the params it defines.
- *   Params the file does not define are not included in its cache hash
- *   (no cross-question pollution).
- */
-function augmentWithParams(
-  state: RootState,
-  fileState: FileState,
-  inheritedParams: Record<string, any>
-): Map<string, QueryResult> {
-  const result = new Map<string, QueryResult>();
-
-  // Questions execute SQL — look up the cached result using effective params.
-  // Dashboards do not execute their own query; only their references do.
-  if (fileState.type === 'question') {
-    const content = selectMergedContent(state, fileState.id) as QuestionContent;
-    if (content?.query) {
-      const ownParamValues = content.parameterValues ?? {};
-      const params = resolveEffectiveParams(content.parameters || [], ownParamValues, inheritedParams);
-      const qr = selectQueryResult(state, content.query, params, content.connection_name);
-      const id = getQueryHash(content.query, params, content.connection_name);
-      if (qr?.data) {
-        result.set(id, { ...(qr.data || {}), id });
-      } else if (qr?.error) {
-        result.set(id, { columns: [], types: [], rows: [], id, error: qr.error } as any);
-      }
-    }
-  }
-
-  // Cascade the same inherited params to all references.
-  // Covers: dashboard → questions, question → referenced questions, etc.
-  for (const refId of fileState.references || []) {
-    const refFile = selectFile(state, refId);
-    if (refFile) {
-      for (const [key, qr] of augmentWithParams(state, refFile, inheritedParams)) {
-        result.set(key, qr);
-      }
-    }
-  }
-
-  return result;
-}
+import { deepMerge, generateDiff } from '@/lib/utils/deep-merge';
+import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 
 interface ReadFilesOptions {
   ttl?: number;      // Time-to-live in ms (default: CACHE_TTL.FILE)
@@ -238,119 +118,6 @@ export async function loadFiles(fileIds: number[], ttl: number, skip: boolean): 
  * @param fileIds - File IDs to select
  * @returns ReadFilesOutput
  */
-// Simple per-key memoization cache: returns the same reference when state hasn't changed,
-// which suppresses React Redux dev-mode "selector returned a different result" warnings.
-// eslint-disable-next-line no-restricted-syntax -- client-side Redux memoization; keyed by fileIds, invalidated by state reference
-const _augmentedFilesCache = new Map<string, { state: RootState; result: AugmentedFile[] }>();
-
-export function selectAugmentedFiles(state: RootState, fileIds: number[]): AugmentedFile[] {
-  const key = fileIds.join(',');
-  const cached = _augmentedFilesCache.get(key);
-  if (cached && cached.state === state) return cached.result;
-
-  const result = fileIds
-    .map(id => {
-      const fileState = selectFile(state, id);
-      if (!fileState) {
-        if (id < 0) console.error(`[selectAugmentedFiles] Virtual file ${id} not found in Redux`);
-        return undefined;
-      }
-      const references = (fileState.references || [])
-        .map(refId => selectFile(state, refId))
-        .filter((f): f is FileState => f !== undefined);
-
-      // Collect query results: start with the root file's effective params and
-      // let augmentWithParams cascade them through the entire reference tree.
-      const inheritedParams = getRootParams(state, fileState);
-      const queryResultMap = augmentWithParams(state, fileState, inheritedParams);
-
-      const effectiveReferences = references.map(ref => buildEffectiveReference(ref, inheritedParams));
-      return { fileState, references: effectiveReferences, queryResults: Array.from(queryResultMap.values()) };
-    })
-    .filter((a): a is AugmentedFile => a !== undefined);
-
-  _augmentedFilesCache.set(key, { state, result });
-  return result;
-}
-
-/**
- * AugmentedFolder - Result of selectAugmentedFolder
- */
-export interface AugmentedFolder {
-  files: FileState[];
-  loading: boolean;
-  error: LoadError | null;
-}
-
-/**
- * selectAugmentedFolder - Pure selector: read folder children from Redux
- *
- * Maps folder references to FileState[], filters by user permissions and hidden paths.
- * No async, no side-effects. Pair with readFolder() to ensure data is loaded.
- *
- * @param state - Redux state
- * @param path - Folder path (e.g. '/org')
- * @returns AugmentedFolder
- */
-export function selectAugmentedFolder(state: RootState, path: string): AugmentedFolder {
-  const folderId = selectFileIdByPath(state, path);
-  const folder = folderId ? selectFile(state, folderId) : undefined;
-
-  if (!folder) return { files: [], loading: true, error: null };
-
-  const user = state.auth.user;
-  const mode = user?.mode || 'org';
-  const role = user?.role || 'viewer';
-
-  const files = (folder.references || [])
-    .map(id => selectFile(state, id))
-    .filter((f): f is FileState => {
-      if (!f) return false;
-      if (!canViewFileType(role, f.type)) return false;
-      if (f.type === 'folder' && isHiddenSystemPath(f.path, mode)) return false;
-      return true;
-    });
-
-  return { files, loading: folder.loading ?? false, error: folder.loadError ?? null };
-}
-
-/**
- * selectFilesByCriteria - Pure selector: filter files from Redux by criteria
- *
- * No async, no side-effects. Pair with readFilesByCriteria() to ensure data is loaded.
- * Uses startsWith for path matching (equivalent to unlimited depth), matching the
- * server-populated Redux state.
- *
- * @param state - Redux state
- * @param criteria - Filter criteria (type, paths)
- * @returns FileState[] matching criteria
- */
-export function selectFilesByCriteria(
-  state: RootState,
-  criteria: { type?: FileType; paths?: string[] }
-): FileState[] {
-  return Object.values(state.files.files).filter(file => {
-    if (criteria.type && file.type !== criteria.type) return false;
-    if (criteria.paths) {
-      return criteria.paths.some(path => file.path.startsWith(path));
-    }
-    return true;
-  });
-}
-
-/**
- * selectFileByPath - Pure selector: get a file by path from Redux
- *
- * @param state - Redux state
- * @param path - File path
- * @returns FileState if found, undefined otherwise
- */
-export function selectFileByPath(state: RootState, path: string | null): FileState | undefined {
-  if (!path) return undefined;
-  const id = selectFileIdByPath(state, path);
-  return id ? selectFile(state, id) : undefined;
-}
-
 /**
  * loadFileByPath - Fetch a file by path into Redux
  *
@@ -709,68 +476,6 @@ export async function editFileStr(
 
   return { success: true, diff };
 }
-
-/**
- * Deep merge two objects
- * @param target - Base object
- * @param source - Changes to merge in
- * @returns Merged object
- */
-function deepMerge<T>(target: T, source: Partial<T>): T {
-  const result = { ...target };
-
-  for (const key in source) {
-    const sourceValue = source[key];
-    const targetValue = result[key];
-
-    if (sourceValue === undefined) continue;
-
-    // If both are objects (and not arrays), merge recursively
-    if (
-      targetValue &&
-      typeof targetValue === 'object' &&
-      !Array.isArray(targetValue) &&
-      sourceValue &&
-      typeof sourceValue === 'object' &&
-      !Array.isArray(sourceValue)
-    ) {
-      result[key] = deepMerge(targetValue, sourceValue) as any;
-    } else {
-      // Otherwise, replace with source value
-      result[key] = sourceValue as any;
-    }
-  }
-
-  return result;
-}
-
-/**
- * Generate unified diff between old and new content
- */
-function generateDiff(oldStr: string, newStr: string): string {
-  const oldLines = oldStr.split('\n');
-  const newLines = newStr.split('\n');
-
-  const diffLines: string[] = [];
-  const maxLines = Math.max(oldLines.length, newLines.length);
-
-  for (let i = 0; i < maxLines; i++) {
-    const oldLine = oldLines[i];
-    const newLine = newLines[i];
-
-    if (oldLine !== newLine) {
-      if (oldLine !== undefined) {
-        diffLines.push(`-${oldLine}`);
-      }
-      if (newLine !== undefined) {
-        diffLines.push(`+${newLine}`);
-      }
-    }
-  }
-
-  return diffLines.join('\n');
-}
-
 
 /**
  * Options for publishFile
@@ -1502,7 +1207,7 @@ export async function readFolder(
  * Strip content and edit state from files to avoid bloating app state.
  * Used by readFolder() and useAppState() folder path.
  */
-export function stripFileContent(files: FileState[]): FileState[] {
+function stripFileContent(files: FileState[]): FileState[] {
   return files.map(f => {
     const { content, persistableChanges, ephemeralChanges, metadataChanges, ...rest } = f;
     return rest as FileState;

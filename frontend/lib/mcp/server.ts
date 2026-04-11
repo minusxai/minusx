@@ -19,7 +19,7 @@ import { resolvePath } from '@/lib/mode/path-resolver';
 import { searchDatabaseSchema } from '@/lib/search/schema-search';
 import { executeQuery as execQuery } from '@/lib/api/execute-query.server';
 import { getNodeConnector } from '@/lib/connections';
-import { compressQueryResult } from '@/lib/api/file-state';
+import { compressQueryResult } from '@/lib/api/compress-augmented';
 import { searchFilesInFolder } from '@/lib/search/file-search';
 import { readFilesServer } from '@/lib/api/file-state.server';
 

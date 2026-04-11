@@ -18,7 +18,8 @@ import { useAppSelector } from '@/store/hooks';
 import { selectActiveConversation } from '@/store/chatSlice';
 import { Dialog, Portal, Button, Text, HStack } from '@chakra-ui/react';
 import { preserveParams } from './url-utils';
-import { clearFileChanges, selectDirtyFiles } from '@/lib/api/file-state';
+import { clearFileChanges } from '@/lib/api/file-state';
+import { selectDirtyFiles } from '@/store/filesSlice';
 import { getStore } from '@/store/store';
 import PublishModal from '@/components/PublishModal';
 

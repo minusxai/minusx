@@ -45,11 +45,11 @@ import { resolveHomeFolderSync, resolvePath } from '@/lib/mode/path-resolver';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import {
   readFiles,
-  selectAugmentedFiles,
-  compressAugmentedFile,
   editFileStr,
   publishFile,
 } from '@/lib/api/file-state';
+import { selectAugmentedFiles } from '@/lib/store/file-selectors';
+import { compressAugmentedFile } from '@/lib/api/compress-augmented';
 import { readFilesServer, getAppStateServer } from '@/lib/api/file-state.server';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { POST as batchPostHandler } from '@/app/api/files/batch/route';

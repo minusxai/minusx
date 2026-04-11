@@ -9,7 +9,7 @@
 
 import { ExecuteQueryInput, ExecuteQueryDetails, QueryResult } from '@/lib/types';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
-import { compressQueryResult } from '@/lib/api/file-state';
+import { compressQueryResult } from '@/lib/api/compress-augmented';
 import type { ServerToolResult } from '@/app/api/chat/orchestrator';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
