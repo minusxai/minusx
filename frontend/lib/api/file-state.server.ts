@@ -1,14 +1,9 @@
 /**
- * Server-side File State Utilities
+ * Server-side File State — implements IFileStateRead for use in tool handlers,
+ * MCP tools, test runners, and cron jobs.
  *
- * Server-side equivalent of file-state.ts for loading files with references
- * and query results. Used by tool fallbacks, MCP tools, test runners, and
- * job handlers.
- *
- * Matches client-side behavior including:
- * - Parameter inheritance for dashboards
- * - Effective queryResultId computation
- * - Optional query execution
+ * Use createServerFileState(user) to get an IFileStateRead bound to a user.
+ * readFilesServer() is the legacy compressed variant for LLM tool responses.
  */
 import 'server-only';
 import { FilesAPI } from '@/lib/data/files.server';
@@ -18,95 +13,164 @@ import {
   compressAugmentedFile,
   dbFileToFileState,
 } from '@/lib/api/compress-augmented';
+import {
+  getRootParamsFromContent,
+  resolveEffectiveParams,
+  buildEffectiveReference,
+} from '@/lib/data/helpers/param-resolution';
+import type {
+  IFileStateRead,
+  ReadFilesOptions,
+  ReadFilesByCriteriaOptions,
+  ReadFolderOptions,
+  ReadFolderResult,
+  QueryExecutionParams,
+  GetQueryResultOptions,
+} from '@/lib/api/file-state-interface';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
+import type { FileInfo } from '@/lib/data/types';
 import type {
   DbFile,
   FileState,
   AugmentedFile,
   CompressedAugmentedFile,
   QuestionContent,
-  QuestionParameter,
   QueryResult,
 } from '@/lib/types';
 
-// ---------------------------------------------------------------------------
-// Parameter Inheritance (mirrored from file-state.ts)
-// ---------------------------------------------------------------------------
-
 /**
- * Extract root params from a dashboard's parameterValues.
- * For questions and other types, returns {} (no inheritance).
+ * Convert metadata-only FileInfo (no content) to a minimal FileState.
+ * Used for folder listings and partial reads where content is not needed.
  */
-function getRootParams(file: DbFile): Record<string, unknown> {
-  if (file.type === 'dashboard') {
-    return (file.content as { parameterValues?: Record<string, unknown> })?.parameterValues || {};
-  }
-  return {};
-}
-
-/**
- * Merge inherited params with question's own params (inherited wins).
- * Only includes params the question defines (no sibling pollution).
- */
-function resolveEffectiveParams(
-  parameters: QuestionParameter[],
-  ownParamValues: Record<string, unknown>,
-  inheritedParams: Record<string, unknown>
-): Record<string, unknown> {
-  const dict: Record<string, unknown> = {};
-  for (const p of parameters) {
-    dict[p.name] = Object.prototype.hasOwnProperty.call(inheritedParams, p.name)
-      ? inheritedParams[p.name]
-      : (ownParamValues[p.name] ?? '');
-  }
-  return dict;
-}
-
-/**
- * Build effective FileState with inherited params applied.
- * Recomputes queryResultId based on effective parameter values.
- */
-function buildEffectiveReference(
-  refFile: FileState,
-  inheritedParams: Record<string, unknown>
-): FileState {
-  if (refFile.type !== 'question' || !refFile.content) return refFile;
-
-  const content = refFile.content as QuestionContent;
-  const ownParamValues = content.parameterValues ?? {};
-  const effectiveParamsDict = content.parameters?.length
-    ? resolveEffectiveParams(content.parameters, ownParamValues, inheritedParams)
-    : {};
-  const effectiveQueryResultId = content.query && content.connection_name
-    ? getQueryHash(content.query, effectiveParamsDict, content.connection_name)
-    : refFile.queryResultId;
-
+function fileInfoToFileState(info: FileInfo): FileState {
   return {
-    ...refFile,
-    queryResultId: effectiveQueryResultId,
-    // Propagate effective params into content so compressFileState recomputes the hash
-    // from inherited values, not the question's standalone defaults.
-    content: { ...content, parameterValues: effectiveParamsDict },
-  };
+    ...info,
+    content: null,
+    queryResultId: undefined,
+    loading: false,
+    saving: false,
+    updatedAt: Date.now(),
+    loadError: null,
+    persistableChanges: {},
+    ephemeralChanges: {},
+    metadataChanges: {},
+  } as unknown as FileState;
 }
 
 // ---------------------------------------------------------------------------
-// Query Execution
+// Internal implementations (take explicit user param)
 // ---------------------------------------------------------------------------
 
-/**
- * Execute queries for file and references with inherited params.
- * Returns array of QueryResult with id field set.
- */
+async function readFilesImpl(
+  fileIds: number[],
+  user: EffectiveUser,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _options: ReadFilesOptions = {}
+): Promise<AugmentedFile[]> {
+  const results: AugmentedFile[] = [];
+
+  for (const fileId of fileIds) {
+    try {
+      const fileResult = await FilesAPI.loadFile(fileId, user);
+      if (!fileResult.data) continue;
+
+      const file = fileResult.data;
+      const refs = fileResult.metadata?.references ?? [];
+      const inheritedParams = getRootParamsFromContent(file.type, file.content);
+
+      const fileState = dbFileToFileState(file);
+      const refFileStates = refs.map(ref =>
+        buildEffectiveReference(dbFileToFileState(ref), inheritedParams)
+      );
+
+      results.push({ fileState, references: refFileStates, queryResults: [] });
+    } catch {
+      // Skip files that fail to load (permission denied, not found, etc.)
+    }
+  }
+
+  return results;
+}
+
+async function readFilesByCriteriaImpl(
+  options: ReadFilesByCriteriaOptions,
+  user: EffectiveUser
+): Promise<AugmentedFile[]> {
+  const { criteria, partial } = options;
+  const result = await FilesAPI.getFiles(criteria, user);
+
+  if (partial) {
+    return result.data.map(file => ({
+      fileState: fileInfoToFileState(file),
+      references: [],
+      queryResults: [],
+    }));
+  }
+
+  const fileIds = result.data.map(f => f.id);
+  return readFilesImpl(fileIds, user);
+}
+
+async function readFolderImpl(
+  path: string,
+  options: ReadFolderOptions = {},
+  user: EffectiveUser
+): Promise<ReadFolderResult> {
+  const { depth = 1 } = options;
+  try {
+    const result = await FilesAPI.getFiles({ paths: [path], depth }, user);
+    const files = result.data.map(file => fileInfoToFileState(file));
+    return { files, loading: false, error: null };
+  } catch (error) {
+    return {
+      files: [],
+      loading: false,
+      error: {
+        message: error instanceof Error ? error.message : String(error),
+        code: 'SERVER_ERROR',
+      },
+    };
+  }
+}
+
+async function getQueryResultImpl(
+  params: QueryExecutionParams,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _options: GetQueryResultOptions = {},
+  user: EffectiveUser
+): Promise<QueryResult> {
+  const { query, params: queryParams, database } = params;
+
+  if (_options.skip) {
+    throw new Error('Cannot execute query with skip=true');
+  }
+
+  const paramRecord: Record<string, string | number> = {};
+  for (const [k, v] of Object.entries(queryParams)) {
+    if (typeof v === 'string' || typeof v === 'number') {
+      paramRecord[k] = v;
+    } else if (v != null) {
+      paramRecord[k] = String(v);
+    }
+  }
+
+  const id = getQueryHash(query, queryParams, database);
+  const result = await runQuery(database, query, paramRecord, user);
+  return { ...result, id };
+}
+
+// ---------------------------------------------------------------------------
+// Query execution with param inheritance (for readFilesServer)
+// ---------------------------------------------------------------------------
+
 async function executeQueriesForFile(
   file: DbFile,
   references: DbFile[],
-  inheritedParams: Record<string, unknown>,
+  inheritedParams: Record<string, any>,
   user: EffectiveUser
 ): Promise<QueryResult[]> {
   const results: QueryResult[] = [];
 
-  // Helper to execute query for a question
   const execQuestion = async (q: DbFile): Promise<void> => {
     if (q.type !== 'question') return;
     const content = q.content as QuestionContent;
@@ -117,7 +181,6 @@ async function executeQueriesForFile(
       ? resolveEffectiveParams(content.parameters, ownParamValues, inheritedParams)
       : ownParamValues;
 
-    // Convert to the format runQuery expects
     const paramRecord: Record<string, string | number> = {};
     for (const [k, v] of Object.entries(params)) {
       if (typeof v === 'string' || typeof v === 'number') {
@@ -143,10 +206,7 @@ async function executeQueriesForFile(
     }
   };
 
-  // Execute for main file if it's a question
   await execQuestion(file);
-
-  // Execute for all referenced questions in parallel
   await Promise.all(references.map(ref => execQuestion(ref)));
 
   return results;
@@ -156,19 +216,31 @@ async function executeQueriesForFile(
 // Public API
 // ---------------------------------------------------------------------------
 
+/**
+ * createServerFileState — returns an IFileStateRead bound to a specific user.
+ * Use this in agents and tool handlers that need runtime-agnostic file access.
+ *
+ * @example
+ * const fs = createServerFileState(user);
+ * const files = await fs.readFiles([42]);
+ */
+export function createServerFileState(user: EffectiveUser): IFileStateRead {
+  return {
+    readFiles: (ids, opts) => readFilesImpl(ids, user, opts),
+    readFilesByCriteria: (opts) => readFilesByCriteriaImpl(opts, user),
+    readFolder: (path, opts) => readFolderImpl(path, opts, user),
+    getQueryResult: (params, opts) => getQueryResultImpl(params, opts, user),
+  };
+}
+
 export interface ReadFilesServerOptions {
   /** Execute queries for question files. Default: false */
   executeQueries?: boolean;
 }
 
 /**
- * Load files by ID with references, optionally executing queries.
- * Server-side equivalent of client's readFiles() + selectAugmentedFiles().
- *
- * @param fileIds - Array of file IDs to load
- * @param user - Effective user for permissions and connection access
- * @param options - Options including whether to execute queries
- * @returns Array of CompressedAugmentedFile matching client format
+ * readFilesServer — load files and return compressed output for LLM tool responses.
+ * For runtime-agnostic access, prefer createServerFileState(user).readFiles() instead.
  */
 export async function readFilesServer(
   fileIds: number[],
@@ -177,8 +249,13 @@ export async function readFilesServer(
 ): Promise<CompressedAugmentedFile[]> {
   const { executeQueries = false } = options;
 
-  const results: CompressedAugmentedFile[] = [];
+  if (!executeQueries) {
+    const augmented = await readFilesImpl(fileIds, user);
+    return augmented.map(compressAugmentedFile);
+  }
 
+  // With query execution: re-run augmentation with actual query results
+  const results: CompressedAugmentedFile[] = [];
   for (const fileId of fileIds) {
     try {
       const fileResult = await FilesAPI.loadFile(fileId, user);
@@ -186,30 +263,17 @@ export async function readFilesServer(
 
       const file = fileResult.data;
       const refs = fileResult.metadata?.references ?? [];
-      const inheritedParams = getRootParams(file);
+      const inheritedParams = getRootParamsFromContent(file.type, file.content);
 
-      // Convert to FileState with effective params applied to references
       const fileState = dbFileToFileState(file);
       const refFileStates = refs.map(ref =>
         buildEffectiveReference(dbFileToFileState(ref), inheritedParams)
       );
 
-      // Execute queries if requested
-      let queryResults: QueryResult[] = [];
-      if (executeQueries) {
-        queryResults = await executeQueriesForFile(file, refs, inheritedParams, user);
-      }
-
-      // Build and compress
-      const augmented: AugmentedFile = {
-        fileState,
-        references: refFileStates,
-        queryResults,
-      };
-
-      results.push(compressAugmentedFile(augmented));
+      const queryResults = await executeQueriesForFile(file, refs, inheritedParams, user);
+      results.push(compressAugmentedFile({ fileState, references: refFileStates, queryResults }));
     } catch {
-      // Skip files that fail to load (permission denied, not found, etc.)
+      // Skip files that fail to load
     }
   }
 
@@ -217,13 +281,7 @@ export async function readFilesServer(
 }
 
 /**
- * Build app state for a file.
- * Server-side equivalent of selectAppState() for file contexts.
- *
- * @param fileId - File ID to load
- * @param user - Effective user for permissions
- * @param options - Options including whether to execute queries
- * @returns AppState object or null if file not found
+ * getAppStateServer — build app state for a single file (for tool context).
  */
 export async function getAppStateServer(
   fileId: number,

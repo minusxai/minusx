@@ -20,6 +20,7 @@ import { shallowEqual } from 'react-redux';
 import { useAppSelector } from '@/store/hooks';
 import {
   isVirtualFileId,
+  selectDirtyFiles,
   type FileId,
   type FileState
 } from '@/store/filesSlice';
@@ -33,13 +34,14 @@ import {
   loadFiles,
   loadFileByPath,
   getQueryResult,
+} from '@/lib/api/file-state';
+import {
   selectAugmentedFiles,
   selectAugmentedFolder,
   selectFilesByCriteria,
   selectFileByPath,
-  selectDirtyFiles,
-  type AugmentedFolder
-} from '@/lib/api/file-state';
+  type AugmentedFolder,
+} from '@/lib/store/file-selectors';
 import type { AppState } from '@/lib/appState';
 import { selectAppState } from '@/store/appStateSelector';
 import { CACHE_TTL } from '@/lib/constants/cache';
