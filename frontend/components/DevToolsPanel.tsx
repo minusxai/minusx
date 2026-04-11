@@ -226,11 +226,11 @@ const checkboxStyle: React.CSSProperties = { display: 'flex', alignItems: 'cente
 
 function ImageToolsPanel({ fileId, appState }: { fileId: number | undefined; appState: AppState | null | undefined }) {
   const [webLink, setWebLink] = useState(false);
-  const [limit256, setLimit256] = useState(false);
+  const [limit512, setLimit512] = useState(false);  // cap output to 512px wide
   const [busy, setBusy] = useState(false);
   const [agentBusy, setAgentBusy] = useState(false);
   const [result, setResult] = useState<ImageResult | null>(null);
-  const screenshotOptions = limit256 ? { maxWidth: 256 } : undefined;
+  const screenshotOptions = limit512 ? { maxWidth: 512 } : undefined;
   const { captureFileView, blobToDataURL, download } = useScreenshot(screenshotOptions);
   const colorMode = useAppSelector(state => state.ui.colorMode);
   const queryResultsMap = useAppSelector(state => state.queryResults.results);
@@ -295,8 +295,8 @@ function ImageToolsPanel({ fileId, appState }: { fileId: number | undefined; app
             <Text fontSize="2xs" color="fg.muted">Web link</Text>
           </label>
           <label style={checkboxStyle}>
-            <input type="checkbox" checked={limit256} onChange={e => setLimit256(e.target.checked)} aria-label="Limit width to 256px" />
-            <Text fontSize="2xs" color="fg.muted">256px</Text>
+            <input type="checkbox" checked={limit512} onChange={e => setLimit512(e.target.checked)} aria-label="Limit width to 512px" />
+            <Text fontSize="2xs" color="fg.muted">512px</Text>
           </label>
         </HStack>
 
