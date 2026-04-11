@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { Box, VStack, HStack, Text, IconButton, Button, createListCollection } from '@chakra-ui/react';
 import { SelectRoot, SelectTrigger, SelectContent, SelectItem, SelectValueText } from '@/components/ui/select';
-import { LuChevronDown, LuChevronRight, LuDownload } from 'react-icons/lu';
+import { LuChevronDown, LuChevronRight, LuDownload, LuRefreshCw } from 'react-icons/lu';
 import { AppState } from '@/lib/appState';
 import AppStateViewer from './AppStateViewer';
 import { getRegisteredToolNames, executeToolCall } from '@/lib/api/tool-handlers';
@@ -230,10 +230,42 @@ function ImageToolsPanel({ fileId, appState }: { fileId: number | undefined; app
   const [busy, setBusy] = useState(false);
   const [agentBusy, setAgentBusy] = useState(false);
   const [result, setResult] = useState<ImageResult | null>(null);
-  const screenshotOptions = limit512 ? { maxWidth: 512 } : undefined;
+  // Memoized so captureElement's useCallback deps don't change on every render
+  const screenshotOptions = useMemo(() => limit512 ? { maxWidth: 512 } : undefined, [limit512]);
   const { captureFileView, blobToDataURL, download } = useScreenshot(screenshotOptions);
   const colorMode = useAppSelector(state => state.ui.colorMode);
   const queryResultsMap = useAppSelector(state => state.queryResults.results);
+
+  // Pre-capture state — all hooks must be above the early return
+  const captureCache = useRef<Blob | null>(null);
+  const captureGenRef = useRef(0);
+  const [captureStatus, setCaptureStatus] = useState<'idle' | 'capturing' | 'ready' | 'error'>('idle');
+
+  const triggerPreCapture = useCallback(async (gen: number) => {
+    if (fileId === undefined) return;
+    setCaptureStatus('capturing');
+    captureCache.current = null;
+    try {
+      const blob = await captureFileView(fileId); // viewport-only — no fullHeight, no 100ms wait
+      if (captureGenRef.current !== gen) return;  // discard if superseded
+      captureCache.current = blob;
+      setCaptureStatus('ready');
+    } catch {
+      if (captureGenRef.current !== gen) return;
+      setCaptureStatus('error');
+    }
+  }, [fileId, captureFileView]);
+
+  // Pre-capture on mount and whenever fileId or screenshot options change
+  useEffect(() => {
+    if (fileId === undefined) return;
+    const gen = ++captureGenRef.current;
+    captureCache.current = null;
+    setCaptureStatus('idle');
+    // 150ms delay: lets the file view finish its initial paint before capturing
+    const timer = setTimeout(() => triggerPreCapture(gen), 150);
+    return () => clearTimeout(timer);
+  }, [fileId, captureFileView, triggerPreCapture]);
 
   if (fileId === undefined) return null;
 
@@ -266,22 +298,35 @@ function ImageToolsPanel({ fileId, appState }: { fileId: number | undefined; app
     setBusy(true);
     setResult(null);
     try {
-      const blob = await captureFileView(fileId, { fullHeight: true });
+      // Instant path: serve pre-captured blob; fall back to live capture if not ready
+      const blob = captureCache.current ?? await captureFileView(fileId);
       const dataUrl = await blobToDataURL(blob);
       const ts = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
       download(blob, `screenshot-${ts}.jpg`);
 
       let url: string | undefined;
       if (webLink) {
-        const file = new File([blob], 'screenshot.png', { type: 'image/png' });
+        const file = new File([blob], 'screenshot.jpg', { type: 'image/jpeg' });
         ({ publicUrl: url } = await uploadFile(file, undefined, { keyType: 'charts' }));
       }
       setResult({ kind: 'items', items: [{ label: 'Screenshot', dataUrl, url }] });
+
+      // Refresh cache in background for next click
+      const gen = ++captureGenRef.current;
+      captureCache.current = null;
+      setCaptureStatus('capturing');
+      triggerPreCapture(gen);
     } catch (err: any) {
       setResult({ kind: 'error', error: err.message ?? String(err), label: 'Download' });
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleRefresh = () => {
+    const gen = ++captureGenRef.current;
+    captureCache.current = null;
+    triggerPreCapture(gen);
   };
 
   return (
@@ -300,11 +345,25 @@ function ImageToolsPanel({ fileId, appState }: { fileId: number | undefined; app
           </label>
         </HStack>
 
-        <HStack gap={2}>
+        <HStack gap={2} align="center">
           <Button size="2xs" variant="outline" onClick={handleDownload} loading={busy}
             aria-label="Download image">
             <LuDownload />Download image
           </Button>
+          {/* Pre-capture status dot */}
+          <Box
+            w="6px" h="6px" borderRadius="full" flexShrink={0}
+            bg={captureStatus === 'ready' ? 'green.500' : captureStatus === 'capturing' ? 'yellow.400' : captureStatus === 'error' ? 'red.400' : 'transparent'}
+            title={captureStatus}
+          />
+          <IconButton
+            size="2xs" variant="ghost"
+            onClick={handleRefresh}
+            disabled={captureStatus === 'capturing'}
+            aria-label="Refresh screenshot cache"
+          >
+            <LuRefreshCw />
+          </IconButton>
           <Button size="2xs" variant="outline" onClick={handleAgentImage} loading={agentBusy}
             aria-label="Agent image">
             Agent image
