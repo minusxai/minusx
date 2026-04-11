@@ -13,6 +13,8 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import type { ToolCall, DatabaseWithSchema } from '@/lib/types';
 import { uploadFile } from '@/lib/object-store/client';
 import { useScreenshot } from '@/lib/hooks/useScreenshot';
+import { extractChartEntries } from '@/lib/chart/chart-attachments';
+import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client';
 
 interface DevToolsPanelProps {
   appState: AppState | null | undefined;
@@ -222,15 +224,43 @@ type ImageResult =
 
 const checkboxStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, fontFamily: 'var(--font-mono)', cursor: 'pointer', userSelect: 'none' };
 
-function ImageToolsPanel({ fileId }: { fileId: number | undefined }) {
+function ImageToolsPanel({ fileId, appState }: { fileId: number | undefined; appState: AppState | null | undefined }) {
   const [webLink, setWebLink] = useState(false);
   const [limit256, setLimit256] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [agentBusy, setAgentBusy] = useState(false);
   const [result, setResult] = useState<ImageResult | null>(null);
   const screenshotOptions = limit256 ? { maxWidth: 256 } : undefined;
   const { captureFileView, blobToDataURL, download } = useScreenshot(screenshotOptions);
+  const colorMode = useAppSelector(state => state.ui.colorMode);
+  const queryResultsMap = useAppSelector(state => state.queryResults.results);
 
   if (fileId === undefined) return null;
+
+  const handleAgentImage = async () => {
+    setAgentBusy(true);
+    setResult(null);
+    try {
+      const entries = extractChartEntries(appState, queryResultsMap);
+      if (entries.length === 0) {
+        setResult({ kind: 'error', error: 'No renderable charts found for this file', label: 'Agent Image' });
+        return;
+      }
+      const rendered = await clientChartImageRenderer.renderCharts(
+        entries,
+        { width: 512, colorMode, addWatermark: false, padding: false },
+      );
+      if (rendered.length === 0) {
+        setResult({ kind: 'error', error: 'Renderer returned no images', label: 'Agent Image' });
+        return;
+      }
+      setResult({ kind: 'items', items: rendered.map(r => ({ label: r.label, dataUrl: r.dataUrl })) });
+    } catch (err: any) {
+      setResult({ kind: 'error', error: err.message ?? String(err), label: 'Agent Image' });
+    } finally {
+      setAgentBusy(false);
+    }
+  };
 
   const handleDownload = async () => {
     setBusy(true);
@@ -270,10 +300,16 @@ function ImageToolsPanel({ fileId }: { fileId: number | undefined }) {
           </label>
         </HStack>
 
-        <Button size="2xs" variant="outline" onClick={handleDownload} loading={busy}
-          aria-label="Download image">
-          <LuDownload />Download image
-        </Button>
+        <HStack gap={2}>
+          <Button size="2xs" variant="outline" onClick={handleDownload} loading={busy}
+            aria-label="Download image">
+            <LuDownload />Download image
+          </Button>
+          <Button size="2xs" variant="outline" onClick={handleAgentImage} loading={agentBusy}
+            aria-label="Agent image">
+            Agent image
+          </Button>
+        </HStack>
 
         {result && (
           <VStack gap={2} align="stretch">
@@ -326,7 +362,7 @@ export default function DevToolsPanel({ appState }: DevToolsPanelProps) {
         </Text>
 
         {/* Image Tools */}
-        <ImageToolsPanel fileId={fileId} />
+        <ImageToolsPanel fileId={fileId} appState={appState} />
 
         {/* App State (collapsible) */}
         <Box borderWidth="1px" borderColor="border.default" borderRadius="md" bg="bg.surface" overflow="hidden">
