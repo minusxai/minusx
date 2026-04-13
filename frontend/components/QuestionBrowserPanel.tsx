@@ -10,6 +10,7 @@ import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { setFile } from '@/store/filesSlice';
 import { FilesAPI } from '@/lib/data/files';
 import { pushView } from '@/store/uiSlice';
+import { createVirtualFile } from '@/lib/api/file-state';
 
 interface QuestionBrowserPanelProps {
   folderPath: string;
@@ -144,10 +145,11 @@ export const QuestionBrowserPanel = ({
             type="button"
             size="sm"
             width="100%"
-            onClick={(e) => {
+            onClick={async (e) => {
               e.stopPropagation();
               if (dashboardId !== undefined) {
-                dispatch(pushView({ type: 'create-question', folderPath, dashboardId }));
+                const virtualFileId = await createVirtualFile('question', { folder: folderPath });
+                dispatch(pushView({ type: 'create-question', folderPath, dashboardId, virtualFileId }));
               }
             }}
             colorPalette="teal"

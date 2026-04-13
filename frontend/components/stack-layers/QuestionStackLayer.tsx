@@ -73,7 +73,7 @@ export default function QuestionStackLayer({ fileId, folderPath, isCreateMode, d
         onClose={() => dispatch(popView())}
         onQuestionCreated={handleQuestionCreated}
         folderPath={folderPath}
-        questionId={isCreateMode ? undefined : fileId}
+        questionId={fileId}
         onAttemptCloseRef={attemptCloseRef}
       />
     </Box>

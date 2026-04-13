@@ -5,7 +5,7 @@ import type { Attachment } from '@/lib/types';
 
 export type ViewStackItem =
   | { type: 'question'; fileId: number }
-  | { type: 'create-question'; folderPath: string; dashboardId: number };
+  | { type: 'create-question'; folderPath: string; dashboardId: number; virtualFileId: number };
 
 interface UIState {
   leftSidebarCollapsed: boolean;

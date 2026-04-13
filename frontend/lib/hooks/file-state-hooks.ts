@@ -43,7 +43,7 @@ import {
   type AugmentedFolder,
 } from '@/lib/store/file-selectors';
 import type { AppState } from '@/lib/appState';
-import { selectAppState } from '@/store/appStateSelector';
+import { selectAppState, selectAppStateWithUI } from '@/store/appStateSelector';
 import { CACHE_TTL } from '@/lib/constants/cache';
 import type { LoadError } from '@/lib/types/errors';
 import type { GetFilesOptions } from '@/lib/data/types';
@@ -474,7 +474,7 @@ export function useQueryResult(
  * ```
  */
 export function useAppState(): { appState: AppState | null; loading: boolean } {
-  return useAppSelector(selectAppState, shallowEqual);
+  return useAppSelector(selectAppStateWithUI, shallowEqual);
 }
 
 // ============================================================================

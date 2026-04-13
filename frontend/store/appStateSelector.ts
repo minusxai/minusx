@@ -111,3 +111,32 @@ export const selectAppState = createSelector(
     return { appState: null, loading: false };
   }
 );
+
+/**
+ * Attaches ui.openModal to appState when a create-question overlay is active.
+ * Wraps selectAppState so callers get the enriched value transparently.
+ */
+export const selectAppStateWithUI = createSelector(
+  selectAppState,
+  (state: RootState) => state.ui.viewStack,
+  ({ appState, loading }, viewStack): { appState: AppState | null; loading: boolean } => {
+    if (!appState) return { appState, loading };
+    const top = viewStack[viewStack.length - 1];
+    if (top?.type === 'create-question') {
+      return {
+        appState: {
+          ...appState,
+          ui: {
+            openModal: {
+              type: 'create-question',
+              virtualFileId: top.virtualFileId,
+              dashboardId: top.dashboardId,
+            },
+          },
+        },
+        loading,
+      };
+    }
+    return { appState, loading };
+  }
+);

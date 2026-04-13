@@ -16,7 +16,8 @@ interface CreateQuestionModalContainerProps {
   onClose: () => void;
   onQuestionCreated: (id: number) => void;
   folderPath: string;
-  questionId?: number;  // Optional: if provided, edit existing question instead of creating new
+  questionId?: number;  // Virtual (negative) ID for new questions pre-created by caller,
+                        // real (positive) ID when editing, or undefined to self-create.
   onAttemptCloseRef?: MutableRefObject<(() => void) | null>;  // Ref for parent to call when user attempts to close
 }
 
@@ -36,9 +37,10 @@ export default function CreateQuestionModalContainer({
   const dispatch = useAppDispatch();
   const [virtualId, setVirtualId] = useState<number | undefined>(undefined);
 
-  // Create virtual file for question creation (only once)
+  // Self-create a virtual file only when questionId is not provided by the caller.
+  // The primary path (QuestionBrowserPanel → viewStack) always pre-creates and passes questionId.
   useEffect(() => {
-    if (questionId || virtualId !== undefined) return; // Skip if editing or already created
+    if (questionId !== undefined || virtualId !== undefined) return; // Skip if provided or already created
 
     createVirtualFile('question', { folder: folderPath })
       .then(id => setVirtualId(id))
@@ -129,6 +131,10 @@ export default function CreateQuestionModalContainer({
     }));
   }, [mergedContent, effectiveId, dispatch]);
 
+  // Create mode: a virtual (negative) file ID — either pre-created by the caller or self-created.
+  // Edit mode: a real (positive) file ID.
+  const isCreateMode = typeof effectiveId === 'number' && isVirtualFileId(effectiveId);
+
   // Create mode: "Add" — stages the virtual question in Redux, notifies parent, closes.
   // No API call — the question will be published later via "Publish All".
   const handleAdd = useCallback(() => {
@@ -149,7 +155,6 @@ export default function CreateQuestionModalContainer({
     onClose();
   }, [onClose]);
 
-  const isCreateMode = questionId === undefined;
   const primaryActionLabel = isCreateMode ? 'Add' : 'Update';
   const handlePrimaryAction = isCreateMode ? handleAdd : handleUpdate;
 
