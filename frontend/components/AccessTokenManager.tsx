@@ -36,6 +36,7 @@ import { FiCopy, FiTrash2, FiExternalLink, FiCheck, FiX } from 'react-icons/fi';
 import { useFetch, useFetchManual } from '@/lib/api/useFetch';
 import { API } from '@/lib/api/declarations';
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
+import { useUsers } from '@/lib/hooks/useUsers';
 
 // Extended token type with analytics
 interface AccessTokenWithAnalytics extends AccessToken {
@@ -72,15 +73,9 @@ export default function AccessTokenManager({ fileId, currentUser }: AccessTokenM
     { enabled: isAdmin }
   );
 
-  // Fetch users with caching (only if admin)
-  const { data: usersData, loading: usersLoading } = useFetch(
-    API.users.list,
-    undefined,
-    { enabled: isAdmin }
-  );
+  const { users, loading: usersLoading } = useUsers();
 
   const tokens = (tokensData as any)?.data || [];
-  const users = (usersData as any)?.data?.users || (usersData as any)?.users || [];
   const loading = tokensLoading || usersLoading;
 
   async function loadTokens() {

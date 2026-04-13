@@ -2,14 +2,14 @@
 
 import { Box, Heading, Text, Button, VStack, HStack, Table, IconButton, Input, Dialog, Portal, Menu } from '@chakra-ui/react';
 import { LuPlus, LuPencil, LuTrash2, LuCrown, LuSquarePen, LuEye, LuCheck, LuX, LuChevronDown } from 'react-icons/lu';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAppSelector } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
 import type { User } from '@/lib/types';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { useConfigs } from '@/lib/hooks/useConfigs';
-import { fetchWithCache } from '@/lib/api/fetch-wrapper';
-import { API } from '@/lib/api/declarations';
+import { useUsers } from '@/lib/hooks/useUsers';
+import { loadUsers, setUsersInStore } from '@/lib/hooks/useUsers';
 
 // Helper to get icon based on role
 const getRoleIcon = (role: string | undefined) => {
@@ -25,8 +25,8 @@ const getRoleIconColor = (role: string | undefined) => {
   return 'fg.muted';
 };
 
-// Extend User with required id field for this page
-type UserWithId = Required<Pick<User, 'id' | 'name' | 'email'>> & Pick<User, 'role' | 'home_folder'>;
+// Users from the DB always carry an id; narrow the type for this page
+type UserWithId = Required<Pick<User, 'id' | 'name' | 'email'>> & Omit<User, 'id' | 'name' | 'email'>;
 
 interface Message {
   type: 'success' | 'error';
@@ -36,8 +36,7 @@ interface Message {
 export default function UsersContent() {
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const { config } = useConfigs();
-  const [users, setUsers] = useState<UserWithId[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { users: reduxUsers, loading } = useUsers() as { users: UserWithId[]; loading: boolean };
   const [message, setMessage] = useState<Message | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -60,37 +59,11 @@ export default function UsersContent() {
     home_folder: '',
   });
 
-  // Fetch users
-  const fetchUsers = async () => {
-    setLoading(true);
-    try {
-      const data = await fetchWithCache('/api/users', {
-        method: 'GET',
-        cacheStrategy: API.users.list.cache,
-      });
 
-      if (data.success) {
-        setUsers(data.data.users);
-      } else {
-        setMessage({ type: 'error', text: data.error?.message || 'Failed to fetch users' });
-      }
-      setLoading(false);
-    } catch (error) {
-      setMessage({ type: 'error', text: error instanceof Error ? error.message : 'Failed to fetch users' });
-      setLoading(false);
-    }
-  };
 
-  useEffect(() => {
-    if (effectiveUser?.role && isAdmin(effectiveUser.role)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      fetchUsers();
-    }
-  }, [effectiveUser]);
 
   const handleAddUser = async () => {
     try {
-      // Prepare request data with state as JSON string
       const requestData = {
         email: formData.email,
         name: formData.name,
@@ -101,17 +74,18 @@ export default function UsersContent() {
         home_folder: formData.home_folder,
       };
 
-      const data = await fetchWithCache('/api/users', {
+      const res = await fetch('/api/users', {
         method: 'POST',
         body: JSON.stringify(requestData),
-        cacheStrategy: API.users.create.cache,
+        headers: { 'Content-Type': 'application/json' },
       });
+      const data = await res.json();
 
       if (data.success) {
         setMessage({ type: 'success', text: `${formData.name} has been added successfully` });
         setIsAddModalOpen(false);
         setFormData({ email: '', name: '', password: '', phone: '', twofa_phone_otp_enabled: false, role: 'viewer', home_folder: '' });
-        fetchUsers();
+        setUsersInStore([...reduxUsers, data.data.user]);
       } else {
         setMessage({ type: 'error', text: data.error?.message || 'Failed to create user' });
       }
@@ -124,7 +98,7 @@ export default function UsersContent() {
     if (!selectedUser) return;
 
     try {
-      const updateData: any = {
+      const updateData: Record<string, unknown> = {
         email: formData.email,
         name: formData.name,
         role: formData.role,
@@ -133,23 +107,23 @@ export default function UsersContent() {
         state: JSON.stringify({ twofa_phone_otp_enabled: formData.twofa_phone_otp_enabled }),
       };
 
-      // Only include password if it's been changed
       if (formData.password) {
         updateData.password = formData.password;
       }
 
-      const data = await fetchWithCache(`/api/users/${selectedUser.id}`, {
+      const res = await fetch(`/api/users/${selectedUser.id}`, {
         method: 'PUT',
         body: JSON.stringify(updateData),
-        cacheStrategy: API.users.update.cache,
+        headers: { 'Content-Type': 'application/json' },
       });
+      const data = await res.json();
 
       if (data.success) {
         setMessage({ type: 'success', text: `${formData.name} has been updated successfully` });
         setIsEditModalOpen(false);
         setSelectedUser(null);
         setFormData({ email: '', name: '', password: '', phone: '', twofa_phone_otp_enabled: false, role: 'viewer', home_folder: '' });
-        fetchUsers();
+        setUsersInStore(reduxUsers.map(u => u.id === selectedUser.id ? { ...u, ...data.data.user } : u));
       } else {
         setMessage({ type: 'error', text: data.error?.message || 'Failed to update user' });
       }
@@ -162,16 +136,14 @@ export default function UsersContent() {
     if (!selectedUser) return;
 
     try {
-      const data = await fetchWithCache(`/api/users/${selectedUser.id}`, {
-        method: 'DELETE',
-        cacheStrategy: API.users.delete.cache,
-      });
+      const res = await fetch(`/api/users/${selectedUser.id}`, { method: 'DELETE' });
+      const data = await res.json();
 
       if (data.success) {
         setMessage({ type: 'success', text: `${selectedUser.name} has been deleted successfully` });
         setIsDeleteModalOpen(false);
         setSelectedUser(null);
-        fetchUsers();
+        setUsersInStore(reduxUsers.filter(u => u.id !== selectedUser.id));
       } else {
         setMessage({ type: 'error', text: data.error?.message || 'Failed to delete user' });
       }
@@ -245,7 +217,7 @@ export default function UsersContent() {
       {/* Header */}
       <HStack justify="space-between" mb={6}>
         <Text fontSize="lg" color="fg.muted" fontFamily="mono">
-          {loading ? '' : `${users.length} ${users.length === 1 ? 'user' : 'users'}`}
+          {loading ? '' : `${reduxUsers.length} ${reduxUsers.length === 1 ? 'user' : 'users'}`}
         </Text>
         <Button
           onClick={() => {
@@ -265,7 +237,7 @@ export default function UsersContent() {
       {/* Users Table */}
       {loading ? (
         <Text color="fg.muted">Loading...</Text>
-      ) : users.length === 0 ? (
+      ) : reduxUsers.length === 0 ? (
         <Box
           p={12}
           textAlign="center"
@@ -301,7 +273,7 @@ export default function UsersContent() {
               </Table.Row>
             </Table.Header>
             <Table.Body>
-              {users.map((user) => (
+              {reduxUsers.map((user) => (
                 <Table.Row key={user.id} _hover={{ bg: 'bg.muted' }}>
                   <Table.Cell>
                     <HStack gap={2}>

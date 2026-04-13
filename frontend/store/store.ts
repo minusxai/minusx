@@ -8,6 +8,7 @@ import chatReducer from './chatSlice';
 import recordingsReducer from './recordingsSlice';
 import jobRunsReducer from './jobRunsSlice';
 import navigationReducer from './navigationSlice';
+import usersReducer from './usersSlice';
 import { chatListenerMiddleware } from './chatListener';
 import { navigationListenerMiddleware } from './navigationListener';
 import { analyticsMiddleware } from '@/lib/analytics/middleware';
@@ -23,6 +24,7 @@ function getAllReducers() {
     recordings: recordingsReducer,  // Session recording state
     jobRuns: jobRunsReducer,        // Job run state (job_runs table records, all job types)
     navigation: navigationReducer,  // Navigation state (pathname, searchParams, activeVirtualId)
+    users: usersReducer,            // Users list (admin user management)
   }
 }
 

@@ -4,11 +4,10 @@ import { useState, useRef, useMemo, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { Box, HStack, Text, Input, Flex, Badge } from '@chakra-ui/react';
 import { LuX, LuChevronDown, LuMail, LuMessageCircle, LuHash } from 'react-icons/lu';
-import { useFetch } from '@/lib/api/useFetch';
-import { API } from '@/lib/api/declarations';
 import { AlertRecipient, User } from '@/lib/types';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { hasDeliveryEnabled, buildDropdownOptions, type DropdownOption } from '@/lib/messaging/delivery-options';
+import { useUsers } from '@/lib/hooks/useUsers';
 
 interface DeliveryPickerProps {
   recipients: AlertRecipient[];
@@ -107,8 +106,7 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const { data: usersResponse } = useFetch<void, { success: boolean; data: { users: User[] } }>(API.users.list);
-  const users = usersResponse?.data?.users ?? [];
+  const { users } = useUsers();
 
   const { config } = useConfigs();
 
