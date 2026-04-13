@@ -130,7 +130,7 @@ export default auth(async (req) => {
     response.cookies.delete('public-access-token');
     void logNetworkRequest(requestId, reqInfo, {
       companyId: req.auth.user?.companyId,
-      userId: req.auth.user?.email,
+      userId: req.auth.user?.userId,
       mode: null,
     });
     return response;
@@ -180,8 +180,8 @@ export default auth(async (req) => {
   if (req.auth.user?.companyId) {
     requestHeaders.set('x-company-id', String(req.auth.user.companyId));
   }
-  if (req.auth.user?.email) {
-    requestHeaders.set('x-user-email', req.auth.user.email);
+  if (req.auth.user?.userId) {
+    requestHeaders.set('x-user-id', String(req.auth.user.userId));
   }
 
   // Add subdomain header if present
@@ -287,7 +287,7 @@ export default auth(async (req) => {
   if (isApiPath) {
     void logNetworkRequest(requestId, reqInfo, {
       companyId: req.auth.user?.companyId,
-      userId: req.auth.user?.email,
+      userId: req.auth.user?.userId,
       mode: effectiveMode,
     });
   }

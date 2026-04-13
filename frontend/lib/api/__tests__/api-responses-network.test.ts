@@ -32,7 +32,7 @@ type ReadonlyHeaders = Awaited<ReturnType<typeof import('next/headers')['headers
 function makeHeaders(values: {
   requestId?: string | null;
   companyId?: string | null;
-  userEmail?: string | null;
+  userId?: string | null;
   mode?: string | null;
   requestPath?: string | null;
 }): ReadonlyHeaders {
@@ -41,7 +41,7 @@ function makeHeaders(values: {
       switch (key) {
         case 'x-request-id':   return values.requestId ?? null;
         case 'x-company-id':   return values.companyId ?? null;
-        case 'x-user-email':   return values.userEmail ?? null;
+        case 'x-user-id':   return values.userId ?? null;
         case 'x-mode':         return values.mode ?? null;
         case 'x-request-path': return values.requestPath ?? null;
         default:               return null;
@@ -59,7 +59,7 @@ describe('successResponse', () => {
     mockHeaders.mockResolvedValue(makeHeaders({
       requestId: 'req-e2e-1',
       companyId: 'co-1',
-      userEmail: 'alice@example.com',
+      userId: 'alice@example.com',
       mode: 'org',
       requestPath: '/api/files',
     }));
@@ -119,7 +119,7 @@ describe('errorResponse', () => {
     mockHeaders.mockResolvedValue(makeHeaders({
       requestId: 'req-e2e-2',
       companyId: 'co-2',
-      userEmail: 'bob@example.com',
+      userId: 'bob@example.com',
       mode: 'tutorial',
       requestPath: '/api/query',
     }));
@@ -160,7 +160,7 @@ describe('handleApiError', () => {
     mockHeaders.mockResolvedValue(makeHeaders({
       requestId: 'req-e2e-3',
       companyId: 'co-3',
-      userEmail: 'carol@example.com',
+      userId: 'carol@example.com',
       mode: 'org',
     }));
 

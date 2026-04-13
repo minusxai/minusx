@@ -40,7 +40,7 @@ async function getRequestUser(): Promise<RequestUserContext> {
     const h = await headers();
     return {
       companyId: h.get('x-company-id'),
-      userId: h.get('x-user-email'),
+      userId: h.get('x-user-id'),
       mode: h.get('x-mode'),
     };
   } catch {
