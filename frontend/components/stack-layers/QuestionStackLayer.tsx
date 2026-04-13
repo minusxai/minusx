@@ -75,6 +75,7 @@ export default function QuestionStackLayer({ fileId, folderPath, isCreateMode, d
         folderPath={folderPath}
         questionId={fileId}
         onAttemptCloseRef={attemptCloseRef}
+        isNewQuestion={isCreateMode}
       />
     </Box>
   );

@@ -19,6 +19,15 @@ interface CreateQuestionModalContainerProps {
   questionId?: number;  // Virtual (negative) ID for new questions pre-created by caller,
                         // real (positive) ID when editing, or undefined to self-create.
   onAttemptCloseRef?: MutableRefObject<(() => void) | null>;  // Ref for parent to call when user attempts to close
+  /**
+   * Explicitly controls whether this is a "fresh creation" that should be cleaned
+   * up from Redux on cancel.  When omitted, falls back to isVirtualFileId(questionId).
+   *
+   * Pass false when opening an already-added virtual question for editing
+   * (e.g. via the dashboard's "Edit" button) to prevent the question being
+   * removed from Redux — which would leave the dashboard with a dangling reference.
+   */
+  isNewQuestion?: boolean;
 }
 
 /**
@@ -33,6 +42,7 @@ export default function CreateQuestionModalContainer({
   folderPath,
   questionId,
   onAttemptCloseRef,
+  isNewQuestion,
 }: CreateQuestionModalContainerProps) {
   const dispatch = useAppDispatch();
   const [virtualId, setVirtualId] = useState<number | undefined>(undefined);
@@ -131,9 +141,12 @@ export default function CreateQuestionModalContainer({
     }));
   }, [mergedContent, effectiveId, dispatch]);
 
-  // Create mode: a virtual (negative) file ID — either pre-created by the caller or self-created.
-  // Edit mode: a real (positive) file ID.
-  const isCreateMode = typeof effectiveId === 'number' && isVirtualFileId(effectiveId);
+  // Create mode: a virtual (negative) file ID that hasn't been added to a dashboard yet.
+  // isNewQuestion overrides the ID-based check when the caller knows the context:
+  //   true  → show "Add" button, clean up virtual file on cancel
+  //   false → show "Update" button, do NOT remove on cancel (file is already referenced)
+  //   undefined → infer from whether the ID is virtual
+  const isCreateMode = isNewQuestion ?? (typeof effectiveId === 'number' && isVirtualFileId(effectiveId));
 
   // Create mode: "Add" — stages the virtual question in Redux, notifies parent, closes.
   // No API call — the question will be published later via "Publish All".
