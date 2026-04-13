@@ -22,7 +22,7 @@ beforeEach(() => {
 });
 
 describe('logNetworkRequest', () => {
-  it('POSTs to MX_API_BASE_URL/network with type=request', async () => {
+  it('POSTs to MX_API_BASE_URL/network/request', async () => {
     await logNetworkRequest('req-123', {
       method: 'POST',
       protocol: 'https',
@@ -34,12 +34,12 @@ describe('logNetworkRequest', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url, options] = mockFetch.mock.calls[0];
-    expect(url).toBe('http://mx-api.test/network');
+    expect(url).toBe('http://mx-api.test/network/request');
     expect(options.method).toBe('POST');
 
     const body = JSON.parse(options.body);
     expect(body.request_id).toBe('req-123');
-    expect(body.type).toBe('request');
+    expect(body.type).toBeUndefined();
     expect(body.method).toBe('POST');
     expect(body.path).toBe('/api/chat');
     expect(body.company_id).toBe('co-1');
@@ -87,6 +87,18 @@ describe('logNetworkRequest', () => {
     expect(body.mode).toBeNull();
   });
 
+  it('coerces numeric companyId and userId to strings', async () => {
+    await logNetworkRequest('req-numeric', { method: 'GET', path: '/api/test', headers: {} }, {
+      companyId: 42,
+      userId: 99,
+      mode: 'org',
+    });
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.company_id).toBe('42');
+    expect(body.user_id).toBe('99');
+  });
+
   it('swallows fetch errors silently', async () => {
     mockFetch.mockRejectedValueOnce(new Error('network failure'));
 
@@ -98,17 +110,17 @@ describe('logNetworkRequest', () => {
 });
 
 describe('logNetworkResponse', () => {
-  it('POSTs to MX_API_BASE_URL/network with type=response', async () => {
+  it('POSTs to MX_API_BASE_URL/network/response', async () => {
     await logNetworkResponse('req-456', { ok: true, data: [1, 2, 3] }, 200, false,
       { companyId: 'co-2', userId: 'user-2', mode: 'org' });
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     const [url, options] = mockFetch.mock.calls[0];
-    expect(url).toBe('http://mx-api.test/network');
+    expect(url).toBe('http://mx-api.test/network/response');
 
     const body = JSON.parse(options.body);
     expect(body.request_id).toBe('req-456');
-    expect(body.type).toBe('response');
+    expect(body.type).toBeUndefined();
     expect(body.status_code).toBe(200);
     expect(body.is_error).toBe(false);
     expect(body.response_body).toEqual({ ok: true, data: [1, 2, 3] });

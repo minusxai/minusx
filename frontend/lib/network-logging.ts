@@ -45,11 +45,11 @@ interface RequestInfo {
   headers?: Record<string, string>;
 }
 
-async function post(payload: Record<string, unknown>): Promise<void> {
+async function post(endpoint: string, payload: Record<string, unknown>): Promise<void> {
   if (!MX_API_BASE_URL) return;
   if (isExcluded(payload.path as string | undefined)) return;
   try {
-    await fetch(`${MX_API_BASE_URL}/network`, {
+    await fetch(`${MX_API_BASE_URL}${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -67,17 +67,16 @@ export async function logNetworkRequest(
   req: RequestInfo,
   user: UserContext | null,
 ): Promise<void> {
-  await post({
+  await post('/network/request', {
     request_id: requestId,
-    type: 'request',
     method: req.method ?? null,
     protocol: req.protocol ?? null,
     domain: req.domain ?? null,
     subdomain: req.subdomain ?? null,
     path: req.path ?? null,
     headers: req.headers ? sanitizeHeaders(req.headers) : null,
-    company_id: user?.companyId ?? null,
-    user_id: user?.userId ?? null,
+    company_id: user?.companyId != null ? String(user.companyId) : null,
+    user_id: user?.userId != null ? String(user.userId) : null,
     mode: user?.mode ?? null,
   });
 }
@@ -90,15 +89,14 @@ export async function logNetworkResponse(
   user: UserContext | null,
   path?: string,
 ): Promise<void> {
-  await post({
+  await post('/network/response', {
     request_id: requestId,
-    type: 'response',
     path: path ?? null,
     response_body: responseBody,
     status_code: statusCode,
     is_error: isError,
-    company_id: user?.companyId ?? null,
-    user_id: user?.userId ?? null,
+    company_id: user?.companyId != null ? String(user.companyId) : null,
+    user_id: user?.userId != null ? String(user.userId) : null,
     mode: user?.mode ?? null,
   });
 }

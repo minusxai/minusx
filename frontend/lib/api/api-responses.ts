@@ -29,6 +29,25 @@ async function getRequestPath(): Promise<string | undefined> {
   }
 }
 
+interface RequestUserContext {
+  companyId: string | null;
+  userId: string | null;
+  mode: string | null;
+}
+
+async function getRequestUser(): Promise<RequestUserContext> {
+  try {
+    const h = await headers();
+    return {
+      companyId: h.get('x-company-id'),
+      userId: h.get('x-user-email'),
+      mode: h.get('x-mode'),
+    };
+  } catch {
+    return { companyId: null, userId: null, mode: null };
+  }
+}
+
 /**
  * Create a success response
  */
@@ -36,8 +55,8 @@ export async function successResponse<T>(
   data: T,
   status: number = 200
 ): Promise<NextResponse<ApiResponse<T>>> {
-  const [requestId, requestPath] = await Promise.all([getRequestId(), getRequestPath()]);
-  if (requestId) void logNetworkResponse(requestId, { success: true, data }, status, false, null, requestPath);
+  const [requestId, requestPath, requestUser] = await Promise.all([getRequestId(), getRequestPath(), getRequestUser()]);
+  if (requestId) void logNetworkResponse(requestId, { success: true, data }, status, false, requestUser, requestPath);
   return NextResponse.json({
     success: true,
     data,
@@ -54,8 +73,8 @@ export async function errorResponse(
   status: number = 500,
   details?: unknown
 ): Promise<NextResponse<ApiResponse>> {
-  const [requestId, requestPath] = await Promise.all([getRequestId(), getRequestPath()]);
-  if (requestId) void logNetworkResponse(requestId, { success: false, error: { code, message, details } }, status, true, null, requestPath);
+  const [requestId, requestPath, requestUser] = await Promise.all([getRequestId(), getRequestPath(), getRequestUser()]);
+  if (requestId) void logNetworkResponse(requestId, { success: false, error: { code, message, details } }, status, true, requestUser, requestPath);
   return NextResponse.json({
     success: false,
     error: {
@@ -159,8 +178,8 @@ export async function handleApiError(error: unknown): Promise<NextResponse<ApiRe
       code = ErrorCodes.CONFLICT;
     }
 
-    const [requestId, requestPath] = await Promise.all([getRequestId(), getRequestPath()]);
-    if (requestId) void logNetworkResponse(requestId, { success: false, error: { code, message: serialized.message } }, status, status >= 500, null, requestPath);
+    const [requestId, requestPath, requestUser] = await Promise.all([getRequestId(), getRequestPath(), getRequestUser()]);
+    if (requestId) void logNetworkResponse(requestId, { success: false, error: { code, message: serialized.message } }, status, status >= 500, requestUser, requestPath);
     return NextResponse.json({
       success: false,
       error: {

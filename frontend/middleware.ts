@@ -176,6 +176,14 @@ export default auth(async (req) => {
   requestHeaders.set('x-request-id', requestId);
   requestHeaders.set('x-request-path', pathname);
 
+  // Propagate user context for response logging in api-responses.ts
+  if (req.auth.user?.companyId) {
+    requestHeaders.set('x-company-id', String(req.auth.user.companyId));
+  }
+  if (req.auth.user?.email) {
+    requestHeaders.set('x-user-email', req.auth.user.email);
+  }
+
   // Add subdomain header if present
   if (subdomain) {
     requestHeaders.set('x-subdomain', subdomain);
