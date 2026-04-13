@@ -8,6 +8,7 @@ import { CompanyDB } from "@/lib/database/company-db"
 import { getConfigsByCompanyId } from "@/lib/data/configs.server"
 import { ALLOW_MULTIPLE_COMPANIES, AUTH_URL } from "@/lib/config"
 import { IS_DEV } from "@/lib/constants"
+import { logNetworkRequest } from "@/lib/network-logging"
 
 export default auth(async (req) => {
   const { pathname } = req.nextUrl
@@ -46,6 +47,17 @@ export default auth(async (req) => {
 
   // Generate a unique request ID for tracing (available to all route handlers via x-request-id header)
   const requestId = crypto.randomUUID();
+
+  // Only log /api/ paths — page renders and static assets are not interesting
+  const isApiPath = pathname.startsWith('/api/');
+
+  // Pre-extract request info for logging (cheap, only used when isApiPath)
+  const reqProtocol = (req.headers.get('x-forwarded-proto') || 'https').split(',')[0].trim();
+  const reqHeaders: Record<string, string> = {};
+  if (isApiPath) {
+    req.headers.forEach((value, key) => { reqHeaders[key] = value; });
+  }
+  const reqInfo = { method: req.method, protocol: reqProtocol, domain: hostname, subdomain: subdomain ?? undefined, path: pathname, headers: reqHeaders };
 
   // Allow access to public routes, auth API, internal API (Python backend), registration API, health check, MCP + OAuth
   if (
@@ -96,6 +108,7 @@ export default auth(async (req) => {
       });
     }
 
+    if (isApiPath) void logNetworkRequest(requestId, reqInfo, null);
     return response;
   }
 
@@ -113,11 +126,17 @@ export default auth(async (req) => {
       },
     });
     response.cookies.delete('public-access-token');
+    void logNetworkRequest(requestId, reqInfo, {
+      companyId: req.auth.user?.companyId,
+      userId: req.auth.user?.email,
+      mode: null,
+    });
     return response;
   }
 
   // Check if user is authenticated
   if (!req.auth) {
+    if (isApiPath) void logNetworkRequest(requestId, reqInfo, null);
     // Redirect to login with return URL (preserve subdomain from Host header)
     const protocol = (req.headers.get('x-forwarded-proto') || 'https').split(',')[0].trim();
     const loginUrl = new URL(`${protocol}://${hostname}/login`);
@@ -134,6 +153,7 @@ export default auth(async (req) => {
       currentVersion: CURRENT_TOKEN_VERSION,
       email: req.auth.user?.email
     });
+    if (isApiPath) void logNetworkRequest(requestId, reqInfo, null);
     const protocol = (req.headers.get('x-forwarded-proto') || 'https').split(',')[0].trim();
     const loginUrl = new URL(`${protocol}://${hostname}/login`);
     loginUrl.searchParams.set('callbackUrl', pathname + req.nextUrl.search);
@@ -251,6 +271,14 @@ export default auth(async (req) => {
         maxAge: 30 * 24 * 60 * 60, // 30 days
       });
     }
+  }
+
+  if (isApiPath) {
+    void logNetworkRequest(requestId, reqInfo, {
+      companyId: req.auth.user?.companyId,
+      userId: req.auth.user?.email,
+      mode: effectiveMode,
+    });
   }
 
   return response

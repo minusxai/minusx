@@ -8,6 +8,7 @@ import { headers } from 'next/headers';
 import { ApiResponse, ErrorCode, ErrorCodes } from './api-types';
 import { UserFacingError, FileExistsError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
 import { notifyInternal } from '@/lib/messaging/internal-notifier';
+import { logNetworkResponse } from '@/lib/network-logging';
 
 async function getRequestId(): Promise<string | null> {
   try {
@@ -27,6 +28,7 @@ export async function successResponse<T>(
   status: number = 200
 ): Promise<NextResponse<ApiResponse<T>>> {
   const requestId = await getRequestId();
+  if (requestId) void logNetworkResponse(requestId, { success: true, data }, status, false, null);
   return NextResponse.json({
     success: true,
     data,
@@ -44,6 +46,7 @@ export async function errorResponse(
   details?: unknown
 ): Promise<NextResponse<ApiResponse>> {
   const requestId = await getRequestId();
+  if (requestId) void logNetworkResponse(requestId, { success: false, error: { code, message, details } }, status, true, null);
   return NextResponse.json({
     success: false,
     error: {
@@ -148,6 +151,7 @@ export async function handleApiError(error: unknown): Promise<NextResponse<ApiRe
     }
 
     const requestId = await getRequestId();
+    if (requestId) void logNetworkResponse(requestId, { success: false, error: { code, message: serialized.message } }, status, status >= 500, null);
     return NextResponse.json({
       success: false,
       error: {
