@@ -5,7 +5,7 @@
  */
 
 import type { FileState } from '@/store/filesSlice';
-import type { CompressedAugmentedFile } from '@/lib/types';
+import type { CompressedAugmentedFile, CompressedFileState } from '@/lib/types';
 
 /**
  * Folder state (from useFolder / navigationSlice)
@@ -25,6 +25,8 @@ export interface AppStateUI {
     type: 'create-question';
     virtualFileId: number;
     dashboardId: number;
+    /** Current state of the virtual file — use for oldMatch values when calling EditFile */
+    virtualFile?: CompressedFileState;
   };
 }
 
