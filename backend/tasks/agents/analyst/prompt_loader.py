@@ -109,6 +109,94 @@ class PromptLoader:
         # Resolve any nested template references within the skill content
         return self._resolve_templates(content)
 
+    def breakdown(self, prompt_id: str, **variables) -> dict:
+        """Return a size breakdown of every section in this prompt.
+
+        Two-pass discovery:
+
+        Pass 1 — top-level template tokens (found in raw prompt text and in
+        ``self.templates``).  Each is rendered with FULL variable substitution
+        so the reported size accurately reflects what actually reaches the LLM.
+
+        Pass 2 — variable tokens (found in the template-resolved text, i.e.
+        tokens that are injected by the caller and live *inside* template
+        sections).  These are reported separately so the user can see which
+        variables drive the most cost within each template section.
+
+        Args:
+            prompt_id: Prompt identifier (dot-separated, e.g. 'default.system')
+            **variables: Same variables you would pass to get()
+
+        Returns::
+            {
+                'total_chars': int,   # length of fully rendered prompt
+                'sections': {
+                    '<token>': {
+                        'kind': 'template' | 'variable' | 'unknown',
+                        'chars': int,
+                        'text':  str,
+                    }
+                }
+            }
+
+        Note: template section sizes INCLUDE any variables embedded inside
+        them.  Variable entries are *subsets* of their containing template
+        section — they are not additive to the total.
+        """
+        raw = self._get_nested(self.prompts, prompt_id)
+        if raw is None:
+            raise ValueError(f"Prompt '{prompt_id}' not found")
+
+        fully_rendered = self.get(prompt_id, **variables)
+        template_resolved = self._resolve_templates(raw)
+
+        token_pattern = re.compile(r'\{([\w]+(?:\.[\w.]+)*)\}')
+
+        def _ordered_tokens(text: str) -> list[str]:
+            seen: set[str] = set()
+            result: list[str] = []
+            for m in token_pattern.finditer(text):
+                t = m.group(1)
+                if t not in seen:
+                    seen.add(t)
+                    result.append(t)
+            return result
+
+        raw_tokens = _ordered_tokens(raw)
+        resolved_tokens = _ordered_tokens(template_resolved)
+
+        sections: dict[str, dict] = {}
+
+        # Pass 1: template sections (top-level, rendered with full variable substitution)
+        for token in raw_tokens:
+            if '.' in token:
+                content = self._get_nested(self.templates, token)
+            else:
+                content = self.templates.get(token)
+                if isinstance(content, dict):
+                    content = content.get('content', '')
+
+            if content is not None:
+                resolved = self._resolve_templates(str(content))
+                try:
+                    rendered = resolved.format(**variables)
+                except (KeyError, ValueError):
+                    rendered = resolved  # missing variable — skip substitution
+                sections[token] = {'kind': 'template', 'chars': len(rendered), 'text': rendered}
+
+        # Pass 2: variable tokens (injected inside templates, or directly in raw text)
+        for token in raw_tokens + [t for t in resolved_tokens if t not in raw_tokens]:
+            if token in sections:
+                continue  # already classified as template
+            if token in variables:
+                val = variables[token]
+                text = str(val) if val is not None else ''
+                sections[token] = {'kind': 'variable', 'chars': len(text), 'text': text}
+            else:
+                sections[token] = {'kind': 'unknown', 'chars': 0, 'text': ''}
+
+        return {'total_chars': len(fully_rendered), 'sections': sections}
+
     def _resolve_templates(self, text: str) -> str:
         """Resolve template references in text.
 
