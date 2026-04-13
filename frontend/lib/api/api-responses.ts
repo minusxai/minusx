@@ -4,39 +4,84 @@
  */
 
 import { NextResponse } from 'next/server';
+import { headers } from 'next/headers';
 import { ApiResponse, ErrorCode, ErrorCodes } from './api-types';
 import { UserFacingError, FileExistsError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
 import { notifyInternal } from '@/lib/messaging/internal-notifier';
+import { logNetworkResponse } from '@/lib/network-logging';
+
+async function getRequestId(): Promise<string | null> {
+  try {
+    const h = await headers();
+    return h.get('x-request-id');
+  } catch {
+    // Not in a Next.js request context (e.g. tests or build time)
+    return null;
+  }
+}
+
+async function getRequestPath(): Promise<string | undefined> {
+  try {
+    const h = await headers();
+    return h.get('x-request-path') ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+interface RequestUserContext {
+  companyId: string | null;
+  userId: string | null;
+  mode: string | null;
+}
+
+async function getRequestUser(): Promise<RequestUserContext> {
+  try {
+    const h = await headers();
+    return {
+      companyId: h.get('x-company-id'),
+      userId: h.get('x-user-id'),
+      mode: h.get('x-mode'),
+    };
+  } catch {
+    return { companyId: null, userId: null, mode: null };
+  }
+}
 
 /**
  * Create a success response
  */
-export function successResponse<T>(
+export async function successResponse<T>(
   data: T,
   status: number = 200
-): NextResponse<ApiResponse<T>> {
+): Promise<NextResponse<ApiResponse<T>>> {
+  const requestId = await getRequestId();
   return NextResponse.json({
     success: true,
-    data
+    data,
+    ...(requestId ? { request_id: requestId } : {}),
   }, { status });
 }
 
 /**
  * Create an error response
  */
-export function errorResponse(
+export async function errorResponse(
   code: ErrorCode,
   message: string,
   status: number = 500,
   details?: unknown
-): NextResponse<ApiResponse> {
+): Promise<NextResponse<ApiResponse>> {
+  const [requestId, requestPath, requestUser] = await Promise.all([getRequestId(), getRequestPath(), getRequestUser()]);
+  if (requestId) void logNetworkResponse(requestId, { success: false, error: { code, message, details } }, status, true, requestUser, requestPath);
   return NextResponse.json({
     success: false,
     error: {
       code,
       message,
       details
-    }
+    },
+    ...(requestId ? { request_id: requestId } : {}),
   }, { status });
 }
 
@@ -110,7 +155,7 @@ export const ApiErrors = {
  * Converts thrown errors into proper API responses
  * Properly serializes UserFacingError and its subclasses with type information
  */
-export function handleApiError(error: unknown): NextResponse<ApiResponse> {
+export async function handleApiError(error: unknown): Promise<NextResponse<ApiResponse>> {
   console.error('API Error:', error);
 
   // Handle UserFacingError and its subclasses
@@ -132,13 +177,16 @@ export function handleApiError(error: unknown): NextResponse<ApiResponse> {
       code = ErrorCodes.CONFLICT;
     }
 
+    const [requestId, requestPath, requestUser] = await Promise.all([getRequestId(), getRequestPath(), getRequestUser()]);
+    if (requestId) void logNetworkResponse(requestId, { success: false, error: { code, message: serialized.message } }, status, status >= 500, requestUser, requestPath);
     return NextResponse.json({
       success: false,
       error: {
         code,
         message: serialized.message,
         type: serialized.type, // Include type for client-side deserialization
-      }
+      },
+      ...(requestId ? { request_id: requestId } : {}),
     }, { status });
   }
 

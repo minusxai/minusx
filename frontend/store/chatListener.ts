@@ -4,6 +4,7 @@ import type { RootState, AppDispatch } from './store';
 import {
   createConversation,
   sendMessage,
+  editAndForkMessage,
   updateConversation,
   completeToolCall,
   setError,
@@ -116,7 +117,9 @@ chatListenerMiddleware.startListening({
           newConversationID: data.conversationID,
           log_index: data.log_index,
           completed_tool_calls: data.completed_tool_calls,
-          pending_tool_calls: data.pending_tool_calls
+          pending_tool_calls: data.pending_tool_calls,
+          debug: data.debug,
+          request_id: data.request_id,
         }));
         return;
       }
@@ -199,7 +202,8 @@ chatListenerMiddleware.startListening({
             newConversationID: doneEventData.conversationID,
             log_index: doneEventData.log_index,
             completed_tool_calls: doneEventData.completed_tool_calls,
-            pending_tool_calls: doneEventData.pending_tool_calls
+            pending_tool_calls: doneEventData.pending_tool_calls,
+            debug: doneEventData.debug,
           }));
         }
 
@@ -284,7 +288,9 @@ chatListenerMiddleware.startListening({
           newConversationID: data.conversationID,
           log_index: data.log_index,
           completed_tool_calls: data.completed_tool_calls,
-          pending_tool_calls: data.pending_tool_calls
+          pending_tool_calls: data.pending_tool_calls,
+          debug: data.debug,
+          request_id: data.request_id,
         }));
         return;
       }
@@ -384,7 +390,9 @@ chatListenerMiddleware.startListening({
           newConversationID: doneEventData.conversationID,
           log_index: doneEventData.log_index,
           completed_tool_calls: doneEventData.completed_tool_calls,
-          pending_tool_calls: doneEventData.pending_tool_calls
+          pending_tool_calls: doneEventData.pending_tool_calls,
+          debug: doneEventData.debug,
+          request_id: doneEventData.request_id,
         }));
 
         // Cleanup AbortController (using stable _id)
@@ -411,6 +419,148 @@ chatListenerMiddleware.startListening({
       // Clear streaming state on error
       listenerApi.dispatch(clearStreamingContent({ conversationID }));
       // Cleanup AbortController (using stable _id)
+      abortControllers.delete(conversation._id);
+    }
+  }
+});
+
+/**
+ * Listen for editAndForkMessage → call /api/chat with log_index set to the fork point.
+ * The editAndForkMessage action already set conversation.log_index = logIndex before this runs.
+ */
+chatListenerMiddleware.startListening({
+  actionCreator: editAndForkMessage,
+  effect: async (action, listenerApi) => {
+    const { conversationID, message } = action.payload;
+    const state = listenerApi.getState() as RootState;
+    const conversation = selectConversation(state, conversationID);
+
+    if (!conversation) return;
+
+    const abortController = new AbortController();
+    abortControllers.set(conversation._id, abortController);
+
+    const useStreaming = !IS_TEST;
+
+    try {
+      const apiConversationID = conversationID < 0 ? null : conversationID;
+
+      if (!useStreaming) {
+        const response = await fetch(`${API_BASE_URL}/api/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            conversationID: apiConversationID,
+            log_index: conversation.log_index,  // Set to fork point by the action
+            user_message: message,
+            agent: conversation.agent,
+            agent_args: conversation.agent_args
+          }),
+          signal: abortController.signal
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+          listenerApi.dispatch(setError({ conversationID, error: data.error }));
+          return;
+        }
+
+        listenerApi.dispatch(updateConversation({
+          conversationID,
+          newConversationID: data.conversationID,
+          log_index: data.log_index,
+          completed_tool_calls: data.completed_tool_calls,
+          pending_tool_calls: data.pending_tool_calls,
+          debug: data.debug,
+          request_id: data.request_id,
+        }));
+        return;
+      }
+
+      // Streaming path
+      const response = await fetch(`${API_BASE_URL}/api/chat/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          conversationID: apiConversationID,
+          log_index: conversation.log_index,
+          user_message: message,
+          agent: conversation.agent,
+          agent_args: conversation.agent_args
+        }),
+        signal: abortController.signal
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No response body');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let doneEventData: any = null;
+      let errorData: any = null;
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const events = buffer.split('\n\n');
+          buffer = events.pop() || '';
+
+          for (const eventChunk of events) {
+            if (!eventChunk.trim()) continue;
+            const parsed = parseSSEChunk(eventChunk);
+            if (!parsed) continue;
+
+            const { event, data } = parsed;
+            if (event === 'streaming_event') {
+              listenerApi.dispatch(addStreamingMessage(data));
+            } else if (event === 'done') {
+              doneEventData = data;
+            } else if (event === 'error') {
+              errorData = data;
+            } else if (event === 'user_input_request') {
+              listenerApi.dispatch(addUserInputRequest({
+                conversationID,
+                tool_call_id: data.tool_call_id,
+                userInput: data.user_input
+              }));
+            }
+          }
+        }
+
+        if (doneEventData) {
+          const realConversationID = doneEventData.conversationID || conversationID;
+          listenerApi.dispatch(clearStreamingContent({ conversationID: realConversationID }));
+          listenerApi.dispatch(updateConversation({
+            conversationID,
+            newConversationID: doneEventData.conversationID,
+            log_index: doneEventData.log_index,
+            completed_tool_calls: doneEventData.completed_tool_calls,
+            pending_tool_calls: doneEventData.pending_tool_calls,
+            debug: doneEventData.debug,
+            request_id: doneEventData.request_id,
+          }));
+          abortControllers.delete(conversation._id);
+        }
+
+        if (errorData) throw new Error(errorData.error);
+        if (!doneEventData) throw new Error('Stream ended without done event');
+
+      } finally {
+        reader.releaseLock();
+      }
+    } catch (error: any) {
+      if (error.name === 'AbortError') return;
+      void captureError('chatListener:editAndFork', error, { conversationID: String(conversationID) });
+      listenerApi.dispatch(setError({ conversationID, error: error.message || 'Unknown error' }));
+      listenerApi.dispatch(clearStreamingContent({ conversationID }));
       abortControllers.delete(conversation._id);
     }
   }
@@ -479,7 +629,9 @@ chatListenerMiddleware.startListening({
           newConversationID: data.conversationID,
           log_index: data.log_index,
           completed_tool_calls: data.completed_tool_calls,
-          pending_tool_calls: data.pending_tool_calls
+          pending_tool_calls: data.pending_tool_calls,
+          debug: data.debug,
+          request_id: data.request_id,
         }));
         return;
       }
@@ -577,7 +729,9 @@ chatListenerMiddleware.startListening({
           newConversationID: doneEventData.conversationID,
           log_index: doneEventData.log_index,
           completed_tool_calls: doneEventData.completed_tool_calls,
-          pending_tool_calls: doneEventData.pending_tool_calls
+          pending_tool_calls: doneEventData.pending_tool_calls,
+          debug: doneEventData.debug,
+          request_id: doneEventData.request_id,
         }));
 
         // Cleanup AbortController (using stable _id)

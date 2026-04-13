@@ -1,6 +1,41 @@
 'use client';
 
 import { ConversationLogEntry } from '@/lib/types';
+import type { DebugMessage } from '@/store/chatSlice';
+
+/**
+ * Aggregate task_debug entries from a log (or logDiff) into DebugMessages.
+ * Groups entries by task_unique_id, summing duration and concatenating llmDebug.
+ * Preserves encounter order.
+ */
+export function extractDebugMessages(log: ConversationLogEntry[]): DebugMessage[] {
+  const debugByTaskId = new Map<string, { debugInfo: any; firstIndex: number }>();
+
+  for (const entry of log) {
+    if (entry._type !== 'task_debug') continue;
+
+    const existing = debugByTaskId.get(entry._task_unique_id);
+    if (existing) {
+      existing.debugInfo.duration += entry.duration;
+      existing.debugInfo.llmDebug.push(...(entry.llmDebug || []));
+    } else {
+      debugByTaskId.set(entry._task_unique_id, {
+        debugInfo: {
+          task_unique_id: entry._task_unique_id,
+          duration: entry.duration,
+          llmDebug: [...(entry.llmDebug || [])],
+          extra: entry.extra,
+          created_at: entry.created_at,
+        },
+        firstIndex: debugByTaskId.size,
+      });
+    }
+  }
+
+  return Array.from(debugByTaskId.values())
+    .sort((a, b) => a.firstIndex - b.firstIndex)
+    .map(({ debugInfo }) => ({ role: 'debug' as const, ...debugInfo }));
+}
 
 /**
  * Slugify text for use in filenames (max 50 chars)
@@ -34,12 +69,9 @@ export function truncateMessageForName(message: string): string {
 export function parseLogToMessages(log: ConversationLogEntry[]): any[] {
   const messages: any[] = [];
   const pendingTasks = new Map<string, any>(); // unique_id -> task
-  const debugByTaskId = new Map<string, {
-    debugInfo: any;
-    firstIndex: number;
-  }>();
 
-  for (const entry of log) {
+  for (let i = 0; i < log.length; i++) {
+    const entry = log[i];
     if (entry._type === 'task') {
       const agent = entry.agent;
 
@@ -51,6 +83,7 @@ export function parseLogToMessages(log: ConversationLogEntry[]): any[] {
           role: 'user',
           content: userMessage,
           created_at: entry.created_at,
+          logIndex: i,
           ...(attachments?.length > 0 ? { attachments } : {}),
         });
       }
@@ -84,39 +117,11 @@ export function parseLogToMessages(log: ConversationLogEntry[]): any[] {
       // Remove from pending
       pendingTasks.delete(entry._task_unique_id);
 
-    } else if (entry._type === 'task_debug') {
-      // Aggregate debug deltas by task_unique_id
-      const existing = debugByTaskId.get(entry._task_unique_id);
-      if (existing) {
-        // Accumulate duration and extend llmDebug
-        existing.debugInfo.duration += entry.duration;
-        existing.debugInfo.llmDebug.push(...(entry.llmDebug || []));
-      } else {
-        // First entry for this task
-        debugByTaskId.set(entry._task_unique_id, {
-          debugInfo: {
-            task_unique_id: entry._task_unique_id,
-            duration: entry.duration,
-            llmDebug: [...(entry.llmDebug || [])],
-            extra: entry.extra,
-            created_at: entry.created_at
-          },
-          firstIndex: messages.length
-        });
-      }
     }
   }
 
-  // Add aggregated debug entries in order
-  const sortedDebug = Array.from(debugByTaskId.values())
-    .sort((a, b) => a.firstIndex - b.firstIndex);
-
-  for (const { debugInfo } of sortedDebug) {
-    messages.push({
-      role: 'debug',
-      ...debugInfo
-    });
-  }
+  // Append aggregated debug messages (reuse extractDebugMessages)
+  messages.push(...extractDebugMessages(log));
 
   return messages;
 }

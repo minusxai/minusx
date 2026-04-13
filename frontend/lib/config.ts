@@ -25,6 +25,7 @@ interface EnvironmentConfig {
   CRON_SECRET: string | undefined;
   MX_API_BASE_URL: string;
   MX_API_KEY: string;
+  MX_NETWORK_LOG_EXCLUDE: string;
   ANALYTICS_DB_DIR: string | undefined;
   DEFAULT_DB_TYPE: string;
   BACKEND_URL: string;
@@ -82,6 +83,7 @@ const config: EnvironmentConfig = {
   CRON_SECRET: process.env.CRON_SECRET,
   MX_API_BASE_URL: getOptional(process.env.MX_API_BASE_URL, ''),
   MX_API_KEY: getOptional(process.env.MX_API_KEY, ''),
+  MX_NETWORK_LOG_EXCLUDE: getOptional(process.env.MX_NETWORK_LOG_EXCLUDE, ''),
   ANALYTICS_DB_DIR: process.env.ANALYTICS_DB_DIR,
   DEFAULT_DB_TYPE: getOptional(process.env.DEFAULT_DB_TYPE, 'duckdb'),
   BACKEND_URL: getOptional(process.env.NEXT_PUBLIC_BACKEND_URL, 'http://localhost:8001'),
@@ -134,6 +136,7 @@ export const POSTGRES_SCHEMA = config.POSTGRES_SCHEMA;
 export const CRON_SECRET = config.CRON_SECRET;
 export const MX_API_BASE_URL = config.MX_API_BASE_URL;
 export const MX_API_KEY = config.MX_API_KEY;
+export const MX_NETWORK_LOG_EXCLUDE = config.MX_NETWORK_LOG_EXCLUDE;
 export const ANALYTICS_DB_DIR = config.ANALYTICS_DB_DIR;
 export const DEFAULT_DB_TYPE = config.DEFAULT_DB_TYPE;
 export const BACKEND_URL = config.BACKEND_URL;

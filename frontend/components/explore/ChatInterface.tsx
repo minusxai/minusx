@@ -611,6 +611,7 @@ export default function ChatInterface({
                         showThinking={showThinking}
                         toggleShowThinking={toggleShowThinking}
                         markdownContext={container === 'sidebar' ? 'sidebar' : 'mainpage'}
+                        conversationID={conversationID}
                     />
                 })
               }

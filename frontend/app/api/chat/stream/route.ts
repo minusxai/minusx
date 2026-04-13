@@ -4,7 +4,9 @@ import {
   getOrCreateConversation,
   appendLogToConversation
 } from '@/lib/conversations';
+import { extractDebugMessages } from '@/lib/conversations-client';
 import { ToolCall, ConversationLogEntry } from '@/lib/types';
+import type { DebugMessage } from '@/store/chatSlice';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import {
   ChatRequest,
@@ -34,7 +36,7 @@ type StreamingEvent =
 type SSEEvent =
   | PythonStreamingEvent
   | StreamingEvent
-  | { type: 'done', logDiff: ConversationLogEntry[], pending_tool_calls: ToolCall[], completed_tool_calls: CompletedToolCallFromPython[], llm_calls?: Record<string, LLMCallDetail>, timestamp: string }
+  | { type: 'done', logDiff: ConversationLogEntry[], pending_tool_calls: ToolCall[], completed_tool_calls: CompletedToolCallFromPython[], llm_calls?: Record<string, LLMCallDetail>, debug?: DebugMessage[], timestamp: string }
   | { type: 'error', error: string, timestamp: string };
 
 /**
@@ -148,6 +150,7 @@ export async function POST(request: NextRequest) {
       let currentConversationID = 0;
       let currentLogIndex = 0;
       let accumulatedCompletedToolCalls: CompletedToolCallFromPython[] = [];
+      let accumulatedLogDiff: ConversationLogEntry[] = [];
       let user: Awaited<ReturnType<typeof getEffectiveUser>> | undefined;
 
       try {
@@ -194,8 +197,8 @@ export async function POST(request: NextRequest) {
         // Setup loop variables
         let completed_tool_calls = body.completed_tool_calls?.map(tuple => tuple[1]) || [];
         let user_message: string | null = body.user_message || null;
-        let accumulatedLogDiff: ConversationLogEntry[] = [];
-        accumulatedCompletedToolCalls = [];  // Use outer scope variable
+        accumulatedLogDiff = [];  // Reset outer scope variable
+        accumulatedCompletedToolCalls = [];  // Reset outer scope variable
         let accumulatedLLMCalls: Record<string, LLMCallDetail> = {};
         let currentFileId = fileId;
         currentLogIndex = initial_log_index;  // Initialize outer scope variable
@@ -397,6 +400,7 @@ export async function POST(request: NextRequest) {
           log_index: currentLogIndex,
           pending_tool_calls: finalPendingToolCalls,
           completed_tool_calls: accumulatedCompletedToolCalls,
+          debug: extractDebugMessages(accumulatedLogDiff),
           timestamp: new Date().toISOString()
         });
         controller.close();
@@ -411,6 +415,7 @@ export async function POST(request: NextRequest) {
             log_index: currentLogIndex,
             pending_tool_calls: [],
             completed_tool_calls: accumulatedCompletedToolCalls,
+            debug: extractDebugMessages(accumulatedLogDiff),
             timestamp: new Date().toISOString()
           });
           controller.close();
@@ -440,6 +445,7 @@ export async function POST(request: NextRequest) {
           log_index: currentLogIndex,
           pending_tool_calls: [],
           completed_tool_calls: accumulatedCompletedToolCalls,
+          debug: extractDebugMessages(accumulatedLogDiff),
           timestamp: new Date().toISOString()
         });
         controller.close();
