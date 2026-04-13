@@ -2,14 +2,14 @@
 
 import { Box, Heading, Text, Button, VStack, HStack, Table, IconButton, Input, Dialog, Portal, Menu } from '@chakra-ui/react';
 import { LuPlus, LuPencil, LuTrash2, LuCrown, LuSquarePen, LuEye, LuCheck, LuX, LuChevronDown } from 'react-icons/lu';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useAppSelector } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
-import { selectUsers, selectUsersStatus } from '@/store/usersSlice';
 import type { User } from '@/lib/types';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { useConfigs } from '@/lib/hooks/useConfigs';
-import { loadUsers, setUsersInStore } from '@/lib/api/users-state';
+import { useUsers } from '@/lib/hooks/useUsers';
+import { loadUsers, setUsersInStore } from '@/lib/hooks/useUsers';
 
 // Helper to get icon based on role
 const getRoleIcon = (role: string | undefined) => {
@@ -36,9 +36,7 @@ interface Message {
 export default function UsersContent() {
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const { config } = useConfigs();
-  const reduxUsers = useAppSelector(selectUsers) as UserWithId[];
-  const usersStatus = useAppSelector(selectUsersStatus);
-  const loading = usersStatus !== 'loaded';
+  const { users: reduxUsers, loading } = useUsers() as { users: UserWithId[]; loading: boolean };
   const [message, setMessage] = useState<Message | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -61,12 +59,8 @@ export default function UsersContent() {
     home_folder: '',
   });
 
-  useEffect(() => {
-    if (effectiveUser?.role && isAdmin(effectiveUser.role)) {
-      loadUsers().catch(() => setMessage({ type: 'error', text: 'Failed to fetch users' }));
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [effectiveUser?.role]);
+
+
 
   const handleAddUser = async () => {
     try {

@@ -1,5 +1,9 @@
+'use client';
+
+import { useEffect } from 'react';
+import { useAppSelector } from '@/store/hooks';
+import { selectUsers, selectUsersStatus, setUsers, setUsersLoading } from '@/store/usersSlice';
 import { getStore } from '@/store/store';
-import { setUsers, setUsersLoading } from '@/store/usersSlice';
 import type { User } from '@/lib/types';
 
 // In-flight promise for request merging: if loadUsers() is called while a
@@ -47,4 +51,15 @@ export function setUsersInStore(users: User[]): void {
  */
 export function _resetForTesting(): void {
   inFlightRequest = null;
+}
+
+export function useUsers(): { users: User[]; loading: boolean } {
+  const users = useAppSelector(selectUsers);
+  const status = useAppSelector(selectUsersStatus);
+
+  useEffect(() => {
+    if (status === 'idle') loadUsers();
+  }, [status]);
+
+  return { users, loading: status !== 'loaded' };
 }

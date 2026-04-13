@@ -17,7 +17,7 @@ import { setupMockFetch } from '@/test/harness/mock-fetch';
 import { GET as usersGetHandler, POST as usersPostHandler } from '@/app/api/users/route';
 import { PUT as userPutHandler, DELETE as userDeleteHandler } from '@/app/api/users/[id]/route';
 import usersReducer, { selectUsers, selectUsersStatus } from '@/store/usersSlice';
-import { loadUsers, setUsersInStore, _resetForTesting } from '@/lib/api/users-state';
+import { loadUsers, setUsersInStore, _resetForTesting } from '@/lib/hooks/useUsers';
 
 // ---------------------------------------------------------------------------
 // Jest module mocks — hoisted to top by Jest
