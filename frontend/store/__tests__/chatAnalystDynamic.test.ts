@@ -290,8 +290,9 @@ describe('Agent - E2E with Dynamic LLM Mocking', () => {
     expect(conv!.executionState).toBe('FINISHED');
     expect(conv!.error).toBeUndefined();
 
-    // Verify tools were executed and tracked in messages
-    expect(conv!.messages?.length).toBe(4); // user + 3 tool results
+    // Verify tools were executed and tracked in messages (exclude debug messages)
+    const nonDebugMessages = conv!.messages?.filter((m: any) => m.role !== 'debug') || [];
+    expect(nonDebugMessages.length).toBe(4); // user + 3 tool results
     const toolMessages = conv!.messages?.filter((m: any) => m.role === 'tool') || [];
     expect(toolMessages.length).toBe(3);
 
@@ -305,12 +306,14 @@ describe('Agent - E2E with Dynamic LLM Mocking', () => {
     // Wait for second message to complete (check real conversation ID)
     await waitFor(() => {
       const c = selectConversation(store.getState() as RootState, realConversationID);
-      return c?.executionState === 'FINISHED' && (c?.messages?.length || 0) === 6;
+      const nonDebug = c?.messages?.filter((m: any) => m.role !== 'debug') || [];
+      return c?.executionState === 'FINISHED' && nonDebug.length === 6;
     }, 45000);
 
     conv = selectConversation(store.getState() as RootState, realConversationID);
     expect(conv!.executionState).toBe('FINISHED');
-    expect(conv!.messages?.length).toBe(6); // user1 + 3 tools + user2 + assistant
+    const nonDebugAfterSecond = conv!.messages?.filter((m: any) => m.role !== 'debug') || [];
+    expect(nonDebugAfterSecond.length).toBe(6); // user1 + 3 tools + user2 + assistant
 
     // Verify all 3 LLM calls were made
     const calls = await mockServer.getCalls();

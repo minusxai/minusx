@@ -370,8 +370,30 @@ export default function DebugInfoDisplay({ debugInfo }: DebugInfoDisplayProps) {
             </VStack>
           </Box>
 
+          {/* Request ID (for cross-referencing network logs) */}
+          {debugInfo.extra?.request_id && (
+            <Box>
+              <Text fontSize="xs" fontWeight="600" color="fg.muted" mb={1}>
+                Request ID
+              </Text>
+              <HStack gap={2}>
+                <Text fontFamily="mono" fontSize="2xs" wordBreak="break-all" flex="1">
+                  {debugInfo.extra.request_id}
+                </Text>
+                <IconButton
+                  aria-label="Copy request ID"
+                  size="2xs"
+                  variant="ghost"
+                  onClick={() => navigator.clipboard.writeText(debugInfo.extra!.request_id)}
+                >
+                  <Box as="span" fontSize="10px">⎘</Box>
+                </IconButton>
+              </HStack>
+            </Box>
+          )}
+
           {/* Extra Task Data */}
-          {debugInfo.extra && (
+          {debugInfo.extra && Object.keys(debugInfo.extra).some(k => k !== 'request_id') && (
             <Box>
               <Text fontSize="xs" fontWeight="600" color="fg.muted" mb={1}>
                 Extra Data
@@ -386,7 +408,10 @@ export default function DebugInfoDisplay({ debugInfo }: DebugInfoDisplayProps) {
                 maxH="200px"
                 overflowY="auto"
               >
-                <pre>{JSON.stringify(debugInfo.extra, null, 2)}</pre>
+                <pre>{JSON.stringify(
+                  Object.fromEntries(Object.entries(debugInfo.extra).filter(([k]) => k !== 'request_id')),
+                  null, 2
+                )}</pre>
               </Box>
             </Box>
           )}

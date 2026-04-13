@@ -44,6 +44,9 @@ export default auth(async (req) => {
     );
   }
 
+  // Generate a unique request ID for tracing (available to all route handlers via x-request-id header)
+  const requestId = crypto.randomUUID();
+
   // Allow access to public routes, auth API, internal API (Python backend), registration API, health check, MCP + OAuth
   if (
     isPublicRoute ||
@@ -62,6 +65,7 @@ export default auth(async (req) => {
   ) {
     // Create modified request headers with subdomain
     const requestHeaders = new Headers(req.headers);
+    requestHeaders.set('x-request-id', requestId);
     if (subdomain) {
       requestHeaders.set('x-subdomain', subdomain);
     }
@@ -99,6 +103,7 @@ export default auth(async (req) => {
   // clear the token cookie to prevent interference with normal authenticated requests
   if (pathname.startsWith('/api/') && publicAccessTokenCookie?.value && req.auth) {
     const requestHeaders = new Headers(req.headers);
+    requestHeaders.set('x-request-id', requestId);
     if (subdomain) {
       requestHeaders.set('x-subdomain', subdomain);
     }
@@ -144,6 +149,9 @@ export default auth(async (req) => {
 
   // Create modified request headers
   const requestHeaders = new Headers(req.headers);
+
+  // Propagate request ID for cross-service tracing
+  requestHeaders.set('x-request-id', requestId);
 
   // Add subdomain header if present
   if (subdomain) {

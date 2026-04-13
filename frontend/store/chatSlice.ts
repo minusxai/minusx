@@ -37,6 +37,7 @@ export type UserMessage = {
   content: string;
   created_at: string;
   attachments?: import('@/lib/types').Attachment[];
+  logIndex?: number;  // Index of this task entry in the conversation log — used to fork from this point
 };
 
 export type CompletedToolCall = {
@@ -186,6 +187,55 @@ const chatSlice = createSlice({
       conv.error = undefined;
     },
 
+    // Edit a past user message and fork the conversation from that point.
+    // Truncates conv.messages to just before the edited message, adds the new
+    // user message, sets log_index to the fork point, and marks WAITING.
+    editAndForkMessage(state, action: PayloadAction<{
+      conversationID: number;
+      logIndex: number;   // The log array index to fork from (sets log_index on the conversation)
+      message: string;
+    }>) {
+      const { conversationID, logIndex, message } = action.payload;
+      const conv = state.conversations[conversationID];
+      if (!conv) return;
+
+      // Keep only messages whose logIndex < fork point (i.e., messages BEFORE the edited one)
+      const kept = conv.messages.filter((m) => {
+        if (m.role === 'user') {
+          const ui = m as UserMessage;
+          return ui.logIndex !== undefined && ui.logIndex < logIndex;
+        }
+        // Non-user messages: keep if they came before the first user message at logIndex.
+        // Tool messages don't have logIndex — use a heuristic: keep tool messages whose
+        // parent user message was before the fork. Since messages are in order, keep all
+        // tool messages that precede the fork user message in the array.
+        return true; // Will be filtered below with index-based pass
+      });
+
+      // Simpler: find the index of the first message with logIndex >= fork point and truncate
+      let cutAt = conv.messages.length;
+      for (let i = 0; i < conv.messages.length; i++) {
+        const m = conv.messages[i];
+        if (m.role === 'user') {
+          const ui = m as UserMessage;
+          if (ui.logIndex !== undefined && ui.logIndex >= logIndex) {
+            cutAt = i;
+            break;
+          }
+        }
+      }
+
+      conv.messages = conv.messages.slice(0, cutAt);
+      conv.messages.push({
+        role: 'user',
+        content: message,
+        created_at: new Date().toISOString(),
+      });
+      conv.log_index = logIndex;
+      conv.executionState = 'WAITING';
+      conv.error = undefined;
+    },
+
     // Update agent_args (e.g., to refresh app_state before sending new message)
     updateAgentArgs(state, action: PayloadAction<{
       conversationID: number;
@@ -205,8 +255,10 @@ const chatSlice = createSlice({
       log_index: number;
       completed_tool_calls: CompletedToolCall[];
       pending_tool_calls: ToolCall[];
+      debug?: DebugMessage[];  // Aggregated debug from this turn's logDiff
+      request_id?: string | null;  // HTTP request ID for cross-referencing network logs
     }>) {
-      const { conversationID, newConversationID, log_index, completed_tool_calls, pending_tool_calls } = action.payload;
+      const { conversationID, newConversationID, log_index, completed_tool_calls, pending_tool_calls, debug, request_id } = action.payload;
 
       let conv = state.conversations[conversationID];
       if (!conv) return;
@@ -237,6 +289,15 @@ const chatSlice = createSlice({
       // Update state
       conv.log_index = log_index;
       conv.messages.push(...completed_tool_calls);
+      if (debug?.length) {
+        // Attach request_id to the first debug message's extra for display in DebugInfoDisplay
+        const debugWithRequestId = request_id
+          ? debug.map((msg, i) =>
+              i === 0 ? { ...msg, extra: { ...msg.extra, request_id } } : msg
+            )
+          : debug;
+        conv.messages.push(...debugWithRequestId);
+      }
       conv.pending_tool_calls = pending_tool_calls.map(tc => ({
         toolCall: tc,
         result: undefined
@@ -508,6 +569,7 @@ export const {
   createConversation,
   loadConversation,
   sendMessage,
+  editAndForkMessage,
   updateAgentArgs,
   updateConversation,
   completeToolCall,

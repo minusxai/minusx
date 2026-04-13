@@ -5,6 +5,8 @@ import {
   appendLogToConversation
 } from '@/lib/conversations';
 import { ToolCall, ConversationLogEntry } from '@/lib/types';
+import { extractDebugMessages } from '@/lib/conversations-client';
+import type { DebugMessage } from '@/store/chatSlice';
 import {
   ChatRequest,
   CompletedToolCallFromPython,
@@ -28,6 +30,8 @@ interface ChatResponse {
   log_index: number;
   pending_tool_calls: ToolCall[];                         // Can be non-empty if tools pending
   completed_tool_calls: CompletedToolCallFromPython[];    // Flat list from Python - frontend can group by run_id if needed
+  debug: DebugMessage[];                                  // Aggregated debug info from this turn's logDiff
+  request_id?: string | null;                             // HTTP request ID from middleware for cross-referencing network logs
   credits?: number | null;                                // Optional
   error?: string | null;
 }
@@ -62,6 +66,7 @@ export async function POST(request: NextRequest) {
   let currentConversationID = 0;
   let currentLogIndex = 0;
   let accumulatedCompletedToolCalls: CompletedToolCallFromPython[] = [];
+  let accumulatedLogDiff: ConversationLogEntry[] = [];
   let user: Awaited<ReturnType<typeof getEffectiveUser>> | undefined;
 
   try {
@@ -82,6 +87,7 @@ export async function POST(request: NextRequest) {
           log_index: 0,
           pending_tool_calls: [],
           completed_tool_calls: [],
+          debug: [],
           error: 'No company ID found for user'
         } as ChatResponse,
         { status: 401 }
@@ -115,7 +121,7 @@ export async function POST(request: NextRequest) {
         mode: user.mode,
       });
     }
-    let accumulatedLogDiff: ConversationLogEntry[] = [];
+    accumulatedLogDiff = [];  // Use outer scope variable
     accumulatedCompletedToolCalls = [];  // Use outer scope variable
     let accumulatedLLMCalls: Record<string, LLMCallDetail> = {};
     let pythonResponse: PythonChatResponse;
@@ -274,6 +280,8 @@ export async function POST(request: NextRequest) {
       log_index: currentLogIndex,
       pending_tool_calls: finalPendingToolCalls,  // Includes spawned frontend tools
       completed_tool_calls: accumulatedCompletedToolCalls,
+      debug: extractDebugMessages(accumulatedLogDiff),
+      request_id: request.headers.get('x-request-id'),
       credits: null,
       error: pythonResponse.error
     } as ChatResponse);
@@ -289,6 +297,8 @@ export async function POST(request: NextRequest) {
         log_index: currentLogIndex,  // IMPORTANT: Return actual log index after save
         pending_tool_calls: [],
         completed_tool_calls: accumulatedCompletedToolCalls,
+        debug: extractDebugMessages(accumulatedLogDiff),
+        request_id: request.headers.get('x-request-id'),
         error: 'Interrupted by user'
       } as ChatResponse);
     }
@@ -313,6 +323,7 @@ export async function POST(request: NextRequest) {
         log_index: 0,
         pending_tool_calls: [],
         completed_tool_calls: [],
+        debug: [],
         credits: null,
         error: error.message || 'Unknown error occurred'
       } as ChatResponse,
