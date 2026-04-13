@@ -9,8 +9,8 @@
 import { useState, useEffect } from 'react';
 import { Box, HStack, Text, Icon, IconButton, SimpleGrid, Button } from '@chakra-ui/react';
 import NextLink from 'next/link';
-import { fetchWithCache } from '@/lib/api/fetch-wrapper';
-import { API } from '@/lib/api/declarations';
+import { loadUsers } from '@/lib/api/users-state';
+import { selectUsers } from '@/store/usersSlice';
 import {
   LuX,
   LuCheck,
@@ -106,7 +106,7 @@ export default function GettingStartedSection() {
   const user = useAppSelector(state => state.auth.user);
   const { connections: connectionsMap } = useConnections({ skip: true });
   const [clickedItems, setClickedItems] = useState<Set<string>>(() => getClickedItems());
-  const [userCount, setUserCount] = useState<number>(1);
+  const userCount = useAppSelector(selectUsers).length;
   const [isLoaded, setIsLoaded] = useState(false);
 
   const isTutorialMode = user?.mode === 'tutorial';
@@ -119,21 +119,12 @@ export default function GettingStartedSection() {
   // Fetch user count for admins — intentional setState in effect
   useEffect(() => {
     if (userIsAdmin) {
-      fetchWithCache('/api/users', {
-        method: 'GET',
-        cacheStrategy: API.users.list.cache,
-      })
-        .then(data => {
-          if (data.data?.users) {
-            setUserCount(data.data.users.length);
-          }
-        })
-        .catch(() => {})
-        .finally(() => setIsLoaded(true));
+      loadUsers().catch(() => {}).finally(() => setIsLoaded(true));
     } else {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsLoaded(true);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userIsAdmin]);
 
   // Handle item click - mark as completed
