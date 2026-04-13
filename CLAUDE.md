@@ -573,6 +573,10 @@ For component-level UI interaction tests (React rendering, user events, DOM asse
 - Pydantic `Optional[T]` generates `T | null` in TypeScript (not `T | undefined`) — fix call sites with `?? undefined` where needed
 - `DocumentContent` (frontend abstraction for dashboards/notebooks) lives in `types.ts` only — it's more general than the generated `DashboardContent`
 
+## Prompt Size Measurement
+
+After any change to agent prompts, tool docstrings, or field descriptions, measure the token impact with `cd frontend && MEASURE_PROMPT=1 npx jest promptMeasure --no-coverage --verbose`. This prints a full per-section breakdown of system prompt, user message, and tool schemas against a real dashboard app_state (baseline: ~17,226 tokens on 2026-04-13).
+
 ## Tool Schema Dual-Update Rule
 
 **When modifying frontend tool handlers (`tool-handlers.ts`), always update the corresponding Pydantic class in `backend/tasks/agents/analyst/tools.py` too.** The Pydantic class is the source of truth for what args the LLM is told it can pass — stale schemas cause the model to use wrong/old args. Both files must stay in sync: `tools.py` defines the schema (args + docstring), `tool-handlers.ts` implements the behavior, and `tools.md` documents the return shape.
