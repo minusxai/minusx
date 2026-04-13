@@ -252,6 +252,27 @@ AtlasFile = Annotated[
 _atlas_file_adapter = TypeAdapter(AtlasFile)
 ATLAS_FILE_SCHEMA_JSON = json.dumps(_atlas_file_adapter.json_schema())
 
+# Variant with vizSettings definitions stripped out — used in EditFile so the
+# LLM gets full question/dashboard structure without duplicating the viz schema
+# that is already present in ExecuteQuery.vizSettings.
+def _build_atlas_schema_no_viz() -> str:
+    schema = _atlas_file_adapter.json_schema()
+    defs = schema.get("$defs", {})
+    # Remove all defs that exist in the VisualizationSettings sub-schema
+    viz_sub_defs = set(json.loads(vizSettingsJsonStr).get("$defs", {}).keys())
+    viz_defs_to_remove = viz_sub_defs | {"VisualizationSettings"}
+    for key in viz_defs_to_remove:
+        defs.pop(key, None)
+    # Replace any $ref to VisualizationSettings with a prose note
+    schema_str = json.dumps(schema)
+    schema_str = schema_str.replace(
+        '"$ref":"#/$defs/VisualizationSettings"',
+        '"description":"vizSettings — see ExecuteQuery.vizSettings for schema","type":"object"'
+    )
+    return schema_str
+
+ATLAS_FILE_SCHEMA_NO_VIZ_JSON = _build_atlas_schema_no_viz()
+
 
 # ============================================================================
 # Unified Test types

@@ -150,7 +150,7 @@ class PromptLoader:
         fully_rendered = self.get(prompt_id, **variables)
         template_resolved = self._resolve_templates(raw)
 
-        token_pattern = re.compile(r'\{([\w]+(?:\.[\w.]+)*)\}')
+        token_pattern = re.compile(r'\{([\w]+(?:\.[\w]+)*)\}')
 
         def _ordered_tokens(text: str) -> list[str]:
             seen: set[str] = set()
@@ -211,7 +211,7 @@ class PromptLoader:
             Text with all template references resolved
         """
         # Pattern to match {path.to.template} (nested with dots)
-        nested_pattern = re.compile(r'\{([\w]+\.[\w.]+)\}')
+        nested_pattern = re.compile(r'\{([\w]+(?:\.[\w]+)+)\}')
 
         # Pattern to match simple {template_name} (single word)
         simple_pattern = re.compile(r'\{(\w+)\}')
