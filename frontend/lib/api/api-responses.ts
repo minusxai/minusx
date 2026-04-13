@@ -55,8 +55,7 @@ export async function successResponse<T>(
   data: T,
   status: number = 200
 ): Promise<NextResponse<ApiResponse<T>>> {
-  const [requestId, requestPath, requestUser] = await Promise.all([getRequestId(), getRequestPath(), getRequestUser()]);
-  if (requestId) void logNetworkResponse(requestId, { success: true, data }, status, false, requestUser, requestPath);
+  const requestId = await getRequestId();
   return NextResponse.json({
     success: true,
     data,

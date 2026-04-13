@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withResponseLogging } from '@/lib/api/with-response-logging';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import {
   getOrCreateConversation,
@@ -58,7 +59,7 @@ async function callPythonBackend(request: PythonChatRequest): Promise<PythonChat
  * POST /api/chat
  * Main chat endpoint for conversation management
  */
-export async function POST(request: NextRequest) {
+export const POST = withResponseLogging(async function POST(request: NextRequest) {
   let fileId: number | null = null;
   let body: ChatRequest | undefined;
 
@@ -330,4 +331,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
