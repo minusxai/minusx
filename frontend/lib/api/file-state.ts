@@ -338,7 +338,7 @@ export interface EditFileStrOptions {
  * Must match compressFileState exactly so oldMatch copied from ReadFiles/appState works verbatim.
  * Used by editFileStr and replaceFileState.
  */
-function buildCurrentFileStr(state: ReturnType<typeof getStore>['getState'] extends () => infer R ? R : never, fileId: number): { success: true; fullFileStr: string; mergedContent: any } | { success: false; error: string } {
+export function buildCurrentFileStr(state: ReturnType<typeof getStore>['getState'] extends () => infer R ? R : never, fileId: number): { success: true; fullFileStr: string; mergedContent: any } | { success: false; error: string } {
   const fileState = selectFile(state, fileId);
   if (!fileState) {
     return { success: false, error: `File ${fileId} not found` };
