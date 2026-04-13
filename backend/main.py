@@ -43,6 +43,12 @@ from tasks.orchestrator import ConversationLog  # noqa: E402
 from tasks.conversation import get_latest_root, update_log_with_completed_tool_calls, get_pending_tool_calls, get_completed_tool_calls  # noqa: E402
 from tasks.types import ChatCompletionToolMessageParamMX, ChatCompletionMessageToolCallParamMX, CompletedToolCallsMXWithRunId  # noqa: E402
 from internal_notifier import notify_internal  # noqa: E402
+import litellm  # noqa: E402
+from tasks.agents.analyst.prompt_loader import PromptLoader, get_skill  # noqa: E402
+from tasks.agents.analyst.file_schema import ATLAS_FILE_SCHEMA_JSON, vizSettingsJsonStr  # noqa: E402
+from tasks.llm.client import describe_tool  # noqa: E402
+import tasks.agents.analyst.agent  # noqa: E402, F401
+import tasks.agents.analyst.tools  # noqa: E402, F401
 
 app = FastAPI(title="MinusX BI Backend")
 
@@ -1566,3 +1572,158 @@ async def chat_stream(request: ConversationRequest):
             "X-Accel-Buffering": "no"  # Disable buffering in nginx
         }
     )
+
+
+# ---------------------------------------------------------------------------
+# Debug endpoints
+# ---------------------------------------------------------------------------
+
+class PromptBreakdownRequest(BaseModel):
+    agent: str = "AnalystAgent"
+    agent_args: dict = {}
+    model: str = "claude-sonnet-4-6"
+    include_text: bool = False  # include full rendered section text in response
+
+
+@app.post("/api/debug/prompt-breakdown")
+async def debug_prompt_breakdown(request: PromptBreakdownRequest):
+    """Return a structured token-cost breakdown of every component sent to the LLM.
+
+    Works for any agent registered in Orchestrator._agent_registry.
+    Instantiates the agent with a stub orchestrator (no DB, no LLM calls) and
+    measures system prompt sections, user message, and tool schemas.
+    """
+    def count_tokens(text: str) -> int:
+        try:
+            if not text:
+                return 0
+            return litellm.token_counter(model=request.model, text=text)
+        except Exception:
+            return max(1, len(text) // 4)
+
+    # Look up agent class
+    try:
+        agent_cls = Orchestrator.get_agent(request.agent)
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Agent '{request.agent}' not found in registry")
+
+    # Minimal stub — no DB, no LLM, only prompt assembly
+    class _StubOrchestrator:
+        def get_previous_root_tasks(self): return []
+        onContent = None
+
+    try:
+        agent = agent_cls(
+            _unique_id="debug",
+            orchestrator=_StubOrchestrator(),
+            **request.agent_args
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to instantiate agent: {e}")
+
+    loader = PromptLoader()
+
+    def _render_breakdown(prompt_id: str, variables: dict) -> dict:
+        raw = loader.breakdown(prompt_id, **variables)
+        sections = {}
+        for name, info in raw['sections'].items():
+            entry: dict = {
+                'kind': info['kind'],
+                'chars': info['chars'],
+                'tokens': count_tokens(info['text']),
+            }
+            if request.include_text:
+                entry['text'] = info['text']
+            sections[name] = entry
+        # Sort by token cost descending for readability
+        sections = dict(sorted(sections.items(), key=lambda kv: -kv[1]['tokens']))
+        return {'total_chars': raw['total_chars'], 'sections': sections}
+
+    # System prompt
+    sys_args = agent._get_prompt_args()
+    if sys_args:
+        prompt_id, variables = sys_args
+        system_breakdown = _render_breakdown(prompt_id, variables)
+        system_breakdown['total_tokens'] = count_tokens(agent._get_system_message()['content'])
+    else:
+        content = agent._get_system_message()['content']
+        system_breakdown = {'total_chars': len(content), 'total_tokens': count_tokens(content), 'sections': {}}
+
+    # User message
+    user_args = agent._get_user_prompt_args()
+    if user_args:
+        prompt_id, variables = user_args
+        user_breakdown = _render_breakdown(prompt_id, variables)
+        user_msg = agent._get_user_message()
+        raw_content = user_msg['content']
+        text_content = next((b['text'] for b in raw_content if b.get('type') == 'text'), '') \
+            if isinstance(raw_content, list) else raw_content
+        user_breakdown['total_tokens'] = count_tokens(text_content)
+    else:
+        user_msg = agent._get_user_message()
+        raw_content = user_msg['content']
+        text_content = next((b['text'] for b in raw_content if b.get('type') == 'text'), '') \
+            if isinstance(raw_content, list) else raw_content
+        user_breakdown = {'total_chars': len(text_content), 'total_tokens': count_tokens(text_content), 'sections': {}}
+
+    # Tool schemas
+    tools = agent._get_available_tools()
+    tool_breakdown = []
+    for tool_cls in tools:
+        schema = describe_tool(tool_cls)
+        schema_json = json.dumps(schema)
+        entry: dict = {
+            'name': schema['function']['name'],
+            'chars': len(schema_json),
+            'tokens': count_tokens(schema_json),
+        }
+        if request.include_text:
+            entry['schema'] = schema
+        tool_breakdown.append(entry)
+    tool_breakdown.sort(key=lambda x: -x['tokens'])
+    total_tool_tokens = sum(t['tokens'] for t in tool_breakdown)
+    total_tool_chars = sum(t['chars'] for t in tool_breakdown)
+
+    # Per-skill breakdown of the preloaded_skills variable
+    preloaded_skills_detail = None
+    if hasattr(agent, '_get_preloaded_skill_names'):
+        preloaded_skills_detail = []
+        for name in agent._get_preloaded_skill_names():
+            content = get_skill(name)
+            if content:
+                preloaded_skills_detail.append({
+                    'name': name,
+                    'chars': len(content),
+                    'tokens': count_tokens(content),
+                })
+
+    # Known large embedded blobs inside tool field descriptions
+    embedded_blobs = {
+        'ATLAS_FILE_SCHEMA_JSON': {
+            'chars': len(ATLAS_FILE_SCHEMA_JSON),
+            'tokens': count_tokens(ATLAS_FILE_SCHEMA_JSON),
+            'note': 'Embedded in EditFile.changes field description',
+        },
+        'vizSettingsJsonStr': {
+            'chars': len(vizSettingsJsonStr),
+            'tokens': count_tokens(vizSettingsJsonStr),
+            'note': 'Subset of ATLAS_FILE_SCHEMA_JSON, also in ExecuteQuery.vizSettings — sent twice',
+        },
+    }
+
+    grand_total = system_breakdown['total_tokens'] + user_breakdown['total_tokens'] + total_tool_tokens
+
+    return {
+        'agent': request.agent,
+        'model': request.model,
+        'system_prompt': system_breakdown,
+        'user_message': user_breakdown,
+        'tools': {
+            'total_chars': total_tool_chars,
+            'total_tokens': total_tool_tokens,
+            'breakdown': tool_breakdown,
+        },
+        'preloaded_skills_detail': preloaded_skills_detail,
+        'embedded_blobs': embedded_blobs,
+        'grand_total_tokens': grand_total,
+    }

@@ -226,6 +226,14 @@ class Agent:
     async def reduce(self, child_batches: List[List["CompressedTask"]]):
         raise NotImplementedError("This method should be implemented by subclasses")
 
+    def _get_prompt_args(self) -> "tuple[str, dict] | None":
+        """Return (prompt_id, variables) for system prompt breakdown, or None."""
+        return None
+
+    def _get_user_prompt_args(self) -> "tuple[str, dict] | None":
+        """Return (prompt_id, variables) for user message breakdown, or None."""
+        return None
+
     async def dispatch(self, agent: AgentCall | List[AgentCall]):
         await self._orchestrator.run(agent, self._unique_id)
         await self.reduce(self._orchestrator.get_children(self._unique_id))

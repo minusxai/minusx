@@ -162,26 +162,45 @@ class AnalystAgent(Agent):
                 sections.append(content)
         return "\n\n".join(sections)
 
-    def _get_system_message(self) -> dict:
-        """Generate system message with schema and context."""
-        max_steps = MAX_STEPS_LOWER_LEVEL - 5  # Safety margin
+    def _get_prompt_args(self) -> tuple[str, dict]:
+        """Return (prompt_id, variables) for system prompt — used by breakdown endpoint."""
+        max_steps = MAX_STEPS_LOWER_LEVEL - 5
         preloaded_names = self._get_preloaded_skill_names()
         preloaded_set = set(preloaded_names)
-
         allowed_viz_types_str = ", ".join(self.allowed_viz_types) if self.allowed_viz_types else "all"
-
-        content = get_prompt(
+        return (
             'default.system',
-            schema=self.schema,
-            context=self.context,
-            connection_id=self.connection_id,
-            home_folder=self.home_folder,
-            max_steps=max_steps,
-            agent_name=self.agent_name,
-            allowed_viz_types=allowed_viz_types_str,
-            skills_catalog=self._build_skills_catalog(preloaded_set),
-            preloaded_skills=self._build_preloaded_skills_content(preloaded_names)
+            {
+                'schema': self.schema,
+                'context': self.context,
+                'connection_id': self.connection_id,
+                'home_folder': self.home_folder,
+                'max_steps': max_steps,
+                'agent_name': self.agent_name,
+                'allowed_viz_types': allowed_viz_types_str,
+                'skills_catalog': self._build_skills_catalog(preloaded_set),
+                'preloaded_skills': self._build_preloaded_skills_content(preloaded_names),
+            }
         )
+
+    def _get_user_prompt_args(self) -> tuple[str, dict]:
+        """Return (prompt_id, variables) for user message — used by breakdown endpoint."""
+        app_state_str = json.dumps(self.app_state, separators=(',', ':')) if self.app_state else "null"
+        attachments_str = self._format_attachments()
+        return (
+            'default.user',
+            {
+                'app_state': app_state_str,
+                'goal': self.goal,
+                'current_date': time.strftime("%Y-%m-%d"),
+                'attachments': attachments_str,
+            }
+        )
+
+    def _get_system_message(self) -> dict:
+        """Generate system message with schema and context."""
+        _, variables = self._get_prompt_args()
+        content = get_prompt('default.system', **variables)
         return {"role": "system", "content": content}
 
     def _format_attachments(self) -> str:
@@ -218,16 +237,8 @@ class AnalystAgent(Agent):
 
     def _get_user_message(self) -> dict:
         """Generate user message with the goal and app state."""
-        app_state_str = json.dumps(self.app_state, separators=(',', ':')) if self.app_state else "null"
-        attachments_str = self._format_attachments()
-
-        text = get_prompt(
-            'default.user',
-            app_state=app_state_str,
-            goal=self.goal,
-            current_date=time.strftime("%Y-%m-%d"),
-            attachments=attachments_str
-        )
+        _, variables = self._get_user_prompt_args()
+        text = get_prompt('default.user', **variables)
 
         image_blocks = self._get_image_content_blocks()
         if image_blocks:

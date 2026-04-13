@@ -4,9 +4,7 @@ from tasks import Tool, UserInputException, register_agent
 from pydantic import BaseModel, Field
 import json
 
-from tasks.agents.analyst.file_schema import (
-    vizSettingsJsonStr, ATLAS_FILE_SCHEMA_JSON,
-)
+from tasks.agents.analyst.file_schema import vizSettingsJsonStr, ATLAS_FILE_SCHEMA_NO_VIZ_JSON
 from tasks.agents.analyst.prompt_loader import get_skill, list_skills
 
 @register_agent
@@ -358,7 +356,7 @@ class EditFile(Tool):
     def __init__(
         self,
         fileId: int = Field(..., description="File ID to edit"),
-        changes: List[EditChange] = Field(..., description=f"Ordered list of find-and-replace changes to apply sequentially. Schema for newMatch values: {ATLAS_FILE_SCHEMA_JSON}"),
+        changes: List[EditChange] = Field(..., description=f"Ordered list of find-and-replace changes to apply sequentially. Schema for newMatch values: {ATLAS_FILE_SCHEMA_NO_VIZ_JSON}. For vizSettings, use the same schema as ExecuteQuery.vizSettings."),
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
