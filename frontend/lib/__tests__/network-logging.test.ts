@@ -138,6 +138,7 @@ describe('logNetworkRequest when MX_API_BASE_URL is empty', () => {
     jest.mock('@/lib/config', () => ({
       MX_API_BASE_URL: '',
       MX_API_KEY: '',
+      MX_NETWORK_LOG_EXCLUDE: '',
     }));
   });
 
@@ -145,5 +146,91 @@ describe('logNetworkRequest when MX_API_BASE_URL is empty', () => {
     const { logNetworkRequest: log } = await import('../network-logging');
     await log('req-noop', { method: 'GET', path: '/', headers: {} }, null);
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+});
+
+// ── Path exclusion ────────────────────────────────────────────────────────────
+
+describe('path exclusion — MX_NETWORK_LOG_EXCLUDE patterns', () => {
+  beforeEach(() => {
+    jest.resetModules();
+    jest.mock('@/lib/config', () => ({
+      MX_API_BASE_URL: 'http://mx-api.test',
+      MX_API_KEY: 'test-key',
+      MX_NETWORK_LOG_EXCLUDE: '^/api/health,^/api/jobs/cron',
+    }));
+  });
+
+  it('skips fetch for /api/health', async () => {
+    const { logNetworkRequest: log } = await import('../network-logging');
+    await log('req-health', { method: 'GET', path: '/api/health' }, null);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('skips fetch for /api/health/check (sub-path match)', async () => {
+    const { logNetworkRequest: log } = await import('../network-logging');
+    await log('req-health-check', { method: 'GET', path: '/api/health/check' }, null);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('skips fetch for /api/jobs/cron', async () => {
+    const { logNetworkRequest: log } = await import('../network-logging');
+    await log('req-cron', { method: 'GET', path: '/api/jobs/cron' }, null);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('does NOT skip /api/chat (not excluded)', async () => {
+    const { logNetworkRequest: log } = await import('../network-logging');
+    await log('req-chat', { method: 'POST', path: '/api/chat' }, null);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips logNetworkResponse for excluded path', async () => {
+    const { logNetworkResponse: logResp } = await import('../network-logging');
+    await logResp('req-health-resp', { ok: true }, 200, false, null, '/api/health');
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('does NOT skip logNetworkResponse for non-excluded path', async () => {
+    const { logNetworkResponse: logResp } = await import('../network-logging');
+    await logResp('req-chat-resp', { ok: true }, 200, false, null, '/api/chat');
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('path exclusion — custom MX_NETWORK_LOG_EXCLUDE patterns', () => {
+  beforeEach(() => {
+    jest.resetModules();
+    jest.mock('@/lib/config', () => ({
+      MX_API_BASE_URL: 'http://mx-api.test',
+      MX_API_KEY: 'test-key',
+      MX_NETWORK_LOG_EXCLUDE: '^/api/query-estimate,^/api/cache',
+    }));
+  });
+
+  it('skips a path matching a custom exclusion pattern', async () => {
+    const { logNetworkRequest: log } = await import('../network-logging');
+    await log('req-estimate', { method: 'GET', path: '/api/query-estimate' }, null);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('skips a second custom pattern', async () => {
+    const { logNetworkRequest: log } = await import('../network-logging');
+    await log('req-cache', { method: 'POST', path: '/api/cache/clear' }, null);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('still logs paths not matching any pattern', async () => {
+    const { logNetworkRequest: log } = await import('../network-logging');
+    await log('req-chat', { method: 'POST', path: '/api/chat' }, null);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('path exclusion — empty MX_NETWORK_LOG_EXCLUDE logs everything', () => {
+  it('does NOT skip /api/health when env var is empty', async () => {
+    // top-level mock has MX_NETWORK_LOG_EXCLUDE: '' — no patterns, nothing excluded
+    await logNetworkRequest('req-health', { method: 'GET', path: '/api/health' }, null);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 });

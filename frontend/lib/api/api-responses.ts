@@ -20,6 +20,15 @@ async function getRequestId(): Promise<string | null> {
   }
 }
 
+async function getRequestPath(): Promise<string | undefined> {
+  try {
+    const h = await headers();
+    return h.get('x-request-path') ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Create a success response
  */
@@ -27,8 +36,8 @@ export async function successResponse<T>(
   data: T,
   status: number = 200
 ): Promise<NextResponse<ApiResponse<T>>> {
-  const requestId = await getRequestId();
-  if (requestId) void logNetworkResponse(requestId, { success: true, data }, status, false, null);
+  const [requestId, requestPath] = await Promise.all([getRequestId(), getRequestPath()]);
+  if (requestId) void logNetworkResponse(requestId, { success: true, data }, status, false, null, requestPath);
   return NextResponse.json({
     success: true,
     data,
@@ -45,8 +54,8 @@ export async function errorResponse(
   status: number = 500,
   details?: unknown
 ): Promise<NextResponse<ApiResponse>> {
-  const requestId = await getRequestId();
-  if (requestId) void logNetworkResponse(requestId, { success: false, error: { code, message, details } }, status, true, null);
+  const [requestId, requestPath] = await Promise.all([getRequestId(), getRequestPath()]);
+  if (requestId) void logNetworkResponse(requestId, { success: false, error: { code, message, details } }, status, true, null, requestPath);
   return NextResponse.json({
     success: false,
     error: {
@@ -150,8 +159,8 @@ export async function handleApiError(error: unknown): Promise<NextResponse<ApiRe
       code = ErrorCodes.CONFLICT;
     }
 
-    const requestId = await getRequestId();
-    if (requestId) void logNetworkResponse(requestId, { success: false, error: { code, message: serialized.message } }, status, status >= 500, null);
+    const [requestId, requestPath] = await Promise.all([getRequestId(), getRequestPath()]);
+    if (requestId) void logNetworkResponse(requestId, { success: false, error: { code, message: serialized.message } }, status, status >= 500, null, requestPath);
     return NextResponse.json({
       success: false,
       error: {

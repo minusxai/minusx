@@ -1,6 +1,17 @@
 import 'server-only';
-import { MX_API_BASE_URL, MX_API_KEY } from '@/lib/config';
+import { MX_API_BASE_URL, MX_API_KEY, MX_NETWORK_LOG_EXCLUDE } from '@/lib/config';
 import { immutableSet } from '@/lib/utils/immutable-collections';
+
+// Paths matching any of these regexes are never logged (request or response).
+// Comma-separated regex strings from MX_NETWORK_LOG_EXCLUDE env var.
+const EXCLUDE_PATTERNS: ReadonlyArray<RegExp> = (
+  MX_NETWORK_LOG_EXCLUDE ? MX_NETWORK_LOG_EXCLUDE.split(',').map(s => s.trim()).filter(Boolean) : []
+).map(p => new RegExp(p));
+
+function isExcluded(path: string | undefined | null): boolean {
+  if (!path) return false;
+  return EXCLUDE_PATTERNS.some(re => re.test(path));
+}
 
 const SENSITIVE_HEADERS = immutableSet([
   'authorization',
@@ -36,6 +47,7 @@ interface RequestInfo {
 
 async function post(payload: Record<string, unknown>): Promise<void> {
   if (!MX_API_BASE_URL) return;
+  if (isExcluded(payload.path as string | undefined)) return;
   try {
     await fetch(`${MX_API_BASE_URL}/network`, {
       method: 'POST',
@@ -76,10 +88,12 @@ export async function logNetworkResponse(
   statusCode: number,
   isError: boolean,
   user: UserContext | null,
+  path?: string,
 ): Promise<void> {
   await post({
     request_id: requestId,
     type: 'response',
+    path: path ?? null,
     response_body: responseBody,
     status_code: statusCode,
     is_error: isError,

@@ -78,6 +78,7 @@ export default auth(async (req) => {
     // Create modified request headers with subdomain
     const requestHeaders = new Headers(req.headers);
     requestHeaders.set('x-request-id', requestId);
+    requestHeaders.set('x-request-path', pathname);
     if (subdomain) {
       requestHeaders.set('x-subdomain', subdomain);
     }
@@ -117,6 +118,7 @@ export default auth(async (req) => {
   if (pathname.startsWith('/api/') && publicAccessTokenCookie?.value && req.auth) {
     const requestHeaders = new Headers(req.headers);
     requestHeaders.set('x-request-id', requestId);
+    requestHeaders.set('x-request-path', pathname);
     if (subdomain) {
       requestHeaders.set('x-subdomain', subdomain);
     }
@@ -170,8 +172,9 @@ export default auth(async (req) => {
   // Create modified request headers
   const requestHeaders = new Headers(req.headers);
 
-  // Propagate request ID for cross-service tracing
+  // Propagate request ID and path for cross-service tracing
   requestHeaders.set('x-request-id', requestId);
+  requestHeaders.set('x-request-path', pathname);
 
   // Add subdomain header if present
   if (subdomain) {
