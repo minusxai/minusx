@@ -65,7 +65,9 @@ const mxfoodSchema = (mxfoodFixture.schema as any).schemas.map((s: any) => ({
 
 const DASHBOARD_ID = 11; // /tutorial/top-level-metrics
 
-describe('Prompt Breakdown', () => {
+// Local-only measurement utility — requires tutorial DB + Python backend.
+// Run with: MEASURE_PROMPT=1 npx jest promptMeasure --no-coverage
+(process.env.MEASURE_PROMPT ? describe : describe.skip)('Prompt Breakdown', () => {
   const { getPythonPort } = withPythonBackend();
 
   setupTestDb(getTestDbPath('prompt_measure'), {
