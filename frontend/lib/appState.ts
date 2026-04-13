@@ -5,7 +5,7 @@
  */
 
 import type { FileState } from '@/store/filesSlice';
-import type { CompressedAugmentedFile } from '@/lib/types';
+import type { CompressedAugmentedFile, CompressedFileState } from '@/lib/types';
 
 /**
  * Folder state (from useFolder / navigationSlice)
@@ -17,18 +17,35 @@ export interface FolderState {
 }
 
 /**
+ * Ephemeral UI context included in AppState so the agent sees the current
+ * modal/overlay state without needing a separate API call.
+ */
+export interface AppStateUI {
+  openModal?: {
+    type: 'create-question';
+    virtualFileId: number;
+    dashboardId: number;
+    /** Current state of the virtual file — use for oldMatch values when calling EditFile */
+    virtualFile?: CompressedFileState;
+  };
+}
+
+/**
  * App State - Discriminated union of page types
  */
 export type AppState =
   | {
       type: 'file';
       state: CompressedAugmentedFile;
+      ui?: AppStateUI;
     }
   | {
       type: 'folder';
       state: FolderState;
+      ui?: AppStateUI;
     }
   | {
       type: 'explore';
       state: null; // No additional state needed for explore page at this time
+      ui?: AppStateUI;
     };

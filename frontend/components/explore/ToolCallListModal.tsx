@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import {
   Dialog,
+  Portal,
   Button,
   VStack,
   HStack,
@@ -56,8 +57,9 @@ export default function ToolCallListModal({ messages, isOpen, onClose }: ToolCal
   return (
     <>
       <Dialog.Root open={isOpen} onOpenChange={(e) => !e.open && onClose()} size="lg">
-        <Dialog.Backdrop />
-        <Dialog.Positioner>
+        <Portal>
+        <Dialog.Backdrop zIndex={99999} />
+        <Dialog.Positioner zIndex={99999}>
           <Dialog.Content maxW="600px" borderRadius="lg" bg="bg.surface" overflow="hidden">
             <Dialog.Header px={5} py={4} borderBottom="1px solid" borderColor="border.default">
               <HStack gap={2}>
@@ -153,6 +155,7 @@ export default function ToolCallListModal({ messages, isOpen, onClose }: ToolCal
             <Dialog.CloseTrigger />
           </Dialog.Content>
         </Dialog.Positioner>
+        </Portal>
       </Dialog.Root>
 
       {/* Detail inspector — opens on top of list */}

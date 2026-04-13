@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import {
   Dialog,
+  Portal,
   Button,
   VStack,
   HStack,
@@ -196,8 +197,9 @@ export default function ToolInspectModal({
 
   return (
     <Dialog.Root open={isOpen} onOpenChange={(e) => !e.open && handleClose()} size="xl">
-      <Dialog.Backdrop />
-      <Dialog.Positioner>
+      <Portal>
+      <Dialog.Backdrop zIndex={100000} />
+      <Dialog.Positioner zIndex={100000}>
         <Dialog.Content maxW="900px" p={0} borderRadius="lg" bg="bg.surface" overflow="hidden">
 
           {/* Header */}
@@ -321,6 +323,7 @@ export default function ToolInspectModal({
           <Dialog.CloseTrigger />
         </Dialog.Content>
       </Dialog.Positioner>
+      </Portal>
     </Dialog.Root>
   );
 }

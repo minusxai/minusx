@@ -13,7 +13,7 @@ import type { UserInput } from './user-input-exception';
 import { UserInputException } from './user-input-exception';
 import { FilesAPI } from '../data/files';
 import { getRouter } from '@/lib/navigation/use-navigation';
-import { readFiles, editFileStr, getQueryResult, createVirtualFile, editFile as editFileOp } from '@/lib/api/file-state';
+import { readFiles, editFileStr, buildCurrentFileStr, getQueryResult, createVirtualFile, editFile as editFileOp } from '@/lib/api/file-state';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile } from '@/lib/api/compress-augmented';
 import { validateFileState } from '@/lib/validation/content-validators';
@@ -404,23 +404,41 @@ registerFrontendTool('EditFile', async (args, _context) => {
   );
   const prevRefIds = new Set<number>(fileState?.references ?? []);
 
-  // Apply each change sequentially; fail-fast on error
-  const diffs: string[] = [];
+  // Validate all changes in memory first (atomic: no Redux writes until all pass)
+  const built = buildCurrentFileStr(stateBefore, fileId);
+  if (!built.success) {
+    return { content: { success: false, error: built.error }, details: { success: false, error: built.error } };
+  }
+  let workingStr = built.fullFileStr;
   for (let i = 0; i < changes.length; i++) {
     const { oldMatch, newMatch, replaceAll } = changes[i];
-    const result = await editFileStr({ fileId, oldMatch, newMatch, replaceAll });
-    if (!result.success) {
-      const err = result.error || 'Edit failed';
+    // Mirror editFileStr's \n normalization
+    const normalizedOld = oldMatch.includes('\\n') ? oldMatch.replace(/\\n/g, '\n') : oldMatch;
+    const normalizedNew = newMatch.includes('\\n') ? newMatch.replace(/\\n/g, '\n') : newMatch;
+    const effectiveOld = workingStr.includes(oldMatch) ? oldMatch : normalizedOld;
+    const effectiveNew = oldMatch === effectiveOld ? newMatch : normalizedNew;
+    if (!workingStr.includes(effectiveOld)) {
+      const err = `String "${oldMatch}" not found in file`;
       const failureContent = {
         success: false,
         error: `Change ${i + 1}/${changes.length} failed: ${err}`,
-        succeededCount: i,
         failedIndex: i,
       };
       return { content: failureContent, details: { success: false, error: failureContent.error } };
     }
-    if (result.diff) diffs.push(result.diff);
+    workingStr = (replaceAll ?? true)
+      ? workingStr.replaceAll(effectiveOld, effectiveNew)
+      : workingStr.replace(effectiveOld, effectiveNew);
   }
+
+  // All changes validated — dispatch as a single atomic replace
+  const diffs: string[] = [];
+  const result = await editFileStr({ fileId, oldMatch: built.fullFileStr, newMatch: workingStr });
+  if (!result.success) {
+    const err = result.error || 'Edit failed';
+    return { content: { success: false, error: err }, details: { success: false, error: err } };
+  }
+  if (result.diff) diffs.push(result.diff);
 
   // Post-edit guard: context files — only docs[].content within versions can change
   if (fileState?.type === 'context') {

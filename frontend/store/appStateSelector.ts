@@ -111,3 +111,40 @@ export const selectAppState = createSelector(
     return { appState: null, loading: false };
   }
 );
+
+/**
+ * Attaches ui.openModal to appState when a create-question overlay is active.
+ * Includes the virtual file's current CompressedFileState so the agent can read
+ * its content for oldMatch values without calling ReadFiles.
+ */
+export const selectAppStateWithUI = createSelector(
+  selectAppState,
+  (state: RootState) => state.ui.viewStack,
+  (state: RootState) => state.files.files,
+  (state: RootState) => state.queryResults.results,
+  ({ appState, loading }, viewStack, filesState, queryResultsMap): { appState: AppState | null; loading: boolean } => {
+    if (!appState) return { appState, loading };
+    const top = viewStack[viewStack.length - 1];
+    if (top?.type === 'create-question') {
+      const partialState = { files: { files: filesState }, queryResults: { results: queryResultsMap } } as RootState;
+      const [augmented] = selectAugmentedFiles(partialState, [top.virtualFileId]);
+      const virtualFile = augmented ? compressAugmentedFile(augmented).fileState : undefined;
+
+      return {
+        appState: {
+          ...appState,
+          ui: {
+            openModal: {
+              type: 'create-question',
+              virtualFileId: top.virtualFileId,
+              dashboardId: top.dashboardId,
+              ...(virtualFile ? { virtualFile } : {}),
+            },
+          },
+        },
+        loading,
+      };
+    }
+    return { appState, loading };
+  }
+);
