@@ -14,8 +14,8 @@ import { DocumentDB } from '@/lib/database/documents-db';
 import type { QuestionContent, DocumentContent, UserRole } from '@/lib/types';
 import { readFiles, publishFile, editFileStr, editFile } from '@/lib/api/file-state';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
-import { compressAugmentedFile, compressQueryResult } from '@/lib/api/compress-augmented';
-import type { ToolCall, CompressedQueryResult, ExecuteQueryDetails, ToolMessage } from '@/lib/types';
+import { compressAugmentedFile, compressQueryResult, APP_STATE_LIMIT_CHARS, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
+import type { ToolCall, CompressedQueryResult, ExecuteQueryDetails, ToolMessage, AugmentedFile, QueryResult } from '@/lib/types';
 import { contentToDetails } from '@/lib/types';
 import { executeQuery } from '@/lib/api/execute-query.server';
 import type { RootState } from '@/store/store';
@@ -806,6 +806,113 @@ describe('Phase 1: Unified File System API E2E', () => {
       expect(compressed.truncated).toBe(false);
       expect(compressed.totalRows).toBe(0);
       expect(compressed.shownRows).toBe(0);
+    });
+  });
+
+  // ============================================================================
+  // compressAugmentedFile — per-context truncation limits
+  // ============================================================================
+
+  describe('compressAugmentedFile — per-context limits', () => {
+    /** Build an AugmentedFile with N rows of ~80 chars each (plenty to exceed 2k) */
+    const makeLargeAugmented = (rowCount: number): AugmentedFile => {
+      const rows = Array.from({ length: rowCount }, (_, i) => ({
+        id: String(i).padStart(4, '0'),
+        category: `category_${i % 10}`,
+        value: 'x'.repeat(50),
+      }));
+      const qr: QueryResult = { columns: ['id', 'category', 'value'], types: ['TEXT', 'TEXT', 'TEXT'], rows };
+      return {
+        fileState: {
+          id: 9999, name: 'Large Result', path: '/test', type: 'question',
+          content: {}, companyId: 1, createdAt: '', updatedAt: 0,
+          references: [], loading: false, saving: false, loadError: null,
+          persistableChanges: {}, ephemeralChanges: {}, metadataChanges: {},
+        } as any,
+        references: [],
+        queryResults: [qr],
+      };
+    };
+
+    it('constant values: APP_STATE < TOOL_DEFAULT < TOOL_MAX', () => {
+      expect(APP_STATE_LIMIT_CHARS).toBe(2_000);
+      expect(TOOL_DEFAULT_LIMIT_CHARS).toBe(10_000);
+      expect(TOOL_MAX_LIMIT_CHARS).toBe(100_000);
+      expect(APP_STATE_LIMIT_CHARS).toBeLessThan(TOOL_DEFAULT_LIMIT_CHARS);
+      expect(TOOL_DEFAULT_LIMIT_CHARS).toBeLessThan(TOOL_MAX_LIMIT_CHARS);
+    });
+
+    it('APP_STATE_LIMIT_CHARS (2k) truncates a 200-row result', () => {
+      const augmented = makeLargeAugmented(200);
+      const compressed = compressAugmentedFile(augmented, APP_STATE_LIMIT_CHARS);
+      const qr = compressed.queryResults[0];
+      expect(qr.truncated).toBe(true);
+      expect(qr.data.length).toBeLessThanOrEqual(APP_STATE_LIMIT_CHARS);
+      expect(qr.totalRows).toBe(200);
+      expect(qr.shownRows).toBeLessThan(200);
+    });
+
+    it('TOOL_DEFAULT_LIMIT_CHARS (10k) shows more rows than APP_STATE_LIMIT_CHARS (2k)', () => {
+      const augmented = makeLargeAugmented(200);
+      const appStateCompressed = compressAugmentedFile(augmented, APP_STATE_LIMIT_CHARS);
+      const toolCompressed = compressAugmentedFile(augmented, TOOL_DEFAULT_LIMIT_CHARS);
+      expect(toolCompressed.queryResults[0].shownRows).toBeGreaterThan(appStateCompressed.queryResults[0].shownRows);
+    });
+
+    it('TOOL_MAX_LIMIT_CHARS (100k) fits all rows of a 200-row result', () => {
+      const augmented = makeLargeAugmented(200);
+      const compressed = compressAugmentedFile(augmented, TOOL_MAX_LIMIT_CHARS);
+      expect(compressed.queryResults[0].truncated).toBe(false);
+      expect(compressed.queryResults[0].shownRows).toBe(200);
+    });
+
+    it('no queryResults — compressAugmentedFile ignores limit and returns empty array', () => {
+      const augmented = makeLargeAugmented(0);
+      augmented.queryResults = [];
+      const compressed = compressAugmentedFile(augmented, APP_STATE_LIMIT_CHARS);
+      expect(compressed.queryResults).toHaveLength(0);
+    });
+  });
+
+  // ============================================================================
+  // readFiles — runQueries option
+  // ============================================================================
+
+  describe('readFiles — runQueries option', () => {
+    let freshQuestionId: number;
+
+    beforeAll(async () => {
+      // A question whose query has never been run — nothing cached in Redux.
+      // The mock pythonBackendFetch returns empty rows for unrecognised queries,
+      // so runQueries: true is safe (it won't throw).
+      freshQuestionId = await DocumentDB.create(
+        'Fresh Question',
+        '/org/fresh-question-runqueries',
+        'question',
+        {
+          description: 'Fresh question for runQueries tests',
+          query: 'SELECT fresh_col FROM fresh_table',
+          connection_name: 'test_db',
+          parameters: [],
+          vizSettings: { type: 'table', xCols: [], yCols: [] },
+        } as QuestionContent,
+        [],
+        1
+      );
+    });
+
+    it('runQueries: false returns empty queryResults when nothing is cached', async () => {
+      const result = await readFiles([freshQuestionId], { runQueries: false });
+      expect(result).toHaveLength(1);
+      // No query run, nothing in Redux cache → queryResults must be empty
+      expect(result[0].queryResults).toHaveLength(0);
+    });
+
+    it('runQueries: true (default) executes the query and populates queryResults', async () => {
+      const result = await readFiles([freshQuestionId], { runQueries: true });
+      expect(result).toHaveLength(1);
+      // pythonBackendFetch mock returns empty rows for unknown queries — but a QueryResult IS returned
+      expect(result[0].queryResults).toHaveLength(1);
     });
   });
 
