@@ -71,14 +71,17 @@ export function generateUploadKey(params: {
  * Generate an S3 key for a CSV file upload.
  * Scoped to company + mode to prevent cross-company access.
  *
- * Key path: {companyId}/csvs/{mode}/{connectionName}/{uuid}.csv
+ * Key path: {companyId}/csvs/{mode}/{connectionName}/{uuid}.{ext}
+ * The original file extension is preserved so parquet files keep their .parquet suffix in S3.
  */
 export function generateCsvUploadKey(params: {
   companyId: number;
   mode: string;
   connectionName: string;
+  filename: string;
 }): string {
-  return `${params.companyId}/csvs/${params.mode}/${params.connectionName}/${randomUUID()}.csv`;
+  const ext = params.filename.split('.').pop()?.toLowerCase() || 'csv';
+  return `${params.companyId}/csvs/${params.mode}/${params.connectionName}/${randomUUID()}.${ext}`;
 }
 
 /** Shared S3 seed path for a single mxfood table. */

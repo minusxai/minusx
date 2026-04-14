@@ -80,6 +80,7 @@ export async function GET(req: NextRequest) {
         companyId: user.companyId,
         mode: user.mode,
         connectionName,
+        filename,
       });
     } else {
       const keyType = keyTypeParam === 'charts' ? 'charts' : 'uploads';
