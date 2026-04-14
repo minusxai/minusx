@@ -211,14 +211,13 @@ export default function ConnectionFormV2({
         }
       : content.type === 'csv'
       ? {
-          generated_db_path: config.generated_db_path || '',
           files: config.files || []
         }
       : content.type === 'google-sheets'
       ? {
           spreadsheet_url: config.spreadsheet_url || '',
           spreadsheet_id: config.spreadsheet_id || '',
-          generated_db_path: config.generated_db_path || '',
+          schema_name: config.schema_name || 'public',
           files: config.files || []
         }
       : content.type === 'athena'
@@ -272,9 +271,9 @@ export default function ConnectionFormV2({
     } else if (content.type === 'postgresql') {
       if (!config.database || !config.username) return false;
     } else if (content.type === 'csv') {
-      if (!config.generated_db_path) return false;
+      if (!config.files?.length) return false;
     } else if (content.type === 'google-sheets') {
-      if (!config.generated_db_path) return false;
+      if (!config.files?.length) return false;
     } else if (content.type === 'athena') {
       if (!config.region_name || !config.s3_staging_dir) return false;
     }
@@ -301,7 +300,7 @@ export default function ConnectionFormV2({
         : newType === 'csv'
         ? { schema_name: 'public', files: [] }
         : newType === 'google-sheets'
-        ? { spreadsheet_url: '', spreadsheet_id: '', generated_db_path: '', files: [] }
+        ? { spreadsheet_url: '', spreadsheet_id: '', schema_name: 'public', files: [] }
         : { host: 'localhost', port: 5432, database: '', username: '', password: '' }
     });
   };
@@ -398,35 +397,35 @@ export default function ConnectionFormV2({
           setTestResult(result);
         }
       } else if (content.type === 'csv') {
-        // For CSV, test the underlying DuckDB connection
-        if (!config.generated_db_path) {
+        // For CSV, test the S3-backed connection
+        if (!config.files?.length) {
           setTestResult({
             success: false,
             message: mode === 'create'
               ? 'Please upload CSV files first, then save the connection'
-              : 'No database generated. Please re-upload CSV files.',
+              : 'No files registered. Please re-upload CSV files.',
           });
           setTesting(false);
           return;
         }
 
-        // Test the connection (uses DuckDB internally)
+        // Test the connection (uses in-memory DuckDB + httpfs)
         const result = await testConnection(content.type, config, mode === 'view' ? fileName : undefined, includeSchema);
         setTestResult(result);
       } else if (content.type === 'google-sheets') {
-        // For Google Sheets, test the underlying DuckDB connection
-        if (!config.generated_db_path) {
+        // For Google Sheets, test the S3-backed connection
+        if (!config.files?.length) {
           setTestResult({
             success: false,
             message: mode === 'create'
               ? 'Please import a Google Sheet first using the "Fetch & Create Database" button'
-              : 'No database generated. Please re-import the Google Sheet.',
+              : 'No sheets imported. Please re-import the Google Sheet.',
           });
           setTesting(false);
           return;
         }
 
-        // Test the connection (uses DuckDB internally)
+        // Test the connection (uses in-memory DuckDB + httpfs via CsvConnector)
         const result = await testConnection(content.type, config, mode === 'view' ? fileName : undefined, includeSchema);
         setTestResult(result);
       } else {
@@ -504,14 +503,14 @@ export default function ConnectionFormV2({
         return;
       }
     } else if (content.type === 'csv') {
-      // For CSV, validate that files have been uploaded (generated_db_path exists)
-      if (!config.generated_db_path) {
+      // For CSV, validate that files have been uploaded (files array must have entries)
+      if (!config.files?.length) {
         setNameError('Please upload CSV files first using the "Upload & Create Database" button');
         return;
       }
     } else if (content.type === 'google-sheets') {
-      // For Google Sheets, validate that sheets have been imported (generated_db_path exists)
-      if (!config.generated_db_path) {
+      // For Google Sheets, validate that sheets have been imported (files array must have entries)
+      if (!config.files?.length) {
         setNameError('Please import a Google Sheet first using the "Fetch & Create Database" button');
         return;
       }

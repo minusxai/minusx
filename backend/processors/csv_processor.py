@@ -146,16 +146,33 @@ async def process_csv_from_s3(
             "Set OBJECT_STORE_BUCKET env var to enable S3-backed CSV connections."
         )
 
-    # Ensure unique table names within each schema
-    schema_filenames: Dict[str, List[str]] = {}
+    # Separate files with user-provided table names from those that need auto-generation
+    auto_gen_schema_filenames: Dict[str, List[str]] = {}
     for f in files:
-        schema = f.get('schema_name', 'public') or 'public'
-        schema_filenames.setdefault(schema, []).append(f['filename'])
+        if not f.get('table_name'):
+            schema = f.get('schema_name', 'public') or 'public'
+            auto_gen_schema_filenames.setdefault(schema, []).append(f['filename'])
 
     schema_table_names: Dict[str, Dict[str, str]] = {
         schema: ensure_unique_table_names(fnames)
-        for schema, fnames in schema_filenames.items()
+        for schema, fnames in auto_gen_schema_filenames.items()
     }
+
+    # Validate user-provided names for uniqueness within each schema
+    user_provided: Dict[str, set] = {}
+    for f in files:
+        if f.get('table_name'):
+            schema = f.get('schema_name', 'public') or 'public'
+            t = sanitize_table_name(f['table_name'] + '.x')  # sanitize user input
+            # Re-sanitize: user provided bare name (no extension), strip nothing
+            t = sanitize_table_name(f['table_name'])
+            user_provided.setdefault(schema, set())
+            if t in user_provided[schema]:
+                raise ValueError(
+                    f"Duplicate table name '{t}' in schema '{schema}'. "
+                    "Please use unique table names."
+                )
+            user_provided[schema].add(t)
 
     conn = _open_s3_duckdb()
     file_metadata = []
@@ -165,7 +182,11 @@ async def process_csv_from_s3(
             s3_key = file_info['s3_key']
             schema_name = file_info.get('schema_name') or 'public'
             file_format = file_info.get('file_format') or detect_file_format(filename)
-            table_name = schema_table_names[schema_name][filename]
+            # Use user-provided table name if present, else auto-generate
+            if file_info.get('table_name'):
+                table_name = sanitize_table_name(file_info['table_name'])
+            else:
+                table_name = schema_table_names[schema_name][filename]
             s3_url = f"s3://{OBJECT_STORE_BUCKET}/{s3_key}"
 
             # Unique view name to avoid conflicts between iterations

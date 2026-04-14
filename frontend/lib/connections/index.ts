@@ -20,11 +20,9 @@ export { CsvConnector } from './csv-connector';
  * by Node.js (e.g. bigquery, postgresql stay on Python).
  *
  * CSV routing:
- *   - Legacy format (generated_db_path)  → DuckDbConnector (local file)
- *   - New S3-backed format (files array) → CsvConnector (in-memory DuckDB + httpfs)
+ *   - S3-backed format (files array) → CsvConnector (in-memory DuckDB + httpfs)
  * Google Sheets:
- *   - Legacy (generated_db_path) → DuckDbConnector
- *   - No S3-backed variant exists yet → falls through to Python
+ *   - S3-backed format (files array) → CsvConnector (same as CSV)
  */
 export function getNodeConnector(
   name: string,
@@ -36,15 +34,13 @@ export function getNodeConnector(
   }
 
   if (type === 'csv') {
-    // S3-backed: files array present → Node.js CsvConnector (in-memory DuckDB + httpfs)
     if (Array.isArray(config.files)) return new CsvConnector(name, config);
-    // Legacy: generated_db_path → local DuckDB file
-    if (config.generated_db_path) return new DuckDbConnector(name, { file_path: config.generated_db_path });
     return null;
   }
 
-  if (type === 'google-sheets' && config.generated_db_path) {
-    return new DuckDbConnector(name, { file_path: config.generated_db_path });
+  if (type === 'google-sheets') {
+    if (Array.isArray(config.files)) return new CsvConnector(name, config);
+    return null;
   }
 
   return null;

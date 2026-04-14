@@ -24,6 +24,7 @@ export default function GoogleSheetsConfig({
   onError
 }: GoogleSheetsConfigProps) {
   const [spreadsheetUrl, setSpreadsheetUrl] = useState<string>(config.spreadsheet_url || '');
+  const [schemaName, setSchemaName] = useState<string>(config.schema_name || 'public');
   const [importProgress, setImportProgress] = useState<'idle' | 'importing' | 'done' | 'error'>('idle');
 
   const handleImport = async () => {
@@ -56,7 +57,8 @@ export default function GoogleSheetsConfig({
         spreadsheetUrl,
         companyId,
         userMode,
-        mode === 'view'  // replace_existing in view mode
+        mode === 'view',  // replace_existing in view mode
+        schemaName,
       );
 
       if (!result.success) {
@@ -101,6 +103,18 @@ export default function GoogleSheetsConfig({
               placeholder="https://docs.google.com/spreadsheets/d/..."
               fontFamily="mono"
               fontSize="sm"
+            />
+          </HStack>
+
+          {/* Schema Input */}
+          <HStack gap={2}>
+            <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap">Schema:</Text>
+            <Input
+              size="sm"
+              fontFamily="mono"
+              value={schemaName}
+              onChange={(e) => setSchemaName(e.target.value.toLowerCase())}
+              placeholder="public"
             />
           </HStack>
 
@@ -152,7 +166,7 @@ export default function GoogleSheetsConfig({
                   <Box key={idx}>
                     <HStack justify="space-between">
                       <Text fontSize="xs" fontFamily="mono" fontWeight="600">
-                        {file.table_name}
+                        {file.schema_name || schemaName}.{file.table_name}
                       </Text>
                       <Text fontSize="xs" color="fg.muted">
                         {file.row_count.toLocaleString()} rows
@@ -192,7 +206,7 @@ export default function GoogleSheetsConfig({
                   <Box key={idx}>
                     <HStack justify="space-between">
                       <Text fontSize="xs" fontFamily="mono" fontWeight="600">
-                        {file.table_name}
+                        {file.schema_name || schemaName}.{file.table_name}
                       </Text>
                       <Text fontSize="xs" color="fg.muted">
                         {file.row_count.toLocaleString()} rows

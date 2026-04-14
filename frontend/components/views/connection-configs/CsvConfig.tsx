@@ -15,6 +15,7 @@ interface CsvConfigProps extends BaseConfigProps {
 interface PendingFile {
   file: File;
   schemaName: string;
+  tableName: string;
 }
 
 export default function CsvConfig({
@@ -29,7 +30,11 @@ export default function CsvConfig({
 
   const handleFilesSelected = (selected: File[]) => {
     setPendingFiles(
-      selected.map((file) => ({ file, schemaName: 'public' }))
+      selected.map((file) => ({
+        file,
+        schemaName: 'public',
+        tableName: file.name.replace(/\.[^.]+$/, '').replace(/[\s-]/g, '_').toLowerCase(),
+      }))
     );
     setUploadProgress('idle');
   };
@@ -37,6 +42,12 @@ export default function CsvConfig({
   const updateSchema = (idx: number, schemaName: string) => {
     setPendingFiles((prev) =>
       prev.map((pf, i) => (i === idx ? { ...pf, schemaName: schemaName.toLowerCase() } : pf))
+    );
+  };
+
+  const updateTableName = (idx: number, tableName: string) => {
+    setPendingFiles((prev) =>
+      prev.map((pf, i) => (i === idx ? { ...pf, tableName: tableName.toLowerCase() } : pf))
     );
   };
 
@@ -53,18 +64,23 @@ export default function CsvConfig({
       onError('Please enter a valid connection name first');
       return;
     }
-    for (const { schemaName } of pendingFiles) {
+    for (const { schemaName, tableName } of pendingFiles) {
       if (schemaName && !/^[a-z0-9_]+$/.test(schemaName)) {
         onError('Schema names must contain only lowercase letters, numbers, and underscores');
+        return;
+      }
+      if (tableName && !/^[a-z0-9_]+$/.test(tableName)) {
+        onError('Table names must contain only lowercase letters, numbers, and underscores');
         return;
       }
     }
 
     setUploadProgress('uploading');
     try {
-      const filesWithSchema: FileWithSchema[] = pendingFiles.map(({ file, schemaName }) => ({
+      const filesWithSchema: FileWithSchema[] = pendingFiles.map(({ file, schemaName, tableName }) => ({
         file,
         schemaName: schemaName || 'public',
+        tableName: tableName || undefined,
       }));
 
       const result = await uploadCsvFilesS3(
@@ -123,7 +139,7 @@ export default function CsvConfig({
               </Text>
 
               <VStack align="stretch" gap={3}>
-                {pendingFiles.map(({ file, schemaName }, idx) => (
+                {pendingFiles.map(({ file, schemaName, tableName }, idx) => (
                   <Box key={idx} p={2} borderRadius="sm" bg="bg.surface" border="1px solid" borderColor="border.subtle">
                     <HStack justify="space-between" mb={2}>
                       <HStack gap={2}>
@@ -143,6 +159,16 @@ export default function CsvConfig({
                         value={schemaName}
                         onChange={(e) => updateSchema(idx, e.target.value)}
                         placeholder="public"
+                      />
+                    </HStack>
+                    <HStack gap={2} mt={1}>
+                      <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap">Table:</Text>
+                      <Input
+                        size="xs"
+                        fontFamily="mono"
+                        value={tableName}
+                        onChange={(e) => updateTableName(idx, e.target.value)}
+                        placeholder="auto-generated from filename"
                       />
                     </HStack>
                   </Box>

@@ -13,6 +13,7 @@ import { CsvConnectionConfig } from '@/lib/types';
 export interface FileWithSchema {
   file: File;
   schemaName: string;   // DuckDB schema, e.g. "public" or "mxfood"
+  tableName?: string;   // Optional override for table name; auto-generated from filename if absent
 }
 
 export interface CsvUploadResult {
@@ -85,17 +86,26 @@ export async function uploadCsvFilesS3(
       s3_key: string;
       schema_name: string;
       file_format: 'csv' | 'parquet';
+      table_name?: string;
     }[] = [];
 
-    for (const { file, schemaName } of filesWithSchema) {
+    for (const { file, schemaName, tableName } of filesWithSchema) {
       const { uploadUrl, s3Key } = await getPresignedUrl(file, connectionName);
       await putFileToS3(file, uploadUrl);
-      fileRecords.push({
+      const record: {
+        filename: string;
+        s3_key: string;
+        schema_name: string;
+        file_format: 'csv' | 'parquet';
+        table_name?: string;
+      } = {
         filename: file.name,
         s3_key: s3Key,
         schema_name: schemaName || 'public',
         file_format: getFileFormat(file.name),
-      });
+      };
+      if (tableName) record.table_name = tableName;
+      fileRecords.push(record);
     }
 
     // Step 3: register with backend (reads metadata from S3)

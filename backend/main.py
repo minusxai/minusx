@@ -30,7 +30,7 @@ from connectors import get_async_connector  # noqa: E402
 from pipelines.executor import PipelineExecutor  # noqa: E402
 from pipelines.tap_tester import test_tap  # noqa: E402
 from processors import process_csv_from_s3  # noqa: E402
-from processors import process_google_sheets_import, delete_google_sheets_connection  # noqa: E402
+from processors import process_google_sheets_import_s3, delete_google_sheets_connection  # noqa: E402
 from sql_utils.limit_enforcer import enforce_query_limit  # noqa: E402
 from sql_utils.validator import validate_sql as validate_sql_syntax  # noqa: E402
 from sql_utils.column_inferrer import infer_columns  # noqa: E402
@@ -1043,12 +1043,13 @@ class GoogleSheetsImportRequest(BaseModel):
     connection_name: str
     spreadsheet_url: str
     replace_existing: bool = False
+    schema_name: Optional[str] = 'public'
 
 
 class GoogleSheetsImportResponse(BaseModel):
     success: bool
     message: str
-    config: Optional[dict] = None  # Contains spreadsheet_url, spreadsheet_id, generated_db_path, files
+    config: Optional[dict] = None  # Contains spreadsheet_url, spreadsheet_id, files
 
 
 class GoogleSheetsDeleteResponse(BaseModel):
@@ -1088,13 +1089,14 @@ async def import_google_sheets(request_body: GoogleSheetsImportRequest, request:
         # Extract mode from header (defaults to 'org' if not provided)
         mode = request.headers.get('x-mode', 'org')
 
-        # Process Google Sheets import
-        result = await process_google_sheets_import(
+        # Process Google Sheets import (S3-backed)
+        result = await process_google_sheets_import_s3(
             company_id=company_id,
             mode=mode,
             connection_name=request_body.connection_name,
             spreadsheet_url=request_body.spreadsheet_url,
-            replace_existing=request_body.replace_existing
+            schema_name=request_body.schema_name or 'public',
+            replace_existing=request_body.replace_existing,
         )
 
         return GoogleSheetsImportResponse(

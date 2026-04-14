@@ -1238,6 +1238,42 @@ export const MIGRATIONS: MigrationEntry[] = [
       return data;
     },
   },
+  {
+    dataVersion: 33,
+    description: 'V33: Strip generated_db_path from CSV connection configs (CSV now uses S3-backed files array only)',
+    dataMigration: (data: InitData) => {
+      for (const companyData of data.companies as CompanyData[]) {
+        for (const doc of companyData.documents as ExportedDocument[]) {
+          if (doc.type !== 'connection') continue;
+          const content = doc.content as any;
+          if (!content || content.type !== 'csv') continue;
+          if ('generated_db_path' in content.config) {
+            delete content.config.generated_db_path;
+            console.log(`  [V33] ${doc.path}: Removed generated_db_path from CSV connection config`);
+          }
+        }
+      }
+      return data;
+    },
+  },
+  {
+    dataVersion: 34,
+    description: 'V34: Strip generated_db_path from Google Sheets connection configs (Google Sheets now uses S3-backed files array only)',
+    dataMigration: (data: InitData) => {
+      for (const companyData of data.companies as CompanyData[]) {
+        for (const doc of companyData.documents as ExportedDocument[]) {
+          if (doc.type !== 'connection') continue;
+          const content = doc.content as any;
+          if (!content || content.type !== 'google-sheets') continue;
+          if ('generated_db_path' in content.config) {
+            delete content.config.generated_db_path;
+            console.log(`  [V34] ${doc.path}: Removed generated_db_path from Google Sheets connection config`);
+          }
+        }
+      }
+      return data;
+    },
+  },
 ];
 
 /**

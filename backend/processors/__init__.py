@@ -10,7 +10,7 @@ from .csv_processor import (
 )
 
 from .google_sheets_processor import (
-    process_google_sheets_import,
+    process_google_sheets_import_s3,
     delete_google_sheets_connection,
     get_google_sheets_connection_info,
     parse_spreadsheet_id,
@@ -22,8 +22,8 @@ __all__ = [
     'sanitize_table_name',
     'ensure_unique_table_names',
     'detect_file_format',
-    # Google Sheets
-    'process_google_sheets_import',
+    # Google Sheets (S3-backed)
+    'process_google_sheets_import_s3',
     'delete_google_sheets_connection',
     'get_google_sheets_connection_info',
     'parse_spreadsheet_id',

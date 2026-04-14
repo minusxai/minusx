@@ -853,8 +853,8 @@ export interface CsvConnectionConfig {
 export interface GoogleSheetsConnectionConfig {
   spreadsheet_url: string;
   spreadsheet_id: string;
-  generated_db_path: string;
-  files: CsvFileInfo[];  // Reuses CsvFileInfo for sheet metadata
+  schema_name?: string;
+  files: CsvFileInfo[];
 }
 
 // Connection file content type (stored as file in /database/)

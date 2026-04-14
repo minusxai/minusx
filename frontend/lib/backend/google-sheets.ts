@@ -6,7 +6,7 @@
 export interface GoogleSheetsImportConfig {
   spreadsheet_url: string;
   spreadsheet_id: string;
-  generated_db_path: string;
+  schema_name?: string;
   files: any[];
 }
 
@@ -21,7 +21,8 @@ export async function importGoogleSheets(
   spreadsheetUrl: string,
   _companyId: number,
   _mode: string,
-  replaceExisting: boolean = false
+  replaceExisting: boolean = false,
+  schemaName: string = 'public',
 ): Promise<GoogleSheetsImportResult> {
   try {
     const res = await fetch('/api/google-sheets/import', {
@@ -30,7 +31,8 @@ export async function importGoogleSheets(
       body: JSON.stringify({
         connection_name: connectionName,
         spreadsheet_url: spreadsheetUrl,
-        replace_existing: replaceExisting
+        replace_existing: replaceExisting,
+        schema_name: schemaName,
       })
     });
 
