@@ -13,9 +13,8 @@
  * "Publish All" button is visible but disabled in Phase 1 (enabled in Phase 2).
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { selectEffectiveName } from '@/store/filesSlice';
 import {
   Box,
   Text,
@@ -33,11 +32,13 @@ import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import FileView from '@/components/FileView';
 import { publishAll, publishFile, clearFileChanges } from '@/lib/api/file-state';
 import { setDashboardEditMode, setFileEditMode } from '@/store/uiSlice';
-import { selectFile, selectMergedContent, selectIsDirty } from '@/store/filesSlice';
+import { selectFile, selectMergedContent, selectIsDirty, selectEffectiveName } from '@/store/filesSlice';
 import type { FileState } from '@/store/filesSlice';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 import type { FileType } from '@/lib/ui/file-metadata';
 import { getStore } from '@/store/store';
+import type { AssetReference, DocumentContent, DashboardLayoutItem } from '@/lib/types';
+import { DashboardPublishHighlightsContext, type PublishHighlight } from '@/lib/context/dashboard-publish-highlights';
 
 interface PublishModalProps {
   isOpen: boolean;
@@ -435,6 +436,48 @@ function SelectedFilePane({ fileId, publishingSingleId, onDiscard, onPublish }: 
   const [viewMode, setViewMode] = useState<'preview' | 'diff'>(showJson ? 'diff' : 'preview');
   const file = useAppSelector(state => selectFile(state, fileId));
 
+  // For dashboards in preview mode: compute add/moved question IDs so widgets get colored borders
+  const publishHighlightsValue = useMemo(() => {
+    if (!file || file.type !== 'dashboard' || viewMode !== 'preview') {
+      return { highlights: null };
+    }
+    const content = file.content as DocumentContent | null;
+    const changes = file.persistableChanges as Partial<DocumentContent> | undefined;
+    if (!changes?.assets && !changes?.layout) return { highlights: null };
+
+    const oldIds = new Set(
+      (content?.assets ?? [])
+        .filter(a => a.type === 'question')
+        .map(a => (a as { type: 'question'; id: number }).id)
+    );
+    const newIds = new Set(
+      (changes?.assets ?? content?.assets ?? [])
+        .filter(a => a.type === 'question')
+        .map(a => (a as { type: 'question'; id: number }).id)
+    );
+
+    const oldLayoutMap = new Map<string, DashboardLayoutItem>(
+      ((content?.layout?.items ?? []) as DashboardLayoutItem[]).map(i => [String(i.id), i])
+    );
+    const newLayoutMap = new Map<string, DashboardLayoutItem>(
+      ((changes?.layout?.items ?? content?.layout?.items ?? []) as DashboardLayoutItem[]).map(i => [String(i.id), i])
+    );
+
+    const map = new Map<number, PublishHighlight>();
+    for (const id of newIds) {
+      if (!oldIds.has(id)) {
+        map.set(id, 'added');
+      } else {
+        const o = oldLayoutMap.get(String(id));
+        const n = newLayoutMap.get(String(id));
+        if (o && n && (o.x !== n.x || o.y !== n.y || o.w !== n.w || o.h !== n.h)) {
+          map.set(id, 'moved');
+        }
+      }
+    }
+    return { highlights: map.size > 0 ? map : null };
+  }, [file, viewMode]);
+
   return (
     <>
       <HStack
@@ -496,9 +539,11 @@ function SelectedFilePane({ fileId, publishingSingleId, onDiscard, onPublish }: 
       </HStack>
 
       {viewMode === 'preview' ? (
-        <Box flex="1" minH="0" display="flex" flexDirection="column" overflowY="auto">
-          <FileView key={fileId} fileId={fileId} mode="preview" hideHeader />
-        </Box>
+        <DashboardPublishHighlightsContext.Provider value={publishHighlightsValue}>
+          <Box flex="1" minH="0" display="flex" flexDirection="column" overflowY="auto">
+            <FileView key={fileId} fileId={fileId} mode="preview" hideHeader />
+          </Box>
+        </DashboardPublishHighlightsContext.Provider>
       ) : (
         <Box flex="1" minH="0" overflowY="auto" p={4} fontSize="xs" fontFamily="mono">
           {file && <DiffView file={file} />}
@@ -516,6 +561,11 @@ function DiffView({ file }: { file: FileState }) {
 
   if (changedKeys.length === 0 && !hasMetadata) {
     return <Text color="fg.muted" fontSize="sm">No changes detected</Text>;
+  }
+
+  // Dashboards get a human-readable widget diff instead of raw JSON blobs
+  if (file.type === 'dashboard') {
+    return <DashboardDiffView file={file} />;
   }
 
   return (
@@ -569,5 +619,136 @@ function DiffView({ file }: { file: FileState }) {
         );
       })}
     </VStack>
+  );
+}
+
+/** Human-readable diff for dashboard files: shows added/removed/moved question widgets by name */
+function DashboardDiffView({ file }: { file: FileState }) {
+  const { content, persistableChanges, metadataChanges } = file;
+
+  const oldAssets: AssetReference[] = (content as DocumentContent | null)?.assets ?? [];
+  const newAssets: AssetReference[] = (persistableChanges as Partial<DocumentContent> | undefined)?.assets
+    ?? (content as DocumentContent | null)?.assets
+    ?? [];
+
+  const oldLayout: Record<string, { x: number; y: number; w: number; h: number }> = {};
+  const newLayout: Record<string, { x: number; y: number; w: number; h: number }> = {};
+
+  for (const item of ((content as DocumentContent | null)?.layout?.items ?? [])) {
+    oldLayout[String(item.id)] = { x: item.x, y: item.y, w: item.w, h: item.h };
+  }
+  const changedLayoutItems = (persistableChanges as Partial<DocumentContent> | undefined)?.layout?.items
+    ?? (content as DocumentContent | null)?.layout?.items
+    ?? [];
+  for (const item of changedLayoutItems) {
+    newLayout[String(item.id)] = { x: item.x, y: item.y, w: item.w, h: item.h };
+  }
+
+  const oldQuestionIds = new Set(
+    oldAssets.filter(a => a.type === 'question').map(a => (a as { type: 'question'; id: number }).id)
+  );
+  const newQuestionIds = new Set(
+    newAssets.filter(a => a.type === 'question').map(a => (a as { type: 'question'; id: number }).id)
+  );
+
+  const addedIds = [...newQuestionIds].filter(id => !oldQuestionIds.has(id));
+  const removedIds = [...oldQuestionIds].filter(id => !newQuestionIds.has(id));
+  const keptIds = [...oldQuestionIds].filter(id => newQuestionIds.has(id));
+
+  const movedIds = keptIds.filter(id => {
+    const key = String(id);
+    const o = oldLayout[key];
+    const n = newLayout[key];
+    if (!o || !n) return false;
+    return o.x !== n.x || o.y !== n.y || o.w !== n.w || o.h !== n.h;
+  });
+
+  const hasChanges = addedIds.length > 0 || removedIds.length > 0 || movedIds.length > 0 || metadataChanges;
+  if (!hasChanges) {
+    return <Text color="fg.muted" fontSize="sm">No changes detected</Text>;
+  }
+
+  return (
+    <VStack gap={3} align="stretch">
+      {metadataChanges?.name !== undefined && (
+        <DashboardDiffSection label="Name">
+          <HStack gap={2}>
+            <Text fontSize="xs" color="accent.danger" textDecoration="line-through" fontFamily="mono">{file.name}</Text>
+            <Text fontSize="xs" color="fg.muted">→</Text>
+            <Text fontSize="xs" color="accent.teal" fontFamily="mono">{metadataChanges.name}</Text>
+          </HStack>
+        </DashboardDiffSection>
+      )}
+
+      {addedIds.length > 0 && (
+        <DashboardDiffSection label={`Added (${addedIds.length})`} accent="teal">
+          <VStack align="stretch" gap={1}>
+            {addedIds.map(id => <QuestionDiffRow key={id} questionId={id} accent="teal" />)}
+          </VStack>
+        </DashboardDiffSection>
+      )}
+
+      {removedIds.length > 0 && (
+        <DashboardDiffSection label={`Removed (${removedIds.length})`} accent="danger">
+          <VStack align="stretch" gap={1}>
+            {removedIds.map(id => <QuestionDiffRow key={id} questionId={id} accent="danger" />)}
+          </VStack>
+        </DashboardDiffSection>
+      )}
+
+      {movedIds.length > 0 && (
+        <DashboardDiffSection label={`Repositioned (${movedIds.length})`} accent="orange">
+          <VStack align="stretch" gap={1}>
+            {movedIds.map(id => {
+              const o = oldLayout[String(id)];
+              const n = newLayout[String(id)];
+              return (
+                <HStack key={id} gap={2} align="center">
+                  <QuestionDiffRow questionId={id} accent="orange" />
+                  <Text fontSize="2xs" color="fg.muted" fontFamily="mono" flexShrink={0}>
+                    {o.w}×{o.h}@({o.x},{o.y}) → {n.w}×{n.h}@({n.x},{n.y})
+                  </Text>
+                </HStack>
+              );
+            })}
+          </VStack>
+        </DashboardDiffSection>
+      )}
+    </VStack>
+  );
+}
+
+function DashboardDiffSection({ label, accent, children }: {
+  label: string;
+  accent?: 'teal' | 'danger' | 'orange';
+  children: React.ReactNode;
+}) {
+  const color = accent === 'teal' ? 'accent.teal' : accent === 'danger' ? 'accent.danger' : 'orange.500';
+  const bg = accent === 'teal' ? 'accent.teal/5' : accent === 'danger' ? 'accent.danger/5' : 'orange.500/5';
+  const border = accent === 'teal' ? 'accent.teal/20' : accent === 'danger' ? 'accent.danger/20' : 'orange.500/20';
+  return (
+    <Box>
+      <Text fontWeight="700" color={color} mb={1.5} textTransform="uppercase" letterSpacing="0.05em" fontSize="2xs">
+        {label}
+      </Text>
+      <Box bg={bg} borderRadius="sm" p={2} border="1px solid" borderColor={border}>
+        {children}
+      </Box>
+    </Box>
+  );
+}
+
+function QuestionDiffRow({ questionId, accent }: { questionId: number; accent: 'teal' | 'danger' | 'orange' }) {
+  const name = useAppSelector(state => selectEffectiveName(state, questionId));
+  const color = accent === 'teal' ? 'accent.teal' : accent === 'danger' ? 'accent.danger' : 'orange.500';
+  return (
+    <HStack gap={1.5}>
+      <Text fontSize="xs" color={color} fontWeight="600" fontFamily="mono">
+        {accent === 'teal' ? '+' : accent === 'danger' ? '−' : '~'}
+      </Text>
+      <Text fontSize="xs" fontFamily="mono" color="fg.default">
+        {name || `#${questionId}`}
+      </Text>
+    </HStack>
   );
 }

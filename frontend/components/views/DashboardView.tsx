@@ -18,6 +18,7 @@ import { useConfigs } from '@/lib/hooks/useConfigs';
 import { syncParametersWithSQL } from '@/lib/sql/sql-params';
 import { shallowEqual } from 'react-redux';
 import { QuestionBrowserPanel } from '../QuestionBrowserPanel';
+import { useDashboardPublishHighlights } from '@/lib/context/dashboard-publish-highlights';
 
 const EMPTY_PARAMS: Record<string, any> = {};
 const DASHBOARD_MIN_W = 2;
@@ -268,6 +269,9 @@ export default function DashboardView({
   // Hover state for param filter chips
   const [hoveredParamKey, setHoveredParamKey] = useState<string | null>(null);
 
+  // Publish-modal widget highlights (added / moved), provided via context from PublishModal
+  const { highlights: publishHighlights } = useDashboardPublishHighlights();
+
   // Parameters for display (structure from questions, values from ephemeral)
   const parameterValuesForDisplay = useMemo(() => {
     return mergedParameters;
@@ -409,27 +413,45 @@ export default function DashboardView({
 
   // Memoize the grid items (questions + text blocks) to prevent re-rendering on every keystroke
   const gridItems = useMemo(() => {
-    const highlightedIds = hoveredParamKey ? (paramToQuestionIds.get(hoveredParamKey) ?? []) : null;
+    const paramHighlightedIds = hoveredParamKey ? (paramToQuestionIds.get(hoveredParamKey) ?? []) : null;
 
     return layoutableAssets.map((asset, index) => {
       const key = getAssetLayoutKey(asset);
 
       if (asset.type === 'question') {
         const questionId = (asset as { id: number }).id;
-        const isHighlighted = highlightedIds ? highlightedIds.includes(questionId) : null;
+
+        // Publish-mode highlights take priority over param-hover highlights
+        const publishMark = publishHighlights?.get(questionId);
+        let borderColor: string;
+        let opacity: number;
+        if (publishHighlights !== null) {
+          // Publish context active: color by add/move/unchanged
+          if (publishMark === 'added') {
+            borderColor = 'accent.teal';
+            opacity = 1;
+          } else if (publishMark === 'moved') {
+            borderColor = 'orange.400';
+            opacity = 1;
+          } else {
+            borderColor = 'border.subtle';
+            opacity = 0.5;
+          }
+        } else {
+          // Normal param-hover highlighting
+          const isHighlighted = paramHighlightedIds ? paramHighlightedIds.includes(questionId) : null;
+          borderColor = isHighlighted === true ? 'accent.teal' : isHighlighted === false ? 'border.subtle' : 'border.default';
+          opacity = isHighlighted === false ? 0.5 : 1;
+        }
 
         return (
           <Box
             key={key}
             bg="bg.subtle"
-            borderWidth="1px"
-            borderColor={
-              isHighlighted === true ? 'accent.teal' :
-              isHighlighted === false ? 'border.subtle' :
-              'border.default'
-            }
+            borderWidth={publishMark ? '2px' : '1px'}
+            borderColor={borderColor}
             borderRadius="md"
-            opacity={isHighlighted === false ? 0.5 : 1}
+            opacity={opacity}
             overflow="hidden"
             display="flex"
             flexDirection="column"
@@ -474,7 +496,7 @@ export default function DashboardView({
         </Box>
       );
     });
-  }, [layoutableAssets, editMode, handleRemoveAsset, parameterValuesForDisplay, effectiveSubmittedValues, hoveredParamKey, paramToQuestionIds, fileId, dispatch]);
+  }, [layoutableAssets, editMode, handleRemoveAsset, parameterValuesForDisplay, effectiveSubmittedValues, hoveredParamKey, paramToQuestionIds, fileId, dispatch, publishHighlights]);
 
   const handleLayoutChange = (newLayout: Layout[]) => {
     if (!document) return;
