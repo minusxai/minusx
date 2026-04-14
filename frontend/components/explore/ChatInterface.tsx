@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { Box, VStack, HStack, Text, Icon, Button, Spinner, Grid, GridItem } from '@chakra-ui/react';
-import { LuPlus, LuChevronDown, LuRefreshCw, LuSparkles, LuPin, LuShare2, LuExpand, LuTerminal, LuMessageSquare, LuSlack } from 'react-icons/lu';
+import { LuPlus, LuChevronDown, LuChevronRight, LuRefreshCw, LuPin, LuShare2, LuExpand, LuTerminal, LuMessageSquare } from 'react-icons/lu';
 import type { LoadError } from '@/lib/types/errors';
 import type { Attachment } from '@/lib/types';
 import { AppState } from '@/lib/appState';
@@ -194,13 +194,12 @@ export default function ChatInterface({
 
   // Extract streaming info (thinking text + tool calls) — memoized to avoid JSON.parse loop on every render
   const streamingInfo = useMemo(() => {
-    if (!conversation?.streamedCompletedToolCalls) return { thinkingText: null, toolCalls: [] };
+    if (!conversation?.streamedCompletedToolCalls) return { thinkingText: null, toolCalls: [], isAnswering: false };
 
-    // Native thinking streamed in real-time (takes priority over legacy XML parsing)
+    // Native thinking streamed in real-time
     let thinkingText: string | null = null;
     if (conversation.streamedThinking) {
-      const lines = conversation.streamedThinking.split('\n').filter(line => line.trim());
-      thinkingText = lines.length > 2 ? lines.slice(0, 2).join('\n') + '...' : lines.join('\n');
+      thinkingText = conversation.streamedThinking;
     }
 
     const toolCalls: string[] = [];
@@ -212,7 +211,11 @@ export default function ChatInterface({
       }
     }
 
-    return { thinkingText, toolCalls };
+    // Check if the LLM is currently streaming the answer (last entry is TalkToUser)
+    const lastEntry = conversation.streamedCompletedToolCalls[conversation.streamedCompletedToolCalls.length - 1];
+    const isAnswering = lastEntry?.function?.name === 'TalkToUser';
+
+    return { thinkingText, toolCalls, isAnswering };
   }, [conversation?.streamedCompletedToolCalls, conversation?.streamedThinking]);
 
 //   console.log('allmessages', allMessages);
@@ -621,40 +624,86 @@ export default function ChatInterface({
                 })
               }
 
-              {/* Streaming info: show thinking text and tool calls while streaming */}
+              {/* Streaming info: show thinking text and tool calls while streaming (hide once answer is streaming) */}
               {isStreaming && (() => {
-                const { thinkingText, toolCalls } = streamingInfo;
-                if (thinkingText || toolCalls.length > 0) {
+                const { thinkingText, toolCalls, isAnswering } = streamingInfo;
+                if (isAnswering) return null;
+
+                // Thinking: one-line preview, expandable to full block
+                if (thinkingText) {
+                  const isExpanded = showThinking;
+                  const toggleExpanded = toggleShowThinking;
                   return (
-                    <Box p={3} bg="bg.muted" borderRadius="md" my={2}>
-                      <VStack gap={2} justify="space-between" align="flex-start">
-                        <HStack gap={2} flex="1">
-                          <Icon as={LuSparkles} boxSize={4} color="accent.teal" flexShrink={0} />
-                          <Text
-                            color="fg.muted"
-                            fontSize="sm"
-                            fontFamily="mono"
-                            fontStyle={thinkingText ? "italic" : "normal"}
-                          >
-                            {thinkingText || `Running: ${toolCalls.join(', ')}`}
+                    <Box my={2}>
+                      <HStack
+                        gap={1}
+                        cursor="pointer"
+                        onClick={toggleExpanded}
+                        _hover={{ opacity: 0.8 }}
+                        color="fg.subtle"
+                        fontSize="sm"
+                        overflow="hidden"
+                        w="100%"
+                      >
+                        <Box flexShrink={0}>{isExpanded ? <LuChevronDown size={16} /> : <LuChevronRight size={16} />}</Box>
+                        {!isExpanded && (
+                          <Text fontFamily="mono" fontSize="sm" color="fg.subtle" fontStyle="italic" truncate>
+                            {thinkingText}
                           </Text>
-                        </HStack>
-                        {thinkingText && toolCalls.length > 0 && (
-                        <HStack justify={'flex-end'}>
+                        )}
+                        {isExpanded && (
+                          <Text fontFamily="mono" fontSize="sm" color="fg.subtle">
+                            Thinking
+                          </Text>
+                        )}
+                      </HStack>
+                      {isExpanded && (
+                        <Box
+                          mt={1}
+                          pl={5}
+                          borderLeft="2px solid"
+                          borderColor="border.default"
+                        >
                           <Text
                             color="fg.subtle"
-                            fontSize="xs"
+                            fontSize="sm"
                             fontFamily="mono"
-                            flexShrink={0}
+                            fontStyle="italic"
+                            whiteSpace="pre-wrap"
                           >
-                            {toolCalls.length} tool{toolCalls.length !== 1 ? 's' : ''}
+                            {thinkingText}
                           </Text>
-                        </HStack>
-                        )}
-                      </VStack>
+                        </Box>
+                      )}
                     </Box>
                   );
                 }
+
+                // Tool calls: pill-style badges
+                if (toolCalls.length > 0) {
+                  return (
+                    <HStack my={2} gap={2} flexWrap="wrap">
+                      {toolCalls.map((tool, i) => (
+                        <HStack
+                          key={i}
+                          px={2.5}
+                          py={1}
+                          borderRadius="full"
+                          borderWidth="1px"
+                          borderColor="accent.teal/30"
+                          bg="accent.teal/5"
+                          gap={1.5}
+                        >
+                          <Spinner size="xs" color="accent.teal" />
+                          <Text color="fg.muted" fontSize="xs" fontFamily="mono">
+                            {tool}
+                          </Text>
+                        </HStack>
+                      ))}
+                    </HStack>
+                  );
+                }
+
                 return null;
               })()}
 
@@ -687,17 +736,6 @@ export default function ChatInterface({
             );
           })()}
 
-          {/* Thinking indicator - shown whenever agent is running */}
-          {(isAgentRunning || isStreaming) && (
-            <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }}
-                      gap={2}
-                      w="100%"
-                  >
-              <GridItem colSpan={colSpan} colStart={colStart}>
-                  <ThinkingIndicator waitingForInput={isWaitingForUserInput} />
-              </GridItem>
-            </Grid>
-          )}
             </VStack>
           </Box>
         </Box>
@@ -851,6 +889,17 @@ export default function ChatInterface({
               </HStack>
             </Box>
             </GridItem>
+            </Grid>
+          )}
+
+          {(isAgentRunning || isStreaming) && (
+            <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }}
+                gap={2}
+                w="100%"
+            >
+              <GridItem colSpan={colSpan} colStart={colStart}>
+                <ThinkingIndicator waitingForInput={isWaitingForUserInput} onStop={handleStopAgent} />
+              </GridItem>
             </Grid>
           )}
 

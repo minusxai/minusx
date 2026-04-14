@@ -2,7 +2,7 @@
 
 import { useState, useRef, KeyboardEvent, useEffect } from 'react';
 import { Box, HStack, VStack, Textarea, IconButton, Icon, Grid, GridItem, Text, Spinner } from '@chakra-ui/react';
-import { LuSendHorizontal, LuPaperclip, LuSettings2, LuSquare, LuX } from 'react-icons/lu';
+import { LuSendHorizontal, LuPaperclip, LuSettings2, LuX } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { selectCompanyName } from '@/store/authSlice';
 import { setSidebarPendingMessage, setSidebarDraft, selectSidebarDraft, setAskForConfirmation, selectChatAttachments, addChatAttachment, removeChatAttachment, clearChatAttachments } from '@/store/uiSlice';
@@ -184,7 +184,7 @@ export default function ChatInput({
                 <Box px={1} py={2}>
                   <LexicalMentionEditor
                     ref={editorRef}
-                    placeholder={isAgentRunning ? `${agentName} is thinking...` : `Ask ${agentName} anything!`}
+                    placeholder={isAgentRunning ? `${agentName} is working...` : `Ask ${agentName} anything!`}
                     databaseName={databaseName}
                     disabled={disabled || isPreparing || isAgentRunning}
                     onSubmit={handleSend}
@@ -330,25 +330,11 @@ export default function ChatInput({
 
                   {isPreparing ? (
                     <Spinner size="sm" color="accent.teal" flexShrink={0} />
-                  ) : isAgentRunning ? (
-                    <IconButton
-                      aria-label="Stop agent"
-                      onClick={onStop}
-                      bg="accent.danger"
-                      color="white"
-                      _hover={{ bg: 'accent.danger', opacity: 0.9 }}
-                      size="sm"
-                      borderRadius="md"
-                      flexShrink={0}
-                      px={2}
-                    > Stop
-                      <Icon as={LuSquare} boxSize={3.5} fill="white"/>
-                    </IconButton>
                   ) : (
                     <IconButton
                       aria-label="Send message"
                       onClick={handleSend}
-                      disabled={disabled || !input.trim() || connectionsLoading || contextsLoading}
+                      disabled={disabled || isAgentRunning || !input.trim() || connectionsLoading || contextsLoading}
                       bg="accent.teal"
                       color="white"
                       _hover={{ bg: 'accent.teal', opacity: 0.9 }}
