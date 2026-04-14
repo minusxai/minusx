@@ -391,6 +391,9 @@ interface VizSettings {
 - `components/question/QuestionVisualization.tsx` - Routes to Table or ChartBuilder
 - `lib/chart/chart-utils.ts` - Shared chart utilities (formatting, axis calculations)
 
+**Chart → LLM Image Pipeline** (`lib/chart/chart-attachments.ts`):
+On every message send from a question or dashboard page, `buildChartAttachments()` renders each chart off-screen via ECharts canvas, converts to JPEG (512px wide, 85% quality), uploads to S3 via presigned URL, and returns the public URL as an image attachment. Results are cached in-memory by `queryResultId|updatedAt|vizSettings|titleOverride|colorMode` — subsequent sends with unchanged data skip render+upload and reuse the cached S3 URL. These image attachments are sent to the LLM as content blocks between the app state block and the user message block.
+
 **Adding a New Viz Type**:
 1. Add type to `VizSettings.type` union in `lib/types.ts`
 2. Create renderer component in `components/plotx/` (receives `ChartProps`)

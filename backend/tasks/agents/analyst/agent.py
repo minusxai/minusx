@@ -236,17 +236,26 @@ class AnalystAgent(Agent):
         return blocks
 
     def _get_user_message(self) -> dict:
-        """Generate user message with the goal and app state."""
+        """Generate user message as multi-block content: app context block, goal block, then any image blocks."""
         _, variables = self._get_user_prompt_args()
-        text = get_prompt('default.user', **variables)
+        app_state_str = variables['app_state']
+        current_date = variables['current_date']
+        attachments_str = variables['attachments']
+        goal = variables['goal']
 
-        image_blocks = self._get_image_content_blocks()
-        if image_blocks:
-            # Multimodal message: text first, then image blocks
-            content = [{"type": "text", "text": text}] + image_blocks
-        else:
-            content = text
+        # Block 1: app context (app_state, date, text attachments)
+        context_parts = [
+            f"<AppState>{app_state_str}</AppState>",
+            f"<CurrentDate>{current_date}</CurrentDate>",
+        ]
+        if attachments_str:
+            context_parts.append(attachments_str)
+        context_block = {"type": "text", "text": "\n".join(context_parts)}
 
+        # Block 2: user goal (raw — structural position identifies it)
+        goal_block = {"type": "text", "text": goal}
+
+        content = [context_block] + self._get_image_content_blocks() + [goal_block]
         return {"role": "user", "content": content}
 
     def _get_llm_settings(self) -> LlmSettings:

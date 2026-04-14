@@ -5,7 +5,7 @@
  * Used for tools that require user interaction or client-specific capabilities.
  */
 
-import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema } from '@/lib/types';
+import { ToolCall, ToolMessage, ToolCallDetails, EditFileDetails, ClarifyDetails, DatabaseWithSchema, AugmentedFile } from '@/lib/types';
 import { setEphemeral, selectMergedContent, selectDirtyFiles, generateVirtualId, type FileId } from '@/store/filesSlice';
 import type { AppDispatch, RootState } from '@/store/store';
 import { getStore } from '@/store/store';
@@ -19,6 +19,9 @@ import { compressAugmentedFile } from '@/lib/api/compress-augmented';
 import { validateFileState } from '@/lib/validation/content-validators';
 import { canCreateFileType } from '@/lib/auth/access-rules.client';
 import { selectAppState } from '@/store/appStateSelector';
+import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client';
+import { RENDERABLE_CHART_TYPES } from '@/lib/chart/render-chart-svg';
+import { uploadFile } from '@/lib/object-store/client';
 
 // ============================================================================
 // Frontend Tool Registry
@@ -117,9 +120,54 @@ export async function executeToolCall(
   return {
     role: 'tool',
     tool_call_id: toolCall.id,
-    content: typeof result.content === 'string' ? result.content : JSON.stringify(result.content),
+    content: Array.isArray(result.content)
+      ? result.content
+      : typeof result.content === 'string' ? result.content : JSON.stringify(result.content),
     details: result.details
   };
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/**
+ * Render chart images for question files and upload to S3.
+ * Returns image_url content blocks (OpenAI format — LiteLLM converts to Anthropic).
+ * Browser-only. Never throws — returns [] on any failure.
+ */
+async function renderFileChartImageBlocks(
+  files: AugmentedFile[],
+): Promise<{ type: 'image_url'; image_url: { url: string } }[]> {
+  if (typeof document === 'undefined') return [];
+  const colorMode: 'light' | 'dark' =
+    document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+
+  const entries = files.flatMap(f => {
+    const vizType = (f.fileState.content as any)?.vizSettings?.type;
+    const qr = f.queryResults?.[0];
+    if (!qr || !RENDERABLE_CHART_TYPES.has(vizType)) return [];
+    return [{ queryResult: qr, vizSettings: (f.fileState.content as any).vizSettings, titleOverride: f.fileState.name }];
+  });
+  if (entries.length === 0) return [];
+
+  try {
+    const rendered = await clientChartImageRenderer.renderCharts(entries, {
+      width: 512, colorMode, addWatermark: false, padding: false,
+    });
+    const blocks = await Promise.all(
+      rendered.map(async r => {
+        if (!r) return null;
+        const blob = await fetch(r.dataUrl).then(res => res.blob());
+        const chartFile = new File([blob], 'chart.jpg', { type: 'image/jpeg' });
+        const { publicUrl } = await uploadFile(chartFile, undefined, { keyType: 'charts' });
+        return { type: 'image_url' as const, image_url: { url: publicUrl } };
+      })
+    );
+    return blocks.filter(Boolean) as { type: 'image_url'; image_url: { url: string } }[];
+  } catch {
+    return [];
+  }
 }
 
 // ============================================================================
@@ -324,9 +372,16 @@ registerFrontendTool('ClarifyFrontend', async (args, context) => {
 registerFrontendTool('ReadFiles', async (args, _context) => {
   const { fileIds } = args;
 
-  const result = await readFiles(fileIds, {});
-  const content = { success: true, files: result.map(compressAugmentedFile) };
-  return { content, details: { success: true } };
+  const result = await readFiles(fileIds, { runQueries: true });
+  const textContent = { success: true, files: result.map(compressAugmentedFile) };
+  const imageBlocks = await renderFileChartImageBlocks(result);
+  if (imageBlocks.length === 0) {
+    return { content: textContent, details: { success: true } };
+  }
+  return {
+    content: [{ type: 'text', text: JSON.stringify(textContent) }, ...imageBlocks],
+    details: { success: true },
+  };
 });
 
 /**

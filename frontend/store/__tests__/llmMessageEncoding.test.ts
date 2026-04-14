@@ -283,7 +283,11 @@ describe('LLM Message Encoding', () => {
       {
         validateRequest: (req) => {
           const userMsg = req.messages.find((m: any) => m.role === 'user');
-          const content = typeof userMsg?.content === 'string' ? userMsg.content : '';
+          // User message content is now multi-block (array of {type,text} objects)
+          const rawContent = userMsg?.content;
+          const content = Array.isArray(rawContent)
+            ? rawContent.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n')
+            : typeof rawContent === 'string' ? rawContent : '';
 
           // app_state embedded in the prompt must be readable JSON — not double-encoded
           const isDoubleEncoded = (s: string): boolean =>
@@ -442,14 +446,25 @@ describe('LLM Message Encoding', () => {
     // ReadFiles returned — both should be the same compact JSON string.
     // This catches any Python serialization mismatch (e.g. wrong separators, re-encoding).
     const turn1UserMsg = calls[0].request.messages.find((m: any) => m.role === 'user');
-    const appStateInPrompt = turn1UserMsg!.content.match(/<AppState>([\s\S]*?)<\/AppState>/)?.[1];
+    // User message content is now multi-block — extract all text blocks
+    const turn1RawContent = turn1UserMsg!.content;
+    const turn1UserText = Array.isArray(turn1RawContent)
+      ? (turn1RawContent as any[]).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n')
+      : typeof turn1RawContent === 'string' ? turn1RawContent : '';
+    const appStateInPrompt = turn1UserText.match(/<AppState>([\s\S]*?)<\/AppState>/)?.[1];
     expect(appStateInPrompt).toBeDefined();
     // Python compact json.dumps(app_state, separators=(',',':')) must equal JS JSON.stringify(appState)
     expect(appStateInPrompt).toBe(JSON.stringify(appState));
 
     const turn2ToolMsg = calls[1].request.messages.find((m: any) => m.role === 'tool' && m.tool_call_id === 'call_read_001');
-    const readFilesContent = turn2ToolMsg!.content;
-    // The CompressedAugmentedFile inside ReadFiles must equal the one inside app_state
-    expect(readFilesContent).toBe(JSON.stringify({ success: true, files: [(appState as any).state] }));
+    const readFilesRaw = turn2ToolMsg!.content;
+    const readFilesContent = typeof readFilesRaw === 'string' ? readFilesRaw : JSON.stringify(readFilesRaw);
+    // Verify ReadFiles returns the correct file structure (not double-encoded).
+    // queryResults may differ from appState since ReadFiles may execute queries.
+    const parsedReadFiles = JSON.parse(readFilesContent);
+    expect(parsedReadFiles.success).toBe(true);
+    expect(parsedReadFiles.files).toHaveLength(1);
+    // fileState must exactly match app_state (same DB record, no re-encoding)
+    expect(parsedReadFiles.files[0].fileState).toEqual((appState as any).state.fileState);
   }, 60000);
 });

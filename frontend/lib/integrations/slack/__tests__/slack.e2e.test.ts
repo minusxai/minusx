@@ -375,10 +375,15 @@ describe('Slack Bot Integration', () => {
         // with 'sales?' rather than 'and last week?'.
         validateRequest: (req) => {
           const msgs = req.messages ?? [];
-          const lastUserMsg = [...msgs].reverse().find(m => m.role === 'user');
-          if (!lastUserMsg?.content?.includes('and last week?')) {
+          const lastUserMsg = [...msgs].reverse().find((m: any) => m.role === 'user');
+          // User message content is now multi-block — extract text before substring check
+          const rawContent = lastUserMsg?.content;
+          const lastMsgText = Array.isArray(rawContent)
+            ? rawContent.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n')
+            : typeof rawContent === 'string' ? rawContent : '';
+          if (!lastMsgText.includes('and last week?')) {
             throw new Error(
-              `Expected last user message to contain "and last week?" but got: ${lastUserMsg?.content}`,
+              `Expected last user message to contain "and last week?" but got: ${lastMsgText}`,
             );
           }
         },

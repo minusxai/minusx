@@ -275,10 +275,26 @@ export default function ToolInspectModal({
                     ))}
                   </HStack>
                 </HStack>
-                <JsonEditor
-                  value={resultTab === 'content' ? toJsonString(toolMessage.content) : toJsonString(toolMessage.details ?? null)}
-                  colorMode={colorMode}
-                />
+                {resultTab === 'content' && (() => {
+                  const content = toolMessage.content;
+                  const blocks: { type: string; [key: string]: any }[] = Array.isArray(content) ? content : [];
+                  const imageUrls = blocks.filter(b => b.type === 'image_url').map(b => b.image_url?.url).filter(Boolean);
+                  const textContent = blocks.length > 0
+                    ? toJsonString(blocks.filter(b => b.type === 'text').map(b => b.text).join('\n') || blocks)
+                    : toJsonString(content);
+                  return (
+                    <VStack align="stretch" gap={2}>
+                      <JsonEditor value={textContent} colorMode={colorMode} />
+                      {imageUrls.map((url, i) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img key={i} src={url} alt={`chart ${i + 1}`} style={{ width: '100%', borderRadius: '6px' }} />
+                      ))}
+                    </VStack>
+                  );
+                })()}
+                {resultTab === 'details' && (
+                  <JsonEditor value={toJsonString(toolMessage.details ?? null)} colorMode={colorMode} />
+                )}
 
                 {hasRerun && (
                   <>

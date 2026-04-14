@@ -35,7 +35,7 @@ templates:
     - CurrentTime
     - Attachments: Files the user has uploaded in this conversation, as additional context (text or CSV content)
     - Allowed Visualization Types: {allowed_viz_types} — only use these visualization types when creating or editing questions. Do not set vizSettings.type to any type not in this list.
-    - Question: The user's actual question/request
+    - User request: Always the last content block in the user message
 
   schema_section: |
     ## Available Database Schema

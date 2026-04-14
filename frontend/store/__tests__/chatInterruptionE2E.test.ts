@@ -759,9 +759,15 @@ describe('Chat Interruption & Error Recovery E2E', () => {
 
         // The CURRENT turn message should be Q4 (msg3, since msg2 was the failed turn)
         // Note: msg2 (the failed turn) should NOT appear — logDiff=[] means R2 was never saved
+        // Current user message is multi-block (array), so extract text before checking.
         const hasMsg3 = messages.some(
-          (m: any) => m.role === 'user' && typeof m.content === 'string' &&
-            m.content.includes('Q4')
+          (m: any) => {
+            if (m.role !== 'user') return false;
+            const text = Array.isArray(m.content)
+              ? m.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n')
+              : typeof m.content === 'string' ? m.content : '';
+            return text.includes('Q4');
+          }
         );
         if (!hasMsg3) {
           throw new Error('Turn 3 user message (Q4) not found as current message');

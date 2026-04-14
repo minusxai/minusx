@@ -97,7 +97,7 @@ export function compressQueryResult(qr: QueryResult & { error?: string }, maxCha
   if ((qr as any).error) {
     return { columns: [], types: [], data: '', totalRows: 0, shownRows: 0, truncated: false, id: qr.id, error: (qr as any).error };
   }
-  const { columns, types, rows } = qr;
+  const { columns = [], types = [], rows = [] } = qr;
   const totalRows = rows.length;
 
   const header = `| ${columns.map(mdTableCell).join(' | ')} |`;
