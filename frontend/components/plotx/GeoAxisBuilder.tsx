@@ -7,6 +7,7 @@ import { SelectRoot, SelectTrigger, SelectValueText, SelectPositioner, SelectCon
 import {
   LuMap, LuMapPin, LuRoute, LuFlame,
   LuLayoutGrid, LuSettings2, LuChevronDown, LuChevronRight,
+  LuCrosshair, LuX,
 } from 'react-icons/lu'
 import { AxisBuilder, type AxisZone } from './AxisBuilder'
 import { ColorScalePicker } from './ColorScalePicker'
@@ -34,6 +35,7 @@ interface GeoAxisBuilderProps {
   onTooltipColsChange?: (cols: string[]) => void
   colorOverrides?: Record<string, string>
   onColorOverridesChange?: (overrides: Record<string, string>) => void
+  getMapView?: () => { center: [number, number]; zoom: number } | null
 }
 
 const DEFAULT_CONFIG: ChoroplethConfig = { subType: 'choropleth', showTiles: false, mapName: 'us-states' }
@@ -47,6 +49,7 @@ export function GeoAxisBuilder({
   onTooltipColsChange,
   colorOverrides = {},
   onColorOverridesChange,
+  getMapView,
 }: GeoAxisBuilderProps) {
   const config = geoConfig ?? DEFAULT_CONFIG
 
@@ -315,6 +318,59 @@ export function GeoAxisBuilder({
                 >
                   <Text fontSize="xs" color="fg.muted">OpenStreetMap Tiles</Text>
                 </Checkbox>
+              </HStack>
+
+              {/* Pin / Unpin view */}
+              <HStack gap={2} align="center">
+                {config.pinnedCenter ? (
+                  <>
+                    <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+                      Pinned: {config.pinnedCenter[0].toFixed(2)}, {config.pinnedCenter[1].toFixed(2)} z{config.pinnedZoom ?? '?'}
+                    </Text>
+                    <HStack
+                      as="button"
+                      aria-label="Unpin map view"
+                      gap={1}
+                      px={2}
+                      py={1}
+                      borderRadius="md"
+                      cursor="pointer"
+                      fontSize="xs"
+                      fontWeight="600"
+                      color="accent.danger"
+                      bg="accent.danger/10"
+                      _hover={{ bg: 'accent.danger/20' }}
+                      onClick={() => update({ pinnedCenter: undefined, pinnedZoom: undefined })}
+                    >
+                      <LuX size={12} />
+                      <Text fontSize="xs">Unpin</Text>
+                    </HStack>
+                  </>
+                ) : (
+                  <HStack
+                    as="button"
+                    aria-label="Pin current map view"
+                    gap={1}
+                    px={2}
+                    py={1}
+                    borderRadius="md"
+                    cursor="pointer"
+                    fontSize="xs"
+                    fontWeight="600"
+                    color="accent.teal"
+                    bg="accent.teal/10"
+                    _hover={{ bg: 'accent.teal/20' }}
+                    onClick={() => {
+                      const view = getMapView?.()
+                      if (view) {
+                        update({ pinnedCenter: view.center, pinnedZoom: view.zoom })
+                      }
+                    }}
+                  >
+                    <LuCrosshair size={12} />
+                    <Text fontSize="xs">Pin Current View</Text>
+                  </HStack>
+                )}
               </HStack>
 
               {/* Color scale (choropleth & heatmap) */}

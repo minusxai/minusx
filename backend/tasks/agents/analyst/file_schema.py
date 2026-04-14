@@ -41,6 +41,8 @@ class GeoConfigBase(BaseModel):
     """Fields shared across all geo sub-types."""
     mapName: Optional[str] = Field(None, description="base GeoJSON map: 'world', 'us-states', 'india-states'")
     showTiles: Optional[bool] = Field(False, description="toggle OpenStreetMap tile layer")
+    pinnedCenter: Optional[List[float]] = Field(None, description="pinned map center as [lat, lng]")
+    pinnedZoom: Optional[int] = Field(None, description="pinned map zoom level")
 
 
 class ChoroplethConfig(GeoConfigBase):

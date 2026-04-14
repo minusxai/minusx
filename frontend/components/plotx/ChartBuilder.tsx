@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useRef } from 'react'
 import { Box, HStack, VStack, Text } from '@chakra-ui/react'
 import { LinePlot } from './LinePlot'
 import { BarPlot } from './BarPlot'
@@ -548,6 +548,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
 
   // Geo mode: completely different layout (Leaflet, not ECharts)
   const isGeo = chartType === 'geo'
+  const getMapViewRef = useRef<(() => { center: [number, number]; zoom: number } | null) | null>(null)
+
   if (isGeo) {
     const handleGeoConfigChangeInternal = (config: GeoConfig) => {
       onGeoConfigChange?.(config)
@@ -565,6 +567,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
             onTooltipColsChange={onTooltipColsChange}
             colorOverrides={styleConfig?.colors ?? {}}
             onColorOverridesChange={(colors) => onStyleConfigChange?.({ ...styleConfig, colors })}
+            getMapView={() => getMapViewRef.current?.() ?? null}
           />
         )}
         <Box flex="1" overflow="hidden" display="flex" minHeight="0">
@@ -575,6 +578,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
             tooltipCols={tooltipColumns}
             markerColor={colorPalette[0]}
             columnFormats={columnFormats}
+            onMapReady={(getView) => { getMapViewRef.current = getView }}
           />
         </Box>
       </Box>

@@ -223,6 +223,14 @@ export type Mapname = string | null;
  */
 export type Showtiles = boolean | null;
 /**
+ * pinned map center as [lat, lng]
+ */
+export type Pinnedcenter = number[] | null;
+/**
+ * pinned map zoom level
+ */
+export type Pinnedzoom = number | null;
+/**
  * geo visualization sub-type
  */
 export type Subtype = "choropleth";
@@ -246,6 +254,14 @@ export type Mapname1 = string | null;
  * toggle OpenStreetMap tile layer
  */
 export type Showtiles1 = boolean | null;
+/**
+ * pinned map center as [lat, lng]
+ */
+export type Pinnedcenter1 = number[] | null;
+/**
+ * pinned map zoom level
+ */
+export type Pinnedzoom1 = number | null;
 /**
  * geo visualization sub-type
  */
@@ -275,6 +291,14 @@ export type Mapname2 = string | null;
  */
 export type Showtiles2 = boolean | null;
 /**
+ * pinned map center as [lat, lng]
+ */
+export type Pinnedcenter2 = number[] | null;
+/**
+ * pinned map zoom level
+ */
+export type Pinnedzoom2 = number | null;
+/**
  * geo visualization sub-type
  */
 export type Subtype2 = "lines";
@@ -302,6 +326,14 @@ export type Mapname3 = string | null;
  * toggle OpenStreetMap tile layer
  */
 export type Showtiles3 = boolean | null;
+/**
+ * pinned map center as [lat, lng]
+ */
+export type Pinnedcenter3 = number[] | null;
+/**
+ * pinned map zoom level
+ */
+export type Pinnedzoom3 = number | null;
 /**
  * geo visualization sub-type
  */
@@ -503,6 +535,8 @@ export interface AxisConfig {
 export interface ChoroplethConfig {
   mapName?: Mapname;
   showTiles?: Showtiles;
+  pinnedCenter?: Pinnedcenter;
+  pinnedZoom?: Pinnedzoom;
   subType: Subtype;
   regionCol?: Regioncol;
   valueCol?: Valuecol;
@@ -514,6 +548,8 @@ export interface ChoroplethConfig {
 export interface PointsConfig {
   mapName?: Mapname1;
   showTiles?: Showtiles1;
+  pinnedCenter?: Pinnedcenter1;
+  pinnedZoom?: Pinnedzoom1;
   subType: Subtype1;
   latCol?: Latcol;
   lngCol?: Lngcol;
@@ -526,6 +562,8 @@ export interface PointsConfig {
 export interface LinesConfig {
   mapName?: Mapname2;
   showTiles?: Showtiles2;
+  pinnedCenter?: Pinnedcenter2;
+  pinnedZoom?: Pinnedzoom2;
   subType: Subtype2;
   latCol?: Latcol1;
   lngCol?: Lngcol1;
@@ -538,6 +576,8 @@ export interface LinesConfig {
 export interface HeatmapConfig {
   mapName?: Mapname3;
   showTiles?: Showtiles3;
+  pinnedCenter?: Pinnedcenter3;
+  pinnedZoom?: Pinnedzoom3;
   subType: Subtype3;
   latCol?: Latcol3;
   lngCol?: Lngcol3;
