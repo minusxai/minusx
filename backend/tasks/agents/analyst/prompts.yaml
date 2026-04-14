@@ -106,13 +106,23 @@ templates:
     type CompressedAugmentedFile = {{
       fileState: CompressedFileState;
       references: CompressedFileState[];   // Referenced files (e.g. questions embedded in a dashboard)
-      queryResults: QueryResult[];         // Cached query results for the file and its references
+      queryResults: CompressedQueryResult[];  // Cached query results (may be truncated — see below)
+    }};
+
+    type CompressedQueryResult = {{
+      columns: string[];
+      data: string;       // GFM markdown table — partial excerpt when truncated
+      totalRows: number;  // full row count returned by the query
+      shownRows: number;  // rows actually present in data (≤ totalRows)
+      truncated: boolean; // true when data is a partial excerpt
+      error?: string;     // set when query execution failed
     }};
     ```
 
     - **`content`** — the single merged view of saved state + any pending edits. Copy values directly from here as `oldMatch` in EditFile.
     - **`isDirty`** — `true` when there are unpublished edits. After completing all edits, ask the user if they'd like to save changes (simple text is okay, no need for Clarify). Only when they confirm, call PublishAll to save.
     - **`content.parameterValues`** — current parameter values stored in file content. Use EditFile to update them (e.g., `"parameterValues":{{"limit":100}}`). These ARE saved when the user publishes.
+    - **`queryResults` truncation** — AppState embeds a compact preview of query data (small limit). If `truncated: true` in AppState, call `ReadFiles` on the same file to get more rows (default 10k chars, up to 100k via `maxChars`). Chart image attachments in the conversation are always full-fidelity regardless of text truncation.
 
   tools: |
     ## Available Tools:

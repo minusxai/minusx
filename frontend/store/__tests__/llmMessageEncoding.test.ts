@@ -511,7 +511,7 @@ describe('LLM Message Encoding', () => {
           const contentStr = typeof rawContent === 'string'
             ? rawContent
             : (Array.isArray(rawContent)
-              ? rawContent.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('')
+              ? (rawContent as any[]).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('')
               : '');
 
           const parsed = JSON.parse(contentStr);
