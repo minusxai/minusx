@@ -374,7 +374,7 @@ export default function QuestionViewV2({
   };
 
   // Handle geo config change
-  const handleGeoConfigChange = (geoConfig: import('@/lib/types.gen').GeoConfig) => {
+  const handleGeoConfigChange = (geoConfig: import('@/lib/types').GeoConfig) => {
     onChange({ vizSettings: { ...content.vizSettings, geoConfig } });
   };
 

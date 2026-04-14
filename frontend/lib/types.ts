@@ -4,6 +4,7 @@ import type { FileState } from '@/store/filesSlice';
 // Regenerate: cd frontend && npm run generate-types
 import type {
   QuestionContent, FileReference, InlineAsset, VizSettings,
+  ChoroplethConfig, PointsConfig, LinesConfig, HeatmapConfig,
 } from './types.gen';
 
 // Re-export FileType for convenience
@@ -19,7 +20,12 @@ export type {
   FileReference, InlineAsset,
   DashboardContent, DashboardLayout, DashboardLayoutItem,
   AtlasQuestionFile, AtlasDashboardFile,
+  ChoroplethConfig, PointsConfig, LinesConfig, HeatmapConfig,
 } from './types.gen';
+
+// Geo config: discriminated union of sub-type-specific configs (null stripped — VizSettings.geoConfig handles nullability)
+export type GeoConfig = ChoroplethConfig | PointsConfig | LinesConfig | HeatmapConfig;
+export type GeoSubType = 'choropleth' | 'points' | 'lines' | 'heatmap';
 
 // Re-export SQL IR types
 export type {

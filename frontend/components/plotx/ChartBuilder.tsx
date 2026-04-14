@@ -23,7 +23,7 @@ import { resolveColumnType } from './AxisComponents'
 import { aggregateData } from '@/lib/chart/aggregate-data'
 import { aggregatePivotData, computeFormulas, getUniqueTopLevelRowValues, getUniqueTopLevelColumnValues, getUniqueRowValuesAtLevel } from '@/lib/chart/pivot-utils'
 import type { PivotConfig, ColumnFormatConfig, AxisConfig, VisualizationStyleConfig } from '@/lib/types'
-import type { GeoConfig } from '@/lib/types.gen'
+import type { GeoConfig } from '@/lib/types'
 import type { VizSettings } from '@/lib/types.gen'
 import { getTimestamp } from '@/lib/chart/chart-utils'
 import { getVizConstraintError } from '@/lib/chart/viz-constraints'
@@ -571,7 +571,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
           <GeoPlot
             rows={rows}
             columns={columns}
-            geoConfig={initialGeoConfig ?? { subType: 'choropleth' }}
+            geoConfig={initialGeoConfig ?? { subType: 'choropleth' } as GeoConfig}
             tooltipCols={tooltipColumns}
             markerColor={colorPalette[0]}
             columnFormats={columnFormats}

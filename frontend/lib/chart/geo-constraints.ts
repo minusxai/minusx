@@ -1,4 +1,4 @@
-import type { GeoConfig } from '@/lib/types.gen'
+import type { GeoConfig } from '@/lib/types'
 
 export interface GeoConstraintResult {
   error: string | null

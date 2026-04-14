@@ -12,7 +12,7 @@ import { AxisBuilder, type AxisZone } from './AxisBuilder'
 import { ColorScalePicker } from './ColorScalePicker'
 import { ColorPicker } from './ColorPicker'
 import { MAP_OPTIONS } from '@/lib/chart/geo-data'
-import type { GeoConfig, GeoSubType } from '@/lib/types.gen'
+import type { GeoConfig, GeoSubType, ChoroplethConfig, PointsConfig, HeatmapConfig } from '@/lib/types'
 
 const SUB_TYPES: Array<{ value: GeoSubType; icon: React.ElementType; label: string }> = [
   { value: 'choropleth', icon: LuMap, label: 'Choropleth' },
@@ -36,7 +36,7 @@ interface GeoAxisBuilderProps {
   onColorOverridesChange?: (overrides: Record<string, string>) => void
 }
 
-const DEFAULT_CONFIG: GeoConfig = { subType: 'choropleth', showTiles: false, mapName: 'us-states' }
+const DEFAULT_CONFIG: ChoroplethConfig = { subType: 'choropleth', showTiles: false, mapName: 'us-states' }
 
 export function GeoAxisBuilder({
   columns,
@@ -62,24 +62,25 @@ export function GeoAxisBuilder({
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const updateConfig = useCallback(
-    (partial: Partial<GeoConfig>) => {
-      onGeoConfigChange({ ...config, ...partial })
-    },
-    [config, onGeoConfigChange],
-  )
-
   const handleSubTypeChange = useCallback(
     (subType: GeoSubType) => {
-      // Choropleth requires a mapName; others keep it if already set but don't require it
-      onGeoConfigChange({
-        subType,
-        showTiles: config.showTiles,
-        mapName: subType === 'choropleth' ? (config.mapName ?? 'us-states') : config.mapName,
-        colorScale: config.colorScale,
-      })
+      const shared = { showTiles: config.showTiles, mapName: config.mapName }
+      switch (subType) {
+        case 'choropleth':
+          onGeoConfigChange({ subType, ...shared, mapName: shared.mapName ?? 'us-states' })
+          break
+        case 'points':
+          onGeoConfigChange({ subType, ...shared })
+          break
+        case 'lines':
+          onGeoConfigChange({ subType, ...shared })
+          break
+        case 'heatmap':
+          onGeoConfigChange({ subType, ...shared })
+          break
+      }
     },
-    [config.showTiles, config.mapName, config.colorScale, onGeoConfigChange],
+    [config.showTiles, config.mapName, onGeoConfigChange],
   )
 
   const togglePanel = (key: string) => {
@@ -124,16 +125,19 @@ export function GeoAxisBuilder({
     )
   }
 
-  // Build AxisBuilder zones based on subType
+  /** Build a drop zone for a single column field on the current config. */
   const makeZone = useCallback(
-    (label: string, field: keyof GeoConfig, emptyText: string): AxisZone => ({
-      label,
-      emptyText,
-      items: config[field] ? [{ column: config[field] as string }] : [],
-      onDrop: (col: string) => updateConfig({ [field]: col }),
-      onRemove: () => updateConfig({ [field]: null }),
-    }),
-    [config, updateConfig],
+    (label: string, fieldKey: string, emptyText: string): AxisZone => {
+      const currentValue = (config as unknown as Record<string, unknown>)[fieldKey] as string | undefined
+      return {
+        label,
+        emptyText,
+        items: currentValue ? [{ column: currentValue }] : [],
+        onDrop: (col: string) => onGeoConfigChange({ ...config, [fieldKey]: col } as GeoConfig),
+        onRemove: () => onGeoConfigChange({ ...config, [fieldKey]: undefined } as GeoConfig),
+      }
+    },
+    [config, onGeoConfigChange],
   )
 
   const tooltipZone: AxisZone = useMemo(() => ({
@@ -185,7 +189,15 @@ export function GeoAxisBuilder({
         subTypeZones = []
     }
     return [...subTypeZones, tooltipZone]
-  }, [config.subType, makeZone])
+  }, [config.subType, makeZone, tooltipZone])
+
+  /** Helper to update current config with narrowed type fields via spread. */
+  const update = useCallback(
+    (partial: Record<string, unknown>) => {
+      onGeoConfigChange({ ...config, ...partial } as GeoConfig)
+    },
+    [config, onGeoConfigChange],
+  )
 
   return (
     <VStack align="stretch" gap={0}>
@@ -263,7 +275,7 @@ export function GeoAxisBuilder({
                   <Checkbox
                     checked={!!config.mapName}
                     onCheckedChange={(e) => {
-                      updateConfig({ mapName: e.checked ? (config.mapName || 'us-states') : null })
+                      update({ mapName: e.checked ? (config.mapName || 'us-states') : undefined })
                     }}
                     size="sm"
                   >
@@ -273,7 +285,7 @@ export function GeoAxisBuilder({
                     <SelectRoot
                       collection={mapCollection}
                       value={[config.mapName]}
-                      onValueChange={(e) => updateConfig({ mapName: e.value[0] || undefined })}
+                      onValueChange={(e) => update({ mapName: e.value[0] || undefined })}
                       size="sm"
                       width="180px"
                     >
@@ -298,7 +310,7 @@ export function GeoAxisBuilder({
                 {/* Tiles toggle */}
                 <Checkbox
                   checked={config.showTiles ?? false}
-                  onCheckedChange={(e) => updateConfig({ showTiles: !!e.checked })}
+                  onCheckedChange={(e) => update({ showTiles: !!e.checked })}
                   size="sm"
                 >
                   <Text fontSize="xs" color="fg.muted">OpenStreetMap Tiles</Text>
@@ -308,10 +320,40 @@ export function GeoAxisBuilder({
               {/* Color scale (choropleth & heatmap) */}
               {(config.subType === 'choropleth' || config.subType === 'heatmap') && (
                 <ColorScalePicker
-                  value={config.colorScale}
+                  value={(config as ChoroplethConfig | HeatmapConfig).colorScale}
                   defaultScale="green"
-                  onChange={(scale) => updateConfig({ colorScale: scale })}
+                  onChange={(scale) => update({ colorScale: scale })}
                 />
+              )}
+
+              {/* Points min radius */}
+              {config.subType === 'points' && (
+                <HStack gap={2} align="center">
+                  <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap">Min Radius</Text>
+                  <input
+                    type="number"
+                    aria-label="Min radius"
+                    min={1}
+                    max={20}
+                    placeholder="5"
+                    value={(config as PointsConfig).minRadius ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? undefined : Math.max(1, Math.min(20, Number(e.target.value)))
+                      update({ minRadius: val })
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      width: '60px',
+                      padding: '2px 6px',
+                      fontSize: '12px',
+                      fontFamily: 'JetBrains Mono, Consolas, monospace',
+                      background: 'var(--chakra-colors-bg-subtle)',
+                      color: 'var(--chakra-colors-fg-default)',
+                      border: '1px solid var(--chakra-colors-border-muted)',
+                      borderRadius: '4px',
+                    }}
+                  />
+                </HStack>
               )}
 
               {/* Marker color (points & lines) */}

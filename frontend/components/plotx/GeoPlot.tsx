@@ -10,7 +10,7 @@ import { getColorScale, getRadiusScale, getHeatGradient, GEO_MARKER_COLOR, GEO_M
 import { formatNumber, applyPrefixSuffix } from '@/lib/chart/chart-utils'
 import { getGeoConstraintError } from '@/lib/chart/geo-constraints'
 import { useAppSelector } from '@/store/hooks'
-import type { GeoConfig, ColumnFormatConfig } from '@/lib/types.gen'
+import type { GeoConfig, ColumnFormatConfig } from '@/lib/types'
 import type { FeatureCollection } from 'geojson'
 
 interface GeoPlotProps {
@@ -323,9 +323,10 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColo
           const lng = Number(row[geoConfig.lngCol])
           if (isNaN(lat) || isNaN(lng)) continue
 
+          const effectiveMinRadius = geoConfig.minRadius ?? 5
           const radius = hasBubble
-            ? getRadiusScale(Number(row[geoConfig.valueCol!]), min, max)
-            : 5
+            ? getRadiusScale(Number(row[geoConfig.valueCol!]), min, max, effectiveMinRadius)
+            : effectiveMinRadius
 
           const marker = L.circleMarker([lat, lng], {
             radius,

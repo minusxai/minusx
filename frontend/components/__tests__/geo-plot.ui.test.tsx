@@ -3,7 +3,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '@/test/helpers/render-with-providers'
 import { ChartBuilder } from '@/components/plotx/ChartBuilder'
-import type { GeoConfig } from '@/lib/types.gen'
+import type { GeoConfig } from '@/lib/types'
 
 // Mock Leaflet — JSDOM has no canvas/DOM rendering
 const mockSetView = jest.fn()
