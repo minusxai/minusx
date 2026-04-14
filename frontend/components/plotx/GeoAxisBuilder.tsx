@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { Box, HStack, VStack, Text, Portal, createListCollection } from '@chakra-ui/react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { SelectRoot, SelectTrigger, SelectValueText, SelectPositioner, SelectContent, SelectItem } from '@/components/ui/select'
@@ -39,6 +39,82 @@ interface GeoAxisBuilderProps {
 }
 
 const DEFAULT_CONFIG: ChoroplethConfig = { subType: 'choropleth', showTiles: false, mapName: 'us-states' }
+
+const NUM_INPUT_STYLE = {
+  width: '60px',
+  padding: '2px 6px',
+  fontSize: '12px',
+  fontFamily: 'JetBrains Mono, Consolas, monospace',
+  background: 'var(--chakra-colors-bg-subtle)',
+  color: 'var(--chakra-colors-fg-default)',
+  border: '1px solid var(--chakra-colors-border-muted)',
+  borderRadius: '4px',
+}
+
+/** Number input that uses local string state so the field is freely editable. Commits on blur. */
+function NumInput({ value, placeholder, ariaLabel, onCommit }: {
+  value: number | undefined | null
+  placeholder: string
+  ariaLabel: string
+  onCommit: (v: number | undefined) => void
+}) {
+  const [local, setLocal] = useState(value != null ? String(value) : '')
+  /* eslint-disable react-hooks/refs -- standard "previous value" pattern for render-time sync */
+  const prevValue = useRef(value)
+  if (value !== prevValue.current) {
+    prevValue.current = value
+    setLocal(value != null ? String(value) : '')
+  }
+  /* eslint-enable react-hooks/refs */
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      aria-label={ariaLabel}
+      placeholder={placeholder}
+      value={local}
+      onChange={(e) => setLocal(e.target.value)}
+      onBlur={() => {
+        const trimmed = local.trim()
+        if (trimmed === '') {
+          onCommit(undefined)
+        } else {
+          const n = Number(trimmed)
+          onCommit(isNaN(n) ? undefined : n)
+        }
+      }}
+      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+      onClick={(e) => e.stopPropagation()}
+      style={NUM_INPUT_STYLE}
+    />
+  )
+}
+
+function PointsSizeInputs({ config, onUpdate }: { config: PointsConfig; onUpdate: (partial: Record<string, unknown>) => void }) {
+  return (
+    <HStack gap={4} align="center" flexWrap="wrap">
+      <HStack gap={2} align="center">
+        <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap">Min Radius</Text>
+        <NumInput
+          value={config.minRadius}
+          placeholder="5"
+          ariaLabel="Min radius"
+          onCommit={(v) => onUpdate({ minRadius: v })}
+        />
+      </HStack>
+      <HStack gap={2} align="center">
+        <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap">Scale</Text>
+        <NumInput
+          value={config.radiusScale}
+          placeholder="1"
+          ariaLabel="Radius scale"
+          onCommit={(v) => onUpdate({ radiusScale: v })}
+        />
+      </HStack>
+    </HStack>
+  )
+}
 
 export function GeoAxisBuilder({
   columns,
@@ -278,7 +354,7 @@ export function GeoAxisBuilder({
                   <Checkbox
                     checked={!!config.mapName}
                     onCheckedChange={(e) => {
-                      update({ mapName: e.checked ? (config.mapName || 'us-states') : undefined })
+                      update({ mapName: e.checked ? (config.mapName || 'us-states') : null })
                     }}
                     size="sm"
                   >
@@ -288,7 +364,7 @@ export function GeoAxisBuilder({
                     <SelectRoot
                       collection={mapCollection}
                       value={[config.mapName]}
-                      onValueChange={(e) => update({ mapName: e.value[0] || undefined })}
+                      onValueChange={(e) => update({ mapName: e.value[0] || null })}
                       size="sm"
                       width="180px"
                     >
@@ -382,34 +458,9 @@ export function GeoAxisBuilder({
                 />
               )}
 
-              {/* Points min radius */}
+              {/* Points sizing */}
               {config.subType === 'points' && (
-                <HStack gap={2} align="center">
-                  <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap">Min Radius</Text>
-                  <input
-                    type="number"
-                    aria-label="Min radius"
-                    min={1}
-                    max={20}
-                    placeholder="5"
-                    value={(config as PointsConfig).minRadius ?? ''}
-                    onChange={(e) => {
-                      const val = e.target.value === '' ? undefined : Math.max(1, Math.min(20, Number(e.target.value)))
-                      update({ minRadius: val })
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                    style={{
-                      width: '60px',
-                      padding: '2px 6px',
-                      fontSize: '12px',
-                      fontFamily: 'JetBrains Mono, Consolas, monospace',
-                      background: 'var(--chakra-colors-bg-subtle)',
-                      color: 'var(--chakra-colors-fg-default)',
-                      border: '1px solid var(--chakra-colors-border-muted)',
-                      borderRadius: '4px',
-                    }}
-                  />
-                </HStack>
+                <PointsSizeInputs config={config as PointsConfig} onUpdate={update} />
               )}
 
               {/* Marker color (points & lines) */}

@@ -114,8 +114,8 @@ export function getHeatGradient(
  * Map a numeric value to a circle radius between MIN_RADIUS and MAX_RADIUS.
  * Clamps values outside [min, max].
  */
-export function getRadiusScale(value: number, min: number, max: number, minRadius: number = MIN_RADIUS): number {
-  if (min === max) return minRadius
+export function getRadiusScale(value: number, min: number, max: number, minRadius: number = MIN_RADIUS, scale: number = 1): number {
+  if (min === max) return minRadius * scale
   const t = Math.max(0, Math.min(1, (value - min) / (max - min)))
-  return minRadius + (MAX_RADIUS - minRadius) * t
+  return (minRadius + (MAX_RADIUS - minRadius) * t) * scale
 }

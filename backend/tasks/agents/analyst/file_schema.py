@@ -60,6 +60,7 @@ class PointsConfig(GeoConfigBase):
     lngCol: Optional[str] = Field(None, description="longitude column")
     valueCol: Optional[str] = Field(None, description="numeric value column for bubble sizing (optional)")
     minRadius: Optional[int] = Field(None, description="minimum circle radius in pixels (default 5, range 1-20)")
+    radiusScale: Optional[float] = Field(None, description="radius multiplier (default 1, e.g. 2 = double size)")
 
 
 class LinesConfig(GeoConfigBase):

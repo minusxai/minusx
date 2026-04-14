@@ -283,6 +283,10 @@ export type Valuecol1 = string | null;
  */
 export type Minradius = number | null;
 /**
+ * radius multiplier (default 1, e.g. 2 = double size)
+ */
+export type Radiusscale = number | null;
+/**
  * base GeoJSON map: 'world', 'us-states', 'india-states'
  */
 export type Mapname2 = string | null;
@@ -555,6 +559,7 @@ export interface PointsConfig {
   lngCol?: Lngcol;
   valueCol?: Valuecol1;
   minRadius?: Minradius;
+  radiusScale?: Radiusscale;
 }
 /**
  * Lines — arc lines between origin/destination coordinate pairs.

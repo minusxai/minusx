@@ -335,9 +335,10 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColo
           if (isNaN(lat) || isNaN(lng)) continue
 
           const effectiveMinRadius = geoConfig.minRadius ?? 5
+          const effectiveScale = geoConfig.radiusScale ?? 1
           const radius = hasBubble
-            ? getRadiusScale(Number(row[geoConfig.valueCol!]), min, max, effectiveMinRadius)
-            : effectiveMinRadius
+            ? getRadiusScale(Number(row[geoConfig.valueCol!]), min, max, effectiveMinRadius, effectiveScale)
+            : effectiveMinRadius * effectiveScale
 
           const marker = L.circleMarker([lat, lng], {
             radius,
