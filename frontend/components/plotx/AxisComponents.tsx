@@ -158,6 +158,86 @@ export const DropZone = ({ label, onDrop, isTouchDevice, children, labelExtra }:
 // Format popover content (shown on ZoneChip click)
 const DECIMAL_OPTIONS = [0, 1, 2, 3, 4] as const
 
+const PRESET_DATE_FORMATS = DATE_FORMAT_OPTIONS.map(o => o.value as string)
+
+const DateFormatPicker = ({ dateFormat, onChange }: { dateFormat?: string | null, onChange: (v: string | undefined) => void }) => {
+  const isCustom = dateFormat != null && !PRESET_DATE_FORMATS.includes(dateFormat)
+  const [customValue, setCustomValue] = useState(isCustom ? dateFormat : '')
+  const [showCustom, setShowCustom] = useState(isCustom)
+
+  const inputStyle = {
+    fontSize: '12px',
+    fontFamily: 'var(--fonts-mono, monospace)',
+    padding: '4px 8px',
+    width: '100%',
+    border: '1px solid var(--colors-border-muted, #333)',
+    borderRadius: '4px',
+    background: 'transparent',
+    color: 'inherit',
+    outline: 'none',
+  } as const
+
+  return (
+    <Box>
+      <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
+        Date Format
+      </Text>
+      <VStack align="stretch" gap={0}>
+        {DATE_FORMAT_OPTIONS.map(fmt => (
+          <Box
+            key={fmt.value}
+            px={2}
+            py={1}
+            cursor="pointer"
+            borderRadius="sm"
+            bg={dateFormat === fmt.value ? 'accent.teal/15' : 'transparent'}
+            _hover={{ bg: dateFormat === fmt.value ? 'accent.teal/15' : 'bg.muted' }}
+            onClick={(e) => { e.stopPropagation(); setShowCustom(false); onChange(dateFormat === fmt.value ? undefined : fmt.value) }}
+            transition="background 0.15s"
+          >
+            <Text fontSize="xs" fontFamily="mono" fontWeight={dateFormat === fmt.value ? '700' : '500'} color={dateFormat === fmt.value ? 'accent.teal' : 'fg.default'}>
+              {fmt.label}
+            </Text>
+          </Box>
+        ))}
+        {/* Custom format option */}
+        <Box
+          px={2}
+          py={1}
+          cursor="pointer"
+          borderRadius="sm"
+          bg={showCustom ? 'accent.teal/15' : 'transparent'}
+          _hover={{ bg: showCustom ? 'accent.teal/15' : 'bg.muted' }}
+          onClick={(e) => { e.stopPropagation(); setShowCustom(true) }}
+          transition="background 0.15s"
+        >
+          <Text fontSize="xs" fontFamily="mono" fontWeight={showCustom ? '700' : '500'} color={showCustom ? 'accent.teal' : 'fg.default'}>
+            Custom…
+          </Text>
+        </Box>
+        {showCustom && (
+          <Box px={2} py={1}>
+            <input
+              aria-label="Custom date format"
+              type="text"
+              placeholder="e.g. dd/MM/yyyy HH:mm"
+              value={customValue}
+              onChange={(e) => setCustomValue(e.target.value)}
+              onBlur={() => { onChange(customValue || undefined) }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { onChange(customValue || undefined) } }}
+              onClick={(e) => e.stopPropagation()}
+              style={inputStyle}
+            />
+            <Text fontSize="2xs" color="fg.subtle" mt={0.5}>
+              yyyy MM dd HH mm ss MMM MMMM
+            </Text>
+          </Box>
+        )}
+      </VStack>
+    </Box>
+  )
+}
+
 interface FormatPopoverProps {
   type: ColumnType
   column: string
@@ -277,30 +357,7 @@ const FormatPopover = ({ type, column, formatConfig, onChange }: FormatPopoverPr
 
       {/* Date format - shown for date type */}
       {type === 'date' && (
-        <Box>
-          <Text fontSize="2xs" fontWeight="700" color="fg.subtle" textTransform="uppercase" letterSpacing="0.05em" mb={1}>
-            Date Format
-          </Text>
-          <VStack align="stretch" gap={0}>
-            {DATE_FORMAT_OPTIONS.map(fmt => (
-              <Box
-                key={fmt.value}
-                px={2}
-                py={1}
-                cursor="pointer"
-                borderRadius="sm"
-                bg={config.dateFormat === fmt.value ? 'accent.teal/15' : 'transparent'}
-                _hover={{ bg: config.dateFormat === fmt.value ? 'accent.teal/15' : 'bg.muted' }}
-                onClick={(e) => { e.stopPropagation(); onChange({ ...config, dateFormat: config.dateFormat === fmt.value ? undefined : fmt.value }) }}
-                transition="background 0.15s"
-              >
-                <Text fontSize="xs" fontFamily="mono" fontWeight={config.dateFormat === fmt.value ? '700' : '500'} color={config.dateFormat === fmt.value ? 'accent.teal' : 'fg.default'}>
-                  {fmt.label}
-                </Text>
-              </Box>
-            ))}
-          </VStack>
-        </Box>
+        <DateFormatPicker dateFormat={config.dateFormat} onChange={(dateFormat) => onChange({ ...config, dateFormat })} />
       )}
     </VStack>
   )
