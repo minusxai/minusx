@@ -124,7 +124,7 @@ export default function CsvConfig({
             <LuUpload /> {mode === 'create' ? 'Select Files' : 'Upload New Files'}
             <input
               type="file"
-              accept=".csv,.parquet,.pq"
+              accept=".csv,.parquet,.pq,.xlsx"
               multiple
               onChange={(e) => handleFilesSelected(Array.from(e.target.files || []))}
               style={{ display: 'none' }}
@@ -230,9 +230,10 @@ export default function CsvConfig({
           )}
 
           <Text fontSize="xs" color="fg.muted">
-            Accepts <Text as="span" fontFamily="mono">.csv</Text> and{' '}
-            <Text as="span" fontFamily="mono">.parquet</Text> files. Each file becomes a table
-            queried as <Text as="span" fontFamily="mono">schema_name.table_name</Text>.
+            Accepts <Text as="span" fontFamily="mono">.csv</Text>,{' '}
+            <Text as="span" fontFamily="mono">.parquet</Text>, and{' '}
+            <Text as="span" fontFamily="mono">.xlsx</Text> files. Each file (or sheet) becomes a
+            table queried as <Text as="span" fontFamily="mono">schema_name.table_name</Text>.
           </Text>
         </VStack>
       </Box>

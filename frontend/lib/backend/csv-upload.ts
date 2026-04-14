@@ -32,12 +32,15 @@ export interface CsvDeleteResult {
 function getContentType(file: File): string {
   const ext = file.name.split('.').pop()?.toLowerCase();
   if (ext === 'parquet' || ext === 'pq') return 'application/octet-stream';
+  if (ext === 'xlsx') return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
   return 'text/csv';
 }
 
-function getFileFormat(filename: string): 'csv' | 'parquet' {
+function getFileFormat(filename: string): 'csv' | 'parquet' | 'xlsx' {
   const ext = filename.split('.').pop()?.toLowerCase();
-  return ext === 'parquet' || ext === 'pq' ? 'parquet' : 'csv';
+  if (ext === 'parquet' || ext === 'pq') return 'parquet';
+  if (ext === 'xlsx') return 'xlsx';
+  return 'csv';
 }
 
 async function getPresignedUrl(
@@ -85,7 +88,7 @@ export async function uploadCsvFilesS3(
       filename: string;
       s3_key: string;
       schema_name: string;
-      file_format: 'csv' | 'parquet';
+      file_format: 'csv' | 'parquet' | 'xlsx';
       table_name?: string;
     }[] = [];
 
@@ -96,7 +99,7 @@ export async function uploadCsvFilesS3(
         filename: string;
         s3_key: string;
         schema_name: string;
-        file_format: 'csv' | 'parquet';
+        file_format: 'csv' | 'parquet' | 'xlsx';
         table_name?: string;
       } = {
         filename: file.name,

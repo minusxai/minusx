@@ -11,13 +11,16 @@ S3 storage layout (enforced by frontend upload-url route):
 The company_id prefix ensures strict cross-company isolation.
 """
 
+import io
 import re
+import uuid
 import asyncio
 from pathlib import Path
 from typing import List, Dict, Any
 
 import boto3
 import duckdb
+import pandas as pd
 from config import (
     BASE_DUCKDB_DATA_PATH,
     OBJECT_STORE_BUCKET,
@@ -71,7 +74,11 @@ def ensure_unique_table_names(filenames: List[str]) -> Dict[str, str]:
 
 def detect_file_format(filename: str) -> str:
     ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
-    return 'parquet' if ext in ('parquet', 'pq') else 'csv'
+    if ext in ('parquet', 'pq'):
+        return 'parquet'
+    if ext == 'xlsx':
+        return 'xlsx'
+    return 'csv'
 
 
 def _open_s3_duckdb() -> duckdb.DuckDBPyConnection:
@@ -85,6 +92,74 @@ def _open_s3_duckdb() -> duckdb.DuckDBPyConnection:
         conn.execute(f"SET s3_endpoint='{OBJECT_STORE_ENDPOINT}'")
         conn.execute("SET s3_url_style='path'")
     return conn
+
+
+def _make_boto3_kwargs() -> Dict[str, Any]:
+    kwargs: Dict[str, Any] = dict(
+        region_name=OBJECT_STORE_REGION,
+        aws_access_key_id=OBJECT_STORE_ACCESS_KEY_ID or None,
+        aws_secret_access_key=OBJECT_STORE_SECRET_ACCESS_KEY or None,
+    )
+    if OBJECT_STORE_ENDPOINT:
+        kwargs['endpoint_url'] = OBJECT_STORE_ENDPOINT
+    return kwargs
+
+
+def _expand_xlsx_to_csvs(
+    s3_key: str,
+    connection_name: str,
+    company_id: int,
+    mode: str,
+    schema_name: str,
+) -> List[Dict[str, str]]:
+    """
+    Download an xlsx from S3, convert each non-empty sheet to a CSV, upload the
+    CSVs back to S3 under the same connection prefix, and return a list of file
+    records ({filename, s3_key, schema_name, file_format}) — one per sheet.
+
+    The original xlsx object is left in S3 (it will be removed with the
+    connection when the user deletes it via the normal cleanup flow).
+    """
+    s3 = boto3.client('s3', **_make_boto3_kwargs())
+
+    # Download xlsx bytes
+    response = s3.get_object(Bucket=OBJECT_STORE_BUCKET, Key=s3_key)
+    xlsx_bytes = response['Body'].read()
+
+    # Parse with pandas
+    xl = pd.ExcelFile(io.BytesIO(xlsx_bytes), engine='openpyxl')
+    csv_records: List[Dict[str, str]] = []
+
+    for sheet_name in xl.sheet_names:
+        df = pd.read_excel(xl, sheet_name=sheet_name)
+        if df.empty:
+            continue
+        safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', sheet_name)[:50].lower()
+        csv_filename = f"{safe_name}.csv"
+        csv_key = f"{company_id}/csvs/{mode}/{connection_name}/{uuid.uuid4().hex}_{csv_filename}"
+
+        buf = io.StringIO()
+        df.to_csv(buf, index=False)
+        csv_bytes = buf.getvalue().encode('utf-8')
+
+        s3.put_object(
+            Bucket=OBJECT_STORE_BUCKET,
+            Key=csv_key,
+            Body=csv_bytes,
+            ContentType='text/csv',
+        )
+
+        csv_records.append({
+            'filename': csv_filename,
+            's3_key': csv_key,
+            'schema_name': schema_name,
+            'file_format': 'csv',
+        })
+
+    if not csv_records:
+        raise ValueError("No non-empty sheets found in the uploaded xlsx file")
+
+    return csv_records
 
 
 def _read_file_metadata(
@@ -146,6 +221,26 @@ async def process_csv_from_s3(
             "OBJECT_STORE_BUCKET is not configured. "
             "Set OBJECT_STORE_BUCKET env var to enable S3-backed CSV connections."
         )
+
+    # Expand xlsx files into per-sheet CSV records (blocking I/O runs off the event loop)
+    expanded_files: List[Dict[str, str]] = []
+    for file_info in files:
+        fmt = file_info.get('file_format') or detect_file_format(file_info['filename'])
+        if fmt == 'xlsx':
+            schema_name = file_info.get('schema_name') or 'public'
+            sheet_records = await asyncio.get_event_loop().run_in_executor(
+                None,
+                _expand_xlsx_to_csvs,
+                file_info['s3_key'],
+                connection_name,
+                company_id,
+                mode,
+                schema_name,
+            )
+            expanded_files.extend(sheet_records)
+        else:
+            expanded_files.append(file_info)
+    files = expanded_files
 
     # Separate files with user-provided table names from those that need auto-generation
     auto_gen_schema_filenames: Dict[str, List[str]] = {}
@@ -227,15 +322,7 @@ def delete_csv_connection(company_id: int, mode: str, connection_name: str) -> b
     if not OBJECT_STORE_BUCKET:
         return False
 
-    kwargs: Dict[str, Any] = dict(
-        region_name=OBJECT_STORE_REGION,
-        aws_access_key_id=OBJECT_STORE_ACCESS_KEY_ID or None,
-        aws_secret_access_key=OBJECT_STORE_SECRET_ACCESS_KEY or None,
-    )
-    if OBJECT_STORE_ENDPOINT:
-        kwargs['endpoint_url'] = OBJECT_STORE_ENDPOINT
-
-    s3 = boto3.client('s3', **kwargs)
+    s3 = boto3.client('s3', **_make_boto3_kwargs())
     prefix = f"{company_id}/csvs/{mode}/{connection_name}/"
 
     paginator = s3.get_paginator('list_objects_v2')

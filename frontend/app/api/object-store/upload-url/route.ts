@@ -20,9 +20,10 @@ const ALLOWED_CONTENT_TYPES = immutableSet([
   'application/pdf',
   'text/plain',
   'text/csv',
-  // Remote-file (CSV/Parquet) uploads
+  // Remote-file (CSV/Parquet/Excel) uploads
   'application/octet-stream',  // Parquet files
   'application/vnd.apache.parquet',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',  // xlsx
 ]);
 
 /** 50 MB — presigned PUT URLs can't enforce this at S3 level, so we document the intent here.
