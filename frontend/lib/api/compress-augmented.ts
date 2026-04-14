@@ -22,6 +22,10 @@ import type {
 
 const LIMIT_CHARS = 50_000;
 
+export const APP_STATE_LIMIT_CHARS    = 2_000;    // Always-on context — keep small
+export const TOOL_DEFAULT_LIMIT_CHARS = 10_000;   // ReadFiles / ExecuteQuery default
+export const TOOL_MAX_LIMIT_CHARS     = 100_000;  // Hard ceiling agents can request
+
 // ---------------------------------------------------------------------------
 // DbFile → FileState
 // ---------------------------------------------------------------------------
@@ -161,13 +165,13 @@ function compressFileState(fs: FileState): CompressedFileState {
  * - Merges persistableChanges into content
  * - Computes isDirty and queryResultId
  * - Strips fullSchema column details for context files
- * - Serialises queryResults to GFM markdown tables (truncated at LIMIT_CHARS)
+ * - Serialises queryResults to GFM markdown tables (truncated at maxChars)
  */
-export function compressAugmentedFile(augmented: AugmentedFile): CompressedAugmentedFile {
+export function compressAugmentedFile(augmented: AugmentedFile, maxChars = LIMIT_CHARS): CompressedAugmentedFile {
   return {
     fileState: compressFileState(augmented.fileState),
     references: augmented.references.map(compressFileState),
-    queryResults: augmented.queryResults.map(qr => compressQueryResult(qr)),
+    queryResults: augmented.queryResults.map(qr => compressQueryResult(qr, maxChars)),
   };
 }
 

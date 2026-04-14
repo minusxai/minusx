@@ -278,27 +278,35 @@ class TalkToUser(Tool):
 
 @register_agent
 class ReadFiles(Tool):
-    """Load multiple files with their full JSON representation.
+    """Load files with their content, references, and cached query results.
 
-    Returns each file as complete JSON: {"id": 123, "name": "...", "path": "...", "type": "question", "content": {...}}
+    Returns each file as CompressedAugmentedFile: fileState, references, and queryResults
+    as compressed GFM markdown tables.
 
-    Use this to:
-    - Read file content before editing (see full structure including name, path, content)
-    - Inspect multiple files at once
-    - Get file metadata and content in one call
+    Chart images (for question files with a rendered chart) are returned as full-fidelity
+    image blocks — they are never truncated.
 
-    The response includes file states, references, and cached query results.
+    Text table data (queryResults[].data) is truncated at maxChars characters (default 10,000):
+    - truncated: true means the result was cut short; totalRows shows the full row count.
+    - Increase maxChars (up to 100,000) to see more rows in text form.
+    - To page through rows, use ExecuteQuery with OFFSET in the SQL.
+    - Set runQueries: false to skip query execution and load only file metadata.
 
-    Only call this for files NOT already in AppState or AppState.references — calling it for files already in AppState is wasteful and redundant.
+    Only call this for files NOT already in AppState or AppState.references — calling it for
+    files already in AppState is wasteful and redundant.
     """
 
     def __init__(
         self,
         fileIds: List[int] = Field(..., description="Array of file IDs to load"),
+        maxChars: Optional[int] = Field(None, description="Max characters of table data per query result (default 10,000, max 100,000). Increase to see more rows."),
+        runQueries: Optional[bool] = Field(None, description="Execute queries to include fresh data (default true). Set false to load file metadata only."),
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
         self.fileIds = fileIds
+        self.maxChars = maxChars
+        self.runQueries = runQueries
 
     async def reduce(self, child_batches):
         pass
@@ -439,8 +447,12 @@ class ExecuteQuery(Tool):
     - shownRows: number of rows included in the data field (may be < totalRows if output was large)
     - truncated: true when data was cut short (shownRows < totalRows)
 
-    When truncated is true, narrow the query (add WHERE clauses or LIMIT) rather
-    than re-running the same query unchanged.
+    Chart images (when vizSettings is provided) are full-fidelity — never truncated.
+
+    Text table data is truncated at maxChars characters (default 10,000):
+    - Increase maxChars (up to 100,000) to expose more rows in text form.
+    - To page through results, add OFFSET N to the SQL (e.g. SELECT … LIMIT 100 OFFSET 100).
+    - When truncated is true, prefer narrowing the query (WHERE / LIMIT) over increasing maxChars.
     """
 
     def __init__(
@@ -449,6 +461,7 @@ class ExecuteQuery(Tool):
         connectionId: str = Field(..., description="Database connection name"),
         parameters: Optional[Dict[str, Any]] = Field(None, description="Query parameters as key-value pairs"),
         vizSettings: Optional[str] = Field(None, description=f"settings to visualize the output of the query; schema: {vizSettingsJsonStr}"),
+        maxChars: Optional[int] = Field(None, description="Max characters of table output (default 10,000, max 100,000). Increase to see more rows."),
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
@@ -456,6 +469,7 @@ class ExecuteQuery(Tool):
         self.connectionId = connectionId
         self.parameters = parameters or {}
         self.vizSettings = vizSettings
+        self.maxChars = maxChars
 
     async def reduce(self, child_batches):
         pass

@@ -9,7 +9,7 @@
 
 import { ExecuteQueryInput, ExecuteQueryDetails, QueryResult } from '@/lib/types';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
-import { compressQueryResult } from '@/lib/api/compress-augmented';
+import { compressQueryResult, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import type { ServerToolResult } from '@/app/api/chat/orchestrator';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
@@ -21,10 +21,11 @@ import type { EffectiveUser } from '@/lib/auth/auth-helpers';
  * @returns Query result with columns, types, rows
  */
 export async function executeQuery(
-  input: ExecuteQueryInput,
+  input: ExecuteQueryInput & { maxChars?: number },
   userOverride?: EffectiveUser
 ): Promise<ServerToolResult> {
-  const { query, connectionId, parameters = {} } = input;
+  const { query, connectionId, parameters = {}, maxChars: rawMaxChars } = input;
+  const maxChars = Math.min(rawMaxChars ?? TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS);
 
   try {
     // Forward request to Python backend
@@ -50,7 +51,7 @@ export async function executeQuery(
       types: data.types || [],
       rows: data.rows || []
     };
-    const compressed = compressQueryResult(queryResult);
+    const compressed = compressQueryResult(queryResult, maxChars);
     const details: ExecuteQueryDetails = { success: true, queryResult };
     return { content: compressed, details };
   } catch (error) {

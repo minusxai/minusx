@@ -17,7 +17,7 @@ import { searchDatabaseSchema } from '@/lib/search/schema-search';
 import { searchFilesInFolder } from '@/lib/search/file-search';
 import { executeQuery as execQuery } from '@/lib/api/execute-query.server';
 import { getNodeConnector } from '@/lib/connections';
-import { compressQueryResult } from '@/lib/api/compress-augmented';
+import { compressQueryResult, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { readFilesServer } from '@/lib/api/file-state.server';
 
 // ============================================================================
@@ -125,7 +125,8 @@ registerTool('Clarify', async (args, _user, childResults) => {
  * DuckDB connections are handled in Node.js to avoid Python's exclusive file lock.
  */
 registerTool('ExecuteQuery', async (args, user) => {
-  const { query, connectionId, parameters = {} } = args;
+  const { query, connectionId, parameters = {}, maxChars: rawMaxChars } = args;
+  const maxChars = Math.min(rawMaxChars ?? TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS);
 
   // Look up connection type; if Node.js handles it, bypass Python entirely
   const connData = await ConnectionsAPI.getByName(connectionId, user).catch(() => null);
@@ -134,7 +135,7 @@ registerTool('ExecuteQuery', async (args, user) => {
     const connector = getNodeConnector(connectionId, type, config);
     if (connector) {
       const result = await connector.query(query, parameters);
-      const compressed = compressQueryResult(result);
+      const compressed = compressQueryResult(result, maxChars);
       const details = { success: true, queryResult: result };
       return { content: compressed, details };
     }
@@ -144,7 +145,8 @@ registerTool('ExecuteQuery', async (args, user) => {
   const result = await execQuery({
     query,
     connectionId,
-    parameters
+    parameters,
+    maxChars,
   }, user);
 
   return result;
