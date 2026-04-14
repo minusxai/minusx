@@ -13,8 +13,9 @@ import type { AugmentedFile, FileState, QueryResult, FileType, QuestionReference
 import type { LoadError } from '@/lib/types/errors';
 
 export interface ReadFilesOptions {
-  ttl?: number;    // Time-to-live in ms (default: CACHE_TTL.FILE)
-  skip?: boolean;  // Skip loading (return from Redux / cache only)
+  ttl?: number;        // Time-to-live in ms (default: CACHE_TTL.FILE)
+  skip?: boolean;      // Skip loading (return from Redux / cache only)
+  runQueries?: boolean; // Execute queries for question files (root + references) that lack cached results
 }
 
 export interface ReadFilesByCriteriaOptions {

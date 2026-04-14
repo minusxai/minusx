@@ -371,7 +371,7 @@ registerFrontendTool('ClarifyFrontend', async (args, context) => {
 registerFrontendTool('ReadFiles', async (args, _context) => {
   const { fileIds } = args;
 
-  const result = await readFiles(fileIds, {});
+  const result = await readFiles(fileIds, { runQueries: true });
   const textContent = { success: true, files: result.map(compressAugmentedFile) };
   const imageBlocks = await renderFileChartImageBlocks(result);
   if (imageBlocks.length === 0) {

@@ -19,7 +19,7 @@
  */
 
 import { getStore } from '@/store/store';
-import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, setEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, selectEffectivePath, deleteFile as deleteFileAction, setFilePlaceholder, generateVirtualId, pathToVirtualId, selectDirtyFiles, replaceVirtualIds, hashString, type FileId } from '@/store/filesSlice';
+import { selectFile, selectIsFileLoaded, selectIsFileFresh, setFile, setFiles, selectMergedContent, setEdit, setMetadataEdit, selectIsDirty, clearEdits, clearMetadataEdits, setLoading, setFolderLoading, setLoadError, clearEphemeral, setEphemeral, addFile, selectFileIdByPath, selectIsFolderFresh, setFileInfo, setFolderInfo, selectFiles, setSaving, selectEffectiveName, deleteFile as deleteFileAction, setFilePlaceholder, generateVirtualId, pathToVirtualId, selectDirtyFiles, replaceVirtualIds, hashString, type FileId } from '@/store/filesSlice';
 import { ConflictError } from '@/lib/data/files';
 import { selectQueryResult, setQueryResult, setQueryError, selectIsQueryFresh, setQueryLoading } from '@/store/queryResultsSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
@@ -33,7 +33,6 @@ import { API } from '@/lib/api/declarations';
 import { canViewFileType } from '@/lib/auth/access-rules.client';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { encodeFileStr, decodeFileStr } from '@/lib/api/file-encoding';
-import type { RootState } from '@/store/store';
 import type { AugmentedFile, FileState, QueryResult, QuestionContent, FileType, DbFile } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';
 import { createLoadErrorFromException } from '@/lib/types/errors';
@@ -167,16 +166,36 @@ export async function loadFileByPath(path: string, ttl: number = CACHE_TTL.FILE)
  * ReadFiles - Load multiple files with references and query results
  *
  * @param input - File IDs to load
- * @param options - { ttl?: number, skip?: boolean }
+ * @param options - { ttl?: number, skip?: boolean, runQueries?: boolean }
  * @returns Augmented files with references and query results
  */
 export async function readFiles(
   fileIds: number[],
   options: ReadFilesOptions = {}
 ): Promise<AugmentedFile[]> {
-  const { ttl = CACHE_TTL.FILE, skip = false } = options;
+  const { ttl = CACHE_TTL.FILE, skip = false, runQueries = false } = options;
 
   await loadFiles(fileIds, ttl, skip);
+
+  if (runQueries) {
+    // Collect all question files (root + references) that need a fresh query result
+    const preAugmented = selectAugmentedFiles(getStore().getState(), fileIds);
+    const questionFiles = preAugmented.flatMap(a => [a.fileState, ...a.references])
+      .filter(f => f.type === 'question');
+
+    await Promise.allSettled(
+      questionFiles.flatMap(f => {
+        const content = f.content as any;
+        if (!content?.query || !content?.connection_name) return [];
+        return [getQueryResult({
+          query: content.query,
+          params: content.parameterValues ?? {},
+          database: content.connection_name,
+        })];
+      })
+    );
+  }
+
   return selectAugmentedFiles(getStore().getState(), fileIds);
 }
 
