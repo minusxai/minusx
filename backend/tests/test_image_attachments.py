@@ -125,12 +125,12 @@ def test_user_message_mixed_attachments_passes_litellm_validation():
     user_msg = agent._get_user_message()
     assert isinstance(user_msg["content"], list)
 
-    # context text block, goal text block, then image block
+    # context text block, then image block, then goal text block
     assert len(user_msg["content"]) == 3
     types = [block["type"] for block in user_msg["content"]]
     assert types[0] == "text"
-    assert types[1] == "text"
-    assert types[2] == "image_url"
+    assert types[1] == "image_url"
+    assert types[2] == "text"
 
     messages = [{"role": "system", "content": "system"}, user_msg]
     validate_and_fix_openai_messages(messages)  # must not raise

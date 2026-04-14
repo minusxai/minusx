@@ -255,7 +255,7 @@ class AnalystAgent(Agent):
         # Block 2: user goal (raw — structural position identifies it)
         goal_block = {"type": "text", "text": goal}
 
-        content = [context_block, goal_block] + self._get_image_content_blocks()
+        content = [context_block] + self._get_image_content_blocks() + [goal_block]
         return {"role": "user", "content": content}
 
     def _get_llm_settings(self) -> LlmSettings:
