@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { handleApiError } from '@/lib/api/api-responses';
-import { createObjectStore, generateUploadKey } from '@/lib/object-store';
+import { createObjectStore, generateUploadKey, generateCsvUploadKey } from '@/lib/object-store';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 
 /**
@@ -20,6 +20,9 @@ const ALLOWED_CONTENT_TYPES = immutableSet([
   'application/pdf',
   'text/plain',
   'text/csv',
+  // Remote-file (CSV/Parquet) uploads
+  'application/octet-stream',  // Parquet files
+  'application/vnd.apache.parquet',
 ]);
 
 /** 50 MB — presigned PUT URLs can't enforce this at S3 level, so we document the intent here.
@@ -46,7 +49,6 @@ export async function GET(req: NextRequest) {
     const filename = req.nextUrl.searchParams.get('filename');
     const contentType = req.nextUrl.searchParams.get('contentType');
     const keyTypeParam = req.nextUrl.searchParams.get('keyType');
-    const keyType = keyTypeParam === 'charts' ? 'charts' : 'uploads';
 
     if (!filename || !contentType) {
       return NextResponse.json(
@@ -56,8 +58,6 @@ export async function GET(req: NextRequest) {
     }
 
     // Reject disallowed MIME types before issuing a presigned URL.
-    // This prevents uploading executable content (text/html, application/javascript, etc.)
-    // that could be hosted under the app's S3 domain.
     if (!ALLOWED_CONTENT_TYPES.has(contentType)) {
       return NextResponse.json(
         { error: `Unsupported file type: ${contentType}` },
@@ -65,18 +65,39 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const ext = '.' + filename.split('.').pop()!.toLowerCase();
-    const key = generateUploadKey({
-      companyId: user.companyId,
-      userId: user.userId,
-      mode: user.mode,
-      type: keyType,
-      ext,
-    });
+    let key: string;
+    if (keyTypeParam === 'csvs') {
+      // CSV uploads use a connection-scoped key for easy per-company cleanup.
+      // connectionName is required for csvs key type.
+      const connectionName = req.nextUrl.searchParams.get('connectionName');
+      if (!connectionName) {
+        return NextResponse.json(
+          { error: 'connectionName is required for keyType=csvs' },
+          { status: 400 },
+        );
+      }
+      key = generateCsvUploadKey({
+        companyId: user.companyId,
+        mode: user.mode,
+        connectionName,
+      });
+    } else {
+      const keyType = keyTypeParam === 'charts' ? 'charts' : 'uploads';
+      const ext = '.' + filename.split('.').pop()!.toLowerCase();
+      key = generateUploadKey({
+        companyId: user.companyId,
+        userId: user.userId,
+        mode: user.mode,
+        type: keyType,
+        ext,
+      });
+    }
+
     const store = createObjectStore();
     const result = await store.getUploadUrl({ key, contentType });
 
-    return NextResponse.json(result);
+    // Always include the raw S3 key so callers don't have to parse the public URL.
+    return NextResponse.json({ ...result, s3Key: key });
   } catch (error) {
     return handleApiError(error);
   }

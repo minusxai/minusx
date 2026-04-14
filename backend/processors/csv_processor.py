@@ -1,296 +1,262 @@
 """
 CSV Processor Module
 
-Handles CSV file upload, storage, and DuckDB database generation.
+Registers S3-hosted CSV/Parquet files as metadata entries for the in-memory
+DuckDB connector.  No local files are created — DuckDB is used only as a
+temporary engine to read column/row metadata from S3 at registration time.
 
-Storage Structure:
-    data/
-      csv_connections/
-        {company_id}/
-          {mode}/
-            {connection_name}/
-              files/
-                table1.csv
-                table2.csv
-              database.duckdb
+S3 storage layout (enforced by frontend upload-url route):
+    {companyId}/csvs/{mode}/{connectionName}/{uuid}.csv   (or .parquet)
+
+The company_id prefix ensures strict cross-company isolation.
 """
 
 import re
-import shutil
+import asyncio
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
+
 import duckdb
-from config import BASE_DUCKDB_DATA_PATH
+from config import (
+    BASE_DUCKDB_DATA_PATH,
+    OBJECT_STORE_BUCKET,
+    OBJECT_STORE_REGION,
+    OBJECT_STORE_ACCESS_KEY_ID,
+    OBJECT_STORE_SECRET_ACCESS_KEY,
+    OBJECT_STORE_ENDPOINT,
+)
 
 
-def get_csv_base_dir() -> Path:
-    """Get the base directory for CSV connections (inside data folder)."""
-    return Path(BASE_DUCKDB_DATA_PATH) / "data" / "csv_connections"
-
-
-def get_csv_connection_dir(company_id: int, mode: str, connection_name: str) -> Path:
-    """Get the directory for a specific CSV connection."""
-    return get_csv_base_dir() / str(company_id) / mode / connection_name
-
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def sanitize_table_name(filename: str) -> str:
-    """
-    Convert a filename to a valid SQL table name.
+    """Convert a filename to a valid SQL table name.
 
-    Rules:
     - Remove file extension
-    - Replace spaces and hyphens with underscores
-    - Remove special characters (keep only alphanumeric and underscore)
-    - Convert to lowercase
-    - If starts with number, prefix with 't_'
-    - Truncate to 63 chars (PostgreSQL limit for identifiers)
+    - Replace spaces/hyphens with underscores
+    - Strip characters that aren't alphanumeric or underscore
+    - Lowercase
+    - Prefix with 't_' if it starts with a digit
+    - Truncate to 63 chars (PostgreSQL identifier limit)
     """
-    # Remove extension
     name = Path(filename).stem
-
-    # Replace spaces and hyphens with underscores
     name = name.replace(' ', '_').replace('-', '_')
-
-    # Keep only alphanumeric and underscore
     name = re.sub(r'[^a-zA-Z0-9_]', '', name)
-
-    # Convert to lowercase
     name = name.lower()
-
-    # If starts with number, prefix with 't_'
     if name and name[0].isdigit():
         name = 't_' + name
-
-    # If empty after sanitization, use default name
     if not name:
         name = 'table_data'
-
-    # Truncate to 63 chars
-    name = name[:63]
-
-    return name
+    return name[:63]
 
 
 def ensure_unique_table_names(filenames: List[str]) -> Dict[str, str]:
-    """
-    Generate unique table names for a list of filenames.
-
-    Returns a dict mapping filename -> table_name.
-    Handles collisions by adding numeric suffixes.
-    """
-    table_names: Dict[str, str] = {}
-    used_names: set = set()
-
+    """Return {filename: table_name} with collision-free names within the list."""
+    result: Dict[str, str] = {}
+    used: set = set()
     for filename in filenames:
-        base_name = sanitize_table_name(filename)
-        final_name = base_name
+        base = sanitize_table_name(filename)
+        final = base
         counter = 1
-
-        while final_name in used_names:
-            final_name = f"{base_name}_{counter}"[:63]
+        while final in used:
+            final = f"{base}_{counter}"[:63]
             counter += 1
-
-        table_names[filename] = final_name
-        used_names.add(final_name)
-
-    return table_names
+        result[filename] = final
+        used.add(final)
+    return result
 
 
-async def process_csv_upload(
+def detect_file_format(filename: str) -> str:
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    return 'parquet' if ext in ('parquet', 'pq') else 'csv'
+
+
+def _open_s3_duckdb() -> duckdb.DuckDBPyConnection:
+    """Open a temporary in-memory DuckDB connection configured for S3 access."""
+    conn = duckdb.connect()
+    conn.execute("INSTALL httpfs; LOAD httpfs;")
+    conn.execute(f"SET s3_region='{OBJECT_STORE_REGION}'")
+    conn.execute(f"SET s3_access_key_id='{OBJECT_STORE_ACCESS_KEY_ID or ''}'")
+    conn.execute(f"SET s3_secret_access_key='{OBJECT_STORE_SECRET_ACCESS_KEY or ''}'")
+    if OBJECT_STORE_ENDPOINT:
+        conn.execute(f"SET s3_endpoint='{OBJECT_STORE_ENDPOINT}'")
+        conn.execute("SET s3_url_style='path'")
+    return conn
+
+
+def _read_file_metadata(
+    conn: duckdb.DuckDBPyConnection,
+    s3_url: str,
+    file_format: str,
+    view_name: str,
+) -> tuple:
+    """Create a temp view and return (row_count, columns)."""
+    if file_format == 'parquet':
+        reader = f"read_parquet('{s3_url}')"
+    else:
+        reader = f"read_csv_auto('{s3_url}')"
+
+    conn.execute(f'CREATE OR REPLACE TEMP VIEW "{view_name}" AS SELECT * FROM {reader}')
+
+    row_count = conn.execute(f'SELECT COUNT(*) FROM "{view_name}"').fetchone()[0]
+
+    # DESCRIBE returns: column_name, column_type, null, key, default, extra
+    cols = conn.execute(f'DESCRIBE "{view_name}"').fetchall()
+    columns = [{"name": c[0], "type": c[1]} for c in cols]
+    return row_count, columns
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+async def process_csv_from_s3(
     company_id: int,
     mode: str,
     connection_name: str,
-    files: List[tuple],  # List of (filename, content_bytes)
-    replace_existing: bool = False
+    files: List[Dict[str, str]],
+    replace_existing: bool = False,
 ) -> Dict[str, Any]:
     """
-    Process uploaded CSV files and create DuckDB database.
+    Validate S3-hosted CSV/Parquet files and collect metadata.
+
+    No local files or DuckDB database files are created.  A temporary
+    in-memory DuckDB is used only to read column names/types and row counts.
+
+    Company isolation: S3 keys are expected to be prefixed with company_id
+    (enforced by the frontend upload-url route).
 
     Args:
-        company_id: Company ID for multi-tenant isolation
-        mode: Mode for isolation (org, tutorial, etc.)
-        connection_name: Name of the connection
-        files: List of (filename, content_bytes) tuples
-        replace_existing: If True, replace existing files; if False, error on existing
+        company_id: Used only for logging/validation; the S3 key already
+                    encodes the company so cross-company access is impossible.
+        mode:       'org' | 'tutorial' etc.
+        connection_name: Name of the CSV connection document.
+        files:      List of {filename, s3_key, schema_name?, file_format?}
+        replace_existing: Ignored (no-op); kept for API compatibility.
 
     Returns:
-        Dict with:
-        - generated_db_path: Relative path to the generated DuckDB file
-        - files: List of file metadata (filename, table_name, row_count, columns)
+        {"files": [{table_name, schema_name, s3_key, file_format,
+                    filename, row_count, columns}]}
     """
-    conn_dir = get_csv_connection_dir(company_id, mode, connection_name)
-    files_dir = conn_dir / "files"
-    db_path = conn_dir / "database.duckdb"
+    if not OBJECT_STORE_BUCKET:
+        raise ValueError(
+            "OBJECT_STORE_BUCKET is not configured. "
+            "Set OBJECT_STORE_BUCKET env var to enable S3-backed CSV connections."
+        )
 
-    # Check if connection directory exists
-    if conn_dir.exists():
-        if replace_existing:
-            # Clear existing files and database
-            if files_dir.exists():
-                shutil.rmtree(files_dir)
-            if db_path.exists():
-                db_path.unlink()
-        else:
-            raise ValueError(f"Connection '{connection_name}' already has data. Use replace_existing=True to overwrite.")
+    # Ensure unique table names within each schema
+    schema_filenames: Dict[str, List[str]] = {}
+    for f in files:
+        schema = f.get('schema_name', 'public') or 'public'
+        schema_filenames.setdefault(schema, []).append(f['filename'])
 
-    # Create directories
-    files_dir.mkdir(parents=True, exist_ok=True)
-
-    # Generate unique table names
-    filenames = [f[0] for f in files]
-    table_names = ensure_unique_table_names(filenames)
-
-    # Save CSV files
-    saved_files = []
-    for filename, content in files:
-        file_path = files_dir / filename
-        with open(file_path, 'wb') as f:
-            f.write(content)
-        saved_files.append({
-            'filename': filename,
-            'table_name': table_names[filename],
-            'file_path': str(file_path)
-        })
-
-    # Create DuckDB database and import CSVs
-    file_metadata = []
-
-    try:
-        conn = duckdb.connect(str(db_path))
-
-        for file_info in saved_files:
-            table_name = file_info['table_name']
-            file_path = file_info['file_path']
-
-            # Create table from CSV using read_csv_auto
-            conn.execute(f"""
-                CREATE TABLE "{table_name}" AS
-                SELECT * FROM read_csv_auto('{file_path}')
-            """)
-
-            # Get row count
-            result = conn.execute(f'SELECT COUNT(*) FROM "{table_name}"').fetchone()
-            row_count = result[0] if result else 0
-
-            # Get column info
-            columns_result = conn.execute(f"""
-                SELECT column_name, data_type
-                FROM information_schema.columns
-                WHERE table_name = '{table_name}'
-                ORDER BY ordinal_position
-            """).fetchall()
-
-            columns = [{"name": col[0], "type": col[1]} for col in columns_result]
-
-            file_metadata.append({
-                "filename": file_info['filename'],
-                "table_name": table_name,
-                "row_count": row_count,
-                "columns": columns
-            })
-
-        conn.close()
-
-    except Exception as e:
-        # Cleanup on error
-        if conn_dir.exists():
-            shutil.rmtree(conn_dir)
-        raise RuntimeError(f"Failed to create DuckDB database: {str(e)}")
-
-    # Generate relative path from BASE_DUCKDB_DATA_PATH
-    relative_db_path = f"data/csv_connections/{company_id}/{mode}/{connection_name}/database.duckdb"
-
-    return {
-        "generated_db_path": relative_db_path,
-        "files": file_metadata
+    schema_table_names: Dict[str, Dict[str, str]] = {
+        schema: ensure_unique_table_names(fnames)
+        for schema, fnames in schema_filenames.items()
     }
 
-
-def delete_csv_connection(company_id: int, mode: str, connection_name: str) -> bool:
-    """
-    Delete a CSV connection's data (files and database).
-
-    Args:
-        company_id: Company ID
-        mode: Mode for isolation
-        connection_name: Connection name
-
-    Returns:
-        True if data was deleted, False if connection didn't exist
-    """
-    conn_dir = get_csv_connection_dir(company_id, mode, connection_name)
-
-    if not conn_dir.exists():
-        return False
-
-    shutil.rmtree(conn_dir)
-    return True
-
-
-def get_csv_connection_info(company_id: int, mode: str, connection_name: str) -> Optional[Dict[str, Any]]:
-    """
-    Get info about an existing CSV connection.
-
-    Returns None if connection doesn't exist.
-    """
-    conn_dir = get_csv_connection_dir(company_id, mode, connection_name)
-    files_dir = conn_dir / "files"
-    db_path = conn_dir / "database.duckdb"
-
-    if not db_path.exists():
-        return None
-
-    # List CSV files
-    csv_files = []
-    if files_dir.exists():
-        csv_files = [f.name for f in files_dir.iterdir() if f.suffix.lower() == '.csv']
-
-    # Get table info from database
+    conn = _open_s3_duckdb()
     file_metadata = []
     try:
-        conn = duckdb.connect(str(db_path), read_only=True)
+        for file_info in files:
+            filename = file_info['filename']
+            s3_key = file_info['s3_key']
+            schema_name = file_info.get('schema_name') or 'public'
+            file_format = file_info.get('file_format') or detect_file_format(filename)
+            table_name = schema_table_names[schema_name][filename]
+            s3_url = f"s3://{OBJECT_STORE_BUCKET}/{s3_key}"
 
-        # Get all tables
-        tables = conn.execute("""
-            SELECT table_name
-            FROM information_schema.tables
-            WHERE table_schema = 'main'
-        """).fetchall()
-
-        for (table_name,) in tables:
-            # Get row count
-            result = conn.execute(f'SELECT COUNT(*) FROM "{table_name}"').fetchone()
-            row_count = result[0] if result else 0
-
-            # Get column info
-            columns_result = conn.execute(f"""
-                SELECT column_name, data_type
-                FROM information_schema.columns
-                WHERE table_name = '{table_name}'
-                ORDER BY ordinal_position
-            """).fetchall()
-
-            columns = [{"name": col[0], "type": col[1]} for col in columns_result]
-
-            # Try to find matching CSV file
-            matching_file = next((f for f in csv_files if sanitize_table_name(f) == table_name), None)
+            # Unique view name to avoid conflicts between iterations
+            view_name = f"_tmp_{schema_name}_{table_name}"
+            row_count, columns = _read_file_metadata(conn, s3_url, file_format, view_name)
 
             file_metadata.append({
-                "filename": matching_file or f"{table_name}.csv",
+                "filename": filename,
                 "table_name": table_name,
+                "schema_name": schema_name,
+                "s3_key": s3_key,
+                "file_format": file_format,
                 "row_count": row_count,
-                "columns": columns
+                "columns": columns,
             })
-
+    finally:
         conn.close()
 
-    except Exception as e:
-        print(f"Error reading CSV connection info: {e}")
-        return None
+    return {"files": file_metadata}
 
-    relative_db_path = f"data/csv_connections/{company_id}/{mode}/{connection_name}/database.duckdb"
 
-    return {
-        "generated_db_path": relative_db_path,
-        "files": file_metadata
-    }
+async def seed_company_tutorial(
+    company_id: int,
+    mode: str,
+    connection_name: str,
+    schema_name: str = "main",
+) -> Dict[str, Any]:
+    """
+    Seed a company's tutorial CSV connection from the local mxfood.duckdb source.
+
+    Reads each table from mxfood.duckdb and writes a Parquet file directly to S3
+    using DuckDB's httpfs extension (no intermediate local files).  Returns the
+    same file-metadata structure as process_csv_from_s3 so the caller can update
+    the connection document directly.
+
+    S3 key layout:
+        {company_id}/csvs/{mode}/{connection_name}/{table_name}.parquet
+
+    No-ops gracefully when:
+      - OBJECT_STORE_BUCKET is not configured
+      - mxfood.duckdb cannot be found
+    """
+    if not OBJECT_STORE_BUCKET:
+        return {"files": [], "skipped": True, "reason": "OBJECT_STORE_BUCKET not configured"}
+
+    mxfood_path = Path(BASE_DUCKDB_DATA_PATH) / "data" / "mxfood.duckdb"
+    if not mxfood_path.exists():
+        return {"files": [], "skipped": True, "reason": f"mxfood.duckdb not found at {mxfood_path}"}
+
+    def _seed_sync() -> Dict[str, Any]:
+        # Open source DuckDB and configure httpfs for S3 writes in one connection.
+        conn = duckdb.connect(str(mxfood_path), read_only=True)
+        try:
+            conn.execute("INSTALL httpfs; LOAD httpfs;")
+            conn.execute(f"SET s3_region='{OBJECT_STORE_REGION}'")
+            conn.execute(f"SET s3_access_key_id='{OBJECT_STORE_ACCESS_KEY_ID or ''}'")
+            conn.execute(f"SET s3_secret_access_key='{OBJECT_STORE_SECRET_ACCESS_KEY or ''}'")
+            if OBJECT_STORE_ENDPOINT:
+                conn.execute(f"SET s3_endpoint='{OBJECT_STORE_ENDPOINT}'")
+                conn.execute("SET s3_url_style='path'")
+
+            tables = [row[0] for row in conn.execute("SHOW TABLES").fetchall()]
+            file_metadata = []
+
+            for table_name in tables:
+                s3_key = f"{company_id}/csvs/{mode}/{connection_name}/{table_name}.parquet"
+                s3_url = f"s3://{OBJECT_STORE_BUCKET}/{s3_key}"
+
+                # Write table to S3 as Parquet directly from the source DuckDB
+                conn.execute(
+                    f"COPY (SELECT * FROM main.\"{table_name}\") "
+                    f"TO '{s3_url}' (FORMAT PARQUET)"
+                )
+
+                # Read metadata back from the newly written Parquet file
+                view_name = f"_seed_{table_name}"
+                row_count, columns = _read_file_metadata(conn, s3_url, "parquet", view_name)
+
+                file_metadata.append({
+                    "filename": f"{table_name}.parquet",
+                    "table_name": table_name,
+                    "schema_name": schema_name,
+                    "s3_key": s3_key,
+                    "file_format": "parquet",
+                    "row_count": row_count,
+                    "columns": columns,
+                })
+        finally:
+            conn.close()
+
+        return {"files": file_metadata}
+
+    # Run the blocking DuckDB work off the event loop
+    return await asyncio.get_event_loop().run_in_executor(None, _seed_sync)

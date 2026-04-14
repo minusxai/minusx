@@ -645,3 +645,4 @@ export function extractCompanyMetadata(initData: InitData): CompanyMetadata[] {
     };
   });
 }
+

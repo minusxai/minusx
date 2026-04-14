@@ -45,6 +45,13 @@ def resolve_duckdb_path(file_path: str) -> str:
 
     return file_path
 
+# Object store (S3-compatible) — shared with frontend OBJECT_STORE_* env vars
+OBJECT_STORE_BUCKET = os.getenv('OBJECT_STORE_BUCKET')
+OBJECT_STORE_REGION = _get_optional(os.getenv('OBJECT_STORE_REGION'), 'us-east-1')
+OBJECT_STORE_ACCESS_KEY_ID = os.getenv('OBJECT_STORE_ACCESS_KEY_ID')
+OBJECT_STORE_SECRET_ACCESS_KEY = os.getenv('OBJECT_STORE_SECRET_ACCESS_KEY')
+OBJECT_STORE_ENDPOINT = os.getenv('OBJECT_STORE_ENDPOINT')  # e.g. http://minio:9000 for MinIO/R2
+
 # API Keys (optional)
 ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')

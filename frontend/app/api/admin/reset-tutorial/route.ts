@@ -16,6 +16,14 @@ import { getAdapter, resetAdapter } from '@/lib/database/adapter/factory';
 import { DEFAULT_STYLES } from '@/lib/branding/whitelabel';
 import { DEFAULT_DB_TYPE } from '@/lib/config';
 import companyTemplate from '@/lib/database/company-template.json';
+import { copySeedMxfoodForCompany } from '@/lib/object-store';
+
+const MXFOOD_TABLES = [
+  'ad_campaigns', 'ad_spend', 'attribution', 'deliveries', 'drivers',
+  'events', 'marketing_channels', 'order_items', 'orders', 'product_categories',
+  'product_subcategories', 'products', 'promo_codes', 'promo_usage', 'restaurants',
+  'subscription_plans', 'support_tickets', 'user_subscriptions', 'users', 'zones',
+];
 
 export const POST = withAuth(async (_request: NextRequest, user) => {
   if (!isAdmin(user.role)) {
@@ -101,6 +109,13 @@ export const POST = withAuth(async (_request: NextRequest, user) => {
 
     // Flush WAL cache so subsequent requests see the new state
     await resetAdapter();
+
+    // Re-copy mxfood seed Parquet files to company-specific S3 prefix — best-effort.
+    copySeedMxfoodForCompany(companyId, 'tutorial', MXFOOD_TABLES).then((copied) => {
+      console.log(`[RESET_TUTORIAL] Re-copied ${copied.length}/${MXFOOD_TABLES.length} mxfood tables for company ${companyId}`);
+    }).catch((err) =>
+      console.warn('[RESET_TUTORIAL] mxfood S3 copy failed (non-fatal):', err)
+    );
 
     return NextResponse.json({
       success: true,

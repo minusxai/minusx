@@ -39,19 +39,13 @@ import Editor from '@monaco-editor/react';
 import { useAppSelector } from '@/store/hooks';
 import ConnectionTablesBrowser from '../ConnectionTablesBrowser';
 import Image from 'next/image';
-import { DuckDBConfig, BigQueryConfig, PostgreSQLConfig, CsvConfig, GoogleSheetsConfig, AthenaConfig } from './connection-configs';
+import { BigQueryConfig, PostgreSQLConfig, CsvConfig, GoogleSheetsConfig, AthenaConfig } from './connection-configs';
 import { cursorBlinkKeyframes } from '@/lib/ui/animations';
 
 const TYPEWRITER_SPEED = 35;
 
 // Connection type metadata for the selection screen
 const CONNECTION_TYPES = [
-  {
-    type: 'duckdb' as const,
-    name: 'DuckDB',
-    logo: '/logos/duckdb.svg',
-    comingSoon: false,
-  },
   {
     type: 'bigquery' as const,
     name: 'BigQuery',
@@ -174,7 +168,7 @@ export default function ConnectionFormV2({
   }, [greeting]);
 
   // Handle type selection from the initial screen
-  const handleTypeSelect = (selectedType: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena') => {
+  const handleTypeSelect = (selectedType: 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena') => {
     handleTypeChange(selectedType);
     setStep('configure');
   };
@@ -298,16 +292,14 @@ export default function ConnectionFormV2({
     }
   };
 
-  const handleTypeChange = (newType: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena') => {
+  const handleTypeChange = (newType: 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena') => {
     // Clear config when switching types
     onChange({
       type: newType,
-      config: newType === 'duckdb'
-        ? { file_path: '' }
-        : newType === 'bigquery'
+      config: newType === 'bigquery'
         ? { project_id: '', service_account_json: '' }
         : newType === 'csv'
-        ? { generated_db_path: '', files: [] }
+        ? { schema_name: 'public', files: [] }
         : newType === 'google-sheets'
         ? { spreadsheet_url: '', spreadsheet_id: '', generated_db_path: '', files: [] }
         : { host: 'localhost', port: 5432, database: '', username: '', password: '' }
@@ -578,7 +570,7 @@ export default function ConnectionFormV2({
               <Box
                 key={connType.type}
                 as="button"
-                onClick={() => !connType.comingSoon && handleTypeSelect(connType.type as 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena')}
+                onClick={() => !connType.comingSoon && handleTypeSelect(connType.type as 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena')}
                 p={6}
                 borderRadius="lg"
                 border="1px solid"
@@ -929,7 +921,7 @@ export default function ConnectionFormV2({
                           py={2}
                           bg={content.type === connType.type ? 'accent.teal/10' : 'transparent'}
                           _hover={{ bg: content.type === connType.type ? 'accent.teal/20' : 'bg.muted' }}
-                          onClick={() => handleTypeChange(connType.type as 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena')}
+                          onClick={() => handleTypeChange(connType.type as 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena')}
                         >
                           <HStack gap={2}>
                             <Box w="20px" h="20px" position="relative" flexShrink={0}>
@@ -953,15 +945,6 @@ export default function ConnectionFormV2({
             )}
           </Box>
         </HStack>
-
-        {/* DuckDB Configuration */}
-        {content.type === 'duckdb' && (
-          <DuckDBConfig
-            config={config}
-            onChange={(newConfig) => onChange({ config: newConfig })}
-            mode={mode}
-          />
-        )}
 
         {/* BigQuery Configuration */}
         {content.type === 'bigquery' && (

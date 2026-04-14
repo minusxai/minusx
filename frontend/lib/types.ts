@@ -833,17 +833,19 @@ export interface TestConnectionResult {
   schema?: DatabaseSchema | null;  // Optional schema returned on successful test
 }
 
-// CSV file metadata stored in CSV connection config
+// CSV / remote-file metadata stored in a CSV connection config
 export interface CsvFileInfo {
   filename: string;
   table_name: string;
+  schema_name: string;         // DuckDB schema, e.g. "public" or "mxfood"
+  s3_key: string;              // S3 object key, company-scoped
+  file_format: 'csv' | 'parquet';
   row_count: number;
   columns: { name: string; type: string }[];
 }
 
-// CSV connection config type
+// CSV connection config — pure S3-backed, no local files
 export interface CsvConnectionConfig {
-  generated_db_path: string;
   files: CsvFileInfo[];
 }
 

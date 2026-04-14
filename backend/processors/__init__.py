@@ -3,10 +3,10 @@ Data processors for importing external data sources.
 """
 
 from .csv_processor import (
-    process_csv_upload,
-    delete_csv_connection,
-    get_csv_connection_info,
-    get_csv_connection_dir,
+    process_csv_from_s3,
+    sanitize_table_name,
+    ensure_unique_table_names,
+    detect_file_format,
 )
 
 from .google_sheets_processor import (
@@ -17,11 +17,11 @@ from .google_sheets_processor import (
 )
 
 __all__ = [
-    # CSV
-    'process_csv_upload',
-    'delete_csv_connection',
-    'get_csv_connection_info',
-    'get_csv_connection_dir',
+    # CSV (S3-backed)
+    'process_csv_from_s3',
+    'sanitize_table_name',
+    'ensure_unique_table_names',
+    'detect_file_format',
     # Google Sheets
     'process_google_sheets_import',
     'delete_google_sheets_connection',

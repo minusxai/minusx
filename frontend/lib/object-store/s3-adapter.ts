@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, CopyObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
   OBJECT_STORE_BUCKET,
@@ -80,5 +80,14 @@ export class S3Adapter implements ObjectStore {
 
   async delete(key: string): Promise<void> {
     await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+  }
+
+  /** Server-side S3 copy — no data transfer through Node.js. */
+  async copyObject(sourceKey: string, destKey: string): Promise<void> {
+    await this.client.send(new CopyObjectCommand({
+      Bucket: this.bucket,
+      CopySource: `${this.bucket}/${sourceKey}`,
+      Key: destKey,
+    }));
   }
 }

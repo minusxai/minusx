@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ConfigDict
@@ -29,7 +29,7 @@ from connection_manager import connection_manager  # noqa: E402
 from connectors import get_async_connector  # noqa: E402
 from pipelines.executor import PipelineExecutor  # noqa: E402
 from pipelines.tap_tester import test_tap  # noqa: E402
-from processors import process_csv_upload, delete_csv_connection  # noqa: E402
+from processors import process_csv_from_s3  # noqa: E402
 from processors import process_google_sheets_import, delete_google_sheets_connection  # noqa: E402
 from sql_utils.limit_enforcer import enforce_query_limit  # noqa: E402
 from sql_utils.validator import validate_sql as validate_sql_syntax  # noqa: E402
@@ -925,13 +925,19 @@ async def test_connector(request: TapTestRequest):
 
 
 # ============================================================================
-# CSV Upload API
+# CSV / Remote-File API
 # ============================================================================
 
-class CsvUploadResponse(BaseModel):
+class CsvRegisterRequest(BaseModel):
+    connection_name: str
+    files: List[dict]   # [{filename, s3_key, schema_name?, file_format?}]
+    replace_existing: bool = False
+
+
+class CsvRegisterResponse(BaseModel):
     success: bool
     message: str
-    config: Optional[dict] = None  # Contains generated_db_path and files metadata
+    config: Optional[dict] = None   # {files: [{table_name, schema_name, s3_key, ...}]}
 
 
 class CsvDeleteResponse(BaseModel):
@@ -939,143 +945,94 @@ class CsvDeleteResponse(BaseModel):
     message: str
 
 
-@app.post("/api/csv/upload", response_model=CsvUploadResponse)
-async def upload_csv_files(
-    request: Request,
-    connection_name: str = Form(...),
-    replace_existing: bool = Form(False),
-    files: List[UploadFile] = File(...)
-):
+@app.post("/api/csv/register", response_model=CsvRegisterResponse)
+async def register_csv_from_s3(request_body: CsvRegisterRequest, request: Request):
     """
-    Upload CSV files and generate a DuckDB database.
+    Register S3-hosted CSV/Parquet files for in-memory DuckDB querying.
 
-    This endpoint:
-    1. Saves uploaded CSV files to data/csv_connections/{company_id}/{mode}/{connection_name}/files/
-    2. Creates a DuckDB database with tables from each CSV
-    3. Returns metadata for storing in the connection config
+    Called after the frontend has uploaded files directly to S3.
+    No local files are created — a temporary in-memory DuckDB reads column/row
+    metadata from S3 at registration time.  The returned config is stored in the
+    connection document and used by the connector to recreate views on demand.
 
-    Args:
-        connection_name: Name for the connection (used as folder name)
-        replace_existing: If True, replace existing files; if False, error on existing
-        files: List of CSV files to upload
-
-    Returns:
-        CsvUploadResponse with generated_db_path and file metadata
+    Company isolation: company_id comes from the x-company-id header set by
+    Next.js after authentication.  S3 keys are already prefixed with company_id
+    (enforced by the upload-url route), so cross-company access is impossible.
     """
     try:
-        # Extract company_id from header
         company_id_header = request.headers.get('x-company-id')
         if not company_id_header:
             raise HTTPException(status_code=400, detail="Missing x-company-id header")
-
         try:
             company_id = int(company_id_header)
         except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid x-company-id header - must be an integer")
+            raise HTTPException(status_code=400, detail="Invalid x-company-id header")
 
-        # Extract mode from header (defaults to 'org' if not provided)
         mode = request.headers.get('x-mode', 'org')
 
-        # Validate files
-        if not files:
-            raise HTTPException(status_code=400, detail="At least one CSV file is required")
+        if not request_body.files:
+            raise HTTPException(status_code=400, detail="At least one file is required")
 
-        # Validate file extensions
-        for file in files:
-            if not file.filename:
-                raise HTTPException(status_code=400, detail="File must have a filename")
-            if not file.filename.lower().endswith('.csv'):
-                raise HTTPException(status_code=400, detail=f"File '{file.filename}' is not a CSV file")
-
-        # Read file contents
-        file_data = []
-        for file in files:
-            content = await file.read()
-            file_data.append((file.filename, content))
-
-        # Process CSV upload
-        result = await process_csv_upload(
+        result = await process_csv_from_s3(
             company_id=company_id,
             mode=mode,
-            connection_name=connection_name,
-            files=file_data,
-            replace_existing=replace_existing
+            connection_name=request_body.connection_name,
+            files=request_body.files,
+            replace_existing=request_body.replace_existing,
         )
 
-        return CsvUploadResponse(
+        n = len(result.get('files', []))
+        return CsvRegisterResponse(
             success=True,
-            message=f"Successfully uploaded {len(files)} CSV file(s)",
-            config=result
+            message=f"Successfully registered {n} file(s)",
+            config=result,
         )
 
-    except ValueError as e:
-        return CsvUploadResponse(
-            success=False,
-            message=str(e),
-            config=None
-        )
-    except RuntimeError as e:
-        return CsvUploadResponse(
-            success=False,
-            message=str(e),
-            config=None
-        )
+    except (ValueError, RuntimeError) as e:
+        return CsvRegisterResponse(success=False, message=str(e), config=None)
     except Exception as e:
-        logger.error(f"CSV upload error: {str(e)}\n{traceback.format_exc()}")
-        return CsvUploadResponse(
+        logger.error(f"CSV register error: {str(e)}\n{traceback.format_exc()}")
+        return CsvRegisterResponse(
             success=False,
-            message=f"Upload failed: {str(e)}",
-            config=None
+            message=f"Registration failed: {str(e)}",
+            config=None,
         )
 
 
 @app.delete("/api/csv/delete/{connection_name}", response_model=CsvDeleteResponse)
 async def delete_csv_data(connection_name: str, request: Request):
     """
-    Delete CSV connection data (files and database).
+    Delete a CSV connection.
 
-    This should be called when deleting a CSV connection to clean up the data files.
-
-    Args:
-        connection_name: Name of the connection to delete data for
-
-    Returns:
-        CsvDeleteResponse indicating success/failure
+    No server-side cleanup needed for S3-backed connections — the connection
+    document is deleted by the frontend (Next.js FilesAPI).  This endpoint
+    exists for completeness and to invalidate the connection manager cache.
     """
     try:
-        # Extract company_id from header
         company_id_header = request.headers.get('x-company-id')
         if not company_id_header:
             raise HTTPException(status_code=400, detail="Missing x-company-id header")
-
         try:
             company_id = int(company_id_header)
         except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid x-company-id header - must be an integer")
+            raise HTTPException(status_code=400, detail="Invalid x-company-id header")
 
-        # Extract mode from header (defaults to 'org' if not provided)
         mode = request.headers.get('x-mode', 'org')
 
-        # Delete the CSV connection data
-        deleted = delete_csv_connection(company_id, mode, connection_name)
+        # Invalidate cached connector so it's rebuilt if connection is re-created
+        cache_key = f"{company_id}:{mode}:{connection_name}"
+        if cache_key in connection_manager._connections:
+            await connection_manager._connections[cache_key].close()
+            del connection_manager._connections[cache_key]
 
-        if deleted:
-            return CsvDeleteResponse(
-                success=True,
-                message=f"Successfully deleted CSV data for connection '{connection_name}'"
-            )
-        else:
-            return CsvDeleteResponse(
-                success=True,
-                message=f"No CSV data found for connection '{connection_name}'"
-            )
+        return CsvDeleteResponse(
+            success=True,
+            message=f"Connection '{connection_name}' removed",
+        )
 
     except Exception as e:
         logger.error(f"CSV delete error: {str(e)}\n{traceback.format_exc()}")
-        return CsvDeleteResponse(
-            success=False,
-            message=f"Delete failed: {str(e)}"
-        )
+        return CsvDeleteResponse(success=False, message=f"Delete failed: {str(e)}")
 
 
 # ============================================================================
