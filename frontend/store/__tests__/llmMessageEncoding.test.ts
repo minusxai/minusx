@@ -467,4 +467,105 @@ describe('LLM Message Encoding', () => {
     // fileState must exactly match app_state (same DB record, no re-encoding)
     expect(parsedReadFiles.files[0].fileState).toEqual((appState as any).state.fileState);
   }, 60000);
+
+  it('ReadFiles maxChars arg truncates query result in tool message', async () => {
+    // Verifies that the maxChars arg flows from the LLM tool call through the frontend
+    // tool handler → compressAugmentedFile → the tool message Python receives.
+    //
+    // The mock sales query returns 2 rows with columns [region, total_sales].
+    // The markdown header alone is ~38 chars, so maxChars: 50 fits 0 data rows → truncated: true.
+    const store = getStore();
+    const mockServer = getLLMMockServer!();
+    const conversationID = -303;
+
+    await mockServer.configure([
+      // Turn 1: call ReadFiles on the fixture question with a tiny maxChars
+      {
+        response: {
+          content: "Let me read the question file.",
+          role: 'assistant',
+          tool_calls: [
+            {
+              id: 'call_maxchars_001',
+              type: 'function',
+              function: {
+                name: 'ReadFiles',
+                arguments: JSON.stringify({ fileIds: [FIXTURE_QUESTION_ID], maxChars: 50 })
+              }
+            }
+          ],
+          finish_reason: 'tool_calls'
+        },
+        usage: { total_tokens: 60, prompt_tokens: 40, completion_tokens: 20 }
+      },
+      // Turn 2: inspect the ReadFiles tool message — queryResults should be truncated
+      {
+        validateRequest: (req) => {
+          const toolMsg = req.messages.find(
+            (m: any) => m.role === 'tool' && m.tool_call_id === 'call_maxchars_001'
+          );
+          expect(toolMsg).toBeDefined();
+
+          // Tool content is a JSON string for text-only ReadFiles results
+          const rawContent = toolMsg!.content;
+          const contentStr = typeof rawContent === 'string'
+            ? rawContent
+            : (Array.isArray(rawContent)
+              ? (rawContent as any[]).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('')
+              : '');
+
+          const parsed = JSON.parse(contentStr);
+          expect(parsed.success).toBe(true);
+          expect(parsed.files).toHaveLength(1);
+
+          // The question runs its query (runQueries: true default) — mockQuerySales
+          // returns 2 rows with columns [region, total_sales].
+          // Header + separator = ~38 chars; first data row = ~28 chars → exceeds maxChars: 50.
+          // So queryResults MUST be present and truncated.
+          const fileResult = parsed.files[0];
+          expect(fileResult.queryResults).toBeDefined();
+          expect(fileResult.queryResults).toHaveLength(1);
+          const qr = fileResult.queryResults[0];
+          expect(qr.data.length).toBeLessThanOrEqual(50);
+          expect(qr.truncated).toBe(true);
+          expect(qr.shownRows).toBe(0);
+          expect(qr.totalRows).toBe(2); // mock returns 2 rows
+
+          return true;
+        },
+        response: {
+          content: 'Got it.',
+          role: 'assistant',
+          tool_calls: [],
+          finish_reason: 'stop'
+        },
+        usage: { total_tokens: 50, prompt_tokens: 40, completion_tokens: 10 }
+      }
+    ]);
+
+    store.dispatch(createConversation({
+      conversationID,
+      agent: 'AnalystAgent',
+      agent_args: {
+        goal: 'Read the question with a small maxChars',
+        connection_id: 'test_connection',
+      }
+    }));
+
+    store.dispatch(sendMessage({ conversationID, message: 'Read the question with a small maxChars' }));
+
+    let realConversationID = conversationID;
+    await waitFor(() => {
+      const tempConv = selectConversation(store.getState() as RootState, conversationID);
+      if (tempConv?.forkedConversationID) {
+        realConversationID = tempConv.forkedConversationID;
+      }
+      const c = selectConversation(store.getState() as RootState, realConversationID);
+      return c?.executionState === 'FINISHED';
+    }, 55000);
+
+    const conv = selectConversation(store.getState() as RootState, realConversationID);
+    expect(conv!.executionState).toBe('FINISHED');
+    expect(conv!.error).toBeUndefined();
+  }, 60000);
 });

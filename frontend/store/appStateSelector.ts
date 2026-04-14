@@ -4,7 +4,7 @@ import type { FileState } from './filesSlice';
 import type { AppState } from '@/lib/appState';
 import { isHiddenSystemPath } from '@/lib/mode/path-resolver';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
-import { compressAugmentedFile } from '@/lib/api/compress-augmented';
+import { compressAugmentedFile, APP_STATE_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { computePathState } from './navigationSlice';
 
 /**
@@ -43,7 +43,7 @@ export const selectAppState = createSelector(
       const [augmented] = selectAugmentedFiles(partialState, [pathState.id]);
       if (!augmented) return { appState: null, loading: true };
       return {
-        appState: { type: 'file', state: compressAugmentedFile(augmented) },
+        appState: { type: 'file', state: compressAugmentedFile(augmented, APP_STATE_LIMIT_CHARS) },
         loading: file.loading || false,
       };
     }
@@ -55,7 +55,7 @@ export const selectAppState = createSelector(
         const [augmented] = selectAugmentedFiles(partialState, [virtualId]);
         if (!augmented) return { appState: null, loading: true };
         return {
-          appState: { type: 'file', state: compressAugmentedFile(augmented) },
+          appState: { type: 'file', state: compressAugmentedFile(augmented, APP_STATE_LIMIT_CHARS) },
           loading: file.loading || false,
         };
       }
@@ -128,7 +128,7 @@ export const selectAppStateWithUI = createSelector(
     if (top?.type === 'create-question') {
       const partialState = { files: { files: filesState }, queryResults: { results: queryResultsMap } } as RootState;
       const [augmented] = selectAugmentedFiles(partialState, [top.virtualFileId]);
-      const virtualFile = augmented ? compressAugmentedFile(augmented).fileState : undefined;
+      const virtualFile = augmented ? compressAugmentedFile(augmented, APP_STATE_LIMIT_CHARS).fileState : undefined;
 
       return {
         appState: {

@@ -15,7 +15,7 @@ import { FilesAPI } from '../data/files';
 import { getRouter } from '@/lib/navigation/use-navigation';
 import { readFiles, editFileStr, buildCurrentFileStr, getQueryResult, createVirtualFile, editFile as editFileOp } from '@/lib/api/file-state';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
-import { compressAugmentedFile } from '@/lib/api/compress-augmented';
+import { compressAugmentedFile, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { validateFileState } from '@/lib/validation/content-validators';
 import { canCreateFileType } from '@/lib/auth/access-rules.client';
 import { selectAppState } from '@/store/appStateSelector';
@@ -370,10 +370,11 @@ registerFrontendTool('ClarifyFrontend', async (args, context) => {
  * model always sees a single flat content layer (no layer reasoning needed).
  */
 registerFrontendTool('ReadFiles', async (args, _context) => {
-  const { fileIds } = args;
+  const { fileIds, maxChars: rawMaxChars, runQueries = true } = args;
+  const maxChars = Math.min(rawMaxChars ?? TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS);
 
-  const result = await readFiles(fileIds, { runQueries: true });
-  const textContent = { success: true, files: result.map(compressAugmentedFile) };
+  const result = await readFiles(fileIds, { runQueries });
+  const textContent = { success: true, files: result.map(f => compressAugmentedFile(f, maxChars)) };
   const imageBlocks = await renderFileChartImageBlocks(result);
   if (imageBlocks.length === 0) {
     return { content: textContent, details: { success: true } };
