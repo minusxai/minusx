@@ -21,6 +21,7 @@ from processors.csv_processor import (
     sanitize_table_name,
     ensure_unique_table_names,
     detect_file_format,
+    delete_csv_connection,
 )
 
 
@@ -86,6 +87,82 @@ class TestDetectFileFormat:
     def test_uppercase_extension(self):
         # Extension comparison is case-insensitive
         assert detect_file_format("DATA.PARQUET") == "parquet"
+
+
+# ---------------------------------------------------------------------------
+# Unit tests — delete_csv_connection (boto3 mocked)
+# ---------------------------------------------------------------------------
+
+class TestDeleteCsvConnection:
+    """Tests for delete_csv_connection — boto3 is mocked throughout."""
+
+    def _make_s3_mock(self, keys: list[str]):
+        """Build a boto3 client mock that returns the given keys from list_objects_v2."""
+        mock_s3 = MagicMock()
+        mock_paginator = MagicMock()
+        mock_s3.get_paginator.return_value = mock_paginator
+        mock_paginator.paginate.return_value = [
+            {"Contents": [{"Key": k} for k in keys]} if keys else {}
+        ]
+        return mock_s3
+
+    def test_deletes_matching_s3_objects(self):
+        """Calls delete_objects with all keys under the connection prefix."""
+        import processors.csv_processor as csv_mod
+
+        keys = ["7/csvs/org/myconn/file1.csv", "7/csvs/org/myconn/file2.csv"]
+        mock_s3 = self._make_s3_mock(keys)
+
+        with patch.object(csv_mod, "OBJECT_STORE_BUCKET", "test-bucket"), \
+             patch("processors.csv_processor.boto3") as mock_boto3:
+            mock_boto3.client.return_value = mock_s3
+            result = delete_csv_connection(company_id=7, mode="org", connection_name="myconn")
+
+        assert result is True
+        mock_s3.delete_objects.assert_called_once_with(
+            Bucket="test-bucket",
+            Delete={"Objects": [{"Key": k} for k in keys]},
+        )
+
+    def test_returns_false_when_no_objects_found(self):
+        """Returns False (not an error) when the prefix has no S3 objects."""
+        import processors.csv_processor as csv_mod
+
+        mock_s3 = self._make_s3_mock([])
+
+        with patch.object(csv_mod, "OBJECT_STORE_BUCKET", "test-bucket"), \
+             patch("processors.csv_processor.boto3") as mock_boto3:
+            mock_boto3.client.return_value = mock_s3
+            result = delete_csv_connection(company_id=7, mode="org", connection_name="myconn")
+
+        assert result is False
+        mock_s3.delete_objects.assert_not_called()
+
+    def test_returns_false_when_bucket_not_configured(self):
+        """Returns False immediately when OBJECT_STORE_BUCKET is not set."""
+        import processors.csv_processor as csv_mod
+
+        with patch.object(csv_mod, "OBJECT_STORE_BUCKET", None), \
+             patch("processors.csv_processor.boto3") as mock_boto3:
+            result = delete_csv_connection(company_id=7, mode="org", connection_name="myconn")
+
+        assert result is False
+        mock_boto3.client.assert_not_called()
+
+    def test_uses_correct_s3_prefix(self):
+        """Paginator is queried with the correct prefix for the connection."""
+        import processors.csv_processor as csv_mod
+
+        mock_s3 = self._make_s3_mock([])
+
+        with patch.object(csv_mod, "OBJECT_STORE_BUCKET", "test-bucket"), \
+             patch("processors.csv_processor.boto3") as mock_boto3:
+            mock_boto3.client.return_value = mock_s3
+            delete_csv_connection(company_id=99, mode="tutorial", connection_name="sales_data")
+
+        mock_paginator = mock_s3.get_paginator.return_value
+        _, paginate_kwargs = mock_paginator.paginate.call_args
+        assert paginate_kwargs.get("Prefix") == "99/csvs/tutorial/sales_data/"
 
 
 # ---------------------------------------------------------------------------

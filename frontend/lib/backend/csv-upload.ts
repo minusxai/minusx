@@ -132,25 +132,3 @@ export async function uploadCsvFilesS3(
   }
 }
 
-/**
- * Notify backend to invalidate the cached connector for a connection.
- * The connection document deletion is handled separately by Next.js FilesAPI.
- */
-export async function deleteCsvData(
-  connectionName: string,
-): Promise<CsvDeleteResult> {
-  try {
-    const res = await fetch(`/api/csv/delete/${encodeURIComponent(connectionName)}`, {
-      method: 'DELETE',
-    });
-    if (!res.ok) {
-      return { success: false, message: `Delete failed: ${await res.text()}` };
-    }
-    return res.json();
-  } catch (error) {
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : 'Delete failed',
-    };
-  }
-}
