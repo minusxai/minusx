@@ -1,5 +1,3 @@
-'use client';
-
 import { ConversationLogEntry } from '@/lib/types';
 import type { DebugMessage } from '@/store/chatSlice';
 

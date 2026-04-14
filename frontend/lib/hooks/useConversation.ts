@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { loadConversation, selectConversation } from '@/store/chatSlice';
-import { parseLogToMessages } from '@/lib/conversations-client';
+import { parseLogToMessages } from '@/lib/conversations-utils';
 import { FilesAPI } from '@/lib/data/files';
 import type { ConversationFileContent, ConversationLogEntry, TaskLogEntry } from '@/lib/types';
 import type { LoadError } from '@/lib/types/errors';

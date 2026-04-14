@@ -1,4 +1,4 @@
-import { extractDebugMessages, parseLogToMessages } from '../conversations-client';
+import { extractDebugMessages, parseLogToMessages } from '../conversations-utils';
 import type { ConversationLogEntry } from '../types';
 
 describe('extractDebugMessages', () => {

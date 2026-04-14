@@ -4,7 +4,7 @@ import {
   getOrCreateConversation,
   appendLogToConversation
 } from '@/lib/conversations';
-import { extractDebugMessages } from '@/lib/conversations-client';
+import { extractDebugMessages } from '@/lib/conversations-utils';
 import { ToolCall, ConversationLogEntry } from '@/lib/types';
 import type { DebugMessage } from '@/store/chatSlice';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';

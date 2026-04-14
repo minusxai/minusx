@@ -6,7 +6,7 @@ import {
   appendLogToConversation
 } from '@/lib/conversations';
 import { ToolCall, ConversationLogEntry } from '@/lib/types';
-import { extractDebugMessages } from '@/lib/conversations-client';
+import { extractDebugMessages } from '@/lib/conversations-utils';
 import type { DebugMessage } from '@/store/chatSlice';
 import {
   ChatRequest,

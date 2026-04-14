@@ -35,7 +35,7 @@ import {
 } from '../chatSlice';
 import type { RootState } from '../store';
 import { POST as chatPostHandler } from '@/app/api/chat/route';
-import { parseLogToMessages } from '@/lib/conversations-client';
+import { parseLogToMessages } from '@/lib/conversations-utils';
 import type { ConversationFile } from '@/lib/conversations';
 import {
   waitFor,
