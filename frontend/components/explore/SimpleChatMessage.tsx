@@ -14,6 +14,7 @@ import { parseThinkingAnswer } from '@/lib/utils/xml-parser';
 import { MessageWithFlags } from './message/messageHelpers';
 import { LuChevronRight, LuChevronDown, LuPencil, LuCheck, LuX } from 'react-icons/lu';
 import { editAndForkMessage } from '@/store/chatSlice';
+import { selectShowDebug } from '@/store/uiSlice';
 
 
 interface ChatMessageProps {
@@ -28,6 +29,7 @@ interface ChatMessageProps {
 
 const SimpleChatMessage = React.memo(function SimpleChatMessage({ message, databaseName, isCompact = false, showThinking = false, toggleShowThinking, markdownContext = 'mainpage', conversationID }: ChatMessageProps) {
   const dispatch = useAppDispatch();
+  const showDebug = useAppSelector(selectShowDebug);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState('');
   const [isHovered, setIsHovered] = useState(false);
@@ -54,7 +56,7 @@ const SimpleChatMessage = React.memo(function SimpleChatMessage({ message, datab
   if (isUser) {
     const userMsg = message as import('@/store/chatSlice').UserMessage;
     const imageAttachments = userMsg.attachments?.filter(a => a.type === 'image' && !a.metadata?.auto) ?? [];
-    const canEdit = conversationID !== undefined && userMsg.logIndex !== undefined;
+    const canEdit = showDebug && conversationID !== undefined && userMsg.logIndex !== undefined;
 
     const handleEditConfirm = () => {
       if (!editText.trim() || conversationID === undefined || userMsg.logIndex === undefined) return;

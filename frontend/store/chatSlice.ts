@@ -128,6 +128,7 @@ const chatSlice = createSlice({
           role: 'user',
           content: message,
           created_at: new Date().toISOString(),
+          logIndex: 0,  // First message always lands at log index 0
           ...(attachments?.length ? { attachments } : {}),
         });
       }
@@ -181,6 +182,7 @@ const chatSlice = createSlice({
         role: 'user',
         content: message,
         created_at: new Date().toISOString(),
+        logIndex: conv.log_index ?? 0,
         ...(attachments?.length ? { attachments } : {}),
       });
       conv.executionState = 'WAITING';
