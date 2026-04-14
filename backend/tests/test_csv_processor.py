@@ -219,6 +219,29 @@ async def test_process_csv_from_s3_default_schema_is_public():
 
 
 @pytest.mark.asyncio
+async def test_process_csv_from_s3_user_provided_name_clashes_with_auto_gen():
+    """Raises ValueError when a user-provided table_name collides with an auto-generated name in the same schema."""
+    import processors.csv_processor as csv_mod
+
+    # 'products.csv' auto-generates to 'products'; user provides 'products' for the second file — collision
+    files_input = [
+        {"filename": "products.csv", "s3_key": "1/products.csv", "schema_name": "public"},
+        {"filename": "other.csv",    "s3_key": "1/other.csv",    "schema_name": "public", "table_name": "products"},
+    ]
+
+    with patch.object(csv_mod, "OBJECT_STORE_BUCKET", FAKE_BUCKET), \
+         patch.object(csv_mod, "_open_s3_duckdb", side_effect=_mock_open_s3_duckdb), \
+         patch.object(csv_mod, "_read_file_metadata", return_value=STUB_METADATA):
+        with pytest.raises(ValueError, match="products"):
+            await csv_mod.process_csv_from_s3(
+                company_id=1,
+                mode="org",
+                connection_name="conn",
+                files=files_input,
+            )
+
+
+@pytest.mark.asyncio
 async def test_process_csv_from_s3_user_provided_table_name():
     """User-provided table_name in file record is used instead of auto-generating from filename."""
     import processors.csv_processor as csv_mod
@@ -392,3 +415,47 @@ class TestProcessGoogleSheetsImportS3:
                 f"S3 key '{s3_key}' does not start with '42/csvs/org/gs_conn/'"
             )
             assert s3_key.endswith(".csv"), f"S3 key '{s3_key}' should end with .csv"
+
+    @pytest.mark.asyncio
+    async def test_replace_existing_deletes_old_s3_files_before_reimport(self, gs_mod):
+        """When replace_existing=True, delete_google_sheets_connection is called before uploading new files."""
+        xlsx_bytes = _make_fake_xlsx_bytes()
+        stub_csv_result = {"files": []}
+
+        with patch.object(gs_mod, "OBJECT_STORE_BUCKET", FAKE_GS_BUCKET), \
+             patch.object(gs_mod, "download_xlsx", return_value=xlsx_bytes), \
+             patch.object(gs_mod, "_upload_bytes_to_s3", return_value=None), \
+             patch.object(gs_mod, "process_csv_from_s3", return_value=stub_csv_result), \
+             patch.object(gs_mod, "delete_google_sheets_connection", return_value=True) as mock_delete:
+            await gs_mod.process_google_sheets_import_s3(
+                company_id=5,
+                mode="org",
+                connection_name="gs_conn",
+                spreadsheet_url=FAKE_SPREADSHEET_URL,
+                schema_name="public",
+                replace_existing=True,
+            )
+
+        mock_delete.assert_called_once_with(5, "org", "gs_conn")
+
+    @pytest.mark.asyncio
+    async def test_replace_existing_false_does_not_delete(self, gs_mod):
+        """When replace_existing=False (default), delete_google_sheets_connection is NOT called."""
+        xlsx_bytes = _make_fake_xlsx_bytes()
+        stub_csv_result = {"files": []}
+
+        with patch.object(gs_mod, "OBJECT_STORE_BUCKET", FAKE_GS_BUCKET), \
+             patch.object(gs_mod, "download_xlsx", return_value=xlsx_bytes), \
+             patch.object(gs_mod, "_upload_bytes_to_s3", return_value=None), \
+             patch.object(gs_mod, "process_csv_from_s3", return_value=stub_csv_result), \
+             patch.object(gs_mod, "delete_google_sheets_connection", return_value=True) as mock_delete:
+            await gs_mod.process_google_sheets_import_s3(
+                company_id=5,
+                mode="org",
+                connection_name="gs_conn",
+                spreadsheet_url=FAKE_SPREADSHEET_URL,
+                schema_name="public",
+                replace_existing=False,
+            )
+
+        mock_delete.assert_not_called()

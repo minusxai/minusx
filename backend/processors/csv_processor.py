@@ -16,6 +16,7 @@ import asyncio
 from pathlib import Path
 from typing import List, Dict, Any
 
+import boto3
 import duckdb
 from config import (
     BASE_DUCKDB_DATA_PATH,
@@ -158,13 +159,11 @@ async def process_csv_from_s3(
         for schema, fnames in auto_gen_schema_filenames.items()
     }
 
-    # Validate user-provided names for uniqueness within each schema
+    # Validate user-provided names: unique within each schema, no collision with auto-gen names
     user_provided: Dict[str, set] = {}
     for f in files:
         if f.get('table_name'):
             schema = f.get('schema_name', 'public') or 'public'
-            t = sanitize_table_name(f['table_name'] + '.x')  # sanitize user input
-            # Re-sanitize: user provided bare name (no extension), strip nothing
             t = sanitize_table_name(f['table_name'])
             user_provided.setdefault(schema, set())
             if t in user_provided[schema]:
@@ -173,6 +172,16 @@ async def process_csv_from_s3(
                     "Please use unique table names."
                 )
             user_provided[schema].add(t)
+
+    # Cross-check: user-provided names must not collide with auto-generated names
+    for schema, auto_names_map in schema_table_names.items():
+        auto_names = set(auto_names_map.values())
+        for t in user_provided.get(schema, set()):
+            if t in auto_names:
+                raise ValueError(
+                    f"Table name '{t}' in schema '{schema}' conflicts with an "
+                    "auto-generated name. Please rename the file or provide a unique table name."
+                )
 
     conn = _open_s3_duckdb()
     file_metadata = []
@@ -206,6 +215,43 @@ async def process_csv_from_s3(
         conn.close()
 
     return {"files": file_metadata}
+
+
+def delete_csv_connection(company_id: int, mode: str, connection_name: str) -> bool:
+    """
+    Delete a CSV connection's S3 data.
+
+    Lists and deletes all objects under the connection's S3 prefix.
+    Returns True if any objects were deleted, False if none were found.
+    """
+    if not OBJECT_STORE_BUCKET:
+        return False
+
+    kwargs: Dict[str, Any] = dict(
+        region_name=OBJECT_STORE_REGION,
+        aws_access_key_id=OBJECT_STORE_ACCESS_KEY_ID or None,
+        aws_secret_access_key=OBJECT_STORE_SECRET_ACCESS_KEY or None,
+    )
+    if OBJECT_STORE_ENDPOINT:
+        kwargs['endpoint_url'] = OBJECT_STORE_ENDPOINT
+
+    s3 = boto3.client('s3', **kwargs)
+    prefix = f"{company_id}/csvs/{mode}/{connection_name}/"
+
+    paginator = s3.get_paginator('list_objects_v2')
+    keys_to_delete = []
+    for page in paginator.paginate(Bucket=OBJECT_STORE_BUCKET, Prefix=prefix):
+        for obj in page.get('Contents', []):
+            keys_to_delete.append({'Key': obj['Key']})
+
+    if not keys_to_delete:
+        return False
+
+    s3.delete_objects(
+        Bucket=OBJECT_STORE_BUCKET,
+        Delete={'Objects': keys_to_delete},
+    )
+    return True
 
 
 async def seed_company_tutorial(

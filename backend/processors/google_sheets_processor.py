@@ -165,6 +165,13 @@ async def process_google_sheets_import_s3(
     spreadsheet_id = parse_spreadsheet_id(spreadsheet_url)
     print(f"[Google Sheets] Processing spreadsheet: {spreadsheet_id}")
 
+    # Delete old S3 files before re-importing so orphaned files don't accumulate
+    if replace_existing:
+        deleted = await asyncio.to_thread(
+            delete_google_sheets_connection, company_id, mode, connection_name
+        )
+        print(f"[Google Sheets] Pre-import cleanup: {'deleted old S3 files' if deleted else 'no existing files found'}")
+
     print("[Google Sheets] Downloading spreadsheet...")
     xlsx_bytes = await download_xlsx(spreadsheet_id)
     print(f"[Google Sheets] Downloaded {len(xlsx_bytes)} bytes")

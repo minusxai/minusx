@@ -29,7 +29,7 @@ from connection_manager import connection_manager  # noqa: E402
 from connectors import get_async_connector  # noqa: E402
 from pipelines.executor import PipelineExecutor  # noqa: E402
 from pipelines.tap_tester import test_tap  # noqa: E402
-from processors import process_csv_from_s3  # noqa: E402
+from processors import process_csv_from_s3, delete_csv_connection  # noqa: E402
 from processors import process_google_sheets_import_s3, delete_google_sheets_connection  # noqa: E402
 from sql_utils.limit_enforcer import enforce_query_limit  # noqa: E402
 from sql_utils.validator import validate_sql as validate_sql_syntax  # noqa: E402
@@ -1002,11 +1002,7 @@ async def register_csv_from_s3(request_body: CsvRegisterRequest, request: Reques
 @app.delete("/api/csv/delete/{connection_name}", response_model=CsvDeleteResponse)
 async def delete_csv_data(connection_name: str, request: Request):
     """
-    Delete a CSV connection.
-
-    No server-side cleanup needed for S3-backed connections — the connection
-    document is deleted by the frontend (Next.js FilesAPI).  This endpoint
-    exists for completeness and to invalidate the connection manager cache.
+    Delete a CSV connection: invalidate cache and remove S3 files.
     """
     try:
         company_id_header = request.headers.get('x-company-id')
@@ -1024,6 +1020,12 @@ async def delete_csv_data(connection_name: str, request: Request):
         if cache_key in connection_manager._connections:
             await connection_manager._connections[cache_key].close()
             del connection_manager._connections[cache_key]
+
+        # Delete S3 files for this connection
+        deleted = await asyncio.to_thread(
+            delete_csv_connection, company_id, mode, connection_name
+        )
+        logger.info(f"CSV delete: S3 cleanup {'performed' if deleted else 'skipped (no files or no bucket)'} for {connection_name}")
 
         return CsvDeleteResponse(
             success=True,
