@@ -298,7 +298,14 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
 
     const content = conn.content as ConnectionContent;
 
-    // Initialize if not already initialized
+    // Node-handled types (duckdb, csv, google-sheets): test via Node.js connector directly.
+    // Never route these to Python — DuckDB lock conflicts would occur.
+    const nodeConnector = getNodeConnector(name, content.type, content.config);
+    if (nodeConnector) {
+      return nodeConnector.testConnection(false);
+    }
+
+    // Python-only types (bigquery, postgresql, athena): initialize then test on Python.
     try {
       await initializeConnectionOnPython(name, content.type, content.config);
     } catch (error) {

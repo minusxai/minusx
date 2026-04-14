@@ -94,8 +94,9 @@ class QueryResponse(BaseModel):
 
 
 class ConnectionInitialize(BaseModel):
-    type: str  # 'duckdb' | 'bigquery'
+    type: str  # 'bigquery' | 'postgresql' | 'athena' (Node-handled types rejected at endpoint level)
     config: dict
+    session_token: Optional[str] = None  # Injected by pythonBackendFetch; ignored here (kept for forward compat)
 
 
 class TestConnectionRequest(BaseModel):
@@ -151,6 +152,12 @@ class TapTestResponse(BaseModel):
     success: bool
     message: str
     details: Optional[dict] = None
+
+
+# Connection types whose schema and query execution is owned by Node.js.
+# Python must NOT create connectors or open DuckDB files for these types.
+# All Python endpoints that accept a connection type guard against this set.
+NODE_HANDLED_TYPES: frozenset[str] = frozenset({'csv', 'google-sheets', 'duckdb'})
 
 
 @app.on_event("startup")
@@ -444,18 +451,32 @@ async def execute_sql_query(query_request: QueryRequest, request: Request):
 
 @app.post("/api/connections/{name}/initialize")
 async def initialize_connection(name: str, conn: ConnectionInitialize, request: Request):
-    """Initialize a connection in-memory (called by Next.js)"""
+    """
+    Initialize a connection in-memory (called by Next.js for Python-only types).
+
+    Node-handled types (duckdb, csv, google-sheets) are managed exclusively by
+    Node.js — this endpoint must never be called for them. Returns 422 if it is.
+    """
     try:
-        connector = get_async_connector(name, conn.type, conn.config)
         print(f"[Connection Init] Initializing connection '{name}' of type '{conn.type}'")
-        validation = connector.validate_config()
-        if not validation['valid']:
-            raise HTTPException(status_code=400, detail=validation['errors'])
+
+        # Node-handled types belong in Node.js — never initialize them in Python
+        if conn.type in NODE_HANDLED_TYPES:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Connection type '{conn.type}' is handled by Node.js, not Python."
+            )
 
         # Use company_id + mode in cache key for multi-tenant isolation
         company_id_header = request.headers.get('x-company-id')
         company_id = int(company_id_header) if company_id_header else None
         mode = request.headers.get('x-mode', 'org')
+
+        connector = get_async_connector(name, conn.type, conn.config)
+        validation = connector.validate_config()
+        if not validation['valid']:
+            raise HTTPException(status_code=400, detail=validation['errors'])
+
         cache_key = connection_manager._cache_key(name, company_id, mode)
         connection_manager._connections[cache_key] = connector
 
@@ -511,8 +532,22 @@ async def test_connection(req: TestConnectionRequest):
     - Always tests the provided config (allows testing unsaved changes)
     - name is optional and used only for display/logging purposes
     - include_schema: Optionally fetch schema (default: False for performance)
+
+    Node-handled types (duckdb, csv, google-sheets) are rejected here — Node.js
+    tests those connections directly without going through Python.
     """
     try:
+        # Node-handled types must be tested by Node.js, not Python
+        if req.type in NODE_HANDLED_TYPES:
+            return {
+                "success": False,
+                "message": (
+                    f"Connection type '{req.type}' is handled by Node.js. "
+                    "Test this connection from the Node.js side."
+                ),
+                "schema": None,
+            }
+
         # Always use the provided config for testing
         # This allows testing edited configs before saving
         connector = get_async_connector(
@@ -564,11 +599,21 @@ async def test_connection(req: TestConnectionRequest):
 @app.post("/api/connections/{name}/schema")
 async def get_connection_schema(name: str, conn: ConnectionInitialize):
     """
-    Get database schema using provided connection config.
-    Creates a temporary connector to fetch schema without caching.
+    Get database schema using provided connection config (Python-only types).
+
+    Node-handled types (duckdb, csv, google-sheets) are never routed here —
+    Node.js fetches their schema via getNodeConnector() directly. Returns 422
+    if one arrives so the caller gets a clear routing-bug signal.
     """
     try:
-        # Create connector directly from provided config
+        # Node-handled types should never reach this endpoint
+        if conn.type in NODE_HANDLED_TYPES:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Connection type '{conn.type}' is handled by Node.js, not Python."
+            )
+
+        # All other types: use Python connector directly
         connector = get_async_connector(name, conn.type, conn.config)
 
         # Validate config

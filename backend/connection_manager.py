@@ -4,6 +4,10 @@ import httpx
 from connectors.base import AsyncDatabaseConnector
 from config import NEXTJS_URL
 
+# Connection types owned entirely by Node.js.
+# Python must never open engines for these — the guard below enforces this.
+_NODE_HANDLED_TYPES: frozenset[str] = frozenset({'csv', 'google-sheets', 'duckdb'})
+
 
 class ConnectionManager:
     """Manages database connections in-memory (stateless)"""
@@ -102,6 +106,15 @@ class ConnectionManager:
 
         conn_type = connection_data['type']
         config = connection_data['config']
+
+        # Node-handled types (duckdb, csv, google-sheets) must never reach Python's
+        # query engine. Node.js routes these directly; if Python receives one it means
+        # routing is broken — raise clearly instead of opening a conflicting DuckDB file.
+        if conn_type in _NODE_HANDLED_TYPES:
+            raise ValueError(
+                f"Connection '{name}' (type: '{conn_type}') is handled by Node.js. "
+                "Python must not execute queries for this connection type."
+            )
 
         # Import here to avoid circular dependency
         from connectors import get_async_connector  # noqa: PLC0415
