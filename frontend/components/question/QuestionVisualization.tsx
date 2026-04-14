@@ -44,7 +44,7 @@ interface QuestionVisualizationProps {
   onYRightColsChange?: (yRightCols: string[]) => void;
   onTooltipColsChange?: (cols: string[]) => void;
   onPivotConfigChange?: (config: PivotConfig) => void;
-  onGeoConfigChange?: (config: import('@/lib/types.gen').GeoConfig) => void;
+  onGeoConfigChange?: (config: import('@/lib/types').GeoConfig) => void;
   onColumnFormatsChange?: (formats: Record<string, ColumnFormatConfig>) => void;
   onStyleConfigChange?: (config: VisualizationStyleConfig) => void;
   onAxisConfigChange?: (config: import('@/lib/types').AxisConfig) => void;

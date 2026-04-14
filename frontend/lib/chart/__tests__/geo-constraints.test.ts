@@ -1,5 +1,5 @@
 import { getGeoConstraintError } from '@/lib/chart/geo-constraints'
-import type { GeoConfig } from '@/lib/types.gen'
+import type { GeoConfig } from '@/lib/types'
 
 const columns = ['state', 'revenue', 'lat', 'lng', 'lat2', 'lng2', 'intensity']
 

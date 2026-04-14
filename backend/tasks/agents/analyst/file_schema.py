@@ -35,18 +35,56 @@ class GeoSubType(str, Enum):
     LINES = "lines"
     HEATMAP = "heatmap"
 
-class GeoConfig(BaseModel):
-    """Configuration for geo map visualization."""
-    subType: GeoSubType = Field(..., description="geo visualization sub-type")
-    mapName: Optional[str] = Field(None, description="base map name: 'world', 'us-states', 'india-states' (for choropleth)")
-    regionCol: Optional[str] = Field(None, description="column matching GeoJSON feature names (choropleth)")
-    valueCol: Optional[str] = Field(None, description="numeric value column (color for choropleth, size for bubble)")
+
+# -- Shared base for all geo sub-types --
+class GeoConfigBase(BaseModel):
+    """Fields shared across all geo sub-types."""
+    mapName: Optional[str] = Field(None, description="base GeoJSON map: 'world', 'us-states', 'india-states'")
+    showTiles: Optional[bool] = Field(False, description="toggle OpenStreetMap tile layer")
+    pinnedCenter: Optional[List[float]] = Field(None, description="pinned map center as [lat, lng]")
+    pinnedZoom: Optional[int] = Field(None, description="pinned map zoom level")
+
+
+class ChoroplethConfig(GeoConfigBase):
+    """Choropleth — color-filled regions by value."""
+    subType: Literal["choropleth"] = Field(..., description="geo visualization sub-type")
+    regionCol: Optional[str] = Field(None, description="column matching GeoJSON feature names")
+    valueCol: Optional[str] = Field(None, description="numeric value column for fill color")
+    colorScale: Optional[str] = Field(None, description="color scale: 'green' (default), 'blue', 'red-yellow-green'")
+
+
+class PointsConfig(GeoConfigBase):
+    """Points — lat/lng markers with optional bubble sizing."""
+    subType: Literal["points"] = Field(..., description="geo visualization sub-type")
     latCol: Optional[str] = Field(None, description="latitude column")
     lngCol: Optional[str] = Field(None, description="longitude column")
-    latCol2: Optional[str] = Field(None, description="destination latitude (lines only)")
-    lngCol2: Optional[str] = Field(None, description="destination longitude (lines only)")
-    showTiles: Optional[bool] = Field(False, description="toggle tile layer on/off")
-    colorScale: Optional[str] = Field(None, description="choropleth color scale: 'green' (default), 'blue', 'red-yellow-green'")
+    valueCol: Optional[str] = Field(None, description="numeric value column for bubble sizing (optional)")
+    minRadius: Optional[int] = Field(None, description="minimum circle radius in pixels (default 5, range 1-20)")
+    radiusScale: Optional[float] = Field(None, description="radius multiplier (default 1, e.g. 2 = double size)")
+
+
+class LinesConfig(GeoConfigBase):
+    """Lines — arc lines between origin/destination coordinate pairs."""
+    subType: Literal["lines"] = Field(..., description="geo visualization sub-type")
+    latCol: Optional[str] = Field(None, description="origin latitude column")
+    lngCol: Optional[str] = Field(None, description="origin longitude column")
+    latCol2: Optional[str] = Field(None, description="destination latitude column")
+    lngCol2: Optional[str] = Field(None, description="destination longitude column")
+
+
+class HeatmapConfig(GeoConfigBase):
+    """Heatmap — density heatmap with optional intensity weighting."""
+    subType: Literal["heatmap"] = Field(..., description="geo visualization sub-type")
+    latCol: Optional[str] = Field(None, description="latitude column")
+    lngCol: Optional[str] = Field(None, description="longitude column")
+    valueCol: Optional[str] = Field(None, description="numeric intensity column (optional, defaults to 1)")
+    colorScale: Optional[str] = Field(None, description="color scale: 'green' (default), 'blue', 'red-yellow-green'")
+
+
+GeoConfig = Annotated[
+    Union[ChoroplethConfig, PointsConfig, LinesConfig, HeatmapConfig],
+    Field(discriminator="subType"),
+]
 
 class AggregationFunction(str, Enum):
     SUM = "SUM"

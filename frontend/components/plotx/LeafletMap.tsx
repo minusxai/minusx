@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect, useMemo } from 'react'
+import { useRef, useEffect, useMemo, useImperativeHandle, forwardRef } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { debounce } from 'lodash'
@@ -28,11 +28,15 @@ interface LeafletMapProps {
   style?: React.CSSProperties
 }
 
+export interface LeafletMapHandle {
+  getView: () => { center: [number, number]; zoom: number } | null
+}
+
 /**
  * Ref-based Leaflet wrapper for React 19.
  * Manages map lifecycle, resize, and tile/data layer updates.
  */
-export function LeafletMap({
+export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function LeafletMap({
   layers,
   center = [20, 0],
   zoom = 2,
@@ -40,11 +44,20 @@ export function LeafletMap({
   colorMode,
   fitBounds,
   style = { width: '100%', height: '100%', minHeight: '300px' },
-}: LeafletMapProps) {
+}, ref) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const tileLayerRef = useRef<L.TileLayer | null>(null)
   const dataLayerGroupRef = useRef<L.LayerGroup | null>(null)
+
+  useImperativeHandle(ref, () => ({
+    getView: () => {
+      const map = mapRef.current
+      if (!map) return null
+      const c = map.getCenter()
+      return { center: [c.lat, c.lng] as [number, number], zoom: map.getZoom() }
+    },
+  }))
 
   const debouncedResize = useMemo(
     () =>
@@ -168,4 +181,4 @@ export function LeafletMap({
       <div ref={containerRef} style={{ ...style, background: MAP_BG[colorMode] }} />
     </>
   )
-}
+})

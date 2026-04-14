@@ -3,15 +3,17 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import L from 'leaflet'
 import 'leaflet.heat'
-import { LeafletMap } from './LeafletMap'
+import { LeafletMap, type LeafletMapHandle } from './LeafletMap'
 import { ChartError } from './ChartError'
 import { loadGeoJSON, MAP_DEFAULTS, type MapName } from '@/lib/chart/geo-data'
 import { getColorScale, getRadiusScale, getHeatGradient, GEO_MARKER_COLOR, GEO_MARKER_COLOR_DARK } from '@/lib/chart/geo-color-scale'
 import { formatNumber, applyPrefixSuffix } from '@/lib/chart/chart-utils'
 import { getGeoConstraintError } from '@/lib/chart/geo-constraints'
 import { useAppSelector } from '@/store/hooks'
-import type { GeoConfig, ColumnFormatConfig } from '@/lib/types.gen'
+import type { GeoConfig, ColumnFormatConfig } from '@/lib/types'
 import type { FeatureCollection } from 'geojson'
+
+export type GetMapView = () => { center: [number, number]; zoom: number } | null
 
 interface GeoPlotProps {
   rows: Record<string, unknown>[]
@@ -21,6 +23,7 @@ interface GeoPlotProps {
   markerColor?: string
   height?: number | string
   columnFormats?: Record<string, ColumnFormatConfig>
+  onMapReady?: (getView: GetMapView) => void
 }
 
 /** Border colors: close to white in dark, close to black in light */
@@ -104,11 +107,19 @@ function greatCircleArc(lat1: number, lng1: number, lat2: number, lng2: number, 
   return points
 }
 
-export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColor, height, columnFormats = {} }: GeoPlotProps) {
+export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColor, height, columnFormats = {}, onMapReady }: GeoPlotProps) {
   const colorMode = useAppSelector((state) => state.ui.colorMode) as 'light' | 'dark'
   const [geoJsonData, setGeoJsonData] = useState<FeatureCollection | null>(null)
   const [geoJsonError, setGeoJsonError] = useState<string | null>(null)
   const selectedLayerRef = useRef<L.Layer | null>(null)
+  const mapRef = useRef<LeafletMapHandle>(null)
+
+  // Expose getView to parent via callback
+  useEffect(() => {
+    if (mapRef.current && onMapReady) {
+      onMapReady(() => mapRef.current?.getView() ?? null)
+    }
+  }) // runs after every render to catch map init
 
   // Validate config
   const constraint = getGeoConstraintError(geoConfig, columns)
@@ -323,9 +334,11 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColo
           const lng = Number(row[geoConfig.lngCol])
           if (isNaN(lat) || isNaN(lng)) continue
 
+          const effectiveMinRadius = geoConfig.minRadius ?? 5
+          const effectiveScale = geoConfig.radiusScale ?? 1
           const radius = hasBubble
-            ? getRadiusScale(Number(row[geoConfig.valueCol!]), min, max)
-            : 5
+            ? getRadiusScale(Number(row[geoConfig.valueCol!]), min, max, effectiveMinRadius, effectiveScale)
+            : effectiveMinRadius * effectiveScale
 
           const marker = L.circleMarker([lat, lng], {
             radius,
@@ -467,14 +480,19 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColo
     ? MAP_DEFAULTS[geoConfig.mapName as MapName]
     : undefined
 
+  // Pinned view overrides map defaults and fitBounds
+  const pinnedCenter = geoConfig.pinnedCenter as [number, number] | undefined
+  const pinnedZoom = geoConfig.pinnedZoom ?? undefined
+
   return (
     <LeafletMap
+      ref={mapRef}
       layers={layers}
-      center={mapDefaults?.center}
-      zoom={mapDefaults?.zoom}
+      center={pinnedCenter ?? mapDefaults?.center}
+      zoom={pinnedZoom ?? mapDefaults?.zoom}
       showTiles={geoConfig.showTiles ?? false}
       colorMode={colorMode}
-      fitBounds={bounds}
+      fitBounds={pinnedCenter ? undefined : bounds}
       style={{ width: '100%', height: height ?? '100%', minHeight: '300px' }}
     />
   )

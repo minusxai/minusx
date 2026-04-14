@@ -123,4 +123,40 @@ describe('getRadiusScale', () => {
   it('clamps values above max', () => {
     expect(getRadiusScale(200, 0, 100)).toBe(30)
   })
+
+  it('uses custom minRadius when provided', () => {
+    expect(getRadiusScale(0, 0, 100, 10)).toBe(10)
+  })
+
+  it('uses custom minRadius for min===max fallback', () => {
+    expect(getRadiusScale(50, 50, 50, 10)).toBe(10)
+  })
+
+  it('scales between custom minRadius and MAX_RADIUS', () => {
+    const r = getRadiusScale(100, 0, 100, 10)
+    expect(r).toBe(30) // max radius unchanged
+  })
+
+  it('interpolates correctly with custom minRadius', () => {
+    // midpoint with minRadius=10: 10 + (30-10)*0.5 = 20
+    expect(getRadiusScale(50, 0, 100, 10)).toBe(20)
+  })
+
+  it('scale=2 doubles all radii', () => {
+    // base at midpoint: 4 + 26*0.5 = 17, scaled: 17*2 = 34
+    expect(getRadiusScale(50, 0, 100, undefined, 2)).toBe(34)
+  })
+
+  it('scale=1 is same as default', () => {
+    expect(getRadiusScale(50, 0, 100, undefined, 1)).toBe(getRadiusScale(50, 0, 100))
+  })
+
+  it('scale applies to min value too', () => {
+    // min radius 4 * scale 3 = 12
+    expect(getRadiusScale(0, 0, 100, undefined, 3)).toBe(12)
+  })
+
+  it('scale applies to min===max fallback', () => {
+    expect(getRadiusScale(50, 50, 50, 10, 2)).toBe(20)
+  })
 })

@@ -211,21 +211,61 @@ export type Ytitle = string | null;
  */
 export type Dualaxis = boolean | null;
 /**
- * geo visualization sub-type
+ * geo map configuration (only used when type is 'geo')
  */
-export type GeoSubType = "choropleth" | "points" | "lines" | "heatmap";
+export type Geoconfig = (ChoroplethConfig | PointsConfig | LinesConfig | HeatmapConfig) | null;
 /**
- * base map name: 'world', 'us-states', 'india-states' (for choropleth)
+ * base GeoJSON map: 'world', 'us-states', 'india-states'
  */
 export type Mapname = string | null;
 /**
- * column matching GeoJSON feature names (choropleth)
+ * toggle OpenStreetMap tile layer
+ */
+export type Showtiles = boolean | null;
+/**
+ * pinned map center as [lat, lng]
+ */
+export type Pinnedcenter = number[] | null;
+/**
+ * pinned map zoom level
+ */
+export type Pinnedzoom = number | null;
+/**
+ * geo visualization sub-type
+ */
+export type Subtype = "choropleth";
+/**
+ * column matching GeoJSON feature names
  */
 export type Regioncol = string | null;
 /**
- * numeric value column (color for choropleth, size for bubble)
+ * numeric value column for fill color
  */
 export type Valuecol = string | null;
+/**
+ * color scale: 'green' (default), 'blue', 'red-yellow-green'
+ */
+export type Colorscale = string | null;
+/**
+ * base GeoJSON map: 'world', 'us-states', 'india-states'
+ */
+export type Mapname1 = string | null;
+/**
+ * toggle OpenStreetMap tile layer
+ */
+export type Showtiles1 = boolean | null;
+/**
+ * pinned map center as [lat, lng]
+ */
+export type Pinnedcenter1 = number[] | null;
+/**
+ * pinned map zoom level
+ */
+export type Pinnedzoom1 = number | null;
+/**
+ * geo visualization sub-type
+ */
+export type Subtype1 = "points";
 /**
  * latitude column
  */
@@ -235,21 +275,89 @@ export type Latcol = string | null;
  */
 export type Lngcol = string | null;
 /**
- * destination latitude (lines only)
+ * numeric value column for bubble sizing (optional)
+ */
+export type Valuecol1 = string | null;
+/**
+ * minimum circle radius in pixels (default 5, range 1-20)
+ */
+export type Minradius = number | null;
+/**
+ * radius multiplier (default 1, e.g. 2 = double size)
+ */
+export type Radiusscale = number | null;
+/**
+ * base GeoJSON map: 'world', 'us-states', 'india-states'
+ */
+export type Mapname2 = string | null;
+/**
+ * toggle OpenStreetMap tile layer
+ */
+export type Showtiles2 = boolean | null;
+/**
+ * pinned map center as [lat, lng]
+ */
+export type Pinnedcenter2 = number[] | null;
+/**
+ * pinned map zoom level
+ */
+export type Pinnedzoom2 = number | null;
+/**
+ * geo visualization sub-type
+ */
+export type Subtype2 = "lines";
+/**
+ * origin latitude column
+ */
+export type Latcol1 = string | null;
+/**
+ * origin longitude column
+ */
+export type Lngcol1 = string | null;
+/**
+ * destination latitude column
  */
 export type Latcol2 = string | null;
 /**
- * destination longitude (lines only)
+ * destination longitude column
  */
 export type Lngcol2 = string | null;
 /**
- * toggle tile layer on/off
+ * base GeoJSON map: 'world', 'us-states', 'india-states'
  */
-export type Showtiles = boolean | null;
+export type Mapname3 = string | null;
 /**
- * choropleth color scale: 'green' (default), 'blue', 'red-yellow-green'
+ * toggle OpenStreetMap tile layer
  */
-export type Colorscale = string | null;
+export type Showtiles3 = boolean | null;
+/**
+ * pinned map center as [lat, lng]
+ */
+export type Pinnedcenter3 = number[] | null;
+/**
+ * pinned map zoom level
+ */
+export type Pinnedzoom3 = number | null;
+/**
+ * geo visualization sub-type
+ */
+export type Subtype3 = "heatmap";
+/**
+ * latitude column
+ */
+export type Latcol3 = string | null;
+/**
+ * longitude column
+ */
+export type Lngcol3 = string | null;
+/**
+ * numeric intensity column (optional, defaults to 1)
+ */
+export type Valuecol2 = string | null;
+/**
+ * color scale: 'green' (default), 'blue', 'red-yellow-green'
+ */
+export type Colorscale1 = string | null;
 export type Parameters = QuestionParameter[] | null;
 export type Name2 = string;
 export type ParameterType = "text" | "number" | "date";
@@ -344,10 +452,7 @@ export interface VizSettings {
    * axis configuration for scale type (linear or log). Only set when user explicitly requests log scale.
    */
   axisConfig?: AxisConfig | null;
-  /**
-   * geo map configuration (only used when type is 'geo')
-   */
-  geoConfig?: GeoConfig | null;
+  geoConfig?: Geoconfig;
 }
 /**
  * Configuration for pivot table visualization.
@@ -429,19 +534,60 @@ export interface AxisConfig {
   dualAxis?: Dualaxis;
 }
 /**
- * Configuration for geo map visualization.
+ * Choropleth — color-filled regions by value.
  */
-export interface GeoConfig {
-  subType: GeoSubType;
+export interface ChoroplethConfig {
   mapName?: Mapname;
+  showTiles?: Showtiles;
+  pinnedCenter?: Pinnedcenter;
+  pinnedZoom?: Pinnedzoom;
+  subType: Subtype;
   regionCol?: Regioncol;
   valueCol?: Valuecol;
+  colorScale?: Colorscale;
+}
+/**
+ * Points — lat/lng markers with optional bubble sizing.
+ */
+export interface PointsConfig {
+  mapName?: Mapname1;
+  showTiles?: Showtiles1;
+  pinnedCenter?: Pinnedcenter1;
+  pinnedZoom?: Pinnedzoom1;
+  subType: Subtype1;
   latCol?: Latcol;
   lngCol?: Lngcol;
+  valueCol?: Valuecol1;
+  minRadius?: Minradius;
+  radiusScale?: Radiusscale;
+}
+/**
+ * Lines — arc lines between origin/destination coordinate pairs.
+ */
+export interface LinesConfig {
+  mapName?: Mapname2;
+  showTiles?: Showtiles2;
+  pinnedCenter?: Pinnedcenter2;
+  pinnedZoom?: Pinnedzoom2;
+  subType: Subtype2;
+  latCol?: Latcol1;
+  lngCol?: Lngcol1;
   latCol2?: Latcol2;
   lngCol2?: Lngcol2;
-  showTiles?: Showtiles;
-  colorScale?: Colorscale;
+}
+/**
+ * Heatmap — density heatmap with optional intensity weighting.
+ */
+export interface HeatmapConfig {
+  mapName?: Mapname3;
+  showTiles?: Showtiles3;
+  pinnedCenter?: Pinnedcenter3;
+  pinnedZoom?: Pinnedzoom3;
+  subType: Subtype3;
+  latCol?: Latcol3;
+  lngCol?: Lngcol3;
+  valueCol?: Valuecol2;
+  colorScale?: Colorscale1;
 }
 export interface QuestionParameter {
   name: Name2;
