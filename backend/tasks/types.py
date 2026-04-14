@@ -44,8 +44,8 @@ class ChatCompletionAssistantMessageParamMX(ChatCompletionAssistantMessageParam)
 
 
 class ChatCompletionToolMessageParamMX(ChatCompletionToolMessageParam):
-    """Extended tool message param that allows dict content."""
-    content: Required[Union[str, dict]]
+    """Extended tool message param that allows dict or list content."""
+    content: Required[Union[str, dict, list]]
     """The contents of the tool message."""
 
     role: Required[Literal["tool"]]
@@ -63,7 +63,7 @@ CompletedToolCallsMX = List[Tuple[ChatCompletionMessageToolCallParamMX, ChatComp
 
 class ChatCompletionToolMessageParamMXWithRunId(TypedDict, total=False):
     """Complete tool call representation with both call and response information."""
-    content: Required[Union[str, dict]]
+    content: Required[Union[str, dict, list]]
     """The contents of the tool message."""
 
     role: Required[Literal["tool"]]

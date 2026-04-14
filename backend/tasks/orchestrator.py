@@ -65,7 +65,7 @@ class TaskResult(BaseModel):
 
     type_: Literal["task_result"] = Field(default="task_result", alias="_type")
     task_unique_id: str = Field(alias="_task_unique_id")
-    result: Optional[Union[dict, str]] = None
+    result: Optional[Union[dict, str, list]] = None
     details: Optional[dict] = None
     created_at: str  # ISO timestamp
 
@@ -101,7 +101,7 @@ class CompressedTask:
         self.unique_id = unique_id
         self.debug = TaskDebug()
         self.child_unique_ids: List[List[str]] = []
-        self.result: Optional[Union[dict, str]] = None
+        self.result: Optional[Union[dict, str, list]] = None
 
 
 # ============================================================================
@@ -175,7 +175,7 @@ class CompressedConversationLog:
         if orchestrator and orchestrator.onToolCreated:
             orchestrator.onToolCreated(task)
 
-    def assign_result(self, task_unique_id: str, result: Union[dict, str], orchestrator: Optional['Orchestrator'] = None):
+    def assign_result(self, task_unique_id: str, result: Union[dict, str, list], orchestrator: Optional['Orchestrator'] = None):
         """Update task result AND append TaskResult to log."""
         self.tasks[task_unique_id].result = result
 
