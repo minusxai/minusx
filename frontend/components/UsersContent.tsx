@@ -103,7 +103,7 @@ export default function UsersContent() {
         name: formData.name,
         role: formData.role,
         home_folder: formData.home_folder,
-        phone: formData.phone || undefined,
+        phone: formData.phone || null,
         state: JSON.stringify({ twofa_phone_otp_enabled: formData.twofa_phone_otp_enabled }),
       };
 

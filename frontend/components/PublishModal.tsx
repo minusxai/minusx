@@ -32,7 +32,7 @@ import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import FileView from '@/components/FileView';
 import { publishAll, publishFile, clearFileChanges } from '@/lib/api/file-state';
 import { setDashboardEditMode, setFileEditMode } from '@/store/uiSlice';
-import { selectFile, selectMergedContent, selectIsDirty, selectEffectiveName } from '@/store/filesSlice';
+import { selectFile, selectMergedContent, selectIsDirty, selectEffectiveName, removeVirtualFile } from '@/store/filesSlice';
 import type { FileState } from '@/store/filesSlice';
 import { extractReferencesFromContent } from '@/lib/data/helpers/extract-references';
 import type { FileType } from '@/lib/ui/file-metadata';
@@ -214,17 +214,32 @@ export default function PublishModal({ isOpen, onClose }: PublishModalProps) {
 
   const handleDiscardFile = useCallback((fileId: number) => {
     const file = dirtyFiles.find(f => f.id === fileId);
-    clearFileChanges({ fileId });
+    if (fileId < 0) {
+      // Virtual file: remove from Redux entirely (clearFileChanges leaves it dirty forever)
+      dispatch(removeVirtualFile(fileId));
+    } else {
+      clearFileChanges({ fileId });
+    }
     exitEditMode(fileId, file?.type);
-  }, [dirtyFiles, exitEditMode]);
+  }, [dirtyFiles, exitEditMode, dispatch]);
 
   const handleDiscardAll = useCallback(() => {
     const filesToDiscard = [...dirtyFiles];
+    // Clear real files first — this reverts dashboard persistableChanges, removing
+    // any references to virtual question IDs before we delete those virtual files.
     for (const file of filesToDiscard) {
-      clearFileChanges({ fileId: file.id });
-      exitEditMode(file.id, file.type);
+      if (file.id >= 0) {
+        clearFileChanges({ fileId: file.id });
+        exitEditMode(file.id, file.type);
+      }
     }
-  }, [dirtyFiles, exitEditMode]);
+    // Now remove virtual files from Redux entirely.
+    for (const file of filesToDiscard) {
+      if (file.id < 0) {
+        dispatch(removeVirtualFile(file.id));
+      }
+    }
+  }, [dirtyFiles, exitEditMode, dispatch]);
 
   const handlePublishAll = useCallback(async () => {
     setIsPublishing(true);
