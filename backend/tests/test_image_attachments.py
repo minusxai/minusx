@@ -102,13 +102,17 @@ def test_user_message_with_image_passes_litellm_validation():
     assert validated is not None
 
 
-def test_user_message_without_images_is_plain_string():
-    """No images → content stays a plain string (no unnecessary wrapping)."""
+def test_user_message_without_images_is_multi_block():
+    """No images → content is a 2-block list: app context + goal."""
     agent = make_agent([
         {"type": "text", "name": "doc.txt", "content": "some text", "metadata": {}},
     ])
     user_msg = agent._get_user_message()
-    assert isinstance(user_msg["content"], str)
+    assert isinstance(user_msg["content"], list)
+    assert len(user_msg["content"]) == 2
+    assert all(b["type"] == "text" for b in user_msg["content"])
+    assert "<AppState>" in user_msg["content"][0]["text"]
+    assert user_msg["content"][1]["text"] == "Describe what you see in the image."
 
 
 def test_user_message_mixed_attachments_passes_litellm_validation():
@@ -121,10 +125,12 @@ def test_user_message_mixed_attachments_passes_litellm_validation():
     user_msg = agent._get_user_message()
     assert isinstance(user_msg["content"], list)
 
-    # Text block first, image block after
+    # context text block, goal text block, then image block
+    assert len(user_msg["content"]) == 3
     types = [block["type"] for block in user_msg["content"]]
     assert types[0] == "text"
-    assert "image_url" in types
+    assert types[1] == "text"
+    assert types[2] == "image_url"
 
     messages = [{"role": "system", "content": "system"}, user_msg]
     validate_and_fix_openai_messages(messages)  # must not raise

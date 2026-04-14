@@ -1656,13 +1656,13 @@ async def debug_prompt_breakdown(request: PromptBreakdownRequest):
         user_breakdown = _render_breakdown(prompt_id, variables)
         user_msg = agent._get_user_message()
         raw_content = user_msg['content']
-        text_content = next((b['text'] for b in raw_content if b.get('type') == 'text'), '') \
+        text_content = '\n'.join(b['text'] for b in raw_content if b.get('type') == 'text') \
             if isinstance(raw_content, list) else raw_content
         user_breakdown['total_tokens'] = count_tokens(text_content)
     else:
         user_msg = agent._get_user_message()
         raw_content = user_msg['content']
-        text_content = next((b['text'] for b in raw_content if b.get('type') == 'text'), '') \
+        text_content = '\n'.join(b['text'] for b in raw_content if b.get('type') == 'text') \
             if isinstance(raw_content, list) else raw_content
         user_breakdown = {'total_chars': len(text_content), 'total_tokens': count_tokens(text_content), 'sections': {}}
 
