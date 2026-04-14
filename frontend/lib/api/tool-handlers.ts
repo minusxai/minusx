@@ -139,6 +139,7 @@ export async function executeToolCall(
 async function renderFileChartImageBlocks(
   files: AugmentedFile[],
 ): Promise<{ type: 'image_url'; image_url: { url: string } }[]> {
+  if (typeof document === 'undefined') return [];
   const colorMode: 'light' | 'dark' =
     document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
 

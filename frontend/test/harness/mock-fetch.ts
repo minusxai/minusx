@@ -18,11 +18,14 @@ export const commonInterceptors = {
         ok: true,
         status: 200,
         json: async () => ({
-          columns: ['region', 'total_sales'],
-          rows: [
-            { region: 'Southwest', total_sales: 27150594.59 },
-            { region: 'Canada', total_sales: 18398929.19 }
-          ]
+          data: {
+            columns: ['region', 'total_sales'],
+            types: ['text', 'number'],
+            rows: [
+              { region: 'Southwest', total_sales: 27150594.59 },
+              { region: 'Canada', total_sales: 18398929.19 }
+            ]
+          }
         })
       } as Response;
     }
