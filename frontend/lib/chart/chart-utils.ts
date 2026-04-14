@@ -219,32 +219,55 @@ export const applyPrefixSuffix = (formatted: string, prefix?: string | null, suf
   return `${prefix ?? ''}${formatted}${suffix ?? ''}`
 }
 
-// Format date string according to named format
+// Legacy named formats → pattern mapping (for data saved before pattern-based format)
+const LEGACY_DATE_FORMATS: Record<string, string> = {
+  'iso': 'yyyy-MM-dd',
+  'us': 'MM/dd/yyyy',
+  'short': 'MMM dd, yyyy',
+  'month-year': "MMM'yy",
+  'year': 'yyyy',
+}
+
+// Date format presets — value is a Unicode date pattern (date-fns/Intl convention)
 export const DATE_FORMAT_OPTIONS = [
-  { value: 'iso', label: '2024-01-15' },
-  { value: 'us', label: '01/15/2024' },
-  { value: 'short', label: 'Jan 15, 2024' },
-  { value: 'month-year', label: "Jan'24" },
-  { value: 'year', label: '2024' },
+  { value: 'yyyy-MM-dd', label: '2024-01-15' },
+  { value: 'MM/dd/yyyy', label: '01/15/2024' },
+  { value: 'dd/MM/yyyy', label: '15/01/2024' },
+  { value: 'MMM dd, yyyy', label: 'Jan 15, 2024' },
+  { value: 'dd-MMM', label: '15-Jan' },
+  { value: "MMM'yy", label: "Jan'24" }
 ] as const
 
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const FULL_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+/** Format a date string using a Unicode date pattern (yyyy, MM, dd, HH, mm, ss, MMM, MMMM). */
 export const formatDateValue = (dateStr: string, format: string): string => {
   const d = new Date(dateStr)
   if (isNaN(d.getTime())) return dateStr
 
-  const pad = (n: number) => n.toString().padStart(2, '0')
-  const month = d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })
-  const day = d.getUTCDate()
-  const year = d.getUTCFullYear()
+  // Resolve legacy named formats
+  const pattern = LEGACY_DATE_FORMATS[format] ?? format
 
-  switch (format) {
-    case 'iso': return `${year}-${pad(d.getUTCMonth() + 1)}-${pad(day)}`
-    case 'us': return `${pad(d.getUTCMonth() + 1)}/${pad(day)}/${year}`
-    case 'short': return `${month} ${day}, ${year}`
-    case 'month-year': return `${month}'${(year % 100).toString().padStart(2, '0')}`
-    case 'year': return `${year}`
-    default: return dateStr
-  }
+  const pad = (n: number) => n.toString().padStart(2, '0')
+  const year = d.getUTCFullYear()
+  const month0 = d.getUTCMonth()
+  const day = d.getUTCDate()
+  const hours = d.getUTCHours()
+  const minutes = d.getUTCMinutes()
+  const seconds = d.getUTCSeconds()
+
+  // Replace tokens longest-first to avoid partial matches (e.g. MMMM before MMM before MM)
+  return pattern
+    .replace('yyyy', String(year))
+    .replace('yy', pad(year % 100))
+    .replace('MMMM', FULL_MONTHS[month0])
+    .replace('MMM', SHORT_MONTHS[month0])
+    .replace('MM', pad(month0 + 1))
+    .replace('dd', pad(day))
+    .replace('HH', pad(hours))
+    .replace('mm', pad(minutes))
+    .replace('ss', pad(seconds))
 }
 
 // Resolve format configs for chart axes (shared by PiePlot, FunnelPlot, and buildChartOption)
@@ -1718,7 +1741,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
             if (items.length === 0) return ''
             const raw = items[0].axisValueLabel
             const isDate = /^\d{4}-\d{2}-\d{2}/.test(raw)
-            const header = xDateFormat ? formatDateValue(raw, xDateFormat) : isDate ? formatDateValue(raw, 'short') : raw
+            const header = xDateFormat ? formatDateValue(raw, xDateFormat) : isDate ? formatDateValue(raw, 'MMM dd, yyyy') : raw
             const nonZeroItems = items.filter((p: any) => typeof p.value === 'number' ? p.value !== 0 : true)
             const rows = nonZeroItems.map((p: any) => {
               // Resolve per-series format config: use column name stripped of axis indicator

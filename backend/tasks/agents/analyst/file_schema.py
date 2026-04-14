@@ -145,7 +145,7 @@ class ColumnFormatConfig(BaseModel):
     """Per-column display formatting. Only set when the user explicitly asks to change formatting."""
     alias: Optional[str] = Field(None, description="display name override for the column header")
     decimalPoints: Optional[int] = Field(None, description="number of decimal places (0-4) for numeric columns")
-    dateFormat: Optional[str] = Field(None, description="date display format: 'iso', 'us', 'eu', 'short', 'month-year', or 'year'")
+    dateFormat: Optional[str] = Field(None, description="date display format as a Unicode date pattern, e.g. 'yyyy-MM-dd', 'MM/dd/yyyy', 'dd/MM/yyyy', 'MMM dd, yyyy', \"MMM'yy\", 'yyyy', 'yyyy-MM-dd HH:mm', 'HH:mm:ss'. Tokens: yyyy (4-digit year), yy (2-digit year), MMMM (full month), MMM (short month), MM (month number), dd (day), HH (hours 24h), mm (minutes), ss (seconds).")
     prefix: Optional[str] = Field(None, description="string to prepend to displayed values (e.g. '$', '€')")
     suffix: Optional[str] = Field(None, description="string to append to displayed values (e.g. '%', ' units', 'k')")
 

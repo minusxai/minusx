@@ -59,7 +59,7 @@ export const TrendPlot = ({ series, columnFormats, yAxisColumns, xAxisColumns }:
     .find(Boolean)
   const fmtLabel = (name: string) => {
     if (xDateFormat) return formatDateValue(name, xDateFormat)
-    if (/^\d{4}-\d{2}-\d{2}/.test(name)) return formatDateValue(name, 'short')
+    if (/^\d{4}-\d{2}-\d{2}/.test(name)) return formatDateValue(name, 'MMM dd, yyyy')
     return name
   }
 
