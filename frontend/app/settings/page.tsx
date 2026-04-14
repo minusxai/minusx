@@ -45,7 +45,7 @@ interface TabEntry {
   custom?: ReactNode;
 }
 
-function SettingRow({ title, description, control }: { title: string; description: string; control: ReactNode }) {
+function SettingRow({ title, description, control, section }: { title: string; description: string; control: ReactNode; section: string }) {
   return (
     <Flex
       justify="space-between"
@@ -54,6 +54,7 @@ function SettingRow({ title, description, control }: { title: string; descriptio
       px={6}
       _hover={{ bg: 'bg.subtle' }}
       transition="all 0.15s ease"
+      aria-label={`Settings > ${section} > ${title}`}
     >
       <Box flex="1" mr={4}>
         <Text fontSize="sm" fontWeight="medium" fontFamily="mono" mb={1}>
@@ -445,7 +446,7 @@ function SettingsContent() {
       <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
         <VStack align="stretch" gap={0} divideY="1px">
           {tabSettings.map((s) => (
-            <SettingRow key={s.title} title={s.title} description={s.description} control={s.control} />
+            <SettingRow key={s.title} title={s.title} description={s.description} control={s.control} section={tab.label} />
           ))}
         </VStack>
       </Box>
@@ -477,14 +478,14 @@ function SettingsContent() {
         >
           <Tabs.List mb={6}>
             {visibleTabs.map((tab) => (
-              <Tabs.Trigger key={tab.id} value={tab.id} fontFamily="mono" fontSize="sm">
+              <Tabs.Trigger key={tab.id} value={tab.id} fontFamily="mono" fontSize="sm" aria-label={`Settings tab: ${tab.label}`}>
                 {tab.label}
               </Tabs.Trigger>
             ))}
           </Tabs.List>
 
           {visibleTabs.map((tab) => (
-            <Tabs.Content key={tab.id} value={tab.id}>
+            <Tabs.Content key={tab.id} value={tab.id} aria-label={`Settings section: ${tab.label}`}>
               {renderTabContent(tab)}
             </Tabs.Content>
           ))}
