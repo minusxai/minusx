@@ -23,10 +23,14 @@ const nextConfig: NextConfig = {
   // Enable standalone output for optimized Docker deployments (60% smaller images)
   output: 'standalone',
 
-  // Exclude heavy client-side packages from server bundle
-  // This prevents DuckDB WASM from being compiled during API route builds
-  // 'duckdb' is the native Node.js DuckDB package used for server-side analytics
-  serverExternalPackages: ['@duckdb/duckdb-wasm', 'duckdb', '@duckdb/node-api', '@duckdb/node-bindings', '@resvg/resvg-js'],
+  // Exclude heavy packages from the server bundle — they are loaded from node_modules
+  // at runtime instead of being compiled into server chunks by Turbopack.
+  // '@duckdb/duckdb-wasm'  — browser WASM, should never be in server bundle
+  // 'duckdb' / '@duckdb/node-api' — native Node.js DuckDB, can't be bundled
+  // '@resvg/resvg-js'      — native SVG renderer
+  // 'node-sql-parser'      — pure-JS but 5.2 MB compiled; server-only (API routes + MCP),
+  //                          so making it external cuts 5 MB from the server chunk graph
+  serverExternalPackages: ['@duckdb/duckdb-wasm', 'duckdb', '@duckdb/node-api', '@duckdb/node-bindings', '@resvg/resvg-js', 'node-sql-parser'],
 
   // Belt-and-suspenders: explicitly externalize duckdb in webpack config too.
   // serverExternalPackages handles Turbopack; this handles webpack (used in --no-turbopack builds).
@@ -40,6 +44,13 @@ const nextConfig: NextConfig = {
   turbopack: {},
 
   experimental: {
+    // Cache fetch() responses in Server Components across HMR refreshes.
+    // Without this, every code change during development re-fetches from the remote
+    // Postgres DB (AWS RDS us-west-1), adding ~50–100 ms latency per SSR call and
+    // causing the 17–29 s compile+render times seen in the dev logs.
+    // This is a dev-only optimization; production builds are unaffected.
+    serverComponentsHmrCache: true,
+
     // Enable optimized package imports to reduce bundle size
     optimizePackageImports: ['@chakra-ui/react', 'react-icons', 'echarts'],
 
