@@ -311,15 +311,21 @@ const chatSlice = createSlice({
 
       // If forked, create new conversation (keep old one)
       if (newConversationID && newConversationID !== conversationID) {
+        const existingRealConversation = state.conversations[newConversationID];
+        const mergedQueuedMessages = [
+          ...(existingRealConversation?.queuedMessages || []),
+          ...(conv.queuedMessages || []),
+        ];
+
         // Create new conversation at new ID (preserve _id for stable tracking)
         state.conversations[newConversationID] = {
           ...conv,
-          _id: conv._id,  // IMPORTANT: Preserve stable _id across fork
+          ...existingRealConversation,
+          _id: existingRealConversation?._id || conv._id,  // IMPORTANT: Preserve stable _id across fork
           conversationID: newConversationID,
-          // streamedCompletedToolCalls: conv.streamedCompletedToolCalls || [],
-          streamedCompletedToolCalls: [],
-        streamedThinking: '',
-          queuedMessages: conv.queuedMessages || [],
+          streamedCompletedToolCalls: existingRealConversation?.streamedCompletedToolCalls || [],
+          streamedThinking: existingRealConversation?.streamedThinking || '',
+          queuedMessages: mergedQueuedMessages,
           forkedConversationID: undefined // Real conversations don't have this
         };
 
