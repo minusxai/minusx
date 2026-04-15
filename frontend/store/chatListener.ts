@@ -929,18 +929,17 @@ chatListenerMiddleware.startListening({
 
 /**
  * Listen for conversation finishing with queued messages → auto-send them
- * (Handles the case where conversation finishes without going through completeToolCall,
- * e.g., when the agent responds directly without tool calls)
+ * Fires on both updateConversation (conversation just finished) and queueMessage
+ * (message queued while conversation already finished).
  */
 chatListenerMiddleware.startListening({
-  actionCreator: updateConversation,
-  effect: async (action, listenerApi) => {
+  matcher: isAnyOf(updateConversation, queueMessage),
+  effect: async (action: any, listenerApi) => {
     const state = listenerApi.getState() as RootState;
-    // Use newConversationID if forked, otherwise original
+    // Use newConversationID if forked (updateConversation), otherwise conversationID
     const effectiveId = action.payload.newConversationID || action.payload.conversationID;
     const conversation = selectConversation(state, effectiveId);
 
-    console.log('[FINISHED listener]', { effectiveId, state: conversation?.executionState, queued: conversation?.queuedMessages?.length, wasInterrupted: conversation?.wasInterrupted });
     if (!conversation || conversation.executionState !== 'FINISHED') return;
     if (!conversation.queuedMessages || conversation.queuedMessages.length === 0) return;
 
