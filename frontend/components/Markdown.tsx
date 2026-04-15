@@ -4,12 +4,14 @@ import { Box, Text } from '@chakra-ui/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Link from 'next/link';
-import { LuChartColumnIncreasing, LuChevronDown, LuCircleHelp, LuFilePlus2, LuRocket, LuShieldCheck, LuShieldAlert, LuShieldQuestion } from 'react-icons/lu';
+import { LuChartColumnIncreasing, LuChevronDown, LuCircleHelp, LuFilePlus2, LuRocket, LuShieldCheck, LuShieldAlert, LuShieldQuestion, LuSparkles } from 'react-icons/lu';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import { FileType } from '@/lib/types';
 import { ReactNode, useCallback, useMemo, useState } from 'react';
 import { useAppSelector } from '@/store/hooks';
 import { useConfigs } from '@/lib/hooks/useConfigs';
+import { selectEffectiveUser } from '@/store/authSlice';
+import { isViewer } from '@/lib/auth/role-helpers';
 import { ReportQueryResult, QuestionContent } from '@/lib/types';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
 
@@ -107,6 +109,148 @@ function LinkButton({ href, icon, children, bg = 'accent.primary' }: {
   );
 }
 
+// --- XML block parsing helpers ---
+
+interface ParsedTrustInfo {
+  level: 'high' | 'medium' | 'low';
+  reasons: string[];
+}
+
+function parseSuggestedQuestions(xml: string): string[] {
+  const questions: string[] = [];
+  const re = /<question>([\s\S]*?)<\/question>/g;
+  let m;
+  while ((m = re.exec(xml)) !== null) {
+    const q = m[1].trim();
+    if (q) questions.push(q);
+  }
+  return questions;
+}
+
+function parseTrustInfo(xml: string): ParsedTrustInfo | null {
+  const levelMatch = xml.match(/level="(high|medium|low)"/);
+  if (!levelMatch) return null;
+
+  const reasons: string[] = [];
+  const reasonRe = /<reason>([\s\S]*?)<\/reason>/g;
+  let m;
+  while ((m = reasonRe.exec(xml)) !== null) {
+    const r = m[1].trim();
+    if (r) reasons.push(r);
+  }
+
+  return { level: levelMatch[1] as 'high' | 'medium' | 'low', reasons };
+}
+
+type ContentPart =
+  | { type: 'text'; content: string }
+  | { type: 'query'; content: string }
+  | { type: 'trust_legacy'; content: string }
+  | { type: 'suggested_questions'; questions: string[] }
+  | { type: 'trust_info'; info: ParsedTrustInfo };
+
+/**
+ * Parse content string into parts, extracting XML blocks and legacy patterns.
+ * Incomplete XML blocks (no closing tag yet — streaming) are stripped from output.
+ */
+function parseContentParts(text: string, queries?: Record<string, ReportQueryResult>): ContentPart[] {
+  // Combined pattern: completed XML blocks + legacy patterns
+  // Order matters: XML blocks first (greedy), then legacy patterns
+  const xmlBlockPattern = /(?:<suggested_questions>([\s\S]*?)<\/suggested_questions>|<trust_info\s([\s\S]*?)<\/trust_info>|\{\{(query):([^}]+)\}\}|\[\[(trust):([^\]]+)\]\])/g;
+
+  const parts: ContentPart[] = [];
+  let lastIndex = 0;
+  let match;
+
+  while ((match = xmlBlockPattern.exec(text)) !== null) {
+    // Add text before this match
+    if (match.index > lastIndex) {
+      parts.push({ type: 'text', content: text.slice(lastIndex, match.index) });
+    }
+
+    if (match[1] !== undefined) {
+      // <suggested_questions>...</suggested_questions>
+      const questions = parseSuggestedQuestions(match[0]);
+      if (questions.length > 0) {
+        parts.push({ type: 'suggested_questions', questions });
+      }
+    } else if (match[2] !== undefined) {
+      // <trust_info ...>...</trust_info>
+      const info = parseTrustInfo(match[0]);
+      if (info) {
+        parts.push({ type: 'trust_info', info });
+      }
+    } else if (match[3] === 'query') {
+      // {{query:id}}
+      parts.push({ type: 'query', content: match[4] });
+    } else if (match[5] === 'trust') {
+      // [[trust:level]] — legacy
+      parts.push({ type: 'trust_legacy', content: match[6] });
+    }
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Remaining text — but strip any incomplete XML tags (streaming)
+  if (lastIndex < text.length) {
+    let remaining = text.slice(lastIndex);
+    // Remove incomplete opening tags that haven't closed yet
+    remaining = remaining.replace(/<suggested_questions>[\s\S]*$/, '');
+    remaining = remaining.replace(/<trust_info[\s\S]*$/, '');
+    if (remaining.trim()) {
+      parts.push({ type: 'text', content: remaining });
+    }
+  }
+
+  return parts;
+}
+
+// Suggested questions component — clickable chips
+function SuggestedQuestionsBlock({ questions, onQuestionClick }: {
+  questions: string[];
+  onQuestionClick?: (question: string) => void;
+}) {
+  if (questions.length === 0) return null;
+
+  return (
+    <Box mt="3" display="flex" flexWrap="wrap" gap="2">
+      {questions.map((q, i) => (
+        <Box
+          key={i}
+          asChild
+          display="inline-flex"
+          alignItems="center"
+          gap="1.5"
+          px="3"
+          py="1.5"
+          borderRadius="md"
+          border="1px solid"
+          borderColor="border.default"
+          bg="bg.muted"
+          fontSize="xs"
+          fontFamily="mono"
+          color="fg.default"
+          cursor={onQuestionClick ? 'pointer' : 'default'}
+          transition="all 0.15s ease"
+          _hover={onQuestionClick ? {
+            borderColor: 'accent.teal',
+            bg: 'accent.teal/5',
+          } : {}}
+        >
+          <button
+            aria-label={`Suggested question: ${q}`}
+            onClick={() => onQuestionClick?.(q)}
+            style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', cursor: 'inherit', display: 'flex', alignItems: 'center', gap: '0.375rem', color: 'inherit' }}
+          >
+            <LuSparkles size={12} style={{ flexShrink: 0 }} />
+            {q}
+          </button>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
 // Trust level section for AI confidence indicators
 const trustConfig = {
   high: {
@@ -138,7 +282,11 @@ const trustConfig = {
   },
 } as const;
 
-function TrustBadge({ level, context }: { level: 'high' | 'medium' | 'low'; context: 'sidebar' | 'mainpage' }) {
+function TrustBadge({ level, context, reasons }: {
+  level: 'high' | 'medium' | 'low';
+  context: 'sidebar' | 'mainpage';
+  reasons?: string[];
+}) {
   const [expanded, setExpanded] = useState(false);
   const { config: appConfig } = useConfigs({ skip: false });
   const agentName = appConfig.branding.agentName;
@@ -146,6 +294,9 @@ function TrustBadge({ level, context }: { level: 'high' | 'medium' | 'low'; cont
   const Icon = config.icon;
   const hasMoreDetails = 'moreDetails' in config;
   if (level === 'high') return null;
+  const hasReasons = reasons && reasons.length > 0;
+  const hasExpandableContent = hasReasons || hasMoreDetails;
+  const expandTitle = hasReasons ? config.moreDetailsTitle : (hasMoreDetails ? config.moreDetailsTitle : '');
 
   return (
     <Box
@@ -185,7 +336,7 @@ function TrustBadge({ level, context }: { level: 'high' | 'medium' | 'low'; cont
             </Text>
           </Box>
         </Box>
-        {hasMoreDetails && (
+        {hasExpandableContent && (
           <Box
             asChild
             display="flex"
@@ -202,7 +353,7 @@ function TrustBadge({ level, context }: { level: 'high' | 'medium' | 'low'; cont
                 <LuCircleHelp size={14} />
               ) : (
                 <>
-                  <Text fontSize="2xs">{config.moreDetailsTitle}</Text>
+                  <Text fontSize="2xs">{expandTitle}</Text>
                   <Box
                     transition="transform 0.2s ease"
                     transform={expanded ? 'rotate(180deg)' : 'rotate(0deg)'}
@@ -217,7 +368,7 @@ function TrustBadge({ level, context }: { level: 'high' | 'medium' | 'low'; cont
           </Box>
         )}
       </Box>
-      {hasMoreDetails && expanded && (
+      {hasExpandableContent && expanded && (
         <Box
           px="3"
           pb="2.5"
@@ -225,12 +376,22 @@ function TrustBadge({ level, context }: { level: 'high' | 'medium' | 'low'; cont
           borderTop="1px solid"
           borderColor={config.borderColor}
         >
-          <Text fontSize="2xs" color="fg.muted" lineHeight="1.6" mt="2">
-            {config.moreDetails}{' '}
-            {/* <a href={config.readMoreLink} target="_blank" rel="noopener noreferrer" style={{ fontWeight: 600 }}>
-              Read more
-            </a> */}
-          </Text>
+          {/* Dynamic reasons from agent */}
+          {hasReasons && (
+            <Box mt="2">
+              {reasons.map((reason, i) => (
+                <Text key={i} fontSize="2xs" color="fg.muted" lineHeight="1.6">
+                  &bull; {reason}
+                </Text>
+              ))}
+            </Box>
+          )}
+          {/* Fallback to static details if no dynamic reasons */}
+          {!hasReasons && 'moreDetails' in config && (
+            <Text fontSize="2xs" color="fg.muted" lineHeight="1.6" mt="2">
+              {config.moreDetails}
+            </Text>
+          )}
         </Box>
       )}
     </Box>
@@ -243,6 +404,7 @@ interface MarkdownProps {
   textAlign?: 'left' | 'center' | 'right';
   textColor?: string;
   queries?: Record<string, ReportQueryResult>;  // Query results for {{query:id}} references
+  onSuggestedQuestionClick?: (question: string) => void;  // Callback when user clicks a suggested question
 }
 
 /**
@@ -257,7 +419,8 @@ export default function Markdown({
   context = 'mainpage',
   textAlign = 'left',
   textColor,
-  queries
+  queries,
+  onSuggestedQuestionClick
 }: MarkdownProps) {
   const styles = {
     h1: { fontSize: 'xl', fontWeight: '700', mb: 3, mt: 2, lineHeight: '1.3' },
@@ -277,6 +440,10 @@ export default function Markdown({
 
   // Get mode from Redux to preserve in internal links
   const mode = useAppSelector(state => state.auth.user?.mode);
+
+  // Role check for trust badge visibility
+  const user = useAppSelector(selectEffectiveUser);
+  const isViewerUser = user ? isViewer(user.role) : false;
 
   // Append mode param to internal links if in non-default mode
   const withMode = (href: string): string => {
@@ -544,28 +711,9 @@ export default function Markdown({
     </Box>
   );
 
-  // Parse content and split on special patterns ({{query:id}}, {{trust:level}})
+  // Parse content and split on special patterns (XML blocks, {{query:id}}, [[trust:level]])
   function renderContent() {
-    // Combined pattern for special references: {{query:id}} and [[trust:level]]
-    const specialPattern = /(?:\{\{(query):([^}]+)\}\}|\[\[(trust):([^\]]+)\]\])/g;
-    const parts: Array<{ type: 'text' | 'query' | 'trust'; content: string }> = [];
-    let lastIndex = 0;
-    let match;
-
-    while ((match = specialPattern.exec(children)) !== null) {
-      if (match.index > lastIndex) {
-        parts.push({ type: 'text', content: children.slice(lastIndex, match.index) });
-      }
-      // match[1]+match[2] for {{query:id}}, match[3]+match[4] for [[trust:level]]
-      const type = (match[1] || match[3]) as 'query' | 'trust';
-      const content = match[2] || match[4];
-      parts.push({ type, content });
-      lastIndex = match.index + match[0].length;
-    }
-
-    if (lastIndex < children.length) {
-      parts.push({ type: 'text', content: children.slice(lastIndex) });
-    }
+    const parts = parseContentParts(children, queries);
 
     // If no special patterns found, render plain markdown
     if (parts.length === 1 && parts[0].type === 'text') {
@@ -590,14 +738,33 @@ export default function Markdown({
                 {part.content}
               </ReactMarkdown>
             );
-          } else if (part.type === 'trust') {
+          } else if (part.type === 'suggested_questions') {
+            return (
+              <SuggestedQuestionsBlock
+                key={index}
+                questions={part.questions}
+                onQuestionClick={onSuggestedQuestionClick}
+              />
+            );
+          } else if (part.type === 'trust_info') {
+            if (isViewerUser) return null;
+            return (
+              <TrustBadge
+                key={index}
+                level={part.info.level}
+                context={context}
+                reasons={part.info.reasons}
+              />
+            );
+          } else if (part.type === 'trust_legacy') {
+            // Backward compat: [[trust:level]]
+            if (isViewerUser) return null;
             const level = part.content as 'high' | 'medium' | 'low';
             if (level in trustConfig) {
               return <TrustBadge key={index} level={level} context={context} />;
             }
             return null;
-          } else {
-            // Query reference
+          } else if (part.type === 'query') {
             const queryData = queries?.[part.content];
             if (queryData) {
               return <InlineChart key={index} queryData={queryData} />;
@@ -619,6 +786,7 @@ export default function Markdown({
               );
             }
           }
+          return null;
         })}
       </>
     );

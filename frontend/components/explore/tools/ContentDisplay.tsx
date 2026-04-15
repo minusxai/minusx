@@ -8,7 +8,7 @@ import { parseThinkingAnswer } from '@/lib/utils/xml-parser';
 
 
 
-export default function ContentDisplay({ toolCallTuple, databaseName, isCompact, showThinking, markdownContext = 'mainpage' }: DisplayProps) {
+export default function ContentDisplay({ toolCallTuple, databaseName, isCompact, showThinking, markdownContext = 'mainpage', onSuggestedQuestionClick }: DisplayProps) {
   const [toolCall, toolMessage] = toolCallTuple;
   let content;
   let citations: any[] = [];
@@ -211,7 +211,7 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
                     my={2}
                 >
                     <Box px={3} py={1} aria-label="Answer block">
-                        <Markdown context={markdownContext}>{block}</Markdown>
+                        <Markdown context={markdownContext} onSuggestedQuestionClick={onSuggestedQuestionClick}>{block}</Markdown>
                     </Box>
                 </GridItem>
             ))}

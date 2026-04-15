@@ -186,6 +186,14 @@ export default function ChatInterface({
   // Stable callback — inline arrow would defeat React.memo on SimpleChatMessage (re-renders all messages each streaming chunk)
   const toggleShowThinking = useCallback(() => setShowThinking(prev => !prev), []);
 
+  // Ref to latest handleSendMessage — avoids stale closures in stable callback
+  const handleSendMessageRef = useRef<(msg: string) => void>(() => {});
+
+  // Stable callback for suggested question clicks — sends the question as a new message
+  const handleSuggestedQuestionClick = useCallback((question: string) => {
+    handleSendMessageRef.current(question);
+  }, []);
+
   // Single unified source for all messages (completed, streaming, pending)
   const allMessages = useMemo(() => {
     if (!conversation) return [];
@@ -428,6 +436,11 @@ export default function ChatInterface({
     }
   };
 
+  // Keep ref in sync with latest handleSendMessage
+  useEffect(() => {
+    handleSendMessageRef.current = handleSendMessage;
+  });
+
   // Navigate when conversation forks (new conversation gets real ID, or conflict resolution)
   useEffect(() => {
     if (!conversation || container !== 'page') return;
@@ -617,6 +630,7 @@ export default function ChatInterface({
                         toggleShowThinking={toggleShowThinking}
                         markdownContext={container === 'sidebar' ? 'sidebar' : 'mainpage'}
                         conversationID={conversationID}
+                        onSuggestedQuestionClick={handleSuggestedQuestionClick}
                     />
                 })
               }
