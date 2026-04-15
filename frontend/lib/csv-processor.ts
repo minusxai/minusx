@@ -67,7 +67,7 @@ export function sanitizeTableName(filename: string): string {
   return name || 'table';
 }
 
-function ensureUniqueTableNames(filenames: string[]): Map<string, string> {
+export function ensureUniqueTableNames(filenames: string[]): Map<string, string> {
   const result = new Map<string, string>();
   const used = new Set<string>();
   for (const filename of filenames) {
