@@ -44,9 +44,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# exported schemas (environment-specific)
-data/schemas.json
+# DuckDB WASM files (copied from node_modules by postinstall)
+/public/duckdb/
 
-# analytics DuckDB files (per-company, runtime-generated)
-data/analytics/
 .eslintcache

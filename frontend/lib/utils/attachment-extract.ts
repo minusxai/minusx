@@ -1,11 +1,11 @@
-import * as pdfjsLib from 'pdfjs-dist';
-import mammoth from 'mammoth';
-
-// Configure worker — use bundled worker from pdfjs-dist
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url
-).toString();
+// PERFORMANCE EXCEPTION — pdfjs-dist (~40 MB) and mammoth (~2.5 MB) are lazy-loaded
+// inside their respective extraction functions rather than imported at module level.
+// Both are only needed when a user actually attaches a PDF or DOCX file in chat.
+// A static top-level import would pull both packages into the Turbopack dev cache for
+// every page that renders ChatInput (i.e. almost every page), adding ~40 MB to the
+// compiled module graph with zero benefit on pages that never use file attachment.
+// This is NOT a circular-dependency workaround — that is the reason the ESLint rule
+// exists. This is a deliberate, targeted code-split for an infrequently-used feature.
 
 export const MAX_PDF_PAGES = 10;
 const MAX_WORDS = 5000; // Word limit for DOCX/TXT documents
@@ -16,6 +16,14 @@ export async function extractTextFromPDF(
   file: File,
   maxPages: number = MAX_PDF_PAGES
 ): Promise<{ text: string; totalPages: number }> {
+  // eslint-disable-next-line no-restricted-syntax -- performance: see file header comment
+  const pdfjsLib = await import('pdfjs-dist');
+  // Worker must be configured before getDocument. Safe to set on each call (idempotent).
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url
+  ).toString();
+
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
   const totalPages = pdf.numPages;
@@ -50,6 +58,9 @@ export async function extractTextFromDocx(
   file: File,
   maxWords: number = MAX_WORDS
 ): Promise<{ text: string; wordCount: number }> {
+  // eslint-disable-next-line no-restricted-syntax -- performance: see file header comment
+  const { default: mammoth } = await import('mammoth');
+
   const arrayBuffer = await file.arrayBuffer();
   const result = await mammoth.extractRawText({ arrayBuffer });
   if (!result.value.trim()) {

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
 import LayoutWrapper from "@/components/LayoutWrapper";
@@ -12,6 +13,11 @@ import FileModal from '@/components/modals/FileModal';
 import { CompanyDB } from '@/lib/database/company-db';
 import { headers } from 'next/headers';
 import { extractSubdomain, isSubdomainRoutingEnabled } from '@/lib/utils/subdomain';
+
+// cache() deduplicates these DB calls within a single request — both generateMetadata()
+// and RootLayout call them, so without cache() the DB is hit twice per render.
+const getDefaultCompanyCached = cache(() => CompanyDB.getDefaultCompany());
+const getEffectiveUserCached = cache(() => getEffectiveUser().catch(() => null));
 
 const inter = Inter({
   subsets: ['latin'],
@@ -32,26 +38,32 @@ const jetbrainsMono = JetBrains_Mono({
 export async function generateMetadata(): Promise<Metadata> {
   let config = DEFAULT_CONFIG;
 
-  // Try to load from default company (pre-login, single-tenant mode)
-  try {
-    const defaultCompany = await CompanyDB.getDefaultCompany();
-    if (defaultCompany) {
+  // Run both lookups in parallel; cache() ensures the DB is not hit again when
+  // loadInitialState() calls the same helpers during the same render.
+  const [defaultCompany, user] = await Promise.all([
+    getDefaultCompanyCached().catch((error) => {
+      console.error('[Metadata] Failed to load default company:', error);
+      return null;
+    }),
+    getEffectiveUserCached(),
+  ]);
+
+  if (defaultCompany) {
+    try {
       const result = await getConfigsByCompanyId(defaultCompany.id);
       config = result.config;
+    } catch (error) {
+      console.error('[Metadata] Failed to load default company config:', error);
     }
-  } catch (error) {
-    console.error('[Metadata] Failed to load default company config:', error);
   }
 
-  // Try to load from authenticated user (post-login, might override)
-  try {
-    const user = await getEffectiveUser();
-    if (user && user.companyId) {
+  if (user?.companyId) {
+    try {
       const result = await getConfigs(user);
       config = result.config;
+    } catch {
+      // Not authenticated or error, keep config from above
     }
-  } catch (error) {
-    // Not authenticated or error, use config from above
   }
 
   return {
@@ -72,39 +84,43 @@ async function loadInitialState(): Promise<{
   user: EffectiveUser | null;
   config: CompanyConfig;
 }> {
-  // 1. Load config on app start (pre-login, single-tenant mode)
+  // Fetch default company and session user in parallel — they're independent.
+  // cache() ensures these DB calls are deduplicated with generateMetadata().
+  const [defaultCompany, user] = await Promise.all([
+    getDefaultCompanyCached().catch((error) => {
+      console.error('[Layout] Failed to load default company:', error);
+      return null;
+    }),
+    getEffectiveUserCached(),
+  ]);
+
   let config: CompanyConfig = DEFAULT_CONFIG;
 
-  try {
-    const defaultCompany = await CompanyDB.getDefaultCompany();
-    if (defaultCompany) {
-      const result = await getConfigsByCompanyId(defaultCompany.id);
-      config = result.config;
-      console.log(`[Layout] Loaded config for default company: ${defaultCompany.name} (ID: ${defaultCompany.id})`);
-    }
-  } catch (error) {
-    console.error('[Layout] Failed to load default company config:', error);
-    // Continue with DEFAULT_CONFIG
-  }
-
-  // 2. Check authentication
-  let user: EffectiveUser | null = null;
-  try {
-    user = await getEffectiveUser();
-  } catch (error) {
-    // Not authenticated, return pre-login state
-    return { user: null, config };
-  }
-
-  // 3. If authenticated, load user's company config (might override pre-login config)
-  if (user && user.companyId) {
+  if (user?.companyId) {
+    // Authenticated: load user's company config directly — it overrides the default
+    // company config anyway, so there's no need to load the default first.
     try {
       const userConfigResult = await getConfigs(user);
       config = userConfigResult.config;
       console.log(`[Layout] Loaded config for user's company: ${user.companyName}`);
     } catch (error) {
       console.error('[Layout] Failed to load user config:', error);
-      // Keep pre-login config or defaults
+      // Fall back to default company config below
+      if (defaultCompany) {
+        try {
+          const result = await getConfigsByCompanyId(defaultCompany.id);
+          config = result.config;
+        } catch {}
+      }
+    }
+  } else if (defaultCompany) {
+    // Not authenticated: use default company config for pre-login branding
+    try {
+      const result = await getConfigsByCompanyId(defaultCompany.id);
+      config = result.config;
+      console.log(`[Layout] Loaded config for default company: ${defaultCompany.name} (ID: ${defaultCompany.id})`);
+    } catch (error) {
+      console.error('[Layout] Failed to load default company config:', error);
     }
   }
 

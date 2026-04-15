@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbo",
+    "dev": "NODE_OPTIONS='--max-old-space-size=3072' next dev --turbo",
     "build": "next build",
     "start": "next start",
     "lint": "eslint --cache",
@@ -18,7 +18,8 @@
     "validate-db": "tsx --conditions react-server scripts/validate-db.ts",
     "setup-postgres": "tsx --conditions react-server scripts/setup-postgres.ts",
     "generate-types": "(cd ../backend && uv run python scripts/export_schema.py) | tee lib/validation/atlas-schema.gen.json | node_modules/.bin/json2ts --unreachableDefinitions --additionalProperties=false > lib/types.gen.ts",
-    "validate-data": "npm run --silent export-db | npm run --silent validate-db"
+    "validate-data": "npm run --silent export-db | npm run --silent validate-db",
+    "postinstall": "node scripts/copy-duckdb-wasm.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1026.0",

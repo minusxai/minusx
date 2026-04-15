@@ -1,7 +1,7 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useAppSelector } from '@/store/hooks';
-import Editor, { DiffEditor } from '@monaco-editor/react';
 import { Box, IconButton, VStack, HStack } from '@chakra-ui/react';
 import { LuAlignLeft, LuPlay } from 'react-icons/lu';
 import { Tooltip } from '@/components/ui/tooltip';
@@ -12,6 +12,21 @@ import { useConfigs } from '@/lib/hooks/useConfigs';
 import { ResolvedReference } from '@/lib/sql/query-composer';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { debounce } from 'lodash';
+
+// PERFORMANCE EXCEPTION — monaco-editor (~73 MB of JS) is lazy-loaded via next/dynamic
+// rather than imported statically. Monaco is browser-only (ssr: false is correct) and is
+// only needed on question/editor pages. A static import pulled the entire 73 MB package
+// into the Turbopack dev cache for every page in the app, slowing every unrelated page's
+// first compile. next/dynamic is the documented Next.js pattern for this exact scenario.
+// This is NOT a circular-dependency workaround — that is the sole reason the rule exists.
+// Kept to two targeted declarations; do not expand this block.
+/* eslint-disable no-restricted-syntax */
+const Editor = dynamic(() => import('@monaco-editor/react'), { ssr: false });
+const DiffEditor = dynamic(
+  () => import('@monaco-editor/react').then(mod => ({ default: mod.DiffEditor })),
+  { ssr: false }
+);
+/* eslint-enable no-restricted-syntax */
 
 /**
  * Promise-aware debounce for async functions

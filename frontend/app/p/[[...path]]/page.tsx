@@ -3,7 +3,7 @@
 import { use, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
-import { Box, VStack, HStack, Flex, useBreakpointValue, Button } from '@chakra-ui/react';
+import { Box, VStack, HStack, Flex, Button } from '@chakra-ui/react';
 import { LuPlus } from 'react-icons/lu';
 import Breadcrumb from '@/components/Breadcrumb';
 import FolderView from '@/components/FolderView';
@@ -34,8 +34,21 @@ export default function PathPage({ params }: PathPageProps) {
   // Get company configs
   const { config } = useConfigs();
 
-  // Determine if we're on mobile or desktop (true = mobile, false = desktop)
-  const isMobile = useBreakpointValue({ base: true, md: false }, { ssr: false });
+  // Determine if we're on mobile or desktop (true = mobile, false = desktop).
+  // useBreakpointValue accesses window during render and fails SSR even with { ssr: false }.
+  // The lazy useState initializer safely returns undefined on the server (window is absent)
+  // and reads the actual value on the client — no synchronous setState inside the effect.
+  // The === true/false checks below handle the undefined initial state (neither sidebar shows).
+  const [isMobile, setIsMobile] = useState<boolean | undefined>(() => {
+    if (typeof window === 'undefined') return undefined;
+    return window.matchMedia('(max-width: 767px)').matches;
+  });
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   // Unwrap params Promise (Next.js 16 requirement)
   const { path } = use(params);
