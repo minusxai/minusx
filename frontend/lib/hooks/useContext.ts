@@ -112,13 +112,13 @@ export function useContext(path: string, version?: number, isFolderScope?: boole
       }
 
       // Default behavior: use published version (via existing helpers)
-      // Folder scopes apply childPaths; file scopes see all context tables.
-      const databases = isFolderScope
-        ? (() => {
-            const contextDir = contextFile?.path.substring(0, contextFile.path.lastIndexOf('/')) || '/';
-            return getWhitelistedSchemaForUser(contextContent, currentUser.id, path, contextDir);
-          })()
-        : getWhitelistedSchemaForUser(contextContent, currentUser.id);
+      // Both files and folders apply childPaths scoping.
+      // Files use their parent directory as the scope path.
+      const contextDir = contextFile?.path.substring(0, contextFile.path.lastIndexOf('/')) || '/';
+      const scopePath = isFolderScope
+        ? path
+        : path.substring(0, path.lastIndexOf('/')) || '/';
+      const databases = getWhitelistedSchemaForUser(contextContent, currentUser.id, scopePath, contextDir);
       const documentation = getDocumentationForUser(contextContent, currentUser.id);
 
       return {

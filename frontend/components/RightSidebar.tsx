@@ -456,7 +456,7 @@ export default function RightSidebar({
   }
 
   // Split sections into chat vs reference
-  const chatSectionIds = new Set(['chat', 'context']);
+  const chatSectionIds = new Set(['chat']);
   const chatSections = sections.filter(s => chatSectionIds.has(s.id));
   const refSections = sections.filter(s => !chatSectionIds.has(s.id));
 
