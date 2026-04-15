@@ -91,7 +91,7 @@ describe('buildDropdownOptions', () => {
     const cfg = config({ messaging: { webhooks: [slackWebhook] }, channels: [slackChannel] });
     const opts = buildDropdownOptions(cfg, [], noRecipients, '');
     expect(opts).toHaveLength(1);
-    expect(opts[0]).toMatchObject({ kind: 'slack_alert', via: 'channel', channel: slackChannel });
+    expect(opts[0]).toMatchObject({ kind: 'slack', via: 'channel', channel: slackChannel });
   });
 
   it('slack channel absent when no slack webhook', () => {
@@ -103,18 +103,18 @@ describe('buildDropdownOptions', () => {
     const cfg = config({ messaging: { webhooks: [emailWebhook] } });
     const opts = buildDropdownOptions(cfg, [alice], noRecipients, '');
     expect(opts).toHaveLength(1);
-    expect(opts[0]).toMatchObject({ kind: 'email_alert', via: 'user', user: alice });
+    expect(opts[0]).toMatchObject({ kind: 'email', via: 'user', user: alice });
   });
 
   it('user phone appears when phone webhook configured', () => {
     const cfg = config({ messaging: { webhooks: [phoneWebhook] } });
     const opts = buildDropdownOptions(cfg, [bob], noRecipients, '');
-    const phone = opts.find(o => o.kind === 'phone_alert');
+    const phone = opts.find(o => o.kind === 'phone');
     expect(phone).toBeDefined();
-    expect(phone).toMatchObject({ kind: 'phone_alert', via: 'user', user: bob });
+    expect(phone).toMatchObject({ kind: 'phone', via: 'user', user: bob });
   });
 
-  it('user without phone skipped for phone_alert', () => {
+  it('user without phone skipped for phone', () => {
     const cfg = config({ messaging: { webhooks: [phoneWebhook] } });
     const opts = buildDropdownOptions(cfg, [alice], noRecipients, '');
     expect(opts).toHaveLength(0);
@@ -124,18 +124,18 @@ describe('buildDropdownOptions', () => {
     const cfg = config({ messaging: { webhooks: [emailWebhook] }, channels: [emailChannel] });
     const opts = buildDropdownOptions(cfg, [], noRecipients, '');
     expect(opts).toHaveLength(1);
-    expect(opts[0]).toMatchObject({ kind: 'email_alert', via: 'channel', channel: emailChannel });
+    expect(opts[0]).toMatchObject({ kind: 'email', via: 'channel', channel: emailChannel });
   });
 
-  it('already-selected recipients excluded from options', () => {
+  it('already-selected slack channel excluded from options', () => {
     const cfg = config({ messaging: { webhooks: [slackWebhook] }, channels: [slackChannel] });
-    const selected: AlertRecipient[] = [{ channel: 'slack_alert', address: 'Engineering' }];
+    const selected: AlertRecipient[] = [{ channelName: 'Engineering', channel: 'slack' }];
     expect(buildDropdownOptions(cfg, [], selected, '')).toHaveLength(0);
   });
 
-  it('already-selected email excluded', () => {
+  it('already-selected user email excluded', () => {
     const cfg = config({ messaging: { webhooks: [emailWebhook] } });
-    const selected: AlertRecipient[] = [{ channel: 'email_alert', address: 'alice@example.com' }];
+    const selected: AlertRecipient[] = [{ userId: 1, channel: 'email' }];
     expect(buildDropdownOptions(cfg, [alice], selected, '')).toHaveLength(0);
   });
 
@@ -157,7 +157,7 @@ describe('buildDropdownOptions', () => {
     });
     const opts = buildDropdownOptions(cfg, [alice], noRecipients, '');
     const kinds = opts.map(o => o.kind);
-    expect(kinds).toContain('email_alert');
-    expect(kinds).toContain('slack_alert');
+    expect(kinds).toContain('email');
+    expect(kinds).toContain('slack');
   });
 });

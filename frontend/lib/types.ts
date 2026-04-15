@@ -507,10 +507,17 @@ export type JobSchedule = {
   timezone: string;
 };
 
+/** Recipient stored on an alert — references a user by ID or a named config channel. */
 export type AlertRecipient =
-  | { channel: 'email_alert'; address: string }
-  | { channel: 'phone_alert'; address: string }
-  | { channel: 'slack_alert'; address: string };  // address = Slack channel name e.g. '#alerts'
+  | { userId: number;      channel: 'email' | 'phone' }
+  | { channelName: string; channel: 'email' | 'phone' | 'slack' };
+
+/** Snapshot of a resolved recipient written to alert run output. */
+export interface DeliveredRecipient {
+  name: string;
+  channel: 'email' | 'phone' | 'slack';
+  address: string;
+}
 
 /** Base content for all scheduled jobs (alerts, reports, transformations, context evals). */
 export interface ScheduledJobContent extends BaseFileContent {
@@ -567,7 +574,8 @@ export interface AlertOutput {
   alertName: string;
   status: 'triggered' | 'not_triggered' | 'error';
   testResults: TestRunResult[];
-  triggeredBy: TestRunResult[];  // subset that failed (caused trigger)
+  triggeredBy: TestRunResult[];     // subset that failed (caused trigger)
+  deliveredTo?: DeliveredRecipient[]; // snapshot of who was notified (name + channel + address)
 }
 
 export type RunMessage =
