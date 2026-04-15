@@ -22,6 +22,8 @@ import { getNodeConnector } from '@/lib/connections';
 import { compressQueryResult } from '@/lib/api/compress-augmented';
 import { searchFilesInFolder } from '@/lib/search/file-search';
 import { readFilesServer } from '@/lib/api/file-state.server';
+import { getWhitelistForUser } from '@/lib/sql/whitelist-resolver.server';
+import { validateQueryTables } from '@/lib/sql/validate-query-tables';
 
 export type McpToolCallResult = { content: Array<{ type: 'text'; text: string }> };
 export type OnToolCall = (tool: string, args: Record<string, unknown>, result: McpToolCallResult) => void;
@@ -108,6 +110,19 @@ export function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCall): M
     },
     async ({ query, connection_id, parameters }: { query: string; connection_id: string; parameters?: Record<string, string | number> }) => {
       const params: Record<string, string | number> = parameters || {};
+
+      // Whitelist validation — use the user's home folder to find the relevant context
+      const whitelist = await getWhitelistForUser(connection_id, user);
+      if (whitelist) {
+        const validationError = validateQueryTables(query, whitelist);
+        if (validationError) {
+          const result: McpToolCallResult = {
+            content: [{ type: 'text' as const, text: JSON.stringify({ success: false, error: validationError }) }],
+          };
+          onToolCall?.('ExecuteQuery', { query, connection_id, parameters }, result);
+          return result;
+        }
+      }
 
       // Try Node.js connector first (DuckDB) to avoid Python's exclusive file lock
       const connData = await ConnectionsAPI.getByName(connection_id, user).catch(() => null);
