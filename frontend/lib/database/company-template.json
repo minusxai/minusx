@@ -129,19 +129,19 @@
           "updated_at": "{{TIMESTAMP}}"
         },
         {
-          "id": 9,
-          "name": "mxfood",
-          "path": "/tutorial/database/mxfood",
+          "id": 109,
+          "name": "data",
+          "path": "/tutorial/database/data",
           "type": "connection",
           "content": {
-            "name": "mxfood",
+            "name": "data",
             "type": "csv",
             "config": {
               "files": [
                 {
                   "filename": "ad_campaigns.parquet",
                   "table_name": "ad_campaigns",
-                  "schema_name": "main",
+                  "schema_name": "mxfood",
                   "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/ad_campaigns.parquet",
                   "file_format": "parquet",
                   "row_count": 69,
@@ -179,7 +179,7 @@
                 {
                   "filename": "ad_spend.parquet",
                   "table_name": "ad_spend",
-                  "schema_name": "main",
+                  "schema_name": "mxfood",
                   "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/ad_spend.parquet",
                   "file_format": "parquet",
                   "row_count": 2650,
@@ -217,7 +217,7 @@
                 {
                   "filename": "attribution.parquet",
                   "table_name": "attribution",
-                  "schema_name": "main",
+                  "schema_name": "mxfood",
                   "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/attribution.parquet",
                   "file_format": "parquet",
                   "row_count": 30000,
@@ -251,7 +251,7 @@
                 {
                   "filename": "deliveries.parquet",
                   "table_name": "deliveries",
-                  "schema_name": "main",
+                  "schema_name": "mxfood",
                   "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/deliveries.parquet",
                   "file_format": "parquet",
                   "row_count": 367312,
@@ -293,7 +293,7 @@
                 {
                   "filename": "drivers.parquet",
                   "table_name": "drivers",
-                  "schema_name": "main",
+                  "schema_name": "mxfood",
                   "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/drivers.parquet",
                   "file_format": "parquet",
                   "row_count": 800,
@@ -331,7 +331,7 @@
                 {
                   "filename": "events.parquet",
                   "table_name": "events",
-                  "schema_name": "main",
+                  "schema_name": "mxfood",
                   "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/events.parquet",
                   "file_format": "parquet",
                   "row_count": 7643737,
@@ -373,7 +373,7 @@
                 {
                   "filename": "marketing_channels.parquet",
                   "table_name": "marketing_channels",
-                  "schema_name": "main",
+                  "schema_name": "mxfood",
                   "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/marketing_channels.parquet",
                   "file_format": "parquet",
                   "row_count": 5,
@@ -395,7 +395,7 @@
                 {
                   "filename": "order_items.parquet",
                   "table_name": "order_items",
-                  "schema_name": "main",
+                  "schema_name": "mxfood",
                   "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/order_items.parquet",
                   "file_format": "parquet",
                   "row_count": 1038204,
@@ -429,7 +429,7 @@
                 {
                   "filename": "orders.parquet",
                   "table_name": "orders",
-                  "schema_name": "main",
+                  "schema_name": "mxfood",
                   "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/orders.parquet",
                   "file_format": "parquet",
                   "row_count": 399267,
@@ -507,7 +507,7 @@
                 {
                   "filename": "product_categories.parquet",
                   "table_name": "product_categories",
-                  "schema_name": "main",
+                  "schema_name": "mxfood",
                   "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/product_categories.parquet",
                   "file_format": "parquet",
                   "row_count": 5,
@@ -525,7 +525,7 @@
                 {
                   "filename": "product_subcategories.parquet",
                   "table_name": "product_subcategories",
-                  "schema_name": "main",
+                  "schema_name": "mxfood",
                   "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/product_subcategories.parquet",
                   "file_format": "parquet",
                   "row_count": 28,
@@ -547,7 +547,7 @@
                 {
                   "filename": "products.parquet",
                   "table_name": "products",
-                  "schema_name": "main",
+                  "schema_name": "mxfood",
                   "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/products.parquet",
                   "file_format": "parquet",
                   "row_count": 7194,
@@ -589,7 +589,7 @@
                 {
                   "filename": "promo_codes.parquet",
                   "table_name": "promo_codes",
-                  "schema_name": "main",
+                  "schema_name": "mxfood",
                   "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/promo_codes.parquet",
                   "file_format": "parquet",
                   "row_count": 6,
@@ -639,7 +639,7 @@
                 {
                   "filename": "promo_usage.parquet",
                   "table_name": "promo_usage",
-                  "schema_name": "main",
+                  "schema_name": "mxfood",
                   "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/promo_usage.parquet",
                   "file_format": "parquet",
                   "row_count": 37578,
@@ -673,7 +673,7 @@
                 {
                   "filename": "restaurants.parquet",
                   "table_name": "restaurants",
-                  "schema_name": "main",
+                  "schema_name": "mxfood",
                   "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/restaurants.parquet",
                   "file_format": "parquet",
                   "row_count": 510,
@@ -719,7 +719,7 @@
                 {
                   "filename": "subscription_plans.parquet",
                   "table_name": "subscription_plans",
-                  "schema_name": "main",
+                  "schema_name": "mxfood",
                   "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/subscription_plans.parquet",
                   "file_format": "parquet",
                   "row_count": 3,
@@ -749,7 +749,7 @@
                 {
                   "filename": "support_tickets.parquet",
                   "table_name": "support_tickets",
-                  "schema_name": "main",
+                  "schema_name": "mxfood",
                   "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/support_tickets.parquet",
                   "file_format": "parquet",
                   "row_count": 32412,
@@ -799,7 +799,7 @@
                 {
                   "filename": "user_subscriptions.parquet",
                   "table_name": "user_subscriptions",
-                  "schema_name": "main",
+                  "schema_name": "mxfood",
                   "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/user_subscriptions.parquet",
                   "file_format": "parquet",
                   "row_count": 2922,
@@ -837,7 +837,7 @@
                 {
                   "filename": "users.parquet",
                   "table_name": "users",
-                  "schema_name": "main",
+                  "schema_name": "mxfood",
                   "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/users.parquet",
                   "file_format": "parquet",
                   "row_count": 30000,
@@ -895,7 +895,7 @@
                 {
                   "filename": "zones.parquet",
                   "table_name": "zones",
-                  "schema_name": "main",
+                  "schema_name": "mxfood",
                   "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/zones.parquet",
                   "file_format": "parquet",
                   "row_count": 12,
@@ -928,372 +928,7 @@
                 }
               ]
             },
-            "description": "Sample food delivery data for tutorials"
-          },
-          "company_id": "{{COMPANY_ID}}",
-          "created_at": "{{TIMESTAMP}}",
-          "updated_at": "{{TIMESTAMP}}"
-        },
-        {
-          "id": 109,
-          "name": "data",
-          "path": "/tutorial/database/data",
-          "type": "connection",
-          "content": {
-            "name": "data",
-            "type": "csv",
-            "config": {
-              "files": [
-                {
-                  "filename": "ad_campaigns.parquet",
-                  "table_name": "ad_campaigns",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/ad_campaigns.parquet",
-                  "file_format": "parquet",
-                  "row_count": 69,
-                  "columns": [
-                    { "name": "campaign_id", "type": "BIGINT" },
-                    { "name": "channel_id", "type": "BIGINT" },
-                    { "name": "campaign_name", "type": "VARCHAR" },
-                    { "name": "start_date", "type": "DATE" },
-                    { "name": "end_date", "type": "DATE" },
-                    { "name": "daily_budget", "type": "DOUBLE" },
-                    { "name": "target_audience", "type": "VARCHAR" }
-                  ]
-                },
-                {
-                  "filename": "ad_spend.parquet",
-                  "table_name": "ad_spend",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/ad_spend.parquet",
-                  "file_format": "parquet",
-                  "row_count": 2650,
-                  "columns": [
-                    { "name": "spend_id", "type": "BIGINT" },
-                    { "name": "campaign_id", "type": "BIGINT" },
-                    { "name": "date", "type": "DATE" },
-                    { "name": "impressions", "type": "BIGINT" },
-                    { "name": "clicks", "type": "BIGINT" },
-                    { "name": "installs", "type": "BIGINT" },
-                    { "name": "spend", "type": "DOUBLE" }
-                  ]
-                },
-                {
-                  "filename": "attribution.parquet",
-                  "table_name": "attribution",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/attribution.parquet",
-                  "file_format": "parquet",
-                  "row_count": 30000,
-                  "columns": [
-                    { "name": "attribution_id", "type": "BIGINT" },
-                    { "name": "user_id", "type": "BIGINT" },
-                    { "name": "campaign_id", "type": "DOUBLE" },
-                    { "name": "channel_id", "type": "BIGINT" },
-                    { "name": "attributed_at", "type": "TIMESTAMP" },
-                    { "name": "click_id", "type": "VARCHAR" }
-                  ]
-                },
-                {
-                  "filename": "deliveries.parquet",
-                  "table_name": "deliveries",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/deliveries.parquet",
-                  "file_format": "parquet",
-                  "row_count": 367312,
-                  "columns": [
-                    { "name": "delivery_id", "type": "BIGINT" },
-                    { "name": "order_id", "type": "BIGINT" },
-                    { "name": "driver_id", "type": "BIGINT" },
-                    { "name": "assigned_at", "type": "TIMESTAMP" },
-                    { "name": "picked_up_at", "type": "TIMESTAMP" },
-                    { "name": "delivered_at", "type": "TIMESTAMP" },
-                    { "name": "delivery_rating", "type": "BIGINT" },
-                    { "name": "delivery_notes", "type": "VARCHAR" }
-                  ]
-                },
-                {
-                  "filename": "drivers.parquet",
-                  "table_name": "drivers",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/drivers.parquet",
-                  "file_format": "parquet",
-                  "row_count": 800,
-                  "columns": [
-                    { "name": "driver_id", "type": "BIGINT" },
-                    { "name": "name", "type": "VARCHAR" },
-                    { "name": "zone_id", "type": "BIGINT" },
-                    { "name": "vehicle_type", "type": "VARCHAR" },
-                    { "name": "rating", "type": "DOUBLE" },
-                    { "name": "created_at", "type": "TIMESTAMP" },
-                    { "name": "is_active", "type": "BOOLEAN" }
-                  ]
-                },
-                {
-                  "filename": "events.parquet",
-                  "table_name": "events",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/events.parquet",
-                  "file_format": "parquet",
-                  "row_count": 7643737,
-                  "columns": [
-                    { "name": "event_id", "type": "BIGINT" },
-                    { "name": "user_id", "type": "BIGINT" },
-                    { "name": "session_id", "type": "VARCHAR" },
-                    { "name": "event_name", "type": "VARCHAR" },
-                    { "name": "event_timestamp", "type": "TIMESTAMP" },
-                    { "name": "platform", "type": "VARCHAR" },
-                    { "name": "screen_name", "type": "VARCHAR" },
-                    { "name": "properties", "type": "VARCHAR" }
-                  ]
-                },
-                {
-                  "filename": "marketing_channels.parquet",
-                  "table_name": "marketing_channels",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/marketing_channels.parquet",
-                  "file_format": "parquet",
-                  "row_count": 5,
-                  "columns": [
-                    { "name": "channel_id", "type": "BIGINT" },
-                    { "name": "channel_name", "type": "VARCHAR" },
-                    { "name": "channel_type", "type": "VARCHAR" }
-                  ]
-                },
-                {
-                  "filename": "order_items.parquet",
-                  "table_name": "order_items",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/order_items.parquet",
-                  "file_format": "parquet",
-                  "row_count": 1038204,
-                  "columns": [
-                    { "name": "product_id", "type": "BIGINT" },
-                    { "name": "quantity", "type": "BIGINT" },
-                    { "name": "unit_price", "type": "DOUBLE" },
-                    { "name": "total_price", "type": "DOUBLE" },
-                    { "name": "order_id", "type": "BIGINT" },
-                    { "name": "order_item_id", "type": "BIGINT" }
-                  ]
-                },
-                {
-                  "filename": "orders.parquet",
-                  "table_name": "orders",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/orders.parquet",
-                  "file_format": "parquet",
-                  "row_count": 399267,
-                  "columns": [
-                    { "name": "user_id", "type": "BIGINT" },
-                    { "name": "restaurant_id", "type": "BIGINT" },
-                    { "name": "driver_id", "type": "BIGINT" },
-                    { "name": "zone_id", "type": "BIGINT" },
-                    { "name": "created_at", "type": "TIMESTAMP" },
-                    { "name": "status", "type": "VARCHAR" },
-                    { "name": "subtotal", "type": "DOUBLE" },
-                    { "name": "delivery_fee", "type": "DOUBLE" },
-                    { "name": "discount_amount", "type": "DOUBLE" },
-                    { "name": "tip_amount", "type": "DOUBLE" },
-                    { "name": "total", "type": "DOUBLE" },
-                    { "name": "promo_code_id", "type": "BIGINT" },
-                    { "name": "is_subscription_order", "type": "BOOLEAN" },
-                    { "name": "platform", "type": "VARCHAR" },
-                    { "name": "estimated_delivery_mins", "type": "BIGINT" },
-                    { "name": "actual_delivery_mins", "type": "DOUBLE" },
-                    { "name": "order_id", "type": "BIGINT" }
-                  ]
-                },
-                {
-                  "filename": "product_categories.parquet",
-                  "table_name": "product_categories",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/product_categories.parquet",
-                  "file_format": "parquet",
-                  "row_count": 5,
-                  "columns": [
-                    { "name": "category_id", "type": "BIGINT" },
-                    { "name": "category_name", "type": "VARCHAR" }
-                  ]
-                },
-                {
-                  "filename": "product_subcategories.parquet",
-                  "table_name": "product_subcategories",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/product_subcategories.parquet",
-                  "file_format": "parquet",
-                  "row_count": 28,
-                  "columns": [
-                    { "name": "subcategory_id", "type": "BIGINT" },
-                    { "name": "category_id", "type": "BIGINT" },
-                    { "name": "subcategory_name", "type": "VARCHAR" }
-                  ]
-                },
-                {
-                  "filename": "products.parquet",
-                  "table_name": "products",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/products.parquet",
-                  "file_format": "parquet",
-                  "row_count": 7194,
-                  "columns": [
-                    { "name": "product_id", "type": "BIGINT" },
-                    { "name": "restaurant_id", "type": "BIGINT" },
-                    { "name": "subcategory_id", "type": "BIGINT" },
-                    { "name": "name", "type": "VARCHAR" },
-                    { "name": "description", "type": "VARCHAR" },
-                    { "name": "price", "type": "DOUBLE" },
-                    { "name": "is_available", "type": "BOOLEAN" },
-                    { "name": "created_at", "type": "TIMESTAMP" }
-                  ]
-                },
-                {
-                  "filename": "promo_codes.parquet",
-                  "table_name": "promo_codes",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/promo_codes.parquet",
-                  "file_format": "parquet",
-                  "row_count": 6,
-                  "columns": [
-                    { "name": "promo_code_id", "type": "BIGINT" },
-                    { "name": "code", "type": "VARCHAR" },
-                    { "name": "discount_type", "type": "VARCHAR" },
-                    { "name": "discount_value", "type": "BIGINT" },
-                    { "name": "min_order_value", "type": "BIGINT" },
-                    { "name": "max_uses", "type": "BIGINT" },
-                    { "name": "max_uses_per_user", "type": "BIGINT" },
-                    { "name": "valid_from", "type": "TIMESTAMP" },
-                    { "name": "valid_until", "type": "TIMESTAMP" },
-                    { "name": "is_first_order_only", "type": "BOOLEAN" }
-                  ]
-                },
-                {
-                  "filename": "promo_usage.parquet",
-                  "table_name": "promo_usage",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/promo_usage.parquet",
-                  "file_format": "parquet",
-                  "row_count": 37578,
-                  "columns": [
-                    { "name": "usage_id", "type": "BIGINT" },
-                    { "name": "promo_code_id", "type": "BIGINT" },
-                    { "name": "user_id", "type": "BIGINT" },
-                    { "name": "order_id", "type": "BIGINT" },
-                    { "name": "used_at", "type": "TIMESTAMP" },
-                    { "name": "discount_applied", "type": "DOUBLE" }
-                  ]
-                },
-                {
-                  "filename": "restaurants.parquet",
-                  "table_name": "restaurants",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/restaurants.parquet",
-                  "file_format": "parquet",
-                  "row_count": 510,
-                  "columns": [
-                    { "name": "restaurant_id", "type": "BIGINT" },
-                    { "name": "name", "type": "VARCHAR" },
-                    { "name": "zone_id", "type": "BIGINT" },
-                    { "name": "cuisine_type", "type": "VARCHAR" },
-                    { "name": "price_tier", "type": "BIGINT" },
-                    { "name": "rating", "type": "DOUBLE" },
-                    { "name": "is_promoted", "type": "BOOLEAN" },
-                    { "name": "created_at", "type": "TIMESTAMP" },
-                    { "name": "is_active", "type": "BOOLEAN" }
-                  ]
-                },
-                {
-                  "filename": "subscription_plans.parquet",
-                  "table_name": "subscription_plans",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/subscription_plans.parquet",
-                  "file_format": "parquet",
-                  "row_count": 3,
-                  "columns": [
-                    { "name": "plan_id", "type": "VARCHAR" },
-                    { "name": "plan_name", "type": "VARCHAR" },
-                    { "name": "monthly_price", "type": "DOUBLE" },
-                    { "name": "free_delivery_threshold", "type": "DOUBLE" },
-                    { "name": "discount_percent", "type": "BIGINT" }
-                  ]
-                },
-                {
-                  "filename": "support_tickets.parquet",
-                  "table_name": "support_tickets",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/support_tickets.parquet",
-                  "file_format": "parquet",
-                  "row_count": 32412,
-                  "columns": [
-                    { "name": "ticket_id", "type": "BIGINT" },
-                    { "name": "user_id", "type": "BIGINT" },
-                    { "name": "order_id", "type": "BIGINT" },
-                    { "name": "category", "type": "VARCHAR" },
-                    { "name": "priority", "type": "VARCHAR" },
-                    { "name": "status", "type": "VARCHAR" },
-                    { "name": "created_at", "type": "TIMESTAMP" },
-                    { "name": "resolved_at", "type": "TIMESTAMP" },
-                    { "name": "resolution_type", "type": "VARCHAR" },
-                    { "name": "refund_amount", "type": "DOUBLE" }
-                  ]
-                },
-                {
-                  "filename": "user_subscriptions.parquet",
-                  "table_name": "user_subscriptions",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/user_subscriptions.parquet",
-                  "file_format": "parquet",
-                  "row_count": 2922,
-                  "columns": [
-                    { "name": "subscription_id", "type": "BIGINT" },
-                    { "name": "user_id", "type": "BIGINT" },
-                    { "name": "plan_id", "type": "VARCHAR" },
-                    { "name": "started_at", "type": "TIMESTAMP" },
-                    { "name": "ended_at", "type": "TIMESTAMP" },
-                    { "name": "status", "type": "VARCHAR" },
-                    { "name": "billing_cycle", "type": "VARCHAR" }
-                  ]
-                },
-                {
-                  "filename": "users.parquet",
-                  "table_name": "users",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/users.parquet",
-                  "file_format": "parquet",
-                  "row_count": 30000,
-                  "columns": [
-                    { "name": "user_id", "type": "BIGINT" },
-                    { "name": "first_name", "type": "VARCHAR" },
-                    { "name": "last_name", "type": "VARCHAR" },
-                    { "name": "email", "type": "VARCHAR" },
-                    { "name": "phone", "type": "VARCHAR" },
-                    { "name": "created_at", "type": "TIMESTAMP" },
-                    { "name": "zone_id", "type": "BIGINT" },
-                    { "name": "acquisition_channel", "type": "VARCHAR" },
-                    { "name": "referred_by_user_id", "type": "DOUBLE" },
-                    { "name": "platform", "type": "VARCHAR" },
-                    { "name": "segment", "type": "VARCHAR" },
-                    { "name": "will_order", "type": "BOOLEAN" }
-                  ]
-                },
-                {
-                  "filename": "zones.parquet",
-                  "table_name": "zones",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/tutorial/mxfood/zones.parquet",
-                  "file_format": "parquet",
-                  "row_count": 12,
-                  "columns": [
-                    { "name": "zone_id", "type": "BIGINT" },
-                    { "name": "zone_name", "type": "VARCHAR" },
-                    { "name": "avg_delivery_time_mins", "type": "BIGINT" },
-                    { "name": "surge_multiplier", "type": "DOUBLE" },
-                    { "name": "lat_center", "type": "DOUBLE" },
-                    { "name": "lng_center", "type": "DOUBLE" }
-                  ]
-                }
-              ]
-            },
-            "description": "Sample MX Food data — add your own CSV, xlsx, or Google Sheets tables here"
+            "description": "Sample MX Food data \u2014 add your own CSV, xlsx, or Google Sheets tables here"
           },
           "company_id": "{{COMPANY_ID}}",
           "created_at": "{{TIMESTAMP}}",
@@ -2285,8 +1920,8 @@
           "references": [],
           "content": {
             "description": "Weekly average order value",
-            "query": "SELECT \n  DATE_TRUNC('week', created_at) as week_start,\n  AVG(total) as avg_order_value\nFROM orders\nGROUP BY DATE_TRUNC('week', created_at)\nORDER BY week_start",
-            "connection_name": "mxfood",
+            "query": "SELECT \n  DATE_TRUNC('week', created_at) as week_start,\n  AVG(total) as avg_order_value\nFROM mxfood.orders\nGROUP BY DATE_TRUNC('week', created_at)\nORDER BY week_start",
+            "connection_name": "data",
             "vizSettings": {
               "type": "trend",
               "xCols": [
@@ -2310,8 +1945,8 @@
           "references": [],
           "content": {
             "description": "Weekly order count and Revenue",
-            "query": "SELECT \n  DATE_TRUNC('week', created_at) as week,\n  COUNT(*) as orders,\n  SUM(total) as revenue\nFROM orders\nGROUP BY DATE_TRUNC('week', created_at)\nORDER BY week",
-            "connection_name": "mxfood",
+            "query": "SELECT \n  DATE_TRUNC('week', created_at) as week,\n  COUNT(*) as orders,\n  SUM(total) as revenue\nFROM mxfood.orders\nGROUP BY DATE_TRUNC('week', created_at)\nORDER BY week",
+            "connection_name": "data",
             "vizSettings": {
               "type": "line",
               "xCols": [
@@ -2336,8 +1971,8 @@
           "references": [],
           "content": {
             "description": "Weekly revenue split by product category (e.g., Pizza, Burgers, etc.)",
-            "query": "SELECT \n  DATE_TRUNC('week', o.created_at) as week_start,\n  pc.category_name,\n  SUM(oi.total_price) as revenue\nFROM orders o\nJOIN order_items oi ON o.order_id = oi.order_id\nJOIN products p ON oi.product_id = p.product_id\nJOIN product_subcategories ps ON p.subcategory_id = ps.subcategory_id\nJOIN product_categories pc ON ps.category_id = pc.category_id\nWHERE o.status = 'completed'\nGROUP BY DATE_TRUNC('week', o.created_at), pc.category_name\nORDER BY week_start, category_name",
-            "connection_name": "mxfood",
+            "query": "SELECT \n  DATE_TRUNC('week', o.created_at) as week_start,\n  pc.category_name,\n  SUM(oi.total_price) as revenue\nFROM mxfood.orders o\nJOIN mxfood.order_items oi ON o.order_id = oi.order_id\nJOIN mxfood.products p ON oi.product_id = p.product_id\nJOIN mxfood.product_subcategories ps ON p.subcategory_id = ps.subcategory_id\nJOIN mxfood.product_categories pc ON ps.category_id = pc.category_id\nWHERE o.status = 'completed'\nGROUP BY DATE_TRUNC('week', o.created_at), pc.category_name\nORDER BY week_start, category_name",
+            "connection_name": "data",
             "vizSettings": {
               "type": "bar",
               "xCols": [
@@ -2362,8 +1997,8 @@
           "references": [],
           "content": {
             "description": "Pivot table showing average completed orders by day of week and hour of day for the last month",
-            "query": "WITH hourly_counts AS (\n  SELECT \n    DATE_TRUNC('day', created_at) as order_date,\n    CASE DAYOFWEEK(created_at)\n      WHEN 0 THEN 'Sunday'\n      WHEN 1 THEN 'Monday'\n      WHEN 2 THEN 'Tuesday'\n      WHEN 3 THEN 'Wednesday'\n      WHEN 4 THEN 'Thursday'\n      WHEN 5 THEN 'Friday'\n      WHEN 6 THEN 'Saturday'\n    END as day_of_week,\n    CASE \n      WHEN EXTRACT(HOUR FROM created_at) >= 0 AND EXTRACT(HOUR FROM created_at) < 6 THEN '0-6 (Early Morning)'\n      WHEN EXTRACT(HOUR FROM created_at) >= 6 AND EXTRACT(HOUR FROM created_at) < 12 THEN '6-12 (Morning)'\n      WHEN EXTRACT(HOUR FROM created_at) >= 12 AND EXTRACT(HOUR FROM created_at) < 18 THEN '12-18 (Afternoon)'\n      WHEN EXTRACT(HOUR FROM created_at) >= 18 THEN '18-24 (Evening)'\n    END as hour_range,\n    COUNT(*) as order_count\n  FROM orders\n  WHERE status = 'completed'\n    AND created_at >= '2025-12-01'\n GROUP BY order_date, day_of_week, hour_range\n)\nSELECT \n  day_of_week,\n  hour_range,\n  ROUND(AVG(order_count), 1) as avg_orders\nFROM hourly_counts\nGROUP BY day_of_week, hour_range\nORDER BY \n  CASE day_of_week\n    WHEN 'Monday' THEN 1\n    WHEN 'Tuesday' THEN 2\n    WHEN 'Wednesday' THEN 3\n    WHEN 'Thursday' THEN 4\n    WHEN 'Friday' THEN 5\n    WHEN 'Saturday' THEN 6\n    WHEN 'Sunday' THEN 7\n  END,\n  CASE hour_range\n    WHEN '0-6 (Early Morning)' THEN 1\n    WHEN '6-12 (Morning)' THEN 2\n    WHEN '12-18 (Afternoon)' THEN 3\n    WHEN '18-24 (Evening)' THEN 4\n  END",
-            "connection_name": "mxfood",
+            "query": "WITH hourly_counts AS (\n  SELECT \n    DATE_TRUNC('day', created_at) as order_date,\n    CASE DAYOFWEEK(created_at)\n      WHEN 0 THEN 'Sunday'\n      WHEN 1 THEN 'Monday'\n      WHEN 2 THEN 'Tuesday'\n      WHEN 3 THEN 'Wednesday'\n      WHEN 4 THEN 'Thursday'\n      WHEN 5 THEN 'Friday'\n      WHEN 6 THEN 'Saturday'\n    END as day_of_week,\n    CASE \n      WHEN EXTRACT(HOUR FROM created_at) >= 0 AND EXTRACT(HOUR FROM created_at) < 6 THEN '0-6 (Early Morning)'\n      WHEN EXTRACT(HOUR FROM created_at) >= 6 AND EXTRACT(HOUR FROM created_at) < 12 THEN '6-12 (Morning)'\n      WHEN EXTRACT(HOUR FROM created_at) >= 12 AND EXTRACT(HOUR FROM created_at) < 18 THEN '12-18 (Afternoon)'\n      WHEN EXTRACT(HOUR FROM created_at) >= 18 THEN '18-24 (Evening)'\n    END as hour_range,\n    COUNT(*) as order_count\n  FROM mxfood.orders\n  WHERE status = 'completed'\n    AND created_at >= '2025-12-01'\n GROUP BY order_date, day_of_week, hour_range\n)\nSELECT \n  day_of_week,\n  hour_range,\n  ROUND(AVG(order_count), 1) as avg_orders\nFROM hourly_counts\nGROUP BY day_of_week, hour_range\nORDER BY \n  CASE day_of_week\n    WHEN 'Monday' THEN 1\n    WHEN 'Tuesday' THEN 2\n    WHEN 'Wednesday' THEN 3\n    WHEN 'Thursday' THEN 4\n    WHEN 'Friday' THEN 5\n    WHEN 'Saturday' THEN 6\n    WHEN 'Sunday' THEN 7\n  END,\n  CASE hour_range\n    WHEN '0-6 (Early Morning)' THEN 1\n    WHEN '6-12 (Morning)' THEN 2\n    WHEN '12-18 (Afternoon)' THEN 3\n    WHEN '18-24 (Evening)' THEN 4\n  END",
+            "connection_name": "data",
             "vizSettings": {
               "type": "pivot",
               "xCols": [
@@ -2402,8 +2037,8 @@
           "references": [],
           "content": {
             "description": "Completed orders by month",
-            "query": "SELECT DATE_TRUNC('month', created_at) as month, COUNT(*) as orders FROM orders WHERE status = 'completed' GROUP BY 1 ORDER BY 1",
-            "connection_name": "mxfood",
+            "query": "SELECT DATE_TRUNC('month', created_at) as month, COUNT(*) as orders FROM mxfood.orders WHERE status = 'completed' GROUP BY 1 ORDER BY 1",
+            "connection_name": "data",
             "vizSettings": {
               "type": "trend",
               "xCols": [
@@ -2427,8 +2062,8 @@
           "references": [],
           "content": {
             "description": "Total revenue per month",
-            "query": "SELECT DATE_TRUNC('month', created_at) as month, ROUND(SUM(total), 2) as revenue FROM orders WHERE status = 'completed' GROUP BY DATE_TRUNC('month', created_at) ORDER BY month",
-            "connection_name": "mxfood",
+            "query": "SELECT DATE_TRUNC('month', created_at) as month, ROUND(SUM(total), 2) as revenue FROM mxfood.orders WHERE status = 'completed' GROUP BY DATE_TRUNC('month', created_at) ORDER BY month",
+            "connection_name": "data",
             "vizSettings": {
               "type": "trend",
               "xCols": [
@@ -2452,8 +2087,8 @@
           "references": [],
           "content": {
             "description": "Count of unique users who placed orders each month",
-            "query": "SELECT DATE_TRUNC('month', created_at) as month, COUNT(DISTINCT user_id) as active_users FROM orders GROUP BY DATE_TRUNC('month', created_at) ORDER BY month",
-            "connection_name": "mxfood",
+            "query": "SELECT DATE_TRUNC('month', created_at) as month, COUNT(DISTINCT user_id) as active_users FROM mxfood.orders GROUP BY DATE_TRUNC('month', created_at) ORDER BY month",
+            "connection_name": "data",
             "vizSettings": {
               "type": "trend",
               "xCols": [
@@ -2477,8 +2112,8 @@
           "references": [],
           "content": {
             "description": "Number of new user signups each week",
-            "query": "WITH weekly_new_users AS (\n  SELECT \n    DATE_TRUNC('week', created_at) as week,\n    COUNT(*) as new_users\n  FROM users\n  GROUP BY DATE_TRUNC('week', created_at)\n),\nweekly_returning_users AS (\n  SELECT \n    DATE_TRUNC('week', o.created_at) as week,\n    COUNT(DISTINCT o.user_id) as returning_users\n  FROM orders o\n  JOIN users u ON o.user_id = u.user_id\n  WHERE DATE_TRUNC('week', o.created_at) > DATE_TRUNC('week', u.created_at)\n  GROUP BY DATE_TRUNC('week', o.created_at)\n)\nSELECT \n  COALESCE(n.week, r.week) as week,\n  COALESCE(n.new_users, 0) as new_users,\n  COALESCE(r.returning_users, 0) as returning_users\nFROM weekly_new_users n\nFULL OUTER JOIN weekly_returning_users r ON n.week = r.week\nORDER BY week",
-            "connection_name": "mxfood",
+            "query": "WITH weekly_new_users AS (\n  SELECT \n    DATE_TRUNC('week', created_at) as week,\n    COUNT(*) as new_users\n  FROM mxfood.users\n  GROUP BY DATE_TRUNC('week', created_at)\n),\nweekly_returning_users AS (\n  SELECT \n    DATE_TRUNC('week', o.created_at) as week,\n    COUNT(DISTINCT o.user_id) as returning_users\n  FROM mxfood.orders o\n  JOIN mxfood.users u ON o.user_id = u.user_id\n  WHERE DATE_TRUNC('week', o.created_at) > DATE_TRUNC('week', u.created_at)\n  GROUP BY DATE_TRUNC('week', o.created_at)\n)\nSELECT \n  COALESCE(n.week, r.week) as week,\n  COALESCE(n.new_users, 0) as new_users,\n  COALESCE(r.returning_users, 0) as returning_users\nFROM weekly_new_users n\nFULL OUTER JOIN weekly_returning_users r ON n.week = r.week\nORDER BY week",
+            "connection_name": "data",
             "vizSettings": {
               "type": "area",
               "xCols": [
@@ -2503,8 +2138,8 @@
           "references": [],
           "content": {
             "description": "Pie chart showing the breakdown of all users by whether they currently have an active subscription",
-            "query": "SELECT \n  CASE \n    WHEN us.subscription_id IS NOT NULL THEN 'Subscriber'\n    ELSE 'Non-Subscriber'\n  END as user_type,\n  COUNT(DISTINCT u.user_id) as user_count\nFROM users u\nLEFT JOIN user_subscriptions us ON u.user_id = us.user_id\n  AND us.status = 'active'\n  AND us.started_at <= '2025-12-01' \n  AND (us.ended_at IS NULL OR us.ended_at >= '2025-12-01')\nGROUP BY user_type\nORDER BY user_count DESC",
-            "connection_name": "mxfood",
+            "query": "SELECT \n  CASE \n    WHEN us.subscription_id IS NOT NULL THEN 'Subscriber'\n    ELSE 'Non-Subscriber'\n  END as user_type,\n  COUNT(DISTINCT u.user_id) as user_count\nFROM mxfood.users u\nLEFT JOIN mxfood.user_subscriptions us ON u.user_id = us.user_id\n  AND us.status = 'active'\n  AND us.started_at <= '2025-12-01' \n  AND (us.ended_at IS NULL OR us.ended_at >= '2025-12-01')\nGROUP BY user_type\nORDER BY user_count DESC",
+            "connection_name": "data",
             "vizSettings": {
               "type": "pie",
               "xCols": [
@@ -2528,8 +2163,8 @@
           "references": [],
           "content": {
             "description": "Pie chart showing revenue breakdown by platform (iOS, Android, Web) for December 2025",
-            "query": "SELECT \n  platform,\n  ROUND(SUM(total), 2) as revenue\nFROM orders\nWHERE status = 'completed'\n  AND created_at >= '2025-12-01'\n  AND created_at < '2026-01-01'\nGROUP BY platform\nORDER BY revenue DESC",
-            "connection_name": "mxfood",
+            "query": "SELECT \n  platform,\n  ROUND(SUM(total), 2) as revenue\nFROM mxfood.orders\nWHERE status = 'completed'\n  AND created_at >= '2025-12-01'\n  AND created_at < '2026-01-01'\nGROUP BY platform\nORDER BY revenue DESC",
+            "connection_name": "data",
             "vizSettings": {
               "type": "pie",
               "xCols": [
@@ -2553,8 +2188,8 @@
           "references": [],
           "content": {
             "description": "Bar chart showing the top 5 zones by revenue for December 2025",
-            "query": "SELECT \n  z.zone_name,\n  ROUND(SUM(o.total), 2) as revenue\nFROM orders o\nJOIN zones z ON o.zone_id = z.zone_id\nWHERE o.status = 'completed'\n  AND o.created_at >= '2025-12-01'\n  AND o.created_at < '2026-01-01'\nGROUP BY z.zone_name\nORDER BY revenue DESC\nLIMIT 5",
-            "connection_name": "mxfood",
+            "query": "SELECT \n  z.zone_name,\n  ROUND(SUM(o.total), 2) as revenue\nFROM mxfood.orders o\nJOIN mxfood.zones z ON o.zone_id = z.zone_id\nWHERE o.status = 'completed'\n  AND o.created_at >= '2025-12-01'\n  AND o.created_at < '2026-01-01'\nGROUP BY z.zone_name\nORDER BY revenue DESC\nLIMIT 5",
+            "connection_name": "data",
             "vizSettings": {
               "type": "bar",
               "xCols": [
@@ -2578,8 +2213,8 @@
           "references": [],
           "content": {
             "description": "Conversion funnel from app open to payment success",
-            "query": "WITH stage_map AS (\n  SELECT * FROM (VALUES ('app_open','App Open',1),('restaurant_view','Restaurant View',2),('add_to_cart','Add to Cart',3),('checkout_started','Checkout Started',4),('payment_success','Payment Success',5)) AS t(event_name, stage, stage_order)\n)\nSELECT m.stage, COALESCE(COUNT(DISTINCT e.session_id), 0) AS users FROM stage_map m LEFT JOIN events e ON e.event_name = m.event_name AND e.event_timestamp >= '2025-06-01' GROUP BY m.stage, m.stage_order ORDER BY m.stage_order;",
-            "connection_name": "mxfood",
+            "query": "WITH stage_map AS (\n  SELECT * FROM (VALUES ('app_open','App Open',1),('restaurant_view','Restaurant View',2),('add_to_cart','Add to Cart',3),('checkout_started','Checkout Started',4),('payment_success','Payment Success',5)) AS t(event_name, stage, stage_order)\n)\nSELECT m.stage, COALESCE(COUNT(DISTINCT e.session_id), 0) AS users FROM stage_map m LEFT JOIN mxfood.events e ON e.event_name = m.event_name AND e.event_timestamp >= '2025-06-01' GROUP BY m.stage, m.stage_order ORDER BY m.stage_order;",
+            "connection_name": "data",
             "vizSettings": {
               "type": "funnel",
               "xCols": [
@@ -2603,8 +2238,8 @@
           "references": [],
           "content": {
             "description": "Total sessions per day over the last 90 days",
-            "query": "SELECT \n  DATE(event_timestamp) as date,\n  platform,\n  COUNT(DISTINCT session_id) as total_sessions\nFROM events\nWHERE event_timestamp >= '2025-12-01'\nGROUP BY DATE(event_timestamp), platform\nORDER BY date, platform",
-            "connection_name": "mxfood",
+            "query": "SELECT \n  DATE(event_timestamp) as date,\n  platform,\n  COUNT(DISTINCT session_id) as total_sessions\nFROM mxfood.events\nWHERE event_timestamp >= '2025-12-01'\nGROUP BY DATE(event_timestamp), platform\nORDER BY date, platform",
+            "connection_name": "data",
             "vizSettings": {
               "type": "bar",
               "xCols": [
@@ -2629,8 +2264,8 @@
           "references": [],
           "content": {
             "description": "Daily average number of events per session",
-            "query": "SELECT \n  DATE_TRUNC('month', event_timestamp) as month_start,\n  ROUND(COUNT(*) * 1.0 / COUNT(DISTINCT session_id), 2) as events_per_session,\n  ROUND(COUNT(DISTINCT session_id) * 1.0 / COUNT(DISTINCT user_id), 2) as avg_sessions_per_user_per_week\nFROM events\nWHERE event_timestamp >= '2025-01-01'\nGROUP BY DATE_TRUNC('month', event_timestamp)\nORDER BY month_start",
-            "connection_name": "mxfood",
+            "query": "SELECT \n  DATE_TRUNC('month', event_timestamp) as month_start,\n  ROUND(COUNT(*) * 1.0 / COUNT(DISTINCT session_id), 2) as events_per_session,\n  ROUND(COUNT(DISTINCT session_id) * 1.0 / COUNT(DISTINCT user_id), 2) as avg_sessions_per_user_per_week\nFROM mxfood.events\nWHERE event_timestamp >= '2025-01-01'\nGROUP BY DATE_TRUNC('month', event_timestamp)\nORDER BY month_start",
+            "connection_name": "data",
             "vizSettings": {
               "type": "line",
               "xCols": [
@@ -2655,8 +2290,8 @@
           "references": [],
           "content": {
             "description": "Daily conversion rate from app open to payment success",
-            "query": "WITH weekly_funnel AS (\n  SELECT \n    DATE_TRUNC('week', event_timestamp) as week,\n    COUNT(DISTINCT CASE WHEN event_name = 'app_open' THEN user_id END) as app_opens,\n    COUNT(DISTINCT CASE WHEN event_name = 'payment_success' THEN user_id END) as conversions\n  FROM events\n  WHERE event_timestamp >= '2025-12-01'\n  GROUP BY DATE_TRUNC('week', event_timestamp)\n)\nSELECT \n  week,\n  ROUND(conversions * 100.0 / NULLIF(app_opens, 0), 2) as conversion_rate_pct\nFROM weekly_funnel\nWHERE app_opens > 0\nORDER BY week",
-            "connection_name": "mxfood",
+            "query": "WITH weekly_funnel AS (\n  SELECT \n    DATE_TRUNC('week', event_timestamp) as week,\n    COUNT(DISTINCT CASE WHEN event_name = 'app_open' THEN user_id END) as app_opens,\n    COUNT(DISTINCT CASE WHEN event_name = 'payment_success' THEN user_id END) as conversions\n  FROM mxfood.events\n  WHERE event_timestamp >= '2025-12-01'\n  GROUP BY DATE_TRUNC('week', event_timestamp)\n)\nSELECT \n  week,\n  ROUND(conversions * 100.0 / NULLIF(app_opens, 0), 2) as conversion_rate_pct\nFROM weekly_funnel\nWHERE app_opens > 0\nORDER BY week",
+            "connection_name": "data",
             "vizSettings": {
               "type": "bar",
               "xCols": [
@@ -2789,357 +2424,9 @@
             "name": "data",
             "type": "csv",
             "config": {
-              "files": [
-                {
-                  "filename": "ad_campaigns.parquet",
-                  "table_name": "ad_campaigns",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/org/mxfood/ad_campaigns.parquet",
-                  "file_format": "parquet",
-                  "row_count": 69,
-                  "columns": [
-                    { "name": "campaign_id", "type": "BIGINT" },
-                    { "name": "channel_id", "type": "BIGINT" },
-                    { "name": "campaign_name", "type": "VARCHAR" },
-                    { "name": "start_date", "type": "DATE" },
-                    { "name": "end_date", "type": "DATE" },
-                    { "name": "daily_budget", "type": "DOUBLE" },
-                    { "name": "target_audience", "type": "VARCHAR" }
-                  ]
-                },
-                {
-                  "filename": "ad_spend.parquet",
-                  "table_name": "ad_spend",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/org/mxfood/ad_spend.parquet",
-                  "file_format": "parquet",
-                  "row_count": 2650,
-                  "columns": [
-                    { "name": "spend_id", "type": "BIGINT" },
-                    { "name": "campaign_id", "type": "BIGINT" },
-                    { "name": "date", "type": "DATE" },
-                    { "name": "impressions", "type": "BIGINT" },
-                    { "name": "clicks", "type": "BIGINT" },
-                    { "name": "installs", "type": "BIGINT" },
-                    { "name": "spend", "type": "DOUBLE" }
-                  ]
-                },
-                {
-                  "filename": "attribution.parquet",
-                  "table_name": "attribution",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/org/mxfood/attribution.parquet",
-                  "file_format": "parquet",
-                  "row_count": 30000,
-                  "columns": [
-                    { "name": "attribution_id", "type": "BIGINT" },
-                    { "name": "user_id", "type": "BIGINT" },
-                    { "name": "campaign_id", "type": "DOUBLE" },
-                    { "name": "channel_id", "type": "BIGINT" },
-                    { "name": "attributed_at", "type": "TIMESTAMP" },
-                    { "name": "click_id", "type": "VARCHAR" }
-                  ]
-                },
-                {
-                  "filename": "deliveries.parquet",
-                  "table_name": "deliveries",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/org/mxfood/deliveries.parquet",
-                  "file_format": "parquet",
-                  "row_count": 367312,
-                  "columns": [
-                    { "name": "delivery_id", "type": "BIGINT" },
-                    { "name": "order_id", "type": "BIGINT" },
-                    { "name": "driver_id", "type": "BIGINT" },
-                    { "name": "assigned_at", "type": "TIMESTAMP" },
-                    { "name": "picked_up_at", "type": "TIMESTAMP" },
-                    { "name": "delivered_at", "type": "TIMESTAMP" },
-                    { "name": "delivery_rating", "type": "BIGINT" },
-                    { "name": "delivery_notes", "type": "VARCHAR" }
-                  ]
-                },
-                {
-                  "filename": "drivers.parquet",
-                  "table_name": "drivers",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/org/mxfood/drivers.parquet",
-                  "file_format": "parquet",
-                  "row_count": 800,
-                  "columns": [
-                    { "name": "driver_id", "type": "BIGINT" },
-                    { "name": "name", "type": "VARCHAR" },
-                    { "name": "zone_id", "type": "BIGINT" },
-                    { "name": "vehicle_type", "type": "VARCHAR" },
-                    { "name": "rating", "type": "DOUBLE" },
-                    { "name": "created_at", "type": "TIMESTAMP" },
-                    { "name": "is_active", "type": "BOOLEAN" }
-                  ]
-                },
-                {
-                  "filename": "events.parquet",
-                  "table_name": "events",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/org/mxfood/events.parquet",
-                  "file_format": "parquet",
-                  "row_count": 7643737,
-                  "columns": [
-                    { "name": "event_id", "type": "BIGINT" },
-                    { "name": "user_id", "type": "BIGINT" },
-                    { "name": "session_id", "type": "VARCHAR" },
-                    { "name": "event_name", "type": "VARCHAR" },
-                    { "name": "event_timestamp", "type": "TIMESTAMP" },
-                    { "name": "platform", "type": "VARCHAR" },
-                    { "name": "screen_name", "type": "VARCHAR" },
-                    { "name": "properties", "type": "VARCHAR" }
-                  ]
-                },
-                {
-                  "filename": "marketing_channels.parquet",
-                  "table_name": "marketing_channels",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/org/mxfood/marketing_channels.parquet",
-                  "file_format": "parquet",
-                  "row_count": 5,
-                  "columns": [
-                    { "name": "channel_id", "type": "BIGINT" },
-                    { "name": "channel_name", "type": "VARCHAR" },
-                    { "name": "channel_type", "type": "VARCHAR" }
-                  ]
-                },
-                {
-                  "filename": "order_items.parquet",
-                  "table_name": "order_items",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/org/mxfood/order_items.parquet",
-                  "file_format": "parquet",
-                  "row_count": 1038204,
-                  "columns": [
-                    { "name": "product_id", "type": "BIGINT" },
-                    { "name": "quantity", "type": "BIGINT" },
-                    { "name": "unit_price", "type": "DOUBLE" },
-                    { "name": "total_price", "type": "DOUBLE" },
-                    { "name": "order_id", "type": "BIGINT" },
-                    { "name": "order_item_id", "type": "BIGINT" }
-                  ]
-                },
-                {
-                  "filename": "orders.parquet",
-                  "table_name": "orders",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/org/mxfood/orders.parquet",
-                  "file_format": "parquet",
-                  "row_count": 399267,
-                  "columns": [
-                    { "name": "user_id", "type": "BIGINT" },
-                    { "name": "restaurant_id", "type": "BIGINT" },
-                    { "name": "driver_id", "type": "BIGINT" },
-                    { "name": "zone_id", "type": "BIGINT" },
-                    { "name": "created_at", "type": "TIMESTAMP" },
-                    { "name": "status", "type": "VARCHAR" },
-                    { "name": "subtotal", "type": "DOUBLE" },
-                    { "name": "delivery_fee", "type": "DOUBLE" },
-                    { "name": "discount_amount", "type": "DOUBLE" },
-                    { "name": "tip_amount", "type": "DOUBLE" },
-                    { "name": "total", "type": "DOUBLE" },
-                    { "name": "promo_code_id", "type": "BIGINT" },
-                    { "name": "is_subscription_order", "type": "BOOLEAN" },
-                    { "name": "platform", "type": "VARCHAR" },
-                    { "name": "estimated_delivery_mins", "type": "BIGINT" },
-                    { "name": "actual_delivery_mins", "type": "DOUBLE" },
-                    { "name": "order_id", "type": "BIGINT" }
-                  ]
-                },
-                {
-                  "filename": "product_categories.parquet",
-                  "table_name": "product_categories",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/org/mxfood/product_categories.parquet",
-                  "file_format": "parquet",
-                  "row_count": 5,
-                  "columns": [
-                    { "name": "category_id", "type": "BIGINT" },
-                    { "name": "category_name", "type": "VARCHAR" }
-                  ]
-                },
-                {
-                  "filename": "product_subcategories.parquet",
-                  "table_name": "product_subcategories",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/org/mxfood/product_subcategories.parquet",
-                  "file_format": "parquet",
-                  "row_count": 28,
-                  "columns": [
-                    { "name": "subcategory_id", "type": "BIGINT" },
-                    { "name": "category_id", "type": "BIGINT" },
-                    { "name": "subcategory_name", "type": "VARCHAR" }
-                  ]
-                },
-                {
-                  "filename": "products.parquet",
-                  "table_name": "products",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/org/mxfood/products.parquet",
-                  "file_format": "parquet",
-                  "row_count": 7194,
-                  "columns": [
-                    { "name": "product_id", "type": "BIGINT" },
-                    { "name": "restaurant_id", "type": "BIGINT" },
-                    { "name": "subcategory_id", "type": "BIGINT" },
-                    { "name": "name", "type": "VARCHAR" },
-                    { "name": "description", "type": "VARCHAR" },
-                    { "name": "price", "type": "DOUBLE" },
-                    { "name": "is_available", "type": "BOOLEAN" },
-                    { "name": "created_at", "type": "TIMESTAMP" }
-                  ]
-                },
-                {
-                  "filename": "promo_codes.parquet",
-                  "table_name": "promo_codes",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/org/mxfood/promo_codes.parquet",
-                  "file_format": "parquet",
-                  "row_count": 6,
-                  "columns": [
-                    { "name": "promo_code_id", "type": "BIGINT" },
-                    { "name": "code", "type": "VARCHAR" },
-                    { "name": "discount_type", "type": "VARCHAR" },
-                    { "name": "discount_value", "type": "BIGINT" },
-                    { "name": "min_order_value", "type": "BIGINT" },
-                    { "name": "max_uses", "type": "BIGINT" },
-                    { "name": "max_uses_per_user", "type": "BIGINT" },
-                    { "name": "valid_from", "type": "TIMESTAMP" },
-                    { "name": "valid_until", "type": "TIMESTAMP" },
-                    { "name": "is_first_order_only", "type": "BOOLEAN" }
-                  ]
-                },
-                {
-                  "filename": "promo_usage.parquet",
-                  "table_name": "promo_usage",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/org/mxfood/promo_usage.parquet",
-                  "file_format": "parquet",
-                  "row_count": 37578,
-                  "columns": [
-                    { "name": "usage_id", "type": "BIGINT" },
-                    { "name": "promo_code_id", "type": "BIGINT" },
-                    { "name": "user_id", "type": "BIGINT" },
-                    { "name": "order_id", "type": "BIGINT" },
-                    { "name": "used_at", "type": "TIMESTAMP" },
-                    { "name": "discount_applied", "type": "DOUBLE" }
-                  ]
-                },
-                {
-                  "filename": "restaurants.parquet",
-                  "table_name": "restaurants",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/org/mxfood/restaurants.parquet",
-                  "file_format": "parquet",
-                  "row_count": 510,
-                  "columns": [
-                    { "name": "restaurant_id", "type": "BIGINT" },
-                    { "name": "name", "type": "VARCHAR" },
-                    { "name": "zone_id", "type": "BIGINT" },
-                    { "name": "cuisine_type", "type": "VARCHAR" },
-                    { "name": "price_tier", "type": "BIGINT" },
-                    { "name": "rating", "type": "DOUBLE" },
-                    { "name": "is_promoted", "type": "BOOLEAN" },
-                    { "name": "created_at", "type": "TIMESTAMP" },
-                    { "name": "is_active", "type": "BOOLEAN" }
-                  ]
-                },
-                {
-                  "filename": "subscription_plans.parquet",
-                  "table_name": "subscription_plans",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/org/mxfood/subscription_plans.parquet",
-                  "file_format": "parquet",
-                  "row_count": 3,
-                  "columns": [
-                    { "name": "plan_id", "type": "VARCHAR" },
-                    { "name": "plan_name", "type": "VARCHAR" },
-                    { "name": "monthly_price", "type": "DOUBLE" },
-                    { "name": "free_delivery_threshold", "type": "DOUBLE" },
-                    { "name": "discount_percent", "type": "BIGINT" }
-                  ]
-                },
-                {
-                  "filename": "support_tickets.parquet",
-                  "table_name": "support_tickets",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/org/mxfood/support_tickets.parquet",
-                  "file_format": "parquet",
-                  "row_count": 32412,
-                  "columns": [
-                    { "name": "ticket_id", "type": "BIGINT" },
-                    { "name": "user_id", "type": "BIGINT" },
-                    { "name": "order_id", "type": "BIGINT" },
-                    { "name": "category", "type": "VARCHAR" },
-                    { "name": "priority", "type": "VARCHAR" },
-                    { "name": "status", "type": "VARCHAR" },
-                    { "name": "created_at", "type": "TIMESTAMP" },
-                    { "name": "resolved_at", "type": "TIMESTAMP" },
-                    { "name": "resolution_type", "type": "VARCHAR" },
-                    { "name": "refund_amount", "type": "DOUBLE" }
-                  ]
-                },
-                {
-                  "filename": "user_subscriptions.parquet",
-                  "table_name": "user_subscriptions",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/org/mxfood/user_subscriptions.parquet",
-                  "file_format": "parquet",
-                  "row_count": 2922,
-                  "columns": [
-                    { "name": "subscription_id", "type": "BIGINT" },
-                    { "name": "user_id", "type": "BIGINT" },
-                    { "name": "plan_id", "type": "VARCHAR" },
-                    { "name": "started_at", "type": "TIMESTAMP" },
-                    { "name": "ended_at", "type": "TIMESTAMP" },
-                    { "name": "status", "type": "VARCHAR" },
-                    { "name": "billing_cycle", "type": "VARCHAR" }
-                  ]
-                },
-                {
-                  "filename": "users.parquet",
-                  "table_name": "users",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/org/mxfood/users.parquet",
-                  "file_format": "parquet",
-                  "row_count": 30000,
-                  "columns": [
-                    { "name": "user_id", "type": "BIGINT" },
-                    { "name": "first_name", "type": "VARCHAR" },
-                    { "name": "last_name", "type": "VARCHAR" },
-                    { "name": "email", "type": "VARCHAR" },
-                    { "name": "phone", "type": "VARCHAR" },
-                    { "name": "created_at", "type": "TIMESTAMP" },
-                    { "name": "zone_id", "type": "BIGINT" },
-                    { "name": "acquisition_channel", "type": "VARCHAR" },
-                    { "name": "referred_by_user_id", "type": "DOUBLE" },
-                    { "name": "platform", "type": "VARCHAR" },
-                    { "name": "segment", "type": "VARCHAR" },
-                    { "name": "will_order", "type": "BOOLEAN" }
-                  ]
-                },
-                {
-                  "filename": "zones.parquet",
-                  "table_name": "zones",
-                  "schema_name": "mxfood",
-                  "s3_key": "{{COMPANY_ID}}/csvs/org/mxfood/zones.parquet",
-                  "file_format": "parquet",
-                  "row_count": 12,
-                  "columns": [
-                    { "name": "zone_id", "type": "BIGINT" },
-                    { "name": "zone_name", "type": "VARCHAR" },
-                    { "name": "avg_delivery_time_mins", "type": "BIGINT" },
-                    { "name": "surge_multiplier", "type": "DOUBLE" },
-                    { "name": "lat_center", "type": "DOUBLE" },
-                    { "name": "lng_center", "type": "DOUBLE" }
-                  ]
-                }
-              ]
+              "files": []
             },
-            "description": "Sample MX Food data — add your own CSV, xlsx, or Google Sheets tables here"
+            "description": "Add your own CSV, xlsx, or Google Sheets tables here"
           },
           "company_id": "{{COMPANY_ID}}",
           "created_at": "{{TIMESTAMP}}",

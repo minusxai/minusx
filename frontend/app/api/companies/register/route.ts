@@ -108,15 +108,11 @@ export async function POST(request: NextRequest) {
         subdomain
       );
 
-      // Copy mxfood seed Parquet files to company-specific S3 prefixes — best-effort, non-blocking.
+      // Copy mxfood seed Parquet files to the tutorial-mode S3 prefix — best-effort, non-blocking.
       // Seed files must have been uploaded via `cd backend && uv run python scripts/seed_mxfood_to_s3.py`
-      // Copy to both tutorial and org modes (org uses the "data" connection, tutorial uses "mxfood").
-      Promise.all([
-        copySeedMxfoodForCompany(result.companyId, 'tutorial', MXFOOD_TABLES),
-        copySeedMxfoodForCompany(result.companyId, 'org', MXFOOD_TABLES),
-      ]).then(([tutorialCopied, orgCopied]) => {
-        console.log(`[COMPANY_REGISTER] Copied ${tutorialCopied.length}/${MXFOOD_TABLES.length} mxfood tables for tutorial mode`);
-        console.log(`[COMPANY_REGISTER] Copied ${orgCopied.length}/${MXFOOD_TABLES.length} mxfood tables for org mode`);
+      // Only tutorial mode is seeded; org mode starts with an empty "data" connection.
+      copySeedMxfoodForCompany(result.companyId, 'tutorial', MXFOOD_TABLES).then((copied) => {
+        console.log(`[COMPANY_REGISTER] Copied ${copied.length}/${MXFOOD_TABLES.length} mxfood seed tables for company ${result.companyId}`);
       }).catch((err) =>
         console.warn('[COMPANY_REGISTER] mxfood S3 copy failed (non-fatal):', err)
       );
