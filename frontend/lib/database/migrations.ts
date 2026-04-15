@@ -1207,6 +1207,37 @@ export const MIGRATIONS: MigrationEntry[] = [
       return data;
     },
   },
+  {
+    dataVersion: 32,
+    description: 'V32: Normalize dashboard layout item IDs — old data stored FileReference objects {type,id}; coerce to integer or drop',
+    dataMigration: (data: InitData) => {
+      for (const companyData of data.companies as CompanyData[]) {
+        for (const doc of companyData.documents as ExportedDocument[]) {
+          if (doc.type !== 'dashboard') continue;
+          const content = doc.content as any;
+          if (!content?.layout?.items || !Array.isArray(content.layout.items)) continue;
+
+          const normalized: any[] = [];
+          for (const item of content.layout.items) {
+            let id = item.id;
+            // Coerce FileReference objects { type: 'question', id: N } → integer
+            if (id !== null && typeof id === 'object' && typeof id.id === 'number') {
+              id = id.id;
+            }
+            // Keep only items whose id is an integer or non-empty string
+            if (typeof id === 'number' && Number.isInteger(id)) {
+              normalized.push({ ...item, id });
+            } else if (typeof id === 'string' && id.length > 0) {
+              normalized.push({ ...item, id });
+            }
+            // else: null / undefined / object / empty string → drop the item
+          }
+          content.layout.items = normalized;
+        }
+      }
+      return data;
+    },
+  },
 ];
 
 /**

@@ -26,7 +26,7 @@ function makeData(configContent: Record<string, unknown>): InitData {
 }
 
 function getCreateTypes(data: InitData): unknown {
-  return (data.companies[0] as CompanyData).documents[0].content?.accessRules?.admin?.createTypes;
+  return ((data.companies[0] as CompanyData).documents[0].content as any)?.accessRules?.admin?.createTypes;
 }
 
 describe('V31 migration — accessRules.admin.createTypes', () => {
