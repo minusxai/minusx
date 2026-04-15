@@ -19,7 +19,7 @@
       "type": "fileTypeAccess",
       "role": "viewer",
       "allowedTypes": ["question", "dashboard", "folder", "context", "connection", "conversation", "session", "alert", "alert_run", "report_run", "report", "transformation", "transformation_run"],
-      "createTypes": [],
+      "createTypes": ["conversation"],
       "viewTypes": ["dashboard", "folder", "conversation", "session", "report", "alert", "alert_run", "report_run"]
     },
     {

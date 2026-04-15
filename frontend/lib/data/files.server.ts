@@ -27,7 +27,7 @@ import { extractReferenceIds, extractAllReferenceIds } from './helpers/reference
 import { UserFacingError, AccessPermissionError, FileNotFoundError } from '@/lib/errors';
 import { validateFileState } from '@/lib/validation/content-validators';
 import { PROTECTED_FILE_PATHS } from '@/lib/constants';
-import { canAccessFileType, canCreateFileType, validateFileLocation, canDeleteFileType } from '@/lib/auth/access-rules';
+import { canAccessFileType, canCreateFileType, validateFileLocation, canDeleteFileType, canCreateFileByRole } from '@/lib/auth/access-rules';
 import type { AccessRulesOverride } from '@/lib/branding/whitelabel';
 import { getConfigsByCompanyId } from './configs.server';
 import { resolvePath, resolveHomeFolderSync, isFileTypeAllowedInPath, resolveHomeFolder } from '@/lib/mode/path-resolver';
@@ -298,9 +298,14 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
     const overrides = await this._getOverrides(user);
 
-    // Check file type access
+    // Check file type access (read permission)
     if (!canAccessFileType(user.role, type, overrides)) {
       throw new AccessPermissionError(`You do not have permission to create files of type: ${type}`);
+    }
+
+    // Check write permission — createTypes gates both create and edit
+    if (!canCreateFileByRole(user.role, type, overrides)) {
+      throw new AccessPermissionError(`Your role (${user.role}) does not have permission to create ${type} files.`);
     }
 
     // Check if type can be manually created (blocks config/styles universally)
@@ -465,6 +470,11 @@ class FilesDataLayerServer implements IFilesDataLayer {
     // Check file access (unified: type + mode + path) - Phase 4
     if (!canAccessFile(existingFile, user, overrides)) {
       throw new AccessPermissionError('You do not have permission to modify this file');
+    }
+
+    // Check write permission — createTypes gates both create and edit
+    if (!canCreateFileByRole(user.role, existingFile.type, overrides)) {
+      throw new AccessPermissionError(`Your role (${user.role}) does not have permission to edit ${existingFile.type} files.`);
     }
 
     // Check if path is protected

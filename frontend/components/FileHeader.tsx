@@ -80,12 +80,12 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
   const nameDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const descDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Set initial edit mode for create mode (once on mount only)
+  // Set initial edit mode for create mode (once on mount only, skip for non-editors)
   const initializedRef = useRef(false);
   useEffect(() => {
     if (!initializedRef.current) {
       initializedRef.current = true;
-      if (mode === 'create') {
+      if (mode === 'create' && canEdit) {
         dispatchSetEditMode(true);
       }
     }
