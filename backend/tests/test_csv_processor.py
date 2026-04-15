@@ -81,8 +81,14 @@ class TestDetectFileFormat:
     def test_pq_short_extension(self):
         assert detect_file_format("data.pq") == "parquet"
 
+    def test_xlsx(self):
+        assert detect_file_format("data.xlsx") == "xlsx"
+
+    def test_xlsx_uppercase(self):
+        assert detect_file_format("DATA.XLSX") == "xlsx"
+
     def test_unknown_defaults_to_csv(self):
-        assert detect_file_format("data.xlsx") == "csv"
+        assert detect_file_format("data.tsv") == "csv"
 
     def test_uppercase_extension(self):
         # Extension comparison is case-insensitive
@@ -536,3 +542,202 @@ class TestProcessGoogleSheetsImportS3:
             )
 
         mock_delete.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Tests for xlsx upload expansion (_expand_xlsx_to_csvs + process_csv_from_s3)
+# ---------------------------------------------------------------------------
+
+def _make_two_sheet_xlsx() -> bytes:
+    """Build an xlsx with two non-empty sheets: 'Sales' and 'Returns'."""
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine='openpyxl') as writer:
+        pd.DataFrame({'id': [1, 2], 'amount': [10.0, 20.0]}).to_excel(
+            writer, sheet_name='Sales', index=False)
+        pd.DataFrame({'sku': ['A'], 'qty': [5]}).to_excel(
+            writer, sheet_name='Returns', index=False)
+    return buf.getvalue()
+
+
+def _make_s3_with_xlsx(xlsx_bytes: bytes):
+    """Return a boto3 client mock that serves the given xlsx bytes on get_object."""
+    mock_s3 = MagicMock()
+    mock_body = MagicMock()
+    mock_body.read.return_value = xlsx_bytes
+    mock_s3.get_object.return_value = {'Body': mock_body}
+    return mock_s3
+
+
+class TestExpandXlsxToCsvs:
+    """Unit tests for _expand_xlsx_to_csvs (boto3 mocked)."""
+
+    def test_two_sheets_produce_two_csv_records(self):
+        """An xlsx with 2 non-empty sheets → 2 CSV file records."""
+        import processors.csv_processor as csv_mod
+        from processors.csv_processor import _expand_xlsx_to_csvs
+
+        xlsx_bytes = _make_two_sheet_xlsx()
+        mock_s3 = _make_s3_with_xlsx(xlsx_bytes)
+
+        with patch.object(csv_mod, "OBJECT_STORE_BUCKET", FAKE_BUCKET), \
+             patch("processors.csv_processor.boto3") as mock_boto3:
+            mock_boto3.client.return_value = mock_s3
+            records = _expand_xlsx_to_csvs(
+                s3_key="1/csvs/org/conn/upload.xlsx",
+                connection_name="conn",
+                company_id=1,
+                mode="org",
+                schema_name="mxfood",
+            )
+
+        assert len(records) == 2
+        filenames = {r['filename'] for r in records}
+        assert 'sales.csv' in filenames
+        assert 'returns.csv' in filenames
+
+    def test_output_format_is_csv(self):
+        """All expanded records have file_format='csv' regardless of input."""
+        import processors.csv_processor as csv_mod
+        from processors.csv_processor import _expand_xlsx_to_csvs
+
+        xlsx_bytes = _make_two_sheet_xlsx()
+        mock_s3 = _make_s3_with_xlsx(xlsx_bytes)
+
+        with patch.object(csv_mod, "OBJECT_STORE_BUCKET", FAKE_BUCKET), \
+             patch("processors.csv_processor.boto3") as mock_boto3:
+            mock_boto3.client.return_value = mock_s3
+            records = _expand_xlsx_to_csvs(
+                s3_key="1/x.xlsx", connection_name="c",
+                company_id=1, mode="org", schema_name="public",
+            )
+
+        for r in records:
+            assert r['file_format'] == 'csv'
+
+    def test_schema_name_preserved(self):
+        """schema_name passed in is reflected in every output record."""
+        import processors.csv_processor as csv_mod
+        from processors.csv_processor import _expand_xlsx_to_csvs
+
+        xlsx_bytes = _make_two_sheet_xlsx()
+        mock_s3 = _make_s3_with_xlsx(xlsx_bytes)
+
+        with patch.object(csv_mod, "OBJECT_STORE_BUCKET", FAKE_BUCKET), \
+             patch("processors.csv_processor.boto3") as mock_boto3:
+            mock_boto3.client.return_value = mock_s3
+            records = _expand_xlsx_to_csvs(
+                s3_key="1/x.xlsx", connection_name="c",
+                company_id=1, mode="org", schema_name="analytics",
+            )
+
+        for r in records:
+            assert r['schema_name'] == 'analytics'
+
+    def test_s3_keys_scoped_to_connection(self):
+        """Uploaded CSV keys are under the correct company/mode/connection prefix."""
+        import processors.csv_processor as csv_mod
+        from processors.csv_processor import _expand_xlsx_to_csvs
+
+        xlsx_bytes = _make_two_sheet_xlsx()
+        mock_s3 = _make_s3_with_xlsx(xlsx_bytes)
+
+        with patch.object(csv_mod, "OBJECT_STORE_BUCKET", FAKE_BUCKET), \
+             patch("processors.csv_processor.boto3") as mock_boto3:
+            mock_boto3.client.return_value = mock_s3
+            records = _expand_xlsx_to_csvs(
+                s3_key="42/csvs/tutorial/myconn/upload.xlsx",
+                connection_name="myconn",
+                company_id=42,
+                mode="tutorial",
+                schema_name="public",
+            )
+
+        for r in records:
+            assert r['s3_key'].startswith("42/csvs/tutorial/myconn/")
+            assert r['s3_key'].endswith(".csv")
+
+    def test_empty_sheet_is_skipped(self):
+        """Empty sheets are not included in the output."""
+        import processors.csv_processor as csv_mod
+        from processors.csv_processor import _expand_xlsx_to_csvs
+
+        # Build xlsx with one real sheet + one empty sheet
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine='openpyxl') as writer:
+            pd.DataFrame({'x': [1]}).to_excel(writer, sheet_name='Real', index=False)
+            pd.DataFrame().to_excel(writer, sheet_name='Empty', index=False)
+        xlsx_bytes = buf.getvalue()
+
+        mock_s3 = _make_s3_with_xlsx(xlsx_bytes)
+
+        with patch.object(csv_mod, "OBJECT_STORE_BUCKET", FAKE_BUCKET), \
+             patch("processors.csv_processor.boto3") as mock_boto3:
+            mock_boto3.client.return_value = mock_s3
+            records = _expand_xlsx_to_csvs(
+                s3_key="1/x.xlsx", connection_name="c",
+                company_id=1, mode="org", schema_name="public",
+            )
+
+        assert len(records) == 1
+        assert records[0]['filename'] == 'real.csv'
+
+    def test_all_empty_sheets_raises(self):
+        """Raises ValueError when every sheet is empty."""
+        import processors.csv_processor as csv_mod
+        from processors.csv_processor import _expand_xlsx_to_csvs
+
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine='openpyxl') as writer:
+            pd.DataFrame().to_excel(writer, sheet_name='Nothing', index=False)
+        xlsx_bytes = buf.getvalue()
+
+        mock_s3 = _make_s3_with_xlsx(xlsx_bytes)
+
+        with patch.object(csv_mod, "OBJECT_STORE_BUCKET", FAKE_BUCKET), \
+             patch("processors.csv_processor.boto3") as mock_boto3:
+            mock_boto3.client.return_value = mock_s3
+            with pytest.raises(ValueError, match="No non-empty sheets"):
+                _expand_xlsx_to_csvs(
+                    s3_key="1/x.xlsx", connection_name="c",
+                    company_id=1, mode="org", schema_name="public",
+                )
+
+
+@pytest.mark.asyncio
+async def test_process_csv_from_s3_expands_xlsx_to_per_sheet_tables():
+    """xlsx files are expanded to one table per sheet; final records have file_format='csv'."""
+    import processors.csv_processor as csv_mod
+
+    xlsx_bytes = _make_two_sheet_xlsx()
+    mock_s3 = _make_s3_with_xlsx(xlsx_bytes)
+
+    expanded_csv_records = [
+        {'filename': 'sales.csv', 's3_key': '1/csvs/org/c/aaa_sales.csv',
+         'schema_name': 'mxfood', 'file_format': 'csv'},
+        {'filename': 'returns.csv', 's3_key': '1/csvs/org/c/bbb_returns.csv',
+         'schema_name': 'mxfood', 'file_format': 'csv'},
+    ]
+
+    with patch.object(csv_mod, "OBJECT_STORE_BUCKET", FAKE_BUCKET), \
+         patch("processors.csv_processor.boto3") as mock_boto3, \
+         patch.object(csv_mod, "_open_s3_duckdb", side_effect=_mock_open_s3_duckdb), \
+         patch.object(csv_mod, "_read_file_metadata", return_value=STUB_METADATA):
+        mock_boto3.client.return_value = mock_s3
+
+        result = await csv_mod.process_csv_from_s3(
+            company_id=1,
+            mode="org",
+            connection_name="c",
+            files=[{
+                "filename": "workbook.xlsx",
+                "s3_key": "1/csvs/org/c/workbook.xlsx",
+                "schema_name": "mxfood",
+                "file_format": "xlsx",
+            }],
+        )
+
+    # One xlsx with 2 non-empty sheets → 2 registered tables
+    assert len(result["files"]) == 2
+    for f in result["files"]:
+        assert f["file_format"] == "csv"
+        assert f["schema_name"] == "mxfood"

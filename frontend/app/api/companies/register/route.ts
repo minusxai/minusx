@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
 
       // Copy mxfood seed Parquet files to the tutorial-mode S3 prefix — best-effort, non-blocking.
       // Seed files must have been uploaded via `cd backend && uv run python scripts/seed_mxfood_to_s3.py`
-      // Only tutorial mode is seeded; org mode starts with an empty "data" connection.
+      // Only tutorial mode is seeded; org/internals start with an empty "static" connection.
       copySeedMxfoodForCompany(result.companyId, 'tutorial', MXFOOD_TABLES).then((copied) => {
         console.log(`[COMPANY_REGISTER] Copied ${copied.length}/${MXFOOD_TABLES.length} mxfood seed tables for company ${result.companyId}`);
       }).catch((err) =>
