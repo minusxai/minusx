@@ -20,9 +20,10 @@ interface DataSectionProps {
   value: TableReference;
   onChange: (table: TableReference) => void;
   availableQuestions?: QuestionOption[];
+  whitelistedSchema?: Array<{ schema: string; tables: Array<{ table: string; columns: Array<{ name: string; type: string }> }> }>;
 }
 
-export function DataSection({ databaseName, value, onChange, availableQuestions = [] }: DataSectionProps) {
+export function DataSection({ databaseName, value, onChange, availableQuestions = [], whitelistedSchema }: DataSectionProps) {
   const [tables, setTables] = useState<Array<{ name: string; schema?: string; displayName: string }>>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -41,7 +42,15 @@ export function DataSection({ databaseName, value, onChange, availableQuestions 
       try {
         const result = await CompletionsAPI.getTableSuggestions({ databaseName });
         if (result.success && result.tables) {
-          setTables(result.tables);
+          const filtered = whitelistedSchema
+            ? result.tables.filter(t =>
+                whitelistedSchema.some(s =>
+                  (!t.schema || s.schema === t.schema) &&
+                  s.tables.some(wt => wt.table.toLowerCase() === t.name.toLowerCase())
+                )
+              )
+            : result.tables;
+          setTables(filtered);
         }
       } catch (err) {
         console.error('Failed to load tables:', err);
