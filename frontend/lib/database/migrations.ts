@@ -1629,17 +1629,6 @@ export function fixData(data: InitData): InitData {
       const content = doc.content as any;
       if (!content || typeof content !== 'object') continue;
 
-      // Dashboard: coerce layout item IDs from string to integer
-      if (doc.type === 'dashboard') {
-        const items = content.layout?.items;
-        if (Array.isArray(items)) {
-          content.layout.items = items.map((item: any) => ({
-            ...item,
-            id: typeof item.id === 'string' ? parseInt(item.id, 10) : item.id,
-          }));
-        }
-      }
-
       // Question: add default pivotConfig when type is 'pivot' but config is missing
       if (doc.type === 'question') {
         const viz = content.vizSettings;
