@@ -308,9 +308,9 @@ class AnalystAgent(Agent):
             citations = response.get("citations", [])
             content_blocks = response.get("content_blocks", None)
             agent_calls = tool_calls_to_agent_calls(tool_calls, content, citations, content_blocks)
-            # Inject whitelisted schema into every SearchDBSchema call
+            # Inject whitelisted schema into SearchDBSchema and ExecuteQuery calls
             for call in agent_calls:
-                if call.agent == 'SearchDBSchema' and self.schema:
+                if call.agent in ('SearchDBSchema', 'ExecuteQuery') and self.schema:
                     call.args['_schema'] = self.schema
             finish_reason = response.get("finish_reason", "")
             

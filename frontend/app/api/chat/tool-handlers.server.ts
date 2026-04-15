@@ -10,14 +10,11 @@ import { ConnectionContent } from '@/lib/types';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { FilesAPI } from '@/lib/data/files.server';
-import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { FrontendToolException } from './frontend-tool-exception';
 import { registerTool, registerToolFallback } from './orchestrator';
 import { searchDatabaseSchema } from '@/lib/search/schema-search';
 import { searchFilesInFolder } from '@/lib/search/file-search';
 import { executeQuery as execQuery } from '@/lib/api/execute-query.server';
-import { getNodeConnector } from '@/lib/connections';
-import { compressQueryResult, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { readFilesServer } from '@/lib/api/file-state.server';
 
 // ============================================================================
@@ -132,34 +129,11 @@ registerTool('Clarify', async (args, _user, childResults) => {
 /**
  * ExecuteQuery - Standalone query execution (backend tool)
  * Executes SQL without modifying any files.
- * DuckDB connections are handled in Node.js to avoid Python's exclusive file lock.
+ * DuckDB connections are handled in Node.js; all other types fall through to Python.
  */
 registerTool('ExecuteQuery', async (args, user) => {
   const { query, connectionId, parameters = {}, maxChars: rawMaxChars } = args;
-  const maxChars = Math.min(rawMaxChars ?? TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS);
-
-  // Look up connection type; if Node.js handles it, bypass Python entirely
-  const connData = await ConnectionsAPI.getByName(connectionId, user).catch(() => null);
-  if (connData) {
-    const { type, config } = connData.connection;
-    const connector = getNodeConnector(connectionId, type, config);
-    if (connector) {
-      const result = await connector.query(query, parameters);
-      const compressed = compressQueryResult(result, maxChars);
-      const details = { success: true, queryResult: result };
-      return { content: compressed, details };
-    }
-  }
-
-  // Fall through to Python for postgresql, bigquery, etc.
-  const result = await execQuery({
-    query,
-    connectionId,
-    parameters,
-    maxChars,
-  }, user);
-
-  return result;
+  return execQuery({ query, connectionId, parameters, maxChars: rawMaxChars }, user);
 });
 
 // ============================================================================

@@ -6,6 +6,7 @@ import json
 
 from tasks.agents.analyst.file_schema import vizSettingsJsonStr, ATLAS_FILE_SCHEMA_NO_VIZ_JSON
 from tasks.agents.analyst.prompt_loader import get_skill, list_skills
+from sql_utils.table_validator import validate_query_tables
 
 @register_agent
 class LoadSkill(Tool):
@@ -464,6 +465,7 @@ class ExecuteQuery(Tool):
         parameters: Optional[Dict[str, Any]] = Field(None, description="Query parameters as key-value pairs"),
         vizSettings: Optional[str] = Field(None, description=f"settings to visualize the output of the query; schema: {vizSettingsJsonStr}"),
         maxChars: Optional[int] = Field(None, description="Max characters of table output (default 10,000, max 100,000). Increase to see more rows."),
+        _schema: Optional[List[dict]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
@@ -472,11 +474,16 @@ class ExecuteQuery(Tool):
         self.parameters = parameters or {}
         self.vizSettings = vizSettings
         self.maxChars = maxChars
+        self._schema = _schema
 
     async def reduce(self, child_batches):
         pass
 
     async def run(self) -> str:
+        if self._schema:
+            error = validate_query_tables(self.query, self._schema)
+            if error:
+                return json.dumps({'success': False, 'error': error})
         # Backend tool - executes in Next.js API routes
         raise UserInputException(self._unique_id)
 

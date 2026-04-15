@@ -8,7 +8,7 @@
  */
 
 import { ExecuteQueryInput, ExecuteQueryDetails, QueryResult } from '@/lib/types';
-import { pythonBackendFetch } from '@/lib/api/python-backend-client';
+import { runQuery } from '@/lib/connections/run-query';
 import { compressQueryResult, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import type { ServerToolResult } from '@/app/api/chat/orchestrator';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
@@ -28,31 +28,9 @@ export async function executeQuery(
   const maxChars = Math.min(rawMaxChars ?? TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS);
 
   try {
-    // Forward request to Python backend
-    const response = await pythonBackendFetch('/api/execute-query', {
-      method: 'POST',
-      body: JSON.stringify({
-        query,
-        parameters,
-        connection_name: connectionId,
-      }),
-    }, userOverride);
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      const errMsg = data.detail || data.message || 'Query execution failed';
-      const details: ExecuteQueryDetails = { success: false, error: errMsg };
-      return { content: details, details };
-    }
-
-    const queryResult: QueryResult = {
-      columns: data.columns || [],
-      types: data.types || [],
-      rows: data.rows || []
-    };
-    const compressed = compressQueryResult(queryResult, maxChars);
-    const details: ExecuteQueryDetails = { success: true, queryResult };
+    const result = await runQuery(connectionId, query, parameters as Record<string, string | number>, userOverride!);
+    const compressed = compressQueryResult(result, maxChars);
+    const details: ExecuteQueryDetails = { success: true, queryResult: result as QueryResult };
     return { content: compressed, details };
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : 'Unknown error';
