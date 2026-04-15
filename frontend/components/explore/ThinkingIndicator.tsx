@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Box, HStack, Text, Icon, IconButton } from '@chakra-ui/react';
+import { Box, HStack, VStack, Text, Icon, IconButton } from '@chakra-ui/react';
 import { LuSparkles, LuSquare } from 'react-icons/lu';
 import { thinkingPhrases as defaultThinkingPhrases } from './message/thinkingPhrases';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -9,12 +9,18 @@ import { sparkleKeyframes } from '@/lib/ui/animations';
 
 const BRAILLE_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
+interface QueuedMessage {
+  message: string;
+  attachments?: any[];
+}
+
 interface ThinkingIndicatorProps {
   waitingForInput?: boolean;
   onStop?: () => void;
+  queuedMessages?: QueuedMessage[];
 }
 
-export default function ThinkingIndicator({ waitingForInput = false, onStop }: ThinkingIndicatorProps) {
+export default function ThinkingIndicator({ waitingForInput = false, onStop, queuedMessages = [] }: ThinkingIndicatorProps) {
   const { config } = useConfigs();
 
   // Use config thinking phrases if present and non-empty, otherwise use defaults
@@ -52,6 +58,27 @@ export default function ThinkingIndicator({ waitingForInput = false, onStop }: T
     <>
       <style>{sparkleKeyframes}</style>
       <Box px={3} py={2} bg="bg.muted" borderRadius="md" mb={1}>
+        {queuedMessages.length > 0 && (
+          <VStack
+            align="stretch"
+            gap={0}
+            mb={2}
+            pb={2}
+            borderBottomWidth="1px"
+            borderColor="border.default"
+          >
+            <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" textTransform="uppercase" letterSpacing="wider" mb={1}>
+              Queued ({queuedMessages.length})
+            </Text>
+            {queuedMessages.map((qm, i) => (
+              <HStack key={i} gap={2} py={0.5}>
+                <Text color="fg.subtle" fontSize="xs" flexShrink={0}>›</Text>
+                <Text color="fg.muted" fontSize="sm" truncate>{qm.message}</Text>
+              </HStack>
+            ))}
+          </VStack>
+        )}
+
         <HStack gap={2.5} justify="space-between">
           <HStack gap={2.5}>
             <Box css={{ animation: 'sparkle 2s ease-in-out infinite' }}>

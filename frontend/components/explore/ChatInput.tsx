@@ -33,6 +33,8 @@ interface ChatInputProps {
   selectedVersion?: number;
   onContextChange?: (contextPath: string | null, version?: number) => void;
   whitelistedSchemas?: DatabaseWithSchema[];
+  prefillText?: string;
+  onPrefillConsumed?: () => void;
 }
 
 export default function ChatInput({
@@ -51,6 +53,8 @@ export default function ChatInput({
   selectedVersion,
   onContextChange,
   whitelistedSchemas,
+  prefillText,
+  onPrefillConsumed,
 }: ChatInputProps) {
   const dispatch = useAppDispatch();
   const companyName = useAppSelector(selectCompanyName);
@@ -78,6 +82,16 @@ export default function ChatInput({
     }
     prevIsPreparingRef.current = isPreparing;
   }, [isPreparing, dispatch]);
+  // Handle prefill text (e.g., from queued messages after stop)
+  useEffect(() => {
+    if (prefillText) {
+      setInput(prefillText);
+      editorRef.current?.setText(prefillText);
+      editorRef.current?.focus();
+      onPrefillConsumed?.();
+    }
+  }, [prefillText, onPrefillConsumed]);
+
   // Handle pending message from SearchBar — wait for connections/context to finish loading
   // before sending, so the message isn't discarded by the loading guard in handleSendMessage.
   useEffect(() => {
@@ -88,7 +102,7 @@ export default function ChatInput({
   }, [pendingMessage, container, dispatch, onSend, connectionsLoading, contextsLoading]);
 
   const handleSend = () => {
-    if (input.trim() && !disabled && !isPreparing && !isAgentRunning && !connectionsLoading && !contextsLoading) {
+    if (input.trim() && !disabled && !isPreparing && !connectionsLoading && !contextsLoading) {
       onSend(input.trim(), attachments);
       // Don't clear here — input stays greyed while isPreparing=true,
       // then cleared by the useEffect when isPreparing transitions to false.
@@ -184,9 +198,9 @@ export default function ChatInput({
                 <Box px={1} py={2}>
                   <LexicalMentionEditor
                     ref={editorRef}
-                    placeholder={isAgentRunning ? `${agentName} is working...` : `Ask ${agentName} anything!`}
+                    placeholder={isAgentRunning ? `Add to agent queue...` : `Ask ${agentName} anything!`}
                     databaseName={databaseName}
-                    disabled={disabled || isPreparing || isAgentRunning}
+                    disabled={disabled || isPreparing}
                     onSubmit={handleSend}
                     onChange={setInput}
                     whitelistedSchemas={whitelistedSchemas}
@@ -334,7 +348,7 @@ export default function ChatInput({
                     <IconButton
                       aria-label="Send message"
                       onClick={handleSend}
-                      disabled={disabled || isAgentRunning || !input.trim() || connectionsLoading || contextsLoading}
+                      disabled={disabled || !input.trim() || connectionsLoading || contextsLoading}
                       bg="accent.teal"
                       color="white"
                       _hover={{ bg: 'accent.teal', opacity: 0.9 }}

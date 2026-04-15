@@ -5,7 +5,7 @@ import { Box, VStack, Text, Flex, Switch, Button, Heading, Container, Tabs } fro
 import { LuRefreshCw } from 'react-icons/lu';
 import { ColorModeButton } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { setAskForConfirmation, setShowDebug, setShowJson, setShowAllErrorToasts, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore } from '@/store/uiSlice';
+import { setAskForConfirmation, setShowDebug, setShowJson, setShowAllErrorToasts, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy } from '@/store/uiSlice';
 import { IS_DEV } from '@/lib/constants';
 import RecordingControl from '@/components/RecordingControl';
 import DataManagementSection from '@/components/DataManagementSection';
@@ -135,6 +135,7 @@ function SettingsContent() {
   const [isClearing, setIsClearing] = useState(false);
   const [isTestingError, setIsTestingError] = useState(false);
   const showAdvanced = useAppSelector((state) => state.ui.showAdvanced);
+  const queueStrategy = useAppSelector((state) => state.ui.queueStrategy ?? 'end-of-turn');
   const devMode = useAppSelector((state) => state.ui.devMode);
   const showSuggestedQuestions = useAppSelector((state) => state.ui.showSuggestedQuestions);
   const showTrustScore = useAppSelector((state) => state.ui.showTrustScore);
@@ -329,6 +330,22 @@ function SettingsContent() {
     },
     {
       tab: 'dev',
+      title: 'Queue Strategy',
+      description: 'end-of-turn: send queued messages after agent finishes. mid-turn: send with tool results.',
+      control: (
+        <Flex gap={2}>
+          <Button size="sm" variant={queueStrategy === 'end-of-turn' ? 'solid' : 'outline'} onClick={() => dispatch(setQueueStrategy('end-of-turn'))}>
+            End of Turn
+          </Button>
+          <Button size="sm" variant={queueStrategy === 'mid-turn' ? 'solid' : 'outline'} onClick={() => dispatch(setQueueStrategy('mid-turn'))}>
+            Mid Turn
+          </Button>
+        </Flex>
+      ),
+      visible: showDebugOption,
+    },
+    {
+      tab: 'dev',
       title: 'Mode',
       description: `Current: ${user?.mode || 'org'}`,
       control: (
@@ -376,7 +393,8 @@ function SettingsContent() {
       description: GIT_COMMIT_SHA,
       control: <></>,
     },
-  ], [askForConfirmation, showDebug, showJson, showAllErrorToasts, showDebugOption, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, showAdvanced, isAdmin, showSuggestedQuestions, showTrustScore]);
+
+  ], [askForConfirmation, showDebug, showJson, showAllErrorToasts, showDebugOption, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, showAdvanced, isAdmin, showSuggestedQuestions, showTrustScore, queueStrategy]);
 
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [
