@@ -47,6 +47,8 @@ export interface QueryExecutionParams {
   database: string;
   references?: QuestionReference[];
   parameterTypes?: Record<string, 'text' | 'number' | 'date'>;
+  /** Path of the question file — used by /api/query to resolve the correct context and validate against its whitelist */
+  filePath?: string;
 }
 
 export interface GetQueryResultOptions {

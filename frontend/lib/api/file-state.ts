@@ -191,6 +191,7 @@ export async function readFiles(
           query: content.query,
           params: content.parameterValues ?? {},
           database: content.connection_name,
+          filePath: f.path,
         })];
       })
     );
@@ -321,7 +322,7 @@ export async function replaceFileState(fileId: number, targetFileObj: { name?: s
     if (finalContent?.query && finalContent?.connection_name) {
       const params = finalContent.parameterValues || {};
       try {
-        await getQueryResult({ query: finalContent.query, params, database: finalContent.connection_name });
+        await getQueryResult({ query: finalContent.query, params, database: finalContent.connection_name, filePath: fileState.path });
         getStore().dispatch(setEphemeral({
           fileId: fileId as FileId,
           changes: {
@@ -1287,7 +1288,7 @@ export async function getQueryResult(
   params: QueryExecutionParams,
   options: GetQueryResultOptions = {}
 ): Promise<QueryResult> {
-  const { query, params: queryParams, database, references, parameterTypes } = params;
+  const { query, params: queryParams, database, references, parameterTypes, filePath } = params;
   const { ttl = CACHE_TTL.QUERY, skip = false, forceLoad = false } = options;
 
   if (skip) {
@@ -1328,7 +1329,8 @@ export async function getQueryResult(
           connection_name: database,
           parameters: queryParams,
           references: references || [],
-          ...(parameterTypes && { parameterTypes })
+          ...(parameterTypes && { parameterTypes }),
+          ...(filePath && { filePath })
         })
       });
 
