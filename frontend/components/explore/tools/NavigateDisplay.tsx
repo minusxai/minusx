@@ -2,11 +2,11 @@
 
 import { HStack, Text, Icon, GridItem } from '@chakra-ui/react';
 import { LuCheck, LuX, LuFile, LuFolder, LuFilePlus2, LuArrowRight } from 'react-icons/lu';
-import { DisplayProps, contentToDetails } from '@/lib/types';
+import { DisplayProps, ToolCallDetails, contentToDetails } from '@/lib/types';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
-export default function NavigateDisplay({ toolCallTuple, showThinking }: DisplayProps) {
+export default function NavigateDisplay({ toolCallTuple }: DisplayProps) {
   const searchParams = useSearchParams();
   const mode = searchParams.get('mode');
   const [toolCall, toolMessage] = toolCallTuple;
@@ -23,20 +23,35 @@ export default function NavigateDisplay({ toolCallTuple, showThinking }: Display
 
   const { file_id, path, newFileType } = args;
 
-  const { success } = contentToDetails(toolMessage);
+  // Still executing (placeholder from messageHelpers) — render nothing until complete
+  if (toolMessage.content === '(executing...)') return null;
 
-  // Failed navigation - show minimal display hidden behind thinking
+  const details = contentToDetails<ToolCallDetails & { message?: string }>(toolMessage);
+  const { success } = details;
+  // `message` lives in content, `error` lives in details — check both
+  const failMessage = details.message || details.error;
+
+  // Failed / declined navigation
   if (!success) {
-    return showThinking ? (
+    return (
       <GridItem colSpan={12} my={1}>
-        <HStack gap={2} px={2} py={1} bg="bg.elevated" borderRadius="md">
-          <Icon as={LuX} boxSize={3} color="accent.danger" />
+        <HStack
+          gap={1.5}
+          py={1.5}
+          px={2}
+          bg="bg.elevated"
+          borderRadius="md"
+          border="1px solid"
+          borderColor="border.default"
+          flexWrap="wrap"
+        >
+          <Icon as={LuX} boxSize={3} color="fg.muted" flexShrink={0} />
           <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-            Navigation failed
+            {failMessage || 'User declined navigation'}
           </Text>
         </HStack>
       </GridItem>
-    ) : null;
+    );
   }
 
   // Helper to append mode param if present

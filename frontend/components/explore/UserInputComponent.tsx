@@ -5,7 +5,7 @@ import { useDispatch } from 'react-redux';
 import {
   Box, HStack, VStack, Text, Button, Input, Textarea, Icon
 } from '@chakra-ui/react';
-import { LuTriangleAlert } from 'react-icons/lu';
+import { LuBadgeInfo } from 'react-icons/lu';
 import { UserInput } from '@/lib/api/user-input-exception';
 import { setUserInputResult } from '@/store/chatSlice';
 import { useDirtyFiles } from '@/lib/hooks/file-state-hooks';
@@ -70,6 +70,7 @@ export default function UserInputComponent({
   const [choiceValues, setChoiceValues] = useState<any[]>([]);
   const [formValues, setFormValues] = useState<Record<string, any>>({});
   const [otherText, setOtherText] = useState('');  // For "Other" option text input
+  const [showDeclineReason, setShowDeclineReason] = useState(false);
 
   const handleSubmit = (result: any) => {
     dispatch(setUserInputResult({
@@ -84,27 +85,65 @@ export default function UserInputComponent({
   const renderInput = () => {
     switch (props.type) {
       case 'confirmation':
-        return (
-          <HStack gap={2} justify="flex-end">
-            <Button
-              size="sm"
-              color="white"
-              variant="outline"
-              bg="accent.danger/80"
-              onClick={() => handleSubmit(false)}
+        return showDeclineReason ? (
+          <VStack gap={2} align="stretch">
+            <HStack gap={2}>
+              <Input
+                placeholder="Tell the agent why (optional)..."
+                value={textValue}
+                onChange={(e) => setTextValue(e.target.value)}
+                fontFamily="mono"
+                fontSize="sm"
+                autoFocus
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                borderColor="border.default"
+                color="fg.muted"
+                fontFamily="mono"
+                flexShrink={0}
+                onClick={() => handleSubmit({ declined: true, reason: textValue.trim() || undefined })}
+              >
+                Decline
+              </Button>
+            </HStack>
+          </VStack>
+        ) : (
+          <VStack gap={2} align="stretch">
+            <HStack gap={2} justify="flex-end">
+              <Button
+                size="sm"
+                variant="outline"
+                borderColor="border.default"
+                color="fg.muted"
+                fontFamily="mono"
+                onClick={() => handleSubmit({ declined: true })}
+              >
+                Decline
+              </Button>
+              <Button
+                size="sm"
+                bg="accent.teal"
+                color="white"
+                fontFamily="mono"
+                onClick={() => handleSubmit(true)}
+              >
+                Allow
+              </Button>
+            </HStack>
+            <Text
+              fontSize="xs"
+              color="fg.muted"
+              fontFamily="mono"
+              cursor="pointer"
+              textAlign="right"
+              _hover={{ color: 'fg.default' }}
+              onClick={() => setShowDeclineReason(true)}
             >
-              {props.cancelText || 'Cancel'}
-            </Button>
-            <Button
-              size="sm"
-              bg="accent.teal"
-              color="white"
-              variant="outline"
-              onClick={() => handleSubmit(true)}
-            >
-              {props.confirmText || 'Confirm'}
-            </Button>
-          </HStack>
+              decline with reason…
+            </Text>
+          </VStack>
         );
 
       case 'text':
@@ -353,25 +392,26 @@ export default function UserInputComponent({
 
   return (
     <Box
+      py={3}
+      px={4}
       border="1px solid"
-      borderColor="accent.warning"
+      borderColor="border.default"
       borderRadius="md"
-      bg="bg.surface"
-      p={4}
-      my={4}
+      bg="bg.subtle"
+      my={2}
     >
       <VStack gap={3} align="stretch">
         {/* Header */}
         <HStack gap={2}>
-          <Icon as={LuTriangleAlert} boxSize={5} color="accent.warning" />
-          <Text fontWeight="600" fontSize="sm">{props.title}</Text>
+          <Icon as={LuBadgeInfo} boxSize={4} fill="accent.teal" color="bg.subtle" />
+          <Text fontWeight="600" fontSize="md" color="fg.default" fontFamily="mono">{props.title}</Text>
         </HStack>
 
         {/* Message */}
         {props.message && (
-          <HStack gap={2} p={2} bg="accent.warning/25" borderRadius="sm">
-            <Text fontSize="md" fontFamily={'mono'}>{props.message}</Text>
-          </HStack>
+          <Text fontSize="sm" color="fg.muted" fontFamily="mono">
+            {props.message}
+          </Text>
         )}
 
         {/* Input UI */}
