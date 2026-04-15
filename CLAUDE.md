@@ -255,13 +255,6 @@ minusx/
 - **Composition over inheritance**: Build complex UIs from simple, reusable components
 - **Single responsibility**: Each component should do one thing well
 
-**Progressive Onboarding (GettingStartedV2)**
-- `components/GettingStartedV2.tsx` - Progressive onboarding banner/empty state
-- Shows contextual CTAs based on what's missing: conversations → connections → contexts → questions → dashboards
-- Two variants: `banner` (above file list) and `empty` (centered in empty folders)
-- Tracks click state locally to immediately advance steps (refreshes to actual state)
-- `GettingStartedSection.tsx` (legacy) only shows in tutorial mode
-
 ### AI Orchestration & Tool Calling Architecture
 
 **Three-Tier System**

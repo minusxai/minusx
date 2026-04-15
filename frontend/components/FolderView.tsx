@@ -9,7 +9,6 @@
  * - Handle loading and error states
  * - Display folder title and file/folder counts
  * - Delegate to FilesList for rendering
- * - Show progressive onboarding via GettingStartedV2
  */
 import { Box, Heading, Text, Spinner, HStack, IconButton } from '@chakra-ui/react';
 import {
@@ -19,6 +18,7 @@ import {
   LuMessageSquare,
   LuVideo,
   LuRefreshCw,
+  LuFolderOpen,
 } from 'react-icons/lu';
 import { Tooltip } from '@/components/ui/tooltip';
 import { readFolder } from '@/lib/api/file-state';
@@ -26,12 +26,40 @@ import type { IconType } from 'react-icons';
 import { useFolder } from '@/lib/hooks/file-state-hooks';
 import FilesList from './FilesList';
 import GettingStartedSection from './GettingStartedSection';
-import GettingStartedV2, { DefaultEmptyState } from './GettingStartedV2';
+import CreateMenu from './CreateMenu';
 import type { FileType } from '@/lib/types';
 import type { ReactNode } from 'react';
 import { useAppSelector } from '@/store/hooks';
 import { isSystemFolder, SYSTEM_FOLDERS, resolvePath } from '@/lib/mode/path-resolver';
 import { DEFAULT_MODE, Mode } from '@/lib/mode/mode-types';
+
+function DefaultEmptyState({ currentPath }: { currentPath: string }) {
+  return (
+    <Box
+      display="flex"
+      flexDirection="column"
+      alignItems="center"
+      justifyContent="center"
+      minH="60vh"
+      px={8}
+    >
+      <Box
+        as={LuFolderOpen}
+        fontSize="6xl"
+        color="fg.muted"
+        opacity={0.4}
+        mb={4}
+      />
+      <Text fontSize="lg" color="fg.muted" fontWeight="500" fontFamily="mono">
+        Nothing here yet
+      </Text>
+      <Text fontSize="sm" color="fg.muted" opacity={0.7} mt={2} mb={6}>
+        Create something awesome
+      </Text>
+      <CreateMenu currentPath={currentPath} variant="button" />
+    </Box>
+  );
+}
 
 /**
  * Get custom empty state message and icon for system folders
@@ -178,19 +206,9 @@ export default function FolderView({ path, title, type, headerRight }: FolderVie
           );
         }
 
-        // Non-system folders use progressive onboarding with fallback to default empty state
-        return (
-          <GettingStartedV2
-            variant="empty"
-            fallback={<DefaultEmptyState currentPath={path} />}
-          />
-        );
+        // Non-system folders: default empty state
+        return <DefaultEmptyState currentPath={path} />;
       })()}
-
-      {/* Progressive onboarding banner - show above files in org mode */}
-      {!isThisSystemFolder && mode !== 'tutorial' && files.length > 0 && (
-        <GettingStartedV2 variant="banner" />
-      )}
       
     </Box>
   );
