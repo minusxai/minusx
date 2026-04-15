@@ -12,7 +12,8 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { HStack, Text } from '@chakra-ui/react';
+import { HStack, Text, Icon } from '@chakra-ui/react';
+import { LuLock } from 'react-icons/lu';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { shallowEqual } from 'react-redux';
 import { selectIsDirty, selectEffectiveName, selectMergedContent, selectDirtyFiles } from '@/store/filesSlice';
@@ -140,6 +141,27 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
     ? ((mergedContent as DocumentContent)?.assets?.filter(a => a.type === 'question').length ?? 0)
     : undefined;
 
+  // Read-only badge: shown for real files the user can't edit
+  const readOnlyBadge = !canEdit && !isVirtualFileId(fileId) ? (
+    <HStack
+      gap={1}
+      fontFamily="mono"
+      fontSize="2xs"
+      fontWeight="600"
+      color="fg.muted"
+      px={1.5}
+      py={0.5}
+      bg="bg.elevated"
+      borderRadius="sm"
+      border="1px solid"
+      borderColor="border.default"
+      flexShrink={0}
+    >
+      <Icon as={LuLock} boxSize={2.5} />
+      <Text>read only</Text>
+    </HStack>
+  ) : undefined;
+
   return (
     <>
       <DocumentHeader
@@ -166,25 +188,30 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
         questionId={fileType === 'question' ? fileId : undefined}
         viewMode={viewMode}
         onViewModeChange={(m) => dispatch(setFileViewMode({ fileId, mode: m }))}
-        additionalBadges={questionCount !== undefined ? (
-          <HStack
-            gap={1}
-            fontFamily="mono"
-            fontSize="2xs"
-            fontWeight="600"
-            color="fg.default"
-            px={1.5}
-            py={0.5}
-            bg="bg.elevated"
-            borderRadius="sm"
-            border="1px solid"
-            borderColor="border.default"
-            flexShrink={0}
-          >
-            <Text>{questionCount.toString().padStart(2, '0')}</Text>
-            <Text color="fg.muted">{questionCount !== 1 ? 'questions' : 'question'}</Text>
-          </HStack>
-        ) : undefined}
+        additionalBadges={(
+          <>
+            {questionCount !== undefined && (
+              <HStack
+                gap={1}
+                fontFamily="mono"
+                fontSize="2xs"
+                fontWeight="600"
+                color="fg.default"
+                px={1.5}
+                py={0.5}
+                bg="bg.elevated"
+                borderRadius="sm"
+                border="1px solid"
+                borderColor="border.default"
+                flexShrink={0}
+              >
+                <Text>{questionCount.toString().padStart(2, '0')}</Text>
+                <Text color="fg.muted">{questionCount !== 1 ? 'questions' : 'question'}</Text>
+              </HStack>
+            )}
+            {readOnlyBadge}
+          </>
+        )}
         highlightColor={isDashboard && editMode ? 'accent.primary' : undefined}
         highlightLabel={isDashboard && editMode ? 'Editing Dashboard' : undefined}
       />

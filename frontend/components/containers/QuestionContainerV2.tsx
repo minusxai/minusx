@@ -20,6 +20,8 @@ import { editFile } from '@/lib/api/file-state';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
 import { QuestionContent } from '@/lib/types';
 import { type FileViewMode } from '@/lib/ui/fileComponents';
+import { selectEffectiveUser } from '@/store/authSlice';
+import { canCreateFileByRole } from '@/lib/auth/access-rules.client';
 
 interface QuestionContainerV2Props {
   fileId: FileId;
@@ -37,6 +39,10 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
 
   // Phase 3: Use useFile hook for file state management (purely reactive)
   const { fileState: file } = useFile(fileId) ?? {};
+
+  // Derive readOnly from the user's role — prevents persistable changes for non-editors
+  const effectiveUser = useAppSelector(selectEffectiveUser);
+  const readOnly = !!effectiveUser && !!file && !canCreateFileByRole(effectiveUser.role, file.type as 'question');
   const fileLoading = !file || file.loading;
 
   // Phase 3: Get merged content (content + persistableChanges + ephemeralChanges)
@@ -97,8 +103,9 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
 
   // Phase 3: Update current state handler - uses editFile from file-state.ts
   const handleChange = useCallback((updates: Partial<QuestionContent>) => {
+    if (readOnly) return;
     editFile({ fileId, changes: { content: updates } });
-  }, [fileId]);
+  }, [fileId, readOnly]);
 
   // Phase 3: Execute query handler - updates lastExecuted to trigger execution
   const handleExecute = useCallback((overrideParamValues?: Record<string, any>) => {
@@ -149,9 +156,10 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
 
   // Handle parameter value change — persisted into file content (marks file dirty)
   const handleParameterValueChange = useCallback((paramName: string, value: string | number | null) => {
+    if (readOnly) return;
     const currentValues = mergedContent?.parameterValues || {};
     editFile({ fileId, changes: { content: { parameterValues: { ...currentValues, [paramName]: value } } } });
-  }, [fileId, mergedContent]);
+  }, [fileId, mergedContent, readOnly]);
 
   // Get proposed query from UI state (set by UserInputComponent for diff view)
   const proposedQuery = useAppSelector(state =>
@@ -186,6 +194,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
       proposedQuery={containerMode === 'preview' ? undefined : proposedQuery}
       originalQuery={originalQuery}
       mode={containerMode}
+      readOnly={readOnly}
       onChange={handleChange}
       onParameterValueChange={handleParameterValueChange}
       onExecute={handleExecute}

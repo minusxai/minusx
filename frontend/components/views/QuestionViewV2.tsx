@@ -76,6 +76,9 @@ interface QuestionViewV2Props {
   // Container mode: 'preview' forces read-only with SQL diff
   mode?: 'view' | 'create' | 'preview';
 
+  // If true, all editing is disabled (role-based permission)
+  readOnly?: boolean;
+
   // Hide viz type buttons and viz settings toggle (chart still renders)
   showVizControls?: boolean;
 
@@ -101,6 +104,7 @@ export default function QuestionViewV2({
   proposedQuery,
   originalQuery,
   mode = 'view',
+  readOnly = false,
   showVizControls = true,
   queryEstimatedDurationMs,
   onChange,
@@ -131,7 +135,7 @@ export default function QuestionViewV2({
   const sqlEditorCollapsed = questionId !== undefined ? reduxSqlEditorCollapsed : localSqlEditorCollapsed;
   // editMode and viewMode sourced from Redux (managed by FileHeader)
   const reduxEditMode = useAppSelector(state => selectFileEditMode(state, questionId ?? -1));
-  const editMode = isPreview ? false : reduxEditMode;
+  const editMode = (isPreview || readOnly) ? false : reduxEditMode;
   const activeTab = useAppSelector(state => selectFileViewMode(state, questionId));
   const [containerWidth, setContainerWidth] = useState(0);
   const mainContentRef = useRef<HTMLDivElement>(null);
@@ -678,7 +682,7 @@ export default function QuestionViewV2({
                 {/* SQL Mode: Monaco Editor */}
                 {queryMode === 'sql' && (
                   <SqlEditor
-                    readOnly={isPreview || !fullMode}
+                    readOnly={isPreview || !fullMode || readOnly}
                     value={isPreview ? (originalQuery ?? content.query) : content.query}
                     onChange={handleQueryChange}
                     onRun={handleExecute}

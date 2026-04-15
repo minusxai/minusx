@@ -46,6 +46,9 @@ interface DashboardViewProps {
   onChange: (updates: Partial<DocumentContent>) => void;
 
   mode?: 'view' | 'create' | 'preview';
+
+  // If true, all editing is disabled (role-based permission)
+  readOnly?: boolean;
 }
 
 // Compact layout for mobile by stacking cards vertically
@@ -112,12 +115,13 @@ export default function DashboardView({
   fileId,
   onChange,
   mode = 'view',
+  readOnly = false,
 }: DashboardViewProps) {
   const dispatch = useAppDispatch();
 
   // editMode and viewMode sourced from Redux (managed by FileHeader)
   const reduxEditMode = useAppSelector(state => selectDashboardEditMode(state, fileId));
-  const editMode = mode === 'preview' ? false : reduxEditMode;
+  const editMode = (mode === 'preview' || readOnly) ? false : reduxEditMode;
   const activeTab = useAppSelector(state => selectFileViewMode(state, fileId));
 
   // Track current columns for responsive grid background

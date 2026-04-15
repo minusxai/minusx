@@ -20,6 +20,8 @@ import DashboardView from '@/components/views/DashboardView';
 import { DocumentContent } from '@/lib/types';
 import { useCallback } from 'react';
 import { type FileViewMode } from '@/lib/ui/fileComponents';
+import { selectEffectiveUser } from '@/store/authSlice';
+import { canCreateFileByRole } from '@/lib/auth/access-rules.client';
 
 interface DashboardContainerV2Props {
   fileId: FileId;
@@ -43,9 +45,14 @@ export default function DashboardContainerV2({ fileId, mode }: DashboardContaine
   // Extract folder path from dashboard path
   const folderPath = file?.path ? file.path.substring(0, file.path.lastIndexOf('/')) || '/' : '/';
 
+  // Derive readOnly from the user's role — prevents persistable changes for non-editors
+  const effectiveUser = useAppSelector(selectEffectiveUser);
+  const readOnly = !!effectiveUser && !!file && !canCreateFileByRole(effectiveUser.role, file.type as 'dashboard');
+
   const handleChange = useCallback((updates: Partial<DocumentContent>) => {
+    if (readOnly) return;
     editFile({ fileId, changes: { content: updates } });
-  }, [fileId]);
+  }, [fileId, readOnly]);
 
   // Show loading state while file is loading
   if (fileLoading || !file || !mergedContent) {
@@ -62,6 +69,7 @@ export default function DashboardContainerV2({ fileId, mode }: DashboardContaine
       fileId={fileId}
       onChange={handleChange}
       mode={mode}
+      readOnly={readOnly}
     />
   );
 }
