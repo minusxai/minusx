@@ -5,7 +5,7 @@
       "type": "fileTypeAccess",
       "role": "admin",
       "allowedTypes": "*",
-      "createTypes": ["question", "dashboard", "folder", "connection", "context", "alert", "conversation", "session", "report", "transformation", "alert_run", "report_run", "transformation_run"],
+      "createTypes": "*",
       "viewTypes": "*"
     },
     {
