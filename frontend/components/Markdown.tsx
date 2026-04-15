@@ -210,7 +210,7 @@ function parseContentParts(text: string, queries?: Record<string, ReportQueryRes
 }
 
 // Suggested questions component — clickable chips that dispatch directly to Redux
-function SuggestedQuestionsBlock({ questions }: { questions: string[] }) {
+function SuggestedQuestionsBlock({ questions, markdownContext = 'mainpage' }: { questions: string[]; markdownContext?: 'sidebar' | 'mainpage' }) {
   const dispatch = useAppDispatch();
   const conversationID = useAppSelector(selectActiveConversation);
 
@@ -222,7 +222,7 @@ function SuggestedQuestionsBlock({ questions }: { questions: string[] }) {
   };
 
   return (
-    <Box mt="4" display="flex" flexDirection="column" gap="1.5">
+    <Box mt={markdownContext === 'sidebar' ? '2' : '4'} display="flex" flexDirection="column" gap={markdownContext === 'sidebar' ? '1' : '1.5'}>
       <Box display="flex" alignItems="center" gap="2">
         <Box flex="1" h="1px" bg="border.default" />
         <span style={{ fontFamily: 'var(--font-jetbrains-mono)', fontWeight: 500, color: 'var(--chakra-colors-fg-subtle)', textTransform: 'uppercase', letterSpacing: '0.08em', flexShrink: 0, fontSize: '10px' }}>
@@ -234,9 +234,9 @@ function SuggestedQuestionsBlock({ questions }: { questions: string[] }) {
           key={i}
           display="flex"
           alignItems="center"
-          gap="2"
-          px="2.5"
-          py="1"
+          gap="1.5"
+          px="2"
+          py={markdownContext === 'sidebar' ? '0.5' : '1'}
           borderRadius="md"
           bg="bg.muted"
           border="1px solid"
@@ -269,6 +269,7 @@ const trustConfig = {
   high: {
     label: 'High',
     icon: LuShieldCheck,
+    iconColor: 'accent.teal',
     bgColor: 'accent.teal/85',
     borderColor: 'accent.teal/30',
     moreDetailsTitle: 'What does this mean?',
@@ -278,6 +279,7 @@ const trustConfig = {
   medium: {
     label: 'Medium',
     icon: LuShieldAlert,
+    iconColor: 'accent.warning',
     bgColor: 'accent.warning/85',
     borderColor: 'accent.warning/30',
     moreDetailsTitle: 'How to improve?',
@@ -287,6 +289,7 @@ const trustConfig = {
   low: {
     label: 'Low',
     icon: LuShieldQuestion,
+    iconColor: 'accent.danger',
     bgColor: 'accent.danger/85',
     borderColor: 'accent.danger/30',
     moreDetailsTitle: 'How to improve?',
@@ -334,12 +337,17 @@ function TrustBadge({ level, context, reasons }: {
           onClick={() => hasExpandableContent && setExpanded(!expanded)}
           style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', cursor: hasExpandableContent ? 'pointer' : 'default', display: 'inline-flex', alignItems: 'center', gap: '0.375rem', color: 'inherit' }}
         >
-          <Box color={config.bgColor} display="flex" alignItems="center">
+          <Box color={config.iconColor} display="flex" alignItems="center">
             <Icon size={14} />
           </Box>
-          <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">
-            {agentName} confidence: {config.label}
+          <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" whiteSpace="nowrap">
+            {context === 'sidebar' ? `${config.label} confidence` : `${agentName} confidence: ${config.label}`}
           </Text>
+          {hasExpandableContent && !expanded && context !== 'sidebar' && (
+            <Text fontSize="2xs" color="fg.subtle" fontFamily="mono" fontStyle="italic" whiteSpace="nowrap">
+              — {config.moreDetailsTitle}
+            </Text>
+          )}
           {hasExpandableContent && (
             <Box
               transition="transform 0.2s ease"
@@ -379,7 +387,7 @@ function TrustBadge({ level, context, reasons }: {
                 <Link href={`/f/${contextFile.id}`} style={{ color: 'var(--chakra-colors-accent-teal)', textDecoration: 'underline' }}>
                   Edit Knowledge Base
                 </Link>
-                {' '}to improve confidence, or just ask the agent!
+                {' '}manually, or just ask the agent!
               </>
             ) : (
               <>Improve confidence by adding context — just ask the agent!</>
@@ -776,7 +784,7 @@ export default function Markdown({
         })}
         {/* Suggested questions always render last */}
         {showSuggestedQuestions && suggestedQuestions.map((part, i) => (
-          <SuggestedQuestionsBlock key={`sq-${i}`} questions={part.questions} />
+          <SuggestedQuestionsBlock key={`sq-${i}`} questions={part.questions} markdownContext={context} />
         ))}
       </>
     );
