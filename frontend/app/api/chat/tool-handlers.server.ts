@@ -36,7 +36,7 @@ registerTool('UserInputToolBackend', async () => {
  * Auto-detects: queries starting with '$' use JSONPath, others use weighted string search
  */
 registerTool('SearchDBSchema', async (args, user) => {
-  const { query, connection_id, schema: whitelistedSchema } = args;
+  const { query, connection_id, _schema: whitelistedSchema } = args;
 
   if (!connection_id) {
     throw new Error('connection_id is required');

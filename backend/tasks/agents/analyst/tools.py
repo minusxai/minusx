@@ -74,13 +74,13 @@ class SearchDBSchema(Tool):
         self,
         connection_id: str = Field(..., description="the database connection ID to use"),
         query: Optional[str] = Field(None, description="JSONPath query (starts with '$') or string search term"),
-        schema: Optional[List[dict]] = Field(None, description="Whitelisted schema to search within — injected automatically, do not set manually."),
+        _schema: Optional[List[dict]] = None,
         **kwargs
     ):
         super().__init__(**kwargs)  # type: ignore
         self.connection_id = connection_id
         self.query = query
-        self.schema = schema
+        self._schema = _schema
 
     async def reduce(self, child_batches):
         pass

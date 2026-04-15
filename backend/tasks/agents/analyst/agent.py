@@ -311,7 +311,7 @@ class AnalystAgent(Agent):
             # Inject whitelisted schema into every SearchDBSchema call
             for call in agent_calls:
                 if call.agent == 'SearchDBSchema' and self.schema:
-                    call.args.setdefault('schema', self.schema)
+                    call.args['_schema'] = self.schema
             finish_reason = response.get("finish_reason", "")
             
 
