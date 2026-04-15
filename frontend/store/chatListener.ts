@@ -197,8 +197,12 @@ chatListenerMiddleware.startListening({
 
         // Handle done event after stream completes
         if (doneEventData) {
-          // Clear streaming content first
-          listenerApi.dispatch(clearStreamingContent({ conversationID }));
+          // New conversations fork from a temp negative ID to a real conversation ID
+          // as soon as the backend creates the file. Clear ephemeral streaming state on
+          // the real conversation if we have one, or stale synthetic TalkToUser content
+          // can survive into the next turn.
+          const realConversationID = doneEventData.conversationID || conversationID;
+          listenerApi.dispatch(clearStreamingContent({ conversationID: realConversationID }));
 
           // Then update with final state
           listenerApi.dispatch(updateConversation({

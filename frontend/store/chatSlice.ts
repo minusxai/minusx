@@ -323,8 +323,11 @@ const chatSlice = createSlice({
           ...existingRealConversation,
           _id: existingRealConversation?._id || conv._id,  // IMPORTANT: Preserve stable _id across fork
           conversationID: newConversationID,
-          streamedCompletedToolCalls: existingRealConversation?.streamedCompletedToolCalls || [],
-          streamedThinking: existingRealConversation?.streamedThinking || '',
+          // Streaming state is ephemeral. When the temp conversation resolves to the
+          // real conversation on a completed turn, do not carry over any synthetic
+          // streamed TalkToUser content from the real conversation shell.
+          streamedCompletedToolCalls: [],
+          streamedThinking: '',
           queuedMessages: mergedQueuedMessages,
           forkedConversationID: undefined // Real conversations don't have this
         };
