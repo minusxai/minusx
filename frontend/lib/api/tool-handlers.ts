@@ -223,9 +223,12 @@ registerFrontendTool('Navigate', async (args, context) => {
       });
     }
 
-    if (userConfirmed === false) {
-      // User cancelled
-      const msg = 'Navigation cancelled by user';
+    if (userConfirmed === false || userConfirmed?.declined) {
+      // User cancelled — include their reason if provided
+      const reason = userConfirmed?.reason;
+      const msg = reason
+        ? `Navigation cancelled by user. Reason: ${reason}`
+        : 'Navigation cancelled by user';
       return { content: { success: false, message: msg }, details: { success: false, error: msg } };
     }
 

@@ -145,6 +145,7 @@ function TrustBadge({ level, context }: { level: 'high' | 'medium' | 'low'; cont
   const config = trustConfig[level];
   const Icon = config.icon;
   const hasMoreDetails = 'moreDetails' in config;
+  if (level === 'high') return null;
 
   return (
     <Box
