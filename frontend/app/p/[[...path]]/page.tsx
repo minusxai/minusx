@@ -36,12 +36,15 @@ export default function PathPage({ params }: PathPageProps) {
 
   // Determine if we're on mobile or desktop (true = mobile, false = desktop).
   // useBreakpointValue accesses window during render and fails SSR even with { ssr: false }.
-  // Using matchMedia in an effect is safe: undefined during SSR/first render (neither
-  // sidebar shows), then resolved after hydration. The === true/false checks below handle this.
-  const [isMobile, setIsMobile] = useState<boolean | undefined>(undefined);
+  // The lazy useState initializer safely returns undefined on the server (window is absent)
+  // and reads the actual value on the client — no synchronous setState inside the effect.
+  // The === true/false checks below handle the undefined initial state (neither sidebar shows).
+  const [isMobile, setIsMobile] = useState<boolean | undefined>(() => {
+    if (typeof window === 'undefined') return undefined;
+    return window.matchMedia('(max-width: 767px)').matches;
+  });
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 767px)');
-    setIsMobile(mq.matches);
     const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);

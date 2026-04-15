@@ -39,6 +39,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // postinstall-generated third-party WASM worker bundles (not project code)
+    "public/duckdb/**",
   ]),
   {
     plugins: {
