@@ -20,34 +20,17 @@ export function filterSchemaByWhitelist(
   currentPath?: string,
   contextDir?: string
 ): DatabaseSchema {
-  // Returns true when currentPath is a direct child of contextDir
-  // (one path segment below — not nested further).
-  const isDirectChildOfContext = (path: string): boolean => {
-    if (!contextDir) return false;
-    const prefix = contextDir === '/' ? '/' : contextDir + '/';
-    if (!path.startsWith(prefix)) return false;
-    return !path.substring(prefix.length).includes('/');
-  };
-
   // Filter whitelist items by childPaths BEFORE creating lookup sets
   const applicableWhitelist = whitelist.filter(item => {
-    // If childPaths is undefined/null, apply to all children (backward compatible)
-    if (!item.childPaths) {
-      return true;
-    }
-    // If childPaths is [] (empty array), apply only to items directly in the context's own folder
-    if (item.childPaths.length === 0) {
-      return currentPath ? isDirectChildOfContext(currentPath) : false;
-    }
-    // If currentPath not provided, include all (for non-child contexts)
-    if (!currentPath) {
-      return true;
-    }
-    // Direct child of contextDir always passes — childPaths restricts subfolders only
-    if (isDirectChildOfContext(currentPath)) {
-      return true;
-    }
-    // Check if currentPath matches any childPaths (including nested paths)
+    // If childPaths is undefined/null, apply to all (backward compatible)
+    if (!item.childPaths) return true;
+    // If currentPath not provided, include all (file-scope callers omit it)
+    if (!currentPath) return true;
+    // contextDir itself always passes — it sits above the childPaths restriction
+    if (contextDir && currentPath === contextDir) return true;
+    // Empty childPaths → nowhere
+    if (item.childPaths.length === 0) return false;
+    // Strict match: currentPath must be exactly a childPath or nested under one
     return item.childPaths.some(childPath =>
       currentPath === childPath || currentPath.startsWith(childPath + '/')
     );

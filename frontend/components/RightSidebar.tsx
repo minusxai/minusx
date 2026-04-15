@@ -359,7 +359,10 @@ export default function RightSidebar({
   const currentUser = useAppSelector(state => state.auth.user);
 
   const contextPath = selectedContextPath || filePath;
-  const contextInfo = useContext(contextPath, contextVersion);
+  // Folder pages and the explore sidebar (no fileType) apply childPaths scoping.
+  // File pages (question, dashboard, etc.) are leaf nodes and see all context tables.
+  const isFolderScope = !fileType || fileType === 'folder';
+  const contextInfo = useContext(contextPath, contextVersion, isFolderScope);
   const databases = contextInfo.databases?.filter(db => db.schemas.length > 0);
   const documentation = contextInfo.documentation;
   const contextsLoading = contextInfo.contextLoading;

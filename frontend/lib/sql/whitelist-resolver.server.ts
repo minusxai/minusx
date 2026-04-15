@@ -69,8 +69,9 @@ export async function getWhitelistForPath(
     const contextContent = result.data?.content as ContextContent | undefined;
     if (!contextContent) return null;
 
-    const contextDir = nearest.path.substring(0, nearest.path.lastIndexOf('/')) || '/';
-    const databases = getWhitelistedSchemaForUser(contextContent, user.userId, normalizedPath, contextDir);
+    // File queries (questions/dashboards) are not restricted by childPaths —
+    // they see all tables from their nearest context. No currentPath passed.
+    const databases = getWhitelistedSchemaForUser(contextContent, user.userId);
     const dbEntry = databases.find(d => d.databaseName === connectionName);
     if (!dbEntry || !dbEntry.schemas.length) return null;
 

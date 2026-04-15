@@ -105,7 +105,7 @@ export default function ExploreInterface({ conversationId, filePath = '/org' }: 
 
   // Get context info using path (always uses useContext hook now)
   const contextPath = selectedContextPath || homeContextPath || homeFolder;
-  const contextInfo = useContext(contextPath, selectedVersion);
+  const contextInfo = useContext(contextPath, selectedVersion, true);
 
   // Track mobile state (default to false for SSR, update on client)
   const [isMobile, setIsMobile] = useState(false);
