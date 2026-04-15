@@ -25,10 +25,9 @@ interface ChatMessageProps {
   toggleShowThinking: () => void;
   markdownContext?: 'sidebar' | 'mainpage';
   conversationID?: number;
-  onSuggestedQuestionClick?: (question: string) => void;
 }
 
-const SimpleChatMessage = React.memo(function SimpleChatMessage({ message, databaseName, isCompact = false, showThinking = false, toggleShowThinking, markdownContext = 'mainpage', conversationID, onSuggestedQuestionClick }: ChatMessageProps) {
+const SimpleChatMessage = React.memo(function SimpleChatMessage({ message, databaseName, isCompact = false, showThinking = false, toggleShowThinking, markdownContext = 'mainpage', conversationID }: ChatMessageProps) {
   const dispatch = useAppDispatch();
   const showDebug = useAppSelector(selectShowDebug);
   const [isEditing, setIsEditing] = useState(false);
@@ -237,7 +236,7 @@ const SimpleChatMessage = React.memo(function SimpleChatMessage({ message, datab
         gap={2}
         w="100%"
         >
-            <ToolCallDisplay key={message.tool_call_id} toolCallTuple={toolCallTuple} databaseName={databaseName} isCompact={isCompact} showThinking={showThinking} markdownContext={markdownContext} onSuggestedQuestionClick={onSuggestedQuestionClick}/>
+            <ToolCallDisplay key={message.tool_call_id} toolCallTuple={toolCallTuple} databaseName={databaseName} isCompact={isCompact} showThinking={showThinking} markdownContext={markdownContext}/>
         </Grid>
     )
   }

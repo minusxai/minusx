@@ -1120,7 +1120,6 @@ export interface DisplayProps {
   isCompact?: boolean;
   showThinking: boolean;
   markdownContext?: 'sidebar' | 'mainpage';
-  onSuggestedQuestionClick?: (question: string) => void;
 }
 
 // ============================================================================

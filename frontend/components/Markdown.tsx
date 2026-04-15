@@ -8,9 +8,10 @@ import { LuChartColumnIncreasing, LuChevronDown, LuCircleHelp, LuFilePlus2, LuRo
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import { FileType } from '@/lib/types';
 import { ReactNode, useCallback, useMemo, useState } from 'react';
-import { useAppSelector } from '@/store/hooks';
+import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { selectEffectiveUser } from '@/store/authSlice';
+import { selectActiveConversation, sendMessage } from '@/store/chatSlice';
 import { isViewer } from '@/lib/auth/role-helpers';
 import { ReportQueryResult, QuestionContent } from '@/lib/types';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
@@ -205,12 +206,17 @@ function parseContentParts(text: string, queries?: Record<string, ReportQueryRes
   return parts;
 }
 
-// Suggested questions component — clickable chips
-function SuggestedQuestionsBlock({ questions, onQuestionClick }: {
-  questions: string[];
-  onQuestionClick?: (question: string) => void;
-}) {
+// Suggested questions component — clickable chips that dispatch directly to Redux
+function SuggestedQuestionsBlock({ questions }: { questions: string[] }) {
+  const dispatch = useAppDispatch();
+  const conversationID = useAppSelector(selectActiveConversation);
+
   if (questions.length === 0) return null;
+
+  const handleClick = (question: string) => {
+    if (conversationID === undefined) return;
+    dispatch(sendMessage({ conversationID, message: question }));
+  };
 
   return (
     <Box mt="3" display="flex" flexWrap="wrap" gap="2">
@@ -230,16 +236,16 @@ function SuggestedQuestionsBlock({ questions, onQuestionClick }: {
           fontSize="xs"
           fontFamily="mono"
           color="fg.default"
-          cursor={onQuestionClick ? 'pointer' : 'default'}
+          cursor="pointer"
           transition="all 0.15s ease"
-          _hover={onQuestionClick ? {
+          _hover={{
             borderColor: 'accent.teal',
             bg: 'accent.teal/5',
-          } : {}}
+          }}
         >
           <button
             aria-label={`Suggested question: ${q}`}
-            onClick={() => onQuestionClick?.(q)}
+            onClick={() => handleClick(q)}
             style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', cursor: 'inherit', display: 'flex', alignItems: 'center', gap: '0.375rem', color: 'inherit' }}
           >
             <LuSparkles size={12} style={{ flexShrink: 0 }} />
@@ -404,7 +410,6 @@ interface MarkdownProps {
   textAlign?: 'left' | 'center' | 'right';
   textColor?: string;
   queries?: Record<string, ReportQueryResult>;  // Query results for {{query:id}} references
-  onSuggestedQuestionClick?: (question: string) => void;  // Callback when user clicks a suggested question
 }
 
 /**
@@ -419,8 +424,7 @@ export default function Markdown({
   context = 'mainpage',
   textAlign = 'left',
   textColor,
-  queries,
-  onSuggestedQuestionClick
+  queries
 }: MarkdownProps) {
   const styles = {
     h1: { fontSize: 'xl', fontWeight: '700', mb: 3, mt: 2, lineHeight: '1.3' },
@@ -743,7 +747,6 @@ export default function Markdown({
               <SuggestedQuestionsBlock
                 key={index}
                 questions={part.questions}
-                onQuestionClick={onSuggestedQuestionClick}
               />
             );
           } else if (part.type === 'trust_info') {
