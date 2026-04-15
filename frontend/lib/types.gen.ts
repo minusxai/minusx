@@ -134,7 +134,7 @@ export type Alias = string | null;
  */
 export type Decimalpoints = number | null;
 /**
- * date display format: 'iso', 'us', 'eu', 'short', 'month-year', or 'year'
+ * date display format as a Unicode date pattern, e.g. 'yyyy-MM-dd', 'MM/dd/yyyy', 'dd/MM/yyyy', 'MMM dd, yyyy', "MMM'yy", 'yyyy', 'yyyy-MM-dd HH:mm', 'HH:mm:ss'. Tokens: yyyy (4-digit year), yy (2-digit year), MMMM (full month), MMM (short month), MM (month number), dd (day), HH (hours 24h), mm (minutes), ss (seconds).
  */
 export type Dateformat = string | null;
 /**
