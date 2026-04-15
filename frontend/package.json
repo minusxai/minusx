@@ -75,6 +75,7 @@
     "shepherd.js": "^14.5.1",
     "sql-formatter": "^15.6.10",
     "tsx": "^4.21.0",
+    "xlsx": "^0.18.5",
     "zod": "^4.3.6"
   },
   "devDependencies": {
