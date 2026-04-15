@@ -36,7 +36,7 @@ registerTool('UserInputToolBackend', async () => {
  * Auto-detects: queries starting with '$' use JSONPath, others use weighted string search
  */
 registerTool('SearchDBSchema', async (args, user) => {
-  const { query, connection_id } = args;
+  const { query, connection_id, schema: whitelistedSchema } = args;
 
   if (!connection_id) {
     throw new Error('connection_id is required');
@@ -50,6 +50,16 @@ registerTool('SearchDBSchema', async (args, user) => {
   const loadedConnection = await connectionLoader(connectionFile.data, user);
   const content = loadedConnection.content as ConnectionContent;
   const schemaData = content.schema || { schemas: [], updated_at: new Date().toISOString() };
+
+  // If a whitelisted schema was injected, filter to only those tables
+  if (whitelistedSchema?.length > 0) {
+    const filteredSchemas = schemaData.schemas.map((s: any) => {
+      const allowed = whitelistedSchema.find((w: any) => w.schema === s.schema);
+      if (!allowed) return null;
+      return { ...s, tables: s.tables.filter((t: any) => allowed.tables.includes(t.table)) };
+    }).filter(Boolean);
+    return searchDatabaseSchema(filteredSchemas, query);
+  }
 
   // Delegate to core search logic
   return searchDatabaseSchema(schemaData.schemas, query);
