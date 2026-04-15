@@ -5,21 +5,21 @@
       "type": "fileTypeAccess",
       "role": "admin",
       "allowedTypes": "*",
-      "createTypes": ["question", "dashboard", "folder", "connection", "alert"],
+      "createTypes": ["question", "dashboard", "folder", "connection", "context", "alert", "conversation", "session", "report", "transformation", "alert_run", "report_run", "transformation_run"],
       "viewTypes": "*"
     },
     {
       "type": "fileTypeAccess",
       "role": "editor",
       "allowedTypes": ["question", "dashboard", "folder", "context", "connection", "conversation", "session", "report", "alert", "alert_run", "report_run", "transformation", "transformation_run"],
-      "createTypes": ["question", "dashboard", "folder","alert"],
+      "createTypes": ["question", "dashboard", "folder", "alert", "conversation", "session", "report", "transformation", "alert_run", "report_run", "transformation_run"],
       "viewTypes": ["question", "dashboard", "folder", "context", "conversation", "session", "report", "alert", "alert_run", "report_run", "transformation", "transformation_run"]
     },
     {
       "type": "fileTypeAccess",
       "role": "viewer",
       "allowedTypes": ["question", "dashboard", "folder", "context", "connection", "conversation", "session", "alert", "alert_run", "report_run", "report", "transformation", "transformation_run"],
-      "createTypes": ["conversation"],
+      "createTypes": ["conversation", "session"],
       "viewTypes": ["dashboard", "folder", "conversation", "session", "report", "alert", "alert_run", "report_run"]
     },
     {
@@ -48,7 +48,7 @@
       "type": "deletionBlocklist",
       "role": "*",
       "blockedTypes": ["config", "styles", "context"],
-      "reason": "These file types are critical system files and cannot be deleted or moved"
+      "reason": "These file types are critical system files and cannot be deleted or removed"
     }
   ]
 }
