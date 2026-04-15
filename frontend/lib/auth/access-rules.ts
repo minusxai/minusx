@@ -17,7 +17,6 @@ interface FileTypeAccessRule extends AccessRule {
   role: UserRole;
   allowedTypes: '*' | FileType[];
   createTypes?: '*' | FileType[];
-  editTypes?: '*' | FileType[];
   viewTypes?: '*' | FileType[];
 }
 
@@ -122,7 +121,6 @@ function getEffectiveRule(role: UserRole, overrides?: AccessRulesOverride): File
     ...rule,
     ...(roleOverride.allowedTypes !== undefined && { allowedTypes: roleOverride.allowedTypes }),
     ...(roleOverride.createTypes !== undefined && { createTypes: roleOverride.createTypes }),
-    ...(roleOverride.editTypes !== undefined && { editTypes: roleOverride.editTypes }),
     ...(roleOverride.viewTypes !== undefined && { viewTypes: roleOverride.viewTypes }),
   };
 }
@@ -178,20 +176,19 @@ export function canViewFileType(role: UserRole, fileType: FileType, overrides?: 
 }
 
 /**
- * Check if a user can edit (mutate) a specific file type (server-side).
- * Uses editTypes from rules.json. Falls back to permissive when editTypes is
- * absent so existing deployments without the field are not accidentally locked out.
+ * Check if a user's role allows creating or editing a specific file type (server-side).
+ * Both operations use createTypes — if your role can create a type, it can also edit it.
  * @param role - User's role
  * @param fileType - The file type to check
  * @param overrides - Optional per-company access rules overrides
- * @returns true if user can edit files of this type
+ * @returns true if user can create/edit files of this type
  */
-export function canEditFileType(role: UserRole, fileType: FileType, overrides?: AccessRulesOverride): boolean {
+export function canCreateFileByRole(role: UserRole, fileType: FileType, overrides?: AccessRulesOverride): boolean {
   const rule = getEffectiveRule(role, overrides);
   if (!rule) return false;
-  if (rule.editTypes === undefined) return true; // backward compat: no editTypes = unrestricted
-  if (rule.editTypes === '*') return true;
-  return (rule.editTypes as FileType[]).includes(fileType);
+  if (rule.createTypes === undefined) return true;
+  if (rule.createTypes === '*') return true;
+  return (rule.createTypes as FileType[]).includes(fileType);
 }
 
 /**

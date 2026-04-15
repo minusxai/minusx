@@ -17,7 +17,7 @@ import { readFiles, editFileStr, buildCurrentFileStr, getQueryResult, createVirt
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { validateFileState } from '@/lib/validation/content-validators';
-import { canCreateFileType, canEditFileType } from '@/lib/auth/access-rules.client';
+import { canCreateFileType, canCreateFileByRole } from '@/lib/auth/access-rules.client';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { selectAppState } from '@/store/appStateSelector';
 import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client';
@@ -455,10 +455,10 @@ registerFrontendTool('EditFile', async (args, _context) => {
     }
   }
 
-  // Guard: check edit permission for this file type
+  // Guard: check edit permission for this file type (same rule as create — createTypes gates both)
   if (fileState?.type) {
     const user = selectEffectiveUser(stateBefore);
-    if (user && !canEditFileType(user.role, fileState.type)) {
+    if (user && !canCreateFileByRole(user.role, fileState.type)) {
       const errorMsg = `This ${fileState.type} is read-only. Your role (${user.role}) does not have permission to edit ${fileState.type} files.`;
       return { content: { success: false, error: errorMsg }, details: { success: false, error: errorMsg } };
     }
@@ -642,6 +642,13 @@ registerFrontendTool('CreateFile', async (args, context) => {
   if (appState?.type === 'explore' && file_type !== 'question' && file_type !== 'folder') {
     const msg = `Cannot create a ${file_type} in the background from the explore page. Navigate to /new/${file_type} instead.`;
     return { content: { success: false, error: msg }, details: { success: false, error: msg } };
+  }
+
+  // Guard: check create permission for this file type by role
+  const createUser = selectEffectiveUser(getStore().getState());
+  if (createUser && !canCreateFileByRole(createUser.role, file_type)) {
+    const errorMsg = `Your role (${createUser.role}) does not have permission to create ${file_type} files.`;
+    return { content: { success: false, error: errorMsg }, details: { success: false, error: errorMsg } };
   }
 
   // Default empty/root path to the current mode root (e.g. /org, /tutorial)

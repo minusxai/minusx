@@ -28,7 +28,7 @@ import { useRouter } from '@/lib/navigation/use-navigation';
 import { DocumentContent, FileType } from '@/lib/types';
 import { isVirtualFileId } from '@/store/filesSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
-import { useAccessRules } from '@/lib/auth/access-rules.client';
+import { canCreateFileByRole } from '@/lib/auth/access-rules.client';
 import DocumentHeader from './DocumentHeader';
 import PublishModal from './PublishModal';
 
@@ -57,8 +57,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
   const viewMode = useAppSelector(state => selectFileViewMode(state, fileId));
 
   const effectiveUser = useAppSelector(selectEffectiveUser);
-  const { canEditFileType } = useAccessRules();
-  const canEdit = !effectiveUser?.role || canEditFileType(effectiveUser.role, fileType as FileType);
+  const canEdit = !effectiveUser?.role || canCreateFileByRole(effectiveUser.role, fileType as FileType);
 
   const dispatchSetEditMode = useCallback((val: boolean) => {
     if (isDashboard) {

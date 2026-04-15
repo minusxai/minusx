@@ -25,7 +25,6 @@ function getEffectiveRule(role: UserRole, overrides?: AccessRulesOverride) {
     ...rule,
     ...(roleOverride.allowedTypes !== undefined && { allowedTypes: roleOverride.allowedTypes }),
     ...(roleOverride.createTypes !== undefined && { createTypes: roleOverride.createTypes }),
-    ...(roleOverride.editTypes !== undefined && { editTypes: roleOverride.editTypes }),
     ...(roleOverride.viewTypes !== undefined && { viewTypes: roleOverride.viewTypes }),
   };
 }
@@ -54,15 +53,15 @@ export function canViewFileType(role: UserRole, fileType: FileType, overrides?: 
 }
 
 /**
- * Check if a user can edit (mutate) a specific file type (client-side).
- * Falls back to permissive when editTypes is absent for backward compatibility.
+ * Check if a user's role allows creating or editing a specific file type (client-side).
+ * Both operations use createTypes — if your role can create a type, it can also edit it.
  */
-export function canEditFileType(role: UserRole, fileType: FileType, overrides?: AccessRulesOverride): boolean {
+export function canCreateFileByRole(role: UserRole, fileType: FileType, overrides?: AccessRulesOverride): boolean {
   const rule = getEffectiveRule(role, overrides) as any;
   if (!rule) return false;
-  if (rule.editTypes === undefined) return true;
-  if (rule.editTypes === '*') return true;
-  return (rule.editTypes as FileType[]).includes(fileType);
+  if (rule.createTypes === undefined) return true;
+  if (rule.createTypes === '*') return true;
+  return (rule.createTypes as FileType[]).includes(fileType);
 }
 
 /**
@@ -136,8 +135,8 @@ export function useAccessRules() {
       canViewFileType(role, fileType, overrides),
     canShowInCreateMenu: (role: UserRole, type: FileType) =>
       canShowInCreateMenu(role, type, overrides),
-    canEditFileType: (role: UserRole, fileType: FileType) =>
-      canEditFileType(role, fileType, overrides),
+    canCreateFileByRole: (role: UserRole, fileType: FileType) =>
+      canCreateFileByRole(role, fileType, overrides),
     canDeleteFileType,
     canCreateFileType,
   }), [overrides]);

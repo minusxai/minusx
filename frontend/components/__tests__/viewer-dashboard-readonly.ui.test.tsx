@@ -57,6 +57,7 @@ import { POST as chatPostHandler } from '@/app/api/chat/route';
 import { GET as filesGetHandler } from '@/app/api/files/route';
 import { PATCH as filePatchHandler } from '@/app/api/files/[id]/route';
 import { POST as batchFilesHandler } from '@/app/api/files/batch/route';
+import { POST as templateHandler } from '@/app/api/files/template/route';
 
 // Capture real fetch before any test overrides it
 const realFetch = global.fetch;
@@ -180,6 +181,9 @@ function makeRealApiFetch(opts: { pythonPort?: number; llmPort?: number } = {}) 
     if (llmPort && urlStr.includes(`localhost:${llmPort}`)) {
       return realFetch(urlStr, init);
     }
+    if (method === 'POST' && urlStr.includes('/api/files/template')) {
+      return call(templateHandler, `${BASE}/api/files/template`, init);
+    }
     if (method === 'POST' && urlStr.includes('/api/files/batch')) {
       return call(batchFilesHandler, `${BASE}/api/files/batch`, init);
     }
@@ -273,7 +277,113 @@ describe('Viewer role: dashboard header hides edit controls', () => {
 });
 
 // ============================================================================
-// Scenario 3: Viewer agentic — EditFile returns permission error
+// Scenario 3: Viewer agentic — CreateFile is rejected
+// ============================================================================
+
+describe('Viewer role: agent CreateFile is rejected', () => {
+  const { getPythonPort, getLLMMockPort, getLLMMockServer } = withPythonBackend({ withLLMMock: true });
+  setupTestDb(getTestDbPath('viewer_readonly_ui'), { customInit: insertDashboardAndQuestion });
+
+  let testStore: ReturnType<typeof storeModule.makeStore>;
+  let getStoreSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    jest.requireMock('@/lib/auth/auth-helpers').getEffectiveUser.mockResolvedValue(VIEWER_EFFECTIVE_USER);
+
+    const pythonPort = getPythonPort();
+    const llmPort = getLLMMockPort?.();
+
+    testStore = storeModule.makeStore();
+    testStore.dispatch(setUser(VIEWER_AUTH_USER));
+    getStoreSpy = jest.spyOn(storeModule, 'getStore').mockReturnValue(testStore);
+
+    global.fetch = makeRealApiFetch({ pythonPort, llmPort });
+  });
+
+  afterEach(() => {
+    global.fetch = realFetch;
+    getStoreSpy.mockRestore();
+  });
+
+  it('returns a permission error when viewer agent tries to CreateFile', async () => {
+    const mockServer = getLLMMockServer!();
+    await mockServer.reset();
+    await mockServer.configure([
+      // Turn 1: agent tries to create a question file as a viewer
+      {
+        response: {
+          content: '',
+          role: 'assistant',
+          tool_calls: [{
+            id: 'tc_viewer_create_q',
+            type: 'function',
+            function: {
+              name: 'CreateFile',
+              arguments: JSON.stringify({
+                file_type: 'question',
+                name: 'Sneaky Question',
+                path: '/org',
+                content: { query: 'SELECT 1', vizSettings: { type: 'table' }, connection_name: '' },
+              }),
+            },
+          }],
+          finish_reason: 'tool_calls',
+        },
+        usage: { total_tokens: 120, prompt_tokens: 90, completion_tokens: 30 },
+      },
+      // Turn 2: LLM receives the error and informs the user
+      {
+        response: {
+          content: "I'm sorry, your viewer role does not allow creating files.",
+          role: 'assistant',
+          tool_calls: [],
+          finish_reason: 'stop',
+        },
+        usage: { total_tokens: 50, prompt_tokens: 30, completion_tokens: 20 },
+      },
+    ]);
+
+    const fileCountBefore = Object.keys(testStore.getState().files.files).length;
+
+    const CONV_ID = -800;
+    testStore.dispatch(createConversation({
+      conversationID: CONV_ID,
+      agent: 'AnalystAgent',
+      agent_args: { goal: 'Create a new question' },
+    }));
+    testStore.dispatch(sendMessage({
+      conversationID: CONV_ID,
+      message: 'Create a new question called Sneaky Question',
+    }));
+
+    const realConvId = await waitForConversationFinished(
+      () => testStore.getState() as RootState,
+      CONV_ID,
+    );
+
+    // Conversation completed without a fatal error
+    const conv = selectConversation(testStore.getState() as RootState, realConvId);
+    expect(conv?.error).toBeUndefined();
+
+    // No new file was created in Redux
+    const fileCountAfter = Object.keys(testStore.getState().files.files).length;
+    expect(fileCountAfter).toBe(fileCountBefore);
+
+    // The tool message for CreateFile should carry a success=false payload
+    const toolMsg = conv?.messages.find(
+      m => m.role === 'tool' && (m as any).tool_call_id === 'tc_viewer_create_q'
+    );
+    expect(toolMsg).toBeDefined();
+    const rawContent = (toolMsg as any)?.content;
+    const resultPayload =
+      typeof rawContent === 'string' ? JSON.parse(rawContent) : rawContent;
+    expect(resultPayload?.success).toBe(false);
+    expect(resultPayload?.error).toMatch(/viewer|permission|create/i);
+  }, 45000);
+});
+
+// ============================================================================
+// Scenario 4: Viewer agentic — EditFile on dashboard returns permission error
 // ============================================================================
 
 describe('Viewer role: agent EditFile on dashboard is rejected', () => {
