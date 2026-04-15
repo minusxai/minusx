@@ -10,7 +10,7 @@ import { AppState } from '@/lib/appState';
 import dynamic from 'next/dynamic';
 import ThinkingIndicator from './ThinkingIndicator';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { createConversation, sendMessage, updateAgentArgs, interruptChat, selectOptionalConversation, setActiveConversation, selectActiveTempConversation, generateVirtualConversationId } from '@/store/chatSlice';
+import { createConversation, sendMessage, queueMessage, clearInterruptedQueuedText, updateAgentArgs, interruptChat, selectOptionalConversation, setActiveConversation, selectActiveTempConversation, generateVirtualConversationId } from '@/store/chatSlice';
 import { useConversation } from '@/lib/hooks/useConversation';
 import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -333,6 +333,16 @@ export default function ChatInterface({
     }
   };
 
+  // When interruptChat captures queued messages, prefill the input
+  const interruptedQueuedText = conversation?.interruptedQueuedText;
+  const [queuePrefill, setQueuePrefill] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (interruptedQueuedText && conversationID) {
+      setQueuePrefill(interruptedQueuedText);
+      dispatch(clearInterruptedQueuedText({ conversationID }));
+    }
+  }, [interruptedQueuedText, conversationID, dispatch]);
+
   const handleStopAgent = () => {
     if (conversationID) {
       dispatch(interruptChat({ conversationID }));
@@ -362,6 +372,22 @@ export default function ChatInterface({
     // }
 
     setLocalError(null);
+
+    // If agent is busy, queue immediately without async work
+    if (conversationID && conversation) {
+      const agentBusy = conversation.executionState === 'WAITING'
+        || conversation.executionState === 'EXECUTING'
+        || conversation.executionState === 'STREAMING';
+
+      if (agentBusy) {
+        dispatch(queueMessage({
+          conversationID,
+          message: userInput,
+          attachments: attachments.length > 0 ? attachments : undefined,
+        }));
+        return;
+      }
+    }
 
     // Simplify schema for agent
     const simplifiedSchema = database?.schemas?.map(s => ({
@@ -898,7 +924,7 @@ export default function ChatInterface({
                 w="100%"
             >
               <GridItem colSpan={colSpan} colStart={colStart}>
-                <ThinkingIndicator waitingForInput={isWaitingForUserInput} onStop={handleStopAgent} />
+                <ThinkingIndicator waitingForInput={isWaitingForUserInput} onStop={handleStopAgent} queuedMessages={conversation?.queuedMessages || []} />
               </GridItem>
             </Grid>
           )}
@@ -920,6 +946,8 @@ export default function ChatInterface({
               selectedVersion={contextVersion}
               onContextChange={onContextChange}
               whitelistedSchemas={databases}
+              prefillText={queuePrefill}
+              onPrefillConsumed={() => setQueuePrefill(undefined)}
             />
           </Box>
         </Box>
