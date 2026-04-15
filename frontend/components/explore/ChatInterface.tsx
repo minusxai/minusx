@@ -10,7 +10,7 @@ import { AppState } from '@/lib/appState';
 import dynamic from 'next/dynamic';
 import ThinkingIndicator from './ThinkingIndicator';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { createConversation, sendMessage, queueMessage, clearInterruptedQueuedText, updateAgentArgs, interruptChat, selectOptionalConversation, setActiveConversation, selectActiveTempConversation, generateVirtualConversationId } from '@/store/chatSlice';
+import { createConversation, sendMessage, queueMessage, clearQueuedMessages, updateAgentArgs, interruptChat, selectOptionalConversation, setActiveConversation, selectActiveTempConversation, generateVirtualConversationId } from '@/store/chatSlice';
 import { useConversation } from '@/lib/hooks/useConversation';
 import { useContext } from '@/lib/hooks/useContext';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -333,16 +333,6 @@ export default function ChatInterface({
     }
   };
 
-  // When interruptChat captures queued messages, prefill the input
-  const interruptedQueuedText = conversation?.interruptedQueuedText;
-  const [queuePrefill, setQueuePrefill] = useState<string | undefined>(undefined);
-  useEffect(() => {
-    if (interruptedQueuedText && conversationID) {
-      setQueuePrefill(interruptedQueuedText);
-      dispatch(clearInterruptedQueuedText({ conversationID }));
-    }
-  }, [interruptedQueuedText, conversationID, dispatch]);
-
   const handleStopAgent = () => {
     if (conversationID) {
       dispatch(interruptChat({ conversationID }));
@@ -431,6 +421,11 @@ export default function ChatInterface({
 
     // Existing conversation - normal flow
     if (conversationID) {
+      // Clear any leftover queued messages (e.g., after interrupt)
+      if (conversation?.queuedMessages?.length) {
+        dispatch(clearQueuedMessages({ conversationID }));
+      }
+
       // Update agent_args with fresh appState before sending message
       dispatch(updateAgentArgs({
         conversationID,
@@ -946,8 +941,9 @@ export default function ChatInterface({
               selectedVersion={contextVersion}
               onContextChange={onContextChange}
               whitelistedSchemas={databases}
-              prefillText={queuePrefill}
-              onPrefillConsumed={() => setQueuePrefill(undefined)}
+              prefillText={!isAgentRunning && !isStreaming && conversation?.wasInterrupted && conversation?.queuedMessages?.length
+                ? conversation.queuedMessages.map(qm => qm.message).join('\n')
+                : undefined}
             />
           </Box>
         </Box>

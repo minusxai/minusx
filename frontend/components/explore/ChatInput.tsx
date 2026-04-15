@@ -34,7 +34,6 @@ interface ChatInputProps {
   onContextChange?: (contextPath: string | null, version?: number) => void;
   whitelistedSchemas?: DatabaseWithSchema[];
   prefillText?: string;
-  onPrefillConsumed?: () => void;
 }
 
 export default function ChatInput({
@@ -54,7 +53,6 @@ export default function ChatInput({
   onContextChange,
   whitelistedSchemas,
   prefillText,
-  onPrefillConsumed,
 }: ChatInputProps) {
   const dispatch = useAppDispatch();
   const companyName = useAppSelector(selectCompanyName);
@@ -88,9 +86,8 @@ export default function ChatInput({
       setInput(prefillText);
       editorRef.current?.setText(prefillText);
       editorRef.current?.focus();
-      onPrefillConsumed?.();
     }
-  }, [prefillText, onPrefillConsumed]);
+  }, [prefillText]);
 
   // Handle pending message from SearchBar — wait for connections/context to finish loading
   // before sending, so the message isn't discarded by the loading guard in handleSendMessage.
