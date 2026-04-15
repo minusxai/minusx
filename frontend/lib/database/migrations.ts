@@ -1138,6 +1138,56 @@ export const MIGRATIONS: MigrationEntry[] = [
       return data;
     },
   },
+  {
+    dataVersion: 30,
+    description: 'V30: Normalize alert recipients from raw addresses to userId/channelName references',
+    dataMigration: (data: InitData) => {
+      for (const companyData of data.companies as CompanyData[]) {
+        // Build email→userId and phone→userId lookup maps from this company's users
+        const emailToUserId = new Map<string, number>();
+        const phoneToUserId = new Map<string, number>();
+        for (const user of companyData.users as any[]) {
+          if (user.id == null) continue;
+          if (user.email) emailToUserId.set(user.email.toLowerCase(), user.id);
+          if (user.phone) phoneToUserId.set(user.phone, user.id);
+        }
+
+        for (const doc of companyData.documents as ExportedDocument[]) {
+          if (doc.type !== 'alert' && doc.type !== 'report') continue;
+          const content = doc.content as any;
+          if (!content || !Array.isArray(content.recipients)) continue;
+
+          const migrated: any[] = [];
+          for (const r of content.recipients) {
+            // Skip recipients already in new shape (has userId or channelName)
+            if ('userId' in r || 'channelName' in r) {
+              migrated.push(r);
+              continue;
+            }
+            const { channel, address } = r as { channel: string; address: string };
+            if (channel === 'email_alert') {
+              const userId = emailToUserId.get((address ?? '').toLowerCase());
+              migrated.push(userId != null
+                ? { userId, channel: 'email' }
+                : { channelName: address, channel: 'email' });
+            } else if (channel === 'phone_alert') {
+              const userId = phoneToUserId.get(address ?? '');
+              migrated.push(userId != null
+                ? { userId, channel: 'phone' }
+                : { channelName: address, channel: 'phone' });
+            } else if (channel === 'slack_alert') {
+              migrated.push({ channelName: address, channel: 'slack' });
+            } else {
+              // Unknown channel type — keep as-is to avoid data loss
+              migrated.push(r);
+            }
+          }
+          content.recipients = migrated;
+        }
+      }
+      return data;
+    },
+  },
 ];
 
 /**

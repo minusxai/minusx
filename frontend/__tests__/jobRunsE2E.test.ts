@@ -59,7 +59,12 @@ jest.mock('@/lib/messaging/webhook-executor', () => ({
   sendPhoneAlertViaWebhook: jest.fn().mockResolvedValue({ success: true, statusCode: 200 }),
 }));
 
-// ─── Company config mock (provide email webhook for delivery tests) ───────────
+// ─── User DB mock (no real users needed for channel-name based delivery) ──────
+jest.mock('@/lib/database/user-db', () => ({
+  UserDB: { listByCompany: jest.fn().mockResolvedValue([]) },
+}));
+
+// ─── Company config mock (provide email webhook + channels for delivery tests) ─
 jest.mock('@/lib/data/configs.server', () => ({
   getConfigsByCompanyId: jest.fn().mockResolvedValue({
     config: {
@@ -78,6 +83,10 @@ jest.mock('@/lib/data/configs.server', () => ({
           },
         ],
       },
+      channels: [
+        { type: 'email', name: 'alice', address: 'alice@example.com' },
+        { type: 'email', name: 'bob', address: 'bob@example.com' },
+      ],
     },
   }),
 }));
@@ -384,8 +393,8 @@ describe('Job Runs E2E', () => {
         schedule: { cron: '* * * * *', timezone: 'UTC' },
         tests: [{ type: 'query', subject: { type: 'query', question_id: questionId, column: 'revenue', row: 0 }, answerType: 'number', operator: '<=', value: { type: 'constant', value: 100 } }],
         recipients: [
-          { channel: 'email_alert', address: 'alice@example.com' },
-          { channel: 'email_alert', address: 'bob@example.com' },
+          { channelName: 'alice', channel: 'email' },
+          { channelName: 'bob', channel: 'email' },
         ],
       };
       await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', alertWithRecipients, [questionId], 1);
@@ -423,7 +432,7 @@ describe('Job Runs E2E', () => {
         status: 'live',
         schedule: { cron: '* * * * *', timezone: 'UTC' },
         tests: [{ type: 'query', subject: { type: 'query', question_id: questionId, column: 'revenue', row: 0 }, answerType: 'number', operator: '<=', value: { type: 'constant', value: 100 } }],
-        recipients: [{ channel: 'email_alert', address: 'alice@example.com' }],
+        recipients: [{ channelName: 'alice', channel: 'email' }],
       };
       await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', alertWithRecipients, [questionId], 1);
 
@@ -448,7 +457,7 @@ describe('Job Runs E2E', () => {
         status: 'live',
         schedule: { cron: '* * * * *', timezone: 'UTC' },
         tests: [{ type: 'query', subject: { type: 'query', question_id: questionId, column: 'revenue', row: 0 }, answerType: 'number', operator: '<=', value: { type: 'constant', value: 200 } }],
-        recipients: [{ channel: 'email_alert', address: 'alice@example.com' }],
+        recipients: [{ channelName: 'alice', channel: 'email' }],
       };
       await DocumentDB.update(alertId, 'Revenue Alert', '/org/alerts/revenue', alertWithRecipients, [questionId], 1);
 

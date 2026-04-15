@@ -1,5 +1,5 @@
 import 'server-only';
-import { resolveBaseUrl } from '@/lib/jobs/job-utils';
+import { resolveBaseUrl, resolveEmailAddresses } from '@/lib/jobs/job-utils';
 import { FilesAPI } from '@/lib/data/files.server';
 import { createServerRunner } from '@/lib/tests/server';
 import type { JobHandler } from '../job-registry';
@@ -29,10 +29,9 @@ export const contextJobHandler: JobHandler = {
       const passed = results.filter(r => r.passed).length;
       const body = `<h2>${contextName}</h2><p>${passed}/${results.length} evals passed.</p><p><a href="${link}">View results</a></p>`;
 
-      for (const recipient of context.recipients) {
-        if (recipient.channel === 'email_alert') {
-          messages.push({ type: 'email_alert', content: body, metadata: { to: recipient.address, subject } });
-        }
+      const emailAddresses = await resolveEmailAddresses(context.recipients, user);
+      for (const address of emailAddresses) {
+        messages.push({ type: 'email_alert', content: body, metadata: { to: address, subject } });
       }
     }
 

@@ -15,6 +15,17 @@ interface DeliveryPickerProps {
   disabled?: boolean;
 }
 
+function recipientKey(r: AlertRecipient): string {
+  return 'userId' in r ? `user:${r.userId}:${r.channel}` : `channel:${r.channelName}:${r.channel}`;
+}
+
+function optionToRecipient(opt: DropdownOption): AlertRecipient {
+  if (opt.via === 'user') {
+    return { userId: opt.user.id!, channel: opt.kind };
+  }
+  return { channelName: opt.channel.name, channel: opt.kind };
+}
+
 function DropdownMenu({ containerRef, options, onSelect }: {
   containerRef: React.RefObject<HTMLDivElement | null>;
   options: DropdownOption[];
@@ -60,15 +71,11 @@ function DropdownMenu({ containerRef, options, onSelect }: {
       overflowY="auto"
     >
       {options.map((opt, i) => {
-        const address =
-          opt.via === 'user'
-            ? (opt.kind === 'email_alert' ? opt.user.email : opt.user.phone!)
-            : opt.kind === 'slack_alert' ? opt.channel.name : opt.channel.address;
-        const displayName =
-          opt.via === 'user' ? opt.user.name : opt.channel.name;
+        const displayName = opt.via === 'user' ? opt.user.name : opt.channel.name;
         const subLabel =
-          opt.via === 'user' ? address :
-          opt.kind === 'slack_alert' ? undefined : opt.channel.address;
+          opt.via === 'user'
+            ? (opt.kind === 'email' ? opt.user.email : opt.user.phone!)
+            : opt.kind === 'slack' ? undefined : opt.channel.address;
 
         return (
           <HStack
@@ -80,16 +87,16 @@ function DropdownMenu({ containerRef, options, onSelect }: {
             _hover={{ bg: 'bg.muted' }}
             onMouseDown={(e: React.MouseEvent) => {
               e.preventDefault();
-              onSelect({ channel: opt.kind, address });
+              onSelect(optionToRecipient(opt));
             }}
           >
-            {opt.kind === 'email_alert' ? <LuMail size={12} /> : opt.kind === 'phone_alert' ? <LuMessageCircle size={12} /> : <LuHash size={12} />}
+            {opt.kind === 'email' ? <LuMail size={12} /> : opt.kind === 'phone' ? <LuMessageCircle size={12} /> : <LuHash size={12} />}
             <Box>
               <Text fontSize="xs" fontWeight="500">{displayName}</Text>
               {subLabel && <Text fontSize="xs" color="fg.muted">{subLabel}</Text>}
             </Box>
-            <Badge size="xs" color={opt.kind === 'email_alert' ? 'accent.danger' : opt.kind === 'phone_alert' ? 'accent.primary' : 'accent.warning'} ml="auto">
-              {opt.kind === 'email_alert' ? 'email' : opt.kind === 'phone_alert' ? 'phone' : 'slack'}
+            <Badge size="xs" color={opt.kind === 'email' ? 'accent.danger' : opt.kind === 'phone' ? 'accent.primary' : 'accent.warning'} ml="auto">
+              {opt.kind}
             </Badge>
           </HStack>
         );
@@ -98,8 +105,6 @@ function DropdownMenu({ containerRef, options, onSelect }: {
   );
 }
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPickerProps) {
   const [inputValue, setInputValue] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
@@ -107,28 +112,19 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
   const containerRef = useRef<HTMLDivElement>(null);
 
   const { users } = useUsers();
-
   const { config } = useConfigs();
 
   const enabled = useMemo(() => hasDeliveryEnabled(config, users), [config, users]);
   const effectiveDisabled = disabled || !enabled;
 
-  const userNameByAddress = useMemo(() => {
-    const map = new Map<string, string>();
+  // Map userId → user for label display
+  const userById = useMemo(() => {
+    const map = new Map<number, User>();
     for (const user of users) {
-      map.set(user.email, user.name);
-      if (user.phone) map.set(user.phone, user.name);
+      if (user.id != null) map.set(user.id, user);
     }
     return map;
   }, [users]);
-
-  const channelNameByAddress = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const ch of config.channels ?? []) {
-      if (ch.type === 'email' || ch.type === 'phone') map.set(ch.address, ch.name);
-    }
-    return map;
-  }, [config.channels]);
 
   const dropdownOptions = useMemo(
     () => buildDropdownOptions(config, users, recipients, inputValue),
@@ -136,19 +132,11 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
   );
 
   const addRecipient = (recipient: AlertRecipient) => {
-    const key = `${recipient.channel}:${recipient.address}`;
-    if (recipients.some(r => `${r.channel}:${r.address}` === key)) return;
+    const key = recipientKey(recipient);
+    if (recipients.some(r => recipientKey(r) === key)) return;
     onChange([...recipients, recipient]);
     setInputValue('');
     setShowDropdown(false);
-  };
-
-  const addEmailFromInput = (email: string, { validate = false } = {}) => {
-    if (!config.messaging?.webhooks?.some(w => w.type === 'email_alert')) return;
-    const trimmed = email.trim().toLowerCase();
-    if (!trimmed) return;
-    if (validate && !EMAIL_REGEX.test(trimmed)) return;
-    addRecipient({ channel: 'email_alert', address: trimmed });
   };
 
   const removeRecipient = (index: number) => {
@@ -156,10 +144,6 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault();
-      if (inputValue.trim()) addEmailFromInput(inputValue, { validate: true });
-    }
     if (e.key === 'Backspace' && !inputValue && recipients.length > 0) {
       removeRecipient(recipients.length - 1);
     }
@@ -167,11 +151,19 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
   };
 
   const handleBlur = () => {
-    setTimeout(() => {
-      if (inputValue.trim()) addEmailFromInput(inputValue, { validate: true });
-      setShowDropdown(false);
-    }, 150);
+    setTimeout(() => setShowDropdown(false), 150);
   };
+
+  function recipientLabel(r: AlertRecipient): string {
+    if ('userId' in r) {
+      return userById.get(r.userId)?.name ?? `User #${r.userId}`;
+    }
+    return r.channelName;
+  }
+
+  function recipientChannel(r: AlertRecipient): 'email' | 'phone' | 'slack' {
+    return r.channel;
+  }
 
   return (
     <Box position="relative" ref={containerRef}>
@@ -192,12 +184,10 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
         {recipients.map((r, i) => (
           <HStack key={i} bg="bg.muted" borderRadius="sm" px={2} py={0.5} gap={1} fontSize="xs">
             <Text fontSize="xs" lineHeight="short">
-              {r.channel === 'slack_alert'
-                ? r.address
-                : (channelNameByAddress.get(r.address) ?? userNameByAddress.get(r.address) ?? r.address)}
+              {recipientLabel(r)}
             </Text>
-            <Badge size="xs" color={r.channel === 'email_alert' ? 'accent.danger' : r.channel === 'phone_alert' ? 'accent.primary' : 'accent.warning'}>
-              {r.channel === 'email_alert' ? 'email' : r.channel === 'phone_alert' ? 'phone' : 'slack'}
+            <Badge size="xs" color={recipientChannel(r) === 'email' ? 'accent.danger' : recipientChannel(r) === 'phone' ? 'accent.primary' : 'accent.warning'}>
+              {recipientChannel(r)}
             </Badge>
             {!effectiveDisabled && (
               <button
@@ -218,7 +208,7 @@ export function DeliveryPicker({ recipients, onChange, disabled }: DeliveryPicke
             onBlur={handleBlur}
             onKeyDown={handleKeyDown}
             autoComplete="one-time-code"
-            placeholder={recipients.length === 0 ? 'Add email or select user...' : ''}
+            placeholder={recipients.length === 0 ? 'Search users or channels...' : ''}
             size="xs"
             variant="outline"
             border="none"

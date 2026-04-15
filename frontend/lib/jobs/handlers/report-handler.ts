@@ -2,7 +2,7 @@ import 'server-only';
 import { FilesAPI } from '@/lib/data/files.server';
 import { buildServerAgentArgs } from '@/lib/chat/agent-args.server';
 import { runChatOrchestration } from '@/lib/chat/run-orchestration';
-import { resolveBaseUrl } from '@/lib/jobs/job-utils';
+import { resolveBaseUrl, resolveEmailAddresses } from '@/lib/jobs/job-utils';
 import { getAppStateServer } from '@/lib/api/file-state.server';
 import type { ReportContent, ReportOutput, ReportRunContent, JobHandlerResult, JobRunnerInput } from '@/lib/types';
 import type { JobHandler } from '../job-registry';
@@ -87,14 +87,13 @@ export const reportJobHandler: JobHandler = {
         : 'No content generated.';
       const emailBody = `<h2>${reportName}</h2><div style="white-space:pre-wrap">${bodySnippet}</div><p><a href="${reportLink}">View full report</a></p>`;
 
-      for (const recipient of report.recipients) {
-        if (recipient.channel === 'email_alert') {
-          messages.push({
-            type: 'email_alert',
-            content: emailBody,
-            metadata: { to: recipient.address, subject },
-          });
-        }
+      const emailAddresses = await resolveEmailAddresses(report.recipients, user);
+      for (const address of emailAddresses) {
+        messages.push({
+          type: 'email_alert',
+          content: emailBody,
+          metadata: { to: address, subject },
+        });
       }
     }
 

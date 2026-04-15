@@ -1,5 +1,5 @@
 import 'server-only';
-import { resolveBaseUrl } from '@/lib/jobs/job-utils';
+import { resolveBaseUrl, resolveEmailAddresses } from '@/lib/jobs/job-utils';
 import { BACKEND_URL } from '@/lib/config';
 import { FilesAPI } from '@/lib/data/files.server';
 import { ConnectionsAPI } from '@/lib/data/connections.server';
@@ -103,10 +103,9 @@ export const transformationJobHandler: JobHandler = {
       const succeeded = results.filter(r => r.status === 'success').length;
       const body = `<h2>${transformationName}</h2><p>${succeeded}/${results.length} transforms succeeded.</p><p><a href="${link}">View results</a></p>`;
 
-      for (const recipient of transformation.recipients) {
-        if (recipient.channel === 'email_alert') {
-          messages.push({ type: 'email_alert', content: body, metadata: { to: recipient.address, subject } });
-        }
+      const emailAddresses = await resolveEmailAddresses(transformation.recipients, user);
+      for (const address of emailAddresses) {
+        messages.push({ type: 'email_alert', content: body, metadata: { to: address, subject } });
       }
     }
 

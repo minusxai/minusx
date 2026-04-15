@@ -11,11 +11,11 @@ export type EmailChannel  = Extract<ConfigChannel, { type: 'email' }>;
 export type PhoneChannel  = Extract<ConfigChannel, { type: 'phone' }>;
 
 export type DropdownOption =
-  | { kind: 'email_alert'; via: 'user';    user: User }
-  | { kind: 'phone_alert'; via: 'user';    user: User }
-  | { kind: 'slack_alert'; via: 'channel'; channel: SlackChannel }
-  | { kind: 'email_alert'; via: 'channel'; channel: EmailChannel }
-  | { kind: 'phone_alert'; via: 'channel'; channel: PhoneChannel };
+  | { kind: 'email'; via: 'user';    user: User }
+  | { kind: 'phone'; via: 'user';    user: User }
+  | { kind: 'slack'; via: 'channel'; channel: SlackChannel }
+  | { kind: 'email'; via: 'channel'; channel: EmailChannel }
+  | { kind: 'phone'; via: 'channel'; channel: PhoneChannel };
 
 function webhookTypes(config: CompanyConfig): Set<string> {
   return new Set(config.messaging?.webhooks?.map(w => w.type) ?? []);
@@ -39,6 +39,10 @@ export function hasDeliveryEnabled(config: CompanyConfig, users: User[]): boolea
   );
 }
 
+function recipientKey(r: AlertRecipient): string {
+  return 'userId' in r ? `user:${r.userId}:${r.channel}` : `channel:${r.channelName}:${r.channel}`;
+}
+
 export function buildDropdownOptions(
   config: CompanyConfig,
   users: User[],
@@ -47,36 +51,35 @@ export function buildDropdownOptions(
 ): DropdownOption[] {
   const types = webhookTypes(config);
   const ch = configChannels(config);
-  const selected = new Set(recipients.map(r => `${r.channel}:${r.address}`));
+  const selected = new Set(recipients.map(recipientKey));
   const q = query.toLowerCase();
   const opts: DropdownOption[] = [];
 
   for (const user of users) {
+    if (!user.id) continue;
     const matches = !q || user.name.toLowerCase().includes(q) || user.email.toLowerCase().includes(q);
     if (!matches) continue;
-    if (types.has('email_alert') && !selected.has(`email_alert:${user.email}`)) {
-      opts.push({ kind: 'email_alert', via: 'user', user });
+    if (types.has('email_alert') && !selected.has(`user:${user.id}:email`)) {
+      opts.push({ kind: 'email', via: 'user', user });
     }
-    if (types.has('phone_alert') && user.phone && !selected.has(`phone_alert:${user.phone}`)) {
-      opts.push({ kind: 'phone_alert', via: 'user', user });
+    if (types.has('phone_alert') && user.phone && !selected.has(`user:${user.id}:phone`)) {
+      opts.push({ kind: 'phone', via: 'user', user });
     }
   }
 
   if (types.has('email_alert')) {
     for (const c of ch.email) {
-      if (!selected.has(`email_alert:${c.address}`)) opts.push({ kind: 'email_alert', via: 'channel', channel: c });
+      if (!selected.has(`channel:${c.name}:email`)) opts.push({ kind: 'email', via: 'channel', channel: c });
     }
   }
   if (types.has('phone_alert')) {
     for (const c of ch.phone) {
-      if (!selected.has(`phone_alert:${c.address}`)) opts.push({ kind: 'phone_alert', via: 'channel', channel: c });
+      if (!selected.has(`channel:${c.name}:phone`)) opts.push({ kind: 'phone', via: 'channel', channel: c });
     }
   }
   if (types.has('slack_alert')) {
     for (const c of ch.slack) {
-      if (!recipients.some(r => r.channel === 'slack_alert' && r.address === c.name)) {
-        opts.push({ kind: 'slack_alert', via: 'channel', channel: c });
-      }
+      if (!selected.has(`channel:${c.name}:slack`)) opts.push({ kind: 'slack', via: 'channel', channel: c });
     }
   }
 
