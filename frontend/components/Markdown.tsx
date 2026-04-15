@@ -4,7 +4,7 @@ import { Box, Text } from '@chakra-ui/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Link from 'next/link';
-import { LuChartColumnIncreasing, LuChevronDown, LuCircleHelp, LuFilePlus2, LuRocket, LuShieldCheck, LuShieldAlert, LuShieldQuestion, LuSparkles } from 'react-icons/lu';
+import { LuChartColumnIncreasing, LuChevronDown, LuCircleHelp, LuFilePlus2, LuRocket, LuShieldCheck, LuShieldAlert, LuShieldQuestion, LuSearch } from 'react-icons/lu';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import { FileType } from '@/lib/types';
 import { ReactNode, useCallback, useMemo, useState } from 'react';
@@ -12,6 +12,7 @@ import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { useConfigs } from '@/lib/hooks/useConfigs';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { selectActiveConversation, sendMessage } from '@/store/chatSlice';
+import { selectShowSuggestedQuestions, selectShowTrustScore } from '@/store/uiSlice';
 import { isViewer } from '@/lib/auth/role-helpers';
 import { ReportQueryResult, QuestionContent } from '@/lib/types';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
@@ -219,38 +220,42 @@ function SuggestedQuestionsBlock({ questions }: { questions: string[] }) {
   };
 
   return (
-    <Box mt="3" display="flex" flexWrap="wrap" gap="2">
+    <Box mt="4" display="flex" flexDirection="column" gap="1.5">
+      <Box display="flex" alignItems="center" gap="2">
+        <Box flex="1" h="1px" bg="border.default" />
+        <span style={{ fontFamily: 'var(--font-jetbrains-mono)', fontWeight: 500, color: 'var(--chakra-colors-fg-subtle)', textTransform: 'uppercase', letterSpacing: '0.08em', flexShrink: 0, fontSize: '10px' }}>
+          Suggested questions
+        </span>
+      </Box>
       {questions.map((q, i) => (
         <Box
           key={i}
-          asChild
-          display="inline-flex"
+          display="flex"
           alignItems="center"
-          gap="1.5"
-          px="3"
-          py="1.5"
+          gap="2"
+          px="2.5"
+          py="1"
           borderRadius="md"
+          bg="bg.muted"
           border="1px solid"
           borderColor="border.default"
-          bg="bg.muted"
-          fontSize="xs"
+          fontSize="2xs"
           fontFamily="mono"
-          color="fg.default"
+          color="fg.muted"
           cursor="pointer"
-          transition="all 0.15s ease"
+          transition="all 0.2s"
+          aria-label={`Suggested question: ${q}`}
+          onClick={() => handleClick(q)}
           _hover={{
             borderColor: 'accent.teal',
             bg: 'accent.teal/5',
+            transform: 'translateX(4px)',
           }}
         >
-          <button
-            aria-label={`Suggested question: ${q}`}
-            onClick={() => handleClick(q)}
-            style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', cursor: 'inherit', display: 'flex', alignItems: 'center', gap: '0.375rem', color: 'inherit' }}
-          >
-            <LuSparkles size={12} style={{ flexShrink: 0 }} />
-            {q}
-          </button>
+          <Box color="accent.teal" display="flex" alignItems="center" flexShrink={0}>
+            <LuSearch size={12} />
+          </Box>
+          <Text fontSize="2xs" fontFamily="mono">{q}</Text>
         </Box>
       ))}
     </Box>
@@ -293,7 +298,7 @@ function TrustBadge({ level, context, reasons }: {
   context: 'sidebar' | 'mainpage';
   reasons?: string[];
 }) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const { config: appConfig } = useConfigs({ skip: false });
   const agentName = appConfig.branding.agentName;
   const config = trustConfig[level];
@@ -305,96 +310,57 @@ function TrustBadge({ level, context, reasons }: {
   const expandTitle = hasReasons ? config.moreDetailsTitle : (hasMoreDetails ? config.moreDetailsTitle : '');
 
   return (
-    <Box
-      w="100%"
-      mt="3"
-      borderRadius="md"
-      border="1px solid"
-      borderColor={config.borderColor}
-      overflow="hidden"
-      css={{ '& p, & span, & button': { fontSize: 'var(--chakra-font-sizes-xs) !important' } }}
-    >
+    <Box w="100%" mt="3">
+      {/* Compact inline trust indicator */}
       <Box
-        display="flex"
+        asChild
+        display="inline-flex"
         alignItems="center"
-        justifyContent="space-between"
-        px="3"
-        py="2"
+        gap="1.5"
+        cursor={hasExpandableContent ? 'pointer' : 'default'}
+        transition="all 0.15s ease"
+        _hover={hasExpandableContent ? { opacity: 0.85 } : {}}
       >
-        <Box display="flex" alignItems="center" gap="1.5">
-          <Text fontSize="2xs" color="fg.muted" textTransform="uppercase">
-            {agentName} trust score
-          </Text>
-          <Box
-            display="flex"
-            alignItems="center"
-            gap="1"
-            bg={config.bgColor}
-            px="2"
-            py="0.5"
-            borderRadius="lg"
-          >
-            <Box color="white" display="flex" alignItems="center">
-              <Icon />
-            </Box>
-            <Text fontSize="2xs" fontWeight="600" color="white">
-              {config.label}
-            </Text>
-          </Box>
-        </Box>
-        {hasExpandableContent && (
-          <Box
-            asChild
-            display="flex"
-            alignItems="center"
-            gap="1"
-            cursor="pointer"
-            color="fg.muted"
-            fontSize="2xs"
-            _hover={{ color: 'fg.default' }}
-            transition="all 0.15s ease"
-          >
-            <button onClick={() => setExpanded(!expanded)} style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem', color: 'inherit' }}>
-              {context === 'sidebar' ? (
-                <LuCircleHelp size={14} />
-              ) : (
-                <>
-                  <Text fontSize="2xs">{expandTitle}</Text>
-                  <Box
-                    transition="transform 0.2s ease"
-                    transform={expanded ? 'rotate(180deg)' : 'rotate(0deg)'}
-                    display="flex"
-                    alignItems="center"
-                  >
-                    <LuChevronDown size={12} />
-                  </Box>
-                </>
-              )}
-            </button>
-          </Box>
-        )}
-      </Box>
-      {hasExpandableContent && expanded && (
-        <Box
-          px="3"
-          pb="2.5"
-          pt="0"
-          borderTop="1px solid"
-          borderColor={config.borderColor}
+        <button
+          aria-label={`Trust score: ${config.label}`}
+          onClick={() => hasExpandableContent && setExpanded(!expanded)}
+          style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', cursor: hasExpandableContent ? 'pointer' : 'default', display: 'inline-flex', alignItems: 'center', gap: '0.375rem', color: 'inherit' }}
         >
-          {/* Dynamic reasons from agent */}
-          {hasReasons && (
-            <Box mt="2">
-              {reasons.map((reason, i) => (
-                <Text key={i} fontSize="2xs" color="fg.muted" lineHeight="1.6">
-                  &bull; {reason}
-                </Text>
-              ))}
+          <Box color={config.bgColor} display="flex" alignItems="center">
+            <Icon size={14} />
+          </Box>
+          <Text fontSize="2xs" color="fg.subtle" fontFamily="mono">
+            {agentName} confidence: {config.label}
+          </Text>
+          {hasExpandableContent && (
+            <Box
+              transition="transform 0.2s ease"
+              transform={expanded ? 'rotate(180deg)' : 'rotate(0deg)'}
+              display="flex"
+              alignItems="center"
+              color="fg.subtle"
+            >
+              <LuChevronDown size={10} />
             </Box>
           )}
-          {/* Fallback to static details if no dynamic reasons */}
+        </button>
+      </Box>
+
+      {/* Expanded reasons */}
+      {hasExpandableContent && expanded && (
+        <Box
+          mt="2"
+          pl="3"
+          borderLeft="2px solid"
+          borderColor={config.borderColor}
+        >
+          {hasReasons && reasons.map((reason, i) => (
+            <Text key={i} fontSize="2xs" color="fg.muted" lineHeight="1.7" fontFamily="mono">
+              {reason}
+            </Text>
+          ))}
           {!hasReasons && 'moreDetails' in config && (
-            <Text fontSize="2xs" color="fg.muted" lineHeight="1.6" mt="2">
+            <Text fontSize="2xs" color="fg.muted" lineHeight="1.7" fontFamily="mono">
               {config.moreDetails}
             </Text>
           )}
@@ -445,9 +411,11 @@ export default function Markdown({
   // Get mode from Redux to preserve in internal links
   const mode = useAppSelector(state => state.auth.user?.mode);
 
-  // Role check for trust badge visibility
+  // Feature flags + role check
   const user = useAppSelector(selectEffectiveUser);
   const isViewerUser = user ? isViewer(user.role) : false;
+  const showSuggestedQuestions = useAppSelector(selectShowSuggestedQuestions);
+  const showTrustScore = useAppSelector(selectShowTrustScore);
 
   // Append mode param to internal links if in non-default mode
   const withMode = (href: string): string => {
@@ -728,7 +696,9 @@ export default function Markdown({
       );
     }
 
-    // Render parts
+    // Render parts: text/trust/query inline, then suggested questions at the very end
+    const suggestedQuestions = parts.filter((p): p is Extract<ContentPart, { type: 'suggested_questions' }> => p.type === 'suggested_questions');
+
     return (
       <>
         {parts.map((part, index) => {
@@ -742,15 +712,8 @@ export default function Markdown({
                 {part.content}
               </ReactMarkdown>
             );
-          } else if (part.type === 'suggested_questions') {
-            return (
-              <SuggestedQuestionsBlock
-                key={index}
-                questions={part.questions}
-              />
-            );
           } else if (part.type === 'trust_info') {
-            if (isViewerUser) return null;
+            if (isViewerUser || !showTrustScore) return null;
             return (
               <TrustBadge
                 key={index}
@@ -760,8 +723,7 @@ export default function Markdown({
               />
             );
           } else if (part.type === 'trust_legacy') {
-            // Backward compat: [[trust:level]]
-            if (isViewerUser) return null;
+            if (isViewerUser || !showTrustScore) return null;
             const level = part.content as 'high' | 'medium' | 'low';
             if (level in trustConfig) {
               return <TrustBadge key={index} level={level} context={context} />;
@@ -791,6 +753,10 @@ export default function Markdown({
           }
           return null;
         })}
+        {/* Suggested questions always render last */}
+        {showSuggestedQuestions && suggestedQuestions.map((part, i) => (
+          <SuggestedQuestionsBlock key={`sq-${i}`} questions={part.questions} />
+        ))}
       </>
     );
   }

@@ -5,7 +5,7 @@ import { Box, VStack, Text, Flex, Switch, Button, Heading, Container, Tabs } fro
 import { LuRefreshCw } from 'react-icons/lu';
 import { ColorModeButton } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { setAskForConfirmation, setShowDebug, setShowJson, setShowAllErrorToasts, setShowAdvanced, setDevMode } from '@/store/uiSlice';
+import { setAskForConfirmation, setShowDebug, setShowJson, setShowAllErrorToasts, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore } from '@/store/uiSlice';
 import { IS_DEV } from '@/lib/constants';
 import RecordingControl from '@/components/RecordingControl';
 import DataManagementSection from '@/components/DataManagementSection';
@@ -136,6 +136,8 @@ function SettingsContent() {
   const [isTestingError, setIsTestingError] = useState(false);
   const showAdvanced = useAppSelector((state) => state.ui.showAdvanced);
   const devMode = useAppSelector((state) => state.ui.devMode);
+  const showSuggestedQuestions = useAppSelector((state) => state.ui.showSuggestedQuestions);
+  const showTrustScore = useAppSelector((state) => state.ui.showTrustScore);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -240,6 +242,28 @@ function SettingsContent() {
         <SwitchControl
           checked={askForConfirmation}
           onChange={(checked) => dispatch(setAskForConfirmation(checked))}
+        />
+      ),
+    },
+    {
+      tab: 'general',
+      title: 'Suggested Questions',
+      description: 'Show clickable follow-up questions after agent responses',
+      control: (
+        <SwitchControl
+          checked={showSuggestedQuestions}
+          onChange={(checked) => dispatch(setShowSuggestedQuestions(checked))}
+        />
+      ),
+    },
+    {
+      tab: 'general',
+      title: 'Trust Score',
+      description: 'Show agent confidence level on responses',
+      control: (
+        <SwitchControl
+          checked={showTrustScore}
+          onChange={(checked) => dispatch(setShowTrustScore(checked))}
         />
       ),
     },
@@ -352,7 +376,7 @@ function SettingsContent() {
       description: GIT_COMMIT_SHA,
       control: <></>,
     },
-  ], [askForConfirmation, showDebug, showJson, showAllErrorToasts, showDebugOption, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, showAdvanced, isAdmin]);
+  ], [askForConfirmation, showDebug, showJson, showAllErrorToasts, showDebugOption, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, showAdvanced, isAdmin, showSuggestedQuestions, showTrustScore]);
 
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [
