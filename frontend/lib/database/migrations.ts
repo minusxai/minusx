@@ -1188,6 +1188,25 @@ export const MIGRATIONS: MigrationEntry[] = [
       return data;
     },
   },
+  {
+    dataVersion: 31,
+    description: 'V31: Add conversation and config to accessRules.admin.createTypes in config overrides',
+    dataMigration: (data: InitData) => {
+      for (const companyData of data.companies as CompanyData[]) {
+        for (const doc of companyData.documents as ExportedDocument[]) {
+          if (doc.type !== 'config') continue;
+          const content = doc.content as any;
+          if (!content || typeof content !== 'object') continue;
+          const createTypes = content?.accessRules?.admin?.createTypes;
+          if (!Array.isArray(createTypes)) continue;
+          for (const type of ['conversation', 'config'] as const) {
+            if (!createTypes.includes(type)) createTypes.push(type);
+          }
+        }
+      }
+      return data;
+    },
+  },
 ];
 
 /**
