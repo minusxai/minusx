@@ -12,6 +12,7 @@ import MobileRightSidebar from '@/components/MobileRightSidebar';
 import SearchBar from '@/components/SearchBar';
 import ProductTour from '@/components/ProductTour';
 import { useAppSelector } from '@/store/hooks';
+import { selectContextFromPath } from '@/store/filesSlice';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { useFolder } from '@/lib/hooks/file-state-hooks';
 import { useConfigs } from '@/lib/hooks/useConfigs';
@@ -42,6 +43,10 @@ export default function PathPage({ params }: PathPageProps) {
 
   // Construct full path from segments
   const fullPath = '/' + pathSegments.join('/');
+
+  // Find the nearest context for this folder path and use as default
+  const nearestContext = useAppSelector(state => selectContextFromPath(state, fullPath));
+  const effectiveContextPath = selectedContextPath || nearestContext?.path || null;
 
   // Load folder into Redux (populates pathIndex, uses TTL cache)
   useFolder(fullPath);
@@ -191,7 +196,7 @@ export default function PathPage({ params }: PathPageProps) {
               filePath={fullPath}
               showChat={showChat}
               contextVersion={selectedVersion}
-              selectedContextPath={selectedContextPath}
+              selectedContextPath={effectiveContextPath}
               onContextChange={shouldShowContextSelector ? (_path: string | null, version?: number) => {
                 setSelectedVersion(version)
                 setSelectedContextPath(_path)
@@ -205,7 +210,7 @@ export default function PathPage({ params }: PathPageProps) {
               filePath={fullPath}
               showChat={showChat}
               contextVersion={selectedVersion}
-              selectedContextPath={selectedContextPath}
+              selectedContextPath={effectiveContextPath}
               onContextChange={shouldShowContextSelector ? (_path: string | null, version?: number) => {
                 setSelectedVersion(version)
                 setSelectedContextPath(_path)

@@ -41,12 +41,21 @@ export default function FilePage({ params }: FilePageProps) {
     pathParts.pop();
     const parentPath = pathParts.join('/') || '/';
 
-    const contextFile = Object.values(filesState).find(f => {
+    // Find all matching ancestor contexts and pick the deepest (nearest)
+    const matching = Object.values(filesState).filter(f => {
       if (f.type !== 'context' || f.id <= 0) return false;
       const contextDir = f.path.substring(0, f.path.lastIndexOf('/')) || '/';
       return parentPath.startsWith(contextDir + '/') || parentPath === contextDir;
     });
 
+    // Sort by depth descending (deepest first = nearest ancestor)
+    matching.sort((a, b) => {
+      const depthA = (a.path.match(/\//g) || []).length;
+      const depthB = (b.path.match(/\//g) || []).length;
+      return depthB - depthA;
+    });
+
+    const contextFile = matching[0];
     if (!contextFile) return null;
 
     return {
@@ -92,7 +101,7 @@ export default function FilePage({ params }: FilePageProps) {
     fileType: file.type,
     contextVersion: selectedVersion,  // Pass selected context version for admin testing
     selectedContextPath: currentContext?.path || null,
-    onContextChange: shouldShowContextSelector ? (_path: string | null, version?: number) => {
+    onContextChange: shouldShowContextSelector && file.type === 'context' ? (_path: string | null, version?: number) => {
       setSelectedVersion(version);
     } : undefined
   };

@@ -78,15 +78,18 @@ export default function CreateMenu({
   const supportedAnalyticsTypes = allFileTypes.filter(type =>
     FILE_TYPE_METADATA[type].category === 'analytics' &&
     FILE_TYPE_METADATA[type].supported &&
+    !('systemCreatedOnly' in FILE_TYPE_METADATA[type] && FILE_TYPE_METADATA[type].systemCreatedOnly) &&
     canShowInCreateMenu(effectiveUser?.role || 'viewer', type)
   );
   const supportedEngineeringTypes = allFileTypes.filter(type =>
     FILE_TYPE_METADATA[type].category === 'engineering' &&
     FILE_TYPE_METADATA[type].supported &&
+    !('systemCreatedOnly' in FILE_TYPE_METADATA[type] && FILE_TYPE_METADATA[type].systemCreatedOnly) &&
     canShowInCreateMenu(effectiveUser?.role || 'viewer', type)
   );
   const comingSoonTypes = allFileTypes.filter(type =>
     !FILE_TYPE_METADATA[type].supported &&
+    !('systemCreatedOnly' in FILE_TYPE_METADATA[type] && FILE_TYPE_METADATA[type].systemCreatedOnly) &&
     canShowInCreateMenu(effectiveUser?.role || 'viewer', type)
   );
 

@@ -64,7 +64,7 @@ export default function ChatInterface({
   const isExplorePage = !appState || (appState.type !== 'file' && appState.type !== 'folder');
 
   // Load context using useContext hook (reuse existing hook)
-  const contextInfo = useContext(contextPath, contextVersion);
+  const contextInfo = useContext(contextPath, contextVersion, true);
   const { databases, documentation: markdown, contextLoading } = contextInfo;
   const { navigate } = useNavigationGuard();
 

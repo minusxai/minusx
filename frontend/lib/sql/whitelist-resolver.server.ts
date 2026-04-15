@@ -69,8 +69,10 @@ export async function getWhitelistForPath(
     const contextContent = result.data?.content as ContextContent | undefined;
     if (!contextContent) return null;
 
+    // Use the file's parent directory as the scope path for childPaths filtering.
     const contextDir = nearest.path.substring(0, nearest.path.lastIndexOf('/')) || '/';
-    const databases = getWhitelistedSchemaForUser(contextContent, user.userId, normalizedPath, contextDir);
+    const scopePath = normalizedPath.substring(0, normalizedPath.lastIndexOf('/')) || '/';
+    const databases = getWhitelistedSchemaForUser(contextContent, user.userId, scopePath, contextDir);
     const dbEntry = databases.find(d => d.databaseName === connectionName);
     if (!dbEntry || !dbEntry.schemas.length) return null;
 

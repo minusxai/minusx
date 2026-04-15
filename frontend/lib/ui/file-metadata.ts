@@ -16,6 +16,7 @@ export interface FileTypeMetadata {
   category: FileCategory;
   supported: boolean;  // Whether this type is currently supported
   h: string;          // Optional: default height for file type views
+  systemCreatedOnly?: boolean;  // If true, hidden from create menu (created by system, not users)
 }
 
 /**
@@ -95,6 +96,7 @@ export const FILE_TYPE_METADATA = {
     category: 'engineering',
     supported: true,
     h: '100vh',
+    systemCreatedOnly: true,
   },
   styles: {
     label: 'Styles',
@@ -103,6 +105,7 @@ export const FILE_TYPE_METADATA = {
     category: 'engineering',
     supported: true,
     h: '100vh',
+    systemCreatedOnly: true,
   },
   alert: {
     label: 'Alert',
@@ -127,6 +130,7 @@ export const FILE_TYPE_METADATA = {
     category: 'engineering',
     supported: true,
     h: 'none',
+    systemCreatedOnly: true,
   },
   alert_run: {
     label: 'Alert Run',
@@ -135,6 +139,7 @@ export const FILE_TYPE_METADATA = {
     category: 'engineering',
     supported: true,
     h: 'none',
+    systemCreatedOnly: true,
   },
   transformation_run: {
     label: 'Transformation Run',
@@ -143,14 +148,16 @@ export const FILE_TYPE_METADATA = {
     category: 'engineering',
     supported: true,
     h: 'none',
+    systemCreatedOnly: true,
   },
   report_run: {
     label: 'Report Run',
     icon: LuFileText,
-    color: 'accent.success',      // Same as report
+    color: 'accent.success',
     category: 'engineering',
     supported: true,
     h: 'none',
+    systemCreatedOnly: true,
   },
   conversation: {
     label: 'Logs',
@@ -159,6 +166,7 @@ export const FILE_TYPE_METADATA = {
     category: 'engineering',
     supported: true,
     h: 'none',
+    systemCreatedOnly: true,
   },
   session: {
     label: 'Recordings',
@@ -167,6 +175,7 @@ export const FILE_TYPE_METADATA = {
     category: 'engineering',
     supported: true,
     h: 'none',
+    systemCreatedOnly: true,
   },
   users: {
     label: 'Users',

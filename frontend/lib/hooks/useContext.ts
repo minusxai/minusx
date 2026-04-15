@@ -37,7 +37,7 @@ import { getPublishedVersion } from '@/lib/context/context-utils';
  * const contextInfo = useContext(filePath, 3);
  * ```
  */
-export function useContext(path: string, version?: number): ContextInfo {
+export function useContext(path: string, version?: number, isFolderScope?: boolean): ContextInfo {
   // 1. Find context file for this path (selector finds nearest ancestor)
   const contextFile = useAppSelector(state => selectContextFromPath(state, path));
 
@@ -112,8 +112,13 @@ export function useContext(path: string, version?: number): ContextInfo {
       }
 
       // Default behavior: use published version (via existing helpers)
+      // Both files and folders apply childPaths scoping.
+      // Files use their parent directory as the scope path.
       const contextDir = contextFile?.path.substring(0, contextFile.path.lastIndexOf('/')) || '/';
-      const databases = getWhitelistedSchemaForUser(contextContent, currentUser.id, path, contextDir);
+      const scopePath = isFolderScope
+        ? path
+        : path.substring(0, path.lastIndexOf('/')) || '/';
+      const databases = getWhitelistedSchemaForUser(contextContent, currentUser.id, scopePath, contextDir);
       const documentation = getDocumentationForUser(contextContent, currentUser.id);
 
       return {
@@ -141,7 +146,7 @@ export function useContext(path: string, version?: number): ContextInfo {
       hasContext: false,
       contextLoading: contextLoading || connectionsLoading
     };
-  }, [loadedContext, connectionsMap, contextLoading, connectionsLoading, currentUser, version]);
+  }, [loadedContext, connectionsMap, contextLoading, connectionsLoading, currentUser, version, path, isFolderScope, contextFile]);
 
   return contextInfo;
 }
