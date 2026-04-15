@@ -1,6 +1,7 @@
 'use client';
 
-import { Box, GridItem, Text, Badge, Link, Flex } from '@chakra-ui/react';
+import { Box, GridItem, Text, Badge, Link, Flex, HStack } from '@chakra-ui/react';
+import { LuChevronRight, LuChevronDown } from 'react-icons/lu';
 import { Tooltip } from '@/components/ui/tooltip';
 import { DisplayProps } from '@/lib/types';
 import Markdown from '../../Markdown';
@@ -8,7 +9,7 @@ import { parseThinkingAnswer } from '@/lib/utils/xml-parser';
 
 
 
-export default function ContentDisplay({ toolCallTuple, databaseName, isCompact, showThinking, markdownContext = 'mainpage' }: DisplayProps) {
+export default function ContentDisplay({ toolCallTuple, databaseName, isCompact, showThinking, toggleShowThinking, markdownContext = 'mainpage' }: DisplayProps) {
   const [toolCall, toolMessage] = toolCallTuple;
   let content;
   let citations: any[] = [];
@@ -170,6 +171,25 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
 
   return (
             <>
+            {/* Show/Hide Thinking toggle — only when thinking exists */}
+            {hasThinking && toggleShowThinking && (
+              <GridItem colSpan={12} colStart={1}>
+                <HStack
+                  mt={1}
+                  cursor="pointer"
+                  onClick={toggleShowThinking}
+                  _hover={{ opacity: 0.8 }}
+                  color="fg.subtle"
+                  fontSize="sm"
+                  w="fit-content"
+                  aria-label={showThinking ? "Hide Thinking" : "Show Thinking"}
+                >
+                  {showThinking ? <LuChevronDown size={16} /> : <LuChevronRight size={16} />}
+                  <Text>{showThinking ? "Hide" : "Show"} Thinking</Text>
+                </HStack>
+              </GridItem>
+            )}
+
             {/* Native or legacy thinking blocks */}
             {showThinking && thinkingToRender.map((block, idx) => (
                 <GridItem

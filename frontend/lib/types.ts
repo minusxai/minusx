@@ -1119,6 +1119,7 @@ export interface DisplayProps {
   databaseName?: string;
   isCompact?: boolean;
   showThinking: boolean;
+  toggleShowThinking?: () => void;
   markdownContext?: 'sidebar' | 'mainpage';
 }
 

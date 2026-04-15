@@ -10,9 +10,9 @@ import { MessageWithMentions } from '../chat/MessageWithMentions';
 import { useAppSelector } from '@/store/hooks';
 import { useAppDispatch } from '@/store/hooks';
 import { cloneDeep, isEmpty } from 'lodash';
-import { parseThinkingAnswer } from '@/lib/utils/xml-parser';
+
 import { MessageWithFlags } from './message/messageHelpers';
-import { LuChevronRight, LuChevronDown, LuPencil, LuCheck, LuX } from 'react-icons/lu';
+import { LuPencil, LuCheck, LuX } from 'react-icons/lu';
 import { editAndForkMessage } from '@/store/chatSlice';
 import { selectShowDebug } from '@/store/uiSlice';
 
@@ -180,24 +180,6 @@ const SimpleChatMessage = React.memo(function SimpleChatMessage({ message, datab
               </Box>
             )}
           </GridItem>
-          <GridItem
-            colSpan={12}
-            colStart={1}
-          >
-            <HStack
-              mt={1}
-              cursor="pointer"
-              onClick={toggleShowThinking}
-              _hover={{ opacity: 0.8 }}
-              color="fg.subtle"
-              fontSize="sm"
-              w="fit-content"
-              aria-label={showThinking ? "Hide Thinking" : "Show Thinking"}
-            >
-              {showThinking ? <LuChevronDown size={16} /> : <LuChevronRight size={16} />}
-              <Text>{showThinking ? "Hide" : "Show"} Thinking</Text>
-            </HStack>
-          </GridItem>
         </>
       )}
     </Grid>)
@@ -236,7 +218,7 @@ const SimpleChatMessage = React.memo(function SimpleChatMessage({ message, datab
         gap={2}
         w="100%"
         >
-            <ToolCallDisplay key={message.tool_call_id} toolCallTuple={toolCallTuple} databaseName={databaseName} isCompact={isCompact} showThinking={showThinking} markdownContext={markdownContext}/>
+            <ToolCallDisplay key={message.tool_call_id} toolCallTuple={toolCallTuple} databaseName={databaseName} isCompact={isCompact} showThinking={showThinking} toggleShowThinking={toggleShowThinking} markdownContext={markdownContext}/>
         </Grid>
     )
   }

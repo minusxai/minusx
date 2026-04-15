@@ -11,7 +11,7 @@ import { DisplayProps } from '@/lib/types';
 import { makeSelectConversationByToolCallId } from '@/store/chatSlice';
 
 
-export default function ToolCallDisplay({ toolCallTuple, databaseName, isCompact, showThinking, markdownContext}: DisplayProps) {
+export default function ToolCallDisplay({ toolCallTuple, databaseName, isCompact, showThinking, toggleShowThinking, markdownContext}: DisplayProps) {
   const [toolCall] = toolCallTuple;
   const functionName = toolCall.function.name;
 
@@ -67,6 +67,7 @@ export default function ToolCallDisplay({ toolCallTuple, databaseName, isCompact
             databaseName={databaseName}
             isCompact={isCompact}
             showThinking={showThinking}
+            toggleShowThinking={toggleShowThinking}
             markdownContext={markdownContext}
         />
     )
