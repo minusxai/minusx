@@ -1,8 +1,9 @@
 #!/usr/bin/env tsx
 /**
- * One-time script: upload all mxfood tables from data/mxfood.duckdb to S3 as Parquet.
- * These become the shared seed files copied per-company at registration time
- * (seeds/mxfood/{table}.parquet → {companyId}/csvs/tutorial/mxfood/{table}.parquet).
+ * One-time script: download mxfood.duckdb from GitHub releases and upload all
+ * tables as Parquet to S3. These become the shared seed files copied per-company
+ * at registration time:
+ *   seeds/mxfood/{table}.parquet → {companyId}/csvs/tutorial/mxfood/{table}.parquet
  *
  * Usage (run from frontend/):
  *   npm run seed-mxfood
@@ -17,14 +18,15 @@
  * Optional:
  *   OBJECT_STORE_REGION              AWS region (default: us-east-1)
  *   OBJECT_STORE_ENDPOINT            Custom endpoint for MinIO/R2 (e.g. http://minio:9000)
- *   BASE_DUCKDB_DATA_PATH            Base dir for DuckDB paths (default: ..)
+ *   MXFOOD_DUCKDB_URL                Override download URL (default: GitHub releases)
  */
 
 import { config } from 'dotenv';
-import { resolve } from 'path';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { writeFile, unlink } from 'fs/promises';
 import { DuckDBInstance } from '@duckdb/node-api';
 
-// Load .env from frontend/ — works whether run via `npm run seed-mxfood` or direct tsx invocation
 config();
 
 const BUCKET = process.env.OBJECT_STORE_BUCKET;
@@ -32,23 +34,31 @@ const REGION = process.env.OBJECT_STORE_REGION ?? 'us-east-1';
 const ACCESS_KEY = process.env.OBJECT_STORE_ACCESS_KEY_ID ?? '';
 const SECRET_KEY = process.env.OBJECT_STORE_SECRET_ACCESS_KEY ?? '';
 const ENDPOINT = process.env.OBJECT_STORE_ENDPOINT ?? '';
-const BASE_PATH = process.env.BASE_DUCKDB_DATA_PATH ?? '..';
+const MXFOOD_URL =
+  process.env.MXFOOD_DUCKDB_URL ??
+  'https://github.com/minusxai/sample_datasets/releases/download/v1.0/mxfood.duckdb';
 
 if (!BUCKET) {
   console.error('ERROR: OBJECT_STORE_BUCKET is not set. Add it to frontend/.env');
   process.exit(1);
 }
 
-const dbPath = resolve(BASE_PATH, 'data/mxfood.duckdb');
-console.log(`Opening DuckDB: ${dbPath}`);
-console.log(`Uploading to:   s3://${BUCKET}/seeds/mxfood/\n`);
-
 async function main() {
-  const instance = await DuckDBInstance.create(dbPath);
+  // Download mxfood.duckdb to a temp file
+  console.log(`Downloading: ${MXFOOD_URL}`);
+  const res = await fetch(MXFOOD_URL);
+  if (!res.ok) throw new Error(`Download failed: ${res.status} ${res.statusText}`);
+  const buffer = Buffer.from(await res.arrayBuffer());
+
+  const tmpPath = join(tmpdir(), `mxfood-seed-${Date.now()}.duckdb`);
+  await writeFile(tmpPath, buffer);
+  console.log(`Downloaded ${(buffer.length / 1024 / 1024).toFixed(1)} MB → ${tmpPath}`);
+  console.log(`Uploading to: s3://${BUCKET}/seeds/mxfood/\n`);
+
+  const instance = await DuckDBInstance.create(tmpPath);
   const conn = await instance.connect();
 
   try {
-    // Set up S3 access via httpfs
     await conn.run('INSTALL httpfs');
     await conn.run('LOAD httpfs');
     await conn.run(`SET s3_region = '${REGION}'`);
@@ -59,7 +69,6 @@ async function main() {
       await conn.run("SET s3_url_style = 'path'");
     }
 
-    // List all tables in main schema
     const result = await conn.run(
       "SELECT table_name FROM information_schema.tables " +
       "WHERE table_schema = 'main' AND table_type = 'BASE TABLE' " +
@@ -69,7 +78,7 @@ async function main() {
     const tables = rows.map(r => r.table_name);
 
     if (tables.length === 0) {
-      console.error('No tables found in main schema of mxfood.duckdb');
+      console.error('No tables found in mxfood.duckdb');
       process.exit(1);
     }
     console.log(`Found ${tables.length} tables: ${tables.join(', ')}\n`);
@@ -92,13 +101,13 @@ async function main() {
     }
 
     console.log(`\nDone. ${succeeded.length}/${tables.length} tables uploaded successfully.`);
-    if (succeeded.length > 0) console.log(`  Succeeded: ${succeeded.join(', ')}`);
     if (failed.length > 0) {
-      console.error(`  Failed:    ${failed.map(([t]) => t).join(', ')}`);
+      console.error(`  Failed: ${failed.map(([t]) => t).join(', ')}`);
       process.exit(1);
     }
   } finally {
     conn.closeSync();
+    await unlink(tmpPath).catch(() => {}); // clean up temp file
   }
 }
 
