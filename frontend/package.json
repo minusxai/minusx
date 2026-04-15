@@ -19,7 +19,8 @@
     "setup-postgres": "tsx --conditions react-server scripts/setup-postgres.ts",
     "generate-types": "(cd ../backend && uv run python scripts/export_schema.py) | tee lib/validation/atlas-schema.gen.json | node_modules/.bin/json2ts --unreachableDefinitions --additionalProperties=false > lib/types.gen.ts",
     "validate-data": "npm run --silent export-db | npm run --silent validate-db",
-    "postinstall": "node scripts/copy-duckdb-wasm.mjs"
+    "postinstall": "node scripts/copy-duckdb-wasm.mjs",
+    "seed-mxfood": "tsx scripts/seed-mxfood-to-s3.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1026.0",
