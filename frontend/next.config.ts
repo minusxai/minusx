@@ -3,6 +3,9 @@ import { execSync } from "child_process";
 
 function readGitCommitSha(): string {
   if (process.env.GIT_COMMIT_SHA) return process.env.GIT_COMMIT_SHA.slice(0, 8);
+  // In dev, return a stable value so Turbopack's cache key doesn't change on every commit.
+  // The SHA is only meaningful in production builds.
+  if (process.env.NODE_ENV === 'development') return 'dev';
   try {
     return execSync("git rev-parse HEAD").toString().trim().slice(0, 8);
   } catch {
