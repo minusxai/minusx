@@ -24,7 +24,7 @@ import { preserveParams } from '@/lib/navigation/url-utils';
 
 type ExecutionStatus = 'running' | 'success' | 'failure' | 'triggered' | 'not_triggered' | 'failed' | 'error';
 
-function StatusBadge({ status }: { status: ExecutionStatus }) {
+function StatusBadge({ status }: { status: ExecutionStatus | undefined }) {
   const colorPalette =
     status === 'triggered' || status === 'failure' || status === 'failed' ? 'red' :
     status === 'not_triggered' || status === 'success' ? 'green' :
@@ -32,13 +32,13 @@ function StatusBadge({ status }: { status: ExecutionStatus }) {
   const label =
     status === 'triggered' ? 'TRIGGERED' :
     status === 'not_triggered' ? 'OK' :
-    status.toUpperCase();
+    status ? status.toUpperCase() : 'UNKNOWN';
   return <Badge colorPalette={colorPalette} size="lg" fontWeight="700">{label}</Badge>;
 }
 
-function MessageStatusBadge({ status }: { status: RunMessageRecord['status'] }) {
+function MessageStatusBadge({ status }: { status: RunMessageRecord['status'] | undefined }) {
   const colorPalette = status === 'sent' ? 'green' : status === 'failed' ? 'red' : status === 'skipped' ? 'gray' : 'yellow';
-  return <Badge colorPalette={colorPalette} size="sm">{status.toUpperCase()}</Badge>;
+  return <Badge colorPalette={colorPalette} size="sm">{status ? status.toUpperCase() : 'UNKNOWN'}</Badge>;
 }
 
 function AttemptLogRow({ log }: { log: MessageAttemptLog }) {
@@ -333,7 +333,7 @@ export function AlertRunView({
                 >
                   {status === 'triggered' ? 'Triggered' :
                    status === 'not_triggered' ? 'Not Triggered' :
-                   status.charAt(0).toUpperCase() + status.slice(1)}
+                   status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Unknown'}
                 </Badge>
               } />
             </VStack>

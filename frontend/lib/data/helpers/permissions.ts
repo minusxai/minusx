@@ -98,10 +98,16 @@ function isAccessibleSystemPath(path: string, user: EffectiveUser): boolean {
     return true;
   }
 
-  // User's conversation folder (already implemented)
+  // User's conversation folder
   const userId = user.userId?.toString() || user.email;
   const userConversationFolder = resolvePath(user.mode, `/logs/conversations/${userId}`);
   if (path.startsWith(userConversationFolder)) {
+    return true;
+  }
+
+  // Job run output files (alert_run, report_run, etc.) — read access for all roles
+  const runsFolder = resolvePath(user.mode, '/logs/runs');
+  if (path === runsFolder || path.startsWith(runsFolder + '/')) {
     return true;
   }
 
