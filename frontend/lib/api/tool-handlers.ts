@@ -17,7 +17,8 @@ import { readFiles, editFileStr, buildCurrentFileStr, getQueryResult, createVirt
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
 import { compressAugmentedFile, TOOL_DEFAULT_LIMIT_CHARS, TOOL_MAX_LIMIT_CHARS } from '@/lib/api/compress-augmented';
 import { validateFileState } from '@/lib/validation/content-validators';
-import { canCreateFileType } from '@/lib/auth/access-rules.client';
+import { canCreateFileType, canEditFileType } from '@/lib/auth/access-rules.client';
+import { selectEffectiveUser } from '@/store/authSlice';
 import { selectAppState } from '@/store/appStateSelector';
 import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client';
 import { RENDERABLE_CHART_TYPES } from '@/lib/chart/render-chart-svg';
@@ -451,6 +452,15 @@ registerFrontendTool('EditFile', async (args, _context) => {
         error: 'Context files can only be edited when the user is on the context page. Navigate to the context file first.',
       };
       return { content: errorContent, details: { success: false, error: errorContent.error } };
+    }
+  }
+
+  // Guard: check edit permission for this file type
+  if (fileState?.type) {
+    const user = selectEffectiveUser(stateBefore);
+    if (user && !canEditFileType(user.role, fileState.type)) {
+      const errorMsg = `This ${fileState.type} is read-only. Your role (${user.role}) does not have permission to edit ${fileState.type} files.`;
+      return { content: { success: false, error: errorMsg }, details: { success: false, error: errorMsg } };
     }
   }
 

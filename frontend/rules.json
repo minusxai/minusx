@@ -6,6 +6,7 @@
       "role": "admin",
       "allowedTypes": "*",
       "createTypes": ["question", "dashboard", "folder", "connection", "alert"],
+      "editTypes": "*",
       "viewTypes": "*"
     },
     {
@@ -13,6 +14,7 @@
       "role": "editor",
       "allowedTypes": ["question", "dashboard", "folder", "context", "connection", "conversation", "session", "report", "alert", "alert_run", "report_run", "transformation", "transformation_run"],
       "createTypes": ["question", "dashboard", "folder","alert"],
+      "editTypes": "*",
       "viewTypes": ["question", "dashboard", "folder", "context", "conversation", "session", "report", "alert", "alert_run", "report_run", "transformation", "transformation_run"]
     },
     {
@@ -20,6 +22,7 @@
       "role": "viewer",
       "allowedTypes": ["question", "dashboard", "folder", "context", "connection", "conversation", "session", "alert", "alert_run", "report_run", "report", "transformation", "transformation_run"],
       "createTypes": [],
+      "editTypes": [],
       "viewTypes": ["dashboard", "folder", "conversation", "session", "report", "alert", "alert_run", "report_run"]
     },
     {

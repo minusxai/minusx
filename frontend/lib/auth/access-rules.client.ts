@@ -25,6 +25,7 @@ function getEffectiveRule(role: UserRole, overrides?: AccessRulesOverride) {
     ...rule,
     ...(roleOverride.allowedTypes !== undefined && { allowedTypes: roleOverride.allowedTypes }),
     ...(roleOverride.createTypes !== undefined && { createTypes: roleOverride.createTypes }),
+    ...(roleOverride.editTypes !== undefined && { editTypes: roleOverride.editTypes }),
     ...(roleOverride.viewTypes !== undefined && { viewTypes: roleOverride.viewTypes }),
   };
 }
@@ -50,6 +51,18 @@ export function canViewFileType(role: UserRole, fileType: FileType, overrides?: 
   if (!rule) return false;
   if (rule.viewTypes === '*') return true;
   return (rule.viewTypes as FileType[]).includes(fileType);
+}
+
+/**
+ * Check if a user can edit (mutate) a specific file type (client-side).
+ * Falls back to permissive when editTypes is absent for backward compatibility.
+ */
+export function canEditFileType(role: UserRole, fileType: FileType, overrides?: AccessRulesOverride): boolean {
+  const rule = getEffectiveRule(role, overrides) as any;
+  if (!rule) return false;
+  if (rule.editTypes === undefined) return true;
+  if (rule.editTypes === '*') return true;
+  return (rule.editTypes as FileType[]).includes(fileType);
 }
 
 /**
@@ -123,6 +136,8 @@ export function useAccessRules() {
       canViewFileType(role, fileType, overrides),
     canShowInCreateMenu: (role: UserRole, type: FileType) =>
       canShowInCreateMenu(role, type, overrides),
+    canEditFileType: (role: UserRole, fileType: FileType) =>
+      canEditFileType(role, fileType, overrides),
     canDeleteFileType,
     canCreateFileType,
   }), [overrides]);

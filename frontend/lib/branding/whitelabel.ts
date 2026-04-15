@@ -21,6 +21,7 @@ export interface SetupWizard {
 export interface FileTypeAccessOverride {
   allowedTypes?: '*' | FileType[];
   createTypes?: '*' | FileType[];
+  editTypes?: '*' | FileType[];
   viewTypes?: '*' | FileType[];
 }
 

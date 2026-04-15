@@ -25,8 +25,10 @@ import { editFile, publishFile, clearFileChanges } from '@/lib/api/file-state';
 import { isUserFacingError } from '@/lib/errors';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import { useRouter } from '@/lib/navigation/use-navigation';
-import { DocumentContent } from '@/lib/types';
+import { DocumentContent, FileType } from '@/lib/types';
 import { isVirtualFileId } from '@/store/filesSlice';
+import { selectEffectiveUser } from '@/store/authSlice';
+import { useAccessRules } from '@/lib/auth/access-rules.client';
 import DocumentHeader from './DocumentHeader';
 import PublishModal from './PublishModal';
 
@@ -53,6 +55,10 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
       : selectFileEditMode(state, fileId)
   );
   const viewMode = useAppSelector(state => selectFileViewMode(state, fileId));
+
+  const effectiveUser = useAppSelector(selectEffectiveUser);
+  const { canEditFileType } = useAccessRules();
+  const canEdit = !effectiveUser?.role || canEditFileType(effectiveUser.role, fileType as FileType);
 
   const dispatchSetEditMode = useCallback((val: boolean) => {
     if (isDashboard) {
@@ -86,13 +92,13 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-enter edit mode when any file has unsaved changes
+  // Auto-enter edit mode when any file has unsaved changes (skip for non-editors)
   const anyDirty = dirtyFiles.length > 0;
   useEffect(() => {
-    if (anyDirty && !editMode) {
+    if (anyDirty && !editMode && canEdit) {
       dispatchSetEditMode(true);
     }
-  }, [anyDirty, editMode, dispatchSetEditMode]);
+  }, [anyDirty, editMode, dispatchSetEditMode, canEdit]);
 
   const handleNameChange = useCallback((name: string) => {
     setLocalName(name);
@@ -157,7 +163,7 @@ export default function FileHeader({ fileId, fileType, mode = 'view' }: FileHead
         onSave={handleSave}
         onReviewChanges={otherDirtyFiles.length > 0 ? () => setIsPublishModalOpen(true) : undefined}
         dirtyFileCount={dirtyFiles.length}
-        hideEditToggle={isVirtualFileId(fileId)}
+        hideEditToggle={isVirtualFileId(fileId) || !canEdit}
         questionId={fileType === 'question' ? fileId : undefined}
         viewMode={viewMode}
         onViewModeChange={(m) => dispatch(setFileViewMode({ fileId, mode: m }))}
