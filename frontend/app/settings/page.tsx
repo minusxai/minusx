@@ -5,7 +5,7 @@ import { Box, VStack, Text, Flex, Switch, Button, Heading, Container, Tabs } fro
 import { LuRefreshCw } from 'react-icons/lu';
 import { ColorModeButton } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { setAskForConfirmation, setShowDebug, setShowJson, setShowAllErrorToasts, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy } from '@/store/uiSlice';
+import { setAskForConfirmation, setShowDebug, setShowJson, setShowAllErrorToasts, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue } from '@/store/uiSlice';
 import { IS_DEV } from '@/lib/constants';
 import RecordingControl from '@/components/RecordingControl';
 import DataManagementSection from '@/components/DataManagementSection';
@@ -135,6 +135,7 @@ function SettingsContent() {
   const [isClearing, setIsClearing] = useState(false);
   const [isTestingError, setIsTestingError] = useState(false);
   const showAdvanced = useAppSelector((state) => state.ui.showAdvanced);
+  const allowChatQueue = useAppSelector((state) => state.ui.allowChatQueue ?? false);
   const queueStrategy = useAppSelector((state) => state.ui.queueStrategy ?? 'end-of-turn');
   const devMode = useAppSelector((state) => state.ui.devMode);
   const showSuggestedQuestions = useAppSelector((state) => state.ui.showSuggestedQuestions);
@@ -281,6 +282,17 @@ function SettingsContent() {
       visible: isAdmin,
     },
     {
+      tab: 'general',
+      title: 'Allow Chat Queue',
+      description: 'When enabled, you can send follow-up chat messages while the agent is still working.',
+      control: (
+        <SwitchControl
+          checked={allowChatQueue}
+          onChange={(checked) => dispatch(setAllowChatQueue(checked))}
+        />
+      ),
+    },
+    {
       tab: 'dev',
       title: 'Dev Tools Panel',
       description: 'Show the Dev Tools section in the sidebar (always on in development)',
@@ -342,7 +354,7 @@ function SettingsContent() {
           </Button>
         </Flex>
       ),
-      visible: showDebugOption,
+      visible: showDebugOption && allowChatQueue,
     },
     {
       tab: 'dev',
@@ -393,8 +405,7 @@ function SettingsContent() {
       description: GIT_COMMIT_SHA,
       control: <></>,
     },
-
-  ], [askForConfirmation, showDebug, showJson, showAllErrorToasts, showDebugOption, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, showAdvanced, isAdmin, showSuggestedQuestions, showTrustScore, queueStrategy]);
+  ], [askForConfirmation, showDebug, showJson, showAllErrorToasts, showDebugOption, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, showAdvanced, isAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue]);
 
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [

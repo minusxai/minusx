@@ -34,6 +34,7 @@ import {
   selectConversation,
   completeToolCall,
 } from '../chatSlice';
+import { setAllowChatQueue } from '../uiSlice';
 import type { RootState } from '../store';
 import { POST as chatPostHandler } from '@/app/api/chat/route';
 import { waitFor, getTestDbPath } from './test-utils';
@@ -201,6 +202,8 @@ describe('Chat Queue E2E', () => {
   it('queued messages auto-send when conversation finishes (end-of-turn)', async () => {
     const store = getStore();
     const conversationID = -200;
+
+    store.dispatch(setAllowChatQueue(true));
 
     // Step 1: Create conversation and send initial message
     store.dispatch(createConversation({

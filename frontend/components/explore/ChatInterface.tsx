@@ -17,6 +17,7 @@ import { useConfigs } from '@/lib/hooks/useConfigs';
 import { Tooltip } from '@/components/ui/tooltip';
 import { toaster } from '@/components/ui/toaster';
 import { clearChatAttachments } from '@/store/uiSlice';
+import { selectAllowChatQueue } from '@/store/uiSlice';
 import { buildChartAttachments } from '@/lib/chart/chart-attachments';
 import ExampleQuestions from './message/ExampleQuestions';
 import FileNotFound from '../FileNotFound';
@@ -132,6 +133,7 @@ export default function ChatInterface({
   const userIsAdmin = effectiveUser?.role ? isAdmin(effectiveUser.role) : false;
   const queryResultsMap = useAppSelector(state => state.queryResults.results);
   const colorMode = useAppSelector(state => state.ui.colorMode) as 'light' | 'dark';
+  const allowChatQueue = useAppSelector(selectAllowChatQueue);
 
   // Case 1: existing conversation — follow fork chain from loaded conversation
   const forkFollowedConversation = useAppSelector(state => {
@@ -370,6 +372,9 @@ export default function ChatInterface({
         || conversation.executionState === 'STREAMING';
 
       if (agentBusy) {
+        if (!allowChatQueue) {
+          return;
+        }
         dispatch(queueMessage({
           conversationID,
           message: userInput,
@@ -929,6 +934,7 @@ export default function ChatInterface({
               onSend={handleSendMessage}
               onStop={handleStopAgent}
               isAgentRunning={isAgentRunning || isStreaming}
+              allowChatQueue={allowChatQueue}
               isPreparing={isPreparing}
               disabled={isLoading}
               databaseName={selectedDatabase || ''}

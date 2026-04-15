@@ -21,6 +21,7 @@ interface ChatInputProps {
   onSend: (message: string, attachments: Attachment[]) => void;
   onStop: () => void;
   isAgentRunning: boolean;
+  allowChatQueue?: boolean;
   disabled?: boolean;
   isPreparing?: boolean;
   databaseName: string;
@@ -40,6 +41,7 @@ export default function ChatInput({
   onSend,
   onStop,
   isAgentRunning,
+  allowChatQueue = false,
   disabled = false,
   isPreparing = false,
   databaseName,
@@ -98,8 +100,10 @@ export default function ChatInput({
     }
   }, [pendingMessage, container, dispatch, onSend, connectionsLoading, contextsLoading]);
 
+  const chatLocked = isAgentRunning && !allowChatQueue;
+
   const handleSend = () => {
-    if (input.trim() && !disabled && !isPreparing && !connectionsLoading && !contextsLoading) {
+    if (input.trim() && !disabled && !isPreparing && !connectionsLoading && !contextsLoading && !chatLocked) {
       onSend(input.trim(), attachments);
       // Don't clear here — input stays greyed while isPreparing=true,
       // then cleared by the useEffect when isPreparing transitions to false.
@@ -195,9 +199,9 @@ export default function ChatInput({
                 <Box px={1} py={2}>
                   <LexicalMentionEditor
                     ref={editorRef}
-                    placeholder={isAgentRunning ? `Add to agent queue...` : `Ask ${agentName} anything!`}
+                    placeholder={chatLocked ? `${agentName} is still working...` : isAgentRunning ? `Add to agent queue...` : `Ask ${agentName} anything!`}
                     databaseName={databaseName}
-                    disabled={disabled || isPreparing}
+                    disabled={disabled || isPreparing || chatLocked}
                     onSubmit={handleSend}
                     onChange={setInput}
                     whitelistedSchemas={whitelistedSchemas}
@@ -345,7 +349,7 @@ export default function ChatInput({
                     <IconButton
                       aria-label="Send message"
                       onClick={handleSend}
-                      disabled={disabled || !input.trim() || connectionsLoading || contextsLoading}
+                      disabled={disabled || !input.trim() || connectionsLoading || contextsLoading || chatLocked}
                       bg="accent.teal"
                       color="white"
                       _hover={{ bg: 'accent.teal', opacity: 0.9 }}

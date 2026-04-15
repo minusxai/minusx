@@ -19,7 +19,7 @@ import {
   setUserInputResult,
   addUserInputRequest
 } from './chatSlice';
-import { selectQueueStrategy } from './uiSlice';
+import { selectAllowChatQueue, selectQueueStrategy } from './uiSlice';
 import { UserInputException } from '@/lib/api/user-input-exception';
 import { generateUniqueId } from '@/lib/utils/id-generator';
 import { captureError } from '@/lib/messaging/capture-error';
@@ -586,6 +586,7 @@ chatListenerMiddleware.startListening({
     // Check if all tools completed
     const allCompleted = selectAllToolsCompleted(state, conversationID);
     if (!allCompleted) return;
+    if (!selectAllowChatQueue(state)) return;
 
     // Get or create AbortController for this conversation (keyed by stable _id)
     let abortController = abortControllers.get(conversation._id);
@@ -936,6 +937,7 @@ chatListenerMiddleware.startListening({
   matcher: isAnyOf(updateConversation, queueMessage),
   effect: async (action: any, listenerApi) => {
     const state = listenerApi.getState() as RootState;
+    if (!selectAllowChatQueue(state)) return;
     // Use newConversationID if forked (updateConversation), otherwise conversationID
     const effectiveId = action.payload.newConversationID || action.payload.conversationID;
     const conversation = selectConversation(state, effectiveId);
