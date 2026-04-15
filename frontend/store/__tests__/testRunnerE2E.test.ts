@@ -148,7 +148,6 @@ describe('Query Test Runner E2E (FilesAPI + runQuery mocked)', () => {
       answerType: 'number',
       operator: '=',
       value: { type: 'constant', value: 42 },
-      label: 'Revenue is 42',
     };
 
     const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
@@ -181,7 +180,6 @@ describe('Query Test Runner E2E (FilesAPI + runQuery mocked)', () => {
       answerType: 'number',
       operator: '=',
       value: { type: 'constant', value: 999 },
-      label: 'Count should be 999',
     };
 
     const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
@@ -214,7 +212,6 @@ describe('Query Test Runner E2E (FilesAPI + runQuery mocked)', () => {
       answerType: 'number',
       operator: '>',
       value: { type: 'constant', value: 50 },
-      label: 'Active users > 50',
     };
 
     const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
@@ -246,7 +243,6 @@ describe('Query Test Runner E2E (FilesAPI + runQuery mocked)', () => {
       answerType: 'string',
       operator: '~',
       value: { type: 'constant', value: '^act' },
-      label: 'Status starts with act',
     };
 
     const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
@@ -282,7 +278,6 @@ describe('Query Test Runner E2E (FilesAPI + runQuery mocked)', () => {
       answerType: 'number',
       operator: '=',
       value: { type: 'constant', value: 30 },
-      label: 'Last row value is 30',
     };
 
     const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
@@ -353,7 +348,6 @@ describe('LLM Test Runner E2E (mock LLM server)', () => {
       answerType: 'binary',
       operator: '=',
       value: { type: 'constant', value: true },
-      label: 'Charts visible',
     };
 
     const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
@@ -393,7 +387,6 @@ describe('LLM Test Runner E2E (mock LLM server)', () => {
       answerType: 'binary',
       operator: '=',
       value: { type: 'constant', value: true },
-      label: 'Revenue trending up',
     };
 
     const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));

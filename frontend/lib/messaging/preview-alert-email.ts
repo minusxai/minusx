@@ -12,13 +12,13 @@ const alertHtml = buildAlertEmailHtml({
   alertName: 'Revenue Drop — Weekly GMV',
   failedTests: [
     {
-      test: { type: 'query', subject: { type: 'query', question_id: 1 }, answerType: 'number', operator: '<', value: { type: 'constant', value: 200000 }, label: 'Weekly GMV' },
+      test: { type: 'query', subject: { type: 'query', question_id: 1 }, answerType: 'number', operator: '<', value: { type: 'constant', value: 200000 }},
       passed: false,
       actualValue: 142300,
       expectedValue: 200000,
     },
     {
-      test: { type: 'query', subject: { type: 'query', question_id: 2 }, answerType: 'number', operator: '>', value: { type: 'constant', value: 0 }, label: 'Order Count' },
+      test: { type: 'query', subject: { type: 'query', question_id: 2 }, answerType: 'number', operator: '>', value: { type: 'constant', value: 0 }},
       passed: false,
       actualValue: 0,
       expectedValue: 0,

@@ -58,7 +58,7 @@ export const alertJobHandler: JobHandler = {
       const agentName = config.branding.agentName;
 
       const failSummary = failedTests.map((r, i) => {
-        const label = r.test.label ?? `Test ${i + 1}`;
+        const label = `Test ${i + 1}`;
         return r.error ? `${label}: ${r.error}` : `${label}: got ${r.actualValue}, expected ${r.test.operator} ${r.expectedValue}`;
       }).join('; ');
 

@@ -663,7 +663,6 @@ export interface Test {
   answerType: TestAnswerType;
   operator: TestOperator;
   value: TestValue;
-  label?: string;  // optional display name shown in run results
 }
 
 /** Result of executing a single Test */

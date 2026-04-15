@@ -8,7 +8,6 @@ import TestResultBadge from './TestResultBadge';
 import { LuChevronDown, LuChevronRight, LuWrench, LuCheck } from 'react-icons/lu';
 
 function deriveLabel(result: TestRunResult, index: number): string {
-  if (result.test.label) return result.test.label;
   if (result.test.type === 'llm' && result.test.subject.type === 'llm') {
     const p = result.test.subject.prompt;
     return p.length > 60 ? p.slice(0, 60) + '…' : p;
@@ -154,9 +153,6 @@ export default function TestRunResultsList({
                 onClick={showTrace && r.log && (r.log as unknown[]).length > 0 ? () => toggleRow(i) : undefined}
               >
                 <TestResultBadge result={r} showDetails />
-                {r.test.label && (
-                  <Text fontSize="xs" color="fg.muted" truncate>{r.test.label}</Text>
-                )}
                 {showTrace && r.log && (r.log as unknown[]).length > 0 && (
                   <Box color="fg.muted" flexShrink={0}>
                     {expandedRows.has(i) ? <LuChevronDown size={12} /> : <LuChevronRight size={12} />}

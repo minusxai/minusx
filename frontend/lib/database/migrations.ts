@@ -1001,13 +1001,6 @@ export const MIGRATIONS: MigrationEntry[] = [
             value: { type: 'constant', value: condition.threshold ?? 0 },
           };
 
-          // Flag unsupported operator or complex function in label
-          if (!validOperators.has(condition.operator)) {
-            test.label = `TODO: '${condition.operator}' operator not supported — rewrite this test`;
-          } else if (condition.function && condition.function !== 'value' && condition.function !== 'count') {
-            test.label = `TODO: rewrite query for '${condition.function}' function`;
-          }
-
           content.tests = [test];
           delete content.questionId;
           delete content.condition;

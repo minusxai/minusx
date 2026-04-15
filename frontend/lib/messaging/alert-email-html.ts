@@ -42,7 +42,7 @@ function formatValue(v: string | number | boolean | null | undefined): string {
 }
 
 function buildTestRow(result: TestRunResult, index: number): string {
-  const label = result.test.label ?? `Test ${index + 1}`;
+  const label = `Test ${index + 1}`;
   const operator = result.test.operator ?? '=';
   const opSymbol = OPERATOR_SYMBOLS[operator] ?? escapeHtml(operator);
   const actual = formatValue(result.actualValue);
