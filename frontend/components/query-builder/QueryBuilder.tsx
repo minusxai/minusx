@@ -102,6 +102,7 @@ interface QueryBuilderProps {
   availableQuestions?: QuestionOption[];
   isCompoundMember?: boolean;  // When true, hide ORDER BY, LIMIT, Execute, Union button
   onConvertToCompound?: () => void;  // Called when user clicks Union button
+  whitelistedSchema?: Array<{ schema: string; tables: Array<{ table: string; columns: Array<{ name: string; type: string }> }> }>;
 }
 
 export function QueryBuilder({
@@ -114,6 +115,7 @@ export function QueryBuilder({
   availableQuestions = [],
   isCompoundMember = false,
   onConvertToCompound,
+  whitelistedSchema,
 }: QueryBuilderProps) {
   const [ir, setIr] = useState<QueryIR | null>(null);
   const [loading, setLoading] = useState(true);
@@ -398,6 +400,7 @@ export function QueryBuilder({
               value={ir.from}
               onChange={handleFromTableChange}
               availableQuestions={availableQuestions}
+              whitelistedSchema={whitelistedSchema}
             />
           )}
           <IRDebugView ir={ir} />
@@ -460,6 +463,7 @@ export function QueryBuilder({
           value={ir.from}
           onChange={handleFromTableChange}
           availableQuestions={availableQuestions}
+          whitelistedSchema={whitelistedSchema}
         />
 
         {/* Join Section - right after table selection */}
@@ -471,6 +475,7 @@ export function QueryBuilder({
             fromTable={ir.from}
             existingTables={existingTables}
             onClose={handleJoinClose}
+            whitelistedSchema={whitelistedSchema}
           />
         )}
 

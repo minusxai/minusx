@@ -18,6 +18,7 @@ import { useQueryResult } from '@/lib/hooks/file-state-hooks';
 interface EmbeddedQuestionContainerProps {
   question: QuestionContent;
   questionId: number;
+  filePath?: string;  // Question file path — forwarded to /api/query for whitelist validation
   externalParameters?: QuestionParameter[];
   externalParamValues?: Record<string, any>;  // Runtime parameter values from parent (e.g., dashboard ephemeral state)
   onChange?: (updates: Partial<QuestionContent>) => void;
@@ -31,6 +32,7 @@ interface EmbeddedQuestionContainerProps {
 export default function EmbeddedQuestionContainer({
   question,
   questionId,
+  filePath,
   externalParameters,
   externalParamValues,
   onChange,
@@ -75,7 +77,7 @@ export default function EmbeddedQuestionContainer({
     queryParams,
     localQuestion.connection_name || '', // Empty string if missing, rely on skip to prevent execution
     localQuestion.references || [],
-    { skip: !localQuestion.query || !localQuestion.connection_name } // Skip if no query or no database
+    { skip: !localQuestion.query || !localQuestion.connection_name, filePath } // Skip if no query or no database
   );
 
   // Update handler - propagate changes to parent if onChange provided

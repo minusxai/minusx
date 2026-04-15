@@ -23,6 +23,7 @@ interface QueryBuilderRootProps {
   onExecute?: () => void;
   isExecuting?: boolean;
   availableQuestions?: QuestionOption[];
+  whitelistedSchema?: Array<{ schema: string; tables: Array<{ table: string; columns: Array<{ name: string; type: string }> }> }>;
 }
 
 export function QueryBuilderRoot({
@@ -33,6 +34,7 @@ export function QueryBuilderRoot({
   onExecute,
   isExecuting = false,
   availableQuestions = [],
+  whitelistedSchema,
 }: QueryBuilderRootProps) {
   const [mode, setMode] = useState<'simple' | 'compound' | 'loading' | 'error'>(() =>
     !sql.trim() ? 'simple' : 'loading'
@@ -187,6 +189,7 @@ export function QueryBuilderRoot({
         onExecute={onExecute}
         isExecuting={isExecuting}
         availableQuestions={availableQuestions}
+        whitelistedSchema={whitelistedSchema}
       />
     );
   }
@@ -205,6 +208,7 @@ export function QueryBuilderRoot({
       isExecuting={isExecuting}
       availableQuestions={availableQuestions}
       onConvertToCompound={handleConvertToCompound}
+      whitelistedSchema={whitelistedSchema}
     />
   );
 }

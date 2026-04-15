@@ -170,6 +170,7 @@ function SmartEmbeddedQuestionContainerInner({
       <EmbeddedQuestionContainer
         question={mergedContent}
         questionId={questionId}
+        filePath={file?.path}
         externalParameters={parametersToUse}
         externalParamValues={externalParamValues}
       />

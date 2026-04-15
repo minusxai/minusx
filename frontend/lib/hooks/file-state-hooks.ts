@@ -381,6 +381,7 @@ export interface UseQueryResultOptions {
   ttl?: number;      // Time-to-live in ms (default: CACHE_TTL.QUERY = 10 hours)
   skip?: boolean;    // Skip execution (for conditional use)
   parameterTypes?: Record<string, 'text' | 'number' | 'date'>;  // Declared types for asyncpg coercion
+  filePath?: string; // Question file path — forwarded to /api/query for whitelist validation
 }
 
 /**
@@ -440,12 +441,12 @@ export function useQueryResult(
   references?: QuestionReference[],
   options: UseQueryResultOptions = {}
 ): UseQueryResultReturn {
-  const { ttl = CACHE_TTL.QUERY, skip = false, parameterTypes } = options;
+  const { ttl = CACHE_TTL.QUERY, skip = false, parameterTypes, filePath } = options;
 
   useEffect(() => {
     if (skip) return;
-    getQueryResult({ query, params, database, references, parameterTypes }, { ttl }).catch(() => {});
-  }, [query, params, database, references, parameterTypes, ttl, skip]);
+    getQueryResult({ query, params, database, references, parameterTypes, filePath }, { ttl }).catch(() => {});
+  }, [query, params, database, references, parameterTypes, filePath, ttl, skip]);
 
   return useQueryResultSelector(query, params, database);
 }

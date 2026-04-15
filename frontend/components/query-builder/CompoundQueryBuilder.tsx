@@ -24,6 +24,7 @@ interface CompoundQueryBuilderProps {
   onExecute?: () => void;
   isExecuting?: boolean;
   availableQuestions?: QuestionOption[];
+  whitelistedSchema?: Array<{ schema: string; tables: Array<{ table: string; columns: Array<{ name: string; type: string }> }> }>;
 }
 
 function OperatorSelector({
@@ -77,6 +78,7 @@ export function CompoundQueryBuilder({
   onExecute,
   isExecuting = false,
   availableQuestions = [],
+  whitelistedSchema,
 }: CompoundQueryBuilderProps) {
   // Track per-query SQL for converting individual QueryIR changes back to SQL
   const [querySqls, setQuerySqls] = useState<string[]>(() => ir.queries.map(() => ''));
@@ -234,6 +236,7 @@ export function CompoundQueryBuilder({
                 onSqlChange={(sql) => handleQuerySqlChange(index, sql)}
                 availableQuestions={availableQuestions}
                 isCompoundMember
+                whitelistedSchema={whitelistedSchema}
               />
             </Box>
 

@@ -92,7 +92,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
     queryToExecute.params,
     queryToExecute.database,
     queryToExecute.references,
-    { skip: !queryToExecute.query, parameterTypes }  // Skip if no query
+    { skip: !queryToExecute.query, parameterTypes, filePath: file?.path }  // Skip if no query
   );
 
   // Phase 3: Update current state handler - uses editFile from file-state.ts

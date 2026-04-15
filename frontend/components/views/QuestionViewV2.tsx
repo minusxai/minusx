@@ -112,8 +112,11 @@ export default function QuestionViewV2({
   const { config } = useConfigs();
   const agentName = config.branding.agentName;
 
-  // Get schema data for SQL autocomplete
-  const { databases: schemaData } = useSchemaContext(filePath || '/org');
+  // Get schema data for SQL autocomplete and GUI mode table filtering
+  const { databases: schemaData, hasContext } = useSchemaContext(filePath || '/org');
+  const whitelistedSchema = hasContext
+    ? schemaData?.find(db => db.databaseName === content.connection_name)?.schemas
+    : undefined;
   const { connections } = useConnections();
   const connectionType = content.connection_name ? connections[content.connection_name]?.metadata?.type : undefined;
   const dialect = connectionTypeToDialect(connectionType ?? '');
@@ -712,6 +715,7 @@ export default function QuestionViewV2({
                       onExecute={handleExecute}
                       isExecuting={queryLoading && !queryData}
                       availableQuestions={availableQuestions}
+                      whitelistedSchema={whitelistedSchema}
                     />
                   </Box>
                 )}

@@ -10,6 +10,8 @@ import { removeNoneParamConditions } from '@/lib/sql/ir-transforms';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
+import { validateQueryTables } from '@/lib/sql/validate-query-tables';
+import { getWhitelistForPath } from '@/lib/sql/whitelist-resolver.server';
 
 /**
  * Transform a query+params pair so that None (null) parameter values are handled:
@@ -88,7 +90,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     const parseStart = Date.now();
     const body = await request.json();
     console.log(`[QUERY API] JSON parse took ${Date.now() - parseStart}ms`);
-    const { connection_name, query, parameters, references, parameterTypes } = body;
+    const { connection_name, query, parameters, references, parameterTypes, filePath } = body;
 
     // Convert parameters to Record<string, string | number | null> for backend
     // Handle both array format (QuestionParameter[]) and object format (Record<string, any>)
@@ -116,6 +118,23 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       });
       console.log(`[QUERY API] Cache hit. Total request time: ${Date.now() - startTime}ms`);
       return NextResponse.json({ success: true, data: { ...cached.result, cachedAt: cached.cachedAt }, finalQuery: cached.finalQuery });
+    }
+
+    // Whitelist validation — only when the caller supplies a filePath (question view).
+    // Validate the raw query before CTE expansion: the original SQL contains the actual
+    // table references; CTE expansion only wraps referenced questions as WITH clauses.
+    // @alias references (question references) will fail to parse → allowed through safely.
+    if (filePath) {
+      const whitelist = await getWhitelistForPath(filePath, connection_name, user);
+      if (whitelist) {
+        const validationError = validateQueryTables(query, whitelist);
+        if (validationError) {
+          return NextResponse.json(
+            { success: false, error: { code: 'FORBIDDEN_TABLES', message: validationError } },
+            { status: 403 }
+          );
+        }
+      }
     }
 
     // Thundering herd: join in-flight promise for same hash

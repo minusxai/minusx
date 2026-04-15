@@ -26,6 +26,7 @@ interface JoinBuilderProps {
   fromTable: TableReference;
   existingTables: string[];
   onClose?: () => void;
+  whitelistedSchema?: Array<{ schema: string; tables: Array<{ table: string; columns: Array<{ name: string; type: string }> }> }>;
 }
 
 export function JoinBuilder({
@@ -35,6 +36,7 @@ export function JoinBuilder({
   fromTable,
   existingTables,
   onClose,
+  whitelistedSchema,
 }: JoinBuilderProps) {
   const [availableTables, setAvailableTables] = useState<
     Array<{ name: string; schema?: string; displayName: string }>
@@ -57,7 +59,15 @@ export function JoinBuilder({
       try {
         const result = await CompletionsAPI.getTableSuggestions({ databaseName });
         if (result.success && result.tables) {
-          setAvailableTables(result.tables);
+          const filtered = whitelistedSchema
+            ? result.tables.filter(t =>
+                whitelistedSchema.some(s =>
+                  (!t.schema || s.schema === t.schema) &&
+                  s.tables.some(wt => wt.table.toLowerCase() === t.name.toLowerCase())
+                )
+              )
+            : result.tables;
+          setAvailableTables(filtered);
         }
       } catch (err) {
         console.error('Failed to load tables:', err);

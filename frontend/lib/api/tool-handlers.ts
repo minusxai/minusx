@@ -549,7 +549,8 @@ registerFrontendTool('EditFile', async (args, _context) => {
         await getQueryResult({
           query: finalContent.query,
           params,
-          database: finalContent.connection_name
+          database: finalContent.connection_name,
+          filePath: fileState?.path,
         });
         // Update lastExecuted so QuestionContainerV2 displays results for the new query.
         // Without this, the component keeps showing results for the old lastExecuted query.
@@ -691,7 +692,8 @@ registerFrontendTool('CreateFile', async (args, context) => {
         await getQueryResult({
           query: finalContent.query,
           params,
-          database: finalContent.connection_name
+          database: finalContent.connection_name,
+          filePath: path,
         });
         getStore().dispatch(setEphemeral({
           fileId: virtualId as FileId,
