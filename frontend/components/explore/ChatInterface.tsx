@@ -146,7 +146,12 @@ export default function ChatInterface({
   // Case 2: new conversation — memoized selector avoids Object.keys scan on every Redux change
   const activeTempConversation = useAppSelector(selectActiveTempConversation);
 
-  const conversation = forkFollowedConversation ?? activeTempConversation;
+  // When loading an existing conversation (providedConversationId set), don't fall back to
+  // activeTempConversation — doing so causes the fork-follow useEffect to redirect back to
+  // the most recent conversation before the target conversation finishes loading.
+  const conversation = providedConversationId
+    ? forkFollowedConversation
+    : (forkFollowedConversation ?? activeTempConversation);
 
   const isNewConversation = !providedConversationId;
   const conversationID = conversation?.conversationID;
