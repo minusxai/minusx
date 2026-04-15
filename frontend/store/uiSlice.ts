@@ -31,6 +31,8 @@ interface UIState {
   modalFile: { fileId: number; state: 'ACTIVE' | 'COLLAPSED' } | null;
   viewStack: ViewStackItem[];
   chatAttachments: Attachment[];
+  showSuggestedQuestions: boolean;
+  showTrustScore: boolean;
 }
 
 const initialState: UIState = {
@@ -57,6 +59,8 @@ const initialState: UIState = {
   modalFile: null,
   viewStack: [],
   chatAttachments: [],
+  showSuggestedQuestions: true,
+  showTrustScore: true,
 };
 
 const uiSlice = createSlice({
@@ -124,6 +128,18 @@ const uiSlice = createSlice({
       state.showAdvanced = action.payload;
       if (typeof window !== 'undefined') {
         try { localStorage.setItem('showAdvanced', String(action.payload)); } catch { /* ignore */ }
+      }
+    },
+    setShowSuggestedQuestions: (state, action: PayloadAction<boolean>) => {
+      state.showSuggestedQuestions = action.payload;
+      if (typeof window !== 'undefined') {
+        try { localStorage.setItem('showSuggestedQuestions', String(action.payload)); } catch { /* ignore */ }
+      }
+    },
+    setShowTrustScore: (state, action: PayloadAction<boolean>) => {
+      state.showTrustScore = action.payload;
+      if (typeof window !== 'undefined') {
+        try { localStorage.setItem('showTrustScore', String(action.payload)); } catch { /* ignore */ }
       }
     },
     setGettingStartedCollapsed: (state, action: PayloadAction<boolean>) => {
@@ -205,11 +221,13 @@ const uiSlice = createSlice({
     clearChatAttachments: (state) => {
       state.chatAttachments = [];
     },
-    setBulkUiFlags: (state, action: PayloadAction<{ showDebug?: boolean; showJson?: boolean; showAdvanced?: boolean }>) => {
-      const { showDebug, showJson, showAdvanced } = action.payload;
+    setBulkUiFlags: (state, action: PayloadAction<{ showDebug?: boolean; showJson?: boolean; showAdvanced?: boolean; showSuggestedQuestions?: boolean; showTrustScore?: boolean }>) => {
+      const { showDebug, showJson, showAdvanced, showSuggestedQuestions, showTrustScore } = action.payload;
       if (showDebug !== undefined) state.showDebug = showDebug;
       if (showJson !== undefined) state.showJson = showJson;
       if (showAdvanced !== undefined) state.showAdvanced = showAdvanced;
+      if (showSuggestedQuestions !== undefined) state.showSuggestedQuestions = showSuggestedQuestions;
+      if (showTrustScore !== undefined) state.showTrustScore = showTrustScore;
     },
   },
 });
@@ -255,6 +273,8 @@ export const {
   pushView,
   popView,
   clearViewStack,
+  setShowSuggestedQuestions,
+  setShowTrustScore,
 } = uiSlice.actions;
 
 export default uiSlice.reducer;
@@ -305,3 +325,5 @@ export const selectViewStack = (state: RootState) => state.ui.viewStack;
 export const selectTopView = (state: RootState): ViewStackItem | undefined =>
   state.ui.viewStack[state.ui.viewStack.length - 1];
 export const selectViewStackDepth = (state: RootState) => state.ui.viewStack.length;
+export const selectShowSuggestedQuestions = (state: RootState) => state.ui.showSuggestedQuestions;
+export const selectShowTrustScore = (state: RootState) => state.ui.showTrustScore;

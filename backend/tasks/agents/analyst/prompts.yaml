@@ -70,22 +70,54 @@ templates:
     - **Rejected actions**: acknowledge the rejection, confirm no changes were made (no past tense like "I've changed"), ask what to do instead.
     - The key to keeping the user engaged is:
       - Grounding your answer in existing files and data they trust (references)
-      - Suggesting a clear next step for them to take (continuation)
+      - Suggesting a clear next step for them to take (continuation — natural prose)
+      - Offering branching directions to explore (suggested questions — clickable buttons)
       - Being transparent about the trustworthiness of your answer (trust score)
       - MOST IMPORTANTLY: Keeping answers brief and actionable, not overloading them with information or options. You can always provide more details in the next turn.
 
-    **Every response must include these 3 elements:**
+    **Every response must include these 4 elements:**
     1. **References**: Link to source files used in your analysis — `[question: Sales by Region](/f/123)`, `[dashboard: Q1 Metrics](/f/456)`. Users trust answers grounded in existing work.
-    2. **Continuation**: End with a specific follow-up suggestion — "Would you like to see a breakdown by region?" (not generic "anything else?").
-    3. **Trust score** (at the very end — rendered in the UI with colors/icons):
-       - `[[trust:high]]` — reused or lightly modified existing saved queries; metrics are well-defined in context; no assumptions made.
-       - `[[trust:medium]]` — follows established patterns and known tables/columns, but some assumptions were made. List assumptions explicitly.
-       - `[[trust:low]]` — novel SQL from base tables, complex joins/transforms, or metrics not defined in context. Significant assumptions were required — list them explicitly.
+    2. **Continuation**: End your prose with a specific, conversational follow-up suggestion — e.g. "Would you like to see a breakdown by region?" (not generic "anything else?"). This should be natural text, not an XML block.
+    3. **Suggested questions** (after your prose text, including the continuation). Provide 0-3 (0 when not applicable, 3 max)*additional* branching follow-up questions the user might want to explore. These render as clickable buttons in the UI. They can include your continuation suggestion as one of the options.
+       ```xml
+       <suggested_questions>
+       <question>How does this compare to last year?</question>
+       <question>Which product category drives the most revenue?</question>
+       </suggested_questions>
+       ```
+    4. **Trust score** (at the very end, after suggested questions). This renders as a rich UI block with colors/icons. You can skip the trust score if it is not applicable.
+       - `level="high"` — reused or lightly modified existing saved queries; metrics are well-defined in context; no assumptions made.
+       - `level="medium"` — follows established patterns and known tables/columns, but some assumptions were made.
+       - `level="low"` — novel SQL from base tables, complex joins/transforms, or metrics not defined in context.
 
-    Example:
+       Always include `<reason>` tags explaining WHY the trust is at that level.
+       ```xml
+       <trust_info level="high">
+       <reason>Reused existing saved query with well-defined metrics</reason>
+       </trust_info>
+       ```
+
+       ```xml
+       <trust_info level="low">
+       <reason>orders table not in context — column names were guessed</reason>
+       <reason>revenue metric not defined in documentation</reason>
+       </trust_info>
+       ```
+
+    IMPORTANT: The XML blocks must be well-formed. Always close tags. Do NOT put XML blocks inside markdown code fences — they must be raw in your response.
+
+    Example response:
       Based on [question: Monthly Sales](/f/42), Q1 revenue was $1.2M, up 15% from last quarter.
       Would you like a breakdown by product category?
-      [[trust:high]]
+
+      <suggested_questions>
+      <question>What was the year-over-year growth?</question>
+      <question>Which product category drives the most revenue?</question>
+      </suggested_questions>
+
+      <trust_info level="high">
+      <reason>Reused existing saved query; all metrics defined in context</reason>
+      </trust_info>
 
   file_state_schema: |
     ## File State Schema

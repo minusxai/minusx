@@ -28,13 +28,17 @@ export function DataLoader() {
   // Restore persisted UI flags after hydration — single dispatch avoids 3 separate re-render cycles
   useEffect(() => {
     try {
-      const flags: { showDebug?: boolean; showJson?: boolean; showAdvanced?: boolean } = {};
+      const flags: { showDebug?: boolean; showJson?: boolean; showAdvanced?: boolean; showSuggestedQuestions?: boolean; showTrustScore?: boolean } = {};
       const debug = localStorage.getItem('showDebug');
       if (debug !== null) flags.showDebug = debug === 'true';
       const json = localStorage.getItem('showJson');
       if (json !== null) flags.showJson = json === 'true';
       const advanced = localStorage.getItem('showAdvanced');
       if (advanced !== null) flags.showAdvanced = advanced === 'true';
+      const suggestedQuestions = localStorage.getItem('showSuggestedQuestions');
+      if (suggestedQuestions !== null) flags.showSuggestedQuestions = suggestedQuestions === 'true';
+      const trustScore = localStorage.getItem('showTrustScore');
+      if (trustScore !== null) flags.showTrustScore = trustScore === 'true';
       if (Object.keys(flags).length > 0) dispatch(setBulkUiFlags(flags));
     } catch { /* ignore */ }
   }, []);
