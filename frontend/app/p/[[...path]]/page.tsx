@@ -3,7 +3,7 @@
 import { use, useEffect, useMemo, useState } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
-import { Box, VStack, HStack, Flex, useBreakpointValue, Button } from '@chakra-ui/react';
+import { Box, VStack, HStack, Flex, Button } from '@chakra-ui/react';
 import { LuPlus } from 'react-icons/lu';
 import Breadcrumb from '@/components/Breadcrumb';
 import FolderView from '@/components/FolderView';
@@ -34,8 +34,18 @@ export default function PathPage({ params }: PathPageProps) {
   // Get company configs
   const { config } = useConfigs();
 
-  // Determine if we're on mobile or desktop (true = mobile, false = desktop)
-  const isMobile = useBreakpointValue({ base: true, md: false }, { ssr: false });
+  // Determine if we're on mobile or desktop (true = mobile, false = desktop).
+  // useBreakpointValue accesses window during render and fails SSR even with { ssr: false }.
+  // Using matchMedia in an effect is safe: undefined during SSR/first render (neither
+  // sidebar shows), then resolved after hydration. The === true/false checks below handle this.
+  const [isMobile, setIsMobile] = useState<boolean | undefined>(undefined);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    setIsMobile(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   // Unwrap params Promise (Next.js 16 requirement)
   const { path } = use(params);
