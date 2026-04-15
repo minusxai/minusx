@@ -112,7 +112,8 @@ export function useContext(path: string, version?: number): ContextInfo {
       }
 
       // Default behavior: use published version (via existing helpers)
-      const databases = getWhitelistedSchemaForUser(contextContent, currentUser.id);
+      const contextDir = contextFile?.path.substring(0, contextFile.path.lastIndexOf('/')) || '/';
+      const databases = getWhitelistedSchemaForUser(contextContent, currentUser.id, path, contextDir);
       const documentation = getDocumentationForUser(contextContent, currentUser.id);
 
       return {

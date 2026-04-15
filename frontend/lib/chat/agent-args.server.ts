@@ -76,11 +76,16 @@ export async function buildServerAgentArgs(
   try {
     const effectiveHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder || '');
     let contextContent: ContextContent | undefined;
+    let nearestContextDir: string | undefined;
 
     if (options?.contextFileId != null) {
       // Context eval path: use the specific context file being evaluated.
       const contextResult = await FilesAPI.loadFile(options.contextFileId, user);
       contextContent = contextResult.data?.content as ContextContent | undefined;
+      const contextPath = contextResult.data?.path;
+      if (contextPath) {
+        nearestContextDir = contextPath.substring(0, contextPath.lastIndexOf('/')) || '/';
+      }
     } else {
       // General path: find the context file nearest to the user's home folder.
       const modePath = resolvePath(user.mode, '/');
@@ -95,11 +100,12 @@ export async function buildServerAgentArgs(
       if (nearestContextPath) {
         const contextResult = await FilesAPI.loadFileByPath(nearestContextPath, user);
         contextContent = contextResult.data.content as ContextContent;
+        nearestContextDir = nearestContextPath.substring(0, nearestContextPath.lastIndexOf('/')) || '/';
       }
     }
 
     if (contextContent) {
-      databases = getWhitelistedSchemaForUser(contextContent, user.userId, effectiveHomeFolder);
+      databases = getWhitelistedSchemaForUser(contextContent, user.userId, effectiveHomeFolder, nearestContextDir);
       documentation = getDocumentationForUser(contextContent, user.userId);
     }
   } catch {

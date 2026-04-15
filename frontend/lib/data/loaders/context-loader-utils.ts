@@ -15,17 +15,27 @@ import { getPublishedVersionForUser as getPublishedVersionForUserId } from '@/li
  * Filter doc entries by childPaths for a specific child path
  * Similar to filterSchemaByWhitelist but for docs
  */
-function filterDocsByChildPaths(docs: DocEntry[], currentPath: string): DocEntry[] {
+function filterDocsByChildPaths(docs: DocEntry[], currentPath: string, contextDir?: string): DocEntry[] {
+  const isDirectChildOfContext = (path: string): boolean => {
+    if (!contextDir) return false;
+    const prefix = contextDir === '/' ? '/' : contextDir + '/';
+    if (!path.startsWith(prefix)) return false;
+    return !path.substring(prefix.length).includes('/');
+  };
+
   return docs.filter(docEntry => {
     // If childPaths is undefined/null, apply to all children (backward compatible)
-    // If childPaths is [] (empty array), apply to NO children (only this folder)
     if (!docEntry.childPaths) {
       return true;
     }
+    // Empty array: only direct children of contextDir
     if (docEntry.childPaths.length === 0) {
-      return false;
+      return isDirectChildOfContext(currentPath);
     }
-
+    // Direct child of contextDir always passes
+    if (isDirectChildOfContext(currentPath)) {
+      return true;
+    }
     // Check if currentPath matches any childPaths (exact or nested)
     return docEntry.childPaths.some(childPath =>
       currentPath === childPath || currentPath.startsWith(childPath + '/')
@@ -105,6 +115,9 @@ export async function computeSchemaFromDatabases(
         fullSchema = [];
         fullDocs = [];
       } else {
+        // parentContextDir: directory of the parent context file, so direct-child paths always pass
+        const parentContextDir = ancestorContext.path.substring(0, ancestorContext.path.lastIndexOf('/')) || '/';
+
         // Filter parent's fullSchema by PARENT's whitelist with childPaths checking
         fullSchema = publishedVersion.databases.map((parentDbContext: DatabaseContext) => {
           const parentDb = ancestorContent.fullSchema?.find(
@@ -116,7 +129,8 @@ export async function computeSchemaFromDatabases(
           const filteredSchema = filterSchemaByWhitelist(
             { schemas: parentDb.schemas, updated_at: parentDb.updated_at },
             parentDbContext.whitelist,  // Parent's whitelist (has childPaths!)
-            path  // Child's path for childPaths checking
+            path,  // Child's path for childPaths checking
+            parentContextDir
           );
 
           return {
@@ -126,8 +140,8 @@ export async function computeSchemaFromDatabases(
         }).filter(Boolean) as DatabaseWithSchema[];
 
         // Accumulate parent's fullDocs + parent's own docs, both filtered by childPaths
-        const parentFullDocs = filterDocsByChildPaths(ancestorContent.fullDocs || [], path);
-        const parentOwnDocs = filterDocsByChildPaths(publishedVersion.docs || [], path);
+        const parentFullDocs = filterDocsByChildPaths(ancestorContent.fullDocs || [], path, parentContextDir);
+        const parentOwnDocs = filterDocsByChildPaths(publishedVersion.docs || [], path, parentContextDir);
         fullDocs = [...parentFullDocs, ...parentOwnDocs];
       }
     }

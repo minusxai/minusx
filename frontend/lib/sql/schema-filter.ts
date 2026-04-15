@@ -10,24 +10,41 @@ import { getPublishedVersionForUser } from '../context/context-utils';
  * @param fullSchema - The full database schema
  * @param whitelist - Array of whitelist items
  * @param currentPath - Optional path of child context requesting filtering
+ * @param contextDir - Optional directory of the context file itself (e.g. "/org" for "/org/context").
+ *                     When provided, items directly in this directory always pass the childPaths check
+ *                     because childPaths restricts subfolders, not the context's own level.
  */
 export function filterSchemaByWhitelist(
   fullSchema: DatabaseSchema,
   whitelist: WhitelistItem[],
-  currentPath?: string
+  currentPath?: string,
+  contextDir?: string
 ): DatabaseSchema {
+  // Returns true when currentPath is a direct child of contextDir
+  // (one path segment below — not nested further).
+  const isDirectChildOfContext = (path: string): boolean => {
+    if (!contextDir) return false;
+    const prefix = contextDir === '/' ? '/' : contextDir + '/';
+    if (!path.startsWith(prefix)) return false;
+    return !path.substring(prefix.length).includes('/');
+  };
+
   // Filter whitelist items by childPaths BEFORE creating lookup sets
   const applicableWhitelist = whitelist.filter(item => {
     // If childPaths is undefined/null, apply to all children (backward compatible)
-    // If childPaths is [] (empty array), apply to NO children (only this folder)
     if (!item.childPaths) {
       return true;
     }
+    // If childPaths is [] (empty array), apply only to items directly in the context's own folder
     if (item.childPaths.length === 0) {
-      return false;
+      return currentPath ? isDirectChildOfContext(currentPath) : false;
     }
     // If currentPath not provided, include all (for non-child contexts)
     if (!currentPath) {
+      return true;
+    }
+    // Direct child of contextDir always passes — childPaths restricts subfolders only
+    if (isDirectChildOfContext(currentPath)) {
       return true;
     }
     // Check if currentPath matches any childPaths (including nested paths)
@@ -83,11 +100,13 @@ export function filterSchemaByWhitelist(
  *
  * @param contextContent - The context content with fullSchema and databases (whitelist)
  * @param currentPath - Optional path of child context requesting filtering
+ * @param contextDir - Optional directory of the context file (see filterSchemaByWhitelist)
  * @returns Array of databases with whitelisted schemas/tables only
  */
 export function getWhitelistedSchema(
   contextContent: ContextContent,
-  currentPath?: string
+  currentPath?: string,
+  contextDir?: string
 ): DatabaseWithSchema[] {
   if (!contextContent.fullSchema || !contextContent.databases) {
     return [];
@@ -108,7 +127,8 @@ export function getWhitelistedSchema(
     const filteredSchema = filterSchemaByWhitelist(
       { schemas: availableDb.schemas, updated_at: availableDb.updated_at || new Date().toISOString() },
       dbContext.whitelist,
-      currentPath
+      currentPath,
+      contextDir
     );
 
     return {
@@ -180,12 +200,14 @@ export function findMatchingContextByPath(
  * @param contextContent - The context content with versions and fullSchema
  * @param userId - The user ID to get the published version for
  * @param currentPath - Optional path of child context requesting filtering
+ * @param contextDir - Optional directory of the context file (see filterSchemaByWhitelist)
  * @returns Array of databases with whitelisted schemas/tables only
  */
 export function getWhitelistedSchemaForUser(
   contextContent: ContextContent,
   userId: number,
-  currentPath?: string
+  currentPath?: string,
+  contextDir?: string
 ): DatabaseWithSchema[] {
   // Get user's published version and compute visible schema from it
   if (contextContent.versions && contextContent.versions.length > 0) {
@@ -203,7 +225,8 @@ export function getWhitelistedSchemaForUser(
         const filteredSchema = filterSchemaByWhitelist(
           { schemas: availableDb.schemas, updated_at: availableDb.updated_at || new Date().toISOString() },
           dbContext.whitelist,
-          currentPath
+          currentPath,
+          contextDir
         );
 
         return {

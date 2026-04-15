@@ -69,7 +69,8 @@ export async function getWhitelistForPath(
     const contextContent = result.data?.content as ContextContent | undefined;
     if (!contextContent) return null;
 
-    const databases = getWhitelistedSchemaForUser(contextContent, user.userId, normalizedPath);
+    const contextDir = nearest.path.substring(0, nearest.path.lastIndexOf('/')) || '/';
+    const databases = getWhitelistedSchemaForUser(contextContent, user.userId, normalizedPath, contextDir);
     const dbEntry = databases.find(d => d.databaseName === connectionName);
     if (!dbEntry || !dbEntry.schemas.length) return null;
 
