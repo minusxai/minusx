@@ -14,6 +14,24 @@ export function generateRandomTableName(): string {
   return `${randomAdj}_${randomNoun}_${randomNum}`
 }
 
+// Served from public/duckdb/ (copied from node_modules by postinstall).
+// Using local files avoids a CDN round-trip (~8 MB) on every cold browser start.
+const LOCAL_BUNDLES: duckdb.DuckDBBundles = {
+  mvp: {
+    mainModule: '/duckdb/duckdb-mvp.wasm',
+    mainWorker: '/duckdb/duckdb-browser-mvp.worker.js',
+  },
+  eh: {
+    mainModule: '/duckdb/duckdb-eh.wasm',
+    mainWorker: '/duckdb/duckdb-browser-eh.worker.js',
+  },
+  coi: {
+    mainModule: '/duckdb/duckdb-coi.wasm',
+    mainWorker: '/duckdb/duckdb-browser-coi.worker.js',
+    pthreadWorker: '/duckdb/duckdb-browser-coi.pthread.worker.js',
+  },
+}
+
 export async function initDuckDB() {
   // If already initialized, return existing db
   if (db && connection) return db
@@ -23,20 +41,14 @@ export async function initDuckDB() {
 
   // Start initialization
   initPromise = (async () => {
-    const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles()
+    const bundle = await duckdb.selectBundle(LOCAL_BUNDLES)
 
-    const bundle = await duckdb.selectBundle(JSDELIVR_BUNDLES)
-
-    const worker_url = URL.createObjectURL(
-      new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' })
-    )
-
-    const worker = new Worker(worker_url)
+    // Local same-origin workers can be loaded directly — no importScripts blob needed.
+    const worker = new Worker(bundle.mainWorker!)
     const logger = new duckdb.ConsoleLogger()
 
     db = new duckdb.AsyncDuckDB(logger, worker)
     await db.instantiate(bundle.mainModule, bundle.pthreadWorker)
-    URL.revokeObjectURL(worker_url)
 
     connection = await db.connect()
 

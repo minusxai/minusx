@@ -44,4 +44,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# DuckDB WASM files (copied from node_modules by postinstall)
+/public/duckdb/
+
 .eslintcache
