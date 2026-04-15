@@ -1,6 +1,7 @@
 'use client';
 
 import { use, useMemo, useState } from 'react';
+import { notFound } from 'next/navigation';
 import { Center, Text, Box, Spinner } from '@chakra-ui/react';
 import FileLayout from '@/components/FileLayout';
 import FileView from '@/components/FileView';
@@ -9,6 +10,7 @@ import { useAppSelector } from '@/store/hooks';
 import { useAppState, useFile } from '@/lib/hooks/file-state-hooks';
 import { RightSidebarProps } from "@/components/RightSidebar";
 import { ContextContent } from '@/lib/types';
+import { canCreateFileByRole } from '@/lib/auth/access-rules.client';
 
 interface NewFilePageProps {
   params: Promise<{ type: string }>;
@@ -22,6 +24,12 @@ export default function NewFilePage({ params }: NewFilePageProps) {
 
   // Validate type is supported
   const isValidType = SUPPORTED_FILE_TYPES.includes(type);
+
+  // 404 if user lacks create permission for this type
+  // (user is null while loading; once loaded, check role against createTypes)
+  if (user && !canCreateFileByRole(user.role, type)) {
+    notFound();
+  }
 
   // Get app state (creates virtual file with URL params automatically)
   const { appState, loading: appStateLoading } = useAppState();
