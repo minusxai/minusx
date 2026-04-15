@@ -53,6 +53,18 @@ export function canViewFileType(role: UserRole, fileType: FileType, overrides?: 
 }
 
 /**
+ * Check if a user's role allows creating or editing a specific file type (client-side).
+ * Both operations use createTypes — if your role can create a type, it can also edit it.
+ */
+export function canCreateFileByRole(role: UserRole, fileType: FileType, overrides?: AccessRulesOverride): boolean {
+  const rule = getEffectiveRule(role, overrides) as any;
+  if (!rule) return false;
+  if (rule.createTypes === undefined) return true;
+  if (rule.createTypes === '*') return true;
+  return (rule.createTypes as FileType[]).includes(fileType);
+}
+
+/**
  * Get creation blocklist from rules (client-side)
  */
 export function getCreationBlocklist(): FileType[] {
@@ -123,6 +135,8 @@ export function useAccessRules() {
       canViewFileType(role, fileType, overrides),
     canShowInCreateMenu: (role: UserRole, type: FileType) =>
       canShowInCreateMenu(role, type, overrides),
+    canCreateFileByRole: (role: UserRole, fileType: FileType) =>
+      canCreateFileByRole(role, fileType, overrides),
     canDeleteFileType,
     canCreateFileType,
   }), [overrides]);

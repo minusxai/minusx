@@ -176,6 +176,22 @@ export function canViewFileType(role: UserRole, fileType: FileType, overrides?: 
 }
 
 /**
+ * Check if a user's role allows creating or editing a specific file type (server-side).
+ * Both operations use createTypes — if your role can create a type, it can also edit it.
+ * @param role - User's role
+ * @param fileType - The file type to check
+ * @param overrides - Optional per-company access rules overrides
+ * @returns true if user can create/edit files of this type
+ */
+export function canCreateFileByRole(role: UserRole, fileType: FileType, overrides?: AccessRulesOverride): boolean {
+  const rule = getEffectiveRule(role, overrides);
+  if (!rule) return false;
+  if (rule.createTypes === undefined) return true;
+  if (rule.createTypes === '*') return true;
+  return (rule.createTypes as FileType[]).includes(fileType);
+}
+
+/**
  * Get creation location restrictions from rules
  */
 export function getCreateLocationRestrictions(): CreateLocationRestriction[] {
