@@ -13,7 +13,9 @@ import { useConfigs } from '@/lib/hooks/useConfigs';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { selectActiveConversation, sendMessage } from '@/store/chatSlice';
 import { selectShowSuggestedQuestions, selectShowTrustScore } from '@/store/uiSlice';
+import { selectContextFromPath } from '@/store/filesSlice';
 import { isViewer } from '@/lib/auth/role-helpers';
+import { resolvePath } from '@/lib/mode/path-resolver';
 import { ReportQueryResult, QuestionContent } from '@/lib/types';
 import QuestionViewV2 from '@/components/views/QuestionViewV2';
 
@@ -304,10 +306,16 @@ function TrustBadge({ level, context, reasons }: {
   const config = trustConfig[level];
   const Icon = config.icon;
   const hasMoreDetails = 'moreDetails' in config;
-  if (level === 'high') return null;
   const hasReasons = reasons && reasons.length > 0;
   const hasExpandableContent = hasReasons || hasMoreDetails;
-  const expandTitle = hasReasons ? config.moreDetailsTitle : (hasMoreDetails ? config.moreDetailsTitle : '');
+
+  // Find the user's context file for the "Edit Knowledge Base" link
+  const trustUser = useAppSelector(selectEffectiveUser);
+  const userMode = trustUser?.mode || 'org';
+  const userHomePath = resolvePath(userMode, trustUser?.home_folder ? `/${trustUser.home_folder}` : '/');
+  const contextFile = useAppSelector((state) => selectContextFromPath(state, userHomePath));
+
+  if (level === 'high') return null;
 
   return (
     <Box w="100%" mt="3">
@@ -364,6 +372,19 @@ function TrustBadge({ level, context, reasons }: {
               {config.moreDetails}
             </Text>
           )}
+          {/* Link to edit knowledge base */}
+          <Text fontSize="2xs" color="fg.subtle" lineHeight="1.7" fontFamily="mono" mt="1.5">
+            {contextFile ? (
+              <>
+                <Link href={`/f/${contextFile.id}`} style={{ color: 'var(--chakra-colors-accent-teal)', textDecoration: 'underline' }}>
+                  Edit Knowledge Base
+                </Link>
+                {' '}to improve confidence, or just ask the agent!
+              </>
+            ) : (
+              <>Improve confidence by adding context — just ask the agent!</>
+            )}
+          </Text>
         </Box>
       )}
     </Box>
