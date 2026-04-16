@@ -129,7 +129,7 @@
           "updated_at": "{{TIMESTAMP}}"
         },
         {
-          "id": 109,
+          "id": 6,
           "name": "static",
           "path": "/tutorial/database/static",
           "type": "connection",
@@ -2403,7 +2403,7 @@
           "updated_at": "{{TIMESTAMP}}"
         },
         {
-          "id": 107,
+          "id": 106,
           "name": "database",
           "path": "/org/database",
           "type": "folder",
@@ -2416,7 +2416,7 @@
           "updated_at": "{{TIMESTAMP}}"
         },
         {
-          "id": 108,
+          "id": 107,
           "name": "static",
           "path": "/org/database/static",
           "type": "connection",
@@ -2465,7 +2465,7 @@
           "updated_at": "{{TIMESTAMP}}"
         },
         {
-          "id": 110,
+          "id": 9,
           "name": "static",
           "path": "/internals/database/static",
           "type": "connection",
