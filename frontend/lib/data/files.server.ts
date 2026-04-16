@@ -34,7 +34,8 @@ import { resolvePath, resolveHomeFolderSync, isFileTypeAllowedInPath, resolveHom
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { getLoader, LoaderOptions } from './loaders';
 import { listAllConnections } from './connections.server';
-import { computeSchemaFromDatabases } from './loaders/context-loader-utils';
+import { computeSchemaFromWhitelist } from './loaders/context-loader-utils';
+import { makeDefaultContextContent } from '@/lib/context/context-utils';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import { getFileAnalyticsSummary, getFilesAnalyticsSummary, getConversationAnalytics } from '@/lib/analytics/file-analytics.server';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
@@ -405,6 +406,13 @@ class FilesDataLayerServer implements IFilesDataLayer {
             [],  // Phase 6: Folders have no references
             user.companyId
           );
+          // Create default context for the new folder
+          const contextPath = `${currentPath}/context`;
+          const contextExists = await DocumentDB.getByPath(contextPath, user.companyId);
+          if (!contextExists) {
+            await DocumentDB.create('context', contextPath, 'context',
+              makeDefaultContextContent(user.userId), [], user.companyId);
+          }
         }
       }
     }
@@ -451,6 +459,16 @@ class FilesDataLayerServer implements IFilesDataLayer {
       companyId: user.companyId,
       mode: user.mode,
     });
+
+    // Atomically create default context for every new folder
+    if (type === 'folder') {
+      const contextPath = `${finalPath}/context`;
+      const existingContext = await DocumentDB.getByPath(contextPath, user.companyId);
+      if (!existingContext) {
+        const contextContent = makeDefaultContextContent(user.userId);
+        await DocumentDB.create('context', contextPath, 'context', contextContent, [], user.companyId);
+      }
+    }
 
     return {
       data: newFile
@@ -691,10 +709,10 @@ class FilesDataLayerServer implements IFilesDataLayer {
         const folderPath = options.path || resolvePath(user.mode, user.home_folder || '');
         const contextPath = `${folderPath}/context`;
 
-        // Compute fullSchema and fullDocs using existing loader logic
-        // Pass empty databases array for new context (version 1 has no whitelist yet)
-        const { fullSchema, fullDocs } = await computeSchemaFromDatabases(
-          [],  // Empty databases array for new context
+        // Compute fullSchema and fullDocs using the new whitelist loader
+        // New contexts default to whitelist:'*' (expose all available schemas)
+        const { fullSchema, fullDocs } = await computeSchemaFromWhitelist(
+          '*',
           contextPath,
           user
         );
@@ -703,7 +721,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
         const content: ContextContent = {
           versions: [{
             version: 1,
-            databases: [],
+            whitelist: '*',
             docs: [],
             createdAt: now,
             createdBy: user.userId,
@@ -818,7 +836,21 @@ class FilesDataLayerServer implements IFilesDataLayer {
     let deletedCount: number;
     if (file.type === 'folder') {
       const descendants = await DocumentDB.listAll(user.companyId, undefined, [file.path], -1, false);
-      const undeletable = descendants.filter(f => !canDeleteFileType(f.type));
+      // A 'context' file is normally undeletable, BUT it can be cascade-deleted when
+      // its parent folder is also being deleted (the folder is either the root being
+      // deleted, or another folder in the subtree that is also being deleted).
+      const undeletable = descendants.filter(f => {
+        if (canDeleteFileType(f.type)) return false;
+        if (f.type === 'context') {
+          const parentPath = f.path.substring(0, f.path.lastIndexOf('/'));
+          // Exempt if parent folder is the folder being deleted OR is itself a descendant
+          const parentIsBeingDeleted =
+            parentPath === file.path ||
+            descendants.some(d => d.type === 'folder' && d.path === parentPath);
+          if (parentIsBeingDeleted) return false;
+        }
+        return true;
+      });
       if (undeletable.length > 0) {
         throw new AccessPermissionError(
           `Cannot delete folder: contains ${undeletable.length} file(s) of undeletable type(s): ${[...new Set(undeletable.map(f => f.type))].join(', ')}`

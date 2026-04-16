@@ -8,7 +8,7 @@ import { DbFile, ContextContent, DatabaseWithSchema, ContextVersion, DocEntry } 
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { getPublishedVersionForUser as getPublishedVersionForUserId } from '@/lib/context/context-utils';
 import { CustomLoader } from './types';
-import { computeSchemaFromDatabases } from './context-loader-utils';
+import { computeSchemaFromWhitelist } from './context-loader-utils';
 
 /**
  * Context Loader - Computes fullSchema and fullDocs based on published version
@@ -90,7 +90,7 @@ async function computeSchemaFromVersion(
   contextPath: string,
   user: EffectiveUser
 ): Promise<{ fullSchema: DatabaseWithSchema[], fullDocs: DocEntry[] }> {
-  const { fullSchema, fullDocs } = await computeSchemaFromDatabases(version.databases, contextPath, user);
+  const { fullSchema, fullDocs } = await computeSchemaFromWhitelist(version.whitelist, contextPath, user);
 
   // fullDocs already includes inherited docs (computed in context-loader-utils)
   // Root contexts get empty fullDocs (no parent to inherit from)

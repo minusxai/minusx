@@ -210,12 +210,13 @@ describe('Files Data Layer - getTemplate', () => {
         {
           versions: [{
             version: 1,
-            databases: [{
-              databaseName: 'default_db',
-              whitelist: [{
-                name: 'users',
-                type: 'table',
-                schema: 'main'
+            whitelist: [{
+              name: 'default_db',
+              type: 'connection',
+              children: [{
+                name: 'main',
+                type: 'schema',
+                children: [{ name: 'users', type: 'table' }]
               }]
             }],
             docs: [{ content: 'Root documentation' }],

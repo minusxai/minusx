@@ -944,17 +944,6 @@
             "versions": [
               {
                 "version": 1,
-                "databases": [
-                  {
-                    "databaseName": "mxfood",
-                    "whitelist": [
-                      {
-                        "type": "schema",
-                        "name": "main"
-                      }
-                    ]
-                  }
-                ],
                 "docs": [
                   {
                     "content": "# mxfood\n\n## Data Description\nThis db contains data about a food delivery company. You have 3 types of data:\n- standard ops / transactional data about orders, users, deliveries, products etc\n- events data (for user flows)\n- marketing data (ads, ad spends, etc)\n"
@@ -962,7 +951,19 @@
                 ],
                 "createdAt": "{{TIMESTAMP}}",
                 "createdBy": 1,
-                "description": "Initial tutorial context"
+                "description": "Initial tutorial context",
+                "whitelist": [
+                  {
+                    "name": "mxfood",
+                    "type": "connection",
+                    "children": [
+                      {
+                        "name": "main",
+                        "type": "schema"
+                      }
+                    ]
+                  }
+                ]
               }
             ],
             "published": {
@@ -2567,17 +2568,6 @@
             "versions": [
               {
                 "version": 1,
-                "databases": [
-                  {
-                    "databaseName": "internals",
-                    "whitelist": [
-                      {
-                        "type": "schema",
-                        "name": "main"
-                      }
-                    ]
-                  }
-                ],
                 "docs": [
                   {
                     "content": "# internals\n\n## file_events\nTracks every file operation in MinusX.\n- `event_type`: created | updated | deleted | read_direct | read_as_reference\n- `file_path`: full path, e.g. `/org/Sales/Revenue` \u2014 mode is `SPLIT_PART(file_path,'/',2)`\n- `file_type`: question | dashboard | connection | context | folder | etc.\n- `user_email`, `user_role`: who performed the action\n- `timestamp`: when it happened\n\n## llm_call_events\nTracks every LLM API call made by the agent.\n- `model`: e.g. `claude-sonnet-4-6`\n- `total_tokens`, `prompt_tokens`, `completion_tokens`\n- `cost` (USD), `duration_s` (seconds)\n- `finish_reason`, `conversation_id`\n- `timestamp`: when the call was made\n"
@@ -2585,12 +2575,26 @@
                 ],
                 "createdAt": "{{TIMESTAMP}}",
                 "createdBy": 1,
-                "description": "MinusX system analytics context"
+                "description": "MinusX system analytics context",
+                "whitelist": [
+                  {
+                    "name": "internals",
+                    "type": "connection",
+                    "children": [
+                      {
+                        "name": "main",
+                        "type": "schema"
+                      }
+                    ]
+                  }
+                ]
               }
             ],
             "published": {
               "all": 1
-            }
+            },
+            "fullSchema": [],
+            "fullDocs": []
           },
           "company_id": "{{COMPANY_ID}}",
           "created_at": "{{TIMESTAMP}}",
@@ -2952,6 +2956,383 @@
           "company_id": "{{COMPANY_ID}}",
           "created_at": "{{TIMESTAMP}}",
           "updated_at": "{{TIMESTAMP}}"
+        },
+        {
+          "id": 111,
+          "name": "context",
+          "path": "/internals/configs/context",
+          "type": "context",
+          "content": {
+            "versions": [
+              {
+                "version": 1,
+                "whitelist": "*",
+                "docs": [],
+                "createdAt": "{{TIMESTAMP}}",
+                "createdBy": 1,
+                "description": "Default context"
+              }
+            ],
+            "published": {
+              "all": 1
+            },
+            "fullSchema": [],
+            "fullDocs": []
+          },
+          "references": [],
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}",
+          "version": 1,
+          "last_edit_id": null
+        },
+        {
+          "id": 112,
+          "name": "context",
+          "path": "/internals/database/context",
+          "type": "context",
+          "content": {
+            "versions": [
+              {
+                "version": 1,
+                "whitelist": "*",
+                "docs": [],
+                "createdAt": "{{TIMESTAMP}}",
+                "createdBy": 1,
+                "description": "Default context"
+              }
+            ],
+            "published": {
+              "all": 1
+            },
+            "fullSchema": [],
+            "fullDocs": []
+          },
+          "references": [],
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}",
+          "version": 1,
+          "last_edit_id": null
+        },
+        {
+          "id": 113,
+          "name": "context",
+          "path": "/internals/logs/context",
+          "type": "context",
+          "content": {
+            "versions": [
+              {
+                "version": 1,
+                "whitelist": "*",
+                "docs": [],
+                "createdAt": "{{TIMESTAMP}}",
+                "createdBy": 1,
+                "description": "Default context"
+              }
+            ],
+            "published": {
+              "all": 1
+            },
+            "fullSchema": [],
+            "fullDocs": []
+          },
+          "references": [],
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}",
+          "version": 1,
+          "last_edit_id": null
+        },
+        {
+          "id": 114,
+          "name": "context",
+          "path": "/internals/logs/conversations/context",
+          "type": "context",
+          "content": {
+            "versions": [
+              {
+                "version": 1,
+                "whitelist": "*",
+                "docs": [],
+                "createdAt": "{{TIMESTAMP}}",
+                "createdBy": 1,
+                "description": "Default context"
+              }
+            ],
+            "published": {
+              "all": 1
+            },
+            "fullSchema": [],
+            "fullDocs": []
+          },
+          "references": [],
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}",
+          "version": 1,
+          "last_edit_id": null
+        },
+        {
+          "id": 115,
+          "name": "context",
+          "path": "/org/context",
+          "type": "context",
+          "content": {
+            "versions": [
+              {
+                "version": 1,
+                "whitelist": "*",
+                "docs": [],
+                "createdAt": "{{TIMESTAMP}}",
+                "createdBy": 1,
+                "description": "Default context"
+              }
+            ],
+            "published": {
+              "all": 1
+            },
+            "fullSchema": [],
+            "fullDocs": []
+          },
+          "references": [],
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}",
+          "version": 1,
+          "last_edit_id": null
+        },
+        {
+          "id": 116,
+          "name": "context",
+          "path": "/org/configs/context",
+          "type": "context",
+          "content": {
+            "versions": [
+              {
+                "version": 1,
+                "whitelist": "*",
+                "docs": [],
+                "createdAt": "{{TIMESTAMP}}",
+                "createdBy": 1,
+                "description": "Default context"
+              }
+            ],
+            "published": {
+              "all": 1
+            },
+            "fullSchema": [],
+            "fullDocs": []
+          },
+          "references": [],
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}",
+          "version": 1,
+          "last_edit_id": null
+        },
+        {
+          "id": 117,
+          "name": "context",
+          "path": "/org/database/context",
+          "type": "context",
+          "content": {
+            "versions": [
+              {
+                "version": 1,
+                "whitelist": "*",
+                "docs": [],
+                "createdAt": "{{TIMESTAMP}}",
+                "createdBy": 1,
+                "description": "Default context"
+              }
+            ],
+            "published": {
+              "all": 1
+            },
+            "fullSchema": [],
+            "fullDocs": []
+          },
+          "references": [],
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}",
+          "version": 1,
+          "last_edit_id": null
+        },
+        {
+          "id": 118,
+          "name": "context",
+          "path": "/org/logs/context",
+          "type": "context",
+          "content": {
+            "versions": [
+              {
+                "version": 1,
+                "whitelist": "*",
+                "docs": [],
+                "createdAt": "{{TIMESTAMP}}",
+                "createdBy": 1,
+                "description": "Default context"
+              }
+            ],
+            "published": {
+              "all": 1
+            },
+            "fullSchema": [],
+            "fullDocs": []
+          },
+          "references": [],
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}",
+          "version": 1,
+          "last_edit_id": null
+        },
+        {
+          "id": 119,
+          "name": "context",
+          "path": "/org/logs/conversations/context",
+          "type": "context",
+          "content": {
+            "versions": [
+              {
+                "version": 1,
+                "whitelist": "*",
+                "docs": [],
+                "createdAt": "{{TIMESTAMP}}",
+                "createdBy": 1,
+                "description": "Default context"
+              }
+            ],
+            "published": {
+              "all": 1
+            },
+            "fullSchema": [],
+            "fullDocs": []
+          },
+          "references": [],
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}",
+          "version": 1,
+          "last_edit_id": null
+        },
+        {
+          "id": 120,
+          "name": "context",
+          "path": "/tutorial/configs/context",
+          "type": "context",
+          "content": {
+            "versions": [
+              {
+                "version": 1,
+                "whitelist": "*",
+                "docs": [],
+                "createdAt": "{{TIMESTAMP}}",
+                "createdBy": 1,
+                "description": "Default context"
+              }
+            ],
+            "published": {
+              "all": 1
+            },
+            "fullSchema": [],
+            "fullDocs": []
+          },
+          "references": [],
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}",
+          "version": 1,
+          "last_edit_id": null
+        },
+        {
+          "id": 121,
+          "name": "context",
+          "path": "/tutorial/database/context",
+          "type": "context",
+          "content": {
+            "versions": [
+              {
+                "version": 1,
+                "whitelist": "*",
+                "docs": [],
+                "createdAt": "{{TIMESTAMP}}",
+                "createdBy": 1,
+                "description": "Default context"
+              }
+            ],
+            "published": {
+              "all": 1
+            },
+            "fullSchema": [],
+            "fullDocs": []
+          },
+          "references": [],
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}",
+          "version": 1,
+          "last_edit_id": null
+        },
+        {
+          "id": 122,
+          "name": "context",
+          "path": "/tutorial/logs/context",
+          "type": "context",
+          "content": {
+            "versions": [
+              {
+                "version": 1,
+                "whitelist": "*",
+                "docs": [],
+                "createdAt": "{{TIMESTAMP}}",
+                "createdBy": 1,
+                "description": "Default context"
+              }
+            ],
+            "published": {
+              "all": 1
+            },
+            "fullSchema": [],
+            "fullDocs": []
+          },
+          "references": [],
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}",
+          "version": 1,
+          "last_edit_id": null
+        },
+        {
+          "id": 123,
+          "name": "context",
+          "path": "/tutorial/logs/conversations/context",
+          "type": "context",
+          "content": {
+            "versions": [
+              {
+                "version": 1,
+                "whitelist": "*",
+                "docs": [],
+                "createdAt": "{{TIMESTAMP}}",
+                "createdBy": 1,
+                "description": "Default context"
+              }
+            ],
+            "published": {
+              "all": 1
+            },
+            "fullSchema": [],
+            "fullDocs": []
+          },
+          "references": [],
+          "company_id": "{{COMPANY_ID}}",
+          "created_at": "{{TIMESTAMP}}",
+          "updated_at": "{{TIMESTAMP}}",
+          "version": 1,
+          "last_edit_id": null
         }
       ]
     }

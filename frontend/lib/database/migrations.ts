@@ -403,16 +403,17 @@ export const MIGRATIONS: MigrationEntry[] = [
           }
 
           // Create version 1 from current content
+          // Note: uses legacy 'databases' field; V33 migration converts it to 'whitelist'
           const now = new Date().toISOString();
           const versionedContent = {
             versions: [{
               version: 1,
-              databases: content.databases || [],
+              databases: content.databases || [],  // Legacy - converted by V33
               docs: content.docs || [],
               createdAt: now,
               createdBy: 1,  // System user (admin)
               description: 'Initial version (auto-migrated)'
-            }],
+            } as any],
             published: { all: 1 },
             // Remove legacy fields
             databases: undefined,
@@ -1235,6 +1236,136 @@ export const MIGRATIONS: MigrationEntry[] = [
           content.layout.items = normalized;
         }
       }
+      return data;
+    },
+  },
+  {
+    dataVersion: 33,
+    schemaVersion: undefined,
+    description: 'V33: Migrate whitelist schema (ContextVersion.databases[] → whitelist tree) + create default context per folder',
+    dataMigration: (data: InitData) => {
+      const now = new Date().toISOString();
+
+      for (const companyData of data.companies as CompanyData[]) {
+        // ── Part A: Convert existing context whitelist format ──────────────────
+        for (const doc of companyData.documents) {
+          if (doc.type !== 'context') continue;
+          const content = doc.content as any;
+          if (!content?.versions) continue;
+
+          for (const version of content.versions) {
+            if (!version.databases) continue; // already migrated or no old-format data
+
+            // Group table items by their schema, then convert to WhitelistNode[]
+            const schemaMap = new Map<string, any[]>(); // schemaName → tableNodes[]
+            const schemaFullNodes: any[] = []; // schema nodes without table filtering
+
+            for (const item of version.databases) {
+              // item is DatabaseContext: { databaseName, whitelist: WhitelistItem[] }
+              // Convert each database to a connection-level WhitelistNode
+            }
+
+            // Convert DatabaseContext[] to WhitelistNode[]
+            version.whitelist = version.databases.map((dbCtx: any) => {
+              const connNode: any = {
+                name: dbCtx.databaseName,
+                type: 'connection',
+              };
+
+              if (!dbCtx.whitelist || dbCtx.whitelist.length === 0) {
+                // Empty whitelist → no children (expose nothing) → children: []
+                connNode.children = [];
+                return connNode;
+              }
+
+              // Group WhitelistItem[] into schema nodes
+              // Schema items: { name, type:'schema' } → schema node with children:undefined (all tables)
+              // Table items: { name, type:'table', schema } → grouped by schema
+              const schemaChildren = new Map<string, { node: any; tables: any[] }>();
+
+              for (const item of dbCtx.whitelist) {
+                if (item.type === 'schema') {
+                  if (!schemaChildren.has(item.name)) {
+                    schemaChildren.set(item.name, {
+                      node: { name: item.name, type: 'schema', childPaths: item.childPaths },
+                      tables: []
+                    });
+                  }
+                } else if (item.type === 'table' && item.schema) {
+                  if (!schemaChildren.has(item.schema)) {
+                    schemaChildren.set(item.schema, { node: { name: item.schema, type: 'schema' }, tables: [] });
+                  }
+                  schemaChildren.get(item.schema)!.tables.push({
+                    name: item.name,
+                    type: 'table',
+                    childPaths: item.childPaths
+                  });
+                }
+              }
+
+              // Build children array
+              connNode.children = Array.from(schemaChildren.values()).map(({ node, tables }) => {
+                if (tables.length > 0) {
+                  // Schema was added via table items; add tables as children
+                  const schemaNode: any = { ...node };
+                  // If schema was also listed explicitly (as type:'schema'), it has no children filter
+                  // but since there are also table items for the same schema, be specific
+                  schemaNode.children = tables;
+                  return schemaNode;
+                }
+                // Schema listed explicitly without any table restrictions: expose all tables
+                // (children: undefined = all tables)
+                return node;
+              });
+
+              return connNode;
+            });
+
+            delete version.databases;
+          }
+        }
+
+        // ── Part B: Create default context for each folder without one ─────────
+        const contextPaths = new Set(
+          companyData.documents.filter((d: any) => d.type === 'context').map((d: any) => d.path)
+        );
+        const maxId = companyData.documents.reduce(
+          (max: number, d: any) => Math.max(max, d.id ?? 0), 0
+        );
+        let nextId = maxId;
+
+        for (const folder of companyData.documents.filter((d: any) => d.type === 'folder')) {
+          const expectedContextPath = `${folder.path}/context`;
+          if (contextPaths.has(expectedContextPath)) continue; // already has a context
+
+          nextId++;
+          companyData.documents.push({
+            id: nextId,
+            name: 'context',
+            path: expectedContextPath,
+            type: 'context',
+            references: [],
+            content: {
+              versions: [{
+                version: 1,
+                whitelist: '*',
+                docs: [],
+                createdAt: now,
+                createdBy: 1,
+                description: 'Default context (migration)',
+              }],
+              published: { all: 1 },
+            },
+            company_id: companyData.id,
+            created_at: now,
+            updated_at: now,
+            version: 1,
+            last_edit_id: null,
+          });
+          contextPaths.add(expectedContextPath);
+        }
+      }
+
       return data;
     },
   },

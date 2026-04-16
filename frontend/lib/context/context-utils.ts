@@ -1,5 +1,5 @@
 import yaml from 'js-yaml';
-import { WhitelistItem, ContextContent, DatabaseContext, ContextVersion } from '../types';
+import { WhitelistItem, ContextContent, DatabaseContext, ContextVersion, Whitelist } from '../types';
 
 /**
  * Serialize multiple databases to YAML format
@@ -63,8 +63,10 @@ export function validateContextVersions(content: ContextContent): void {
     if (typeof version.version !== 'number') {
       throw new Error(`Version ${index}: version number must be a number`);
     }
-    if (!Array.isArray(version.databases)) {
-      throw new Error(`Version ${version.version}: databases must be an array`);
+    // whitelist must be '*' or an array
+    const wl = version.whitelist;
+    if (wl !== '*' && !Array.isArray(wl)) {
+      throw new Error(`Version ${version.version}: whitelist must be '*' or an array`);
     }
     if (!Array.isArray(version.docs)) {
       throw new Error(`Version ${version.version}: docs must be an array`);
@@ -75,38 +77,28 @@ export function validateContextVersions(content: ContextContent): void {
     if (typeof version.createdBy !== 'number') {
       throw new Error(`Version ${version.version}: createdBy must be a number`);
     }
-
-    // Validate whitelist structure in each database
-    version.databases.forEach((dbContext, dbIdx) => {
-      if (!Array.isArray(dbContext.whitelist)) {
-        throw new Error(`Version ${version.version}, database ${dbIdx}: whitelist must be array`);
-      }
-
-      dbContext.whitelist.forEach((item, itemIdx) => {
-        // Validate childPaths if present
-        if (item.childPaths !== undefined) {
-          if (!Array.isArray(item.childPaths)) {
-            throw new Error(
-              `Version ${version.version}, database ${dbIdx}, item ${itemIdx}: childPaths must be array`
-            );
-          }
-
-          item.childPaths.forEach((path, pathIdx) => {
-            if (typeof path !== 'string' || path.trim() === '') {
-              throw new Error(
-                `Version ${version.version}, database ${dbIdx}, item ${itemIdx}, path ${pathIdx}: must be non-empty string`
-              );
-            }
-            if (!path.startsWith('/')) {
-              throw new Error(
-                `Version ${version.version}, database ${dbIdx}, item ${itemIdx}, path ${pathIdx}: must be absolute path (start with /)`
-              );
-            }
-          });
-        }
-      });
-    });
   });
+}
+
+/**
+ * Create default context content for a new folder.
+ * The default context exposes all connections ('*') and has no documentation.
+ *
+ * @param userId - ID of the user creating the context
+ */
+export function makeDefaultContextContent(userId: number): ContextContent {
+  const now = new Date().toISOString();
+  return {
+    versions: [{
+      version: 1,
+      whitelist: '*' as Whitelist,
+      docs: [],
+      createdAt: now,
+      createdBy: userId,
+      description: 'Default context',
+    }],
+    published: { all: 1 },
+  };
 }
 
 /**

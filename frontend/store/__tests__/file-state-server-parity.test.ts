@@ -517,7 +517,7 @@ describe('Client-Server File State Parity', () => {
         published: { all: 1 },
         versions: [{
           version: 1,
-          databases: [{ databaseName: 'test-conn', whitelist: [{ type: 'schema', name: 'main' }] }],
+          whitelist: [{ name: 'test-conn', type: 'connection', children: [{ name: 'main', type: 'schema' }] }],
           docs: [{ content: 'Agent documentation for testing', draft: false }],
           createdAt: new Date().toISOString(),
           createdBy: 1,
@@ -529,7 +529,7 @@ describe('Client-Server File State Parity', () => {
         published: { all: 1 },
         versions: [{
           version: 1,
-          databases: [{ databaseName: 'test-conn', whitelist: [{ type: 'schema', name: 'main' }] }],
+          whitelist: [{ name: 'test-conn', type: 'connection', children: [{ name: 'main', type: 'schema' }] }],
           docs: [{ content: 'Eval-specific context documentation', draft: false }],
           createdAt: new Date().toISOString(),
           createdBy: 1,
