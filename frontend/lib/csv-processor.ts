@@ -6,6 +6,9 @@ import 'server-only';
  */
 
 import { randomUUID } from 'crypto';
+import { writeFileSync, readFileSync, unlinkSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import {
   S3Client,
   GetObjectCommand,
@@ -101,27 +104,43 @@ async function xlsxBytesToS3Csvs(
   const workbook = XLSX.read(buffer, { type: 'buffer' });
   const results: IncomingFile[] = [];
 
-  for (const sheetName of workbook.SheetNames) {
-    const ws = workbook.Sheets[sheetName];
-    const csvData = XLSX.utils.sheet_to_csv(ws, { blankrows: false });
-    if (!csvData.trim()) continue; // skip empty sheets
+  // One DuckDB instance per call — no S3 config needed (local file ops only)
+  const instance = await DuckDBInstance.create(':memory:');
+  const conn = await instance.connect();
+  try {
+    for (const sheetName of workbook.SheetNames) {
+      const ws = workbook.Sheets[sheetName];
+      const csvData = XLSX.utils.sheet_to_csv(ws, { blankrows: false });
+      if (!csvData.trim()) continue; // skip empty sheets
 
-    const safeName =
-      sheetName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'sheet';
-    const csvFilename = `${safeName}.csv`;
-    // Use a pure UUID S3 key — the sheet name is stored separately in `filename`
-    const newKey = `${companyId}/csvs/${mode}/${connectionName}/${randomUUID()}.csv`;
+      const safeName =
+        sheetName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'sheet';
+      const csvFilename = `${safeName}.csv`;
+      const uuid = randomUUID();
+      const tmpCsvPath     = join(tmpdir(), `${uuid}.csv`);
+      const tmpParquetPath = join(tmpdir(), `${uuid}.parquet`);
+      const s3Key = `${companyId}/csvs/${mode}/${connectionName}/${uuid}.parquet`;
 
-    await s3.send(
-      new PutObjectCommand({
-        Bucket: OBJECT_STORE_BUCKET!,
-        Key: newKey,
-        Body: Buffer.from(csvData, 'utf-8'),
-        ContentType: 'text/csv',
-      }),
-    );
-
-    results.push({ filename: csvFilename, s3_key: newKey, schema_name: schemaName, file_format: 'csv' });
+      try {
+        writeFileSync(tmpCsvPath, csvData, 'utf-8');
+        await conn.run(
+          `COPY (SELECT * FROM read_csv_auto('${tmpCsvPath}')) TO '${tmpParquetPath}' (FORMAT PARQUET, COMPRESSION ZSTD)`
+        );
+        const parquetBuffer = readFileSync(tmpParquetPath);
+        await s3.send(new PutObjectCommand({
+          Bucket: OBJECT_STORE_BUCKET!,
+          Key: s3Key,
+          Body: parquetBuffer,
+          ContentType: 'application/octet-stream',
+        }));
+        results.push({ filename: csvFilename, s3_key: s3Key, schema_name: schemaName, file_format: 'parquet' });
+      } finally {
+        try { unlinkSync(tmpCsvPath); } catch { /* ignore */ }
+        try { unlinkSync(tmpParquetPath); } catch { /* ignore */ }
+      }
+    }
+  } finally {
+    conn.closeSync();
   }
 
   if (results.length === 0) throw new Error('No non-empty sheets found in xlsx file');
