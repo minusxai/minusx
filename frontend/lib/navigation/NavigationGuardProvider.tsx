@@ -20,6 +20,7 @@ import { Dialog, Portal, Button, Text, HStack } from '@chakra-ui/react';
 import { preserveParams } from './url-utils';
 import { clearFileChanges } from '@/lib/api/file-state';
 import { selectDirtyFiles } from '@/store/filesSlice';
+import { selectUnrestrictedMode } from '@/store/uiSlice';
 import { getStore } from '@/store/store';
 import PublishModal from '@/components/PublishModal';
 
@@ -124,11 +125,14 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
   const dirtyFiles = useAppSelector(state => selectDirtyFiles(state), shallowEqual);
   const anyDirtyFiles = dirtyFiles.length > 0;
 
+  // Unrestricted mode: skip all navigation guards
+  const unrestrictedMode = useAppSelector(selectUnrestrictedMode);
+
   // In-app nav guard: any dirty file (current or otherwise) OR agent running.
   // Agent navigation via the Navigate tool uses router.push() directly and bypasses this guard.
-  const shouldGuardInAppNavigation = isCurrentFileDirty || anyDirtyFiles || isAgentRunning;
+  const shouldGuardInAppNavigation = !unrestrictedMode && (isCurrentFileDirty || anyDirtyFiles || isAgentRunning);
 
-  // beforeunload guard: fire whenever any file has unsaved changes, or when the agent is running.
+  // beforeunload guard: always fire for dirty files or running agent, regardless of unrestricted mode.
   const shouldGuardUnload = isCurrentFileDirty || anyDirtyFiles || isAgentRunning;
 
   // Modal state

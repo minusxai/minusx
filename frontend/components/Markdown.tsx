@@ -372,7 +372,7 @@ function TrustBadge({ level, context, reasons }: {
         >
           {hasReasons && reasons.map((reason, i) => (
             <Text key={i} fontSize="2xs" color="fg.muted" lineHeight="1.7" fontFamily="mono">
-              {reason}
+              <Text as="span" fontWeight="700">Reason: </Text>{reason}
             </Text>
           ))}
           {!hasReasons && 'moreDetails' in config && (
@@ -387,7 +387,7 @@ function TrustBadge({ level, context, reasons }: {
                 <Link href={`/f/${contextFile.id}`} style={{ color: 'var(--chakra-colors-accent-teal)', textDecoration: 'underline' }}>
                   Edit Knowledge Base
                 </Link>
-                {' '}manually, or just ask the agent!
+                {' '}to improve context, or just ask the agent to do it!
               </>
             ) : (
               <>Improve confidence by adding context — just ask the agent!</>
