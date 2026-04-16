@@ -208,6 +208,32 @@ async function readFileMetadata(
   return { rowCount, columns };
 }
 
+// ─── CSV → Parquet conversion ─────────────────────────────────────────────────
+
+type DuckConn = Awaited<ReturnType<InstanceType<typeof DuckDBInstance>['connect']>>;
+
+/**
+ * Convert a CSV already in S3 to Parquet (same key prefix, `.parquet` extension).
+ * Deletes the original CSV on success.
+ * Returns the new S3 key, or null if conversion fails (original left intact).
+ */
+async function convertCsvToParquet(conn: DuckConn, csvKey: string): Promise<string | null> {
+  const parquetKey = csvKey.replace(/\.[^.]+$/, '') + '.parquet';
+  const csvUrl     = `s3://${OBJECT_STORE_BUCKET!}/${csvKey}`;
+  const parquetUrl = `s3://${OBJECT_STORE_BUCKET!}/${parquetKey}`;
+  try {
+    await conn.run(
+      `COPY (SELECT * FROM read_csv_auto('${csvUrl}')) TO '${parquetUrl}' (FORMAT PARQUET, COMPRESSION ZSTD)`
+    );
+    // Parquet written — remove the now-redundant CSV
+    await makeS3().send(new DeleteObjectCommand({ Bucket: OBJECT_STORE_BUCKET!, Key: csvKey }));
+    return parquetKey;
+  } catch (err) {
+    console.warn(`[csv-processor] Parquet conversion failed for ${csvKey}:`, err);
+    return null; // keep CSV as fallback
+  }
+}
+
 // ─── Main registration function ───────────────────────────────────────────────
 
 /**
@@ -249,7 +275,7 @@ export async function processFilesFromS3(
     }
   }
 
-  // Extract metadata via DuckDB
+  // Convert CSV → Parquet and extract metadata via DuckDB
   const instance = await DuckDBInstance.create(':memory:');
   const conn = await instance.connect();
   try {
@@ -257,15 +283,22 @@ export async function processFilesFromS3(
 
     const results: RegisteredFile[] = [];
     for (const file of flatFiles) {
-      const format = (file.file_format ?? 'csv') as 'csv' | 'parquet';
+      let s3Key = file.s3_key;
+      let format = (file.file_format ?? 'csv') as 'csv' | 'parquet';
       const tableName = file.table_name ?? autoNames.get(file.filename) ?? sanitizeTableName(file.filename);
-      const s3Url = `s3://${OBJECT_STORE_BUCKET}/${file.s3_key}`;
 
+      // Convert CSV → Parquet for fast columnar queries; fall back to CSV on error
+      if (format === 'csv') {
+        const converted = await convertCsvToParquet(conn, s3Key);
+        if (converted) { s3Key = converted; format = 'parquet'; }
+      }
+
+      const s3Url = `s3://${OBJECT_STORE_BUCKET}/${s3Key}`;
       const { rowCount, columns } = await readFileMetadata(conn, s3Url, format);
       results.push({
         table_name: tableName,
         schema_name: file.schema_name ?? 'public',
-        s3_key: file.s3_key,
+        s3_key: s3Key,
         file_format: format,
         filename: file.filename,
         row_count: rowCount,
