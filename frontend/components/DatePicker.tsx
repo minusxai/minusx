@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import { DayPicker } from 'react-day-picker';
 import { Box, Portal, Input, IconButton, HStack } from '@chakra-ui/react';
 import { LuCalendar } from 'react-icons/lu';
-import { useAppSelector } from '@/store/hooks';
 import 'react-day-picker/dist/style.css';
 
 interface DatePickerProps {
@@ -18,9 +17,6 @@ export default function DatePicker({ value, onChange, placeholder = 'YYYY-MM-DD'
   const [isOpen, setIsOpen] = useState(false);
   const [buttonRef, setButtonRef] = useState<HTMLDivElement | null>(null);
   const [inputValue, setInputValue] = useState(value || '');
-  const colorMode = useAppSelector((state) => state.ui.colorMode);
-  const isDark = colorMode === 'dark';
-
   // Sync input value when prop changes
   React.useEffect(() => {
     setInputValue(value || '');
@@ -94,7 +90,7 @@ export default function DatePicker({ value, onChange, placeholder = 'YYYY-MM-DD'
           py={2}
           _focus={{
             borderColor: 'accent.teal',
-            boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)',
+            boxShadow: '0 0 0 1px #16a085',
           }}
         />
         <IconButton
@@ -139,12 +135,13 @@ export default function DatePicker({ value, onChange, placeholder = 'YYYY-MM-DD'
               }}
             >
               <Box
-                bg={isDark ? 'accent.muted' : 'white'}
+                bg="bg.canvas"
                 borderRadius="md"
                 border="1px solid"
-                borderColor={isDark ? 'accent.muted' : 'accent.muted'}
+                borderColor="border.muted"
                 shadow="lg"
                 p={4}
+                color="fg.default"
                 style={{
                   fontFamily: '"JetBrains Mono", monospace',
                 }}
@@ -153,35 +150,11 @@ export default function DatePicker({ value, onChange, placeholder = 'YYYY-MM-DD'
                   .rdp {
                     --rdp-cell-size: 40px;
                     --rdp-accent-color: #16a085;
-                    --rdp-background-color: ${isDark ? '#2d3748' : '#e2e8f0'};
+                    --rdp-accent-background-color: #16a085;
+                    --rdp-selected-border: 2px solid #16a085;
+                    --rdp-today-color: #16a085;
                     font-family: "JetBrains Mono", monospace;
-                  }
-                  .rdp-months {
-                    color: ${isDark ? '#ffffff' : '#1a202c'};
-                    font-family: "JetBrains Mono", monospace;
-                  }
-                  .rdp-caption {
-                    color: ${isDark ? '#ffffff' : '#1a202c'};
-                    font-weight: 800;
-                    font-size: 0.875rem;
-                    margin-bottom: 12px;
-                    font-family: "JetBrains Mono", monospace;
-                    letter-spacing: 0.02em;
-                  }
-                  .rdp-caption_label {
-                    font-family: "JetBrains Mono", monospace;
-                  }
-                  .rdp-head_cell {
-                    color: ${isDark ? '#a0aec0' : '#718096'};
-                    font-weight: 700;
-                    font-size: 0.75rem;
-                    text-transform: uppercase;
-                    font-family: "JetBrains Mono", monospace;
-                    letter-spacing: 0.05em;
-                  }
-                  .rdp-cell {
-                    color: ${isDark ? '#ffffff' : '#1a202c'};
-                    font-family: "JetBrains Mono", monospace;
+                    color: var(--chakra-colors-fg-default);
                   }
                   .rdp-day {
                     border-radius: 0.25rem;
@@ -190,57 +163,46 @@ export default function DatePicker({ value, onChange, placeholder = 'YYYY-MM-DD'
                     transition: all 0.2s;
                     font-family: "JetBrains Mono", monospace;
                   }
-                  .rdp-day:hover:not(.rdp-day_selected) {
-                    background-color: ${isDark ? '#2d3748' : '#e2e8f0'};
+                  .rdp-day:hover:not(.rdp-selected) {
+                    background-color: var(--chakra-colors-bg-muted);
                     color: #16a085;
                   }
+                  .rdp-selected,
                   .rdp-selected .rdp-day_button {
-                    border: 2px solid #16a085;
-                  }
-                  .rdp-day_selected {
                     background-color: #16a085 !important;
                     color: white !important;
-                    font-weight: 800
-                  }
-                  .rdp-today:not(.rdp-outside) {
-                    color : #16a085;
-                  }
-                  .rdp-day_selected:hover {
-                    background-color: #16a085 !important;
-                    color: white !important;
-                  }
-                  button.rdp-day_selected {
-                    background-color: #16a085 !important;
-                    color: white !important;
-                  }
-                  .rdp-day_today:not(.rdp-day_selected) {
-                    background-color: ${isDark ? '#2d3748' : '#e2e8f0'};
-                    color: #16a085;
                     font-weight: 800;
-                  }
-                  .rdp-button:disabled {
-                    color: #718096;
-                    opacity: 0.5;
-                  }
-                  .rdp-nav_button {
-                    color: #16a085 !important;
-                    font-weight: 700;
-                  }
-                  .rdp-nav_button:hover {
-                    background-color: ${isDark ? '#2d3748' : '#e2e8f0'};
-                  }
-                  .rdp-nav_button svg {
-                    color: #16a085 !important;
-                    fill: #16a085 !important;
+                    border-radius: 0.25rem;
+                    border: none;
                   }
                   .rdp-chevron {
                     fill: #16a085 !important;
+                  }
+                  .rdp-button_previous:hover,
+                  .rdp-button_next:hover {
+                    background-color: var(--chakra-colors-bg-muted);
+                  }
+                  .rdp-weekday {
+                    color: var(--chakra-colors-fg-muted);
+                    font-weight: 700;
+                    font-size: 0.75rem;
+                    text-transform: uppercase;
+                    font-family: "JetBrains Mono", monospace;
+                    letter-spacing: 0.05em;
+                  }
+                  .rdp-month_caption {
+                    color: var(--chakra-colors-fg-default);
+                    font-weight: 800;
+                    font-size: 0.875rem;
+                    font-family: "JetBrains Mono", monospace;
+                    letter-spacing: 0.02em;
+                  }
+                  .rdp-today:not(.rdp-outside) {
                     color: #16a085 !important;
                   }
-                  .rdp-nav_button_previous svg,
-                  .rdp-nav_button_next svg {
-                    color: #16a085 !important;
-                    fill: #16a085 !important;
+                  .rdp-disabled:not(.rdp-selected) {
+                    color: var(--chakra-colors-fg-muted);
+                    opacity: 0.5;
                   }
                 `}</style>
                 <DayPicker

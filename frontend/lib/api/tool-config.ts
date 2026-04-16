@@ -13,6 +13,7 @@ import SearchFilesDisplay from '@/components/explore/tools/SearchFilesDisplay';
 import CreateFileDisplay from '@/components/explore/tools/CreateFileDisplay';
 import SearchDBSchemaDisplay from '@/components/explore/tools/SearchDBSchemaDisplay';
 import PublishAllDisplay from '@/components/explore/tools/PublishAllDisplay';
+import LoadSkillDisplay from '@/components/explore/tools/LoadSkillDisplay';
 import { DisplayProps } from '@/lib/types';
 
 // Tool configuration interface
@@ -81,6 +82,9 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
   },
   'PublishAll': {
     displayComponent: PublishAllDisplay
+  },
+  'LoadSkill': {
+    displayComponent: LoadSkillDisplay
   }
 };
 
