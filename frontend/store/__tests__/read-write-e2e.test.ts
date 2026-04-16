@@ -1776,27 +1776,30 @@ describe('Phase 1: Unified File System API E2E', () => {
       const authMock = jest.requireMock('@/lib/auth/auth-helpers');
       authMock.getEffectiveUser.mockResolvedValue(subfolderViewerEffective);
 
-      // Ancestor context at /org/context — outside the viewer's home /org/sales
-      ancestorContextId = await DocumentDB.create(
-        'context',
-        '/org/context',
-        'context',
-        {
-          versions: [{
-            version: 1,
-            databases: [],
-            docs: [{ content: 'Org-level docs' }],
-            createdAt: new Date().toISOString(),
-            createdBy: 1,
-            description: 'Org context'
-          }],
-          published: { all: 1 },
-          fullSchema: [],
-          fullDocs: []
-        },
-        [],
-        1
-      );
+      // Ancestor context at /org/context — outside the viewer's home /org/sales.
+      // Template seed already creates /org/context with whitelist:'*', so upsert.
+      const ancestorContextContent = {
+        versions: [{
+          version: 1,
+          whitelist: '*' as const,
+          docs: [{ content: 'Org-level docs' }],
+          createdAt: new Date().toISOString(),
+          createdBy: 1,
+          description: 'Org context'
+        }],
+        published: { all: 1 },
+        fullSchema: [],
+        fullDocs: []
+      };
+      const existingAncestor = await DocumentDB.getByPath('/org/context', 1);
+      if (existingAncestor) {
+        await DocumentDB.update(existingAncestor.id, 'context', '/org/context', ancestorContextContent, [], 1);
+        ancestorContextId = existingAncestor.id;
+      } else {
+        ancestorContextId = await DocumentDB.create(
+          'context', '/org/context', 'context', ancestorContextContent, [], 1
+        );
+      }
     });
 
     afterAll(() => {

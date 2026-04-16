@@ -502,18 +502,28 @@ describe('Client-Server File State Parity', () => {
       const companyId = 1;
       const FilesAPI = (await import('@/lib/data/files.server')).FilesAPI;
 
-      // Seed a connection at /org/database/test-conn (type='duckdb')
+      // Seed a connection at /org/database/test-conn (type='duckdb') with a
+      // pre-populated schema so the connection loader uses the cached value
+      // (rather than attempting a real DuckDB connection and returning empty).
       await DocumentDB.create(
         'test-conn',
         '/org/database/test-conn',
         'connection',
-        { type: 'duckdb', config: {} } as ConnectionContent,
+        {
+          type: 'duckdb',
+          config: {},
+          schema: {
+            schemas: [{ schema: 'main', tables: [{ table: 'users', columns: [{ name: 'id', type: 'INTEGER' }] }] }],
+            updated_at: new Date().toISOString(),
+          },
+        } as ConnectionContent,
         [],
         companyId
       );
 
-      // Seed a primary context with known whitelist + docs.
-      await DocumentDB.create('test-context', '/org/test-context', 'context', {
+      // Upsert the canonical /org/context with test-specific whitelist + docs.
+      // (Template seed already creates /org/context with whitelist:'*'; we update it here.)
+      const testContextContent: ContextContent = {
         published: { all: 1 },
         versions: [{
           version: 1,
@@ -522,7 +532,15 @@ describe('Client-Server File State Parity', () => {
           createdAt: new Date().toISOString(),
           createdBy: 1,
         }],
-      } as ContextContent, [], companyId);
+        fullSchema: [],
+        fullDocs: [],
+      };
+      const existingOrgCtx = await DocumentDB.getByPath('/org/context', companyId);
+      if (existingOrgCtx) {
+        await DocumentDB.update(existingOrgCtx.id, 'context', '/org/context', testContextContent, [], companyId);
+      } else {
+        await DocumentDB.create('context', '/org/context', 'context', testContextContent, [], companyId);
+      }
 
       // Seed a second context with distinct docs — used for the contextFileId override test.
       secondContextId = await DocumentDB.create('eval-context', '/org/eval-context', 'context', {
@@ -548,9 +566,9 @@ describe('Client-Server File State Parity', () => {
         mode: 'org',
       };
 
-      // Load the primary context through FilesAPI (same pipeline buildServerAgentArgs uses)
+      // Load the canonical /org/context through FilesAPI (same pipeline buildServerAgentArgs uses)
       // so loadedContext.fullSchema reflects what the loader actually computed.
-      const result = await FilesAPI.loadFileByPath('/org/test-context', agentUser);
+      const result = await FilesAPI.loadFileByPath('/org/context', agentUser);
       loadedContext = result.data.content as ContextContent;
     });
 

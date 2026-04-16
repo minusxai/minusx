@@ -7,7 +7,7 @@
 import { DatabaseWithSchema, ContextVersion, DatabaseContext, DbFile, DocEntry, Whitelist } from '@/lib/types';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { FilesAPI } from '@/lib/data/files.server';
-import { filterSchemaByWhitelist, applyWhitelistToConnections } from '@/lib/sql/schema-filter';
+import { applyWhitelistToConnections } from '@/lib/sql/schema-filter';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { getPublishedVersionForUser as getPublishedVersionForUserId } from '@/lib/context/context-utils';
 
