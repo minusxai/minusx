@@ -635,7 +635,7 @@ describe('POST /api/admin/reset-tutorial', () => {
     await orphanDb.query(
       'INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
       [
-        1, 50, 'orphan', '/org/orphan',
+        1, 56, 'orphan', '/org/orphan',
         'folder', JSON.stringify({ name: 'orphan' }),
         JSON.stringify([]), now, now
       ]
@@ -650,7 +650,7 @@ describe('POST /api/admin/reset-tutorial', () => {
     const db = await createAdapter({ type: 'sqlite', sqlitePath: TEST_DB_PATH });
 
     const orphanResult = await db.query<{ count: number }>(
-      'SELECT COUNT(*) as count FROM files WHERE company_id = 1 AND id = 50',
+      'SELECT COUNT(*) as count FROM files WHERE company_id = 1 AND id = 56',
       []
     );
     expect(orphanResult.rows[0].count).toBe(0);
