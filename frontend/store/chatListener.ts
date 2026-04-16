@@ -612,7 +612,7 @@ chatListenerMiddleware.startListening({
       // Include queued user messages if mid-turn strategy
       const queueStrategy = selectQueueStrategy(listenerApi.getState() as RootState);
       const queuedMessages = conversation.queuedMessages;
-      const shouldFlushMidTurn = queueStrategy === 'mid-turn' && queuedMessages && queuedMessages.length > 0;
+      const shouldFlushMidTurn = selectAllowChatQueue(listenerApi.getState() as RootState) && queueStrategy === 'mid-turn' && queuedMessages && queuedMessages.length > 0;
       const userMessage = shouldFlushMidTurn
         ? queuedMessages.map(qm => qm.message).join('\n\n')
         : null;
