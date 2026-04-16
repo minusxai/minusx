@@ -587,7 +587,7 @@ describe('POST /api/admin/reset-tutorial', () => {
     expect(rootResult.rows[0].name).toBe('tutorial');
 
     const connResult = await db.query<{ id: number; path: string }>(
-      "SELECT id, path FROM files WHERE company_id = 1 AND id = 109",
+      "SELECT id, path FROM files WHERE company_id = 1 AND id = 6",
       []
     );
     expect(connResult.rows).toHaveLength(1);
