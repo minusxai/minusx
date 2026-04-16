@@ -109,7 +109,7 @@ export default function ContextContainerV2({
       if (merged.databases !== undefined) {
         const now = new Date().toISOString();
         // Convert legacy DatabaseContext[] to Whitelist (WhitelistNode[])
-        const legacyDbs = merged.databases || [];
+        const legacyDbs: DatabaseContext[] = merged.databases === '*' ? [] : (merged.databases || []);
         const migratedWhitelist: Whitelist = legacyDbs.map((dbCtx: DatabaseContext) => ({
           name: dbCtx.databaseName,
           type: 'connection' as const,
@@ -331,9 +331,11 @@ export default function ContextContainerV2({
 
     // If updating databases or docs, update the selected version
     if (updates.databases !== undefined || updates.docs !== undefined) {
-      // Convert DatabaseContext[] (editor format) → Whitelist (storage format)
+      // Convert DatabaseContext[] | '*' (editor format) → Whitelist (storage format)
       const newWhitelist: Whitelist | undefined = updates.databases !== undefined
-        ? updates.databases.map((dbCtx: DatabaseContext) => ({
+        ? updates.databases === '*'
+          ? '*'
+          : (updates.databases as DatabaseContext[]).map((dbCtx: DatabaseContext) => ({
             name: dbCtx.databaseName,
             type: 'connection' as const,
             children: dbCtx.whitelist.length === 0
@@ -398,10 +400,10 @@ export default function ContextContainerV2({
       };
     }
 
-    // Convert Whitelist (storage format) → DatabaseContext[] (editor format)
+    // Convert Whitelist (storage format) → DatabaseContext[] | '*' (editor format)
     const wl = currentVersionContent.whitelist;
-    const editorDatabases: DatabaseContext[] = wl === '*'
-      ? []
+    const editorDatabases: DatabaseContext[] | '*' = wl === '*'
+      ? '*'
       : (wl as WhitelistNode[])
           .filter(n => n.type === 'connection')
           .map(connNode => ({

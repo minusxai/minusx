@@ -222,9 +222,9 @@ export default function ContextEditorV2({
     });
   };
 
-  // Initialize databases array if empty when availableDatabases loads
+  // Initialize databases array if empty (and not '*') when availableDatabases loads
   useEffect(() => {
-    if (content.databases && content.databases.length === 0 && availableDatabases.length > 0) {
+    if (content.databases !== '*' && content.databases && content.databases.length === 0 && availableDatabases.length > 0) {
       const initialDatabases: DatabaseContext[] = availableDatabases.map((db) => ({
         databaseName: db.databaseName,
         whitelist: []
@@ -315,8 +315,8 @@ export default function ContextEditorV2({
 
   // Handle whitelist change - pure controlled
   const handleWhitelistChange = (databaseName: string, newWhitelist: WhitelistItem[]) => {
-    const databases = content.databases || [];
-    const dbIndex = databases.findIndex(db => db.databaseName === databaseName);
+    const databases: DatabaseContext[] = content.databases === '*' ? [] : (content.databases || []);
+    const dbIndex = databases.findIndex((db: DatabaseContext) => db.databaseName === databaseName);
 
     if (dbIndex >= 0) {
       // Update existing database
@@ -355,8 +355,10 @@ export default function ContextEditorV2({
     }
   };
 
-  // Count total whitelisted items
-  const totalWhitelisted = content.databases?.reduce((sum, db) => sum + db.whitelist.length, 0) || 0;
+  // Count total whitelisted items ('*' = all available)
+  const totalWhitelisted = content.databases === '*'
+    ? availableDatabases.reduce((sum: number, db) => sum + db.schemas.reduce((s: number, sc) => s + sc.tables.length, 0), 0)
+    : (content.databases || []).reduce((sum: number, db: DatabaseContext) => sum + db.whitelist.length, 0);
 
   // Version management helpers
   const getVersionLabel = (version: ContextVersion) => {
@@ -723,8 +725,8 @@ export default function ContextEditorV2({
                 ) : (
                   <VStack gap={4} align="stretch">
                     {availableDatabases.map((database) => {
-                      const databases = content.databases || [];
-                      const dbContext = databases.find(db => db.databaseName === database.databaseName);
+                      const databases = content.databases === '*' ? [] : (content.databases || []);
+                      const dbContext = (databases as DatabaseContext[]).find((db: DatabaseContext) => db.databaseName === database.databaseName);
                       const whitelist = dbContext?.whitelist || [];
 
                       const isExpanded = expandedDatabases.has(database.databaseName);

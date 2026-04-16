@@ -274,7 +274,7 @@ export type ContextContent = PartialBy<ScheduledJobContent, 'schedule' | 'recipi
   fullDocs?: DocEntry[];              // Computed by loader - inherited docs
 
   // Working fields (exposed by container for editing current version)
-  databases?: DatabaseContext[];      // Current version's whitelist (container only)
+  databases?: DatabaseContext[] | '*'; // Current version's whitelist (container only); '*' = expose all
   docs?: DocEntry[];                  // Current version's docs (container only)
 
   // Evals (stored at content level, independent of versions)

@@ -2,9 +2,13 @@ import yaml from 'js-yaml';
 import { WhitelistItem, ContextContent, DatabaseContext, ContextVersion, Whitelist } from '../types';
 
 /**
- * Serialize multiple databases to YAML format
+ * Serialize databases (or '*') to YAML format.
+ * '*' serializes as `databases: '*'` to preserve the "expose all" semantic.
  */
-export function serializeDatabases(databases: DatabaseContext[] | undefined): string {
+export function serializeDatabases(databases: DatabaseContext[] | '*' | undefined): string {
+  if (databases === '*') {
+    return yaml.dump({ databases: '*' }, { indent: 2, lineWidth: -1, noRefs: true });
+  }
   return yaml.dump({ databases: databases || [] }, {
     indent: 2,
     lineWidth: -1,
@@ -13,15 +17,16 @@ export function serializeDatabases(databases: DatabaseContext[] | undefined): st
 }
 
 /**
- * Parse YAML with databases array
+ * Parse YAML with databases array (or '*').
+ * Returns '*' when the YAML contains `databases: '*'`.
  */
-export function parseDatabasesYaml(yamlText: string): DatabaseContext[] {
+export function parseDatabasesYaml(yamlText: string): DatabaseContext[] | '*' {
   try {
-    const parsed = yaml.load(yamlText) as { databases?: DatabaseContext[] };
+    const parsed = yaml.load(yamlText) as { databases?: DatabaseContext[] | '*' };
 
-    if (!parsed || !parsed.databases || !Array.isArray(parsed.databases)) {
-      return [];
-    }
+    if (!parsed) return [];
+    if (parsed.databases === '*') return '*';
+    if (!parsed.databases || !Array.isArray(parsed.databases)) return [];
 
     return parsed.databases;
   } catch (error) {
