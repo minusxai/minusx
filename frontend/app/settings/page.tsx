@@ -5,7 +5,7 @@ import { Box, VStack, Text, Flex, Switch, Button, Heading, Container, Tabs } fro
 import { LuRefreshCw } from 'react-icons/lu';
 import { ColorModeButton } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { setAskForConfirmation, setShowDebug, setShowJson, setShowAllErrorToasts, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue } from '@/store/uiSlice';
+import { setAskForConfirmation, setShowDebug, setShowJson, setShowAllErrorToasts, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode } from '@/store/uiSlice';
 import { IS_DEV } from '@/lib/constants';
 import RecordingControl from '@/components/RecordingControl';
 import DataManagementSection from '@/components/DataManagementSection';
@@ -140,6 +140,7 @@ function SettingsContent() {
   const devMode = useAppSelector((state) => state.ui.devMode);
   const showSuggestedQuestions = useAppSelector((state) => state.ui.showSuggestedQuestions);
   const showTrustScore = useAppSelector((state) => state.ui.showTrustScore);
+  const unrestrictedMode = useAppSelector((state) => state.ui.unrestrictedMode);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -293,6 +294,17 @@ function SettingsContent() {
       ),
     },
     {
+      tab: 'general',
+      title: 'Unrestricted Mode',
+      description: 'Skip navigation guards — freely move between pages even with unsaved changes or a running agent.',
+      control: (
+        <SwitchControl
+          checked={unrestrictedMode}
+          onChange={(checked) => dispatch(setUnrestrictedMode(checked))}
+        />
+      ),
+    },
+    {
       tab: 'dev',
       title: 'Dev Tools Panel',
       description: 'Show the Dev Tools section in the sidebar (always on in development)',
@@ -405,7 +417,7 @@ function SettingsContent() {
       description: GIT_COMMIT_SHA,
       control: <></>,
     },
-  ], [askForConfirmation, showDebug, showJson, showAllErrorToasts, showDebugOption, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, showAdvanced, isAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue]);
+  ], [askForConfirmation, showDebug, showJson, showAllErrorToasts, showDebugOption, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, showAdvanced, isAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode]);
 
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [
