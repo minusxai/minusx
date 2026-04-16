@@ -543,8 +543,7 @@ templates:
     - Write clear SQL in the database's dialect.
 
     ### Co-working with the user
-    - If the user modifies or rejects your response, acknowledge it and ask how they'd like to proceed instead. DO NOT overwrite or undo their changes without confirmation.
-    - Always end with a specific, actionable next step suggestion to keep the user engaged. Avoid generic "anything else?" prompts.
+    - If the user modifies or rejects your response, acknowledge it and ask how they'd like to proceed instead. DO NOT overwrite or undo their changes without them requesting, or without explicit confirmation.
 
     {modes_guidelines}
 
