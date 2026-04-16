@@ -30,7 +30,7 @@ const nextConfig: NextConfig = {
   // '@resvg/resvg-js'      — native SVG renderer
   // 'node-sql-parser'      — pure-JS but 5.2 MB compiled; server-only (API routes + MCP),
   //                          so making it external cuts 5 MB from the server chunk graph
-  serverExternalPackages: ['@duckdb/duckdb-wasm', 'duckdb', '@duckdb/node-api', '@duckdb/node-bindings', '@resvg/resvg-js', 'node-sql-parser'],
+  serverExternalPackages: ['@duckdb/duckdb-wasm', 'duckdb', '@duckdb/node-api', '@duckdb/node-bindings', '@resvg/resvg-js'],
 
   // Belt-and-suspenders: explicitly externalize duckdb in webpack config too.
   // serverExternalPackages handles Turbopack; this handles webpack (used in --no-turbopack builds).
