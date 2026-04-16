@@ -4,6 +4,9 @@ import type { RootState, AppDispatch } from './store';
 import {
   createConversation,
   sendMessage,
+  queueMessage,
+  clearQueuedMessages,
+  flushQueuedMessages,
   editAndForkMessage,
   updateConversation,
   completeToolCall,
@@ -16,6 +19,7 @@ import {
   setUserInputResult,
   addUserInputRequest
 } from './chatSlice';
+import { selectAllowChatQueue, selectQueueStrategy } from './uiSlice';
 import { UserInputException } from '@/lib/api/user-input-exception';
 import { generateUniqueId } from '@/lib/utils/id-generator';
 import { captureError } from '@/lib/messaging/capture-error';
@@ -193,8 +197,12 @@ chatListenerMiddleware.startListening({
 
         // Handle done event after stream completes
         if (doneEventData) {
-          // Clear streaming content first
-          listenerApi.dispatch(clearStreamingContent({ conversationID }));
+          // New conversations fork from a temp negative ID to a real conversation ID
+          // as soon as the backend creates the file. Clear ephemeral streaming state on
+          // the real conversation if we have one, or stale synthetic TalkToUser content
+          // can survive into the next turn.
+          const realConversationID = doneEventData.conversationID || conversationID;
+          listenerApi.dispatch(clearStreamingContent({ conversationID: realConversationID }));
 
           // Then update with final state
           listenerApi.dispatch(updateConversation({
@@ -600,6 +608,17 @@ chatListenerMiddleware.startListening({
         p.result!
       ]);
 
+      // Include queued user messages if mid-turn strategy
+      const queueStrategy = selectQueueStrategy(listenerApi.getState() as RootState);
+      const queuedMessages = conversation.queuedMessages;
+      const shouldFlushMidTurn = selectAllowChatQueue(listenerApi.getState() as RootState) && queueStrategy === 'mid-turn' && queuedMessages && queuedMessages.length > 0;
+      const userMessage = shouldFlushMidTurn
+        ? queuedMessages.map(qm => qm.message).join('\n\n')
+        : null;
+      if (shouldFlushMidTurn) {
+        listenerApi.dispatch(flushQueuedMessages({ conversationID }));
+      }
+
       if (!useStreaming) {
         // Non-streaming path (for tests)
         const response = await fetch(`${API_BASE_URL}/api/chat`, {
@@ -608,7 +627,7 @@ chatListenerMiddleware.startListening({
           body: JSON.stringify({
             conversationID,
             log_index: conversation.log_index,
-            user_message: null,
+            user_message: userMessage,
             completed_tool_calls,
             agent: conversation.agent,
             agent_args: conversation.agent_args
@@ -643,7 +662,7 @@ chatListenerMiddleware.startListening({
         body: JSON.stringify({
           conversationID,
           log_index: conversation.log_index,
-          user_message: null,
+          user_message: userMessage,
           completed_tool_calls,
           agent: conversation.agent,
           agent_args: conversation.agent_args
@@ -909,5 +928,40 @@ chatListenerMiddleware.startListening({
     } else {
       console.warn(`[interruptChat] No AbortController found for conversation ${conversationID}`);
     }
+  }
+});
+
+/**
+ * Listen for conversation finishing with queued messages → auto-send them
+ * Fires on both updateConversation (conversation just finished) and queueMessage
+ * (message queued while conversation already finished).
+ */
+chatListenerMiddleware.startListening({
+  matcher: isAnyOf(updateConversation, queueMessage),
+  effect: async (action: any, listenerApi) => {
+    const state = listenerApi.getState() as RootState;
+    if (!selectAllowChatQueue(state)) return;
+    // Use newConversationID if forked (updateConversation), otherwise conversationID
+    const effectiveId = action.payload.newConversationID || action.payload.conversationID;
+    const conversation = selectConversation(state, effectiveId);
+
+    if (!conversation || conversation.executionState !== 'FINISHED') return;
+    if (!conversation.queuedMessages || conversation.queuedMessages.length === 0) return;
+
+    // Don't auto-send if this was an interrupt — prefill the input instead
+    if (conversation.wasInterrupted) return;
+
+    // Concatenate all queued messages into one
+    const combinedMessage = conversation.queuedMessages.map(qm => qm.message).join('\n\n');
+    // Merge attachments from all queued messages
+    const allAttachments = conversation.queuedMessages.flatMap(qm => qm.attachments || []);
+
+    // Clear the queue first, then send
+    listenerApi.dispatch(clearQueuedMessages({ conversationID: effectiveId }));
+    listenerApi.dispatch(sendMessage({
+      conversationID: effectiveId,
+      message: combinedMessage,
+      attachments: allAttachments.length > 0 ? allAttachments : undefined,
+    }));
   }
 });

@@ -33,6 +33,8 @@ interface UIState {
   chatAttachments: Attachment[];
   showSuggestedQuestions: boolean;
   showTrustScore: boolean;
+  allowChatQueue: boolean;
+  queueStrategy: 'end-of-turn' | 'mid-turn';
 }
 
 const initialState: UIState = {
@@ -61,6 +63,8 @@ const initialState: UIState = {
   chatAttachments: [],
   showSuggestedQuestions: true,
   showTrustScore: true,
+  allowChatQueue: false,
+  queueStrategy: 'end-of-turn',
 };
 
 const uiSlice = createSlice({
@@ -221,11 +225,25 @@ const uiSlice = createSlice({
     clearChatAttachments: (state) => {
       state.chatAttachments = [];
     },
-    setBulkUiFlags: (state, action: PayloadAction<{ showDebug?: boolean; showJson?: boolean; showAdvanced?: boolean; showSuggestedQuestions?: boolean; showTrustScore?: boolean }>) => {
-      const { showDebug, showJson, showAdvanced, showSuggestedQuestions, showTrustScore } = action.payload;
+    setAllowChatQueue: (state, action: PayloadAction<boolean>) => {
+      state.allowChatQueue = action.payload;
+      if (typeof window !== 'undefined') {
+        try { localStorage.setItem('allowChatQueue', String(action.payload)); } catch { /* ignore */ }
+      }
+    },
+    setQueueStrategy: (state, action: PayloadAction<'end-of-turn' | 'mid-turn'>) => {
+      state.queueStrategy = action.payload;
+      if (typeof window !== 'undefined') {
+        try { localStorage.setItem('queueStrategy', action.payload); } catch { /* ignore */ }
+      }
+    },
+    setBulkUiFlags: (state, action: PayloadAction<{ showDebug?: boolean; showJson?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean }>) => {
+      const { showDebug, showJson, showAdvanced, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore } = action.payload;
       if (showDebug !== undefined) state.showDebug = showDebug;
       if (showJson !== undefined) state.showJson = showJson;
       if (showAdvanced !== undefined) state.showAdvanced = showAdvanced;
+      if (allowChatQueue !== undefined) state.allowChatQueue = allowChatQueue;
+      if (queueStrategy !== undefined) state.queueStrategy = queueStrategy;
       if (showSuggestedQuestions !== undefined) state.showSuggestedQuestions = showSuggestedQuestions;
       if (showTrustScore !== undefined) state.showTrustScore = showTrustScore;
     },
@@ -269,6 +287,8 @@ export const {
   addChatAttachment,
   removeChatAttachment,
   clearChatAttachments,
+  setAllowChatQueue,
+  setQueueStrategy,
   setBulkUiFlags,
   pushView,
   popView,
@@ -302,6 +322,8 @@ export const selectShowDebug = (state: RootState) => state.ui.showDebug;
 export const selectShowAdvanced = (state: RootState) => state.ui.showAdvanced;
 export const selectShowJson = (state: RootState) => state.ui.showJson;
 export const selectShowAllErrorToasts = (state: RootState) => state.ui.showAllErrorToasts;
+export const selectAllowChatQueue = (state: RootState) => state.ui.allowChatQueue ?? false;
+export const selectQueueStrategy = (state: RootState) => state.ui.queueStrategy ?? 'end-of-turn';
 export const selectGettingStartedCollapsed = (state: RootState) => state.ui.gettingStartedCollapsed;
 export const selectDashboardEditMode = (state: RootState, fileId: number) => state.ui.dashboardEditMode[fileId] ?? false;
 export const selectFileEditMode = (state: RootState, fileId: number) => state.ui.fileEditMode[fileId] ?? false;

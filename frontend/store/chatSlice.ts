@@ -88,6 +88,13 @@ export interface Conversation {
   streamedCompletedToolCalls: CompletedToolCall[];
   streamedThinking: string; // Native thinking accumulated during streaming
 
+  // Queued messages — sent when the current agent turn finishes
+  queuedMessages?: Array<{ message: string; attachments?: import('@/lib/types').Attachment[] }>;
+
+  // True when the agent was interrupted and queued messages should prefill the input
+  wasInterrupted?: boolean;
+
+
   // For temp conversations (negative IDs): points to the real conversation ID created by backend
   forkedConversationID?: number;
 
@@ -144,6 +151,7 @@ const chatSlice = createSlice({
         agent_args: agent_args || {},
         streamedCompletedToolCalls: [],
         streamedThinking: '',
+        queuedMessages: [],
         active: true  // Mark new conversation as active
       };
     },
@@ -187,6 +195,42 @@ const chatSlice = createSlice({
       });
       conv.executionState = 'WAITING';
       conv.error = undefined;
+      conv.wasInterrupted = false;
+    },
+
+    // Queue a message while agent is running — will be sent when current turn finishes
+    queueMessage(state, action: PayloadAction<{
+      conversationID: number;
+      message: string;
+      attachments?: import('@/lib/types').Attachment[];
+    }>) {
+      const { conversationID, message, attachments } = action.payload;
+      const conv = state.conversations[conversationID];
+      if (!conv) return;
+      if (!conv.queuedMessages) conv.queuedMessages = [];
+      conv.queuedMessages.push({ message, ...(attachments?.length ? { attachments } : {}) });
+    },
+
+    // Clear queued messages (after they've been sent)
+    clearQueuedMessages(state, action: PayloadAction<{ conversationID: number }>) {
+      const conv = state.conversations[action.payload.conversationID];
+      if (conv) conv.queuedMessages = [];
+    },
+
+    // Move queued messages into the messages array as user messages, then clear the queue
+    flushQueuedMessages(state, action: PayloadAction<{ conversationID: number }>) {
+      const conv = state.conversations[action.payload.conversationID];
+      if (!conv || !conv.queuedMessages?.length) return;
+      const combinedMessage = conv.queuedMessages.map(qm => qm.message).join('\n\n');
+      const allAttachments = conv.queuedMessages.flatMap(qm => qm.attachments || []);
+      conv.messages.push({
+        role: 'user',
+        content: combinedMessage,
+        created_at: new Date().toISOString(),
+        logIndex: conv.log_index ?? 0,
+        ...(allAttachments.length ? { attachments: allAttachments } : {}),
+      });
+      conv.queuedMessages = [];
     },
 
     // Edit a past user message and fork the conversation from that point.
@@ -267,14 +311,24 @@ const chatSlice = createSlice({
 
       // If forked, create new conversation (keep old one)
       if (newConversationID && newConversationID !== conversationID) {
+        const existingRealConversation = state.conversations[newConversationID];
+        const mergedQueuedMessages = [
+          ...(existingRealConversation?.queuedMessages || []),
+          ...(conv.queuedMessages || []),
+        ];
+
         // Create new conversation at new ID (preserve _id for stable tracking)
         state.conversations[newConversationID] = {
           ...conv,
-          _id: conv._id,  // IMPORTANT: Preserve stable _id across fork
+          ...existingRealConversation,
+          _id: existingRealConversation?._id || conv._id,  // IMPORTANT: Preserve stable _id across fork
           conversationID: newConversationID,
-          // streamedCompletedToolCalls: conv.streamedCompletedToolCalls || [],
+          // Streaming state is ephemeral. When the temp conversation resolves to the
+          // real conversation on a completed turn, do not carry over any synthetic
+          // streamed TalkToUser content from the real conversation shell.
           streamedCompletedToolCalls: [],
-        streamedThinking: '',
+          streamedThinking: '',
+          queuedMessages: mergedQueuedMessages,
           forkedConversationID: undefined // Real conversations don't have this
         };
 
@@ -374,7 +428,8 @@ const chatSlice = createSlice({
           _id: tempConv._id,  // IMPORTANT: Preserve stable _id across fork
           conversationID,
           forkedConversationID: undefined, // Real conversations don't have this
-          streamedCompletedToolCalls: [] // Explicitly initialize for new conversation
+          streamedCompletedToolCalls: [], // Explicitly initialize for new conversation
+          queuedMessages: tempConv.queuedMessages || [],
         };
 
         // Mark temp conversation as forked to real one
@@ -490,8 +545,11 @@ const chatSlice = createSlice({
         conv.error = 'Interrupted by user';
         conv.pending_tool_calls = [];
         conv.streamedCompletedToolCalls = [];
+        conv.wasInterrupted = true;
+
       }
     },
+
 
     // ===== User Input Actions =====
 
@@ -571,6 +629,9 @@ export const {
   createConversation,
   loadConversation,
   sendMessage,
+  queueMessage,
+  clearQueuedMessages,
+  flushQueuedMessages,
   editAndForkMessage,
   updateAgentArgs,
   updateConversation,

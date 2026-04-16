@@ -2,7 +2,7 @@
 
 import { useState, useRef, KeyboardEvent, useEffect } from 'react';
 import { Box, HStack, VStack, Textarea, IconButton, Icon, Grid, GridItem, Text, Spinner } from '@chakra-ui/react';
-import { LuSendHorizontal, LuPaperclip, LuSettings2, LuSquare, LuX } from 'react-icons/lu';
+import { LuSendHorizontal, LuPaperclip, LuSettings2, LuX } from 'react-icons/lu';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { selectCompanyName } from '@/store/authSlice';
 import { setSidebarPendingMessage, setSidebarDraft, selectSidebarDraft, setAskForConfirmation, selectChatAttachments, addChatAttachment, removeChatAttachment, clearChatAttachments } from '@/store/uiSlice';
@@ -21,6 +21,7 @@ interface ChatInputProps {
   onSend: (message: string, attachments: Attachment[]) => void;
   onStop: () => void;
   isAgentRunning: boolean;
+  allowChatQueue?: boolean;
   disabled?: boolean;
   isPreparing?: boolean;
   databaseName: string;
@@ -33,12 +34,14 @@ interface ChatInputProps {
   selectedVersion?: number;
   onContextChange?: (contextPath: string | null, version?: number) => void;
   whitelistedSchemas?: DatabaseWithSchema[];
+  prefillText?: string;
 }
 
 export default function ChatInput({
   onSend,
   onStop,
   isAgentRunning,
+  allowChatQueue = false,
   disabled = false,
   isPreparing = false,
   databaseName,
@@ -51,6 +54,7 @@ export default function ChatInput({
   selectedVersion,
   onContextChange,
   whitelistedSchemas,
+  prefillText,
 }: ChatInputProps) {
   const dispatch = useAppDispatch();
   const companyName = useAppSelector(selectCompanyName);
@@ -78,6 +82,15 @@ export default function ChatInput({
     }
     prevIsPreparingRef.current = isPreparing;
   }, [isPreparing, dispatch]);
+  // Handle prefill text (e.g., from queued messages after stop)
+  useEffect(() => {
+    if (prefillText) {
+      setInput(prefillText);
+      editorRef.current?.setText(prefillText);
+      editorRef.current?.focus();
+    }
+  }, [prefillText]);
+
   // Handle pending message from SearchBar — wait for connections/context to finish loading
   // before sending, so the message isn't discarded by the loading guard in handleSendMessage.
   useEffect(() => {
@@ -87,8 +100,10 @@ export default function ChatInput({
     }
   }, [pendingMessage, container, dispatch, onSend, connectionsLoading, contextsLoading]);
 
+  const chatLocked = isAgentRunning && !allowChatQueue;
+
   const handleSend = () => {
-    if (input.trim() && !disabled && !isPreparing && !isAgentRunning && !connectionsLoading && !contextsLoading) {
+    if (input.trim() && !disabled && !isPreparing && !connectionsLoading && !contextsLoading && !chatLocked) {
       onSend(input.trim(), attachments);
       // Don't clear here — input stays greyed while isPreparing=true,
       // then cleared by the useEffect when isPreparing transitions to false.
@@ -184,9 +199,9 @@ export default function ChatInput({
                 <Box px={1} py={2}>
                   <LexicalMentionEditor
                     ref={editorRef}
-                    placeholder={isAgentRunning ? `${agentName} is thinking...` : `Ask ${agentName} anything!`}
+                    placeholder={chatLocked ? `${agentName} is still working...` : isAgentRunning ? `Add to agent queue...` : `Ask ${agentName} anything!`}
                     databaseName={databaseName}
-                    disabled={disabled || isPreparing || isAgentRunning}
+                    disabled={disabled || isPreparing || chatLocked}
                     onSubmit={handleSend}
                     onChange={setInput}
                     whitelistedSchemas={whitelistedSchemas}
@@ -330,25 +345,11 @@ export default function ChatInput({
 
                   {isPreparing ? (
                     <Spinner size="sm" color="accent.teal" flexShrink={0} />
-                  ) : isAgentRunning ? (
-                    <IconButton
-                      aria-label="Stop agent"
-                      onClick={onStop}
-                      bg="accent.danger"
-                      color="white"
-                      _hover={{ bg: 'accent.danger', opacity: 0.9 }}
-                      size="sm"
-                      borderRadius="md"
-                      flexShrink={0}
-                      px={2}
-                    > Stop
-                      <Icon as={LuSquare} boxSize={3.5} fill="white"/>
-                    </IconButton>
                   ) : (
                     <IconButton
                       aria-label="Send message"
                       onClick={handleSend}
-                      disabled={disabled || !input.trim() || connectionsLoading || contextsLoading}
+                      disabled={disabled || !input.trim() || connectionsLoading || contextsLoading || chatLocked}
                       bg="accent.teal"
                       color="white"
                       _hover={{ bg: 'accent.teal', opacity: 0.9 }}
