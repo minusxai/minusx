@@ -4,4 +4,5 @@ export { default as PostgreSQLConfig } from './PostgreSQLConfig';
 export { default as CsvConfig } from './CsvConfig';
 export { default as GoogleSheetsConfig } from './GoogleSheetsConfig';
 export { default as AthenaConfig } from './AthenaConfig';
+export { default as StaticConnectionConfig } from './StaticConnectionConfig';
 export type { BaseConfigProps } from './types';

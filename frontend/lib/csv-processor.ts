@@ -12,6 +12,7 @@ import {
   PutObjectCommand,
   ListObjectsV2Command,
   DeleteObjectsCommand,
+  DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { DuckDBInstance } from '@duckdb/node-api';
 import * as XLSX from 'xlsx';
@@ -176,6 +177,15 @@ export async function deleteConnectionFiles(
     );
   }
   return true;
+}
+
+// ─── S3 single-file delete ────────────────────────────────────────────────────
+
+/** Delete a single S3 object by key. Throws if not configured or if the key is missing. */
+export async function deleteS3File(s3Key: string): Promise<void> {
+  if (!OBJECT_STORE_BUCKET) throw new Error('OBJECT_STORE_BUCKET is not configured');
+  const s3 = makeS3();
+  await s3.send(new DeleteObjectCommand({ Bucket: OBJECT_STORE_BUCKET, Key: s3Key }));
 }
 
 // ─── DuckDB metadata extraction ───────────────────────────────────────────────

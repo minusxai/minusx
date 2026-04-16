@@ -842,6 +842,10 @@ export interface CsvFileInfo {
   file_format: 'csv' | 'parquet';
   row_count: number;
   columns: { name: string; type: string }[];
+  // Source tracking (used by the static connection to distinguish CSV vs Google Sheets imports)
+  source_type?: 'csv' | 'google_sheets';
+  spreadsheet_url?: string;    // For google_sheets: the source spreadsheet URL
+  spreadsheet_id?: string;     // For google_sheets: Google spreadsheet ID (groups sheets from the same doc)
 }
 
 // CSV connection config — pure S3-backed, no local files

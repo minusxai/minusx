@@ -6,7 +6,8 @@
 /**
  * Reserved connection names that cannot be used
  */
-export const RESERVED_NAMES = ['default_db'];
+// 'static' is the shared CSV/Google Sheets landing zone — one per mode, cannot be deleted or renamed
+export const RESERVED_NAMES = ['default_db', 'static'];
 
 /**
  * Block DuckDB connections that point to another company's analytics DB.
