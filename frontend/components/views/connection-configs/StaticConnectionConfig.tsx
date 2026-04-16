@@ -11,12 +11,14 @@
  * - Upload CSV / xlsx files (multiple, per-file schema + table name)
  * - Add a Google Sheet (URL + schema, all sheets become tables)
  * - View all registered tables grouped by source (CSV files vs Google Sheets groups)
+ * - Rename schema/table for any registered file inline (no S3 changes — pure metadata update)
+ * - Collision detection: warns and blocks when two files share the same schema.table name
  * - Delete individual CSV tables (removes S3 object + drops from files list)
  * - Delete an entire Google Sheets group (all sheets from one spreadsheet)
  * - Re-import a Google Sheet (refresh data from the live spreadsheet)
  */
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Image from 'next/image';
 import {
   Box,
@@ -27,6 +29,7 @@ import {
   Input,
   Icon,
   Spinner,
+  IconButton,
 } from '@chakra-ui/react';
 import {
   LuUpload,
@@ -38,10 +41,14 @@ import {
   LuTable,
   LuChevronDown,
   LuChevronRight,
+  LuCheck,
+  LuPencil,
+  LuCircleAlert,
 } from 'react-icons/lu';
 import { CsvFileInfo } from '@/lib/types';
 import { uploadCsvFilesS3, FileWithSchema } from '@/lib/backend/csv-upload';
 import { importGoogleSheets, reimportGoogleSheets } from '@/lib/backend/google-sheets';
+import { sanitizeTableName, validateIdentifier } from '@/lib/csv-utils';
 import { BaseConfigProps } from './types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -62,10 +69,6 @@ type ActivePanel = null | 'csv-upload' | 'sheets-add';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function sanitizeForId(filename: string): string {
-  return filename.replace(/\.[^.]+$/, '').replace(/[\s\-]/g, '_').toLowerCase();
-}
-
 /** Split files into plain CSV entries and Google Sheets groups (by spreadsheet_id). */
 function groupFiles(files: CsvFileInfo[]): {
   csvFiles: CsvFileInfo[];
@@ -83,6 +86,171 @@ function groupFiles(files: CsvFileInfo[]): {
     }
   }
   return { csvFiles, sheetsGroups };
+}
+
+/**
+ * Find all schema.table pairs that appear more than once in the files list.
+ * Returns a Set of "schema.table" strings that are duplicated.
+ */
+function findCollisions(files: CsvFileInfo[]): Set<string> {
+  const seen = new Map<string, number>();
+  for (const f of files) {
+    const key = `${f.schema_name}.${f.table_name}`;
+    seen.set(key, (seen.get(key) ?? 0) + 1);
+  }
+  const collisions = new Set<string>();
+  for (const [key, count] of seen) {
+    if (count >= 2) collisions.add(key);
+  }
+  return collisions;
+}
+
+// ─── Inline rename row ────────────────────────────────────────────────────────
+
+interface FileRowProps {
+  f: CsvFileInfo;
+  isCollision: boolean;
+  editingKey: string | null;
+  editSchema: string;
+  editTable: string;
+  editError: string;
+  deletingKey: string | null;
+  onStartEdit: (f: CsvFileInfo) => void;
+  onEditSchema: (v: string) => void;
+  onEditTable: (v: string) => void;
+  onConfirmRename: (s3Key: string) => void;
+  onCancelEdit: () => void;
+  onDelete: (s3Key: string) => void;
+  /** Extra indent for nested rows (e.g. inside a sheets group) */
+  nested?: boolean;
+}
+
+function FileRow({
+  f, isCollision, editingKey, editSchema, editTable, editError,
+  deletingKey, onStartEdit, onEditSchema, onEditTable, onConfirmRename, onCancelEdit, onDelete,
+  nested = false,
+}: FileRowProps) {
+  const tableInputRef = useRef<HTMLInputElement>(null);
+  const isEditing = editingKey === f.s3_key;
+
+  return (
+    <VStack align="stretch" gap={0}>
+      <HStack justify="space-between" align="center" gap={2} role="group" pl={nested ? 0 : undefined}>
+        <VStack align="start" gap={0} flex={1} minW={0}>
+          {/* Schema.table display or edit inputs */}
+          {isEditing ? (
+            <HStack gap={1} align="center" wrap="nowrap">
+              <Input
+                size="xs"
+                fontFamily="mono"
+                w="24"
+                value={editSchema}
+                onChange={(e) => onEditSchema(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { tableInputRef.current?.focus(); }
+                  if (e.key === 'Escape') onCancelEdit();
+                }}
+                aria-label="Schema name"
+                autoFocus
+              />
+              <Text fontSize="xs" flexShrink={0}>.</Text>
+              <Input
+                ref={tableInputRef}
+                size="xs"
+                fontFamily="mono"
+                w="28"
+                value={editTable}
+                onChange={(e) => onEditTable(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') onConfirmRename(f.s3_key);
+                  if (e.key === 'Escape') onCancelEdit();
+                }}
+                aria-label="Table name"
+              />
+              <IconButton
+                size="xs"
+                variant="ghost"
+                colorPalette="green"
+                aria-label="Confirm rename"
+                onClick={() => onConfirmRename(f.s3_key)}
+              >
+                <LuCheck />
+              </IconButton>
+              <IconButton
+                size="xs"
+                variant="ghost"
+                aria-label="Cancel rename"
+                onClick={onCancelEdit}
+              >
+                <LuX />
+              </IconButton>
+            </HStack>
+          ) : (
+            <HStack gap={1} align="center">
+              {!nested && <Icon as={LuFile} boxSize={3} color="fg.muted" flexShrink={0} />}
+              <Text
+                fontSize="xs"
+                fontFamily="mono"
+                fontWeight="600"
+                color={isCollision ? 'red.400' : undefined}
+                truncate
+              >
+                {f.schema_name}.{f.table_name}
+              </Text>
+              {isCollision && (
+                <Box
+                  as="span"
+                  display="inline-flex"
+                  title="Duplicate name — rename this file to resolve the conflict"
+                  flexShrink={0}
+                >
+                  <Icon as={LuCircleAlert} boxSize={3} color="red.400" />
+                </Box>
+              )}
+              <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap">
+                {f.row_count.toLocaleString()} rows
+              </Text>
+              <IconButton
+                size="xs"
+                variant="ghost"
+                aria-label={`Rename ${f.schema_name}.${f.table_name}`}
+                opacity={0}
+                _groupHover={{ opacity: 1 }}
+                onClick={() => onStartEdit(f)}
+              >
+                <LuPencil />
+              </IconButton>
+            </HStack>
+          )}
+
+          {/* Validation error while editing */}
+          {isEditing && editError && (
+            <Text fontSize="xs" color="red.400" pl={nested ? 0 : 4}>{editError}</Text>
+          )}
+
+          {/* Column preview (only on non-editing state, not nested) */}
+          {!isEditing && !nested && (
+            <Text fontSize="xs" color="fg.muted" fontFamily="mono" pl={4} truncate>
+              {f.columns.slice(0, 5).map((c) => c.name).join(', ')}
+              {f.columns.length > 5 ? ` +${f.columns.length - 5} more` : ''}
+            </Text>
+          )}
+        </VStack>
+
+        <Button
+          size="xs"
+          variant="ghost"
+          colorPalette="red"
+          aria-label={`Delete table ${f.table_name}`}
+          loading={deletingKey === f.s3_key}
+          onClick={() => onDelete(f.s3_key)}
+          flexShrink={0}
+        >
+          <LuTrash2 />
+        </Button>
+      </HStack>
+    </VStack>
+  );
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -110,8 +278,51 @@ export default function StaticConnectionConfig({
   const [reimportingId, setReimportingId] = useState<string | null>(null);
   const [deletingKey, setDeletingKey] = useState<string | null>(null); // s3_key or spreadsheet_id
 
+  // ── Inline rename state ───────────────────────────────────────────────────
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editSchema, setEditSchema] = useState('');
+  const [editTable, setEditTable] = useState('');
+  const [editError, setEditError] = useState('');
+
   const existingFiles = (config.files ?? []) as CsvFileInfo[];
   const { csvFiles, sheetsGroups } = groupFiles(existingFiles);
+  const collisionSet = findCollisions(existingFiles);
+
+  // ── Rename handlers ───────────────────────────────────────────────────────
+
+  const handleStartEdit = (f: CsvFileInfo) => {
+    setEditingKey(f.s3_key);
+    setEditSchema(f.schema_name);
+    setEditTable(f.table_name);
+    setEditError('');
+  };
+
+  const handleCancelEdit = () => {
+    setEditingKey(null);
+    setEditError('');
+  };
+
+  const handleConfirmRename = (s3Key: string) => {
+    const schemaErr = validateIdentifier(editSchema);
+    if (schemaErr) { setEditError(`Schema: ${schemaErr}`); return; }
+    const tableErr = validateIdentifier(editTable);
+    if (tableErr) { setEditError(`Table: ${tableErr}`); return; }
+
+    // Collision check — exclude the file being renamed
+    const others = existingFiles.filter((f) => f.s3_key !== s3Key);
+    if (others.some((f) => f.schema_name === editSchema && f.table_name === editTable)) {
+      setEditError(`${editSchema}.${editTable} is already used by another file`);
+      return;
+    }
+
+    onChange({
+      files: existingFiles.map((f) =>
+        f.s3_key === s3Key ? { ...f, schema_name: editSchema, table_name: editTable } : f
+      ),
+    });
+    setEditingKey(null);
+    setEditError('');
+  };
 
   // ── CSV upload handlers ───────────────────────────────────────────────────
 
@@ -120,7 +331,7 @@ export default function StaticConnectionConfig({
       selected.map((file) => ({
         file,
         schemaName: 'public',
-        tableName: sanitizeForId(file.name),
+        tableName: sanitizeTableName(file.name),
       })),
     );
     setUploadProgress('idle');
@@ -129,13 +340,39 @@ export default function StaticConnectionConfig({
   const handleUpload = async () => {
     if (pendingFiles.length === 0) { onError('Please select at least one file'); return; }
 
+    // Block upload if existing files have unresolved name collisions
+    if (collisionSet.size > 0) {
+      onError('Resolve name conflicts in existing files before uploading more');
+      return;
+    }
+
     for (const { schemaName, tableName } of pendingFiles) {
-      if (schemaName && !/^[a-z0-9_]+$/.test(schemaName)) {
-        onError('Schema names must contain only lowercase letters, numbers, and underscores');
+      const schemaErr = validateIdentifier(schemaName);
+      if (schemaErr) { onError(`Schema "${schemaName}": ${schemaErr}`); return; }
+      const tableErr = tableName ? validateIdentifier(tableName) : null;
+      if (tableErr) { onError(`Table "${tableName}": ${tableErr}`); return; }
+    }
+
+    // Check that pending files don't conflict with existing files or each other
+    for (let i = 0; i < pendingFiles.length; i++) {
+      const { schemaName, tableName, file } = pendingFiles[i];
+      const resolvedTable = tableName || sanitizeTableName(file.name);
+      const key = `${schemaName}.${resolvedTable}`;
+
+      const conflictsExisting = existingFiles.some(
+        (f) => f.schema_name === schemaName && f.table_name === resolvedTable
+      );
+      if (conflictsExisting) {
+        onError(`"${key}" already exists — rename the file or choose a different table name`);
         return;
       }
-      if (tableName && !/^[a-z0-9_]+$/.test(tableName)) {
-        onError('Table names must contain only lowercase letters, numbers, and underscores');
+
+      const conflictsPending = pendingFiles.slice(0, i).some((p) => {
+        const pt = p.tableName || sanitizeTableName(p.file.name);
+        return p.schemaName === schemaName && pt === resolvedTable;
+      });
+      if (conflictsPending) {
+        onError(`Two selected files would both map to "${key}" — rename one of them`);
         return;
       }
     }
@@ -175,10 +412,8 @@ export default function StaticConnectionConfig({
       onError('Invalid Google Sheets URL — expected https://docs.google.com/spreadsheets/d/...');
       return;
     }
-    if (sheetSchema && !/^[a-z0-9_]+$/.test(sheetSchema)) {
-      onError('Schema name must contain only lowercase letters, numbers, and underscores');
-      return;
-    }
+    const schemaErr = sheetSchema ? validateIdentifier(sheetSchema) : null;
+    if (schemaErr) { onError(`Schema: ${schemaErr}`); return; }
     if (!companyId) { onError('Unable to determine company ID'); return; }
 
     setImportProgress('importing');
@@ -216,6 +451,7 @@ export default function StaticConnectionConfig({
       });
       if (!res.ok) { onError(`Delete failed: ${await res.text()}`); return; }
       onChange({ files: existingFiles.filter((f) => f.s3_key !== s3Key) });
+      if (editingKey === s3Key) setEditingKey(null);
     } catch (e) {
       onError(e instanceof Error ? e.message : 'Delete failed');
     } finally {
@@ -239,6 +475,7 @@ export default function StaticConnectionConfig({
         ),
       );
       onChange({ files: existingFiles.filter((f) => f.spreadsheet_id !== spreadsheetId) });
+      if (groupFiles.some((f) => f.s3_key === editingKey)) setEditingKey(null);
     } catch (e) {
       onError(e instanceof Error ? e.message : 'Delete failed');
     } finally {
@@ -275,6 +512,20 @@ export default function StaticConnectionConfig({
   // ── Render ────────────────────────────────────────────────────────────────
 
   const hasFiles = existingFiles.length > 0;
+
+  const sharedRowProps = {
+    editingKey,
+    editSchema,
+    editTable,
+    editError,
+    deletingKey,
+    onStartEdit: handleStartEdit,
+    onEditSchema: (v: string) => { setEditSchema(v); setEditError(''); },
+    onEditTable: (v: string) => { setEditTable(v); setEditError(''); },
+    onConfirmRename: handleConfirmRename,
+    onCancelEdit: handleCancelEdit,
+    onDelete: handleDeleteFile,
+  };
 
   return (
     <VStack gap={4} align="stretch">
@@ -452,7 +703,7 @@ export default function StaticConnectionConfig({
       {/* ── Registered tables ── */}
       {hasFiles && (
         <Box p={3} borderRadius="md" border="1px solid" borderColor="border.subtle" bg="bg.muted">
-          <HStack gap={2} mb={3}>
+          <HStack gap={2} mb={collisionSet.size > 0 ? 2 : 3}>
             <Icon as={LuTable} boxSize={4} color="fg.muted" />
             <Text fontSize="xs" fontWeight="700">
               Registered Tables
@@ -462,38 +713,34 @@ export default function StaticConnectionConfig({
             </Text>
           </HStack>
 
+          {/* Collision warning banner */}
+          {collisionSet.size > 0 && (
+            <HStack
+              gap={2}
+              mb={3}
+              p={2}
+              borderRadius="sm"
+              bg="red.subtle"
+              border="1px solid"
+              borderColor="red.200"
+            >
+              <Icon as={LuCircleAlert} boxSize={3} color="red.400" flexShrink={0} />
+              <Text fontSize="xs" color="red.600">
+                Name conflicts detected — hover a highlighted row and click the pencil to rename.
+              </Text>
+            </HStack>
+          )}
+
           <VStack align="stretch" gap={3}>
 
             {/* CSV files */}
             {csvFiles.map((f) => (
-              <HStack key={f.s3_key} justify="space-between" align="start" gap={2}>
-                <VStack align="start" gap={0} flex={1} minW={0}>
-                  <HStack gap={1}>
-                    <Icon as={LuFile} boxSize={3} color="fg.muted" flexShrink={0} />
-                    <Text fontSize="xs" fontFamily="mono" fontWeight="600" truncate>
-                      {f.schema_name}.{f.table_name}
-                    </Text>
-                    <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap">
-                      {f.row_count.toLocaleString()} rows
-                    </Text>
-                  </HStack>
-                  <Text fontSize="xs" color="fg.muted" fontFamily="mono" pl={4} truncate>
-                    {f.columns.slice(0, 5).map((c) => c.name).join(', ')}
-                    {f.columns.length > 5 ? ` +${f.columns.length - 5} more` : ''}
-                  </Text>
-                </VStack>
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  colorPalette="red"
-                  aria-label={`Delete table ${f.table_name}`}
-                  loading={deletingKey === f.s3_key}
-                  onClick={() => handleDeleteFile(f.s3_key)}
-                  flexShrink={0}
-                >
-                  <LuTrash2 />
-                </Button>
-              </HStack>
+              <FileRow
+                key={f.s3_key}
+                f={f}
+                isCollision={collisionSet.has(`${f.schema_name}.${f.table_name}`)}
+                {...sharedRowProps}
+              />
             ))}
 
             {/* Google Sheets groups */}
@@ -550,18 +797,16 @@ export default function StaticConnectionConfig({
                     </HStack>
                   </HStack>
 
-                  {/* Individual sheet rows */}
-                  <VStack align="stretch" gap={1} pl={4}>
+                  {/* Individual sheet rows — each is renameable */}
+                  <VStack align="stretch" gap={2} pl={2}>
                     {files.map((f) => (
-                      <HStack key={f.s3_key} justify="space-between">
-                        <Text fontSize="xs" fontFamily="mono" fontWeight="600">
-                          {f.schema_name}.{f.table_name}
-                        </Text>
-                        <HStack gap={2}>
-                          <Text fontSize="xs" color="fg.muted" fontFamily="mono">{f.file_format}</Text>
-                          <Text fontSize="xs" color="fg.muted">{f.row_count.toLocaleString()} rows</Text>
-                        </HStack>
-                      </HStack>
+                      <FileRow
+                        key={f.s3_key}
+                        f={f}
+                        isCollision={collisionSet.has(`${f.schema_name}.${f.table_name}`)}
+                        nested
+                        {...sharedRowProps}
+                      />
                     ))}
                   </VStack>
                 </Box>
@@ -580,7 +825,8 @@ export default function StaticConnectionConfig({
       <Text fontSize="xs" color="fg.muted">
         Tables are queried as{' '}
         <Text as="span" fontFamily="mono">schema.table_name</Text>.
-        Upload and Google Sheets changes take effect after saving the connection.
+        Hover any registered table and click the pencil to rename it — no re-upload needed.
+        Changes take effect after saving the connection.
       </Text>
     </VStack>
   );

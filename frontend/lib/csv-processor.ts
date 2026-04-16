@@ -23,6 +23,10 @@ import {
   OBJECT_STORE_SECRET_ACCESS_KEY,
   OBJECT_STORE_ENDPOINT,
 } from '@/lib/config';
+import { sanitizeTableName, ensureUniqueTableNames } from '@/lib/csv-utils';
+
+// Re-export shared utilities so existing callers don't break
+export { sanitizeTableName, ensureUniqueTableNames } from '@/lib/csv-utils';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -59,28 +63,7 @@ function makeS3(): S3Client {
 }
 
 // ─── Table name helpers ───────────────────────────────────────────────────────
-
-export function sanitizeTableName(filename: string): string {
-  let name = filename.replace(/\.[^.]+$/, ''); // strip extension
-  name = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
-  if (/^\d/.test(name)) name = 't_' + name;
-  name = name.slice(0, 63);
-  return name || 'table';
-}
-
-export function ensureUniqueTableNames(filenames: string[]): Map<string, string> {
-  const result = new Map<string, string>();
-  const used = new Set<string>();
-  for (const filename of filenames) {
-    const base = sanitizeTableName(filename);
-    let name = base;
-    let counter = 2;
-    while (used.has(name)) name = `${base}_${counter++}`;
-    result.set(filename, name);
-    used.add(name);
-  }
-  return result;
-}
+// (implementations live in lib/csv-utils.ts — re-exported above for back-compat)
 
 // ─── xlsx expansion ───────────────────────────────────────────────────────────
 
@@ -126,7 +109,8 @@ async function xlsxBytesToS3Csvs(
     const safeName =
       sheetName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'sheet';
     const csvFilename = `${safeName}.csv`;
-    const newKey = `${companyId}/csvs/${mode}/${connectionName}/${randomUUID()}_${csvFilename}`;
+    // Use a pure UUID S3 key — the sheet name is stored separately in `filename`
+    const newKey = `${companyId}/csvs/${mode}/${connectionName}/${randomUUID()}.csv`;
 
     await s3.send(
       new PutObjectCommand({
