@@ -7,6 +7,7 @@ import { InitData, CompanyData, ExportedDocument } from './import-export';
 import { LATEST_DATA_VERSION, LATEST_SCHEMA_VERSION } from './constants';
 import { DEFAULT_STYLES } from '@/lib/branding/whitelabel';
 import { VALID_MODES } from '@/lib/mode/mode-types';
+import { convertDatabaseContextToWhitelist } from '@/lib/context/context-utils';
 
 export type DataMigration = (data: InitData) => InitData;
 export type SchemaMigration = null;  // Null means "recreate DB with new schema"
@@ -1256,70 +1257,10 @@ export const MIGRATIONS: MigrationEntry[] = [
           for (const version of content.versions) {
             if (!version.databases) continue; // already migrated or no old-format data
 
-            // Group table items by their schema, then convert to WhitelistNode[]
-            const schemaMap = new Map<string, any[]>(); // schemaName → tableNodes[]
-            const schemaFullNodes: any[] = []; // schema nodes without table filtering
-
-            for (const item of version.databases) {
-              // item is DatabaseContext: { databaseName, whitelist: WhitelistItem[] }
-              // Convert each database to a connection-level WhitelistNode
-            }
-
-            // Convert DatabaseContext[] to WhitelistNode[]
-            version.whitelist = version.databases.map((dbCtx: any) => {
-              const connNode: any = {
-                name: dbCtx.databaseName,
-                type: 'connection',
-              };
-
-              if (!dbCtx.whitelist || dbCtx.whitelist.length === 0) {
-                // Empty whitelist → no children (expose nothing) → children: []
-                connNode.children = [];
-                return connNode;
-              }
-
-              // Group WhitelistItem[] into schema nodes
-              // Schema items: { name, type:'schema' } → schema node with children:undefined (all tables)
-              // Table items: { name, type:'table', schema } → grouped by schema
-              const schemaChildren = new Map<string, { node: any; tables: any[] }>();
-
-              for (const item of dbCtx.whitelist) {
-                if (item.type === 'schema') {
-                  if (!schemaChildren.has(item.name)) {
-                    schemaChildren.set(item.name, {
-                      node: { name: item.name, type: 'schema', childPaths: item.childPaths },
-                      tables: []
-                    });
-                  }
-                } else if (item.type === 'table' && item.schema) {
-                  if (!schemaChildren.has(item.schema)) {
-                    schemaChildren.set(item.schema, { node: { name: item.schema, type: 'schema' }, tables: [] });
-                  }
-                  schemaChildren.get(item.schema)!.tables.push({
-                    name: item.name,
-                    type: 'table',
-                    childPaths: item.childPaths
-                  });
-                }
-              }
-
-              // Build children array
-              connNode.children = Array.from(schemaChildren.values()).map(({ node, tables }) => {
-                if (tables.length > 0) {
-                  // Schema was added via table items; add tables as children
-                  const schemaNode: any = { ...node };
-                  // If schema was also listed explicitly (as type:'schema'), it has no children filter
-                  // but since there are also table items for the same schema, be specific
-                  schemaNode.children = tables;
-                  return schemaNode;
-                }
-                // Schema listed explicitly without any table restrictions: expose all tables
-                // (children: undefined = all tables)
-                return node;
-              });
-
-              return connNode;
-            });
+            // Use shared conversion (same function used by context loader + editor)
+            version.whitelist = version.databases === '*'
+              ? '*'
+              : convertDatabaseContextToWhitelist(version.databases);
 
             delete version.databases;
           }

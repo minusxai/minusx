@@ -155,10 +155,11 @@ export default function ContextEditorV2({
   // Get connections loading state from Redux (for loading indicator)
   const isLoading = useAppSelector(selectConnectionsLoading);
 
-  // Use fullSchema from content (what parent makes available)
-  // This ensures hierarchical filtering - children can only whitelist from parent's whitelist
-  // Filter out databases with no schemas (not exposed from parent)
-  const availableDatabases = (content.fullSchema || []).filter(db => db.schemas.length > 0);
+  // Use parentSchema (what the parent makes available to select) for the editor.
+  // parentSchema is computed by the loader BEFORE applying this context's own whitelist,
+  // so it always shows all databases the user can configure — even when the current
+  // whitelist exposes nothing. Fall back to fullSchema for backward compatibility.
+  const availableDatabases = (content.parentSchema || content.fullSchema || []).filter(db => db.schemas.length > 0);
 
   // Compute immediate child paths for path filtering UI
   const availableChildPaths = useMemo(() => {
@@ -732,7 +733,7 @@ export default function ContextEditorV2({
                   </Box>
                 ) : (
                   <VStack gap={4} align="stretch">
-                    {content.databases === '*' && (
+                    {content.databases === '*' ? (
                       <Box
                         p={3}
                         mb={1}
@@ -763,6 +764,17 @@ export default function ContextEditorV2({
                           </Button>
                         </HStack>
                       </Box>
+                    ) : (
+                      <HStack justify="flex-end" mb={1}>
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          onClick={() => onChange({ databases: '*' })}
+                        >
+                          <Icon as={LuGlobe} boxSize={3} />
+                          Expose all (wildcard)
+                        </Button>
+                      </HStack>
                     )}
                     {availableDatabases.map((database) => {
                       const isConnectionWildcard = content.databases === '*';

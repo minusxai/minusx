@@ -58,7 +58,7 @@ export async function computeSchemaFromWhitelist(
   whitelist: Whitelist,
   contextPath: string,
   user: EffectiveUser
-): Promise<{ fullSchema: DatabaseWithSchema[], fullDocs: DocEntry[] }> {
+): Promise<{ fullSchema: DatabaseWithSchema[], parentSchema: DatabaseWithSchema[], fullDocs: DocEntry[] }> {
   const contextDir = contextPath.substring(0, contextPath.lastIndexOf('/')) || '/';
   const pathSegments = contextPath.split('/').filter(Boolean);
   const isRoot = pathSegments.length === 2; // e.g., /org/context
@@ -69,7 +69,8 @@ export async function computeSchemaFromWhitelist(
 
     // Apply own whitelist (no currentPath for root — childPaths has no effect at root level)
     const fullSchema = applyWhitelistToConnections(allConnections, whitelist);
-    return { fullSchema, fullDocs: [] };
+    // parentSchema for root = all connections (what is available to select from)
+    return { fullSchema, parentSchema: allConnections, fullDocs: [] };
   }
 
   // Child: Find nearest ancestor context
@@ -82,7 +83,7 @@ export async function computeSchemaFromWhitelist(
 
   if (!ancestorContext) {
     // No ancestor found — nothing to inherit
-    return { fullSchema: [], fullDocs: [] };
+    return { fullSchema: [], parentSchema: [], fullDocs: [] };
   }
 
   // Load ancestor (triggers its own loader recursively)
@@ -96,7 +97,7 @@ export async function computeSchemaFromWhitelist(
   );
 
   if (!publishedVersion) {
-    return { fullSchema: [], fullDocs: [] };
+    return { fullSchema: [], parentSchema: [], fullDocs: [] };
   }
 
   // The ancestor's fullSchema is what the ancestor exposes (already filtered by its own whitelist).
@@ -117,7 +118,8 @@ export async function computeSchemaFromWhitelist(
   const parentOwnDocs = filterDocsByChildPaths(publishedVersion.docs || [], contextDir);
   const fullDocs = [...parentFullDocs, ...parentOwnDocs];
 
-  return { fullSchema, fullDocs };
+  // parentOffering = what the parent makes available to this context (before own whitelist)
+  return { fullSchema, parentSchema: parentOffering, fullDocs };
 }
 
 /**

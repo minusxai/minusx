@@ -270,8 +270,9 @@ export type ContextContent = PartialBy<ScheduledJobContent, 'schedule' | 'recipi
   published: PublishedVersions;  // Required - always has published.all
 
   // Computed fields (added by loader, not stored in DB)
-  fullSchema?: DatabaseWithSchema[];  // Computed by loader - inherited schema
-  fullDocs?: DocEntry[];              // Computed by loader - inherited docs
+  fullSchema?: DatabaseWithSchema[];   // Computed by loader - what this context actually exposes (own whitelist applied)
+  parentSchema?: DatabaseWithSchema[]; // Computed by loader - what parent offers (before own whitelist); used by editor
+  fullDocs?: DocEntry[];               // Computed by loader - inherited docs
 
   // Working fields (exposed by container for editing current version)
   databases?: DatabaseContext[] | '*'; // Current version's whitelist (container only); '*' = expose all

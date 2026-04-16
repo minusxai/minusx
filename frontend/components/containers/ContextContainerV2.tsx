@@ -22,7 +22,9 @@ import {
   validateContextVersions,
   canDeleteVersion,
   getNextVersionNumber,
-  getPublishedVersionForUser
+  getPublishedVersionForUser,
+  resolveVersionWhitelist,
+  convertDatabaseContextToWhitelist,
 } from '@/lib/context/context-utils';
 
 interface ContextContainerV2Props {
@@ -108,28 +110,10 @@ export default function ContextContainerV2({
       // Legacy format: has top-level databases and docs
       if (merged.databases !== undefined) {
         const now = new Date().toISOString();
-        // Convert legacy DatabaseContext[] to Whitelist (WhitelistNode[])
-        const legacyDbs: DatabaseContext[] = merged.databases === '*' ? [] : (merged.databases || []);
-        const migratedWhitelist: Whitelist = legacyDbs.map((dbCtx: DatabaseContext) => ({
-          name: dbCtx.databaseName,
-          type: 'connection' as const,
-          children: dbCtx.whitelist.length === 0
-            ? undefined
-            : dbCtx.whitelist.reduce<WhitelistNode[]>((acc, item: WhitelistItem) => {
-                if (item.type === 'schema') {
-                  acc.push({ name: item.name, type: 'schema' as const, childPaths: item.childPaths });
-                } else {
-                  const schemaName = item.schema || '';
-                  let schemaNode = acc.find(n => n.name === schemaName && n.type === 'schema');
-                  if (!schemaNode) {
-                    schemaNode = { name: schemaName, type: 'schema' as const, children: [] };
-                    acc.push(schemaNode);
-                  }
-                  schemaNode.children!.push({ name: item.name, type: 'table' as const, childPaths: item.childPaths });
-                }
-                return acc;
-              }, []),
-        }));
+        // Convert legacy DatabaseContext[] | '*' to Whitelist
+        const migratedWhitelist: Whitelist = merged.databases === '*'
+          ? '*'
+          : convertDatabaseContextToWhitelist((merged.databases || []) as DatabaseContext[]);
         return {
           ...merged,
           versions: [{
@@ -335,26 +319,7 @@ export default function ContextContainerV2({
       const newWhitelist: Whitelist | undefined = updates.databases !== undefined
         ? updates.databases === '*'
           ? '*'
-          : (updates.databases as DatabaseContext[]).map((dbCtx: DatabaseContext) => ({
-            name: dbCtx.databaseName,
-            type: 'connection' as const,
-            children: dbCtx.whitelist.length === 0
-              ? undefined
-              : dbCtx.whitelist.reduce<WhitelistNode[]>((acc, item: WhitelistItem) => {
-                  if (item.type === 'schema') {
-                    acc.push({ name: item.name, type: 'schema' as const, childPaths: item.childPaths });
-                  } else {
-                    const schemaName = item.schema || '';
-                    let schemaNode = acc.find(n => n.name === schemaName && n.type === 'schema');
-                    if (!schemaNode) {
-                      schemaNode = { name: schemaName, type: 'schema' as const, children: [] };
-                      acc.push(schemaNode);
-                    }
-                    schemaNode.children!.push({ name: item.name, type: 'table' as const, childPaths: item.childPaths });
-                  }
-                  return acc;
-                }, []),
-          }))
+          : convertDatabaseContextToWhitelist(updates.databases as DatabaseContext[])
         : undefined;
 
       const updatedVersions = currentContent.versions?.map(v => {
@@ -401,7 +366,8 @@ export default function ContextContainerV2({
     }
 
     // Convert Whitelist (storage format) → DatabaseContext[] | '*' (editor format)
-    const wl = currentVersionContent.whitelist;
+    // Use resolveVersionWhitelist to handle old-format versions (databases field instead of whitelist)
+    const wl = resolveVersionWhitelist(currentVersionContent);
     const editorDatabases: DatabaseContext[] | '*' = wl === '*'
       ? '*'
       : (wl as WhitelistNode[])

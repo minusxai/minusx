@@ -35,7 +35,7 @@ import { isAdmin } from '@/lib/auth/role-helpers';
 import { getLoader, LoaderOptions } from './loaders';
 import { listAllConnections } from './connections.server';
 import { computeSchemaFromWhitelist } from './loaders/context-loader-utils';
-import { makeDefaultContextContent } from '@/lib/context/context-utils';
+import { makeDefaultContextContent, resolveVersionWhitelist } from '@/lib/context/context-utils';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import { getFileAnalyticsSummary, getFilesAnalyticsSummary, getConversationAnalytics } from '@/lib/analytics/file-analytics.server';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
@@ -510,11 +510,19 @@ class FilesDataLayerServer implements IFilesDataLayer {
       console.log(`[FILES DataLayer] Stripped schema from client content for connection ${name}`);
     }
 
-    // For contexts: strip fullSchema and fullDocs (server-computed fields)
+    // For contexts: strip fullSchema/fullDocs (server-computed) and normalize version format.
+    // Older clients may send version.databases (legacy) instead of version.whitelist (new).
+    // Normalize on every save so the DB always uses the canonical format.
     if (existingFile.type === 'context') {
-      const { fullSchema, fullDocs, ...contextContentWithoutComputed } = content as ContextContent;
-      contentToSave = contextContentWithoutComputed as BaseFileContent;
-      console.log(`[FILES DataLayer] Stripped fullSchema and fullDocs from client content for context ${name}`);
+      const { fullSchema, parentSchema, fullDocs, ...ctx } = content as ContextContent;
+      if (ctx.versions) {
+        ctx.versions = ctx.versions.map(v => {
+          const { databases: _legacy, ...vClean } = v as any;
+          return { ...vClean, whitelist: resolveVersionWhitelist(v) };
+        });
+      }
+      contentToSave = ctx as BaseFileContent;
+      console.log(`[FILES DataLayer] Stripped fullSchema/parentSchema/fullDocs and normalized version format for context ${name}`);
     }
 
     // No need to compute queryResultId — it's a runtime field on FileState, not persisted
@@ -709,9 +717,9 @@ class FilesDataLayerServer implements IFilesDataLayer {
         const folderPath = options.path || resolvePath(user.mode, user.home_folder || '');
         const contextPath = `${folderPath}/context`;
 
-        // Compute fullSchema and fullDocs using the new whitelist loader
+        // Compute fullSchema, parentSchema and fullDocs using the new whitelist loader
         // New contexts default to whitelist:'*' (expose all available schemas)
-        const { fullSchema, fullDocs } = await computeSchemaFromWhitelist(
+        const { fullSchema, parentSchema, fullDocs } = await computeSchemaFromWhitelist(
           '*',
           contextPath,
           user
@@ -729,6 +737,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
           }],
           published: { all: 1 },
           fullSchema,
+          parentSchema,
           fullDocs
         };
 

@@ -1,5 +1,5 @@
 import yaml from 'js-yaml';
-import { WhitelistItem, ContextContent, DatabaseContext, ContextVersion, Whitelist } from '../types';
+import { WhitelistItem, ContextContent, DatabaseContext, ContextVersion, Whitelist, WhitelistNode } from '../types';
 
 /**
  * Serialize databases (or '*') to YAML format.
@@ -171,4 +171,82 @@ export function getPublishedVersionForUser(content: ContextContent, _userId: num
  */
 export function getPublishedVersion(content: ContextContent): number {
   return content.published?.all ?? 1;
+}
+
+/**
+ * Convert a DatabaseContext[] (old format) to WhitelistNode[] (new format).
+ *
+ * Semantic mapping:
+ *   - dbCtx.whitelist === []  → children: []        (expose nothing)
+ *   - schema-only items      → schema node, children: undefined (expose all tables)
+ *   - table items            → grouped under their schema node with explicit children
+ *   - mixed schema+table     → table children take precedence (explicit list)
+ *
+ * IMPORTANT: empty whitelist → children: [] (NOT undefined).
+ *   children: undefined = "expose all tables in this schema/connection"
+ *   children: []        = "expose nothing from this schema/connection"
+ */
+export function convertDatabaseContextToWhitelist(legacyDbs: DatabaseContext[]): WhitelistNode[] {
+  return legacyDbs.map((dbCtx) => {
+    const connNode: WhitelistNode = { name: dbCtx.databaseName, type: 'connection' };
+
+    if (!dbCtx.whitelist || dbCtx.whitelist.length === 0) {
+      connNode.children = [];  // empty whitelist = expose nothing
+      return connNode;
+    }
+
+    // Group items by schema using a Map to handle mixed schema+table entries correctly
+    const schemaMap = new Map<string, { node: WhitelistNode; tables: WhitelistNode[] }>();
+
+    for (const item of dbCtx.whitelist) {
+      if (item.type === 'schema') {
+        if (!schemaMap.has(item.name)) {
+          schemaMap.set(item.name, {
+            node: { name: item.name, type: 'schema', childPaths: item.childPaths },
+            tables: []
+          });
+        }
+      } else if (item.type === 'table' && item.schema) {
+        if (!schemaMap.has(item.schema)) {
+          schemaMap.set(item.schema, { node: { name: item.schema, type: 'schema' }, tables: [] });
+        }
+        schemaMap.get(item.schema)!.tables.push({
+          name: item.name,
+          type: 'table',
+          childPaths: item.childPaths
+        });
+      }
+    }
+
+    connNode.children = Array.from(schemaMap.values()).map(({ node, tables }) => {
+      if (tables.length > 0) {
+        // Explicit table list — schema node gets explicit children
+        return { ...node, children: tables };
+      }
+      // Schema listed without table restrictions → expose all tables (children: undefined)
+      return node;
+    });
+
+    return connNode;
+  });
+}
+
+/**
+ * Resolve the whitelist from a ContextVersion, handling backward compatibility.
+ *
+ * Older data stored the whitelist as `version.databases: DatabaseContext[]` before the
+ * migration to `version.whitelist: Whitelist`. This function reads whichever field is
+ * present so the context loader and editor work correctly with un-migrated data.
+ */
+export function resolveVersionWhitelist(version: ContextVersion): Whitelist {
+  // New format: version.whitelist is set
+  if (version.whitelist !== undefined) {
+    return version.whitelist;
+  }
+
+  // Backward compat: old data stored whitelist inside version.databases
+  const legacyDbs = (version as any).databases as DatabaseContext[] | '*' | undefined;
+  if (!legacyDbs) return [];
+  if (legacyDbs === '*') return '*';
+  return convertDatabaseContextToWhitelist(legacyDbs);
 }
