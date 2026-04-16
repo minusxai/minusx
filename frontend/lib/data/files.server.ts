@@ -410,7 +410,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
           const contextPath = `${currentPath}/context`;
           const contextExists = await DocumentDB.getByPath(contextPath, user.companyId);
           if (!contextExists) {
-            await DocumentDB.create('context', contextPath, 'Knowledge Base',
+            await DocumentDB.create('Knowledge Base', contextPath, 'context',
               makeDefaultContextContent(user.userId), [], user.companyId);
           }
         }
@@ -466,7 +466,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
       const existingContext = await DocumentDB.getByPath(contextPath, user.companyId);
       if (!existingContext) {
         const contextContent = makeDefaultContextContent(user.userId);
-        await DocumentDB.create('context', contextPath, 'Knowledge Base', contextContent, [], user.companyId);
+        await DocumentDB.create('Knowledge Base', contextPath, 'context', contextContent, [], user.companyId);
       }
     }
 
