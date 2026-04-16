@@ -44,21 +44,6 @@ export default class ConnectionAPI {
   }
 
   /**
-   * Update a connection
-   */
-  static async update(name: string, config: Record<string, any>): Promise<DatabaseConnection> {
-    const json = await fetchWithCache(`/api/connections/${name}`, {
-      method: 'PUT',
-      body: JSON.stringify({ config }),
-      cacheStrategy: {
-        ttl: 0,
-        deduplicate: false,
-      },
-    });
-    return json.data || json; // Support both new and legacy format
-  }
-
-  /**
    * Delete a connection
    */
   static async delete(name: string): Promise<void> {

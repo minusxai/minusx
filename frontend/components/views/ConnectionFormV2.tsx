@@ -745,8 +745,8 @@ export default function ConnectionFormV2({
           </HStack>
 
           <HStack gap={2}>
-            {/* Section Toggle for existing connections */}
-            {mode === 'view' && (
+            {/* Section Toggle for existing connections — DuckDB is system-managed, no settings */}
+            {mode === 'view' && content.type !== 'duckdb' && (
               <TabSwitcher
                 tabs={[
                   { value: 'tables', label: 'Tables', icon: LuTable },
@@ -757,7 +757,7 @@ export default function ConnectionFormV2({
                 accentColor="accent.teal"
               />
             )}
-            {activeSection === 'settings' && !hideCancel && (
+            {activeSection === 'settings' && !hideCancel && content.type !== 'duckdb' && (
                 <Button onClick={onCancel} variant="ghost" size="xs">
                   Cancel
                 </Button>
@@ -783,7 +783,24 @@ export default function ConnectionFormV2({
         {/* Tables Browser - shown by default for existing connections */}
         {activeSection === 'tables' && (
           <VStack align="stretch" gap={4} flex="1">
+            {/* System-managed notice for DuckDB connections */}
+            {content.type === 'duckdb' && (
+              <HStack
+                gap={2}
+                px={4}
+                py={3}
+                bg="bg.muted"
+                borderRadius="md"
+                border="1px solid"
+                borderColor="border.subtle"
+              >
+                <Text fontSize="sm" color="fg.muted">
+                  This is a system-managed, read-only connection. Its configuration cannot be changed.
+                </Text>
+              </HStack>
+            )}
             {/* Hint message */}
+            {content.type !== 'duckdb' && (
             <HStack
               gap={2}
               px={4}
@@ -805,6 +822,7 @@ export default function ConnectionFormV2({
                 </Link>
               </Text>
             </HStack>
+            )}
             <Box minH="400px">
               <ConnectionTablesBrowser
                 schemas={schemas}

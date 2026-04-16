@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { getConnection, updateConnection, deleteConnection } from '@/lib/data/connections.server';
+import { getConnection, deleteConnection } from '@/lib/data/connections.server';
 import { successResponse, handleApiError } from '@/lib/api/api-responses';
 import { withAuth } from '@/lib/api/with-auth';
 
@@ -19,20 +19,9 @@ export const GET = withAuth(async (request: NextRequest, user, { params }: Route
   }
 });
 
-// PUT /api/connections/{name}
-export const PUT = withAuth(async (request: NextRequest, user, { params }: RouteParams) => {
-  try {
-    const { name } = await params;
-    const { config } = await request.json();
-    const result = await updateConnection(name, config, user);
-    // Return the whole result { connection, schema? } to preserve optional schema
-    return successResponse(result);
-  } catch (error) {
-    return handleApiError(error);
-  }
-});
-
 // DELETE /api/connections/{name}
+// Performs full connection teardown: removes document, deregisters from Python backend,
+// and cleans up any associated S3 data (CSV / Google Sheets).
 export const DELETE = withAuth(async (request: NextRequest, user, { params }: RouteParams) => {
   try {
     const { name } = await params;

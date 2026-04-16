@@ -62,5 +62,6 @@ export const ANALYTICS_CONFIG = parseAnalyticsConfig(process.env.NEXT_PUBLIC_ANA
 export const SEND_ERRORS_IN_DEV = process.env.NEXT_PUBLIC_SEND_ERRORS_IN_DEV === 'true';
 
 export const PROTECTED_FILE_PATHS = [
-  '/config/users.yml',
+  // System-managed internals DuckDB connection — read-only, cannot be modified or deleted
+  '/internals/database/internals',
 ] as const;

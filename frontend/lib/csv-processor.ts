@@ -6,6 +6,9 @@ import 'server-only';
  */
 
 import { randomUUID } from 'crypto';
+import { writeFileSync, readFileSync, unlinkSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import {
   S3Client,
   GetObjectCommand,
@@ -101,27 +104,43 @@ async function xlsxBytesToS3Csvs(
   const workbook = XLSX.read(buffer, { type: 'buffer' });
   const results: IncomingFile[] = [];
 
-  for (const sheetName of workbook.SheetNames) {
-    const ws = workbook.Sheets[sheetName];
-    const csvData = XLSX.utils.sheet_to_csv(ws, { blankrows: false });
-    if (!csvData.trim()) continue; // skip empty sheets
+  // One DuckDB instance per call — no S3 config needed (local file ops only)
+  const instance = await DuckDBInstance.create(':memory:');
+  const conn = await instance.connect();
+  try {
+    for (const sheetName of workbook.SheetNames) {
+      const ws = workbook.Sheets[sheetName];
+      const csvData = XLSX.utils.sheet_to_csv(ws, { blankrows: false });
+      if (!csvData.trim()) continue; // skip empty sheets
 
-    const safeName =
-      sheetName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'sheet';
-    const csvFilename = `${safeName}.csv`;
-    // Use a pure UUID S3 key — the sheet name is stored separately in `filename`
-    const newKey = `${companyId}/csvs/${mode}/${connectionName}/${randomUUID()}.csv`;
+      const safeName =
+        sheetName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'sheet';
+      const csvFilename = `${safeName}.csv`;
+      const uuid = randomUUID();
+      const tmpCsvPath     = join(tmpdir(), `${uuid}.csv`);
+      const tmpParquetPath = join(tmpdir(), `${uuid}.parquet`);
+      const s3Key = `${companyId}/csvs/${mode}/${connectionName}/${uuid}.parquet`;
 
-    await s3.send(
-      new PutObjectCommand({
-        Bucket: OBJECT_STORE_BUCKET!,
-        Key: newKey,
-        Body: Buffer.from(csvData, 'utf-8'),
-        ContentType: 'text/csv',
-      }),
-    );
-
-    results.push({ filename: csvFilename, s3_key: newKey, schema_name: schemaName, file_format: 'csv' });
+      try {
+        writeFileSync(tmpCsvPath, csvData, 'utf-8');
+        await conn.run(
+          `COPY (SELECT * FROM read_csv_auto('${tmpCsvPath}')) TO '${tmpParquetPath}' (FORMAT PARQUET, COMPRESSION ZSTD)`
+        );
+        const parquetBuffer = readFileSync(tmpParquetPath);
+        await s3.send(new PutObjectCommand({
+          Bucket: OBJECT_STORE_BUCKET!,
+          Key: s3Key,
+          Body: parquetBuffer,
+          ContentType: 'application/octet-stream',
+        }));
+        results.push({ filename: csvFilename, s3_key: s3Key, schema_name: schemaName, file_format: 'parquet' });
+      } finally {
+        try { unlinkSync(tmpCsvPath); } catch { /* ignore */ }
+        try { unlinkSync(tmpParquetPath); } catch { /* ignore */ }
+      }
+    }
+  } finally {
+    conn.closeSync();
   }
 
   if (results.length === 0) throw new Error('No non-empty sheets found in xlsx file');
@@ -208,6 +227,32 @@ async function readFileMetadata(
   return { rowCount, columns };
 }
 
+// ─── CSV → Parquet conversion ─────────────────────────────────────────────────
+
+type DuckConn = Awaited<ReturnType<InstanceType<typeof DuckDBInstance>['connect']>>;
+
+/**
+ * Convert a CSV already in S3 to Parquet (same key prefix, `.parquet` extension).
+ * Deletes the original CSV on success.
+ * Returns the new S3 key, or null if conversion fails (original left intact).
+ */
+async function convertCsvToParquet(conn: DuckConn, csvKey: string): Promise<string | null> {
+  const parquetKey = csvKey.replace(/\.[^.]+$/, '') + '.parquet';
+  const csvUrl     = `s3://${OBJECT_STORE_BUCKET!}/${csvKey}`;
+  const parquetUrl = `s3://${OBJECT_STORE_BUCKET!}/${parquetKey}`;
+  try {
+    await conn.run(
+      `COPY (SELECT * FROM read_csv_auto('${csvUrl}')) TO '${parquetUrl}' (FORMAT PARQUET, COMPRESSION ZSTD)`
+    );
+    // Parquet written — remove the now-redundant CSV
+    await makeS3().send(new DeleteObjectCommand({ Bucket: OBJECT_STORE_BUCKET!, Key: csvKey }));
+    return parquetKey;
+  } catch (err) {
+    console.warn(`[csv-processor] Parquet conversion failed for ${csvKey}:`, err);
+    return null; // keep CSV as fallback
+  }
+}
+
 // ─── Main registration function ───────────────────────────────────────────────
 
 /**
@@ -249,7 +294,7 @@ export async function processFilesFromS3(
     }
   }
 
-  // Extract metadata via DuckDB
+  // Convert CSV → Parquet and extract metadata via DuckDB
   const instance = await DuckDBInstance.create(':memory:');
   const conn = await instance.connect();
   try {
@@ -257,15 +302,22 @@ export async function processFilesFromS3(
 
     const results: RegisteredFile[] = [];
     for (const file of flatFiles) {
-      const format = (file.file_format ?? 'csv') as 'csv' | 'parquet';
+      let s3Key = file.s3_key;
+      let format = (file.file_format ?? 'csv') as 'csv' | 'parquet';
       const tableName = file.table_name ?? autoNames.get(file.filename) ?? sanitizeTableName(file.filename);
-      const s3Url = `s3://${OBJECT_STORE_BUCKET}/${file.s3_key}`;
 
+      // Convert CSV → Parquet for fast columnar queries; fall back to CSV on error
+      if (format === 'csv') {
+        const converted = await convertCsvToParquet(conn, s3Key);
+        if (converted) { s3Key = converted; format = 'parquet'; }
+      }
+
+      const s3Url = `s3://${OBJECT_STORE_BUCKET}/${s3Key}`;
       const { rowCount, columns } = await readFileMetadata(conn, s3Url, format);
       results.push({
         table_name: tableName,
         schema_name: file.schema_name ?? 'public',
-        s3_key: file.s3_key,
+        s3_key: s3Key,
         file_format: format,
         filename: file.filename,
         row_count: rowCount,

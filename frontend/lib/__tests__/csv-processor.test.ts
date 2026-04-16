@@ -6,6 +6,12 @@
  */
 
 jest.mock('server-only', () => ({}));
+// Mock fs so DuckDB's COPY TO (which is a no-op in tests) doesn't block readFileSync
+jest.mock('fs', () => ({
+  writeFileSync: jest.fn(),
+  readFileSync: jest.fn().mockReturnValue(Buffer.from('mock-parquet')),
+  unlinkSync: jest.fn(),
+}));
 jest.mock('@duckdb/node-api', () => ({ DuckDBInstance: { create: jest.fn() } }));
 jest.mock('@aws-sdk/client-s3', () => ({
   S3Client: jest.fn(),
@@ -237,7 +243,7 @@ describe('processFilesFromS3', () => {
     });
     mockSend
       .mockResolvedValueOnce({ Body: makeStream(xlsxBuf) }) // GET xlsx from S3
-      .mockResolvedValue({});                                // PUT each CSV
+      .mockResolvedValue({});                                // PUT each Parquet
 
     const result = await processFilesFromS3(1, 'org', 'myconn', [{
       filename: 'workbook.xlsx',
@@ -248,7 +254,7 @@ describe('processFilesFromS3', () => {
 
     expect(result).toHaveLength(2);
     expect(result.map(r => r.table_name)).toEqual(expect.arrayContaining(['sales', 'users']));
-    expect(result.every(r => r.file_format === 'csv')).toBe(true);
+    expect(result.every(r => r.file_format === 'parquet')).toBe(true);
   });
 
   it('skips empty sheets in xlsx', async () => {
@@ -415,9 +421,9 @@ describe('importGoogleSheetToS3', () => {
 
     expect(spreadsheetId).toBe('sheet123');
     expect(files).toHaveLength(1);
-    expect(files[0].file_format).toBe('csv');
+    expect(files[0].file_format).toBe('parquet');
     expect(files[0].schema_name).toBe('public');
-    // S3 PUT was called to upload the CSV
+    // S3 PUT was called to upload the Parquet
     expect(mockSend).toHaveBeenCalledTimes(1);
   });
 

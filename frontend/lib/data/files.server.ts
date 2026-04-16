@@ -804,6 +804,10 @@ class FilesDataLayerServer implements IFilesDataLayer {
       );
     }
 
+    if (PROTECTED_FILE_PATHS.includes(file.path as any)) {
+      throw new AccessPermissionError(`Cannot delete protected file: ${file.path}`);
+    }
+
     if (!isAdmin(user.role)) {
       const resolvedHomeFolder = resolveHomeFolderSync(user.mode, user.home_folder);
       if (!file.path.startsWith(resolvedHomeFolder)) {

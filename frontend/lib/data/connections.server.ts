@@ -27,6 +27,7 @@ import {
 } from './connections.interface';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { getSafeConfig, validateConnectionName, RESERVED_NAMES, validateDuckDbFilePath } from './helpers/connections';
+import { UserFacingError } from '@/lib/errors';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { Mode } from '@/lib/mode/mode-types';
 import { getNodeConnector } from '@/lib/connections';
@@ -115,6 +116,11 @@ class ConnectionsDataLayerServer implements IConnectionsDataLayer {
   }
 
   async create(input: CreateConnectionInput, user: EffectiveUser): Promise<CreateConnectionResult> {
+    // DuckDB connections cannot be created manually — arbitrary file paths are a security risk
+    if (input.type === 'duckdb') {
+      throw new UserFacingError('DuckDB connections cannot be created manually. Use CSV uploads or Google Sheets instead.');
+    }
+
     // Validation
     validateConnectionName(input.name);
 
