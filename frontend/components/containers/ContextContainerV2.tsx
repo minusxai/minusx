@@ -10,7 +10,7 @@ import { selectIsDirty, selectEffectiveName, type FileId } from '@/store/filesSl
 import { useFile } from '@/lib/hooks/file-state-hooks';
 import { editFile, publishFile, clearFileChanges, reloadFile } from '@/lib/api/file-state';
 import ContextEditorV2 from '@/components/context/ContextEditorV2';
-import { ContextContent, ContextVersion, DocEntry } from '@/lib/types';
+import { ContextContent, ContextVersion, DocEntry, Whitelist, WhitelistNode, DatabaseContext, WhitelistItem } from '@/lib/types';
 import { useJobRuns } from '@/lib/hooks/job-runs-hooks';
 import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
@@ -22,7 +22,9 @@ import {
   validateContextVersions,
   canDeleteVersion,
   getNextVersionNumber,
-  getPublishedVersionForUser
+  getPublishedVersionForUser,
+  resolveVersionWhitelist,
+  convertDatabaseContextToWhitelist,
 } from '@/lib/context/context-utils';
 
 interface ContextContainerV2Props {
@@ -108,11 +110,15 @@ export default function ContextContainerV2({
       // Legacy format: has top-level databases and docs
       if (merged.databases !== undefined) {
         const now = new Date().toISOString();
+        // Convert legacy DatabaseContext[] | '*' to Whitelist
+        const migratedWhitelist: Whitelist = merged.databases === '*'
+          ? '*'
+          : convertDatabaseContextToWhitelist((merged.databases || []) as DatabaseContext[]);
         return {
           ...merged,
           versions: [{
             version: 1,
-            databases: merged.databases || [],
+            whitelist: migratedWhitelist,
             docs: merged.docs || [],
             createdAt: now,
             createdBy: user?.id || 1,
@@ -129,7 +135,7 @@ export default function ContextContainerV2({
         ...merged,
         versions: [{
           version: 1,
-          databases: [],
+          whitelist: [] as WhitelistNode[],
           docs: [],
           createdAt: now,
           createdBy: user?.id || 1,
@@ -194,7 +200,7 @@ export default function ContextContainerV2({
 
     const newVersion: ContextVersion = {
       version: newVersionNumber,
-      databases: JSON.parse(JSON.stringify(sourceVersion.databases)),  // Deep copy
+      whitelist: JSON.parse(JSON.stringify(sourceVersion.whitelist)),  // Deep copy
       docs: sourceVersion.docs.map((doc: DocEntry) => ({ ...doc, childPaths: doc.childPaths ? [...doc.childPaths] : undefined })),
       createdAt: new Date().toISOString(),
       createdBy: user.id,
@@ -309,11 +315,18 @@ export default function ContextContainerV2({
 
     // If updating databases or docs, update the selected version
     if (updates.databases !== undefined || updates.docs !== undefined) {
+      // Convert DatabaseContext[] | '*' (editor format) → Whitelist (storage format)
+      const newWhitelist: Whitelist | undefined = updates.databases !== undefined
+        ? updates.databases === '*'
+          ? '*'
+          : convertDatabaseContextToWhitelist(updates.databases as DatabaseContext[])
+        : undefined;
+
       const updatedVersions = currentContent.versions?.map(v => {
         if (v.version === selectedVersion) {
           return {
             ...v,
-            databases: updates.databases ?? v.databases,
+            ...(newWhitelist !== undefined ? { whitelist: newWhitelist } : {}),
             docs: updates.docs ?? v.docs,
             lastEditedAt: new Date().toISOString(),
             lastEditedBy: user.id
@@ -352,10 +365,34 @@ export default function ContextContainerV2({
       };
     }
 
+    // Convert Whitelist (storage format) → DatabaseContext[] | '*' (editor format)
+    // Use resolveVersionWhitelist to handle old-format versions (databases field instead of whitelist)
+    const wl = resolveVersionWhitelist(currentVersionContent);
+    const editorDatabases: DatabaseContext[] | '*' = wl === '*'
+      ? '*'
+      : (wl as WhitelistNode[])
+          .filter(n => n.type === 'connection')
+          .map(connNode => ({
+            databaseName: connNode.name,
+            whitelist: connNode.children === undefined
+              ? []
+              : connNode.children.flatMap(schemaNode => {
+                  if (schemaNode.children === undefined) {
+                    return [{ name: schemaNode.name, type: 'schema' as const, childPaths: schemaNode.childPaths } as WhitelistItem];
+                  }
+                  return schemaNode.children.map(tableNode => ({
+                    name: tableNode.name,
+                    type: 'table' as const,
+                    schema: schemaNode.name,
+                    childPaths: tableNode.childPaths
+                  } as WhitelistItem));
+                }),
+          }));
+
     return {
       ...currentContent,
-      // Expose selected version's databases/docs for editing
-      databases: currentVersionContent.databases,
+      // Expose selected version's whitelist as databases for editor backward compat
+      databases: editorDatabases,
       docs: currentVersionContent.docs,
       published: currentContent.published // Ensure published is always present
     };

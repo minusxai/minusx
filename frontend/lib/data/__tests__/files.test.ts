@@ -202,34 +202,34 @@ describe('Files Data Layer - getTemplate', () => {
 
   describe('context template', () => {
     beforeAll(async () => {
-      // Create root context to enable child context tests
-      await DocumentDB.create(
-        'context',
-        '/org/context',
-        'context',
-        {
-          versions: [{
-            version: 1,
-            databases: [{
-              databaseName: 'default_db',
-              whitelist: [{
-                name: 'users',
-                type: 'table',
-                schema: 'main'
-              }]
-            }],
-            docs: [{ content: 'Root documentation' }],
-            createdAt: new Date().toISOString(),
-            createdBy: testUser.userId,
-            description: 'Root context'
+      // Upsert /org/context with test-specific data (template seed already creates it with whitelist:'*')
+      const testContextContent: ContextContent = {
+        versions: [{
+          version: 1,
+          whitelist: [{
+            name: 'default_db',
+            type: 'connection',
+            children: [{
+              name: 'main',
+              type: 'schema',
+              children: [{ name: 'users', type: 'table' }]
+            }]
           }],
-          published: { all: 1 },
-          fullSchema: [],
-          fullDocs: []
-        } as ContextContent,
-        [],
-        testUser.companyId
-      );
+          docs: [{ content: 'Root documentation' }],
+          createdAt: new Date().toISOString(),
+          createdBy: testUser.userId,
+          description: 'Root context'
+        }],
+        published: { all: 1 },
+        fullSchema: [],
+        fullDocs: []
+      };
+      const existing = await DocumentDB.getByPath('/org/context', testUser.companyId);
+      if (existing) {
+        await DocumentDB.update(existing.id, 'context', '/org/context', testContextContent, [], testUser.companyId);
+      } else {
+        await DocumentDB.create('context', '/org/context', 'context', testContextContent, [], testUser.companyId);
+      }
     });
 
     it('should generate root context template with schema from connections', async () => {
@@ -245,7 +245,7 @@ describe('Files Data Layer - getTemplate', () => {
       expect(content.versions).toHaveLength(1);
       expect(content.versions![0]).toMatchObject({
         version: 1,
-        databases: [],
+        whitelist: '*',
         docs: [],
         description: 'Initial version'
       });
@@ -270,7 +270,7 @@ describe('Files Data Layer - getTemplate', () => {
       expect(content.versions).toHaveLength(1);
       expect(content.versions![0]).toMatchObject({
         version: 1,
-        databases: [],
+        whitelist: '*',
         docs: [],
         description: 'Initial version'
       });

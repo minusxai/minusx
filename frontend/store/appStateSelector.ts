@@ -85,6 +85,16 @@ export const selectAppState = createSelector(
           if (!f) return false;
           if (f.type === 'folder' && isHiddenSystemPath(f.path, mode)) return false;
           return true;
+        })
+        .map(f => {
+          // Strip parentSchema from context files in folder view — it's the parent's offering
+          // before this context's own whitelist is applied, so it's only relevant when editing
+          // the context file itself. In folder view the agent must only see the whitelisted schema.
+          if (f.type === 'context' && f.content) {
+            const { parentSchema: _ps, ...contentWithout } = f.content as any;
+            return { ...f, content: contentWithout };
+          }
+          return f;
         });
 
       const folderLoading = folder.loading ?? false;

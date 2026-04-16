@@ -7,6 +7,7 @@ import { InitData, CompanyData, ExportedDocument } from './import-export';
 import { LATEST_DATA_VERSION, LATEST_SCHEMA_VERSION } from './constants';
 import { DEFAULT_STYLES } from '@/lib/branding/whitelabel';
 import { VALID_MODES } from '@/lib/mode/mode-types';
+import { convertDatabaseContextToWhitelist } from '@/lib/context/context-utils';
 
 export type DataMigration = (data: InitData) => InitData;
 export type SchemaMigration = null;  // Null means "recreate DB with new schema"
@@ -403,16 +404,17 @@ export const MIGRATIONS: MigrationEntry[] = [
           }
 
           // Create version 1 from current content
+          // Note: uses legacy 'databases' field; V33 migration converts it to 'whitelist'
           const now = new Date().toISOString();
           const versionedContent = {
             versions: [{
               version: 1,
-              databases: content.databases || [],
+              databases: content.databases || [],  // Legacy - converted by V33
               docs: content.docs || [],
               createdAt: now,
               createdBy: 1,  // System user (admin)
               description: 'Initial version (auto-migrated)'
-            }],
+            } as any],
             published: { all: 1 },
             // Remove legacy fields
             databases: undefined,
@@ -1235,6 +1237,76 @@ export const MIGRATIONS: MigrationEntry[] = [
           content.layout.items = normalized;
         }
       }
+      return data;
+    },
+  },
+  {
+    dataVersion: 33,
+    schemaVersion: undefined,
+    description: 'V33: Migrate whitelist schema (ContextVersion.databases[] → whitelist tree) + create default context per folder',
+    dataMigration: (data: InitData) => {
+      const now = new Date().toISOString();
+
+      for (const companyData of data.companies as CompanyData[]) {
+        // ── Part A: Convert existing context whitelist format ──────────────────
+        for (const doc of companyData.documents) {
+          if (doc.type !== 'context') continue;
+          const content = doc.content as any;
+          if (!content?.versions) continue;
+
+          for (const version of content.versions) {
+            if (!version.databases) continue; // already migrated or no old-format data
+
+            // Use shared conversion (same function used by context loader + editor)
+            version.whitelist = version.databases === '*'
+              ? '*'
+              : convertDatabaseContextToWhitelist(version.databases);
+
+            delete version.databases;
+          }
+        }
+
+        // ── Part B: Create default context for each folder without one ─────────
+        const contextPaths = new Set(
+          companyData.documents.filter((d: any) => d.type === 'context').map((d: any) => d.path)
+        );
+        const maxId = companyData.documents.reduce(
+          (max: number, d: any) => Math.max(max, d.id ?? 0), 0
+        );
+        let nextId = maxId;
+
+        for (const folder of companyData.documents.filter((d: any) => d.type === 'folder')) {
+          const expectedContextPath = `${folder.path}/context`;
+          if (contextPaths.has(expectedContextPath)) continue; // already has a context
+
+          nextId++;
+          companyData.documents.push({
+            id: nextId,
+            name: 'context',
+            path: expectedContextPath,
+            type: 'context',
+            references: [],
+            content: {
+              versions: [{
+                version: 1,
+                whitelist: '*',
+                docs: [],
+                createdAt: now,
+                createdBy: 1,
+                description: 'Default context (migration)',
+              }],
+              published: { all: 1 },
+            },
+            company_id: companyData.id,
+            created_at: now,
+            updated_at: now,
+            version: 1,
+            last_edit_id: null,
+          });
+          contextPaths.add(expectedContextPath);
+        }
+      }
+
       return data;
     },
   },

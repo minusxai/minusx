@@ -16,7 +16,7 @@ import Editor from '@monaco-editor/react';
 import Markdown from '@/components/Markdown';
 import ChatInterface from '@/components/explore/ChatInterface';
 import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
-import type { ContextContent, DatabaseContext } from '@/lib/types';
+import type { ContextContent, Whitelist, WhitelistNode } from '@/lib/types';
 
 const TYPEWRITER_SPEED = 35;
 
@@ -196,14 +196,15 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
 
     createVirtualFile('context').then((vId) => {
       // Set initial content with whitelisted tables + empty doc
-      const databases: DatabaseContext[] = [{
-        databaseName: connectionName,
-        whitelist: schemas.map(s => ({ type: 'schema' as const, name: s.schema })),
+      const whitelist: Whitelist = [{
+        name: connectionName,
+        type: 'connection' as const,
+        children: schemas.map(s => ({ type: 'schema' as const, name: s.schema } as WhitelistNode)),
       }];
       const contextContent: ContextContent = {
         versions: [{
           version: 1,
-          databases,
+          whitelist,
           docs: [{ content: '' }],
           createdAt: new Date().toISOString(),
           createdBy: 0,
@@ -236,14 +237,32 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
     setError(null);
     try {
       // Update content with latest description before publishing
-      const databases: DatabaseContext[] = [{
-        databaseName: connectionName,
-        whitelist: effectiveWhitelist,
+      // Convert WhitelistItem[] to WhitelistNode[] grouped by schema
+      const schemaItems = effectiveWhitelist.filter(w => w.type === 'schema');
+      const tableItems = effectiveWhitelist.filter(w => w.type === 'table');
+      const tablesBySchema = new Map<string, typeof tableItems>();
+      tableItems.forEach(item => {
+        const s = item.schema || '';
+        if (!tablesBySchema.has(s)) tablesBySchema.set(s, []);
+        tablesBySchema.get(s)!.push(item);
+      });
+      const schemaChildren: WhitelistNode[] = [
+        ...schemaItems.map(s => ({ name: s.name, type: 'schema' as const } as WhitelistNode)),
+        ...Array.from(tablesBySchema.entries()).map(([schemaName, tables]) => ({
+          name: schemaName,
+          type: 'schema' as const,
+          children: tables.map(t => ({ name: t.name, type: 'table' as const } as WhitelistNode)),
+        } as WhitelistNode)),
+      ];
+      const whitelist: Whitelist = [{
+        name: connectionName,
+        type: 'connection' as const,
+        children: schemaChildren.length > 0 ? schemaChildren : undefined,
       }];
       const contextContent: ContextContent = {
         versions: [{
           version: 1,
-          databases,
+          whitelist,
           docs: [{ content: description.trim() || '' }],
           createdAt: new Date().toISOString(),
           createdBy: 0,

@@ -173,6 +173,37 @@ export type Attachment = {
 };
 
 // Context.md types (database schema whitelisting)
+
+/**
+ * Recursive whitelist tree node.
+ * type:'connection' → children are schema nodes
+ * type:'schema'     → children are table nodes
+ * type:'table'      → leaf node (no children)
+ *
+ * children:undefined = expose all children (wildcard)
+ * children:[]        = expose nothing
+ * children:[...]     = expose only listed children
+ *
+ * childPaths: restricts which sub-folder paths inherit this node
+ *   undefined = all children
+ *   []        = no children
+ *   ['/org/team_a'] = only /org/team_a and its subtree
+ */
+export interface WhitelistNode {
+  name: string;
+  type: 'connection' | 'schema' | 'table';
+  children?: WhitelistNode[];  // undefined = expose all; explicit array = filter to listed
+  childPaths?: string[];       // restrict inheritance to these sub-paths
+}
+
+/**
+ * Top-level whitelist for a context version.
+ * '*' means expose all connections/schemas/tables.
+ * Array of WhitelistNode[] means filter to listed connections.
+ */
+export type Whitelist = '*' | WhitelistNode[];
+
+/** @deprecated Use WhitelistNode instead. Kept for backward compatibility during migration. */
 export interface WhitelistItem {
   name: string;              // table or schema name
   type: 'table' | 'schema';
@@ -186,6 +217,7 @@ export interface DocEntry {
   draft?: boolean;           // Optional: if true, excluded from agent-facing outputs
 }
 
+/** @deprecated Use Whitelist/WhitelistNode instead. Kept for backward compatibility during migration. */
 export interface DatabaseContext {
   databaseName: string;
   whitelist: WhitelistItem[];
@@ -193,7 +225,7 @@ export interface DatabaseContext {
 
 export interface ContextVersion {
   version: number;                   // Version number (non-sequential, gaps allowed)
-  databases: DatabaseContext[];      // Schema whitelist for this version
+  whitelist: Whitelist;              // Schema whitelist for this version (replaces databases[])
   docs: DocEntry[];                  // Documentation entries with optional childPaths
   createdAt: string;                 // ISO timestamp
   createdBy: number;                 // User ID who created version
@@ -238,11 +270,12 @@ export type ContextContent = PartialBy<ScheduledJobContent, 'schedule' | 'recipi
   published: PublishedVersions;  // Required - always has published.all
 
   // Computed fields (added by loader, not stored in DB)
-  fullSchema?: DatabaseWithSchema[];  // Computed by loader - inherited schema
-  fullDocs?: DocEntry[];              // Computed by loader - inherited docs
+  fullSchema?: DatabaseWithSchema[];   // Computed by loader - what this context actually exposes (own whitelist applied)
+  parentSchema?: DatabaseWithSchema[]; // Computed by loader - what parent offers (before own whitelist); used by editor
+  fullDocs?: DocEntry[];               // Computed by loader - inherited docs
 
   // Working fields (exposed by container for editing current version)
-  databases?: DatabaseContext[];      // Current version's whitelist (container only)
+  databases?: DatabaseContext[] | '*'; // Current version's whitelist (container only); '*' = expose all
   docs?: DocEntry[];                  // Current version's docs (container only)
 
   // Evals (stored at content level, independent of versions)

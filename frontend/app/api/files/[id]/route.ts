@@ -111,6 +111,12 @@ export const PATCH = withAuth(async (
       if (result.data.type === 'config') {
         revalidateTag('configs', 'default');
       }
+      // Context files need fullSchema recomputed after save (saveFile strips it).
+      // Re-run the loader so the client gets fresh fullSchema immediately.
+      if (result.data.type === 'context') {
+        const loaded = await loadFile(id, user, { refresh: true });
+        return successResponse(loaded.data);
+      }
       return successResponse(result.data);
     } catch (error) {
       if (error instanceof ConflictError) {

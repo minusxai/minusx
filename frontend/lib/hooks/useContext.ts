@@ -4,7 +4,7 @@ import { selectContextFromPath } from '@/store/filesSlice';
 import { useFile } from './file-state-hooks';
 import { useConnections } from './useConnections';
 import { ContextContent, ContextInfo } from '@/lib/types';
-import { getWhitelistedSchemaForUser, getDocumentationForUser, filterSchemaByWhitelist } from '@/lib/sql/schema-filter';
+import { getWhitelistedSchemaForUser, getDocumentationForUser, applyWhitelistToConnections } from '@/lib/sql/schema-filter';
 import { getPublishedVersion } from '@/lib/context/context-utils';
 
 /**
@@ -73,23 +73,13 @@ export function useContext(path: string, version?: number, isFolderScope?: boole
           contextContent.versions.find(v => v.version === contextContent.published.all);
 
         if (effectiveVersionContent) {
-          // Filter fullSchema by this version's whitelist (reuse existing helper)
-          const databases = effectiveVersionContent.databases.map(dbContext => {
-            const availableDb = contextContent.fullSchema?.find(
-              fs => fs.databaseName === dbContext.databaseName
-            );
-            if (!availableDb) return null;
-
-            const filteredSchema = filterSchemaByWhitelist(
-              { schemas: availableDb.schemas, updated_at: availableDb.updated_at || new Date().toISOString() },
-              dbContext.whitelist
-            );
-
-            return {
-              databaseName: dbContext.databaseName,
-              schemas: filteredSchema.schemas
-            };
-          }).filter(Boolean) as Array<{ databaseName: string; schemas: any[] }>;
+          // Apply this version's whitelist to fullSchema
+          // Note: fullSchema contains the published version's schema; version override
+          // applies the requested version's whitelist on top of that.
+          const databases = applyWhitelistToConnections(
+            contextContent.fullSchema || [],
+            effectiveVersionContent.whitelist
+          );
 
           // Combine inherited docs (fullDocs) + own docs from this version, excluding drafts
           const inheritedDocStrings = (contextContent.fullDocs || [])

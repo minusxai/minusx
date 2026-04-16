@@ -2,8 +2,123 @@
  * Shared schema filtering logic
  * Used by both client-side (useContext hook) and server-side (ContextHelpers)
  */
-import { DatabaseSchema, WhitelistItem, ContextContent, DatabaseWithSchema } from '../types';
+import { DatabaseSchema, WhitelistItem, ContextContent, DatabaseWithSchema, Whitelist, WhitelistNode } from '../types';
 import { getPublishedVersionForUser } from '../context/context-utils';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NEW API: Whitelist tree filtering (WhitelistNode / Whitelist)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Check whether a whitelist node's childPaths restriction allows the given currentPath.
+ * - undefined childPaths → no restriction (always passes)
+ * - empty array → blocks all paths
+ * - non-empty array → currentPath must be exactly one of the listed paths or a descendant
+ */
+function childPathAllowed(node: WhitelistNode, currentPath?: string): boolean {
+  if (!node.childPaths) return true;       // no restriction
+  if (!currentPath) return true;           // no path given → include all
+  if (node.childPaths.length === 0) return false;  // empty → nowhere
+  return node.childPaths.some(cp =>
+    currentPath === cp || currentPath.startsWith(cp + '/')
+  );
+}
+
+/**
+ * Apply a single connection-level WhitelistNode to a DatabaseSchema.
+ * Returns the filtered schema (may have empty schemas array if nothing allowed).
+ *
+ * @param fullSchema  - Full schema for this connection
+ * @param connNode    - WhitelistNode of type:'connection'
+ * @param currentPath - Optional requesting path (used for childPaths filtering)
+ */
+export function filterSchemaByWhitelistNode(
+  fullSchema: DatabaseSchema,
+  connNode: WhitelistNode,
+  currentPath?: string,
+): DatabaseSchema {
+  // Check connection-level childPaths
+  if (!childPathAllowed(connNode, currentPath)) {
+    return { ...fullSchema, schemas: [] };
+  }
+
+  // children:undefined → expose all schemas unchanged
+  if (connNode.children === undefined) {
+    return fullSchema;
+  }
+
+  // children:[] → expose nothing
+  if (connNode.children.length === 0) {
+    return { ...fullSchema, schemas: [] };
+  }
+
+  // Filter schemas by children
+  const filteredSchemas = fullSchema.schemas.flatMap(schema => {
+    const schemaNode = connNode.children!.find(n => n.name === schema.schema);
+    if (!schemaNode) return [];
+
+    // Check schema-level childPaths
+    if (!childPathAllowed(schemaNode, currentPath)) return [];
+
+    // children:undefined → expose all tables
+    if (schemaNode.children === undefined) {
+      return [schema];
+    }
+
+    // children:[] → expose nothing from this schema
+    if (schemaNode.children.length === 0) {
+      return [];
+    }
+
+    // Filter tables by children
+    const filteredTables = schema.tables.filter(table => {
+      const tableNode = schemaNode.children!.find(n => n.name === table.table);
+      if (!tableNode) return false;
+      return childPathAllowed(tableNode, currentPath);
+    });
+
+    if (filteredTables.length === 0) return [];
+    return [{ ...schema, tables: filteredTables }];
+  });
+
+  return { ...fullSchema, schemas: filteredSchemas };
+}
+
+/**
+ * Apply a top-level Whitelist to a list of connections.
+ * - '*' → return all connections unchanged
+ * - []  → return empty list
+ * - WhitelistNode[] → filter connections; connections with empty schemas are excluded
+ *
+ * @param connections  - Available connections (each with databaseName + schemas)
+ * @param whitelist    - Whitelist to apply
+ * @param currentPath  - Optional requesting path (used for childPaths filtering)
+ */
+export function applyWhitelistToConnections(
+  connections: DatabaseWithSchema[],
+  whitelist: Whitelist,
+  currentPath?: string,
+): DatabaseWithSchema[] {
+  if (whitelist === '*') return connections;
+
+  return connections.flatMap(conn => {
+    const connNode = whitelist.find(n => n.name === conn.databaseName);
+    if (!connNode) return [];
+
+    // Check connection-level childPaths
+    if (!childPathAllowed(connNode, currentPath)) return [];
+
+    const filteredSchema = filterSchemaByWhitelistNode(
+      { schemas: conn.schemas, updated_at: conn.updated_at || new Date().toISOString() },
+      connNode,
+      currentPath,
+    );
+
+    if (filteredSchema.schemas.length === 0) return [];
+
+    return [{ ...conn, schemas: filteredSchema.schemas }];
+  });
+}
 
 /**
  * Filter schema based on whitelist items
@@ -78,151 +193,30 @@ export function filterSchemaByWhitelist(
 }
 
 /**
- * Apply context's whitelist to its fullSchema
- * Returns only the schemas/tables that are whitelisted in this context
+ * Get whitelisted schema for a user's published version.
  *
- * @param contextContent - The context content with fullSchema and databases (whitelist)
- * @param currentPath - Optional path of child context requesting filtering
- * @param contextDir - Optional directory of the context file (see filterSchemaByWhitelist)
- * @returns Array of databases with whitelisted schemas/tables only
- */
-export function getWhitelistedSchema(
-  contextContent: ContextContent,
-  currentPath?: string,
-  contextDir?: string
-): DatabaseWithSchema[] {
-  if (!contextContent.fullSchema || !contextContent.databases) {
-    return [];
-  }
-
-  const fullSchema = contextContent.fullSchema;
-  const databases = contextContent.databases;
-
-  return databases.map(dbContext => {
-    // Find the available database in fullSchema
-    const availableDb = fullSchema.find(
-      fs => fs.databaseName === dbContext.databaseName
-    );
-
-    if (!availableDb) return null;
-
-    // Apply whitelist filter
-    const filteredSchema = filterSchemaByWhitelist(
-      { schemas: availableDb.schemas, updated_at: availableDb.updated_at || new Date().toISOString() },
-      dbContext.whitelist,
-      currentPath,
-      contextDir
-    );
-
-    return {
-      databaseName: dbContext.databaseName,
-      schemas: filteredSchema.schemas
-    };
-  }).filter(Boolean) as DatabaseWithSchema[];
-}
-
-/**
- * Find matching context file for a given path and database
- * Note: This function appears to be unused legacy code
- */
-export function findMatchingContext(
-  contextFiles: any[],
-  path: string,
-  databaseName: string
-): any | null {
-  return contextFiles.find(ctx => {
-    // Note: Context format is legacy (databaseName, whitelist) not fully typed
-    const contextContent = ctx.content;
-
-    // Must match database name
-    if (contextContent.databaseName !== databaseName) return false;
-
-    // Get directory containing the context file
-    const contextDir = ctx.path.substring(0, ctx.path.lastIndexOf('/')) || '/';
-    const searchDir = path.substring(0, path.lastIndexOf('/')) || '/';
-
-    // Context applies if it's in an ancestor directory
-    return searchDir.startsWith(contextDir);
-  }) || null;
-}
-
-/**
- * Find all matching context files for a given path (without database filter)
- * Returns all contexts in the current path or any parent paths
- */
-/**
- * Find contexts that apply to a given path
- * Matches contexts that are ancestors or exact matches (by directory, not name)
+ * With the new whitelist schema (ContextVersion.whitelist), the context loader
+ * already computes fullSchema as the final exposed schema (parent offering ×
+ * own whitelist). So this function simply returns fullSchema.
  *
- * Note: contextFiles should already be filtered by type='context'
- */
-export function findMatchingContextByPath(
-  contextFiles: any[],
-  path: string
-): any[] {
-  return contextFiles.filter(ctx => {
-    // Get the directory containing the context file
-    const contextDir = ctx.path.substring(0, ctx.path.lastIndexOf('/')) || '/';
-
-    // Context applies if its directory is an ancestor of the path (not equal to it)
-    // A context at /dir/context applies to /dir/subdir but NOT /dir itself
-    if (contextDir === '/') {
-      // Special case: root context applies to everything below root
-      return path.startsWith('/') && path !== '/';
-    } else {
-      // Context must be in a parent directory, not the same directory
-      return path.startsWith(contextDir + '/');
-    }
-  });
-}
-
-/**
- * Get whitelisted schema for a user's published version
- * Filters fullSchema by the published version's whitelist
+ * The currentPath / contextDir parameters are kept for backward compatibility
+ * but are no longer used for filtering — childPaths filtering now happens
+ * at load time inside the context loader.
  *
- * @param contextContent - The context content with versions and fullSchema
- * @param userId - The user ID to get the published version for
- * @param currentPath - Optional path of child context requesting filtering
- * @param contextDir - Optional directory of the context file (see filterSchemaByWhitelist)
+ * @param contextContent - The context content with fullSchema computed by loader
+ * @param userId - The user ID (unused — single published version for all users)
+ * @param currentPath - Unused (kept for API compatibility)
+ * @param contextDir  - Unused (kept for API compatibility)
  * @returns Array of databases with whitelisted schemas/tables only
  */
 export function getWhitelistedSchemaForUser(
   contextContent: ContextContent,
-  userId: number,
-  currentPath?: string,
-  contextDir?: string
+  _userId: number,
+  _currentPath?: string,
+  _contextDir?: string
 ): DatabaseWithSchema[] {
-  // Get user's published version and compute visible schema from it
-  if (contextContent.versions && contextContent.versions.length > 0) {
-    const publishedVersionNum = getPublishedVersionForUser(contextContent, userId);
-    const publishedVersion = contextContent.versions.find(v => v.version === publishedVersionNum);
-
-    if (publishedVersion) {
-      // Filter fullSchema by this version's whitelist to get visible schema
-      const databases = publishedVersion.databases.map(dbContext => {
-        const availableDb = contextContent.fullSchema?.find(
-          fs => fs.databaseName === dbContext.databaseName
-        );
-        if (!availableDb) return null;
-
-        const filteredSchema = filterSchemaByWhitelist(
-          { schemas: availableDb.schemas, updated_at: availableDb.updated_at || new Date().toISOString() },
-          dbContext.whitelist,
-          currentPath,
-          contextDir
-        );
-
-        return {
-          databaseName: dbContext.databaseName,
-          schemas: filteredSchema.schemas
-        };
-      }).filter(Boolean) as DatabaseWithSchema[];
-
-      return databases;
-    }
-  }
-
-  // Legacy fallback for contexts without versions
+  // The loader already applied the whitelist when computing fullSchema.
+  // Return it directly.
   if (contextContent.fullSchema) {
     return contextContent.fullSchema;
   }

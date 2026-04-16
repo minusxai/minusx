@@ -1,10 +1,14 @@
 import yaml from 'js-yaml';
-import { WhitelistItem, ContextContent, DatabaseContext, ContextVersion } from '../types';
+import { WhitelistItem, ContextContent, DatabaseContext, ContextVersion, Whitelist, WhitelistNode } from '../types';
 
 /**
- * Serialize multiple databases to YAML format
+ * Serialize databases (or '*') to YAML format.
+ * '*' serializes as `databases: '*'` to preserve the "expose all" semantic.
  */
-export function serializeDatabases(databases: DatabaseContext[] | undefined): string {
+export function serializeDatabases(databases: DatabaseContext[] | '*' | undefined): string {
+  if (databases === '*') {
+    return yaml.dump({ databases: '*' }, { indent: 2, lineWidth: -1, noRefs: true });
+  }
   return yaml.dump({ databases: databases || [] }, {
     indent: 2,
     lineWidth: -1,
@@ -13,15 +17,16 @@ export function serializeDatabases(databases: DatabaseContext[] | undefined): st
 }
 
 /**
- * Parse YAML with databases array
+ * Parse YAML with databases array (or '*').
+ * Returns '*' when the YAML contains `databases: '*'`.
  */
-export function parseDatabasesYaml(yamlText: string): DatabaseContext[] {
+export function parseDatabasesYaml(yamlText: string): DatabaseContext[] | '*' {
   try {
-    const parsed = yaml.load(yamlText) as { databases?: DatabaseContext[] };
+    const parsed = yaml.load(yamlText) as { databases?: DatabaseContext[] | '*' };
 
-    if (!parsed || !parsed.databases || !Array.isArray(parsed.databases)) {
-      return [];
-    }
+    if (!parsed) return [];
+    if (parsed.databases === '*') return '*';
+    if (!parsed.databases || !Array.isArray(parsed.databases)) return [];
 
     return parsed.databases;
   } catch (error) {
@@ -63,8 +68,10 @@ export function validateContextVersions(content: ContextContent): void {
     if (typeof version.version !== 'number') {
       throw new Error(`Version ${index}: version number must be a number`);
     }
-    if (!Array.isArray(version.databases)) {
-      throw new Error(`Version ${version.version}: databases must be an array`);
+    // whitelist must be '*' or an array
+    const wl = version.whitelist;
+    if (wl !== '*' && !Array.isArray(wl)) {
+      throw new Error(`Version ${version.version}: whitelist must be '*' or an array`);
     }
     if (!Array.isArray(version.docs)) {
       throw new Error(`Version ${version.version}: docs must be an array`);
@@ -75,38 +82,28 @@ export function validateContextVersions(content: ContextContent): void {
     if (typeof version.createdBy !== 'number') {
       throw new Error(`Version ${version.version}: createdBy must be a number`);
     }
-
-    // Validate whitelist structure in each database
-    version.databases.forEach((dbContext, dbIdx) => {
-      if (!Array.isArray(dbContext.whitelist)) {
-        throw new Error(`Version ${version.version}, database ${dbIdx}: whitelist must be array`);
-      }
-
-      dbContext.whitelist.forEach((item, itemIdx) => {
-        // Validate childPaths if present
-        if (item.childPaths !== undefined) {
-          if (!Array.isArray(item.childPaths)) {
-            throw new Error(
-              `Version ${version.version}, database ${dbIdx}, item ${itemIdx}: childPaths must be array`
-            );
-          }
-
-          item.childPaths.forEach((path, pathIdx) => {
-            if (typeof path !== 'string' || path.trim() === '') {
-              throw new Error(
-                `Version ${version.version}, database ${dbIdx}, item ${itemIdx}, path ${pathIdx}: must be non-empty string`
-              );
-            }
-            if (!path.startsWith('/')) {
-              throw new Error(
-                `Version ${version.version}, database ${dbIdx}, item ${itemIdx}, path ${pathIdx}: must be absolute path (start with /)`
-              );
-            }
-          });
-        }
-      });
-    });
   });
+}
+
+/**
+ * Create default context content for a new folder.
+ * The default context exposes all connections ('*') and has no documentation.
+ *
+ * @param userId - ID of the user creating the context
+ */
+export function makeDefaultContextContent(userId: number): ContextContent {
+  const now = new Date().toISOString();
+  return {
+    versions: [{
+      version: 1,
+      whitelist: '*' as Whitelist,
+      docs: [],
+      createdAt: now,
+      createdBy: userId,
+      description: 'Default context',
+    }],
+    published: { all: 1 },
+  };
 }
 
 /**
@@ -174,4 +171,82 @@ export function getPublishedVersionForUser(content: ContextContent, _userId: num
  */
 export function getPublishedVersion(content: ContextContent): number {
   return content.published?.all ?? 1;
+}
+
+/**
+ * Convert a DatabaseContext[] (old format) to WhitelistNode[] (new format).
+ *
+ * Semantic mapping:
+ *   - dbCtx.whitelist === []  → children: []        (expose nothing)
+ *   - schema-only items      → schema node, children: undefined (expose all tables)
+ *   - table items            → grouped under their schema node with explicit children
+ *   - mixed schema+table     → table children take precedence (explicit list)
+ *
+ * IMPORTANT: empty whitelist → children: [] (NOT undefined).
+ *   children: undefined = "expose all tables in this schema/connection"
+ *   children: []        = "expose nothing from this schema/connection"
+ */
+export function convertDatabaseContextToWhitelist(legacyDbs: DatabaseContext[]): WhitelistNode[] {
+  return legacyDbs.map((dbCtx) => {
+    const connNode: WhitelistNode = { name: dbCtx.databaseName, type: 'connection' };
+
+    if (!dbCtx.whitelist || dbCtx.whitelist.length === 0) {
+      connNode.children = [];  // empty whitelist = expose nothing
+      return connNode;
+    }
+
+    // Group items by schema using a Map to handle mixed schema+table entries correctly
+    const schemaMap = new Map<string, { node: WhitelistNode; tables: WhitelistNode[] }>();
+
+    for (const item of dbCtx.whitelist) {
+      if (item.type === 'schema') {
+        if (!schemaMap.has(item.name)) {
+          schemaMap.set(item.name, {
+            node: { name: item.name, type: 'schema', childPaths: item.childPaths },
+            tables: []
+          });
+        }
+      } else if (item.type === 'table' && item.schema) {
+        if (!schemaMap.has(item.schema)) {
+          schemaMap.set(item.schema, { node: { name: item.schema, type: 'schema' }, tables: [] });
+        }
+        schemaMap.get(item.schema)!.tables.push({
+          name: item.name,
+          type: 'table',
+          childPaths: item.childPaths
+        });
+      }
+    }
+
+    connNode.children = Array.from(schemaMap.values()).map(({ node, tables }) => {
+      if (tables.length > 0) {
+        // Explicit table list — schema node gets explicit children
+        return { ...node, children: tables };
+      }
+      // Schema listed without table restrictions → expose all tables (children: undefined)
+      return node;
+    });
+
+    return connNode;
+  });
+}
+
+/**
+ * Resolve the whitelist from a ContextVersion, handling backward compatibility.
+ *
+ * Older data stored the whitelist as `version.databases: DatabaseContext[]` before the
+ * migration to `version.whitelist: Whitelist`. This function reads whichever field is
+ * present so the context loader and editor work correctly with un-migrated data.
+ */
+export function resolveVersionWhitelist(version: ContextVersion): Whitelist {
+  // New format: version.whitelist is set
+  if (version.whitelist !== undefined) {
+    return version.whitelist;
+  }
+
+  // Backward compat: old data stored whitelist inside version.databases
+  const legacyDbs = (version as any).databases as DatabaseContext[] | '*' | undefined;
+  if (!legacyDbs) return [];
+  if (legacyDbs === '*') return '*';
+  return convertDatabaseContextToWhitelist(legacyDbs);
 }

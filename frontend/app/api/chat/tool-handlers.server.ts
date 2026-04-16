@@ -48,8 +48,10 @@ registerTool('SearchDBSchema', async (args, user) => {
   const content = loadedConnection.content as ConnectionContent;
   const schemaData = content.schema || { schemas: [], updated_at: new Date().toISOString() };
 
-  // If a whitelisted schema was injected, filter to only those tables
-  if (whitelistedSchema?.length > 0) {
+  // If a whitelisted schema was injected, enforce it — even if empty.
+  // Array.isArray check (not length > 0) so that [] (empty whitelist) returns nothing
+  // rather than falling through to the full unfiltered schema.
+  if (Array.isArray(whitelistedSchema)) {
     const filteredSchemas = schemaData.schemas.map((s: any) => {
       const allowed = whitelistedSchema.find((w: any) => w.schema === s.schema);
       if (!allowed) return null;
@@ -58,7 +60,7 @@ registerTool('SearchDBSchema', async (args, user) => {
     return searchDatabaseSchema(filteredSchemas, query);
   }
 
-  // Delegate to core search logic
+  // No _schema injected (no active context) — return full schema
   return searchDatabaseSchema(schemaData.schemas, query);
 });
 

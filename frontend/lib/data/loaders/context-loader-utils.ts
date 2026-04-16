@@ -4,10 +4,10 @@
  * Used by both context loader and file template generation
  */
 
-import { DatabaseWithSchema, ContextVersion, DatabaseContext, DbFile, DocEntry } from '@/lib/types';
+import { DatabaseWithSchema, ContextVersion, DatabaseContext, DbFile, DocEntry, Whitelist } from '@/lib/types';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { FilesAPI } from '@/lib/data/files.server';
-import { filterSchemaByWhitelist } from '@/lib/sql/schema-filter';
+import { applyWhitelistToConnections } from '@/lib/sql/schema-filter';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { getPublishedVersionForUser as getPublishedVersionForUserId } from '@/lib/context/context-utils';
 
@@ -34,109 +34,114 @@ function filterDocsByChildPaths(docs: DocEntry[], currentPath: string): DocEntry
 }
 
 /**
- * Compute fullSchema and fullDocs from databases and docs arrays
- * Core schema computation logic shared by context loader and template generation
+ * Compute fullSchema and fullDocs from a Whitelist value and the context path.
  *
- * @param databases - Array of database contexts (whitelist + childPaths)
+ * This is the new entry-point for the context loader (replaces computeSchemaFromDatabases).
+ * It handles both the new Whitelist tree format ('*' | WhitelistNode[]).
+ *
+ * Flow:
+ *   Root context (pathSegments.length === 2, e.g. /org/context):
+ *     - Load all available connections
+ *     - Apply own whitelist to produce fullSchema
+ *
+ *   Child context (pathSegments.length > 2):
+ *     - Load nearest ancestor context (triggers its loader recursively)
+ *     - Apply ancestor's published-version whitelist WITH child's contextDir
+ *       to ancestor's fullSchema → "parent offering" (respects childPaths)
+ *     - Apply own whitelist to the parent offering → fullSchema
+ *
+ * @param whitelist   - The context's own whitelist ('*' or node array)
  * @param contextPath - Full path to context file (e.g., /org/sales/context)
- * @param user - Effective user for permissions
- * @returns fullSchema (available schemas) and fullDocs (inherited documentation)
+ * @param user        - Effective user for permissions
  */
-export async function computeSchemaFromDatabases(
-  databases: DatabaseContext[],
+export async function computeSchemaFromWhitelist(
+  whitelist: Whitelist,
   contextPath: string,
   user: EffectiveUser
-): Promise<{ fullSchema: DatabaseWithSchema[], fullDocs: DocEntry[] }> {
-  // Extract path (directory containing context file) for childPaths filtering
-  const path = contextPath.substring(0, contextPath.lastIndexOf('/')) || '/';
-  // Detect if root (path depth 1)
+): Promise<{ fullSchema: DatabaseWithSchema[], parentSchema: DatabaseWithSchema[], fullDocs: DocEntry[] }> {
+  const contextDir = contextPath.substring(0, contextPath.lastIndexOf('/')) || '/';
   const pathSegments = contextPath.split('/').filter(Boolean);
   const isRoot = pathSegments.length === 2; // e.g., /org/context
 
-  let fullSchema: DatabaseWithSchema[];
-  let fullDocs: DocEntry[];
-
   if (isRoot) {
-    // Root: Load all connections and merge schemas
-    const databaseFolder = resolvePath(user.mode, '/database');
-    const { data: connections } = await FilesAPI.getFiles(
-      { paths: [databaseFolder], type: 'connection', depth: 1 },
-      user
-    );
+    // Root: Load all connections and apply own whitelist
+    const allConnections = await loadAllConnectionsAsSchema(user);
 
-    // Load full connection content (triggers connection loaders)
-    const { data: loadedConnections } = await FilesAPI.loadFiles(
-      connections.map(c => c.id),
-      user
-    );
-
-    // Merge ALL connection schemas into fullSchema (unfiltered)
-    // fullSchema represents what's AVAILABLE to whitelist, not what's whitelisted
-    fullSchema = loadedConnections.map(conn => ({
-      databaseName: conn.name,
-      schemas: (conn.content as any)?.schema?.schemas || []
-    }));
-
-    fullDocs = [];
-  } else {
-    // Child: Find nearest ancestor context
-    const { data: allContexts } = await FilesAPI.getFiles(
-      { paths: ['/'], type: 'context', depth: -1 },
-      user
-    );
-
-    const ancestorContext = findNearestAncestorContext(contextPath, allContexts);
-
-    if (!ancestorContext) {
-      // No ancestor found - treat as root
-      fullSchema = [];
-      fullDocs = [];
-    } else {
-      // Load ancestor context (triggers its loader recursively)
-      // Parent's loader will compute fullSchema based on parent's published version for this user
-      const { data: loadedAncestors } = await FilesAPI.loadFiles([ancestorContext.id], user);
-      const ancestorContent = loadedAncestors[0].content as any;
-
-      // Get parent's published version to access parent's whitelist (which has childPaths)
-      const publishedVersionNum = getPublishedVersionForUserId(ancestorContent, user.userId);
-      const publishedVersion = ancestorContent.versions?.find((v: ContextVersion) => v.version === publishedVersionNum);
-
-      if (!publishedVersion) {
-        fullSchema = [];
-        fullDocs = [];
-      } else {
-        // Filter parent's fullSchema by PARENT's whitelist with childPaths checking
-        // NOTE: no contextDir passed here — child context inheritance must strictly respect
-        // childPaths (a child at /org/team_a does not get a free pass just for being a direct
-        // child of the parent context dir; only exact childPaths matches apply).
-        fullSchema = publishedVersion.databases.map((parentDbContext: DatabaseContext) => {
-          const parentDb = ancestorContent.fullSchema?.find(
-            (fs: DatabaseWithSchema) => fs.databaseName === parentDbContext.databaseName
-          );
-          if (!parentDb) return null;
-
-          // Filter by PARENT's whitelist (which has childPaths restrictions)
-          const filteredSchema = filterSchemaByWhitelist(
-            { schemas: parentDb.schemas, updated_at: parentDb.updated_at },
-            parentDbContext.whitelist,  // Parent's whitelist (has childPaths!)
-            path  // Child's path for childPaths checking
-          );
-
-          return {
-            databaseName: parentDbContext.databaseName,
-            schemas: filteredSchema.schemas
-          };
-        }).filter(Boolean) as DatabaseWithSchema[];
-
-        // Accumulate parent's fullDocs + parent's own docs, both filtered by childPaths
-        const parentFullDocs = filterDocsByChildPaths(ancestorContent.fullDocs || [], path);
-        const parentOwnDocs = filterDocsByChildPaths(publishedVersion.docs || [], path);
-        fullDocs = [...parentFullDocs, ...parentOwnDocs];
-      }
-    }
+    // Apply own whitelist (no currentPath for root — childPaths has no effect at root level)
+    const fullSchema = applyWhitelistToConnections(allConnections, whitelist);
+    // parentSchema for root = all connections (what is available to select from)
+    return { fullSchema, parentSchema: allConnections, fullDocs: [] };
   }
 
-  return { fullSchema, fullDocs };
+  // Child: Find nearest ancestor context
+  const { data: allContexts } = await FilesAPI.getFiles(
+    { paths: ['/'], type: 'context', depth: -1 },
+    user
+  );
+
+  const ancestorContext = findNearestAncestorContext(contextPath, allContexts);
+
+  if (!ancestorContext) {
+    // No ancestor found — nothing to inherit
+    return { fullSchema: [], parentSchema: [], fullDocs: [] };
+  }
+
+  // Load ancestor (triggers its own loader recursively)
+  const { data: loadedAncestors } = await FilesAPI.loadFiles([ancestorContext.id], user);
+  const ancestorContent = loadedAncestors[0].content as any;
+
+  // Get ancestor's published version to access its whitelist (with childPaths)
+  const publishedVersionNum = getPublishedVersionForUserId(ancestorContent, user.userId);
+  const publishedVersion = ancestorContent.versions?.find(
+    (v: ContextVersion) => v.version === publishedVersionNum
+  );
+
+  if (!publishedVersion) {
+    return { fullSchema: [], parentSchema: [], fullDocs: [] };
+  }
+
+  // The ancestor's fullSchema is what the ancestor exposes (already filtered by its own whitelist).
+  // Apply the ancestor's whitelist WITH currentPath = this context's directory to filter
+  // by childPaths restrictions (tables/schemas restricted to specific sub-paths).
+  const ancestorFullSchema: DatabaseWithSchema[] = ancestorContent.fullSchema || [];
+  const parentOffering = applyWhitelistToConnections(
+    ancestorFullSchema,
+    publishedVersion.whitelist,
+    contextDir
+  );
+
+  // Apply own whitelist to the parent's offering
+  const fullSchema = applyWhitelistToConnections(parentOffering, whitelist);
+
+  // Accumulate parent's fullDocs + parent's own docs, both filtered by childPaths
+  const parentFullDocs = filterDocsByChildPaths(ancestorContent.fullDocs || [], contextDir);
+  const parentOwnDocs = filterDocsByChildPaths(publishedVersion.docs || [], contextDir);
+  const fullDocs = [...parentFullDocs, ...parentOwnDocs];
+
+  // parentOffering = what the parent makes available to this context (before own whitelist)
+  return { fullSchema, parentSchema: parentOffering, fullDocs };
+}
+
+/**
+ * Load all available connections and return as DatabaseWithSchema[].
+ */
+async function loadAllConnectionsAsSchema(user: EffectiveUser): Promise<DatabaseWithSchema[]> {
+  const databaseFolder = resolvePath(user.mode, '/database');
+  const { data: connections } = await FilesAPI.getFiles(
+    { paths: [databaseFolder], type: 'connection', depth: 1 },
+    user
+  );
+
+  const { data: loadedConnections } = await FilesAPI.loadFiles(
+    connections.map(c => c.id),
+    user
+  );
+
+  return loadedConnections.map(conn => ({
+    databaseName: conn.name,
+    schemas: (conn.content as any)?.schema?.schemas || [],
+    updated_at: (conn.content as any)?.schema?.updated_at,
+  }));
 }
 
 /**

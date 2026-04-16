@@ -20,7 +20,6 @@ import {
 import type {
   ConnectionContent,
   ContextContent,
-  DatabaseContext,
   ContextVersion,
   DatabaseSchema,
   QuestionContent,
@@ -201,11 +200,10 @@ describe('Context Loader Integration with Versioning', () => {
     // /org/context - Root context with multiple versions
     const orgVersion1: ContextVersion = {
       version: 1,
-      databases: [
-        {
-          databaseName: 'duckdb_main',
-          whitelist: [{ name: 'public', type: 'schema' }]  // All tables
-        }
+      whitelist: [
+        { name: 'duckdb_main', type: 'connection', children: [
+          { name: 'public', type: 'schema' }  // all tables (children undefined = expose all)
+        ]}
       ],
       docs: [{ content: 'Version 1: Full public schema' }],
       createdAt: new Date().toISOString(),
@@ -215,18 +213,18 @@ describe('Context Loader Integration with Versioning', () => {
 
     const orgVersion2: ContextVersion = {
       version: 2,
-      databases: [
-        {
-          databaseName: 'duckdb_main',
-          whitelist: [
-            { name: 'users', type: 'table', schema: 'public' },
-            { name: 'orders', type: 'table', schema: 'public' }
-          ]  // Only users and orders
-        },
-        {
-          databaseName: 'bigquery_analytics',
-          whitelist: [{ name: 'events', type: 'table', schema: 'analytics' }]
-        }
+      whitelist: [
+        { name: 'duckdb_main', type: 'connection', children: [
+          { name: 'public', type: 'schema', children: [
+            { name: 'users', type: 'table' },
+            { name: 'orders', type: 'table' }
+          ]}
+        ]},
+        { name: 'bigquery_analytics', type: 'connection', children: [
+          { name: 'analytics', type: 'schema', children: [
+            { name: 'events', type: 'table' }
+          ]}
+        ]}
       ],
       docs: [{ content: 'Version 2: Restricted schema + BigQuery' }],
       createdAt: new Date().toISOString(),
@@ -255,13 +253,12 @@ describe('Context Loader Integration with Versioning', () => {
     // /org/sales/context - Child context
     const salesVersion1: ContextVersion = {
       version: 1,
-      databases: [
-        {
-          databaseName: 'duckdb_main',
-          whitelist: [
-            { name: 'users', type: 'table', schema: 'public' }  // Only users
-          ]
-        }
+      whitelist: [
+        { name: 'duckdb_main', type: 'connection', children: [
+          { name: 'public', type: 'schema', children: [
+            { name: 'users', type: 'table' }
+          ]}
+        ]}
       ],
       docs: [{ content: 'Sales context v1' }],
       createdAt: new Date().toISOString(),
@@ -304,25 +301,23 @@ describe('Context Loader Integration with Versioning', () => {
       expect(duckdb!.schemas[0].tables.map(t => t.table).sort()).toEqual(['orders', 'products', 'users']);
     });
 
-    it('should load user-specific published version for admin with override', async () => {
-      // Admin user 4 loads context → should see version 2 (user-specific override)
+    it('should load all versions for admin users', async () => {
+      // Admin user 4 loads context → sees all versions, fullSchema from published version 1
       const { data: contexts } = await FilesAPI.loadFiles([orgContextId], adminUser4);
       const content = contexts[0].content as ContextContent;
 
       // Admin sees all versions
       expect(content.versions).toHaveLength(2);
 
-      // fullSchema shows ALL available schema (unfiltered)
-      // For root contexts, fullSchema = all connection schemas regardless of version's whitelist
+      // fullSchema computed from published version 1 (duckdb_main/public/all tables)
       const duckdb = content.fullSchema!.find(db => db.databaseName === 'duckdb_main');
       expect(duckdb).toBeDefined();
-      expect(duckdb!.schemas[0].tables).toHaveLength(3); // All tables: users, orders, products
+      expect(duckdb!.schemas[0].tables).toHaveLength(3); // users, orders, products (version 1 whitelist)
       expect(duckdb!.schemas[0].tables.map(t => t.table).sort()).toEqual(['orders', 'products', 'users']);
 
+      // bigquery NOT in version 1's whitelist
       const bigquery = content.fullSchema!.find(db => db.databaseName === 'bigquery_analytics');
-      expect(bigquery).toBeDefined();
-      expect(bigquery!.schemas[0].tables).toHaveLength(1); // events
-      expect(bigquery!.schemas[0].tables[0].table).toBe('events');
+      expect(bigquery).toBeUndefined();
     });
 
     it('should fallback to published.all for admin without user-specific version', async () => {
@@ -353,12 +348,12 @@ describe('Context Loader Integration with Versioning', () => {
       expect(content.versions).toHaveLength(1);
       expect(content.versions![0].version).toBe(1);
 
-      // fullSchema filtered by parent's version 1 schema (all tables available)
-      // fullSchema represents what's AVAILABLE to child, not what child whitelisted
+      // fullSchema = parent offering × child's own whitelist
+      // Parent offers all public tables; child whitelist = users only → result is users only
       const duckdb = content.fullSchema!.find(db => db.databaseName === 'duckdb_main');
       expect(duckdb).toBeDefined();
-      expect(duckdb!.schemas[0].tables).toHaveLength(3); // All tables from parent
-      expect(duckdb!.schemas[0].tables.map(t => t.table).sort()).toEqual(['orders', 'products', 'users']);
+      expect(duckdb!.schemas[0].tables).toHaveLength(1); // Only users (child's whitelist applied)
+      expect(duckdb!.schemas[0].tables[0].table).toBe('users');
 
       // fullDocs inherited from parent's version 1
       expect(content.fullDocs).toEqual([{ content: 'Version 1: Full public schema' }]);
@@ -366,20 +361,20 @@ describe('Context Loader Integration with Versioning', () => {
 
     it('should inherit parent schema based on published version (admin sees same as non-admin)', async () => {
       // Admin user 4 loads child context
-      // Parent is at version 1 for all users (no more user-specific overrides)
+      // Parent is at version 1 for all users
       // Child whitelists only users table
       const { data: contexts } = await FilesAPI.loadFiles([salesContextId], adminUser4);
       const content = contexts[0].content as ContextContent;
 
-      // Admin sees all versions
+      // Admin sees all versions in this child context (only 1 version)
       expect(content.versions).toHaveLength(1);
 
-      // fullSchema filtered by parent's version 1 schema (all tables available)
-      // fullSchema represents what's AVAILABLE to child, not what child whitelisted
+      // fullSchema = parent offering × child's own whitelist
+      // Parent offers all public tables; child whitelist = users only → result is users only
       const duckdb = content.fullSchema!.find(db => db.databaseName === 'duckdb_main');
       expect(duckdb).toBeDefined();
-      expect(duckdb!.schemas[0].tables).toHaveLength(3); // All tables from parent
-      expect(duckdb!.schemas[0].tables.map(t => t.table).sort()).toEqual(['orders', 'products', 'users']);
+      expect(duckdb!.schemas[0].tables).toHaveLength(1); // Only users (child's whitelist applied)
+      expect(duckdb!.schemas[0].tables[0].table).toBe('users');
 
       // fullDocs inherited from parent's version 1 (same as non-admin)
       expect(content.fullDocs).toEqual([{ content: 'Version 1: Full public schema' }]);
@@ -416,7 +411,7 @@ describe('Context Loader Integration with Versioning', () => {
         versions: [
           {
             version: 1,
-            databases: [],
+            whitelist: [],
             docs: [],
             createdAt: new Date().toISOString(),
             createdBy: 1,
@@ -450,7 +445,9 @@ describe('Context Loader Integration with Versioning', () => {
         versions: [
           {
             version: 1,
-            databases: [{ databaseName: 'duckdb_main', whitelist: [{ name: 'users', type: 'table', schema: 'public' }] }],
+            whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
+              { name: 'public', type: 'schema', children: [{ name: 'users', type: 'table' }] }
+            ]}],
             docs: [{ content: 'V1' }],
             createdAt: new Date().toISOString(),
             createdBy: 1,
@@ -458,7 +455,9 @@ describe('Context Loader Integration with Versioning', () => {
           },
           {
             version: 2,
-            databases: [{ databaseName: 'duckdb_main', whitelist: [{ name: 'orders', type: 'table', schema: 'public' }] }],
+            whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
+              { name: 'public', type: 'schema', children: [{ name: 'orders', type: 'table' }] }
+            ]}],
             docs: [{ content: 'V2' }],
             createdAt: new Date().toISOString(),
             createdBy: 1,
@@ -466,7 +465,9 @@ describe('Context Loader Integration with Versioning', () => {
           },
           {
             version: 5,
-            databases: [{ databaseName: 'duckdb_main', whitelist: [{ name: 'products', type: 'table', schema: 'public' }] }],
+            whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
+              { name: 'public', type: 'schema', children: [{ name: 'products', type: 'table' }] }
+            ]}],
             docs: [{ content: 'V5' }],
             createdAt: new Date().toISOString(),
             createdBy: 1,
@@ -493,11 +494,11 @@ describe('Context Loader Integration with Versioning', () => {
       // Should load version 5 (published.all)
       expect(content.versions![0].version).toBe(5);
 
-      // fullSchema shows ALL available schema (unfiltered) regardless of version
+      // fullSchema computed from version 5's whitelist (only products table)
       const duckdb = content.fullSchema!.find(db => db.databaseName === 'duckdb_main');
       expect(duckdb).toBeDefined();
-      expect(duckdb!.schemas[0].tables).toHaveLength(3); // All tables available
-      expect(duckdb!.schemas[0].tables.map(t => t.table).sort()).toEqual(['orders', 'products', 'users']);
+      expect(duckdb!.schemas[0].tables).toHaveLength(1); // Only products (version 5 whitelist)
+      expect(duckdb!.schemas[0].tables[0].table).toBe('products');
     });
   });
 
@@ -514,13 +515,12 @@ describe('Context Loader Integration with Versioning', () => {
         {
           versions: [{
             version: 1,
-            databases: [{
-              databaseName: 'duckdb_main',
-              whitelist: [
-                { name: 'users', type: 'table', schema: 'public', childPaths: ['/org/testing/sales'] },
-                { name: 'orders', type: 'table', schema: 'public', childPaths: ['/org/testing/marketing'] }
-              ]
-            }],
+            whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
+              { name: 'public', type: 'schema', children: [
+                { name: 'users', type: 'table', childPaths: ['/org/testing/sales'] },
+                { name: 'orders', type: 'table', childPaths: ['/org/testing/marketing'] }
+              ]}
+            ]}],
             docs: [{ content: 'Parent context' }],
             createdAt: new Date().toISOString(),
             createdBy: 1
@@ -539,12 +539,7 @@ describe('Context Loader Integration with Versioning', () => {
         {
           versions: [{
             version: 1,
-            databases: [{
-              databaseName: 'duckdb_main',
-              whitelist: [
-                { name: 'users', type: 'table', schema: 'public' }
-              ]
-            }],
+            whitelist: '*',
             docs: [{ content: 'Sales context' }],
             createdAt: new Date().toISOString(),
             createdBy: 1
@@ -563,12 +558,7 @@ describe('Context Loader Integration with Versioning', () => {
         {
           versions: [{
             version: 1,
-            databases: [{
-              databaseName: 'duckdb_main',
-              whitelist: [
-                { name: 'orders', type: 'table', schema: 'public' }
-              ]
-            }],
+            whitelist: '*',
             docs: [{ content: 'Marketing context' }],
             createdAt: new Date().toISOString(),
             createdBy: 1
@@ -615,12 +605,11 @@ describe('Context Loader Integration with Versioning', () => {
         {
           versions: [{
             version: 1,
-            databases: [{
-              databaseName: 'duckdb_main',
-              whitelist: [
-                { name: 'products', type: 'table', schema: 'public' } // No childPaths
-              ]
-            }],
+            whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
+              { name: 'public', type: 'schema', children: [
+                { name: 'products', type: 'table' }  // No childPaths — applies to all children
+              ]}
+            ]}],
             docs: [{ content: 'Parent context' }],
             createdAt: new Date().toISOString(),
             createdBy: 1
@@ -639,12 +628,7 @@ describe('Context Loader Integration with Versioning', () => {
         {
           versions: [{
             version: 1,
-            databases: [{
-              databaseName: 'duckdb_main',
-              whitelist: [
-                { name: 'products', type: 'table', schema: 'public' }
-              ]
-            }],
+            whitelist: '*',
             docs: [{ content: 'Child 1' }],
             createdAt: new Date().toISOString(),
             createdBy: 1
@@ -662,12 +646,7 @@ describe('Context Loader Integration with Versioning', () => {
         {
           versions: [{
             version: 1,
-            databases: [{
-              databaseName: 'duckdb_main',
-              whitelist: [
-                { name: 'products', type: 'table', schema: 'public' }
-              ]
-            }],
+            whitelist: '*',
             docs: [{ content: 'Child 2' }],
             createdAt: new Date().toISOString(),
             createdBy: 1
@@ -703,12 +682,11 @@ describe('Context Loader Integration with Versioning', () => {
         {
           versions: [{
             version: 1,
-            databases: [{
-              databaseName: 'duckdb_main',
-              whitelist: [
-                { name: 'users', type: 'table', schema: 'public', childPaths: ['/org/testing3/sales'] }
-              ]
-            }],
+            whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
+              { name: 'public', type: 'schema', children: [
+                { name: 'users', type: 'table', childPaths: ['/org/testing3/sales'] }
+              ]}
+            ]}],
             docs: [{ content: 'Parent context' }],
             createdAt: new Date().toISOString(),
             createdBy: 1
@@ -727,12 +705,7 @@ describe('Context Loader Integration with Versioning', () => {
         {
           versions: [{
             version: 1,
-            databases: [{
-              databaseName: 'duckdb_main',
-              whitelist: [
-                { name: 'users', type: 'table', schema: 'public' }
-              ]
-            }],
+            whitelist: '*',
             docs: [{ content: 'Nested child' }],
             createdAt: new Date().toISOString(),
             createdBy: 1
@@ -751,12 +724,7 @@ describe('Context Loader Integration with Versioning', () => {
         {
           versions: [{
             version: 1,
-            databases: [{
-              databaseName: 'duckdb_main',
-              whitelist: [
-                // Empty whitelist - should have no tables since parent restricts access
-              ]
-            }],
+            whitelist: '*',  // Wants everything parent allows, but parent restricts to sales path
             docs: [{ content: 'Unrelated child' }],
             createdAt: new Date().toISOString(),
             createdBy: 1
@@ -801,13 +769,10 @@ describe('Context Loader Integration with Versioning', () => {
         {
           versions: [{
             version: 1,
-            databases: [{
-              databaseName: 'duckdb_main',
-              whitelist: [
-                // Whitelist entire schema with childPaths restriction
-                { name: 'public', type: 'schema', childPaths: ['/org/testing4/engineering'] }
-              ]
-            }],
+            whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
+              // Whitelist entire schema with childPaths restriction
+              { name: 'public', type: 'schema', childPaths: ['/org/testing4/engineering'] }
+            ]}],
             docs: [{ content: 'Parent with schema-level childPaths' }],
             createdAt: new Date().toISOString(),
             createdBy: 1
@@ -826,12 +791,7 @@ describe('Context Loader Integration with Versioning', () => {
         {
           versions: [{
             version: 1,
-            databases: [{
-              databaseName: 'duckdb_main',
-              whitelist: [
-                { name: 'public', type: 'schema' }
-              ]
-            }],
+            whitelist: '*',
             docs: [{ content: 'Engineering context' }],
             createdAt: new Date().toISOString(),
             createdBy: 1
@@ -850,10 +810,7 @@ describe('Context Loader Integration with Versioning', () => {
         {
           versions: [{
             version: 1,
-            databases: [{
-              databaseName: 'duckdb_main',
-              whitelist: []
-            }],
+            whitelist: '*',  // Wants everything parent allows, but parent restricts to engineering
             docs: [{ content: 'Sales context' }],
             createdAt: new Date().toISOString(),
             createdBy: 1
@@ -901,13 +858,12 @@ describe('Context Loader Integration with Versioning', () => {
         {
           versions: [{
             version: 1,
-            databases: [{
-              databaseName: 'duckdb_main',
-              whitelist: [
-                { name: 'users', type: 'table', schema: 'public', childPaths: ['/org/testing5/team_a'] },
-                { name: 'orders', type: 'table', schema: 'public', childPaths: ['/org/testing5/team_b'] }
-              ]
-            }],
+            whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
+              { name: 'public', type: 'schema', children: [
+                { name: 'users', type: 'table', childPaths: ['/org/testing5/team_a'] },
+                { name: 'orders', type: 'table', childPaths: ['/org/testing5/team_b'] }
+              ]}
+            ]}],
             docs: [{ content: 'Parent with childPaths' }],
             createdAt: new Date().toISOString(),
             createdBy: 1
@@ -927,13 +883,12 @@ describe('Context Loader Integration with Versioning', () => {
         {
           versions: [{
             version: 1,
-            databases: [{
-              databaseName: 'duckdb_main',
-              whitelist: [
+            whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
+              { name: 'public', type: 'schema', children: [
                 // Child WANTS orders, but parent restricts this path to users only
-                { name: 'orders', type: 'table', schema: 'public' }
-              ]
-            }],
+                { name: 'orders', type: 'table' }
+              ]}
+            ]}],
             docs: [{ content: 'Team A context' }],
             createdAt: new Date().toISOString(),
             createdBy: 1
@@ -948,22 +903,20 @@ describe('Context Loader Integration with Versioning', () => {
       const { data: [teamAChild] } = await FilesAPI.loadFiles([teamAContextId], nonAdminUser);
       const teamAContent = teamAChild.content as ContextContent;
 
-      // CRITICAL: fullSchema should contain ONLY 'users' (what parent allows for this path)
-      // Even though child's whitelist says 'orders', parent restricts this path to 'users'
+      // CRITICAL: fullSchema should be EMPTY because:
+      // - Parent only allows 'users' for team_a (childPaths restriction)
+      // - Child's whitelist requests 'orders' only
+      // - Intersection of parent offering {users} and child whitelist {orders} = empty
+      // This proves parent's childPaths restriction CANNOT be bypassed by child's whitelist
       expect(teamAContent.fullSchema).toBeDefined();
+      expect(teamAContent.fullSchema).toHaveLength(0); // Child cannot get what parent doesn't allow
+
       const teamADb = teamAContent.fullSchema!.find(d => d.databaseName === 'duckdb_main');
-      expect(teamADb).toBeDefined();
+      expect(teamADb).toBeUndefined(); // No databases accessible
 
-      const teamATables = teamADb!.schemas[0].tables.map(t => t.table);
-
-      // Must have 'users' (allowed by parent for this path)
-      expect(teamATables).toContain('users');
-
-      // Must NOT have 'orders' (parent restricts to /org/team_b only)
-      expect(teamATables).not.toContain('orders');
-
-      // Must NOT have 'products' (not in parent whitelist at all)
-      expect(teamATables).not.toContain('products');
+      // orders is blocked (parent restricts to /org/testing5/team_b only)
+      // users is blocked too (child doesn't request it)
+      // products was never in parent whitelist
     });
 
     it('E2E: child can only whitelist from parent-allowed fullSchema', async () => {
@@ -978,13 +931,12 @@ describe('Context Loader Integration with Versioning', () => {
         {
           versions: [{
             version: 1,
-            databases: [{
-              databaseName: 'duckdb_main',
-              whitelist: [
-                { name: 'users', type: 'table', schema: 'public', childPaths: ['/org/testing6/restricted'] }
+            whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
+              { name: 'public', type: 'schema', children: [
+                { name: 'users', type: 'table', childPaths: ['/org/testing6/restricted'] }
                 // Only 'users' table, only for /org/testing6/restricted path
-              ]
-            }],
+              ]}
+            ]}],
             docs: [{ content: 'Severely restricted parent' }],
             createdAt: new Date().toISOString(),
             createdBy: 1
@@ -995,7 +947,7 @@ describe('Context Loader Integration with Versioning', () => {
         companyId
       );
 
-      // Child at /org/testing6/restricted with empty whitelist initially
+      // Child at /org/testing6/restricted uses '*' to expose everything parent allows
       const restrictedContextId = await DocumentDB.create(
         'context',
         '/org/testing6/restricted/context',
@@ -1003,10 +955,7 @@ describe('Context Loader Integration with Versioning', () => {
         {
           versions: [{
             version: 1,
-            databases: [{
-              databaseName: 'duckdb_main',
-              whitelist: [] // Empty - wants to whitelist from available
-            }],
+            whitelist: '*',  // Expose everything parent allows for this path
             docs: [{ content: 'Restricted child' }],
             createdAt: new Date().toISOString(),
             createdBy: 1
@@ -1040,14 +989,13 @@ describe('Context Loader Integration with Versioning', () => {
         {
           versions: [{
             version: 1,
-            databases: [{
-              databaseName: 'duckdb_main',
-              whitelist: [
-                { name: 'users', type: 'table', schema: 'public', childPaths: ['/org/testing7/sales', '/org/testing7/support'] },
-                { name: 'orders', type: 'table', schema: 'public', childPaths: ['/org/testing7/sales'] },
-                { name: 'products', type: 'table', schema: 'public', childPaths: ['/org/testing7/sales'] }
-              ]
-            }],
+            whitelist: [{ name: 'duckdb_main', type: 'connection', children: [
+              { name: 'public', type: 'schema', children: [
+                { name: 'users', type: 'table', childPaths: ['/org/testing7/sales', '/org/testing7/support'] },
+                { name: 'orders', type: 'table', childPaths: ['/org/testing7/sales'] },
+                { name: 'products', type: 'table', childPaths: ['/org/testing7/sales'] }
+              ]}
+            ]}],
             docs: [{ content: 'Multi-team parent' }],
             createdAt: new Date().toISOString(),
             createdBy: 1
@@ -1058,7 +1006,7 @@ describe('Context Loader Integration with Versioning', () => {
         companyId
       );
 
-      // Sales team - should see users, orders, products
+      // Sales team - expose everything parent allows (users, orders, products)
       const salesContextId = await DocumentDB.create(
         'context',
         '/org/testing7/sales/context',
@@ -1066,7 +1014,7 @@ describe('Context Loader Integration with Versioning', () => {
         {
           versions: [{
             version: 1,
-            databases: [{ databaseName: 'duckdb_main', whitelist: [] }],
+            whitelist: '*',
             docs: [],
             createdAt: new Date().toISOString(),
             createdBy: 1
@@ -1077,7 +1025,7 @@ describe('Context Loader Integration with Versioning', () => {
         companyId
       );
 
-      // Support team - should see ONLY users
+      // Support team - expose everything parent allows (only users)
       const supportContextId = await DocumentDB.create(
         'context',
         '/org/testing7/support/context',
@@ -1085,7 +1033,7 @@ describe('Context Loader Integration with Versioning', () => {
         {
           versions: [{
             version: 1,
-            databases: [{ databaseName: 'duckdb_main', whitelist: [] }],
+            whitelist: '*',
             docs: [],
             createdAt: new Date().toISOString(),
             createdBy: 1
@@ -1176,7 +1124,7 @@ describe('Context Loader Integration with Versioning', () => {
       const marketingCtxId = await DocumentDB.create(
         'context', '/org/marketing/context', 'context',
         {
-          versions: [{ version: 1, databases: [], docs: [], createdAt: new Date().toISOString(), createdBy: 1, description: '' }],
+          versions: [{ version: 1, whitelist: [], docs: [], createdAt: new Date().toISOString(), createdBy: 1, description: '' }],
           published: { all: 1 }, fullSchema: [], fullDocs: []
         } as ContextContent,
         [], 1
@@ -1309,6 +1257,520 @@ describe('Context Loader Integration with Versioning', () => {
       const { data } = await FilesAPI.loadFiles([questionId], subfolderViewer);
       // Direct access denied — not in home folder, not a reference
       expect(data).toHaveLength(0);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Whitelist filtering — comprehensive cases
+  //
+  // These tests verify every combination of Whitelist values at every level
+  // of the connection → schema → table hierarchy, for both root and child
+  // contexts.  They are the primary guard against regressions like "empty
+  // whitelist falls back to parent schema" (the bug that prompted this suite).
+  //
+  // Parent setup (from outer beforeEach):
+  //   /org/context  whitelist: duckdb_main/public/{users,orders,products}
+  //                 bigquery_analytics NOT exposed
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('Whitelist filtering — comprehensive cases', () => {
+    // ── Helpers ─────────────────────────────────────────────────────────────
+
+    /**
+     * Delete and recreate /org/context with a custom whitelist.
+     * Returns the new context ID.
+     */
+    async function replaceRootContext(whitelist: import('@/lib/types').Whitelist): Promise<number> {
+      const { getAdapter } = await import('@/lib/database/adapter/factory');
+      const db = await getAdapter();
+      await db.query("DELETE FROM files WHERE path = '/org/context' AND company_id = 1", []);
+      return DocumentDB.create('context', '/org/context', 'context', {
+        versions: [{
+          version: 1,
+          whitelist,
+          docs: [],
+          createdAt: new Date().toISOString(),
+          createdBy: 1,
+          description: 'Root context for whitelist test',
+        }],
+        published: { all: 1 },
+        fullSchema: [],
+        fullDocs: [],
+      } as ContextContent, [], 1);
+    }
+
+    /** Unique suffix counter for child context paths — avoids path collisions within a test. */
+    let childSuffix = 0;
+
+    /**
+     * Create a child context under /org/ with a custom whitelist.
+     * The parent (/org/context) is whatever was set by the outer beforeEach or replaceRootContext.
+     */
+    async function createChildContext(whitelist: import('@/lib/types').Whitelist): Promise<number> {
+      const path = `/org/wl_child_${++childSuffix}/context`;
+      return DocumentDB.create('context', path, 'context', {
+        versions: [{
+          version: 1,
+          whitelist,
+          docs: [],
+          createdAt: new Date().toISOString(),
+          createdBy: 1,
+        }],
+        published: { all: 1 },
+        fullSchema: [],
+        fullDocs: [],
+      } as ContextContent, [], 1);
+    }
+
+    // ── Root context — whitelist filters connections directly ────────────────
+
+    describe('Root context whitelist', () => {
+      it("whitelist: '*' exposes all connections and all their schemas/tables", async () => {
+        const rootId = await replaceRootContext('*');
+        const { data: [ctx] } = await FilesAPI.loadFiles([rootId], nonAdminUser);
+        const schema = (ctx.content as ContextContent).fullSchema!;
+
+        const duckdb = schema.find(db => db.databaseName === 'duckdb_main');
+        expect(duckdb).toBeDefined();
+        expect(duckdb!.schemas[0].tables.map(t => t.table).sort()).toEqual(['orders', 'products', 'users']);
+
+        const bq = schema.find(db => db.databaseName === 'bigquery_analytics');
+        expect(bq).toBeDefined();
+        expect(bq!.schemas[0].tables[0].table).toBe('events');
+      });
+
+      it('whitelist: [] exposes nothing', async () => {
+        const rootId = await replaceRootContext([]);
+        const { data: [ctx] } = await FilesAPI.loadFiles([rootId], nonAdminUser);
+        expect((ctx.content as ContextContent).fullSchema).toEqual([]);
+      });
+
+      it('connection absent from whitelist is excluded', async () => {
+        const rootId = await replaceRootContext([
+          { name: 'duckdb_main', type: 'connection', children: [{ name: 'public', type: 'schema' }] },
+          // bigquery_analytics intentionally absent
+        ]);
+        const { data: [ctx] } = await FilesAPI.loadFiles([rootId], nonAdminUser);
+        const schema = (ctx.content as ContextContent).fullSchema!;
+        expect(schema.find(db => db.databaseName === 'duckdb_main')).toBeDefined();
+        expect(schema.find(db => db.databaseName === 'bigquery_analytics')).toBeUndefined();
+      });
+
+      it('connection with children:undefined exposes all its schemas', async () => {
+        const rootId = await replaceRootContext([
+          { name: 'duckdb_main', type: 'connection' }, // children omitted = expose all
+        ]);
+        const { data: [ctx] } = await FilesAPI.loadFiles([rootId], nonAdminUser);
+        const duckdb = (ctx.content as ContextContent).fullSchema!.find(db => db.databaseName === 'duckdb_main');
+        expect(duckdb).toBeDefined();
+        expect(duckdb!.schemas[0].tables).toHaveLength(3);
+      });
+
+      it('connection with children:[] exposes nothing', async () => {
+        const rootId = await replaceRootContext([
+          { name: 'duckdb_main', type: 'connection', children: [] },
+        ]);
+        const { data: [ctx] } = await FilesAPI.loadFiles([rootId], nonAdminUser);
+        expect((ctx.content as ContextContent).fullSchema).toEqual([]);
+      });
+
+      it('schema with children:undefined exposes all tables in that schema', async () => {
+        const rootId = await replaceRootContext([
+          { name: 'duckdb_main', type: 'connection', children: [
+            { name: 'public', type: 'schema' }, // children omitted = expose all tables
+          ]},
+        ]);
+        const { data: [ctx] } = await FilesAPI.loadFiles([rootId], nonAdminUser);
+        const duckdb = (ctx.content as ContextContent).fullSchema!.find(db => db.databaseName === 'duckdb_main');
+        expect(duckdb!.schemas[0].tables.map(t => t.table).sort()).toEqual(['orders', 'products', 'users']);
+      });
+
+      it('schema with children:[] exposes nothing', async () => {
+        const rootId = await replaceRootContext([
+          { name: 'duckdb_main', type: 'connection', children: [
+            { name: 'public', type: 'schema', children: [] },
+          ]},
+        ]);
+        const { data: [ctx] } = await FilesAPI.loadFiles([rootId], nonAdminUser);
+        expect((ctx.content as ContextContent).fullSchema).toEqual([]);
+      });
+
+      it('schema with specific tables exposes only those tables', async () => {
+        const rootId = await replaceRootContext([
+          { name: 'duckdb_main', type: 'connection', children: [
+            { name: 'public', type: 'schema', children: [
+              { name: 'users', type: 'table' },
+              { name: 'orders', type: 'table' },
+              // products NOT listed
+            ]},
+          ]},
+        ]);
+        const { data: [ctx] } = await FilesAPI.loadFiles([rootId], nonAdminUser);
+        const tables = (ctx.content as ContextContent).fullSchema!
+          .find(db => db.databaseName === 'duckdb_main')!
+          .schemas[0].tables.map(t => t.table).sort();
+        expect(tables).toEqual(['orders', 'users']);
+        expect(tables).not.toContain('products');
+      });
+
+      it('single table whitelist exposes only that table', async () => {
+        const rootId = await replaceRootContext([
+          { name: 'duckdb_main', type: 'connection', children: [
+            { name: 'public', type: 'schema', children: [
+              { name: 'users', type: 'table' },
+            ]},
+          ]},
+        ]);
+        const { data: [ctx] } = await FilesAPI.loadFiles([rootId], nonAdminUser);
+        const duckdb = (ctx.content as ContextContent).fullSchema!.find(db => db.databaseName === 'duckdb_main');
+        expect(duckdb!.schemas[0].tables).toHaveLength(1);
+        expect(duckdb!.schemas[0].tables[0].table).toBe('users');
+      });
+
+      it('schema absent from connection schema is excluded', async () => {
+        const rootId = await replaceRootContext([
+          { name: 'duckdb_main', type: 'connection', children: [
+            { name: 'nonexistent_schema', type: 'schema' },
+          ]},
+        ]);
+        const { data: [ctx] } = await FilesAPI.loadFiles([rootId], nonAdminUser);
+        expect((ctx.content as ContextContent).fullSchema).toEqual([]);
+      });
+    });
+
+    // ── Child context — own whitelist applied to parent offering ────────────
+    //
+    // The outer beforeEach sets up /org/context with:
+    //   whitelist: duckdb_main/public/{users, orders, products}  (bigquery NOT included)
+
+    describe('Child context whitelist', () => {
+      it("whitelist: '*' inherits the full parent offering unchanged", async () => {
+        const id = await createChildContext('*');
+        const { data: [ctx] } = await FilesAPI.loadFiles([id], nonAdminUser);
+        const duckdb = (ctx.content as ContextContent).fullSchema!.find(db => db.databaseName === 'duckdb_main');
+        expect(duckdb).toBeDefined();
+        expect(duckdb!.schemas[0].tables.map(t => t.table).sort()).toEqual(['orders', 'products', 'users']);
+        // bigquery not in parent → absent even though child has '*'
+        expect((ctx.content as ContextContent).fullSchema!.find(db => db.databaseName === 'bigquery_analytics')).toBeUndefined();
+      });
+
+      it('CRITICAL: whitelist: [] exposes nothing — must NOT fall back to parent', async () => {
+        // This is the exact user-reported bug: a folder context with an empty whitelist
+        // was incorrectly showing the parent's schema in the right sidebar.
+        const id = await createChildContext([]);
+        const { data: [ctx] } = await FilesAPI.loadFiles([id], nonAdminUser);
+        expect((ctx.content as ContextContent).fullSchema).toEqual([]);
+      });
+
+      it('CRITICAL: connection with children:[] exposes nothing — the editor saves this when whitelist is empty for a connection', async () => {
+        // This is exactly what ContextContainerV2 saves when the user has
+        //   databases: [{ databaseName: 'duckdb_main', whitelist: [] }]
+        // The resulting WhitelistNode has children:[], which must produce fullSchema:[].
+        const id = await createChildContext([
+          { name: 'duckdb_main', type: 'connection', children: [] },
+        ]);
+        const { data: [ctx] } = await FilesAPI.loadFiles([id], nonAdminUser);
+        expect((ctx.content as ContextContent).fullSchema).toEqual([]);
+      });
+
+      it('child cannot access a connection not offered by parent', async () => {
+        // bigquery_analytics is NOT in the parent whitelist (beforeEach /org/context)
+        const id = await createChildContext([
+          { name: 'bigquery_analytics', type: 'connection', children: [
+            { name: 'analytics', type: 'schema' },
+          ]},
+        ]);
+        const { data: [ctx] } = await FilesAPI.loadFiles([id], nonAdminUser);
+        expect((ctx.content as ContextContent).fullSchema).toEqual([]);
+      });
+
+      it('child restricts to a subset of the parent offering', async () => {
+        // Parent: duckdb_main/public/{users, orders, products}
+        // Child:  duckdb_main/public/{users}
+        const id = await createChildContext([
+          { name: 'duckdb_main', type: 'connection', children: [
+            { name: 'public', type: 'schema', children: [
+              { name: 'users', type: 'table' },
+            ]},
+          ]},
+        ]);
+        const { data: [ctx] } = await FilesAPI.loadFiles([id], nonAdminUser);
+        const duckdb = (ctx.content as ContextContent).fullSchema!.find(db => db.databaseName === 'duckdb_main');
+        expect(duckdb).toBeDefined();
+        expect(duckdb!.schemas[0].tables).toHaveLength(1);
+        expect(duckdb!.schemas[0].tables[0].table).toBe('users');
+      });
+
+      it('child requesting a table not in parent offering gets nothing', async () => {
+        // 'events' does not exist in duckdb_main/public (only in bigquery, not offered)
+        const id = await createChildContext([
+          { name: 'duckdb_main', type: 'connection', children: [
+            { name: 'public', type: 'schema', children: [
+              { name: 'events', type: 'table' },
+            ]},
+          ]},
+        ]);
+        const { data: [ctx] } = await FilesAPI.loadFiles([id], nonAdminUser);
+        expect((ctx.content as ContextContent).fullSchema).toEqual([]);
+      });
+
+      it('child schema with children:[] exposes nothing from that schema', async () => {
+        const id = await createChildContext([
+          { name: 'duckdb_main', type: 'connection', children: [
+            { name: 'public', type: 'schema', children: [] },
+          ]},
+        ]);
+        const { data: [ctx] } = await FilesAPI.loadFiles([id], nonAdminUser);
+        expect((ctx.content as ContextContent).fullSchema).toEqual([]);
+      });
+
+      it('child schema with children:undefined exposes all tables offered by parent', async () => {
+        const id = await createChildContext([
+          { name: 'duckdb_main', type: 'connection', children: [
+            { name: 'public', type: 'schema' }, // expose all tables parent allows
+          ]},
+        ]);
+        const { data: [ctx] } = await FilesAPI.loadFiles([id], nonAdminUser);
+        const duckdb = (ctx.content as ContextContent).fullSchema!.find(db => db.databaseName === 'duckdb_main');
+        expect(duckdb!.schemas[0].tables).toHaveLength(3);
+      });
+
+      it('child with connection children:undefined exposes all schemas/tables offered by parent', async () => {
+        const id = await createChildContext([
+          { name: 'duckdb_main', type: 'connection' }, // expose all parent allows
+        ]);
+        const { data: [ctx] } = await FilesAPI.loadFiles([id], nonAdminUser);
+        const duckdb = (ctx.content as ContextContent).fullSchema!.find(db => db.databaseName === 'duckdb_main');
+        expect(duckdb).toBeDefined();
+        expect(duckdb!.schemas[0].tables).toHaveLength(3);
+      });
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Path-based whitelist hierarchy
+  //
+  // These tests verify the full ancestor-chain:  given a context at some
+  // path, what schemas does it actually expose after the entire chain of
+  // parent restrictions has been applied?
+  //
+  // They differ from the "comprehensive cases" suite above, which tests
+  // single-level whitelist semantics.  Here we wire together two or three
+  // levels and assert on the final `fullSchema` at the leaf.
+  // ─────────────────────────────────────────────────────────────────────────
+  describe('Path-based whitelist hierarchy', () => {
+    type Whitelist = import('@/lib/types').Whitelist;
+
+    // ── Shared helpers ───────────────────────────────────────────────────
+
+    async function replaceRootCtx(whitelist: Whitelist): Promise<number> {
+      const { getAdapter } = await import('@/lib/database/adapter/factory');
+      const db = await getAdapter();
+      await db.query("DELETE FROM files WHERE path = '/org/context' AND company_id = 1", []);
+      return DocumentDB.create('context', '/org/context', 'context', {
+        versions: [{ version: 1, whitelist, docs: [], createdAt: new Date().toISOString(), createdBy: 1 }],
+        published: { all: 1 },
+        fullSchema: [],
+        fullDocs: [],
+      } as ContextContent, [], 1);
+    }
+
+    async function mkContext(path: string, whitelist: Whitelist): Promise<number> {
+      return DocumentDB.create('context', path, 'context', {
+        versions: [{ version: 1, whitelist, docs: [], createdAt: new Date().toISOString(), createdBy: 1 }],
+        published: { all: 1 },
+        fullSchema: [],
+        fullDocs: [],
+      } as ContextContent, [], 1);
+    }
+
+    function tables(content: ContextContent): string[] {
+      return (content.fullSchema ?? [])
+        .flatMap(db => db.schemas)
+        .flatMap(s => s.tables)
+        .map(t => t.table)
+        .sort();
+    }
+
+    // ── Tests ────────────────────────────────────────────────────────────
+
+    it('three-level hierarchy: each level narrows the whitelist', async () => {
+      // /org/context:           all three tables
+      // /org/dept/context:      users + orders only
+      // /org/dept/team/context: users only
+      await replaceRootCtx([
+        { name: 'duckdb_main', type: 'connection', children: [
+          { name: 'public', type: 'schema' }, // expose all
+        ]},
+      ]);
+      await mkContext('/org/dept/context', [
+        { name: 'duckdb_main', type: 'connection', children: [
+          { name: 'public', type: 'schema', children: [
+            { name: 'users', type: 'table' },
+            { name: 'orders', type: 'table' },
+          ]},
+        ]},
+      ]);
+      const leafId = await mkContext('/org/dept/team/context', [
+        { name: 'duckdb_main', type: 'connection', children: [
+          { name: 'public', type: 'schema', children: [
+            { name: 'users', type: 'table' },
+          ]},
+        ]},
+      ]);
+
+      const { data: [ctx] } = await FilesAPI.loadFiles([leafId], nonAdminUser);
+      expect(tables(ctx.content as ContextContent)).toEqual(['users']);
+    });
+
+    it('grandchild with whitelist:* is bounded by the nearest parent, not the root', async () => {
+      // /org/context:       users + orders + products
+      // /org/mid/context:   users + orders  (narrows)
+      // /org/mid/leaf/context: *  (wants everything — but nearest parent only has users+orders)
+      await replaceRootCtx([
+        { name: 'duckdb_main', type: 'connection', children: [{ name: 'public', type: 'schema' }] },
+      ]);
+      await mkContext('/org/mid/context', [
+        { name: 'duckdb_main', type: 'connection', children: [
+          { name: 'public', type: 'schema', children: [
+            { name: 'users', type: 'table' },
+            { name: 'orders', type: 'table' },
+          ]},
+        ]},
+      ]);
+      const leafId = await mkContext('/org/mid/leaf/context', '*');
+
+      const { data: [ctx] } = await FilesAPI.loadFiles([leafId], nonAdminUser);
+      const t = tables(ctx.content as ContextContent);
+      // Bounded by nearest parent (/org/mid/context), NOT the root
+      expect(t).toEqual(['orders', 'users']);
+      expect(t).not.toContain('products');
+    });
+
+    it('child cannot exceed ancestor-chain ceiling even with explicit whitelist', async () => {
+      // /org/context:       users + orders  (products NOT available)
+      // /org/dept/context:  wants users + orders + products → products silently excluded
+      await replaceRootCtx([
+        { name: 'duckdb_main', type: 'connection', children: [
+          { name: 'public', type: 'schema', children: [
+            { name: 'users', type: 'table' },
+            { name: 'orders', type: 'table' },
+          ]},
+        ]},
+      ]);
+      const childId = await mkContext('/org/dept/context', [
+        { name: 'duckdb_main', type: 'connection', children: [
+          { name: 'public', type: 'schema', children: [
+            { name: 'users', type: 'table' },
+            { name: 'orders', type: 'table' },
+            { name: 'products', type: 'table' }, // not in root → excluded
+          ]},
+        ]},
+      ]);
+
+      const { data: [ctx] } = await FilesAPI.loadFiles([childId], nonAdminUser);
+      const t = tables(ctx.content as ContextContent);
+      expect(t).toEqual(['orders', 'users']);
+      expect(t).not.toContain('products');
+    });
+
+    it('two siblings under the same parent get different schemas based on their own whitelist', async () => {
+      // /org/context (from beforeEach): duckdb_main/public/{users, orders, products}
+      // /org/alpha/context: users + orders
+      // /org/beta/context:  products only
+      const alphaId = await mkContext('/org/alpha/context', [
+        { name: 'duckdb_main', type: 'connection', children: [
+          { name: 'public', type: 'schema', children: [
+            { name: 'users', type: 'table' },
+            { name: 'orders', type: 'table' },
+          ]},
+        ]},
+      ]);
+      const betaId = await mkContext('/org/beta/context', [
+        { name: 'duckdb_main', type: 'connection', children: [
+          { name: 'public', type: 'schema', children: [
+            { name: 'products', type: 'table' },
+          ]},
+        ]},
+      ]);
+
+      const { data: [alpha, beta] } = await FilesAPI.loadFiles([alphaId, betaId], nonAdminUser);
+      expect(tables(alpha.content as ContextContent)).toEqual(['orders', 'users']);
+      expect(tables(beta.content as ContextContent)).toEqual(['products']);
+    });
+
+    it('whitelist:* at each level propagates the full parent offering unchanged', async () => {
+      // /org/context (beforeEach): duckdb_main/public/{users, orders, products}
+      // /org/pass/context:         *  → sees {users, orders, products}
+      // /org/pass/through/context: *  → also sees {users, orders, products}
+      const midId = await mkContext('/org/pass/context', '*');
+      const leafId = await mkContext('/org/pass/through/context', '*');
+
+      const { data: [mid, leaf] } = await FilesAPI.loadFiles([midId, leafId], nonAdminUser);
+      expect(tables(mid.content as ContextContent)).toEqual(['orders', 'products', 'users']);
+      expect(tables(leaf.content as ContextContent)).toEqual(['orders', 'products', 'users']);
+    });
+
+    it('missing intermediate context — skips to nearest existing ancestor', async () => {
+      // /org/context (beforeEach): users + orders + products
+      // /org/gap/context:          does NOT exist
+      // /org/gap/leaf/context:     *  → nearest ancestor is /org/context
+      //                                → should see all three tables
+      // (no mkContext('/org/gap/context') call)
+      const leafId = await mkContext('/org/gap/leaf/context', '*');
+
+      const { data: [ctx] } = await FilesAPI.loadFiles([leafId], nonAdminUser);
+      expect(tables(ctx.content as ContextContent)).toEqual(['orders', 'products', 'users']);
+    });
+
+    it('context at path exposes empty schema when its whitelist is empty regardless of parent', async () => {
+      // /org/context (beforeEach): users + orders + products
+      // /org/blocked/context:      []  → fullSchema must be []
+      const id = await mkContext('/org/blocked/context', []);
+
+      const { data: [ctx] } = await FilesAPI.loadFiles([id], nonAdminUser);
+      expect((ctx.content as ContextContent).fullSchema).toEqual([]);
+    });
+
+    it('deep path uses nearest ancestor, not the root, for inheritance', async () => {
+      // Verify findNearestAncestorContext picks /org/deep/mid/context over /org/context
+      // /org/context:           users + orders + products
+      // /org/deep/context:      users only  (strips orders and products)
+      // /org/deep/mid/context:  *
+      // /org/deep/mid/leaf/context: *
+      // Both mid and leaf should be bounded by /org/deep/context (users only)
+      await replaceRootCtx([
+        { name: 'duckdb_main', type: 'connection', children: [{ name: 'public', type: 'schema' }] },
+      ]);
+      await mkContext('/org/deep/context', [
+        { name: 'duckdb_main', type: 'connection', children: [
+          { name: 'public', type: 'schema', children: [{ name: 'users', type: 'table' }] },
+        ]},
+      ]);
+      const midId  = await mkContext('/org/deep/mid/context', '*');
+      const leafId = await mkContext('/org/deep/mid/leaf/context', '*');
+
+      const { data: [mid, leaf] } = await FilesAPI.loadFiles([midId, leafId], nonAdminUser);
+      // Both bounded by /org/deep/context → only users
+      expect(tables(mid.content as ContextContent)).toEqual(['users']);
+      expect(tables(leaf.content as ContextContent)).toEqual(['users']);
+    });
+
+    it('connection exposed at root but blocked at intermediate level is gone for all descendants', async () => {
+      // /org/context:           duckdb_main + bigquery_analytics (both)
+      // /org/mid/context:       duckdb_main only (drops bigquery)
+      // /org/mid/leaf/context:  *  → should only see duckdb_main
+      await replaceRootCtx('*'); // exposes both connections
+
+      await mkContext('/org/mid/context', [
+        { name: 'duckdb_main', type: 'connection', children: [{ name: 'public', type: 'schema' }] },
+        // bigquery intentionally dropped
+      ]);
+      const leafId = await mkContext('/org/mid/leaf/context', '*');
+
+      const { data: [ctx] } = await FilesAPI.loadFiles([leafId], nonAdminUser);
+      const schema = (ctx.content as ContextContent).fullSchema!;
+      expect(schema.find(db => db.databaseName === 'duckdb_main')).toBeDefined();
+      expect(schema.find(db => db.databaseName === 'bigquery_analytics')).toBeUndefined();
     });
   });
 });

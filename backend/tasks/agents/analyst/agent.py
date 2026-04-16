@@ -96,7 +96,7 @@ class AnalystAgent(Agent):
         super().__init__(**kwargs)  # type: ignore
         self.goal = goal
         self.connection_id = connection_id or "No connection"
-        self.schema = schema or []
+        self.schema = schema  # preserve None (no context) vs [] (empty whitelist)
         self.context = context or ""
         self.app_state = app_state or {}
         self.agent_name = agent_name or "MinusX"
@@ -171,7 +171,7 @@ class AnalystAgent(Agent):
         return (
             'default.system',
             {
-                'schema': self.schema,
+                'schema': self.schema if self.schema is not None else [],
                 'context': self.context,
                 'connection_id': self.connection_id,
                 'home_folder': self.home_folder,
@@ -308,9 +308,12 @@ class AnalystAgent(Agent):
             citations = response.get("citations", [])
             content_blocks = response.get("content_blocks", None)
             agent_calls = tool_calls_to_agent_calls(tool_calls, content, citations, content_blocks)
-            # Inject whitelisted schema into SearchDBSchema and ExecuteQuery calls
+            # Inject whitelisted schema into SearchDBSchema and ExecuteQuery calls.
+            # None  = no active context → no injection, tools see full schema
+            # []    = context with empty whitelist → inject [] so tools return nothing
+            # [...] = context with whitelisted tables → inject to filter results
             for call in agent_calls:
-                if call.agent in ('SearchDBSchema', 'ExecuteQuery') and self.schema:
+                if call.agent in ('SearchDBSchema', 'ExecuteQuery') and self.schema is not None:
                     call.args['_schema'] = self.schema
             finish_reason = response.get("finish_reason", "")
             
@@ -395,7 +398,7 @@ class ReportAgent(Agent):
         self.emails = emails or []
         # Global context
         self.connection_id = connection_id
-        self.schema = schema or []
+        self.schema = schema  # preserve None (no context) vs [] (empty whitelist)
         self.context = context or ""
         self.home_folder = home_folder or "/"
         # Track child results
