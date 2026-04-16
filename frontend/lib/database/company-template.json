@@ -954,11 +954,11 @@
                 "description": "Initial tutorial context",
                 "whitelist": [
                   {
-                    "name": "mxfood",
+                    "name": "static",
                     "type": "connection",
                     "children": [
                       {
-                        "name": "main",
+                        "name": "mxfood",
                         "type": "schema"
                       }
                     ]
@@ -971,7 +971,7 @@
             },
             "fullSchema": [
               {
-                "databaseName": "mxfood",
+                "databaseName": "static",
                 "schemas": [
                   {
                     "schema": "main",
