@@ -38,6 +38,8 @@ import { testConnection } from '@/lib/backend/python-backend';
 import TabSwitcher from '../TabSwitcher';
 import Editor from '@monaco-editor/react';
 import { useAppSelector } from '@/store/hooks';
+import { TEMPLATE_FILE_IDS } from '@/lib/database/template-file-ids';
+import { resolvePath } from '@/lib/mode/path-resolver';
 import ConnectionTablesBrowser from '../ConnectionTablesBrowser';
 import Image from 'next/image';
 import { BigQueryConfig, PostgreSQLConfig, CsvConfig, GoogleSheetsConfig, AthenaConfig, StaticConnectionConfig } from './connection-configs';
@@ -152,18 +154,17 @@ export default function ConnectionFormV2({
   const companyId = useAppSelector((state) => state.auth.user?.companyId);
   const userMode = useAppSelector((state) => state.auth.user?.mode) || 'org';
   const showJson = useAppSelector((state) => state.ui.showJson);
-  // ID of the static connection for the current mode (used to redirect CSV/GS selections)
-  const staticConnectionId = useAppSelector((state) => {
-    const f = Object.values(state.files.files).find(
-      (file) => file?.type === 'connection' && (file as { name?: string }).name === 'static' && (file?.id ?? 0) > 0,
-    );
-    return (f as { id?: number } | undefined)?.id ?? null;
-  });
+  const staticConnectionId = TEMPLATE_FILE_IDS[resolvePath(userMode, '/database/static')];
 
   // For create mode, start with type selection step; skip if already editing
   const [step, setStep] = useState<'select-type' | 'configure'>(mode === 'create' ? 'select-type' : 'configure');
-  // For existing connections, default to 'tables' view; for new connections, show 'settings'
-  const [activeSection, setActiveSection] = useState<'tables' | 'settings'>(mode === 'view' ? 'tables' : 'settings');
+  // For existing connections, default to 'tables' view; for new connections, show 'settings'.
+  // Exception: static connection (CSV/GS) defaults to 'settings' because that's where
+  // the file upload / Google Sheets UI lives (StaticConnectionConfig).
+  const isStaticConnection = content.type === 'csv' && fileName === 'static';
+  const [activeSection, setActiveSection] = useState<'tables' | 'settings'>(
+    mode === 'view' && !isStaticConnection ? 'tables' : 'settings'
+  );
   const [activeView, setActiveView] = useState<'form' | 'json'>('form');
   const [nameError, setNameError] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
@@ -201,7 +202,6 @@ export default function ConnectionFormV2({
       if (staticConnectionId) {
         router.push(`/f/${staticConnectionId}`);
       }
-      onCancel(); // close the create form
       return;
     }
     handleTypeChange(selectedType);
