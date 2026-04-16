@@ -35,6 +35,7 @@ interface UIState {
   showTrustScore: boolean;
   allowChatQueue: boolean;
   queueStrategy: 'end-of-turn' | 'mid-turn';
+  dismissAgentNavGuard: boolean;
 }
 
 const initialState: UIState = {
@@ -65,6 +66,7 @@ const initialState: UIState = {
   showTrustScore: true,
   allowChatQueue: false,
   queueStrategy: 'end-of-turn',
+  dismissAgentNavGuard: false,
 };
 
 const uiSlice = createSlice({
@@ -237,8 +239,14 @@ const uiSlice = createSlice({
         try { localStorage.setItem('queueStrategy', action.payload); } catch { /* ignore */ }
       }
     },
-    setBulkUiFlags: (state, action: PayloadAction<{ showDebug?: boolean; showJson?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean }>) => {
-      const { showDebug, showJson, showAdvanced, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore } = action.payload;
+    setDismissAgentNavGuard: (state, action: PayloadAction<boolean>) => {
+      state.dismissAgentNavGuard = action.payload;
+      if (typeof window !== 'undefined') {
+        try { localStorage.setItem('dismissAgentNavGuard', String(action.payload)); } catch { /* ignore */ }
+      }
+    },
+    setBulkUiFlags: (state, action: PayloadAction<{ showDebug?: boolean; showJson?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; dismissAgentNavGuard?: boolean }>) => {
+      const { showDebug, showJson, showAdvanced, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore, dismissAgentNavGuard } = action.payload;
       if (showDebug !== undefined) state.showDebug = showDebug;
       if (showJson !== undefined) state.showJson = showJson;
       if (showAdvanced !== undefined) state.showAdvanced = showAdvanced;
@@ -246,6 +254,7 @@ const uiSlice = createSlice({
       if (queueStrategy !== undefined) state.queueStrategy = queueStrategy;
       if (showSuggestedQuestions !== undefined) state.showSuggestedQuestions = showSuggestedQuestions;
       if (showTrustScore !== undefined) state.showTrustScore = showTrustScore;
+      if (dismissAgentNavGuard !== undefined) state.dismissAgentNavGuard = dismissAgentNavGuard;
     },
   },
 });
@@ -289,6 +298,7 @@ export const {
   clearChatAttachments,
   setAllowChatQueue,
   setQueueStrategy,
+  setDismissAgentNavGuard,
   setBulkUiFlags,
   pushView,
   popView,
@@ -349,3 +359,4 @@ export const selectTopView = (state: RootState): ViewStackItem | undefined =>
 export const selectViewStackDepth = (state: RootState) => state.ui.viewStack.length;
 export const selectShowSuggestedQuestions = (state: RootState) => state.ui.showSuggestedQuestions;
 export const selectShowTrustScore = (state: RootState) => state.ui.showTrustScore;
+export const selectDismissAgentNavGuard = (state: RootState) => state.ui.dismissAgentNavGuard;

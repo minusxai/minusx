@@ -14,12 +14,14 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode,
 import { shallowEqual } from 'react-redux';
 import { usePathname } from 'next/navigation';
 import { useRouter } from './use-navigation';
-import { useAppSelector } from '@/store/hooks';
+import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectActiveConversation } from '@/store/chatSlice';
 import { Dialog, Portal, Button, Text, HStack } from '@chakra-ui/react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { preserveParams } from './url-utils';
 import { clearFileChanges } from '@/lib/api/file-state';
 import { selectDirtyFiles } from '@/store/filesSlice';
+import { selectDismissAgentNavGuard, setDismissAgentNavGuard } from '@/store/uiSlice';
 import { getStore } from '@/store/store';
 import PublishModal from '@/components/PublishModal';
 
@@ -76,6 +78,7 @@ interface NavigationGuardProviderProps {
 export function NavigationGuardProvider({ children }: NavigationGuardProviderProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const dispatch = useAppDispatch();
 
   // Get the current file ID from the URL
   const currentFileId = useMemo(() => getFileIdFromPathname(pathname), [pathname]);
@@ -124,9 +127,15 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
   const dirtyFiles = useAppSelector(state => selectDirtyFiles(state), shallowEqual);
   const anyDirtyFiles = dirtyFiles.length > 0;
 
-  // In-app nav guard: any dirty file (current or otherwise) OR agent running.
+  // "Do not show again" for agent-running modal (persisted via Redux + localStorage)
+  const agentNavDismissed = useAppSelector(selectDismissAgentNavGuard);
+  const [doNotShowAgain, setDoNotShowAgain] = useState(false);
+
+  // In-app nav guard: any dirty file (current or otherwise) OR agent running (unless dismissed).
   // Agent navigation via the Navigate tool uses router.push() directly and bypasses this guard.
-  const shouldGuardInAppNavigation = isCurrentFileDirty || anyDirtyFiles || isAgentRunning;
+  const shouldGuardForDirty = isCurrentFileDirty || anyDirtyFiles;
+  const shouldGuardForAgent = isAgentRunning && !agentNavDismissed;
+  const shouldGuardInAppNavigation = shouldGuardForDirty || shouldGuardForAgent;
 
   // beforeunload guard: fire whenever any file has unsaved changes, or when the agent is running.
   const shouldGuardUnload = isCurrentFileDirty || anyDirtyFiles || isAgentRunning;
@@ -166,12 +175,26 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
     setSaveError(null);
   }, [pendingHref, router, dirtyFiles]);
 
+  // Dismiss agent-running modal and navigate
+  const handleAgentDismiss = useCallback(() => {
+    if (doNotShowAgain) {
+      dispatch(setDismissAgentNavGuard(true));
+    }
+    if (pendingHref) {
+      router.push(pendingHref);
+    }
+    setIsOpen(false);
+    setPendingHref(null);
+    setDoNotShowAgain(false);
+  }, [doNotShowAgain, pendingHref, router, dispatch]);
+
   // Cancel navigation (stay on page)
   const handleCancel = useCallback(() => {
     setIsOpen(false);
     setPendingHref(null);
     setGuardReason(null);
     setSaveError(null);
+    setDoNotShowAgain(false);
   }, []);
 
   // Open PublishModal for reviewing and saving all dirty files
@@ -288,18 +311,31 @@ export function NavigationGuardProvider({ children }: NavigationGuardProviderPro
               <Dialog.Body px={6} py={5}>
                 <Text fontSize="sm" lineHeight="1.6">
                   {guardReason === 'agent-running'
-                    ? 'An agent is currently running. Are you sure you want to leave? The agent will continue running in the background but you may lose track of its progress.'
+                    ? 'An agent is currently running and it will continue running in the background.'
                     : isCurrentFileDirty
                       ? `You have unsaved changes in "${currentFileName}". Are you sure you want to leave without saving?`
                       : 'You have unsaved changes. You must save or discard your changes before navigating away from this page.'
                   }
                 </Text>
+                {guardReason === 'agent-running' && (
+                  <Checkbox
+                    checked={doNotShowAgain}
+                    onCheckedChange={(e) => setDoNotShowAgain(!!e.checked)}
+                    size="sm"
+                  >
+                    <Text fontSize="sm">Do not show again</Text>
+                  </Checkbox>
+                )}
                 {saveError && (
                   <Text fontSize="sm" color="accent.danger" mt={2}>{saveError}</Text>
                 )}
               </Dialog.Body>
               <Dialog.Footer px={6} py={4} gap={3} borderTop="1px solid" borderColor="border.default" justifyContent="flex-end">
-                {guardReason === 'dirty' ? (
+                {guardReason === 'agent-running' ? (
+                  <Button variant="outline" onClick={handleAgentDismiss}>
+                    Dismiss
+                  </Button>
+                ) : guardReason === 'dirty' ? (
                   <HStack gap={2}>
                     <Button variant="outline" onClick={handleCancel}>
                       Cancel

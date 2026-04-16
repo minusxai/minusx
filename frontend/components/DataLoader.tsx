@@ -28,7 +28,7 @@ export function DataLoader() {
   // Restore persisted UI flags after hydration — single dispatch avoids 3 separate re-render cycles
   useEffect(() => {
     try {
-      const flags: { showDebug?: boolean; showJson?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean } = {};
+      const flags: { showDebug?: boolean; showJson?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; dismissAgentNavGuard?: boolean } = {};
       const debug = localStorage.getItem('showDebug');
       if (debug !== null) flags.showDebug = debug === 'true';
       const json = localStorage.getItem('showJson');
@@ -43,6 +43,8 @@ export function DataLoader() {
       if (allowChatQueue !== null) flags.allowChatQueue = allowChatQueue === 'true';
       const qs = localStorage.getItem('queueStrategy');
       if (qs === 'end-of-turn' || qs === 'mid-turn') flags.queueStrategy = qs;
+      const dismissAgentNav = localStorage.getItem('dismissAgentNavGuard');
+      if (dismissAgentNav !== null) flags.dismissAgentNavGuard = dismissAgentNav === 'true';
       if (Object.keys(flags).length > 0) dispatch(setBulkUiFlags(flags));
     } catch { /* ignore */ }
   }, []);
