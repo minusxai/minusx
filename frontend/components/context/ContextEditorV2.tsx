@@ -315,7 +315,14 @@ export default function ContextEditorV2({
 
   // Handle whitelist change - pure controlled
   const handleWhitelistChange = (databaseName: string, newWhitelist: WhitelistItem[]) => {
-    const databases: DatabaseContext[] = content.databases === '*' ? [] : (content.databases || []);
+    // When databases === '*', synthesize a full whitelist for all connections as the starting point
+    // so that modifying one connection doesn't implicitly exclude all others.
+    const databases: DatabaseContext[] = content.databases === '*'
+      ? availableDatabases.map(db => ({
+          databaseName: db.databaseName,
+          whitelist: db.schemas.map(s => ({ type: 'schema' as const, name: s.schema })),
+        }))
+      : (content.databases || []);
     const dbIndex = databases.findIndex((db: DatabaseContext) => db.databaseName === databaseName);
 
     if (dbIndex >= 0) {
@@ -725,9 +732,12 @@ export default function ContextEditorV2({
                 ) : (
                   <VStack gap={4} align="stretch">
                     {availableDatabases.map((database) => {
-                      const databases = content.databases === '*' ? [] : (content.databases || []);
-                      const dbContext = (databases as DatabaseContext[]).find((db: DatabaseContext) => db.databaseName === database.databaseName);
-                      const whitelist = dbContext?.whitelist || [];
+                      // When databases === '*', synthesize schema-level whitelist so picker shows all as selected
+                      const whitelist: WhitelistItem[] = content.databases === '*'
+                        ? database.schemas.map(s => ({ type: 'schema' as const, name: s.schema }))
+                        : ((content.databases || []) as DatabaseContext[]).find(
+                            (db: DatabaseContext) => db.databaseName === database.databaseName
+                          )?.whitelist || [];
 
                       const isExpanded = expandedDatabases.has(database.databaseName);
                       const whitelistedSchemas = whitelist.filter(w => w.type === 'schema');
