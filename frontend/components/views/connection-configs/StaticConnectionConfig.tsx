@@ -214,8 +214,7 @@ function FileRow({
                 size="xs"
                 variant="ghost"
                 aria-label={`Rename ${f.schema_name}.${f.table_name}`}
-                opacity={0}
-                _groupHover={{ opacity: 1 }}
+                color="fg.muted"
                 onClick={() => onStartEdit(f)}
               >
                 <LuPencil />
@@ -270,8 +269,9 @@ export default function StaticConnectionConfig({
   const [uploadProgress, setUploadProgress] = useState<'idle' | 'uploading' | 'done' | 'error'>('idle');
 
   // ── Google Sheets add state ───────────────────────────────────────────────
-  const [sheetUrl, setSheetUrl] = useState('');
-  const [sheetSchema, setSheetSchema] = useState('public');
+  const [pendingSheets, setPendingSheets] = useState<Array<{ url: string; schema: string; tableName: string }>>([
+    { url: '', schema: 'public', tableName: '' },
+  ]);
   const [importProgress, setImportProgress] = useState<'idle' | 'importing' | 'done' | 'error'>('idle');
 
   // ── Per-item loading states ───────────────────────────────────────────────
@@ -395,7 +395,7 @@ export default function StaticConnectionConfig({
         source_type: 'csv' as const,
       }));
 
-      onChange({ files: [...existingFiles, ...newFiles] });
+      onChange({ files: [...newFiles, ...existingFiles] });
       setUploadProgress('done');
       setPendingFiles([]);
     } catch (e) {
@@ -407,31 +407,48 @@ export default function StaticConnectionConfig({
   // ── Google Sheets add handler ─────────────────────────────────────────────
 
   const handleSheetImport = async () => {
-    if (!sheetUrl) { onError('Please enter a Google Sheets URL'); return; }
-    if (!sheetUrl.includes('docs.google.com/spreadsheets')) {
-      onError('Invalid Google Sheets URL — expected https://docs.google.com/spreadsheets/d/...');
-      return;
+    const validSheets = pendingSheets.filter((s) => s.url.trim());
+    if (validSheets.length === 0) { onError('Please enter at least one Google Sheets URL'); return; }
+
+    for (const s of validSheets) {
+      if (!s.url.includes('docs.google.com/spreadsheets')) {
+        onError(`Invalid URL: ${s.url}`);
+        return;
+      }
+      const schemaErr = s.schema ? validateIdentifier(s.schema) : null;
+      if (schemaErr) { onError(`Schema "${s.schema}": ${schemaErr}`); return; }
+      const tableErr = s.tableName ? validateIdentifier(s.tableName) : null;
+      if (tableErr) { onError(`Table name "${s.tableName}": ${tableErr}`); return; }
     }
-    const schemaErr = sheetSchema ? validateIdentifier(sheetSchema) : null;
-    if (schemaErr) { onError(`Schema: ${schemaErr}`); return; }
     if (!companyId) { onError('Unable to determine company ID'); return; }
 
     setImportProgress('importing');
+    let allNewFiles: CsvFileInfo[] = [];
     try {
-      const result = await importGoogleSheets('static', sheetUrl, companyId, userMode, false, sheetSchema);
+      for (const sheet of validSheets) {
+        const result = await importGoogleSheets('static', sheet.url, companyId, userMode, false, sheet.schema || 'public');
+        if (!result.success) { onError(result.message); setImportProgress('error'); return; }
 
-      if (!result.success) { onError(result.message); setImportProgress('error'); return; }
+        const spreadsheetFiles: CsvFileInfo[] = (result.config!.files ?? []).map((f, idx) => ({
+          ...f,
+          // Override table name: if user supplied one and there's only one sheet, use it directly;
+          // if multiple sheets, use it as a prefix (e.g. "sales" → "sales_sheet1")
+          table_name:
+            sheet.tableName
+              ? result.config!.files!.length === 1
+                ? sheet.tableName
+                : `${sheet.tableName}_${f.table_name}`
+              : f.table_name,
+          source_type: 'google_sheets' as const,
+          spreadsheet_url: sheet.url,
+          spreadsheet_id: result.config!.spreadsheet_id,
+        }));
+        allNewFiles = [...allNewFiles, ...spreadsheetFiles];
+      }
 
-      const newFiles: CsvFileInfo[] = (result.config!.files ?? []).map((f) => ({
-        ...f,
-        source_type: 'google_sheets' as const,
-        spreadsheet_url: sheetUrl,
-        spreadsheet_id: result.config!.spreadsheet_id,
-      }));
-
-      onChange({ files: [...existingFiles, ...newFiles] });
+      onChange({ files: [...allNewFiles, ...existingFiles] });
       setImportProgress('done');
-      setSheetUrl('');
+      setPendingSheets([{ url: '', schema: 'public', tableName: '' }]);
       setActivePanel(null);
     } catch (e) {
       onError(e instanceof Error ? e.message : 'Import failed');
@@ -499,9 +516,16 @@ export default function StaticConnectionConfig({
 
       if (!result.success) { onError(result.message ?? 'Re-import failed'); return; }
 
-      // Replace files from this spreadsheet with the freshly imported ones
+      // Replace files from this spreadsheet with freshly imported ones, keeping at same position
       const unchanged = existingFiles.filter((f) => f.spreadsheet_id !== spreadsheetId);
-      onChange({ files: [...unchanged, ...(result.files ?? [])] });
+      // Find where the old group was in the list to re-insert at the same spot
+      const firstIdx = existingFiles.findIndex((f) => f.spreadsheet_id === spreadsheetId);
+      const newFiles = result.files ?? [];
+      const updated =
+        firstIdx === -1
+          ? [...newFiles, ...unchanged]
+          : [...unchanged.slice(0, firstIdx), ...newFiles, ...unchanged.slice(firstIdx)];
+      onChange({ files: updated });
     } catch (e) {
       onError(e instanceof Error ? e.message : 'Re-import failed');
     } finally {
@@ -551,6 +575,7 @@ export default function StaticConnectionConfig({
           onClick={() => {
             setActivePanel(activePanel === 'sheets-add' ? null : 'sheets-add');
             setImportProgress('idle');
+            if (activePanel !== 'sheets-add') setPendingSheets([{ url: '', schema: 'public', tableName: '' }]);
           }}
         >
           <Image src="/logos/google-sheets.svg" alt="Google Sheets" width={14} height={14} />
@@ -654,36 +679,91 @@ export default function StaticConnectionConfig({
       {/* ── Google Sheets add panel ── */}
       {activePanel === 'sheets-add' && (
         <Box p={3} borderRadius="md" border="1px solid" borderColor="accent.teal" bg="accent.teal/5">
-          <VStack align="stretch" gap={2}>
-            <HStack gap={2}>
-              <Icon as={LuLink} boxSize={4} color="fg.muted" flexShrink={0} />
-              <Input
-                value={sheetUrl}
-                onChange={(e) => { setSheetUrl(e.target.value); setImportProgress('idle'); }}
-                placeholder="https://docs.google.com/spreadsheets/d/..."
-                fontFamily="mono"
-                fontSize="sm"
-              />
-            </HStack>
-            <HStack gap={2}>
-              <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap">Schema:</Text>
-              <Input
-                size="sm"
-                fontFamily="mono"
-                value={sheetSchema}
-                onChange={(e) => setSheetSchema(e.target.value.toLowerCase())}
-                placeholder="public"
-              />
-            </HStack>
+          <VStack align="stretch" gap={3}>
+            {pendingSheets.map((sheet, idx) => (
+              <Box
+                key={idx}
+                p={2}
+                borderRadius="sm"
+                bg="bg.surface"
+                border="1px solid"
+                borderColor="border.subtle"
+              >
+                <HStack justify="space-between" mb={2}>
+                  <HStack gap={1.5}>
+                    <Icon as={LuLink} boxSize={3} color="fg.muted" flexShrink={0} />
+                    <Text fontSize="xs" color="fg.muted">Spreadsheet {pendingSheets.length > 1 ? idx + 1 : ''}</Text>
+                  </HStack>
+                  {pendingSheets.length > 1 && (
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      aria-label="Remove this spreadsheet"
+                      onClick={() => setPendingSheets((p) => p.filter((_, i) => i !== idx))}
+                    >
+                      <LuX />
+                    </Button>
+                  )}
+                </HStack>
+
+                <VStack align="stretch" gap={2}>
+                  <Input
+                    size="sm"
+                    fontFamily="mono"
+                    value={sheet.url}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setPendingSheets((p) => p.map((s, i) => i === idx ? { ...s, url: v } : s));
+                      setImportProgress('idle');
+                    }}
+                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                  />
+                  <HStack gap={2}>
+                    <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap">Schema:</Text>
+                    <Input
+                      size="xs"
+                      fontFamily="mono"
+                      value={sheet.schema}
+                      onChange={(e) =>
+                        setPendingSheets((p) => p.map((s, i) => i === idx ? { ...s, schema: e.target.value.toLowerCase() } : s))
+                      }
+                      placeholder="public"
+                    />
+                    <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap">Table name:</Text>
+                    <Input
+                      size="xs"
+                      fontFamily="mono"
+                      value={sheet.tableName}
+                      onChange={(e) =>
+                        setPendingSheets((p) => p.map((s, i) => i === idx ? { ...s, tableName: e.target.value.toLowerCase() } : s))
+                      }
+                      placeholder="auto (from tab name)"
+                    />
+                  </HStack>
+                </VStack>
+              </Box>
+            ))}
+
+            <Button
+              size="xs"
+              variant="ghost"
+              colorPalette="teal"
+              alignSelf="start"
+              onClick={() => setPendingSheets((p) => [...p, { url: '', schema: 'public', tableName: '' }])}
+            >
+              + Add another spreadsheet
+            </Button>
+
             <Text fontSize="xs" color="fg.muted">
               Sheet must be publicly shared — &quot;Anyone with the link can view&quot;.
-              Each non-empty sheet becomes a table.
+              Each tab becomes a table (use the table name field to override, or rename after import with ✏).
             </Text>
+
             <HStack gap={2}>
               <Button
                 onClick={handleSheetImport}
                 loading={importProgress === 'importing'}
-                disabled={!sheetUrl}
+                disabled={pendingSheets.every((s) => !s.url.trim())}
                 size="sm"
                 bg="accent.teal"
               >
