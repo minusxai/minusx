@@ -17,7 +17,7 @@ import {
   completeToolCall,
   updateConversation
 } from '../chatSlice';
-import { setAllowChatQueue } from '../uiSlice';
+
 import type { RootState } from '../store';
 import { POST as chatPostHandler } from '@/app/api/chat/route';
 import { waitFor, getTestDbPath, initTestDatabase, cleanupTestDatabase, createNextRequest } from './test-utils';
@@ -214,7 +214,7 @@ describe('Chat API Tests', () => {
 
     it('should handle basic conversation flow with MultiToolAgent (mirrors backend test)', async () => {
       const store = getStore();
-      store.dispatch(setAllowChatQueue(true));
+
       const conversationID = -123; // Temp conversation ID (negative)
 
       // STEP 1: Create conversation
@@ -315,7 +315,7 @@ describe('Chat API Tests', () => {
 
     it('should handle conversation continuation and forking', async () => {
       const store = getStore();
-      store.dispatch(setAllowChatQueue(true));
+
       const conversationID = -456; // Temp conversation ID (negative)
 
       // STEP 1: Create and complete first exchange

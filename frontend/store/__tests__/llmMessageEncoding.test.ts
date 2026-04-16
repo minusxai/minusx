@@ -22,7 +22,7 @@ import {
   sendMessage,
   selectConversation
 } from '../chatSlice';
-import { setAllowChatQueue } from '../uiSlice';
+
 import type { RootState } from '../store';
 import { POST as chatPostHandler } from '@/app/api/chat/route';
 import { POST as filesBatchPostHandler } from '@/app/api/files/batch/route';
@@ -243,7 +243,7 @@ describe('LLM Message Encoding', () => {
 
   it('should not double-encode dashboard app_state or ReadFiles result', async () => {
     const store = getStore();
-    store.dispatch(setAllowChatQueue(true));
+
     const mockServer = getLLMMockServer!();
     const conversationID = -301;
 
@@ -477,7 +477,7 @@ describe('LLM Message Encoding', () => {
     // The mock sales query returns 2 rows with columns [region, total_sales].
     // The markdown header alone is ~38 chars, so maxChars: 50 fits 0 data rows → truncated: true.
     const store = getStore();
-    store.dispatch(setAllowChatQueue(true));
+
     const mockServer = getLLMMockServer!();
     const conversationID = -303;
 

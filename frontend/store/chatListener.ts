@@ -590,7 +590,6 @@ chatListenerMiddleware.startListening({
     // Check if all tools completed
     const allCompleted = selectAllToolsCompleted(state, conversationID);
     if (!allCompleted) return;
-    if (!selectAllowChatQueue(state)) return;
 
     // Get or create AbortController for this conversation (keyed by stable _id)
     let abortController = abortControllers.get(conversation._id);
