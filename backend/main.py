@@ -35,6 +35,7 @@ from sql_utils.limit_enforcer import enforce_query_limit  # noqa: E402
 from sql_utils.validator import validate_sql as validate_sql_syntax  # noqa: E402
 from sql_utils.column_inferrer import infer_columns  # noqa: E402
 from sql_utils.autocomplete import get_completions, AutocompleteRequest, get_mention_completions  # noqa: E402
+from sql_utils.table_validator import validate_query_tables  # noqa: E402
 from sql_ir import parse_sql_to_ir, any_ir_to_sql, UnsupportedSQLError  # noqa: E402
 
 # Import orchestration components
@@ -637,6 +638,37 @@ async def validate_sql(request: ValidateSqlRequest):
     except Exception as e:
         logger.error(f"SQL validation error: {e}")
         return {"valid": True, "errors": []}
+
+
+class ValidateQueryTablesRequest(BaseModel):
+    """Request to validate that a SQL query only references whitelisted tables."""
+    sql: str
+    whitelist: List[Dict[str, Any]]
+    session_token: Optional[str] = None  # injected by pythonBackendFetch, not used here
+
+
+@app.post("/api/validate-query-tables")
+async def validate_query_tables_endpoint(request: ValidateQueryTablesRequest):
+    """Validate that every table referenced in a SQL query is covered by the provided whitelist.
+
+    Returns {"error": null} when the query is allowed, or {"error": "<message>"} when blocked.
+    Unparseable SQL is allowed through — the execution layer surfaces syntax errors.
+
+    The frontend sends tables as [{table: 'name'}] objects; normalise to the flat
+    ['name'] strings that validate_query_tables expects.
+    """
+    normalised = [
+        {
+            "schema": entry.get("schema", ""),
+            "tables": [
+                t["table"] if isinstance(t, dict) else t
+                for t in (entry.get("tables") or [])
+            ],
+        }
+        for entry in request.whitelist
+    ]
+    error = validate_query_tables(request.sql, normalised)
+    return {"error": error}
 
 
 class InferColumnsRequest(BaseModel):

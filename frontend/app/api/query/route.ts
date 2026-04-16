@@ -127,7 +127,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     if (filePath) {
       const whitelist = await getWhitelistForPath(filePath, connection_name, user);
       if (whitelist) {
-        const validationError = validateQueryTables(query, whitelist);
+        const validationError = await validateQueryTables(query, whitelist, user);
         if (validationError) {
           return NextResponse.json(
             { success: false, error: { code: 'FORBIDDEN_TABLES', message: validationError } },
