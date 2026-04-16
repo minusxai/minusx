@@ -21,6 +21,7 @@ import type { JobRun } from '@/lib/types';
 import { serializeDatabases, parseDatabasesYaml, canDeleteVersion } from '@/lib/context/context-utils';
 import SchemaTreeView from '../SchemaTreeView';
 import ChildPathSelector from '../ChildPathSelector';
+import { Checkbox } from '@/components/ui/checkbox';
 import Editor, { DiffEditor } from '@monaco-editor/react';
 import Markdown from '../Markdown';
 import DocumentHeader from '../DocumentHeader';
@@ -731,10 +732,43 @@ export default function ContextEditorV2({
                   </Box>
                 ) : (
                   <VStack gap={4} align="stretch">
+                    {content.databases === '*' && (
+                      <Box
+                        p={3}
+                        mb={1}
+                        bg="accent.teal/10"
+                        border="1px solid"
+                        borderColor="accent.teal/30"
+                        borderRadius="md"
+                      >
+                        <HStack gap={2} justify="space-between">
+                          <HStack gap={2}>
+                            <Icon as={LuGlobe} boxSize={4} color="accent.teal" />
+                            <Text fontSize="sm" color="accent.teal" fontWeight="600">
+                              All connections wildcarded — all current and future schemas are exposed
+                            </Text>
+                          </HStack>
+                          <Button
+                            size="xs"
+                            variant="outline"
+                            onClick={() => {
+                              const explicitDbs: DatabaseContext[] = availableDatabases.map(db => ({
+                                databaseName: db.databaseName,
+                                whitelist: db.schemas.map(s => ({ type: 'schema' as const, name: s.schema })),
+                              }));
+                              onChange({ databases: explicitDbs });
+                            }}
+                          >
+                            Switch to explicit
+                          </Button>
+                        </HStack>
+                      </Box>
+                    )}
                     {availableDatabases.map((database) => {
-                      // When databases === '*', synthesize schema-level whitelist so picker shows all as selected
-                      const whitelist: WhitelistItem[] = content.databases === '*'
-                        ? database.schemas.map(s => ({ type: 'schema' as const, name: s.schema }))
+                      const isConnectionWildcard = content.databases === '*';
+                      // When databases === '*', pass empty whitelist and let connectionWhitelisted prop handle visuals
+                      const whitelist: WhitelistItem[] = isConnectionWildcard
+                        ? []
                         : ((content.databases || []) as DatabaseContext[]).find(
                             (db: DatabaseContext) => db.databaseName === database.databaseName
                           )?.whitelist || [];
@@ -743,12 +777,24 @@ export default function ContextEditorV2({
                       const whitelistedSchemas = whitelist.filter(w => w.type === 'schema');
                       const whitelistedTables = whitelist.filter(w => w.type === 'table');
                       const totalTables = database.schemas.reduce((sum, s) => sum + s.tables.length, 0);
-                      // Tables covered by schema-level whitelists + individually whitelisted tables
                       const tablesFromSchemas = database.schemas
                         .filter(s => whitelistedSchemas.some(ws => ws.name === s.schema))
                         .reduce((sum, s) => sum + s.tables.length, 0);
-                      const effectiveTableCount = tablesFromSchemas + whitelistedTables.length;
+                      // When wildcarded, all tables are effectively included
+                      const effectiveTableCount = isConnectionWildcard ? totalTables : tablesFromSchemas + whitelistedTables.length;
                       const hasAny = effectiveTableCount > 0;
+
+                      // Connection-level checkbox state
+                      const connectionCheckboxState: { checked: boolean; indeterminate: boolean } = (() => {
+                        if (isConnectionWildcard) return { checked: true, indeterminate: false };
+                        if (whitelist.length === 0) return { checked: false, indeterminate: false };
+                        const isFullyCovered = database.schemas.every(s =>
+                          whitelistedSchemas.some(ws => ws.name === s.schema) ||
+                          s.tables.every(t => whitelistedTables.some(wt => wt.name === t.table && wt.schema === s.schema))
+                        );
+                        if (isFullyCovered) return { checked: true, indeterminate: false };
+                        return { checked: false, indeterminate: true };
+                      })();
 
                       return (
                         <Box
@@ -770,6 +816,34 @@ export default function ContextEditorV2({
                                 {...(isExpanded ? { borderBottom: '1px solid', borderColor: 'border.default' } : {})}
                               >
                                 <HStack gap={2}>
+                                  <Box
+                                    position="relative"
+                                    onClick={(e: React.MouseEvent) => { e.stopPropagation(); }}
+                                  >
+                                    <Checkbox
+                                      checked={connectionCheckboxState.checked}
+                                      onCheckedChange={() => {
+                                        if (connectionCheckboxState.checked || connectionCheckboxState.indeterminate) {
+                                          handleWhitelistChange(database.databaseName, []);
+                                        } else {
+                                          handleWhitelistChange(database.databaseName, database.schemas.map(s => ({ type: 'schema' as const, name: s.schema })));
+                                        }
+                                      }}
+                                    />
+                                    {connectionCheckboxState.indeterminate && (
+                                      <Box
+                                        position="absolute"
+                                        top="50%"
+                                        left="50%"
+                                        transform="translate(-50%, -50%)"
+                                        width="8px"
+                                        height="2px"
+                                        bg="accent.teal"
+                                        borderRadius="sm"
+                                        pointerEvents="none"
+                                      />
+                                    )}
+                                  </Box>
                                   <Icon
                                     as={isExpanded ? LuChevronDown : LuChevronRight}
                                     boxSize={4}
@@ -783,6 +857,20 @@ export default function ContextEditorV2({
                                   >
                                     {database.databaseName}
                                   </Text>
+                                  {isConnectionWildcard && (
+                                    <Box
+                                      px={2}
+                                      py={0.5}
+                                      bg="accent.teal/15"
+                                      borderRadius="sm"
+                                      border="1px solid"
+                                      borderColor="accent.teal/30"
+                                    >
+                                      <Text fontSize="2xs" fontWeight="700" color="accent.teal" fontFamily="mono">
+                                        all schemas
+                                      </Text>
+                                    </Box>
+                                  )}
                                   <Box
                                     px={2}
                                     py={0.5}
@@ -816,6 +904,7 @@ export default function ContextEditorV2({
                                   showStats={true}
                                   showPathFilter={true}
                                   availableChildPaths={availableChildPaths}
+                                  connectionWhitelisted={isConnectionWildcard}
                                 />
                               </Box>
                             </Collapsible.Content>

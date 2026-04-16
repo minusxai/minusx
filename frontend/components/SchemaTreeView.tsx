@@ -51,6 +51,9 @@ interface SchemaTreeViewProps {
 
   /** Start with all schemas expanded */
   defaultExpandedSchemas?: boolean;
+
+  /** When true, the entire connection is wildcarded (databases === '*') */
+  connectionWhitelisted?: boolean;
 }
 
 const TABLES_PER_PAGE = 5;
@@ -70,6 +73,7 @@ export default function SchemaTreeView({
   connectionName,
   onRetry,
   defaultExpandedSchemas = false,
+  connectionWhitelisted = false,
 }: SchemaTreeViewProps) {
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(() =>
     defaultExpandedSchemas ? new Set(schemas.map(s => s.schema)) : new Set()
@@ -211,6 +215,7 @@ export default function SchemaTreeView({
 
   const getSchemaCheckboxState = (schema: SchemaTreeItem): { checked: boolean; indeterminate: boolean } => {
     if (!selectable) return { checked: false, indeterminate: false };
+    if (connectionWhitelisted) return { checked: true, indeterminate: false };
 
     const schemaWhitelisted = isSchemaWhitelisted(schema.schema);
     const whitelistedTableCount = getSchemaTables(schema);
@@ -228,6 +233,15 @@ export default function SchemaTreeView({
 
   const toggleSchema = (schema: SchemaTreeItem) => {
     if (!selectable || !onWhitelistChange) return;
+
+    if (connectionWhitelisted) {
+      // Transition from global wildcard to explicit by excluding this schema
+      const otherSchemas = schemas
+        .filter(s => s.schema !== schema.schema)
+        .map(s => ({ type: 'schema' as const, name: s.schema }));
+      onWhitelistChange(otherSchemas);
+      return;
+    }
 
     const isWhitelisted = isSchemaWhitelisted(schema.schema);
     const whitelistedTableCount = getSchemaTables(schema);
@@ -251,6 +265,19 @@ export default function SchemaTreeView({
 
   const toggleTable = (schemaName: string, tableName: string) => {
     if (!selectable || !onWhitelistChange) return;
+
+    if (connectionWhitelisted) {
+      // Transition from global wildcard to explicit, excluding this specific table
+      const otherSchemas = schemas
+        .filter(s => s.schema !== schemaName)
+        .map(s => ({ type: 'schema' as const, name: s.schema }));
+      const thisSchema = schemas.find(s => s.schema === schemaName);
+      const remainingTables = thisSchema?.tables
+        .filter(t => t.table !== tableName)
+        .map(t => ({ type: 'table' as const, name: t.table, schema: schemaName })) || [];
+      onWhitelistChange([...otherSchemas, ...remainingTables]);
+      return;
+    }
 
     const isSchemaWL = isSchemaWhitelisted(schemaName);
     const isTableWL = isTableWhitelisted(schemaName, tableName);
@@ -515,6 +542,7 @@ export default function SchemaTreeView({
                       borderColor: 'accent.secondary'
                     }}
                     transition="all 0.2s"
+                    opacity={connectionWhitelisted ? 0.6 : 1}
                   >
                     <HStack gap={2} justify="space-between" w="100%">
                       <HStack gap={2} flex={1} minW={0}>
@@ -584,9 +612,9 @@ export default function SchemaTreeView({
                         >
                           {schemaItem.schema}
                         </Text>
-                        {selectable && isSchemaWhitelisted(schemaItem.schema) && (
+                        {selectable && (connectionWhitelisted || isSchemaWhitelisted(schemaItem.schema)) && (
                           <Text fontSize="xs" color="fg.muted">
-                            (entire schema)
+                            {connectionWhitelisted ? '(from connection)' : '(entire schema)'}
                           </Text>
                         )}
                       </HStack>
@@ -647,7 +675,7 @@ export default function SchemaTreeView({
                             const isTableExpanded = expandedTables.has(tableKey);
                             const filteredColumns = getFilteredColumns(schemaItem.schema, table);
                             const columnCount = showColumns ? (searchQuery ? filteredColumns.length : table.columns.length) : 0;
-                            const schemaWL = selectable ? isSchemaWhitelisted(schemaItem.schema) : false;
+                            const schemaWL = selectable ? (connectionWhitelisted || isSchemaWhitelisted(schemaItem.schema)) : false;
                             const tableWL = selectable ? isTableWhitelisted(schemaItem.schema, table.table) : false;
 
                             return (
