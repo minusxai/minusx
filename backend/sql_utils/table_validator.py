@@ -34,11 +34,16 @@ def validate_query_tables(sql: str, whitelist: list[dict]) -> Optional[str]:
     cte_names = {cte.alias.lower() for cte in ast.find_all(exp.CTE) if cte.alias}
 
     # Build allowed lookup: table_name (lower) → set of allowed schema names (lower)
+    # Tables can be plain strings OR dicts like {table: 'name', columns: [...]}
+    # (the latter comes when the agent passes the full schema object directly).
     allowed: dict[str, set[str]] = {}
     for entry in whitelist:
         schema = (entry.get('schema') or '').lower()
         for table in (entry.get('tables') or []):
-            allowed.setdefault(table.lower(), set()).add(schema)
+            if isinstance(table, dict):
+                table = table.get('table') or table.get('name') or table.get('table_name') or ''
+            if table:
+                allowed.setdefault(table.lower(), set()).add(schema)
 
     blocked = []
     for table in ast.find_all(exp.Table):

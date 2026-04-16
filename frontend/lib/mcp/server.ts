@@ -114,7 +114,7 @@ export function createMcpServer(user: EffectiveUser, onToolCall?: OnToolCall): M
       // Whitelist validation — use the user's home folder to find the relevant context
       const whitelist = await getWhitelistForUser(connection_id, user);
       if (whitelist) {
-        const validationError = validateQueryTables(query, whitelist);
+        const validationError = await validateQueryTables(query, whitelist, user);
         if (validationError) {
           const result: McpToolCallResult = {
             content: [{ type: 'text' as const, text: JSON.stringify({ success: false, error: validationError }) }],
