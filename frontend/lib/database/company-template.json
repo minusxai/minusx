@@ -2959,7 +2959,7 @@
         },
         {
           "id": 48,
-          "name": "context",
+          "name": "Knowledge Base",
           "path": "/internals/configs/context",
           "type": "context",
           "content": {
@@ -2988,7 +2988,7 @@
         },
         {
           "id": 49,
-          "name": "context",
+          "name": "Knowledge Base",
           "path": "/internals/database/context",
           "type": "context",
           "content": {
@@ -3017,7 +3017,7 @@
         },
         {
           "id": 50,
-          "name": "context",
+          "name": "Knowledge Base",
           "path": "/internals/logs/context",
           "type": "context",
           "content": {
@@ -3046,7 +3046,7 @@
         },
         {
           "id": 51,
-          "name": "context",
+          "name": "Knowledge Base",
           "path": "/internals/logs/conversations/context",
           "type": "context",
           "content": {
@@ -3075,7 +3075,7 @@
         },
         {
           "id": 108,
-          "name": "context",
+          "name": "Knowledge Base",
           "path": "/org/context",
           "type": "context",
           "content": {
@@ -3104,7 +3104,7 @@
         },
         {
           "id": 109,
-          "name": "context",
+          "name": "Knowledge Base",
           "path": "/org/configs/context",
           "type": "context",
           "content": {
@@ -3133,7 +3133,7 @@
         },
         {
           "id": 110,
-          "name": "context",
+          "name": "Knowledge Base",
           "path": "/org/database/context",
           "type": "context",
           "content": {
@@ -3162,7 +3162,7 @@
         },
         {
           "id": 111,
-          "name": "context",
+          "name": "Knowledge Base",
           "path": "/org/logs/context",
           "type": "context",
           "content": {
@@ -3191,7 +3191,7 @@
         },
         {
           "id": 112,
-          "name": "context",
+          "name": "Knowledge Base",
           "path": "/org/logs/conversations/context",
           "type": "context",
           "content": {
@@ -3220,7 +3220,7 @@
         },
         {
           "id": 52,
-          "name": "context",
+          "name": "Knowledge Base",
           "path": "/tutorial/configs/context",
           "type": "context",
           "content": {
@@ -3249,7 +3249,7 @@
         },
         {
           "id": 53,
-          "name": "context",
+          "name": "Knowledge Base",
           "path": "/tutorial/database/context",
           "type": "context",
           "content": {
@@ -3278,7 +3278,7 @@
         },
         {
           "id": 54,
-          "name": "context",
+          "name": "Knowledge Base",
           "path": "/tutorial/logs/context",
           "type": "context",
           "content": {
@@ -3307,7 +3307,7 @@
         },
         {
           "id": 55,
-          "name": "context",
+          "name": "Knowledge Base",
           "path": "/tutorial/logs/conversations/context",
           "type": "context",
           "content": {

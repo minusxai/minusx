@@ -1282,7 +1282,7 @@ export const MIGRATIONS: MigrationEntry[] = [
           nextId++;
           companyData.documents.push({
             id: nextId,
-            name: 'context',
+            name: 'Knowledge Base',
             path: expectedContextPath,
             type: 'context',
             references: [],
@@ -1309,6 +1309,21 @@ export const MIGRATIONS: MigrationEntry[] = [
 
       return data;
     },
+  },
+  {
+    dataVersion: 34,
+    schemaVersion: undefined,
+    dataMigration: (data: InitData) => {
+      for (const companyData of data.companies as CompanyData[]) {
+        for (const doc of companyData.documents) {
+          if (doc.type === 'context' && doc.name === 'context') {
+            doc.name = 'Knowledge Base';
+          }
+        }
+      }
+      return data;
+    },
+    description: 'V34: Rename default context files from "context" to "Knowledge Base"',
   },
 ];
 
