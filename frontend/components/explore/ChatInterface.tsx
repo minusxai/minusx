@@ -384,11 +384,14 @@ export default function ChatInterface({
       }
     }
 
-    // Simplify schema for agent
+    // Simplify schema for agent.
+    // null  = no active context → no restriction (agent can search full schema)
+    // []    = context with empty whitelist → restrict to nothing
+    // [...] = context with whitelisted tables → filter to those
     const simplifiedSchema = database?.schemas?.map(s => ({
       schema: s.schema,
       tables: s.tables.map(t => t.table)
-    })) || [];
+    })) ?? null;
 
     // Render chart images for the current file and upload to S3.
     // Question: 1 image. Dashboard: one image per chart with data.
