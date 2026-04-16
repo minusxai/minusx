@@ -614,7 +614,11 @@ class FilesDataLayerServer implements IFilesDataLayer {
         // Load connections to suggest default database
         const { connections } = await listAllConnections(user, false);
         const databaseNames = connections.map(c => c.name);
-        const databaseConnections = connections.map(c => ({ metadata: { name: c.name } }));
+        // For default selection, prefer queryable connections (DuckDB, PostgreSQL, BigQuery, Athena)
+        // over static file connections (csv, google-sheets) — they're landing zones, not analytics DBs.
+        const queryableConnections = connections.filter(c => c.type !== 'csv' && c.type !== 'google-sheets');
+        const selectionPool = queryableConnections.length > 0 ? queryableConnections : connections;
+        const databaseConnections = selectionPool.map(c => ({ metadata: { name: c.name } }));
         // Use centralized database selection logic (returns empty string if no connections)
         const defaultDb = selectDatabase(databaseConnections, options.databaseName);
 

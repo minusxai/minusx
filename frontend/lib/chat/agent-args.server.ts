@@ -67,9 +67,10 @@ export async function buildServerAgentArgs(
   options?: BuildServerAgentArgsOptions
 ): Promise<ServerAgentArgs> {
   const { connections } = await listAllConnections(user, false);
-  const selectedConnectionName = selectDatabase(connections, null);
-  const selectedConnection = connections.find((c) => c.name === selectedConnectionName) ?? connections[0];
 
+  // Load context first so we can prefer the connection the context whitelists —
+  // this mirrors exactly what the client's AnalystAgent does (selectDatabase on
+  // the context's whitelisted databases, not on all connections).
   let databases: DatabaseWithSchema[] | undefined;
   let documentation: string | undefined;
 
@@ -111,6 +112,12 @@ export async function buildServerAgentArgs(
   } catch {
     // Proceed without context — agent can still use SearchDBSchema tool
   }
+
+  // Prefer the first database whitelisted by the context (mirrors client selectDatabase
+  // behavior). Fall back to the first available connection if no context is present.
+  const contextPreferred = databases?.[0]?.databaseName ?? null;
+  const selectedConnectionName = selectDatabase(connections, contextPreferred);
+  const selectedConnection = connections.find((c) => c.name === selectedConnectionName) ?? connections[0];
 
   const selectedDatabaseName = selectedConnection?.name || '';
 

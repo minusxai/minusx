@@ -24,15 +24,14 @@ def get_async_connector(name: str, conn_type: str, config: dict) -> AsyncDatabas
     return connector
 
 
-# Import sync connectors first (needed by async wrappers for DuckDB and BigQuery)
-from .duckdb_connector import DuckDBConnector  # noqa: E402, F401
+# Import sync connectors (BigQuery wraps one)
 from .bigquery_connector import BigQueryConnector  # noqa: E402, F401
 
-# Import async connectors to trigger registration
+# Import async connectors to trigger registration.
+# Note: duckdb, csv, and google-sheets are intentionally absent — they are all
+# handled exclusively by Node.js. Python has no connector for these types;
+# all Python endpoints guard against NODE_HANDLED_TYPES before calling get_async_connector.
 from .postgres_connector_async import AsyncPostgresConnector  # noqa: E402, F401
-from .duckdb_connector_async import AsyncDuckDBConnector  # noqa: E402, F401
 from .bigquery_connector_async import AsyncBigQueryConnector  # noqa: E402, F401
-from .csv_connector_async import AsyncCsvConnector  # noqa: E402, F401
-from .google_sheets_connector_async import AsyncGoogleSheetsConnector  # noqa: E402, F401
 from .athena_connector import AthenaConnector  # noqa: E402, F401
 from .athena_connector_async import AsyncAthenaConnector  # noqa: E402, F401

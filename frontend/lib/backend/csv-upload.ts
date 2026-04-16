@@ -1,11 +1,20 @@
 /**
- * CSV Upload API Client
+ * CSV / Remote-file Upload Client
  *
- * Client functions for uploading CSV files and managing CSV connections.
- * These functions call the Next.js API proxy routes, which forward to Python.
+ * Upload flow:
+ *  1. For each file: GET presigned S3 URL from /api/object-store/upload-url
+ *  2. PUT file directly to S3 (bypasses backend)
+ *  3. POST file metadata (s3_key, filename, schema_name, file_format) to /api/csv/register
+ *  4. Backend reads column/type metadata from S3 and returns the final config
  */
 
 import { CsvConnectionConfig } from '@/lib/types';
+
+export interface FileWithSchema {
+  file: File;
+  schemaName: string;   // DuckDB schema, e.g. "public" or "mxfood"
+  tableName?: string;   // Optional override for table name; auto-generated from filename if absent
+}
 
 export interface CsvUploadResult {
   success: boolean;
@@ -18,78 +27,111 @@ export interface CsvDeleteResult {
   message: string;
 }
 
-/**
- * Upload CSV files to create a new CSV connection or replace existing one.
- *
- * @param connectionName - Name of the connection
- * @param files - Array of File objects to upload
- * @param replaceExisting - If true, replace existing files; if false, error on existing
- * @returns Upload result with generated config
- */
-export async function uploadCsvFiles(
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function getContentType(file: File): string {
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  if (ext === 'parquet' || ext === 'pq') return 'application/octet-stream';
+  if (ext === 'xlsx') return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+  return 'text/csv';
+}
+
+function getFileFormat(filename: string): 'csv' | 'parquet' | 'xlsx' {
+  const ext = filename.split('.').pop()?.toLowerCase();
+  if (ext === 'parquet' || ext === 'pq') return 'parquet';
+  if (ext === 'xlsx') return 'xlsx';
+  return 'csv';
+}
+
+async function getPresignedUrl(
+  file: File,
   connectionName: string,
-  files: File[],
-  replaceExisting: boolean = false
-): Promise<CsvUploadResult> {
-  const formData = new FormData();
-  formData.append('connection_name', connectionName);
-  formData.append('replace_existing', replaceExisting.toString());
+): Promise<{ uploadUrl: string; publicUrl: string; s3Key: string }> {
+  const params = new URLSearchParams({
+    filename: file.name,
+    contentType: getContentType(file),
+    keyType: 'csvs',
+    connectionName,
+  });
+  const res = await fetch(`/api/object-store/upload-url?${params}`);
+  if (!res.ok) throw new Error(`Failed to get upload URL: ${await res.text()}`);
+  return res.json();
+}
 
-  for (const file of files) {
-    formData.append('files', file);
-  }
-
-  try {
-    const res = await fetch('/api/csv/upload', {
-      method: 'POST',
-      body: formData
-    });
-
-    if (!res.ok) {
-      const error = await res.text();
-      return {
-        success: false,
-        message: `Upload failed: ${error}`
-      };
-    }
-
-    return await res.json();
-  } catch (error) {
-    return {
-      success: false,
-      message: `Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-    };
+async function putFileToS3(file: File, uploadUrl: string): Promise<void> {
+  const res = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': getContentType(file) },
+    body: file,
+  });
+  if (!res.ok) {
+    throw new Error(`S3 upload failed for ${file.name}: ${res.status} ${res.statusText}`);
   }
 }
+
+// ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
- * Delete CSV connection data (files and database).
- * Should be called when deleting a CSV connection.
+ * Upload CSV/Parquet files to S3 and register them with the backend.
  *
- * @param connectionName - Name of the connection
- * @returns Delete result
+ * Each file can have its own schema name. The backend reads column + row
+ * metadata from S3 at registration time and returns the full config.
  */
-export async function deleteCsvData(
-  connectionName: string
-): Promise<CsvDeleteResult> {
+export async function uploadCsvFilesS3(
+  connectionName: string,
+  filesWithSchema: FileWithSchema[],
+  replaceExisting: boolean = false,
+): Promise<CsvUploadResult> {
   try {
-    const res = await fetch(`/api/csv/delete/${encodeURIComponent(connectionName)}`, {
-      method: 'DELETE'
+    // Step 1 & 2: upload each file to S3
+    const fileRecords: {
+      filename: string;
+      s3_key: string;
+      schema_name: string;
+      file_format: 'csv' | 'parquet' | 'xlsx';
+      table_name?: string;
+    }[] = [];
+
+    for (const { file, schemaName, tableName } of filesWithSchema) {
+      const { uploadUrl, s3Key } = await getPresignedUrl(file, connectionName);
+      await putFileToS3(file, uploadUrl);
+      const record: {
+        filename: string;
+        s3_key: string;
+        schema_name: string;
+        file_format: 'csv' | 'parquet' | 'xlsx';
+        table_name?: string;
+      } = {
+        filename: file.name,
+        s3_key: s3Key,
+        schema_name: schemaName || 'public',
+        file_format: getFileFormat(file.name),
+      };
+      if (tableName) record.table_name = tableName;
+      fileRecords.push(record);
+    }
+
+    // Step 3: register with backend (reads metadata from S3)
+    const res = await fetch('/api/csv/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        connection_name: connectionName,
+        files: fileRecords,
+        replace_existing: replaceExisting,
+      }),
     });
 
     if (!res.ok) {
-      const error = await res.text();
-      return {
-        success: false,
-        message: `Delete failed: ${error}`
-      };
+      return { success: false, message: `Registration failed: ${await res.text()}` };
     }
 
-    return await res.json();
+    return res.json();
   } catch (error) {
     return {
       success: false,
-      message: `Delete failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      message: error instanceof Error ? error.message : 'Upload failed',
     };
   }
 }
+

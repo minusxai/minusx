@@ -579,6 +579,8 @@ After any change to agent prompts, tool docstrings, or field descriptions, measu
 
 ## Previous Mistakes
 
+**Scripts belong in `frontend/scripts/` as Node.js (tsx), never Python.** The frontend already has all needed dependencies (`@duckdb/node-api`, `@aws-sdk/client-s3`, `dotenv`); use `import { config } from 'dotenv'; config()` to load `frontend/.env`, and add an entry to `frontend/package.json`.
+
 **Schema parity (SQLite + Postgres):** Any change to `lib/database/schema.ts` MUST be mirrored in `lib/database/postgres-schema.ts` (and vice versa) in the same commit — including new columns, indexes, and `ALTER TABLE` guards for existing tables.
 
 **Tool Registration:** When a tool spawns another tool via `FrontendToolException`, the spawned tool MUST be registered with `@register_agent` because the Python orchestrator needs to instantiate it from the registry when processing the conversation log.

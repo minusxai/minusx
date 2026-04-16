@@ -9,6 +9,7 @@ import {
   validatePassword,
   validateFullName,
 } from '@/lib/validation/validators';
+import { copySeedMxfoodForCompany } from '@/lib/object-store';
 
 interface RegisterRequest {
   companyName: string;
@@ -17,6 +18,14 @@ interface RegisterRequest {
   adminPassword: string;
   inviteCode?: string;
 }
+
+// Table names that exist in the mxfood seed — must match seeds/mxfood/{table}.parquet
+const MXFOOD_TABLES = [
+  'ad_campaigns', 'ad_spend', 'attribution', 'deliveries', 'drivers',
+  'events', 'marketing_channels', 'order_items', 'orders', 'product_categories',
+  'product_subcategories', 'products', 'promo_codes', 'promo_usage', 'restaurants',
+  'subscription_plans', 'support_tickets', 'user_subscriptions', 'users', 'zones',
+];
 
 /**
  * POST /api/companies/register
@@ -97,6 +106,15 @@ export async function POST(request: NextRequest) {
         body.adminEmail.trim(),
         body.adminPassword,
         subdomain
+      );
+
+      // Copy mxfood seed Parquet files to the tutorial-mode S3 prefix — best-effort, non-blocking.
+      // Seed files must have been uploaded via `cd backend && uv run python scripts/seed_mxfood_to_s3.py`
+      // Only tutorial mode is seeded; org/internals start with an empty "static" connection.
+      copySeedMxfoodForCompany(result.companyId, 'tutorial', MXFOOD_TABLES).then((copied) => {
+        console.log(`[COMPANY_REGISTER] Copied ${copied.length}/${MXFOOD_TABLES.length} mxfood seed tables for company ${result.companyId}`);
+      }).catch((err) =>
+        console.warn('[COMPANY_REGISTER] mxfood S3 copy failed (non-fatal):', err)
       );
 
       console.log(`[COMPANY_REGISTER] Created company ${companyName} with ${9} default files`);

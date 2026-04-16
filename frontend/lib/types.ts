@@ -833,17 +833,23 @@ export interface TestConnectionResult {
   schema?: DatabaseSchema | null;  // Optional schema returned on successful test
 }
 
-// CSV file metadata stored in CSV connection config
+// CSV / remote-file metadata stored in a CSV connection config
 export interface CsvFileInfo {
   filename: string;
   table_name: string;
+  schema_name: string;         // DuckDB schema, e.g. "public" or "mxfood"
+  s3_key: string;              // S3 object key, company-scoped
+  file_format: 'csv' | 'parquet';
   row_count: number;
   columns: { name: string; type: string }[];
+  // Source tracking (used by the static connection to distinguish CSV vs Google Sheets imports)
+  source_type?: 'csv' | 'google_sheets';
+  spreadsheet_url?: string;    // For google_sheets: the source spreadsheet URL
+  spreadsheet_id?: string;     // For google_sheets: Google spreadsheet ID (groups sheets from the same doc)
 }
 
-// CSV connection config type
+// CSV connection config — pure S3-backed, no local files
 export interface CsvConnectionConfig {
-  generated_db_path: string;
   files: CsvFileInfo[];
 }
 
@@ -851,8 +857,8 @@ export interface CsvConnectionConfig {
 export interface GoogleSheetsConnectionConfig {
   spreadsheet_url: string;
   spreadsheet_id: string;
-  generated_db_path: string;
-  files: CsvFileInfo[];  // Reuses CsvFileInfo for sheet metadata
+  schema_name?: string;
+  files: CsvFileInfo[];
 }
 
 // Connection file content type (stored as file in /database/)

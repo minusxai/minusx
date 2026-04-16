@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ConfigDict
@@ -29,8 +29,6 @@ from connection_manager import connection_manager  # noqa: E402
 from connectors import get_async_connector  # noqa: E402
 from pipelines.executor import PipelineExecutor  # noqa: E402
 from pipelines.tap_tester import test_tap  # noqa: E402
-from processors import process_csv_upload, delete_csv_connection  # noqa: E402
-from processors import process_google_sheets_import, delete_google_sheets_connection  # noqa: E402
 from sql_utils.limit_enforcer import enforce_query_limit  # noqa: E402
 from sql_utils.validator import validate_sql as validate_sql_syntax  # noqa: E402
 from sql_utils.column_inferrer import infer_columns  # noqa: E402
@@ -94,8 +92,9 @@ class QueryResponse(BaseModel):
 
 
 class ConnectionInitialize(BaseModel):
-    type: str  # 'duckdb' | 'bigquery'
+    type: str  # 'bigquery' | 'postgresql' | 'athena' (Node-handled types rejected at endpoint level)
     config: dict
+    session_token: Optional[str] = None  # Injected by pythonBackendFetch; ignored here (kept for forward compat)
 
 
 class TestConnectionRequest(BaseModel):
@@ -151,6 +150,12 @@ class TapTestResponse(BaseModel):
     success: bool
     message: str
     details: Optional[dict] = None
+
+
+# Connection types whose schema and query execution is owned by Node.js.
+# Python must NOT create connectors or open DuckDB files for these types.
+# All Python endpoints that accept a connection type guard against this set.
+NODE_HANDLED_TYPES: frozenset[str] = frozenset({'csv', 'google-sheets', 'duckdb'})
 
 
 @app.on_event("startup")
@@ -444,18 +449,32 @@ async def execute_sql_query(query_request: QueryRequest, request: Request):
 
 @app.post("/api/connections/{name}/initialize")
 async def initialize_connection(name: str, conn: ConnectionInitialize, request: Request):
-    """Initialize a connection in-memory (called by Next.js)"""
+    """
+    Initialize a connection in-memory (called by Next.js for Python-only types).
+
+    Node-handled types (duckdb, csv, google-sheets) are managed exclusively by
+    Node.js — this endpoint must never be called for them. Returns 422 if it is.
+    """
     try:
-        connector = get_async_connector(name, conn.type, conn.config)
         print(f"[Connection Init] Initializing connection '{name}' of type '{conn.type}'")
-        validation = connector.validate_config()
-        if not validation['valid']:
-            raise HTTPException(status_code=400, detail=validation['errors'])
+
+        # Node-handled types belong in Node.js — never initialize them in Python
+        if conn.type in NODE_HANDLED_TYPES:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Connection type '{conn.type}' is handled by Node.js, not Python."
+            )
 
         # Use company_id + mode in cache key for multi-tenant isolation
         company_id_header = request.headers.get('x-company-id')
         company_id = int(company_id_header) if company_id_header else None
         mode = request.headers.get('x-mode', 'org')
+
+        connector = get_async_connector(name, conn.type, conn.config)
+        validation = connector.validate_config()
+        if not validation['valid']:
+            raise HTTPException(status_code=400, detail=validation['errors'])
+
         cache_key = connection_manager._cache_key(name, company_id, mode)
         connection_manager._connections[cache_key] = connector
 
@@ -511,8 +530,22 @@ async def test_connection(req: TestConnectionRequest):
     - Always tests the provided config (allows testing unsaved changes)
     - name is optional and used only for display/logging purposes
     - include_schema: Optionally fetch schema (default: False for performance)
+
+    Node-handled types (duckdb, csv, google-sheets) are rejected here — Node.js
+    tests those connections directly without going through Python.
     """
     try:
+        # Node-handled types must be tested by Node.js, not Python
+        if req.type in NODE_HANDLED_TYPES:
+            return {
+                "success": False,
+                "message": (
+                    f"Connection type '{req.type}' is handled by Node.js. "
+                    "Test this connection from the Node.js side."
+                ),
+                "schema": None,
+            }
+
         # Always use the provided config for testing
         # This allows testing edited configs before saving
         connector = get_async_connector(
@@ -564,11 +597,21 @@ async def test_connection(req: TestConnectionRequest):
 @app.post("/api/connections/{name}/schema")
 async def get_connection_schema(name: str, conn: ConnectionInitialize):
     """
-    Get database schema using provided connection config.
-    Creates a temporary connector to fetch schema without caching.
+    Get database schema using provided connection config (Python-only types).
+
+    Node-handled types (duckdb, csv, google-sheets) are never routed here —
+    Node.js fetches their schema via getNodeConnector() directly. Returns 422
+    if one arrives so the caller gets a clear routing-bug signal.
     """
     try:
-        # Create connector directly from provided config
+        # Node-handled types should never reach this endpoint
+        if conn.type in NODE_HANDLED_TYPES:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Connection type '{conn.type}' is handled by Node.js, not Python."
+            )
+
+        # All other types: use Python connector directly
         connector = get_async_connector(name, conn.type, conn.config)
 
         # Validate config
@@ -922,298 +965,6 @@ async def test_connector(request: TapTestRequest):
             "success": False,
             "message": f"Test failed: {str(e)}"
         }
-
-
-# ============================================================================
-# CSV Upload API
-# ============================================================================
-
-class CsvUploadResponse(BaseModel):
-    success: bool
-    message: str
-    config: Optional[dict] = None  # Contains generated_db_path and files metadata
-
-
-class CsvDeleteResponse(BaseModel):
-    success: bool
-    message: str
-
-
-@app.post("/api/csv/upload", response_model=CsvUploadResponse)
-async def upload_csv_files(
-    request: Request,
-    connection_name: str = Form(...),
-    replace_existing: bool = Form(False),
-    files: List[UploadFile] = File(...)
-):
-    """
-    Upload CSV files and generate a DuckDB database.
-
-    This endpoint:
-    1. Saves uploaded CSV files to data/csv_connections/{company_id}/{mode}/{connection_name}/files/
-    2. Creates a DuckDB database with tables from each CSV
-    3. Returns metadata for storing in the connection config
-
-    Args:
-        connection_name: Name for the connection (used as folder name)
-        replace_existing: If True, replace existing files; if False, error on existing
-        files: List of CSV files to upload
-
-    Returns:
-        CsvUploadResponse with generated_db_path and file metadata
-    """
-    try:
-        # Extract company_id from header
-        company_id_header = request.headers.get('x-company-id')
-        if not company_id_header:
-            raise HTTPException(status_code=400, detail="Missing x-company-id header")
-
-        try:
-            company_id = int(company_id_header)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid x-company-id header - must be an integer")
-
-        # Extract mode from header (defaults to 'org' if not provided)
-        mode = request.headers.get('x-mode', 'org')
-
-        # Validate files
-        if not files:
-            raise HTTPException(status_code=400, detail="At least one CSV file is required")
-
-        # Validate file extensions
-        for file in files:
-            if not file.filename:
-                raise HTTPException(status_code=400, detail="File must have a filename")
-            if not file.filename.lower().endswith('.csv'):
-                raise HTTPException(status_code=400, detail=f"File '{file.filename}' is not a CSV file")
-
-        # Read file contents
-        file_data = []
-        for file in files:
-            content = await file.read()
-            file_data.append((file.filename, content))
-
-        # Process CSV upload
-        result = await process_csv_upload(
-            company_id=company_id,
-            mode=mode,
-            connection_name=connection_name,
-            files=file_data,
-            replace_existing=replace_existing
-        )
-
-        return CsvUploadResponse(
-            success=True,
-            message=f"Successfully uploaded {len(files)} CSV file(s)",
-            config=result
-        )
-
-    except ValueError as e:
-        return CsvUploadResponse(
-            success=False,
-            message=str(e),
-            config=None
-        )
-    except RuntimeError as e:
-        return CsvUploadResponse(
-            success=False,
-            message=str(e),
-            config=None
-        )
-    except Exception as e:
-        logger.error(f"CSV upload error: {str(e)}\n{traceback.format_exc()}")
-        return CsvUploadResponse(
-            success=False,
-            message=f"Upload failed: {str(e)}",
-            config=None
-        )
-
-
-@app.delete("/api/csv/delete/{connection_name}", response_model=CsvDeleteResponse)
-async def delete_csv_data(connection_name: str, request: Request):
-    """
-    Delete CSV connection data (files and database).
-
-    This should be called when deleting a CSV connection to clean up the data files.
-
-    Args:
-        connection_name: Name of the connection to delete data for
-
-    Returns:
-        CsvDeleteResponse indicating success/failure
-    """
-    try:
-        # Extract company_id from header
-        company_id_header = request.headers.get('x-company-id')
-        if not company_id_header:
-            raise HTTPException(status_code=400, detail="Missing x-company-id header")
-
-        try:
-            company_id = int(company_id_header)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid x-company-id header - must be an integer")
-
-        # Extract mode from header (defaults to 'org' if not provided)
-        mode = request.headers.get('x-mode', 'org')
-
-        # Delete the CSV connection data
-        deleted = delete_csv_connection(company_id, mode, connection_name)
-
-        if deleted:
-            return CsvDeleteResponse(
-                success=True,
-                message=f"Successfully deleted CSV data for connection '{connection_name}'"
-            )
-        else:
-            return CsvDeleteResponse(
-                success=True,
-                message=f"No CSV data found for connection '{connection_name}'"
-            )
-
-    except Exception as e:
-        logger.error(f"CSV delete error: {str(e)}\n{traceback.format_exc()}")
-        return CsvDeleteResponse(
-            success=False,
-            message=f"Delete failed: {str(e)}"
-        )
-
-
-# ============================================================================
-# Google Sheets API
-# ============================================================================
-
-class GoogleSheetsImportRequest(BaseModel):
-    connection_name: str
-    spreadsheet_url: str
-    replace_existing: bool = False
-
-
-class GoogleSheetsImportResponse(BaseModel):
-    success: bool
-    message: str
-    config: Optional[dict] = None  # Contains spreadsheet_url, spreadsheet_id, generated_db_path, files
-
-
-class GoogleSheetsDeleteResponse(BaseModel):
-    success: bool
-    message: str
-
-
-@app.post("/api/google-sheets/import", response_model=GoogleSheetsImportResponse)
-async def import_google_sheets(request_body: GoogleSheetsImportRequest, request: Request):
-    """
-    Import a public Google Sheet and create a DuckDB database.
-
-    This endpoint:
-    1. Downloads the spreadsheet as xlsx via Google's export endpoint
-    2. Extracts each sheet as a CSV file
-    3. Creates a DuckDB database with tables from each sheet
-    4. Returns metadata for storing in the connection config
-
-    Args:
-        request_body: GoogleSheetsImportRequest with URL and connection name
-        request: FastAPI Request object for headers
-
-    Returns:
-        GoogleSheetsImportResponse with generated config
-    """
-    try:
-        # Extract company_id from header
-        company_id_header = request.headers.get('x-company-id')
-        if not company_id_header:
-            raise HTTPException(status_code=400, detail="Missing x-company-id header")
-
-        try:
-            company_id = int(company_id_header)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid x-company-id header - must be an integer")
-
-        # Extract mode from header (defaults to 'org' if not provided)
-        mode = request.headers.get('x-mode', 'org')
-
-        # Process Google Sheets import
-        result = await process_google_sheets_import(
-            company_id=company_id,
-            mode=mode,
-            connection_name=request_body.connection_name,
-            spreadsheet_url=request_body.spreadsheet_url,
-            replace_existing=request_body.replace_existing
-        )
-
-        return GoogleSheetsImportResponse(
-            success=True,
-            message=f"Successfully imported {len(result['files'])} sheet(s) from Google Sheets",
-            config=result
-        )
-
-    except ValueError as e:
-        return GoogleSheetsImportResponse(
-            success=False,
-            message=str(e),
-            config=None
-        )
-    except RuntimeError as e:
-        return GoogleSheetsImportResponse(
-            success=False,
-            message=str(e),
-            config=None
-        )
-    except Exception as e:
-        logger.error(f"Google Sheets import error: {str(e)}\n{traceback.format_exc()}")
-        return GoogleSheetsImportResponse(
-            success=False,
-            message=f"Import failed: {str(e)}",
-            config=None
-        )
-
-
-@app.delete("/api/google-sheets/delete/{connection_name}", response_model=GoogleSheetsDeleteResponse)
-async def delete_google_sheets_data(connection_name: str, request: Request):
-    """
-    Delete Google Sheets connection data (files and database).
-
-    This should be called when deleting a Google Sheets connection to clean up the data files.
-
-    Args:
-        connection_name: Name of the connection to delete data for
-
-    Returns:
-        GoogleSheetsDeleteResponse indicating success/failure
-    """
-    try:
-        # Extract company_id from header
-        company_id_header = request.headers.get('x-company-id')
-        if not company_id_header:
-            raise HTTPException(status_code=400, detail="Missing x-company-id header")
-
-        try:
-            company_id = int(company_id_header)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid x-company-id header - must be an integer")
-
-        # Extract mode from header (defaults to 'org' if not provided)
-        mode = request.headers.get('x-mode', 'org')
-
-        # Delete the Google Sheets connection data
-        deleted = delete_google_sheets_connection(company_id, mode, connection_name)
-
-        if deleted:
-            return GoogleSheetsDeleteResponse(
-                success=True,
-                message=f"Successfully deleted Google Sheets data for connection '{connection_name}'"
-            )
-        else:
-            return GoogleSheetsDeleteResponse(
-                success=True,
-                message=f"No Google Sheets data found for connection '{connection_name}'"
-            )
-
-    except Exception as e:
-        logger.error(f"Google Sheets delete error: {str(e)}\n{traceback.format_exc()}")
-        return GoogleSheetsDeleteResponse(
-            success=False,
-            message=f"Delete failed: {str(e)}"
-        )
 
 
 # ============================================================================

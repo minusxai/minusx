@@ -16,6 +16,7 @@
  * - Calling onChange for content updates
  */
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Box,
@@ -39,19 +40,13 @@ import Editor from '@monaco-editor/react';
 import { useAppSelector } from '@/store/hooks';
 import ConnectionTablesBrowser from '../ConnectionTablesBrowser';
 import Image from 'next/image';
-import { DuckDBConfig, BigQueryConfig, PostgreSQLConfig, CsvConfig, GoogleSheetsConfig, AthenaConfig } from './connection-configs';
+import { BigQueryConfig, PostgreSQLConfig, CsvConfig, GoogleSheetsConfig, AthenaConfig, StaticConnectionConfig } from './connection-configs';
 import { cursorBlinkKeyframes } from '@/lib/ui/animations';
 
 const TYPEWRITER_SPEED = 35;
 
 // Connection type metadata for the selection screen
 const CONNECTION_TYPES = [
-  {
-    type: 'duckdb' as const,
-    name: 'DuckDB',
-    logo: '/logos/duckdb.svg',
-    comingSoon: false,
-  },
   {
     type: 'bigquery' as const,
     name: 'BigQuery',
@@ -66,15 +61,18 @@ const CONNECTION_TYPES = [
   },
   {
     type: 'csv' as const,
-    name: 'CSV Files',
+    name: 'CSV / xlsx',
     logo: '/logos/csv.svg',
     comingSoon: false,
+    redirectToStatic: true,
+    note: 'Managed in your static connection',
   },
   {
     type: 'google-sheets' as const,
     name: 'Google Sheets',
     logo: '/logos/google-sheets.svg',
     comingSoon: false,
+    redirectToStatic: true,
     note: 'Public sheets only',
   },
   {
@@ -102,6 +100,21 @@ const CONNECTION_TYPES = [
     comingSoon: true,
   }
 ];
+
+// Logo/name for types not in the type-selector (legacy connections, static)
+const LEGACY_TYPE_INFO: Record<string, { logo: string; name: string }> = {
+  'csv':          { logo: '/logos/csv.svg',          name: 'CSV / Sheets' },
+  'google-sheets':{ logo: '/logos/google-sheets.svg', name: 'Google Sheets' },
+  'duckdb':       { logo: '/logos/duckdb.svg',        name: 'DuckDB' },
+};
+
+function getTypeInfo(type: string): { logo: string; name: string } {
+  return (
+    CONNECTION_TYPES.find((c) => c.type === type) ??
+    LEGACY_TYPE_INFO[type] ??
+    { logo: '/logos/duckdb.svg', name: type }
+  );
+}
 
 interface ConnectionFormV2Props {
   content: ConnectionContent;
@@ -134,10 +147,18 @@ export default function ConnectionFormV2({
   hideCancel = false,
   greeting,
 }: ConnectionFormV2Props) {
+  const router = useRouter();
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const companyId = useAppSelector((state) => state.auth.user?.companyId);
   const userMode = useAppSelector((state) => state.auth.user?.mode) || 'org';
   const showJson = useAppSelector((state) => state.ui.showJson);
+  // ID of the static connection for the current mode (used to redirect CSV/GS selections)
+  const staticConnectionId = useAppSelector((state) => {
+    const f = Object.values(state.files.files).find(
+      (file) => file?.type === 'connection' && (file as { name?: string }).name === 'static' && (file?.id ?? 0) > 0,
+    );
+    return (f as { id?: number } | undefined)?.id ?? null;
+  });
 
   // For create mode, start with type selection step; skip if already editing
   const [step, setStep] = useState<'select-type' | 'configure'>(mode === 'create' ? 'select-type' : 'configure');
@@ -174,7 +195,15 @@ export default function ConnectionFormV2({
   }, [greeting]);
 
   // Handle type selection from the initial screen
-  const handleTypeSelect = (selectedType: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena') => {
+  const handleTypeSelect = (selectedType: 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena') => {
+    // CSV and Google Sheets always go to the static connection — no new connection is created
+    if (selectedType === 'csv' || selectedType === 'google-sheets') {
+      if (staticConnectionId) {
+        router.push(`/f/${staticConnectionId}`);
+      }
+      onCancel(); // close the create form
+      return;
+    }
     handleTypeChange(selectedType);
     setStep('configure');
   };
@@ -217,14 +246,13 @@ export default function ConnectionFormV2({
         }
       : content.type === 'csv'
       ? {
-          generated_db_path: config.generated_db_path || '',
           files: config.files || []
         }
       : content.type === 'google-sheets'
       ? {
           spreadsheet_url: config.spreadsheet_url || '',
           spreadsheet_id: config.spreadsheet_id || '',
-          generated_db_path: config.generated_db_path || '',
+          schema_name: config.schema_name || 'public',
           files: config.files || []
         }
       : content.type === 'athena'
@@ -278,9 +306,9 @@ export default function ConnectionFormV2({
     } else if (content.type === 'postgresql') {
       if (!config.database || !config.username) return false;
     } else if (content.type === 'csv') {
-      if (!config.generated_db_path) return false;
+      if (fileName !== 'static' && !config.files?.length) return false;
     } else if (content.type === 'google-sheets') {
-      if (!config.generated_db_path) return false;
+      if (!config.files?.length) return false;
     } else if (content.type === 'athena') {
       if (!config.region_name || !config.s3_staging_dir) return false;
     }
@@ -298,18 +326,16 @@ export default function ConnectionFormV2({
     }
   };
 
-  const handleTypeChange = (newType: 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena') => {
+  const handleTypeChange = (newType: 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena') => {
     // Clear config when switching types
     onChange({
       type: newType,
-      config: newType === 'duckdb'
-        ? { file_path: '' }
-        : newType === 'bigquery'
+      config: newType === 'bigquery'
         ? { project_id: '', service_account_json: '' }
         : newType === 'csv'
-        ? { generated_db_path: '', files: [] }
+        ? { schema_name: 'public', files: [] }
         : newType === 'google-sheets'
-        ? { spreadsheet_url: '', spreadsheet_id: '', generated_db_path: '', files: [] }
+        ? { spreadsheet_url: '', spreadsheet_id: '', schema_name: 'public', files: [] }
         : { host: 'localhost', port: 5432, database: '', username: '', password: '' }
     });
   };
@@ -406,35 +432,35 @@ export default function ConnectionFormV2({
           setTestResult(result);
         }
       } else if (content.type === 'csv') {
-        // For CSV, test the underlying DuckDB connection
-        if (!config.generated_db_path) {
+        // For CSV, test the S3-backed connection
+        if (!config.files?.length) {
           setTestResult({
             success: false,
             message: mode === 'create'
               ? 'Please upload CSV files first, then save the connection'
-              : 'No database generated. Please re-upload CSV files.',
+              : 'No files registered. Please re-upload CSV files.',
           });
           setTesting(false);
           return;
         }
 
-        // Test the connection (uses DuckDB internally)
+        // Test the connection (uses in-memory DuckDB + httpfs)
         const result = await testConnection(content.type, config, mode === 'view' ? fileName : undefined, includeSchema);
         setTestResult(result);
       } else if (content.type === 'google-sheets') {
-        // For Google Sheets, test the underlying DuckDB connection
-        if (!config.generated_db_path) {
+        // For Google Sheets, test the S3-backed connection
+        if (!config.files?.length) {
           setTestResult({
             success: false,
             message: mode === 'create'
               ? 'Please import a Google Sheet first using the "Fetch & Create Database" button'
-              : 'No database generated. Please re-import the Google Sheet.',
+              : 'No sheets imported. Please re-import the Google Sheet.',
           });
           setTesting(false);
           return;
         }
 
-        // Test the connection (uses DuckDB internally)
+        // Test the connection (uses in-memory DuckDB + httpfs via CsvConnector)
         const result = await testConnection(content.type, config, mode === 'view' ? fileName : undefined, includeSchema);
         setTestResult(result);
       } else {
@@ -511,15 +537,15 @@ export default function ConnectionFormV2({
         setNameError('Username is required');
         return;
       }
-    } else if (content.type === 'csv') {
-      // For CSV, validate that files have been uploaded (generated_db_path exists)
-      if (!config.generated_db_path) {
-        setNameError('Please upload CSV files first using the "Upload & Create Database" button');
+    } else if (content.type === 'csv' && fileName !== 'static') {
+      // For non-static CSV connections, validate that files have been uploaded
+      if (!config.files?.length) {
+        setNameError('Please upload CSV files first using the "Upload & Register" button');
         return;
       }
     } else if (content.type === 'google-sheets') {
-      // For Google Sheets, validate that sheets have been imported (generated_db_path exists)
-      if (!config.generated_db_path) {
+      // For Google Sheets, validate that sheets have been imported
+      if (!config.files?.length) {
         setNameError('Please import a Google Sheet first using the "Fetch & Create Database" button');
         return;
       }
@@ -578,7 +604,7 @@ export default function ConnectionFormV2({
               <Box
                 key={connType.type}
                 as="button"
-                onClick={() => !connType.comingSoon && handleTypeSelect(connType.type as 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena')}
+                onClick={() => !connType.comingSoon && handleTypeSelect(connType.type as 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena')}
                 p={6}
                 borderRadius="lg"
                 border="1px solid"
@@ -638,9 +664,9 @@ export default function ConnectionFormV2({
                     color={connType.comingSoon ? 'fg.subtle' : 'fg.default'}>
                       {connType.name}
                     </Text>
-                    {'note' in connType && connType.note && (
+                    {('note' in connType) && (connType as { note?: string }).note && (
                       <Text fontSize="2xs" color="fg.muted" fontStyle="italic">
-                        {connType.note}
+                        {(connType as { note?: string }).note}
                       </Text>
                     )}
                   </VStack>
@@ -696,13 +722,7 @@ export default function ConnectionFormV2({
                 fontSize="2xs"
                 alignItems="center"
               >
-                {content.type === 'bigquery' ? 'BigQuery' :
-                 content.type === 'duckdb' ? 'DuckDB' :
-                 content.type === 'postgresql' ? 'PostgreSQL' :
-                 content.type === 'csv' ? 'CSV Files' :
-                 content.type === 'google-sheets' ? 'Google Sheets' :
-                 content.type === 'athena' ? 'Athena' :
-                 content.type}
+                {getTypeInfo(content.type).name}
               </Box>
             )}
             {/* Unsaved changes warning */}
@@ -866,13 +886,13 @@ export default function ConnectionFormV2({
                 >
                   <Box w="16px" h="16px" position="relative" flexShrink={0}>
                     <Image
-                      src={CONNECTION_TYPES.find(c => c.type === content.type)?.logo || '/logos/duckdb.svg'}
+                      src={getTypeInfo(content.type).logo}
                       alt={content.type}
                       fill
                       style={{ objectFit: 'contain' }}
                     />
                   </Box>
-                  {CONNECTION_TYPES.find(c => c.type === content.type)?.name || content.type}
+                  {getTypeInfo(content.type).name}
                 </HStack>
                 <Text fontSize="xs" color="fg.muted" mt={2}>
                   Database type cannot be changed after creation
@@ -896,14 +916,14 @@ export default function ConnectionFormV2({
                       <HStack gap={2}>
                         <Box w="20px" h="20px" position="relative" flexShrink={0}>
                           <Image
-                            src={CONNECTION_TYPES.find(c => c.type === content.type)?.logo || '/logos/duckdb.svg'}
+                            src={getTypeInfo(content.type).logo}
                             alt={content.type}
                             fill
                             style={{ objectFit: 'contain' }}
                           />
                         </Box>
                         <Text fontSize="sm" fontWeight="500" fontFamily="mono">
-                          {CONNECTION_TYPES.find(c => c.type === content.type)?.name || content.type}
+                          {getTypeInfo(content.type).name}
                         </Text>
                       </HStack>
                       <Icon as={LuChevronDown} boxSize={4} color="fg.subtle" />
@@ -929,7 +949,7 @@ export default function ConnectionFormV2({
                           py={2}
                           bg={content.type === connType.type ? 'accent.teal/10' : 'transparent'}
                           _hover={{ bg: content.type === connType.type ? 'accent.teal/20' : 'bg.muted' }}
-                          onClick={() => handleTypeChange(connType.type as 'duckdb' | 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena')}
+                          onClick={() => handleTypeChange(connType.type as 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena')}
                         >
                           <HStack gap={2}>
                             <Box w="20px" h="20px" position="relative" flexShrink={0}>
@@ -954,15 +974,6 @@ export default function ConnectionFormV2({
           </Box>
         </HStack>
 
-        {/* DuckDB Configuration */}
-        {content.type === 'duckdb' && (
-          <DuckDBConfig
-            config={config}
-            onChange={(newConfig) => onChange({ config: newConfig })}
-            mode={mode}
-          />
-        )}
-
         {/* BigQuery Configuration */}
         {content.type === 'bigquery' && (
           <BigQueryConfig
@@ -981,8 +992,20 @@ export default function ConnectionFormV2({
           />
         )}
 
-        {/* CSV Configuration */}
-        {content.type === 'csv' && (
+        {/* Static connection — unified CSV + Google Sheets landing zone */}
+        {content.type === 'csv' && fileName === 'static' && (
+          <StaticConnectionConfig
+            config={config}
+            onChange={(newConfig) => onChange({ config: newConfig })}
+            mode={mode}
+            companyId={companyId}
+            userMode={userMode}
+            onError={setNameError}
+          />
+        )}
+
+        {/* CSV Configuration (non-static, backward compat) */}
+        {content.type === 'csv' && fileName !== 'static' && (
           <CsvConfig
             config={config}
             onChange={(newConfig) => onChange({ config: newConfig })}

@@ -6,7 +6,8 @@
 /**
  * Reserved connection names that cannot be used
  */
-export const RESERVED_NAMES = ['default_db'];
+// 'static' is the shared CSV/Google Sheets landing zone — one per mode, cannot be deleted or renamed
+export const RESERVED_NAMES = ['default_db', 'static'];
 
 /**
  * Block DuckDB connections that point to another company's analytics DB.
@@ -67,7 +68,6 @@ export function getSafeConfig(type: string, config: any): Record<string, any> {
   if (type === 'csv') {
     // CSV config is safe to return (no sensitive data)
     return {
-      generated_db_path: config.generated_db_path,
       files: config.files || []
     };
   }
@@ -77,7 +77,7 @@ export function getSafeConfig(type: string, config: any): Record<string, any> {
     return {
       spreadsheet_url: config.spreadsheet_url,
       spreadsheet_id: config.spreadsheet_id,
-      generated_db_path: config.generated_db_path,
+      schema_name: config.schema_name,
       files: config.files || []
     };
   }

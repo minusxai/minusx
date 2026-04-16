@@ -30,7 +30,7 @@ import { S3Adapter } from './s3-adapter';
 export interface UploadUrlResult {
   /** Presigned PUT URL the client uploads to directly. */
   uploadUrl: string;
-  /** Publicly accessible URL of the object after upload. */
+  /** Publicly accessible URL of the object after equal. */
   publicUrl: string;
 }
 
@@ -39,6 +39,8 @@ export interface ObjectStore {
   /** Server-side direct upload — returns publicUrl. */
   put(key: string, body: Buffer, contentType: string): Promise<string>;
   delete(key: string): Promise<void>;
+  /** Server-side S3 copy — no data transfer through Node.js. */
+  copyObject(sourceKey: string, destKey: string): Promise<void>;
 }
 
 export function createObjectStore(): ObjectStore {
@@ -47,13 +49,12 @@ export function createObjectStore(): ObjectStore {
 
 /**
  * Key path structure:
- *   {companyId}/{type}/{userId}/{mode}/{YYYY-MM-DD}/{uuid}{ext}
+ *   Uploads/charts:  {companyId}/{type}/{userId}/{mode}/{YYYY-MM-DD}/{uuid}{ext}
+ *   CSV files:       {companyId}/csvs/{mode}/{connectionName}/{uuid}{ext}
+ *   Seed files:      seeds/mxfood/{table}.parquet  (shared, read-only)
  *
- * - type: 'uploads' (user-attached files) | 'charts' (LLM vision renders)
- *   Allows independent S3 lifecycle rules per type.
- * - userId/mode: audit trail and per-user isolation
- * - YYYY-MM-DD: date-based lifecycle policies (e.g. delete charts after 30 days)
- * - uuid: uniqueness within the same day/user/mode
+ * - type: 'uploads' | 'charts' | 'csvs'
+ * - CSV keys are scoped to companyId + mode for company isolation.
  */
 export function generateUploadKey(params: {
   companyId: number;
@@ -64,6 +65,64 @@ export function generateUploadKey(params: {
 }): string {
   const day = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   return `${params.companyId}/${params.type}/${params.userId}/${params.mode}/${day}/${randomUUID()}${params.ext}`;
+}
+
+/**
+ * Generate an S3 key for a CSV file upload.
+ * Scoped to company + mode to prevent cross-company access.
+ *
+ * Key path: {companyId}/csvs/{mode}/{connectionName}/{uuid}.{ext}
+ * The original file extension is preserved so parquet files keep their .parquet suffix in S3.
+ */
+export function generateCsvUploadKey(params: {
+  companyId: number;
+  mode: string;
+  connectionName: string;
+  filename: string;
+}): string {
+  const ext = params.filename.split('.').pop()?.toLowerCase() || 'csv';
+  return `${params.companyId}/csvs/${params.mode}/${params.connectionName}/${randomUUID()}.${ext}`;
+}
+
+/** Shared S3 seed path for a single mxfood table. */
+export function getMxfoodSeedKey(tableName: string): string {
+  return `seeds/mxfood/${tableName}.parquet`;
+}
+
+/** Per-company destination key for a mxfood tutorial table. */
+export function getMxfoodCompanyKey(companyId: number, mode: string, tableName: string): string {
+  return `${companyId}/csvs/${mode}/mxfood/${tableName}.parquet`;
+}
+
+/**
+ * Copy all mxfood seed Parquet files from the shared `seeds/mxfood/` prefix
+ * to the company-specific `{companyId}/csvs/{mode}/mxfood/` prefix using
+ * server-side S3 CopyObject (no data transfer through Node.js).
+ *
+ * Returns the list of table names that were copied successfully.
+ * Failures are logged but do not throw — call is best-effort.
+ */
+export async function copySeedMxfoodForCompany(
+  companyId: number,
+  mode: string,
+  tableNames: string[],
+): Promise<string[]> {
+  const store = createObjectStore();
+  const copied: string[] = [];
+
+  await Promise.all(tableNames.map(async (table) => {
+    try {
+      await store.copyObject(
+        getMxfoodSeedKey(table),
+        getMxfoodCompanyKey(companyId, mode, table),
+      );
+      copied.push(table);
+    } catch (err) {
+      console.warn(`[copySeedMxfoodForCompany] Failed to copy ${table} for company ${companyId}:`, err);
+    }
+  }));
+
+  return copied;
 }
 
 export { S3Adapter };
