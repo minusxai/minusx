@@ -53,7 +53,7 @@ export default function StepGenerating({ connectionName, contextFileId, greeting
   const router = useRouter();
   const dispatch = useAppDispatch();
   const reduxState = useAppSelector(state => state);
-  const showDebug = useAppSelector(state => state.ui.showDebug);
+  const showDebug = useAppSelector(state => state.ui.devMode);
   const user = useAppSelector(state => state.auth.user);
   const modeRoot = resolveHomeFolderSync(user?.mode ?? 'org', user?.home_folder ?? '');
 

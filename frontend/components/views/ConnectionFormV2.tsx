@@ -153,7 +153,7 @@ export default function ConnectionFormV2({
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const companyId = useAppSelector((state) => state.auth.user?.companyId);
   const userMode = useAppSelector((state) => state.auth.user?.mode) || 'org';
-  const showJson = useAppSelector((state) => state.ui.showJson);
+  const showJson = useAppSelector((state) => state.ui.devMode);
   const staticConnectionId = TEMPLATE_FILE_IDS[resolvePath(userMode, '/database/static')];
 
   // For create mode, start with type selection step; skip if already editing

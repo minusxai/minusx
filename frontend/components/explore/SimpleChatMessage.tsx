@@ -14,7 +14,7 @@ import { cloneDeep, isEmpty } from 'lodash';
 import { MessageWithFlags } from './message/messageHelpers';
 import { LuPencil, LuCheck, LuX } from 'react-icons/lu';
 import { editAndForkMessage } from '@/store/chatSlice';
-import { selectShowDebug } from '@/store/uiSlice';
+import { selectDevMode } from '@/store/uiSlice';
 
 
 interface ChatMessageProps {
@@ -29,7 +29,7 @@ interface ChatMessageProps {
 
 const SimpleChatMessage = React.memo(function SimpleChatMessage({ message, databaseName, isCompact = false, showThinking = false, toggleShowThinking, markdownContext = 'mainpage', conversationID }: ChatMessageProps) {
   const dispatch = useAppDispatch();
-  const showDebug = useAppSelector(selectShowDebug);
+  const showDebug = useAppSelector(selectDevMode);
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState('');
   const [isHovered, setIsHovered] = useState(false);

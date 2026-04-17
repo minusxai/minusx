@@ -6,7 +6,7 @@ import { LuBug, LuChevronDown, LuChevronRight, LuClock, LuCpu } from 'react-icon
 import Editor from '@monaco-editor/react';
 import type { MessageDebugInfo } from '@/lib/types';
 import { useAppSelector } from '@/store/hooks';
-import { selectShowDebug } from '@/store/uiSlice';
+import { selectDevMode } from '@/store/uiSlice';
 import { selectEffectiveUser } from '@/store/authSlice';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { getLLMLogStats, type LLMLogStats } from '@/lib/api/llm-calls';
@@ -131,7 +131,7 @@ export default function DebugInfoDisplay({ debugInfo }: DebugInfoDisplayProps) {
   // Check if user is admin and debug is enabled
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const isUserAdmin = effectiveUser?.role && isAdmin(effectiveUser.role);
-  const showDebug = useAppSelector(selectShowDebug);
+  const showDebug = useAppSelector(selectDevMode);
 
   // Don't render if not admin or debug is disabled
   if (!isUserAdmin || !showDebug) {

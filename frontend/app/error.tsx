@@ -5,7 +5,7 @@ import { showAdminToast } from '@/lib/utils/toast-helpers';
 import { isHydrationError } from '@/lib/utils/error-utils';
 import { captureError } from '@/lib/messaging/capture-error';
 import { getStore } from '@/store/store';
-import { selectShowAllErrorToasts } from '@/store/uiSlice';
+import { selectDevMode } from '@/store/uiSlice';
 import { Box, Button, Text, VStack } from '@chakra-ui/react';
 import { IS_DEV, IS_TEST, SEND_ERRORS_IN_DEV } from '@/lib/constants';
 
@@ -28,7 +28,7 @@ export default function Error({
     }
 
     // Suppress hydration errors unless admin has opted into seeing all error toasts
-    const showAll = selectShowAllErrorToasts(getStore().getState());
+    const showAll = selectDevMode(getStore().getState());
     if (!showAll && isHydrationError(error.message)) return;
 
     // Show toast notification (only to admins)

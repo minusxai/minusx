@@ -8,10 +8,13 @@ import { selectEffectiveUser } from '@/store/authSlice';
 import { startImpersonation } from '@/lib/navigation/url-utils';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { useUsers } from '@/lib/hooks/useUsers';
+import { useAppSelector } from '@/store/hooks';
+import { selectDevMode } from '@/store/uiSlice';
 
 export default function ImpersonationSelector() {
   const currentUser = useSelector(selectEffectiveUser);
   const isUserAdmin = currentUser?.role ? isAdmin(currentUser.role) : false;
+  const devMode = useAppSelector(selectDevMode);
 
   const { users: allUsers, loading: usersLoading } = useUsers();
 
@@ -26,8 +29,7 @@ export default function ImpersonationSelector() {
       }));
   }, [allUsers, currentUser?.email]);
 
-  // Only show for admins
-  if (!isUserAdmin) {
+  if (!isUserAdmin || !devMode) {
     return null;
   }
 

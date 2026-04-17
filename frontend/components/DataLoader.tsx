@@ -28,11 +28,11 @@ export function DataLoader() {
   // Restore persisted UI flags after hydration — single dispatch avoids 3 separate re-render cycles
   useEffect(() => {
     try {
-      const flags: { showDebug?: boolean; showJson?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean } = {};
-      const debug = localStorage.getItem('showDebug');
-      if (debug !== null) flags.showDebug = debug === 'true';
-      const json = localStorage.getItem('showJson');
-      if (json !== null) flags.showJson = json === 'true';
+      const flags: { devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean } = {};
+      const dev = localStorage.getItem('devMode');
+      if (dev !== null) flags.devMode = dev === 'true';
+      const confirm = localStorage.getItem('askForConfirmation');
+      if (confirm !== null) flags.askForConfirmation = confirm === 'true';
       const advanced = localStorage.getItem('showAdvanced');
       if (advanced !== null) flags.showAdvanced = advanced === 'true';
       const suggestedQuestions = localStorage.getItem('showSuggestedQuestions');

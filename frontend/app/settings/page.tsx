@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, ReactNode, useMemo, Suspense, useCallback } from 'react';
-import { Box, VStack, Text, Flex, Switch, Button, Heading, Container, Tabs } from '@chakra-ui/react';
-import { LuRefreshCw } from 'react-icons/lu';
+import { Box, VStack, Text, Flex, Switch, Button, Heading, Container, Tabs, Badge, HStack, Icon } from '@chakra-ui/react';
+import { LuRefreshCw, LuUser } from 'react-icons/lu';
 import { ColorModeButton } from '@/components/ui/color-mode';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { setAskForConfirmation, setShowDebug, setShowJson, setShowAllErrorToasts, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode } from '@/store/uiSlice';
+import { setAskForConfirmation, setShowAdvanced, setDevMode, setShowSuggestedQuestions, setShowTrustScore, setQueueStrategy, setAllowChatQueue, setUnrestrictedMode } from '@/store/uiSlice';
+import { canEdit } from '@/lib/auth/role-helpers';
 import { IS_DEV } from '@/lib/constants';
 import RecordingControl from '@/components/RecordingControl';
 import DataManagementSection from '@/components/DataManagementSection';
@@ -31,6 +32,7 @@ type TabId = 'general' | 'dev' | 'data' | 'users' | 'configs' | 'styles' | 'mess
 
 interface SettingEntry {
   tab: TabId;
+  section?: string;
   title: string;
   description: string;
   control: ReactNode;
@@ -128,9 +130,6 @@ function FileTabContent({ path, Container, createFolder, createType }: {
 function SettingsContent() {
   const dispatch = useAppDispatch();
   const askForConfirmation = useAppSelector((state) => state.ui.askForConfirmation);
-  const showDebug = useAppSelector((state) => state.ui.showDebug);
-  const showJson = useAppSelector((state) => state.ui.showJson);
-  const showAllErrorToasts = useAppSelector((state) => state.ui.showAllErrorToasts);
   const user = useAppSelector((state) => state.auth.user);
   const [isClearing, setIsClearing] = useState(false);
   const [isTestingError, setIsTestingError] = useState(false);
@@ -160,8 +159,8 @@ function SettingsContent() {
   const mode = user?.mode || 'org';
 
   const isAdmin = user?.role === 'admin';
+  const isEditorOrAdmin = user?.role ? canEdit(user.role) : false;
   const isAdvancedAdmin = isAdmin && showAdvanced;
-  const showDebugOption = isAdvancedAdmin;
 
   const handleClearCache = async () => {
     setIsClearing(true);
@@ -231,14 +230,17 @@ function SettingsContent() {
 
   // ── Settings config ──────────────────────────────────────────────
   const settings: SettingEntry[] = useMemo(() => [
+    // ── General: Feature Flags (all users) ──
     {
       tab: 'general',
+      section: 'Feature Flags',
       title: 'Appearance: Dark Mode',
       description: 'Switch between light and dark theme',
       control: <ColorModeButton />,
     },
     {
       tab: 'general',
+      section: 'Feature Flags',
       title: 'Confirm Actions',
       description: 'Confirm before applying AI-suggested changes to any page',
       control: (
@@ -250,6 +252,7 @@ function SettingsContent() {
     },
     {
       tab: 'general',
+      section: 'Feature Flags',
       title: 'Suggested Questions',
       description: 'Show clickable follow-up questions after agent responses',
       control: (
@@ -261,6 +264,7 @@ function SettingsContent() {
     },
     {
       tab: 'general',
+      section: 'Feature Flags',
       title: 'Trust Score',
       description: 'Show agent confidence level on responses',
       control: (
@@ -270,31 +274,10 @@ function SettingsContent() {
         />
       ),
     },
+    // ── General: Advanced Flags (editors + admins) ──
     {
       tab: 'general',
-      title: 'Advanced',
-      description: 'Show advanced tabs: Configs, Styles, Dev, and Data Management',
-      control: (
-        <SwitchControl
-          checked={showAdvanced}
-          onChange={(checked) => dispatch(setShowAdvanced(checked))}
-        />
-      ),
-      visible: isAdmin,
-    },
-    {
-      tab: 'general',
-      title: 'Allow Chat Queue',
-      description: 'When enabled, you can send follow-up chat messages while the agent is still working.',
-      control: (
-        <SwitchControl
-          checked={allowChatQueue}
-          onChange={(checked) => dispatch(setAllowChatQueue(checked))}
-        />
-      ),
-    },
-    {
-      tab: 'general',
+      section: 'Advanced Flags',
       title: 'Unrestricted Mode',
       description: 'Skip navigation guards — freely move between pages even with unsaved changes or a running agent.',
       control: (
@@ -303,54 +286,43 @@ function SettingsContent() {
           onChange={(checked) => dispatch(setUnrestrictedMode(checked))}
         />
       ),
+      visible: isEditorOrAdmin,
     },
+    // ── General: Developer Tools toggle (admin only, unlabeled card) ──
+    {
+      tab: 'general',
+      title: 'Developer Tabs',
+      description: 'Show developer tabs: Developer Tools, Configs, Styles, and Data Management',
+      control: (
+        <SwitchControl
+          checked={showAdvanced}
+          onChange={(checked) => dispatch(setShowAdvanced(checked))}
+        />
+      ),
+      visible: isAdmin,
+    },
+    // ── Dev tab ──
     {
       tab: 'dev',
-      title: 'Dev Tools Panel',
-      description: 'Show the Dev Tools section in the sidebar (always on in development)',
+      title: 'Show Debug Options',
+      description: 'Enables: impersonation selector, JSON view toggles, LLM debug info, DevTools panel in right ridebar, and all error toasts',
       control: (
         <SwitchControl
           checked={devMode}
           onChange={(checked) => dispatch(setDevMode(checked))}
         />
       ),
-      visible: !IS_DEV,
     },
     {
       tab: 'dev',
-      title: 'Show Debug Info',
-      description: 'Display debug information in the interface',
+      title: 'Allow Chat Queue',
+      description: 'Send follow-up chat messages while the agent is still working.',
       control: (
         <SwitchControl
-          checked={showDebug}
-          onChange={(checked) => dispatch(setShowDebug(checked))}
+          checked={allowChatQueue}
+          onChange={(checked) => dispatch(setAllowChatQueue(checked))}
         />
       ),
-      visible: showDebugOption,
-    },
-    {
-      tab: 'dev',
-      title: 'Show JSON Toggle',
-      description: 'Display JSON toggle button in the interface',
-      control: (
-        <SwitchControl
-          checked={showJson}
-          onChange={(checked) => dispatch(setShowJson(checked))}
-        />
-      ),
-      visible: showDebugOption,
-    },
-    {
-      tab: 'dev',
-      title: 'Show all error toasts',
-      description: 'Display all error notifications including recoverable hydration errors (admin only)',
-      control: (
-        <SwitchControl
-          checked={showAllErrorToasts}
-          onChange={(checked) => dispatch(setShowAllErrorToasts(checked))}
-        />
-      ),
-      visible: showDebugOption,
     },
     {
       tab: 'dev',
@@ -366,7 +338,7 @@ function SettingsContent() {
           </Button>
         </Flex>
       ),
-      visible: showDebugOption && allowChatQueue,
+      visible: allowChatQueue,
     },
     {
       tab: 'dev',
@@ -409,15 +381,8 @@ function SettingsContent() {
           Trigger
         </Button>
       ),
-      visible: showDebugOption,
     },
-    {
-      tab: 'general',
-      title: 'Build',
-      description: GIT_COMMIT_SHA,
-      control: <></>,
-    },
-  ], [askForConfirmation, showDebug, showJson, showAllErrorToasts, showDebugOption, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, showAdvanced, isAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode]);
+  ], [askForConfirmation, isClearing, isTestingError, user?.mode, dispatch, handleClearCache, handleTestError, showAdvanced, isAdmin, isEditorOrAdmin, showSuggestedQuestions, showTrustScore, queueStrategy, allowChatQueue, unrestrictedMode, devMode]);
 
   // ── Tabs config ──────────────────────────────────────────────────
   const tabs: TabEntry[] = useMemo(() => [
@@ -441,7 +406,7 @@ function SettingsContent() {
     {
       id: 'integrations',
       label: 'Integrations',
-      visible: isAdvancedAdmin,
+      visible: isAdmin,
       custom: (
         <VStack align="stretch" gap={3}>
           <Text fontSize="xs" color="fg.muted" fontFamily="mono">
@@ -478,7 +443,7 @@ function SettingsContent() {
         />
       ),
     },
-    { id: 'dev', label: 'Dev', visible: isAdvancedAdmin },
+    { id: 'dev', label: 'Developer Tools', visible: isAdvancedAdmin },
     {
       id: 'data',
       label: 'Data Management',
@@ -507,14 +472,54 @@ function SettingsContent() {
     if (tab.custom) return tab.custom;
 
     const tabSettings = settings.filter((s) => s.tab === tab.id && s.visible !== false);
+
+    const sectionMap = new Map<string, SettingEntry[]>();
+    for (const s of tabSettings) {
+      const key = s.section ?? '';
+      if (!sectionMap.has(key)) sectionMap.set(key, []);
+      sectionMap.get(key)!.push(s);
+    }
+
     return (
-      <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
-        <VStack align="stretch" gap={0} divideY="1px">
-          {tabSettings.map((s) => (
-            <SettingRow key={s.title} title={s.title} description={s.description} control={s.control} section={tab.label} />
-          ))}
-        </VStack>
-      </Box>
+      <VStack align="stretch" gap={4}>
+        {tab.id === 'general' && (
+          <Box bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" px={6} py={4}>
+            <VStack align="stretch" gap={1}>
+              <HStack gap={3}>
+                <Icon as={LuUser} boxSize={4} color="fg.muted" flexShrink={0} />
+                <Text fontSize="sm" fontWeight="medium" fontFamily="mono">{user?.name ?? '—'}</Text>
+              </HStack>
+              <HStack gap={3} pl={7}>
+                <Text fontSize="xs" color="fg.muted" fontFamily="mono">{user?.email ?? '—'}</Text>
+                <Badge
+                  size="sm"
+                  colorPalette={user?.role === 'admin' ? 'teal' : user?.role === 'editor' ? 'blue' : 'gray'}
+                  variant="subtle"
+                  fontFamily="mono"
+                >
+                  {user?.role ?? '—'}
+                </Badge>
+              </HStack>
+            </VStack>
+          </Box>
+        )}
+        {[...sectionMap.entries()].map(([sectionName, entries]) => (
+          <Box key={sectionName || '__default__'} bg="bg.surface" borderRadius="xl" shadow="sm" borderWidth="1px" borderColor="border" overflow="hidden">
+            {sectionName && (
+              <Box px={6} py={3} borderBottomWidth="1px" borderColor="border">
+                <Text fontSize="xs" fontWeight="semibold" color="fg.muted" fontFamily="mono" textTransform="uppercase" letterSpacing="wider">
+                  {sectionName}
+                </Text>
+              </Box>
+            )}
+            <VStack align="stretch" gap={0} divideY="1px">
+              {entries.map((s) => (
+                <SettingRow key={s.title} title={s.title} description={s.description} control={s.control} section={tab.label} />
+              ))}
+            </VStack>
+          </Box>
+        ))}
+      </VStack>
     );
   };
 
@@ -555,6 +560,10 @@ function SettingsContent() {
             </Tabs.Content>
           ))}
         </Tabs.Root>
+
+        <Text fontSize="xs" color="fg.subtle" fontFamily="mono" mt={8} mb={2}>
+          Build: {GIT_COMMIT_SHA}
+        </Text>
 
       </Container>
     </Box>

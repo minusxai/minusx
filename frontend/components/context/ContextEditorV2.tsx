@@ -100,7 +100,7 @@ export default function ContextEditorV2({
   const [yamlText, setYamlText] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const colorMode = useAppSelector((state) => state.ui.colorMode);
-  const showDebug = useAppSelector((state) => state.ui.showDebug);
+  const showDebug = useAppSelector((state) => state.ui.devMode);
   const user = useAppSelector(state => state.auth.user);
   const filesState = useAppSelector(state => state.files.files); // Moved here for consistent hooks order
 

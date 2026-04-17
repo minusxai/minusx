@@ -447,7 +447,7 @@ function SelectedFilePane({ fileId, publishingSingleId, onDiscard, onPublish }: 
   onDiscard: () => void;
   onPublish: () => void;
 }) {
-  const showJson = useAppSelector(state => state.ui.showJson);
+  const showJson = useAppSelector(state => state.ui.devMode);
   const [viewMode, setViewMode] = useState<'preview' | 'diff'>(showJson ? 'diff' : 'preview');
   const file = useAppSelector(state => selectFile(state, fileId));
 

@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { showAdminToast } from '@/lib/utils/toast-helpers';
 import { isHydrationError } from '@/lib/utils/error-utils';
 import { getStore } from '@/store/store';
-import { selectShowAllErrorToasts } from '@/store/uiSlice';
+import { selectDevMode } from '@/store/uiSlice';
 
 /**
  * Global error handler that catches browser-level errors that escape React error boundaries
@@ -27,7 +27,7 @@ export function GlobalErrorHandler() {
 
       // React hydration errors are recoverable — React automatically re-renders on the client.
       // Suppress them unless the admin has opted into seeing all error toasts.
-      const showAll = selectShowAllErrorToasts(getStore().getState());
+      const showAll = selectDevMode(getStore().getState());
       if (!showAll && isHydrationError(msg)) return;
 
       const errorDetail = event.error
@@ -48,7 +48,7 @@ export function GlobalErrorHandler() {
       const msg = event.reason instanceof Error ? event.reason.message : String(event.reason ?? '');
 
       // Suppress hydration-related rejections unless the admin opted in
-      const showAll = selectShowAllErrorToasts(getStore().getState());
+      const showAll = selectDevMode(getStore().getState());
       if (!showAll && isHydrationError(msg)) return;
 
       console.error('Unhandled promise rejection:', event.reason);

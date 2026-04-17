@@ -16,9 +16,6 @@ interface UIState {
   sidebarPendingMessage: string | null;
   activeSidebarSection: string | null;
   askForConfirmation: boolean;
-  showDebug: boolean;
-  showJson: boolean;
-  showAllErrorToasts: boolean;
   showAdvanced: boolean;
   gettingStartedCollapsed: boolean;
   dashboardEditMode: Record<number, boolean>;  // fileId -> editMode (dashboards)
@@ -47,9 +44,6 @@ const initialState: UIState = {
   sidebarPendingMessage: null,
   activeSidebarSection: null,
   askForConfirmation: false,
-  showDebug: false,
-  showJson: false,
-  showAllErrorToasts: false,
   showAdvanced: false,
   gettingStartedCollapsed: false,
   dashboardEditMode: {},
@@ -99,9 +93,15 @@ const uiSlice = createSlice({
     },
     setDevMode: (state, action: PayloadAction<boolean>) => {
       state.devMode = action.payload;
+      if (typeof window !== 'undefined') {
+        try { localStorage.setItem('devMode', String(action.payload)); } catch { /* ignore */ }
+      }
     },
     toggleDevMode: (state) => {
       state.devMode = !state.devMode;
+      if (typeof window !== 'undefined') {
+        try { localStorage.setItem('devMode', String(state.devMode)); } catch { /* ignore */ }
+      }
     },
     setSidebarPendingMessage: (state, action: PayloadAction<string | null>) => {
       state.sidebarPendingMessage = action.payload;
@@ -111,23 +111,8 @@ const uiSlice = createSlice({
     },
     setAskForConfirmation: (state, action: PayloadAction<boolean>) => {
       state.askForConfirmation = action.payload;
-    },
-    setShowDebug: (state, action: PayloadAction<boolean>) => {
-      state.showDebug = action.payload;
       if (typeof window !== 'undefined') {
-        try { localStorage.setItem('showDebug', String(action.payload)); } catch { /* ignore */ }
-      }
-    },
-    setShowJson: (state, action: PayloadAction<boolean>) => {
-      state.showJson = action.payload;
-      if (typeof window !== 'undefined') {
-        try { localStorage.setItem('showJson', String(action.payload)); } catch { /* ignore */ }
-      }
-    },
-    setShowAllErrorToasts: (state, action: PayloadAction<boolean>) => {
-      state.showAllErrorToasts = action.payload;
-      if (typeof window !== 'undefined') {
-        try { localStorage.setItem('showAllErrorToasts', String(action.payload)); } catch { /* ignore */ }
+        try { localStorage.setItem('askForConfirmation', String(action.payload)); } catch { /* ignore */ }
       }
     },
     setShowAdvanced: (state, action: PayloadAction<boolean>) => {
@@ -245,10 +230,10 @@ const uiSlice = createSlice({
         try { localStorage.setItem('unrestrictedMode', String(action.payload)); } catch { /* ignore */ }
       }
     },
-    setBulkUiFlags: (state, action: PayloadAction<{ showDebug?: boolean; showJson?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean }>) => {
-      const { showDebug, showJson, showAdvanced, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore, unrestrictedMode } = action.payload;
-      if (showDebug !== undefined) state.showDebug = showDebug;
-      if (showJson !== undefined) state.showJson = showJson;
+    setBulkUiFlags: (state, action: PayloadAction<{ devMode?: boolean; askForConfirmation?: boolean; showAdvanced?: boolean; allowChatQueue?: boolean; queueStrategy?: 'end-of-turn' | 'mid-turn'; showSuggestedQuestions?: boolean; showTrustScore?: boolean; unrestrictedMode?: boolean }>) => {
+      const { devMode, askForConfirmation, showAdvanced, allowChatQueue, queueStrategy, showSuggestedQuestions, showTrustScore, unrestrictedMode } = action.payload;
+      if (devMode !== undefined) state.devMode = devMode;
+      if (askForConfirmation !== undefined) state.askForConfirmation = askForConfirmation;
       if (showAdvanced !== undefined) state.showAdvanced = showAdvanced;
       if (allowChatQueue !== undefined) state.allowChatQueue = allowChatQueue;
       if (queueStrategy !== undefined) state.queueStrategy = queueStrategy;
@@ -272,9 +257,6 @@ export const {
   setSidebarPendingMessage,
   setActiveSidebarSection,
   setAskForConfirmation,
-  setShowDebug,
-  setShowJson,
-  setShowAllErrorToasts,
   setShowAdvanced,
   setGettingStartedCollapsed,
   toggleGettingStartedCollapsed,
@@ -328,10 +310,8 @@ export const selectRightSidebarUIState = createSelector(
 );
 
 export const selectAskForConfirmation = (state: RootState) => state.ui.askForConfirmation;
-export const selectShowDebug = (state: RootState) => state.ui.showDebug;
+export const selectDevMode = (state: RootState) => state.ui.devMode;
 export const selectShowAdvanced = (state: RootState) => state.ui.showAdvanced;
-export const selectShowJson = (state: RootState) => state.ui.showJson;
-export const selectShowAllErrorToasts = (state: RootState) => state.ui.showAllErrorToasts;
 export const selectAllowChatQueue = (state: RootState) => state.ui.allowChatQueue ?? false;
 export const selectQueueStrategy = (state: RootState) => state.ui.queueStrategy ?? 'end-of-turn';
 export const selectGettingStartedCollapsed = (state: RootState) => state.ui.gettingStartedCollapsed;
