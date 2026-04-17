@@ -1325,6 +1325,50 @@ export const MIGRATIONS: MigrationEntry[] = [
     },
     description: 'V34: Rename default context files from "context" to "Knowledge Base"',
   },
+  {
+    dataVersion: 35,
+    schemaVersion: undefined,
+    dataMigration: (data: InitData) => {
+      const now = new Date().toISOString();
+      for (const companyData of data.companies as CompanyData[]) {
+        const allPaths = new Set(companyData.documents.map(d => d.path));
+        const folderPaths = new Set(
+          companyData.documents.filter(d => d.type === 'folder').map(d => d.path)
+        );
+
+        for (const mode of VALID_MODES) {
+          const databaseFolder = `/${mode}/database`;
+          const staticPath = `${databaseFolder}/static`;
+
+          if (!folderPaths.has(databaseFolder)) continue; // database folder doesn't exist — skip
+          if (allPaths.has(staticPath)) continue;         // static connection already exists — skip
+
+          const maxId = companyData.documents.reduce((max, d) => Math.max(max, d.id), 0);
+          companyData.documents.push({
+            id: maxId + 1,
+            name: 'static',
+            path: staticPath,
+            type: 'connection' as const,
+            references: [],
+            content: {
+              type: 'csv',
+              config: { files: [] },
+              description: 'Add your own CSV, xlsx, or Google Sheets tables here',
+            },
+            company_id: companyData.id,
+            created_at: now,
+            updated_at: now,
+            version: 1,
+            last_edit_id: null,
+          });
+          allPaths.add(staticPath);
+          console.log(`  [V35] Created ${staticPath} for company "${companyData.name}"`);
+        }
+      }
+      return data;
+    },
+    description: 'V35: Create missing /{mode}/database/static connection for all modes',
+  },
 ];
 
 /**
