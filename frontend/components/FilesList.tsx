@@ -148,6 +148,10 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
   const effectiveCollapsed = hasPrimarySections
     ? collapsedSections
     : new Set([...collapsedSections].filter(k => !sections.some(s => s.key === k)));
+  const shouldHideSectionHeaders = sections.length <= 1;
+  const nonContextSections = sections.filter(section => section.key !== 'context');
+  const shouldForceOpenSingleNonContextSection =
+    sections.some(section => section.key === 'context') && nonContextSections.length === 1;
   const toggleSection = (key: SectionKey) => {
     setCollapsedSections(prev => {
       const next = new Set(prev);
@@ -423,8 +427,15 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
         <VStack gap={0} align="stretch">
           {sections.map((section, sectionIdx) => {
             const isCollapsible = section.key !== 'context';
-            const isCollapsed = isCollapsible && effectiveCollapsed.has(section.key);
-            const showHeader = isCollapsible;
+            const isForcedOpen =
+              shouldForceOpenSingleNonContextSection &&
+              section.key === nonContextSections[0]?.key;
+            const isCollapsed =
+              !shouldHideSectionHeaders &&
+              !isForcedOpen &&
+              isCollapsible &&
+              effectiveCollapsed.has(section.key);
+            const showHeader = !shouldHideSectionHeaders && isCollapsible;
             // Get representative metadata for section icon/color
             const sectionMeta = section.key !== '_other'
               ? FILE_TYPE_METADATA[section.key as keyof typeof FILE_TYPE_METADATA]

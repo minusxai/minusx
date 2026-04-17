@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
-import { Box, Heading, Text, Flex, HStack, Icon, VStack } from '@chakra-ui/react';
+import { Box, Button, Heading, Text, Flex, HStack, Icon, VStack } from '@chakra-ui/react';
 import { LuPlay, LuDatabase, LuSparkles, LuCheck } from 'react-icons/lu';
 import { useAppDispatch } from '@/store/hooks';
 import { useRouter } from '@/lib/navigation/use-navigation';
@@ -213,6 +213,25 @@ export function HelloWorldContent() {
       <Box ref={orb1Ref} className="hw-orb hw-orb-1" position="absolute" w="400px" h="400px" borderRadius="full" bg="accent.teal" opacity={0.12} filter="blur(80px)" zIndex={0} pointerEvents="none" />
       <Box ref={orb2Ref} className="hw-orb hw-orb-2" position="absolute" w="300px" h="300px" borderRadius="full" bg="accent.teal" opacity={0.14} filter="blur(60px)" zIndex={0} pointerEvents="none" />
       <Box ref={orb3Ref} className="hw-orb hw-orb-3" position="absolute" w="250px" h="250px" borderRadius="full" bg="accent.teal" opacity={0.18} filter="blur(70px)" zIndex={0} pointerEvents="none" />
+
+      {/* ─── Skip Setup Button (visible on all non-complete phases) ─── */}
+      {!isComplete && (
+        <Button
+          position="absolute"
+          top={4}
+          right={6}
+          zIndex={2}
+          size="sm"
+          variant="solid"
+          bg="accent.teal"
+          color="white"
+          fontFamily="mono"
+          _hover={{ opacity: 0.9 }}
+          onClick={handleSkipToHome}
+        >
+          Skip Setup →
+        </Button>
+      )}
 
       {/* ─── WELCOME PHASE ─── */}
       {step === 'welcome' && !isComplete && (

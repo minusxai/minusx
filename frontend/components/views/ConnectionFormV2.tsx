@@ -769,20 +769,47 @@ export default function ConnectionFormV2({
           <HStack gap={2}>
             {/* Section Toggle for existing connections — DuckDB is system-managed, no settings */}
             {mode === 'view' && content.type !== 'duckdb' && (
-              <TabSwitcher
-                tabs={[
-                  { value: 'tables', label: 'Tables', icon: LuTable },
-                  { value: 'settings', label: 'Settings', icon: LuSettings }
-                ]}
-                activeTab={activeSection}
-                onTabChange={(tab) => setActiveSection(tab as 'tables' | 'settings')}
-                accentColor="accent.teal"
-              />
-            )}
-            {activeSection === 'settings' && !hideCancel && content.type !== 'duckdb' && (
-                <Button onClick={onCancel} variant="ghost" size="xs">
-                  Cancel
+              <HStack
+                gap={0}
+                bg="bg.surface"
+                borderRadius="lg"
+                p={1}
+                border="1px solid"
+                borderColor="border.default"
+              >
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Tables view"
+                  onClick={() => setActiveSection('tables')}
+                  bg={activeSection === 'tables' ? 'accent.teal' : 'transparent'}
+                  color={activeSection === 'tables' ? 'white' : 'fg.muted'}
+                  _hover={{ bg: activeSection === 'tables' ? 'accent.teal' : 'bg.muted' }}
+                  borderRadius="md"
+                  fontSize="xs"
+                  fontWeight="600"
+                  px={3}
+                >
+                  <LuTable />
+                  Table View
                 </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Settings view"
+                  onClick={() => setActiveSection('settings')}
+                  bg={activeSection === 'settings' ? 'accent.teal' : 'transparent'}
+                  color={activeSection === 'settings' ? 'white' : 'fg.muted'}
+                  _hover={{ bg: activeSection === 'settings' ? 'accent.teal' : 'bg.muted' }}
+                  borderRadius="md"
+                  fontSize="xs"
+                  fontWeight="600"
+                  px={3}
+                >
+                  <LuSettings />
+                  Settings
+                </Button>
+              </HStack>
             )}
           </HStack>
         </HStack>
@@ -1162,6 +1189,11 @@ export default function ConnectionFormV2({
             <LuSave />
             Save DB Connection
           </Button>
+          {!hideCancel && isDirty && (
+            <Button onClick={onCancel} variant="ghost" size="sm">
+              Cancel
+            </Button>
+          )}
         </HStack>
             </>
             )}

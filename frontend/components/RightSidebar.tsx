@@ -6,7 +6,6 @@ import { LuChevronRight, LuChevronLeft, LuGripVertical, LuChevronDown, LuMessage
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setRightSidebarCollapsed, setRightSidebarWidth, setActiveSidebarSection, selectRightSidebarUIState } from '@/store/uiSlice';
 import { IS_DEV } from '@/lib/constants';
-import { setFiles } from '@/store/filesSlice';
 import { createSelector } from '@reduxjs/toolkit';
 import type { RootState } from '@/store/store';
 import QuestionSchemaSection from './QuestionSchemaSection';
@@ -16,7 +15,8 @@ import Markdown from './Markdown';
 import ChatInterface from './explore/ChatInterface';
 import AccessTokenManager from './AccessTokenManager';
 import DevToolsPanel from './DevToolsPanel';
-import { resolvePath, resolveHomeFolderSync } from '@/lib/mode/path-resolver';
+import { resolveHomeFolderSync, isUnderSystemFolder } from '@/lib/mode/path-resolver';
+import type { Mode } from '@/lib/mode/mode-types';
 import { Tooltip } from './ui/tooltip';
 import { useContext } from '@/lib/hooks/useContext';
 import { useAppState } from '@/lib/hooks/file-state-hooks';
@@ -42,11 +42,16 @@ export interface RightSidebarProps {
 // Per-instance memoized selector factory
 const makeSelectContextFileCount = () =>
   createSelector(
-    [(state: RootState) => state.files.files, (_: RootState, homeFolder: string) => homeFolder],
-    (files, homeFolder) =>
+    [
+      (state: RootState) => state.files.files,
+      (_: RootState, homeFolder: string, _mode: Mode) => homeFolder,
+      (_: RootState, _homeFolder: string, mode: Mode) => mode,
+    ],
+    (files, homeFolder, mode) =>
       homeFolder
         ? Object.values(files).filter(
             file => file.type === 'context' && file.path.startsWith(homeFolder) && file.id > 0
+              && !isUnderSystemFolder(file.path, mode)
           ).length
         : 0
   );
@@ -431,13 +436,14 @@ export default function RightSidebar({
 
   const homeFolder = currentUser ? resolveHomeFolderSync(currentUser.mode, currentUser.home_folder || '') : '';
   const selectContextFileCount = useMemo(() => makeSelectContextFileCount(), []);
-  const contextFileCount = useAppSelector(state => selectContextFileCount(state, homeFolder));
-  if (onContextChange && contextFileCount > 1) {
-    sections.push(getSidebarSection('context'));
-  }
-
+  const mode: Mode = currentUser?.mode || 'org';
+  const contextFileCount = useAppSelector(state => selectContextFileCount(state, homeFolder, mode));
   if (showChat) {
     sections.push(getSidebarSection('chat'));
+  }
+
+  if (onContextChange && contextFileCount > 1) {
+    sections.push(getSidebarSection('context'));
   }
 
   sections.push(getSidebarSection('databases'));
