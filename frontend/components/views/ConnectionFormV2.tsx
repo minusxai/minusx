@@ -30,6 +30,7 @@ import {
   Portal,
   Icon,
   SimpleGrid,
+  Progress,
 } from '@chakra-ui/react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { LuTriangleAlert, LuFileJson2, LuEye, LuSave, LuChevronDown, LuTable, LuSettings, LuArrowLeft, LuCircleAlert } from 'react-icons/lu';
@@ -38,8 +39,8 @@ import { testConnection } from '@/lib/backend/python-backend';
 import TabSwitcher from '../TabSwitcher';
 import Editor from '@monaco-editor/react';
 import { useAppSelector } from '@/store/hooks';
-import { TEMPLATE_FILE_IDS } from '@/lib/database/template-file-ids';
 import { resolvePath } from '@/lib/mode/path-resolver';
+import { useFileByPath } from '@/lib/hooks/file-state-hooks';
 import ConnectionTablesBrowser from '../ConnectionTablesBrowser';
 import Image from 'next/image';
 import { BigQueryConfig, PostgreSQLConfig, CsvConfig, GoogleSheetsConfig, AthenaConfig, StaticConnectionConfig } from './connection-configs';
@@ -154,7 +155,16 @@ export default function ConnectionFormV2({
   const companyId = useAppSelector((state) => state.auth.user?.companyId);
   const userMode = useAppSelector((state) => state.auth.user?.mode) || 'org';
   const showJson = useAppSelector((state) => state.ui.devMode);
-  const staticConnectionId = TEMPLATE_FILE_IDS[resolvePath(userMode, '/database/static')];
+  const staticConnectionPath = resolvePath(userMode, '/database/static');
+  const { file: staticConnectionFile, loading: staticConnectionLoading } = useFileByPath(staticConnectionPath);
+  const [redirectingToStatic, setRedirectingToStatic] = useState(false);
+
+  useEffect(() => {
+    if (redirectingToStatic && staticConnectionFile?.fileState.id && staticConnectionFile.fileState.id > 0) {
+      const modeParam = userMode !== 'org' ? `?mode=${userMode}` : '';
+      router.push(`/f/${staticConnectionFile.fileState.id}${modeParam}`);
+    }
+  }, [redirectingToStatic, staticConnectionFile?.fileState.id, userMode, router]);
 
   // For create mode, start with type selection step; skip if already editing
   const [step, setStep] = useState<'select-type' | 'configure'>(mode === 'create' ? 'select-type' : 'configure');
@@ -199,8 +209,11 @@ export default function ConnectionFormV2({
   const handleTypeSelect = (selectedType: 'bigquery' | 'postgresql' | 'csv' | 'google-sheets' | 'athena') => {
     // CSV and Google Sheets always go to the static connection — no new connection is created
     if (selectedType === 'csv' || selectedType === 'google-sheets') {
-      if (staticConnectionId) {
-        router.push(`/f/${staticConnectionId}`);
+      if (staticConnectionFile?.fileState.id && staticConnectionFile.fileState.id > 0) {
+        const modeParam = userMode !== 'org' ? `?mode=${userMode}` : '';
+        router.push(`/f/${staticConnectionFile.fileState.id}${modeParam}`);
+      } else {
+        setRedirectingToStatic(true);
       }
       return;
     }
@@ -597,6 +610,15 @@ export default function ConnectionFormV2({
               </>
             )}
           </VStack>
+
+          {/* Loading bar while resolving static connection */}
+          {(redirectingToStatic || staticConnectionLoading) && (
+            <Progress.Root size="xs" value={null} colorPalette="teal">
+              <Progress.Track borderRadius="full">
+                <Progress.Range />
+              </Progress.Track>
+            </Progress.Root>
+          )}
 
           {/* Connection Type Cards */}
           <SimpleGrid columns={{ base: 1, md: 4 }} gap={4}>
