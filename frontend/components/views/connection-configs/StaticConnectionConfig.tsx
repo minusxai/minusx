@@ -786,7 +786,7 @@ export default function StaticConnectionConfig({
           <HStack gap={2} mb={collisionSet.size > 0 ? 2 : 3}>
             <Icon as={LuTable} boxSize={4} color="fg.muted" />
             <Text fontSize="xs" fontWeight="700">
-              Registered Tables
+              Existing Tables
               <Text as="span" fontSize="xs" fontWeight="400" color="fg.muted" ml={1}>
                 ({existingFiles.length} table{existingFiles.length !== 1 ? 's' : ''})
               </Text>
