@@ -13,7 +13,7 @@ import ImpersonationSelector from './ImpersonationSelector';
 import CreateMenu from './CreateMenu';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectEffectiveUser } from '@/store/authSlice';
-import { toggleLeftSidebar, selectShowDebug, selectShowAdvanced, toggleColorMode } from '@/store/uiSlice';
+import { toggleLeftSidebar, selectDevMode, selectShowAdvanced, toggleColorMode } from '@/store/uiSlice';
 import { APP_VERSION } from '@/lib/constants';
 import { exitImpersonation } from '@/lib/navigation/url-utils';
 import { isAdmin } from '@/lib/auth/role-helpers';
@@ -72,7 +72,7 @@ function NavItem({ href, icon, label, isCollapsed, isActive }: NavItemProps) {
 export default function Sidebar() {
   const dispatch = useAppDispatch();
   const isCollapsed = useAppSelector((state) => state.ui.leftSidebarCollapsed);
-  const showDebug = useAppSelector(selectShowDebug);
+  const showDebug = useAppSelector(selectDevMode);
   const showAdvanced = useAppSelector(selectShowAdvanced);
   const colorMode = useAppSelector((state) => state.ui.colorMode);
   const pathname = usePathname();

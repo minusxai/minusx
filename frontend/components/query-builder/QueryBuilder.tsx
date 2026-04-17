@@ -13,7 +13,7 @@ import { QueryIR, SelectColumn, TableReference } from '@/lib/types';
 import { isCompoundQueryIR } from '@/lib/sql/ir-types';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { useAppSelector } from '@/store/hooks';
-import { selectShowDebug } from '@/store/uiSlice';
+import { selectDevMode } from '@/store/uiSlice';
 import type { QuestionOption } from '@/lib/hooks/useAvailableQuestions';
 import { DataSection } from './DataSection';
 import { FilterSection } from './FilterSection';
@@ -24,7 +24,7 @@ import { JoinBuilder } from './JoinBuilder';
 import { OrderByBuilder } from './OrderByBuilder';
 
 function IRDebugView({ ir }: { ir: QueryIR | null }) {
-  const showDebug = useAppSelector(selectShowDebug);
+  const showDebug = useAppSelector(selectDevMode);
   const [showIRJson, setShowIRJson] = useState(false);
 
   if (!showDebug) return null;

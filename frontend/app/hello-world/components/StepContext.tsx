@@ -97,7 +97,7 @@ function AgentFeedCollapsible({ connectionName, isRunning }: { connectionName: s
 export default function StepContext({ connectionName, connectionId, onComplete, onRequestChat, onContextCreated, greeting }: StepContextProps) {
   const { connections, loading: connectionsLoading } = useConnections({ skip: false });
   const colorMode = useAppSelector((state) => state.ui.colorMode);
-  const showDebug = useAppSelector((state) => state.ui.showDebug);
+  const showDebug = useAppSelector((state) => state.ui.devMode);
   const dispatch = useAppDispatch();
 
   // Check if a context file already exists (persisted, id > 0)

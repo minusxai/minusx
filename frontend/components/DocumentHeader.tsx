@@ -106,7 +106,7 @@ export default function DocumentHeader({
 }: DocumentHeaderProps) {
   const metadata = getFileTypeMetadata(fileType);
   const [validationError, setValidationError] = useState<string | null>(null);
-  const showJson = useAppSelector((state) => state.ui.showJson);
+  const showJson = useAppSelector((state) => state.ui.devMode);
   const titleColor = 'fg.default';
   const subtitleColor = 'fg.muted';
 

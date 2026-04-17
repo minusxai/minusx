@@ -139,7 +139,7 @@ export function QuestionVisualization({
   onAnnotationsChange,
 }: QuestionVisualizationProps) {
   const dispatch = useAppDispatch();
-  const showJson = useAppSelector(state => state.ui.showJson);
+  const showJson = useAppSelector(state => state.ui.devMode);
   const { config: appConfig } = useConfigs();
   const agentName = appConfig.branding.agentName;
 
