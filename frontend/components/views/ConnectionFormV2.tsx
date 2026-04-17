@@ -133,6 +133,7 @@ interface ConnectionFormV2Props {
   mode: 'create' | 'view';
   hideCancel?: boolean;
   greeting?: string;
+  onPendingDeletion?: (s3Key: string) => void;
 }
 
 export default function ConnectionFormV2({
@@ -149,6 +150,7 @@ export default function ConnectionFormV2({
   mode,
   hideCancel = false,
   greeting,
+  onPendingDeletion,
 }: ConnectionFormV2Props) {
   const router = useRouter();
   const colorMode = useAppSelector((state) => state.ui.colorMode);
@@ -1068,6 +1070,7 @@ export default function ConnectionFormV2({
             companyId={companyId}
             userMode={userMode}
             onError={setNameError}
+            onPendingDeletion={onPendingDeletion}
           />
         )}
 

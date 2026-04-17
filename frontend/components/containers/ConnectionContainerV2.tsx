@@ -16,7 +16,7 @@ import { editFile, publishFile, reloadFile } from '@/lib/api/file-state';
 import { redirectAfterSave } from '@/lib/ui/file-utils';
 import ConnectionFormV2 from '@/components/views/ConnectionFormV2';
 import { ConnectionContent } from '@/lib/types';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useRouter } from '@/lib/navigation/use-navigation';
 import { isUserFacingError } from '@/lib/errors';
 import { fetchWithCache } from '@/lib/api/fetch-wrapper';
@@ -45,6 +45,7 @@ export default function ConnectionContainerV2({
 }: ConnectionContainerV2Props) {
   const router = useRouter();
   const [saveError, setSaveError] = useState<string | null>(null);
+  const pendingDeletionsRef = useRef<string[]>([]);
 
   // Phase 2: Use useFile hook
   const { fileState: file } = useFile(fileId) ?? {};
@@ -106,6 +107,15 @@ export default function ConnectionContainerV2({
       } else {
         // For edit mode, use the Phase 2 unified PATCH endpoint
         const result = await publishFile({ fileId });
+        // Flush pending S3 deletions after the config is saved (fire and forget)
+        const toDelete = pendingDeletionsRef.current.splice(0);
+        toDelete.forEach((s3Key) => {
+          fetch('/api/csv/delete-file', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ s3_key: s3Key }),
+          }).catch(() => {/* orphaned S3 file — acceptable */});
+        });
         redirectAfterSave(result, fileId, router);
       }
     } catch (error) {
@@ -123,6 +133,7 @@ export default function ConnectionContainerV2({
 
   // Cancel/revert handler
   const handleCancel = useCallback(() => {
+    pendingDeletionsRef.current = [];
     if (mode === 'create') {
       // For new connections, navigate back to home
       router.push('/');
@@ -161,6 +172,7 @@ export default function ConnectionContainerV2({
       mode={mode === 'preview' ? 'view' : mode}
       hideCancel={hideCancel}
       greeting={greeting}
+      onPendingDeletion={(s3Key) => { pendingDeletionsRef.current.push(s3Key); }}
     />
   );
 }

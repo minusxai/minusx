@@ -57,6 +57,7 @@ interface StaticConnectionConfigProps extends BaseConfigProps {
   companyId: number | undefined;
   userMode: string;
   onError: (error: string) => void;
+  onPendingDeletion?: (s3Key: string) => void;
 }
 
 interface PendingFile {
@@ -114,7 +115,6 @@ interface FileRowProps {
   editSchema: string;
   editTable: string;
   editError: string;
-  deletingKey: string | null;
   onStartEdit: (f: CsvFileInfo) => void;
   onEditSchema: (v: string) => void;
   onEditTable: (v: string) => void;
@@ -127,7 +127,7 @@ interface FileRowProps {
 
 function FileRow({
   f, isCollision, editingKey, editSchema, editTable, editError,
-  deletingKey, onStartEdit, onEditSchema, onEditTable, onConfirmRename, onCancelEdit, onDelete,
+  onStartEdit, onEditSchema, onEditTable, onConfirmRename, onCancelEdit, onDelete,
   nested = false,
 }: FileRowProps) {
   const tableInputRef = useRef<HTMLInputElement>(null);
@@ -241,7 +241,6 @@ function FileRow({
           variant="ghost"
           colorPalette="red"
           aria-label={`Delete table ${f.table_name}`}
-          loading={deletingKey === f.s3_key}
           onClick={() => onDelete(f.s3_key)}
           flexShrink={0}
         >
@@ -260,6 +259,7 @@ export default function StaticConnectionConfig({
   companyId,
   userMode,
   onError,
+  onPendingDeletion,
 }: StaticConnectionConfigProps) {
   // ── Panel toggle ──────────────────────────────────────────────────────────
   const [activePanel, setActivePanel] = useState<ActivePanel>(null);
@@ -276,7 +276,6 @@ export default function StaticConnectionConfig({
 
   // ── Per-item loading states ───────────────────────────────────────────────
   const [reimportingId, setReimportingId] = useState<string | null>(null);
-  const [deletingKey, setDeletingKey] = useState<string | null>(null); // s3_key or spreadsheet_id
 
   // ── Inline rename state ───────────────────────────────────────────────────
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -458,46 +457,19 @@ export default function StaticConnectionConfig({
 
   // ── Delete a single CSV table ─────────────────────────────────────────────
 
-  const handleDeleteFile = async (s3Key: string) => {
-    setDeletingKey(s3Key);
-    try {
-      const res = await fetch('/api/csv/delete-file', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ s3_key: s3Key }),
-      });
-      if (!res.ok) { onError(`Delete failed: ${await res.text()}`); return; }
-      onChange({ files: existingFiles.filter((f) => f.s3_key !== s3Key) });
-      if (editingKey === s3Key) setEditingKey(null);
-    } catch (e) {
-      onError(e instanceof Error ? e.message : 'Delete failed');
-    } finally {
-      setDeletingKey(null);
-    }
+  const handleDeleteFile = (s3Key: string) => {
+    onChange({ files: existingFiles.filter((f) => f.s3_key !== s3Key) });
+    onPendingDeletion?.(s3Key);
+    if (editingKey === s3Key) setEditingKey(null);
   };
 
   // ── Delete all sheets from a spreadsheet ──────────────────────────────────
 
-  const handleDeleteSheetGroup = async (spreadsheetId: string) => {
+  const handleDeleteSheetGroup = (spreadsheetId: string) => {
     const groupFiles = sheetsGroups.get(spreadsheetId) ?? [];
-    setDeletingKey(spreadsheetId);
-    try {
-      await Promise.allSettled(
-        groupFiles.map((f) =>
-          fetch('/api/csv/delete-file', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ s3_key: f.s3_key }),
-          }),
-        ),
-      );
-      onChange({ files: existingFiles.filter((f) => f.spreadsheet_id !== spreadsheetId) });
-      if (groupFiles.some((f) => f.s3_key === editingKey)) setEditingKey(null);
-    } catch (e) {
-      onError(e instanceof Error ? e.message : 'Delete failed');
-    } finally {
-      setDeletingKey(null);
-    }
+    onChange({ files: existingFiles.filter((f) => f.spreadsheet_id !== spreadsheetId) });
+    groupFiles.forEach((f) => onPendingDeletion?.(f.s3_key));
+    if (groupFiles.some((f) => f.s3_key === editingKey)) setEditingKey(null);
   };
 
   // ── Re-import a Google Sheet ──────────────────────────────────────────────
@@ -542,7 +514,6 @@ export default function StaticConnectionConfig({
     editSchema,
     editTable,
     editError,
-    deletingKey,
     onStartEdit: handleStartEdit,
     onEditSchema: (v: string) => { setEditSchema(v); setEditError(''); },
     onEditTable: (v: string) => { setEditTable(v); setEditError(''); },
@@ -826,7 +797,6 @@ export default function StaticConnectionConfig({
             {/* Google Sheets groups */}
             {Array.from(sheetsGroups.entries()).map(([sheetId, files]) => {
               const url = files[0]?.spreadsheet_url ?? '';
-              const isDeleting = deletingKey === sheetId;
               const isReimporting = reimportingId === sheetId;
 
               return (
@@ -857,7 +827,6 @@ export default function StaticConnectionConfig({
                         variant="ghost"
                         aria-label="Re-import sheets from this spreadsheet"
                         loading={isReimporting}
-                        disabled={isDeleting}
                         onClick={() => handleReimport(sheetId)}
                         title="Re-import all sheets from this spreadsheet"
                       >
@@ -868,7 +837,6 @@ export default function StaticConnectionConfig({
                         variant="ghost"
                         colorPalette="red"
                         aria-label="Delete all sheets from this spreadsheet"
-                        loading={isDeleting}
                         disabled={isReimporting}
                         onClick={() => handleDeleteSheetGroup(sheetId)}
                       >
