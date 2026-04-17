@@ -7,6 +7,7 @@ import { LeafletMap, type LeafletMapHandle } from './LeafletMap'
 import { ChartError } from './ChartError'
 import { loadGeoJSON, MAP_DEFAULTS, type MapName } from '@/lib/chart/geo-data'
 import { getColorScale, getRadiusScale, getHeatGradient, GEO_MARKER_COLOR, GEO_MARKER_COLOR_DARK } from '@/lib/chart/geo-color-scale'
+import { COLOR_PALETTE } from '@/lib/chart/echarts-theme'
 import { formatNumber, applyPrefixSuffix } from '@/lib/chart/chart-utils'
 import { getGeoConstraintError } from '@/lib/chart/geo-constraints'
 import { useAppSelector } from '@/store/hooks'
@@ -328,6 +329,36 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColo
           }
         }
 
+        // Color logic: auto-detect numeric vs categorical
+        const hasColorCol = !!geoConfig.colorCol
+        const isNumericColor = hasColorCol && rows.length > 0 && typeof rows[0][geoConfig.colorCol!] === 'number'
+        let colorMin = Infinity
+        let colorMax = -Infinity
+        const categoricalColorMap = new Map<string, string>()
+        if (hasColorCol) {
+          if (isNumericColor) {
+            for (const row of rows) {
+              const val = Number(row[geoConfig.colorCol!])
+              if (!isNaN(val)) { colorMin = Math.min(colorMin, val); colorMax = Math.max(colorMax, val) }
+            }
+          } else {
+            const uniqueValues = [...new Set(rows.map(r => String(r[geoConfig.colorCol!] ?? '')))]
+            uniqueValues.forEach((val, i) => {
+              categoricalColorMap.set(val, COLOR_PALETTE[i % COLOR_PALETTE.length])
+            })
+          }
+        }
+
+        const getPointColor = (row: Record<string, unknown>): string => {
+          if (!hasColorCol) return effectiveMarkerColor
+          if (isNumericColor) {
+            const val = Number(row[geoConfig.colorCol!])
+            if (isNaN(val)) return effectiveMarkerColor
+            return getColorScale(val, colorMin, colorMax, colorMode, geoConfig.colorScale)
+          }
+          return categoricalColorMap.get(String(row[geoConfig.colorCol!] ?? '')) ?? effectiveMarkerColor
+        }
+
         const markers: L.CircleMarker[] = []
         for (const row of rows) {
           const lat = Number(row[geoConfig.latCol])
@@ -340,16 +371,21 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColo
             ? getRadiusScale(Number(row[geoConfig.valueCol!]), min, max, effectiveMinRadius, effectiveScale)
             : effectiveMinRadius * effectiveScale
 
+          const pointColor = getPointColor(row)
+
           const marker = L.circleMarker([lat, lng], {
             radius,
-            fillColor: effectiveMarkerColor,
-            color: effectiveMarkerColor,
+            fillColor: pointColor,
+            color: pointColor,
             weight: 1,
             fillOpacity: 0.7,
           })
 
           // Tooltip
           const pointTtRows: Array<{ key: string; value: string }> = []
+          if (geoConfig.colorCol && row[geoConfig.colorCol] != null) {
+            pointTtRows.push({ key: geoConfig.colorCol, value: String(row[geoConfig.colorCol]) })
+          }
           if (geoConfig.valueCol && row[geoConfig.valueCol] != null) {
             pointTtRows.push({ key: geoConfig.valueCol, value: Number(row[geoConfig.valueCol]).toLocaleString() })
           }
