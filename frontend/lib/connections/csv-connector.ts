@@ -133,6 +133,13 @@ async function withConnection<T>(
   const instance = await getOrCreateInstance(cacheKey, files);
   const conn = await instance.connect();
   try {
+    // Lock down external access to the company's own S3 prefix only.
+    // Whitelist must be set before disabling external access.
+    const companyId = files[0]?.s3_key.split('/')[0] ?? '';
+    if (OBJECT_STORE_BUCKET && companyId) {
+      await conn.run(`SET allowed_directories = ['s3://${OBJECT_STORE_BUCKET}/${companyId}/']`);
+    }
+    await conn.run('SET enable_external_access = false');
     return await fn(conn);
   } finally {
     conn.closeSync();

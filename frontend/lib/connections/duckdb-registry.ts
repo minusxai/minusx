@@ -62,6 +62,9 @@ export async function withDuckDbConnection<T>(
   const instance = await getOrCreateDuckDbInstance(absPath, accessMode);
   const conn = await instance.connect();
   try {
+    // Whitelist must be set before disabling external access.
+    await conn.run(`SET allowed_paths = ['${absPath.replace(/'/g, "''")}']`);
+    await conn.run('SET enable_external_access = false');
     return await fn(conn);
   } finally {
     conn.closeSync();
