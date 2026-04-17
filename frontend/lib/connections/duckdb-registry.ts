@@ -11,9 +11,23 @@ const registry = new Map<string, DuckDBInstance>();
 // eslint-disable-next-line no-restricted-syntax -- server-only; keyed by absolute file path (unique per company by directory layout)
 const initPromises = new Map<string, Promise<DuckDBInstance>>();
 
+async function applySecuritySettings(instance: DuckDBInstance, absPath: string): Promise<void> {
+  // enable_external_access is instance-level — set once at creation, persists across connections.
+  // allowed_paths must be set BEFORE disabling external access.
+  const conn = await instance.connect();
+  try {
+    await conn.run(`SET allowed_paths = ['${absPath.replace(/'/g, "''")}']`);
+    await conn.run('SET enable_external_access = false');
+  } finally {
+    conn.closeSync();
+  }
+}
+
 async function createInstance(absPath: string, accessMode: DuckDbAccessMode): Promise<DuckDBInstance> {
   try {
-    return await DuckDBInstance.create(absPath, { access_mode: accessMode });
+    const instance = await DuckDBInstance.create(absPath, { access_mode: accessMode });
+    await applySecuritySettings(instance, absPath);
+    return instance;
   } catch (err: any) {
     // DuckDB WAL replay failures leave the DB unopenable. The WAL only contains
     // schema migrations (ALTER TABLE ADD COLUMN) that will be re-applied on next
@@ -24,7 +38,9 @@ async function createInstance(absPath: string, accessMode: DuckDbAccessMode): Pr
     if (isWalError && fs.existsSync(walPath)) {
       console.warn(`[duckdb-registry] Corrupt WAL detected for ${absPath}, deleting and retrying`, err.message);
       fs.unlinkSync(walPath);
-      return DuckDBInstance.create(absPath, { access_mode: accessMode });
+      const instance = await DuckDBInstance.create(absPath, { access_mode: accessMode });
+      await applySecuritySettings(instance, absPath);
+      return instance;
     }
     throw err;
   }
@@ -62,9 +78,6 @@ export async function withDuckDbConnection<T>(
   const instance = await getOrCreateDuckDbInstance(absPath, accessMode);
   const conn = await instance.connect();
   try {
-    // Whitelist must be set before disabling external access.
-    await conn.run(`SET allowed_paths = ['${absPath.replace(/'/g, "''")}']`);
-    await conn.run('SET enable_external_access = false');
     return await fn(conn);
   } finally {
     conn.closeSync();

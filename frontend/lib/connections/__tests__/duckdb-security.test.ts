@@ -114,6 +114,36 @@ describe('Analytics DB security (file-based DuckDB)', () => {
       conn.closeSync();
     }
   });
+
+  it('[GREEN] security settings persist on a second connection — no re-apply needed', async () => {
+    // Regression: applying SET statements per-connection fails on the 2nd call
+    // because enable_external_access is instance-level and can't be changed once set.
+    const csvPath = join(tmpDir, 'secrets.csv');
+    writeFileSync(csvPath, 'secret\npassword123\n');
+
+    // First connection: apply settings once
+    const conn1 = await instance.connect();
+    try {
+      await conn1.run(`SET allowed_paths = ['${dbPath}']`);
+      await conn1.run("SET enable_external_access = false");
+    } finally {
+      conn1.closeSync();
+    }
+
+    // Second connection: must NOT re-apply settings (would throw), but still be protected
+    const conn2 = await instance.connect();
+    try {
+      await expect(
+        conn2.run(`SELECT * FROM read_csv_auto('${csvPath}')`)
+      ).rejects.toThrow();
+      // Normal queries still work
+      const result = await conn2.run('SELECT * FROM company_data');
+      const rows = await result.getRowObjectsJS() as Array<Record<string, unknown>>;
+      expect(rows).toHaveLength(1);
+    } finally {
+      conn2.closeSync();
+    }
+  });
 });
 
 // ── CSV/Parquet connection (in-memory DuckDB with allowed_directories) ────────
