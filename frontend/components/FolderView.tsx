@@ -15,6 +15,7 @@ import {
   LuDatabase,
   LuSettings,
   LuFileText,
+  LuFileSpreadsheet,
   LuMessageSquare,
   LuVideo,
   LuRefreshCw,
@@ -74,6 +75,72 @@ function getSystemFolderEmptyState(path: string, mode: Mode): { message: string;
     [resolvePath(mode, SYSTEM_FOLDERS.config)]: { message: 'No configurations yet', icon: LuSettings },
   };
   return systemFolderStates[path] || null;
+}
+
+function DatabaseFolderNote() {
+  return (
+    <HStack
+      mb={5}
+      px={3.5}
+      py={2.5}
+      borderRadius="lg"
+      bg="accent.teal/8"
+      border="1px solid"
+      borderColor="accent.teal/20"
+      gap={2.5}
+      fontSize="sm"
+      color="fg.muted"
+    >
+      <Box
+        as={LuFileSpreadsheet}
+        boxSize={4}
+        flexShrink={0}
+        color="accent.teal"
+      />
+      <Text lineHeight="tall">
+        All uploaded{' '}
+        <Box
+          as="span"
+          fontFamily="mono"
+          fontWeight="600"
+          color="accent.teal"
+          px={1}
+          py={0.5}
+          borderRadius="sm"
+          bg="accent.teal/10"
+        >
+          CSV
+        </Box>
+        /
+        <Box
+          as="span"
+          fontFamily="mono"
+          fontWeight="600"
+          color="accent.teal"
+          px={1}
+          py={0.5}
+          borderRadius="sm"
+          bg="accent.teal/10"
+        >
+          XLSX
+        </Box>{' '}
+        files live under the{' '}
+        <Box
+          as="span"
+          fontFamily="mono"
+          fontWeight="600"
+          color="accent.teal"
+          px={1}
+          py={0.5}
+          borderRadius="sm"
+          bg="accent.teal/10"
+        >
+          static
+        </Box>{' '}
+        connection.
+      </Text>
+    </HStack>
+  );
 }
 
 export interface FolderViewProps {
@@ -138,6 +205,7 @@ export default function FolderView({ path, title, type, headerRight }: FolderVie
   // Calculate counts
   const fileCount = files.filter(f => f.type !== 'folder').length;
   const folderCount = files.filter(f => f.type === 'folder').length;
+  const showDatabaseFolderNote = path === resolvePath(mode, SYSTEM_FOLDERS.database);
 
   return (
     <Box>
@@ -177,6 +245,8 @@ export default function FolderView({ path, title, type, headerRight }: FolderVie
           </IconButton>
         </Tooltip>
       </HStack>
+
+      {showDatabaseFolderNote && <DatabaseFolderNote />}
 
       {/* Getting Started Section - only show in tutorial/demo mode */}
       {!isThisSystemFolder && mode === 'tutorial' && <GettingStartedSection />}
