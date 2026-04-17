@@ -1,7 +1,7 @@
 'use client';
 
 import { useAppSelector } from '@/store/hooks';
-import { resolveHomeFolderSync } from '@/lib/mode/path-resolver';
+import { resolveHomeFolderSync, isUnderSystemFolder } from '@/lib/mode/path-resolver';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { LuNotebookText } from 'react-icons/lu';
 import { useEffect, useMemo } from 'react';
@@ -25,10 +25,12 @@ export function ContextSelector({ selectedContextPath, selectedVersion, onSelect
 
   const homeFolder = user ? resolveHomeFolderSync(user.mode, user.home_folder || '') : '';
 
+  const mode = user?.mode || 'org';
   const allContexts = user ? Object.values(filesState)
     .filter(file => file.type === 'context')
     .filter(file => file.path.startsWith(homeFolder))
-    .filter(file => file.id > 0) : [];
+    .filter(file => file.id > 0)
+    .filter(file => !isUnderSystemFolder(file.path, mode)) : [];
 
   const contexts = allContexts.map(file => ({
     id: file.id,
