@@ -10,6 +10,7 @@ import {
   LuCrosshair, LuX,
 } from 'react-icons/lu'
 import { AxisBuilder, type AxisZone } from './AxisBuilder'
+import { resolveColumnType } from './AxisComponents'
 import { ColorScalePicker } from './ColorScalePicker'
 import { ColorPicker } from './ColorPicker'
 import { MAP_OPTIONS } from '@/lib/chart/geo-data'
@@ -213,7 +214,7 @@ export function GeoAxisBuilder({
         emptyText,
         items: currentValue ? [{ column: currentValue }] : [],
         onDrop: (col: string) => onGeoConfigChange({ ...config, [fieldKey]: col } as GeoConfig),
-        onRemove: () => onGeoConfigChange({ ...config, [fieldKey]: undefined } as GeoConfig),
+        onRemove: () => onGeoConfigChange({ ...config, [fieldKey]: null } as GeoConfig),
       }
     },
     [config, onGeoConfigChange],
@@ -247,6 +248,7 @@ export function GeoAxisBuilder({
           makeZone('Latitude', 'latCol', 'Drop lat column'),
           makeZone('Longitude', 'lngCol', 'Drop lng column'),
           makeZone('Size (optional)', 'valueCol', 'Drop value for bubble sizing'),
+          makeZone('Color (optional)', 'colorCol', 'Drop column to color points'),
         ]
         break
       case 'lines':
@@ -449,10 +451,10 @@ export function GeoAxisBuilder({
                 )}
               </HStack>
 
-              {/* Color scale (choropleth & heatmap) */}
-              {(config.subType === 'choropleth' || config.subType === 'heatmap') && (
+              {/* Color scale (choropleth, heatmap, or points with numeric colorCol) */}
+              {(config.subType === 'choropleth' || config.subType === 'heatmap' || (config.subType === 'points' && !!(config as PointsConfig).colorCol && resolveColumnType((config as PointsConfig).colorCol!, columns, types) === 'number')) && (
                 <ColorScalePicker
-                  value={(config as ChoroplethConfig | HeatmapConfig).colorScale}
+                  value={(config as ChoroplethConfig | HeatmapConfig | PointsConfig).colorScale}
                   defaultScale="green"
                   onChange={(scale) => update({ colorScale: scale })}
                 />
@@ -463,8 +465,8 @@ export function GeoAxisBuilder({
                 <PointsSizeInputs config={config as PointsConfig} onUpdate={update} />
               )}
 
-              {/* Marker color (points & lines) */}
-              {(config.subType === 'points' || config.subType === 'lines') && onColorOverridesChange && (
+              {/* Marker color (points without colorCol, & lines) */}
+              {(((config.subType === 'points' && !(config as PointsConfig).colorCol) || config.subType === 'lines') && onColorOverridesChange) && (
                 <Box alignSelf="flex-start">
                   <ColorPicker
                     colorOverrides={colorOverrides}

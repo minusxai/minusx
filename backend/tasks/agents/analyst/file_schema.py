@@ -59,6 +59,8 @@ class PointsConfig(GeoConfigBase):
     latCol: Optional[str] = Field(None, description="latitude column")
     lngCol: Optional[str] = Field(None, description="longitude column")
     valueCol: Optional[str] = Field(None, description="numeric value column for bubble sizing (optional)")
+    colorCol: Optional[str] = Field(None, description="column for coloring points by value (categorical or numeric)")
+    colorScale: Optional[str] = Field(None, description="color scale for numeric colorCol: 'green' (default), 'blue', 'red-yellow-green'")
     minRadius: Optional[int] = Field(None, description="minimum circle radius in pixels (default 5, range 1-20)")
     radiusScale: Optional[float] = Field(None, description="radius multiplier (default 1, e.g. 2 = double size)")
 

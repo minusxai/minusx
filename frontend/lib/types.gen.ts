@@ -279,6 +279,14 @@ export type Lngcol = string | null;
  */
 export type Valuecol1 = string | null;
 /**
+ * column for coloring points by value (categorical or numeric)
+ */
+export type Colorcol = string | null;
+/**
+ * color scale for numeric colorCol: 'green' (default), 'blue', 'red-yellow-green'
+ */
+export type Colorscale1 = string | null;
+/**
  * minimum circle radius in pixels (default 5, range 1-20)
  */
 export type Minradius = number | null;
@@ -357,7 +365,7 @@ export type Valuecol2 = string | null;
 /**
  * color scale: 'green' (default), 'blue', 'red-yellow-green'
  */
-export type Colorscale1 = string | null;
+export type Colorscale2 = string | null;
 export type Parameters = QuestionParameter[] | null;
 export type Name2 = string;
 export type ParameterType = "text" | "number" | "date";
@@ -558,6 +566,8 @@ export interface PointsConfig {
   latCol?: Latcol;
   lngCol?: Lngcol;
   valueCol?: Valuecol1;
+  colorCol?: Colorcol;
+  colorScale?: Colorscale1;
   minRadius?: Minradius;
   radiusScale?: Radiusscale;
 }
@@ -587,7 +597,7 @@ export interface HeatmapConfig {
   latCol?: Latcol3;
   lngCol?: Lngcol3;
   valueCol?: Valuecol2;
-  colorScale?: Colorscale1;
+  colorScale?: Colorscale2;
 }
 export interface QuestionParameter {
   name: Name2;
