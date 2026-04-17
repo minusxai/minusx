@@ -95,7 +95,12 @@ export default function FolderView({ path, title, type, headerRight }: FolderVie
   const { files: allFiles, loading, error } = useFolder(path);
 
   // Filter by type if specified (client-side filtering)
-  const files = type ? allFiles.filter(f => f.type === type) : allFiles;
+  // In system folders, hide context (Knowledge Base) files — they can't be created there
+  const files = (() => {
+    let result = type ? allFiles.filter(f => f.type === type) : allFiles;
+    if (isThisSystemFolder) result = result.filter(f => f.type !== 'context');
+    return result;
+  })();
 
   // Loading state
   if (loading) {
