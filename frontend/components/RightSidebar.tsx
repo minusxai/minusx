@@ -432,12 +432,12 @@ export default function RightSidebar({
   const homeFolder = currentUser ? resolveHomeFolderSync(currentUser.mode, currentUser.home_folder || '') : '';
   const selectContextFileCount = useMemo(() => makeSelectContextFileCount(), []);
   const contextFileCount = useAppSelector(state => selectContextFileCount(state, homeFolder));
-  if (onContextChange && contextFileCount > 1) {
-    sections.push(getSidebarSection('context'));
-  }
-
   if (showChat) {
     sections.push(getSidebarSection('chat'));
+  }
+
+  if (onContextChange && contextFileCount > 1) {
+    sections.push(getSidebarSection('context'));
   }
 
   sections.push(getSidebarSection('databases'));
