@@ -333,6 +333,11 @@ export default function Sidebar() {
                       navigate('/explore');
                     }
                   }}
+                  currentConversationId={
+                    pathname.startsWith('/explore/')
+                      ? Number(pathname.split('/explore/')[1])
+                      : undefined
+                  }
                 />
               </Box>
             )}
