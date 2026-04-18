@@ -10,8 +10,6 @@
  */
 
 import { validateQueryTables, type WhitelistEntry } from '../validate-query-tables';
-import { withPythonBackend } from '@/test/harness/python-backend';
-import { setupMockFetch } from '@/test/harness/mock-fetch';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
 // ---------------------------------------------------------------------------
@@ -44,10 +42,7 @@ const WHITELIST_MULTI: WhitelistEntry[] = [
 // Suite
 // ---------------------------------------------------------------------------
 
-describe('validateQueryTables — E2E via Python/sqlglot', () => {
-  const { getPythonPort } = withPythonBackend();
-  // Routes pythonBackendFetch calls (localhost:8001) to the real Python process
-  setupMockFetch({ getPythonPort });
+describe('validateQueryTables — local WASM', () => {
 
   // ── Empty / no-op cases ──────────────────────────────────────────────────
 

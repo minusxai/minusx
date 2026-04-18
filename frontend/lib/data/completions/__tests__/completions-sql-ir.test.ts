@@ -3,7 +3,6 @@
  * Tests sqlToIR and irToSql methods at the completions API level
  */
 
-import { withPythonBackend } from '@/test/harness/python-backend';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
 import { setupTestDb } from '@/test/harness/test-db';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
@@ -13,12 +12,10 @@ import { CompletionsAPI } from '../completions';
 import { QueryIR } from '@/lib/sql/ir-types';
 
 describe('Completions SQL IR - E2E Tests', () => {
-  const { getPythonPort } = withPythonBackend();
   setupTestDb(getTestDbPath('sql_ir_completions'));
 
-  // Mock fetch with route interceptors (same pattern as chatE2E)
+  // Mock fetch with route interceptors — no Python backend needed (routes use local WASM)
   const mockFetch = setupMockFetch({
-    getPythonPort,
     interceptors: [
       {
         includesUrl: ['localhost:3000/api/sql-to-ir'],
