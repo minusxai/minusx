@@ -8,9 +8,10 @@ import { withAuth } from '@/lib/api/with-auth';
 import { NextRequest, NextResponse } from 'next/server';
 import { handleApiError } from '@/lib/api/api-responses';
 import { FilesAPI } from '@/lib/data/files.server';
-import { pythonBackendFetch } from '@/lib/api/python-backend-client';
+// import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import { QuestionContent, DatabaseWithSchema, connectionTypeToDialect } from '@/lib/types';
 import { FileNotFoundError } from '@/lib/errors';
+import { inferColumnsLocal } from '@/lib/sql/infer-columns';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -83,24 +84,26 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       }
     }
 
-    // Call Python backend for static column inference
-    const response = await pythonBackendFetch('/api/infer-columns', {
-      method: 'POST',
-      body: JSON.stringify({
-        query,
-        schema_data: schemaData,
-        dialect,
-      }),
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      console.error('[infer-columns] Python backend error:', text);
-      return NextResponse.json({ columns: [], error: 'Inference failed' });
-    }
-
-    const data = await response.json();
+    // Infer columns locally via WASM (replaces Python backend call)
+    const data = await inferColumnsLocal(query, schemaData, dialect);
     return NextResponse.json(data);
+
+    // --- Previous implementation: forward to Python backend ---
+    // const response = await pythonBackendFetch('/api/infer-columns', {
+    //   method: 'POST',
+    //   body: JSON.stringify({
+    //     query,
+    //     schema_data: schemaData,
+    //     dialect,
+    //   }),
+    // });
+    // if (!response.ok) {
+    //   const text = await response.text();
+    //   console.error('[infer-columns] Python backend error:', text);
+    //   return NextResponse.json({ columns: [], error: 'Inference failed' });
+    // }
+    // const data = await response.json();
+    // return NextResponse.json(data);
   } catch (error) {
     console.error('[API /infer-columns] Error:', error);
     return handleApiError(error);
