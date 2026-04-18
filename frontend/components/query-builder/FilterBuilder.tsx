@@ -154,7 +154,7 @@ export function FilterBuilder({
   return (
     <Box>
       <HStack gap={2} mb={2}>
-        <Text fontSize="sm" fontWeight="medium">
+        <Text fontSize="sm" fontWeight="medium" fontFamily="mono">
           <HStack gap={1}>
             <LuFilter />
             <span>{label}</span>
@@ -250,7 +250,7 @@ export function FilterBuilder({
                     <SelectItem key={column.name} item={column.name}>
                       {column.name}
                       {column.type && (
-                        <Text as="span" fontSize="xs" color="fg.muted" ml={2}>
+                        <Text as="span" fontSize="xs" color="fg.muted" ml={2} fontFamily="mono">
                           {column.type}
                         </Text>
                       )}
@@ -315,7 +315,7 @@ export function FilterBuilder({
         })}
 
         {(!filter || filter.conditions.length === 0) && (
-          <Text fontSize="sm" color="fg.muted">
+          <Text fontSize="sm" color="fg.muted" fontFamily="mono">
             No conditions
           </Text>
         )}
@@ -324,7 +324,7 @@ export function FilterBuilder({
       {/* Add condition button */}
       <Button size="sm" onClick={handleAddCondition} disabled={loading}>
         <LuPlus />
-        <Text ml={1}>Add Condition</Text>
+        <Text ml={1} fontFamily="mono">Add Condition</Text>
       </Button>
     </Box>
   );

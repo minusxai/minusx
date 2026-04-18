@@ -261,7 +261,7 @@ export function CompoundQueryBuilder({
             _hover={{ color: 'fg.default', borderColor: 'border.default' }}
           >
             <LuPlus size={14} />
-            <Text ml={1}>Add query</Text>
+            <Text ml={1} fontFamily="mono">Add query</Text>
           </Button>
         </HStack>
 
@@ -297,7 +297,7 @@ export function CompoundQueryBuilder({
             mt={2}
           >
             <LuPlay size={18} fill="white" />
-            <Text ml={2}>Execute</Text>
+            <Text ml={2} fontFamily="mono">Execute</Text>
           </Button>
         )}
       </VStack>

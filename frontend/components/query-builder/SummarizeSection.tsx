@@ -479,7 +479,7 @@ export function SummarizeSection({
       p={3}
     >
       <HStack justify="space-between" mb={2.5}>
-        <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
+        <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" fontFamily="mono">
           Summarize
         </Text>
         {onClose && (
@@ -523,7 +523,7 @@ export function SummarizeSection({
           >
             <VStack gap={2.5} align="stretch">
               <HStack justify="space-between" align="center">
-                <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
+                <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" fontFamily="mono">
                   SQL Expression
                 </Text>
                 <AliasInput
@@ -574,11 +574,11 @@ export function SummarizeSection({
             padding={3}
           >
             <HStack justify="space-between" align="center" mb={2.5}>
-              <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
+              <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" fontFamily="mono">
                 Edit metric
               </Text>
               <HStack gap={1.5} align="center">
-                <Text fontSize="xs" color="fg.muted">as</Text>
+                <Text fontSize="xs" color="fg.muted" fontFamily="mono">as</Text>
                 <AliasInput
                   value={editAlias}
                   onChange={(alias) => setEditAlias(alias || '')}
@@ -615,11 +615,11 @@ export function SummarizeSection({
                 onCheckedChange={(e) => setWrapWithRound(e.checked === true)}
                 size="sm"
               >
-                <Text fontSize="xs" color="fg">ROUND</Text>
+                <Text fontSize="xs" color="fg" fontFamily="mono">ROUND</Text>
               </Checkbox>
               {wrapWithRound && (
                 <HStack gap={1} align="center">
-                  <Text fontSize="xs" color="fg.muted">decimals:</Text>
+                  <Text fontSize="xs" color="fg.muted" fontFamily="mono">decimals:</Text>
                   <Input
                     size="xs"
                     type="number"
@@ -676,7 +676,7 @@ export function SummarizeSection({
           }
           padding={3}
         >
-          <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" mb={2.5}>
+          <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" mb={2.5} fontFamily="mono">
             Add metric
           </Text>
           <SimpleGrid columns={3} gap={1.5} mb={1}>
@@ -750,7 +750,7 @@ export function SummarizeSection({
               onClick={() => setAddExprOpen(true)}
             >
               <LuCode size={11} color="var(--chakra-colors-fg-muted)" />
-              <Text fontSize="xs" color="fg.muted" fontWeight="500">expr</Text>
+              <Text fontSize="xs" color="fg.muted" fontWeight="500" fontFamily="mono">expr</Text>
             </Box>
           }
           padding={3}
@@ -758,7 +758,7 @@ export function SummarizeSection({
         >
           <VStack gap={2.5} align="stretch">
             <HStack justify="space-between" align="center">
-              <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
+              <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" fontFamily="mono">
                 SQL Expression
               </Text>
               <AliasInput
@@ -783,7 +783,7 @@ export function SummarizeSection({
         </PickerPopover>
 
         {/* "by" separator - only show if we have metrics */}
-        <Text fontSize="xs" color="fg.muted" fontWeight="500" px={1}>
+        <Text fontSize="xs" color="fg.muted" fontWeight="500" px={1} fontFamily="mono">
             group by
         </Text>
 
@@ -833,7 +833,7 @@ export function SummarizeSection({
                 width="340px"
               >
                 <VStack gap={2.5} align="stretch">
-                  <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
+                  <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" fontFamily="mono">
                     Group By Expression
                   </Text>
                   <Textarea
@@ -936,7 +936,7 @@ export function SummarizeSection({
                         }}
                         rightElement={
                           isDateColumn(col.type) ? (
-                            <Text fontSize="xs" color="fg.muted">›</Text>
+                            <Text fontSize="xs" color="fg.muted" fontFamily="mono">›</Text>
                           ) : undefined
                         }
                       >
@@ -957,7 +957,7 @@ export function SummarizeSection({
                 >
                   ‹
                 </Box>
-                <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase">
+                <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" fontFamily="mono">
                   {selectedDateColumn.name}
                 </Text>
               </HStack>

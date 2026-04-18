@@ -108,7 +108,7 @@ export function OrderByBuilder({
       p={3}
     >
       <HStack justify="space-between" mb={2.5}>
-        <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
+        <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" fontFamily="mono">
           Sort
         </Text>
         {onClose && (
@@ -250,7 +250,7 @@ export function OrderByBuilder({
         </PickerPopover>
 
         {clauses.length === 0 && (
-          <Text fontSize="xs" color="fg.muted" fontStyle="italic">
+          <Text fontSize="xs" color="fg.muted" fontStyle="italic" fontFamily="mono">
             Click + to add sorting
           </Text>
         )}

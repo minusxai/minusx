@@ -356,7 +356,7 @@ export function FilterSection({
   // Shared filter form content (used by both add and edit popovers)
   const renderFilterForm = (mode: 'add' | 'edit') => (
     <VStack gap={3} align="stretch">
-      <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase">
+      <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" fontFamily="mono">
         {mode === 'add' ? 'Add filter' : 'Edit filter'}
       </Text>
 
@@ -372,7 +372,7 @@ export function FilterSection({
               aggregate: e.checked === true ? 'COUNT' : undefined,
             }))}
           >
-            <Text fontSize="sm">Use aggregate function</Text>
+            <Text fontSize="sm" fontFamily="mono">Use aggregate function</Text>
           </Checkbox>
 
           {newFilter.isAggregate && (
@@ -453,7 +453,7 @@ export function FilterSection({
               <SelectItem key={col.name} item={col.name}>
                 <HStack gap={2}>
                   {getColumnIcon(col.type)}
-                  <Text>{col.name}</Text>
+                  <Text fontFamily="mono">{col.name}</Text>
                 </HStack>
               </SelectItem>
             ))}
@@ -523,7 +523,7 @@ export function FilterSection({
     >
       <HStack justify="space-between" mb={2.5}>
         <HStack gap={2}>
-          <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
+          <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" fontFamily="mono">
             {depth > 0 ? 'Group' : label}
           </Text>
 
@@ -628,7 +628,7 @@ export function FilterSection({
             borderStyle="dashed"
           >
             <LuPlus size={14} />
-            <Text ml={1}>Add group</Text>
+            <Text ml={1} fontFamily="mono">Add group</Text>
           </Button>
         )}
       </HStack>

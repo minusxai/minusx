@@ -214,7 +214,7 @@ export function JoinBuilder({
       p={3}
     >
       <HStack justify="space-between" mb={2.5}>
-        <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
+        <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" fontFamily="mono">
           Join
         </Text>
         {onClose && (
@@ -294,7 +294,7 @@ export function JoinBuilder({
                 </Box>
               </PickerPopover>
 
-              <Text fontSize="xs" color="fg.muted" fontWeight="500">
+              <Text fontSize="xs" color="fg.muted" fontWeight="500" fontFamily="mono">
                 on
               </Text>
 
@@ -339,7 +339,7 @@ export function JoinBuilder({
                     _hover={{ bg: 'bg.muted', borderStyle: 'solid' }}
                     onClick={() => setAddConditionForJoin(joinIndex)}
                   >
-                    <Text fontSize="xs" color="accent.primary" fontWeight="500">+ on</Text>
+                    <Text fontSize="xs" color="accent.primary" fontWeight="500" fontFamily="mono">+ on</Text>
                   </Box>
                 }
                 width="320px"
@@ -382,8 +382,8 @@ export function JoinBuilder({
               _hover={{ bg: 'bg.muted', borderStyle: 'solid' }}
               onClick={() => setAddJoinOpen(true)}
             >
-              <Text fontSize="sm" color="accent.primary" fontWeight="500">+</Text>
-              <Text fontSize="xs" color="accent.primary" fontWeight="500">Add Join</Text>
+              <Text fontSize="sm" color="accent.primary" fontWeight="500" fontFamily="mono">+</Text>
+              <Text fontSize="xs" color="accent.primary" fontWeight="500" fontFamily="mono">Add Join</Text>
             </Box>
           }
         >
@@ -391,7 +391,7 @@ export function JoinBuilder({
           <PickerList maxH="250px" searchable searchPlaceholder="Search tables...">
             {(query) =>
               loading ? (
-                <Text fontSize="sm" color="fg.muted" px={2} py={1.5}>Loading...</Text>
+                <Text fontSize="sm" color="fg.muted" px={2} py={1.5} fontFamily="mono">Loading...</Text>
               ) : (
                 availableTables
                   .filter((t) => !query || t.displayName.toLowerCase().includes(query.toLowerCase()))
@@ -437,7 +437,7 @@ function ConditionBuilder({ existingTables, getColumnsForTable, fromTable, joinT
       {/* Left side */}
       <HStack gap={2}>
         <Box flex={1}>
-          <Text fontSize="xs" color="fg.muted" mb={1}>Left Table</Text>
+          <Text fontSize="xs" color="fg.muted" mb={1} fontFamily="mono">Left Table</Text>
           <VStack gap={0.5} align="stretch" maxH="100px" overflowY="auto" bg="bg.muted" borderRadius="md" p={1}>
             {existingTables.map((t) => (
               <PickerItem
@@ -446,13 +446,13 @@ function ConditionBuilder({ existingTables, getColumnsForTable, fromTable, joinT
                 selectedBg="rgba(99, 102, 241, 0.2)"
                 onClick={() => { setLeftTable(t); setLeftCol(''); }}
               >
-                <Text fontSize="xs">{t}</Text>
+                <Text fontSize="xs" fontFamily="mono">{t}</Text>
               </PickerItem>
             ))}
           </VStack>
         </Box>
         <Box flex={1}>
-          <Text fontSize="xs" color="fg.muted" mb={1}>Column</Text>
+          <Text fontSize="xs" color="fg.muted" mb={1} fontFamily="mono">Column</Text>
           <VStack gap={0.5} align="stretch" maxH="100px" overflowY="auto" bg="bg.muted" borderRadius="md" p={1}>
             {leftColumns.map((c) => (
               <PickerItem
@@ -462,19 +462,19 @@ function ConditionBuilder({ existingTables, getColumnsForTable, fromTable, joinT
                 selectedBg="rgba(99, 102, 241, 0.2)"
                 onClick={() => setLeftCol(c.name)}
               >
-                <Text fontSize="xs">{c.name}</Text>
+                <Text fontSize="xs" fontFamily="mono">{c.name}</Text>
               </PickerItem>
             ))}
           </VStack>
         </Box>
       </HStack>
 
-      <Text fontSize="xs" color="fg.muted" textAlign="center">=</Text>
+      <Text fontSize="xs" color="fg.muted" textAlign="center" fontFamily="mono">=</Text>
 
       {/* Right side */}
       <HStack gap={2}>
         <Box flex={1}>
-          <Text fontSize="xs" color="fg.muted" mb={1}>Right Table</Text>
+          <Text fontSize="xs" color="fg.muted" mb={1} fontFamily="mono">Right Table</Text>
           <VStack gap={0.5} align="stretch" maxH="100px" overflowY="auto" bg="bg.muted" borderRadius="md" p={1}>
             {existingTables.map((t) => (
               <PickerItem
@@ -483,13 +483,13 @@ function ConditionBuilder({ existingTables, getColumnsForTable, fromTable, joinT
                 selectedBg="rgba(99, 102, 241, 0.2)"
                 onClick={() => { setRightTable(t); setRightCol(''); }}
               >
-                <Text fontSize="xs">{t}</Text>
+                <Text fontSize="xs" fontFamily="mono">{t}</Text>
               </PickerItem>
             ))}
           </VStack>
         </Box>
         <Box flex={1}>
-          <Text fontSize="xs" color="fg.muted" mb={1}>Column</Text>
+          <Text fontSize="xs" color="fg.muted" mb={1} fontFamily="mono">Column</Text>
           <VStack gap={0.5} align="stretch" maxH="100px" overflowY="auto" bg="bg.muted" borderRadius="md" p={1}>
             {rightColumns.map((c) => (
               <PickerItem
@@ -499,7 +499,7 @@ function ConditionBuilder({ existingTables, getColumnsForTable, fromTable, joinT
                 selectedBg="rgba(99, 102, 241, 0.2)"
                 onClick={() => setRightCol(c.name)}
               >
-                <Text fontSize="xs">{c.name}</Text>
+                <Text fontSize="xs" fontFamily="mono">{c.name}</Text>
               </PickerItem>
             ))}
           </VStack>
