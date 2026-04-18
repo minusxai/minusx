@@ -22,6 +22,7 @@ import { CTEfyQuery, ResolvedReference } from '@/lib/sql/query-composer';
 import { extractReferencesFromSQL, parseReferenceAlias } from '@/lib/sql/sql-references';
 import { inferColumnsLocal } from '@/lib/sql/infer-columns';
 import { getCompletionsLocal } from '@/lib/sql/autocomplete';
+import { getMentionCompletionsLocal } from '@/lib/sql/mention-completions';
 
 /**
  * Server-side implementation of completions data layer
@@ -86,34 +87,47 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
       console.warn('[Completions] Failed to load questions/dashboards:', error);
     }
 
-    // Call Python backend
+    // Run mention completions locally (replaces Python backend call)
     try {
-      const response = await pythonBackendFetch('/api/chat-mentions', {
-        method: 'POST',
-        body: JSON.stringify({
-          prefix,
-          schema_data: schemaData,
-          available_questions: availableQuestions,
-          mention_type: mentionType
-        }),
-      });
-
-      if (!response.ok) {
-        console.error('[Completions] Backend error:', await response.text());
-        return { suggestions: [] };
-      }
-
-      const data = await response.json();
+      const suggestions = getMentionCompletionsLocal(
+        prefix,
+        schemaData,
+        availableQuestions,
+        mentionType,
+      );
       return {
-        suggestions: data.suggestions || [],
-        metadata: {
-          timestamp: Date.now()
-        }
+        suggestions,
+        metadata: { timestamp: Date.now() },
       };
     } catch (error) {
       console.error('[Completions] Error:', error);
       return { suggestions: [] };
     }
+
+    // --- Previous implementation: forward to Python backend ---
+    // try {
+    //   const response = await pythonBackendFetch('/api/chat-mentions', {
+    //     method: 'POST',
+    //     body: JSON.stringify({
+    //       prefix,
+    //       schema_data: schemaData,
+    //       available_questions: availableQuestions,
+    //       mention_type: mentionType
+    //     }),
+    //   });
+    //   if (!response.ok) {
+    //     console.error('[Completions] Backend error:', await response.text());
+    //     return { suggestions: [] };
+    //   }
+    //   const data = await response.json();
+    //   return {
+    //     suggestions: data.suggestions || [],
+    //     metadata: { timestamp: Date.now() }
+    //   };
+    // } catch (error) {
+    //   console.error('[Completions] Error:', error);
+    //   return { suggestions: [] };
+    // }
   }
 
   async getSqlCompletions(options: SqlCompletionsOptions, user: EffectiveUser): Promise<SqlCompletionsResult> {
