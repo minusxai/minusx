@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
 import { handleApiError } from '@/lib/api/api-responses';
 import { createObjectStore, generateUploadKey, generateCsvUploadKey } from '@/lib/object-store';
+import { signStorageToken } from '@/lib/object-store/key-token';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 
 /**
@@ -98,8 +99,9 @@ export async function GET(req: NextRequest) {
     const store = createObjectStore();
     const result = await store.getUploadUrl({ key, contentType });
 
-    // Always include the raw S3 key so callers don't have to parse the public URL.
-    return NextResponse.json({ ...result, s3Key: key });
+    // Sign the key into a tamper-proof token so /api/csv/register can trust
+    // the echoed-back key without mode-specific validation.
+    return NextResponse.json({ ...result, s3Key: signStorageToken(key, user.companyId) });
   } catch (error) {
     return handleApiError(error);
   }
