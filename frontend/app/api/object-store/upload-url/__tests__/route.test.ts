@@ -6,6 +6,7 @@
  *  - Returns 400 when filename or contentType is missing
  *  - Returns 401 when the user is not authenticated
  *  - uploadUrl and publicUrl reflect the values returned by the ObjectStore
+ *  - s3Key is a signed token that verifyStorageToken can decode back to the raw key
  */
 
 jest.mock('@/lib/database/db-config', () => {
@@ -42,6 +43,7 @@ jest.mock('@/lib/object-store', () => {
 import { NextRequest } from 'next/server';
 import { GET } from '@/app/api/object-store/upload-url/route';
 import { getEffectiveUser } from '@/lib/auth/auth-helpers';
+import { verifyStorageToken } from '@/lib/object-store/key-token';
 
 const mockUser = {
   companyId: 42,
@@ -91,6 +93,23 @@ describe('GET /api/object-store/upload-url', () => {
     const req = makeRequest({ filename: 'photo.png' });
     const res = await GET(req);
     expect(res.status).toBe(400);
+  });
+
+  it('s3Key is a signed token verifiable back to the raw key', async () => {
+    const req = makeRequest({ filename: 'data.csv', contentType: 'text/csv' });
+    const res = await GET(req);
+    const { s3Key, publicUrl } = await res.json();
+
+    // Token must be verifiable and decode to the same key embedded in publicUrl
+    const rawKey = verifyStorageToken(s3Key, mockUser.companyId);
+    expect(publicUrl).toContain(rawKey);
+
+    // Wrong companyId must be rejected
+    expect(() => verifyStorageToken(s3Key, mockUser.companyId + 1)).toThrow();
+
+    // Tampered token must be rejected
+    const [head, sig] = s3Key.split('.');
+    expect(() => verifyStorageToken(`${head}.invalidsig`, mockUser.companyId)).toThrow();
   });
 
   it('returns 401 when not authenticated (null user)', async () => {

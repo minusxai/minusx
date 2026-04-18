@@ -25,7 +25,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       config: { files: registered },
     });
   } catch (error) {
-    if (error instanceof Error && (error.message.includes('not configured') || error.message.includes('collision'))) {
+    if (error instanceof Error && (error.message.includes('not configured') || error.message.includes('collision') || error.message.includes('storage token'))) {
       return NextResponse.json({ success: false, message: error.message, config: null }, { status: 400 });
     }
     return handleApiError(error);

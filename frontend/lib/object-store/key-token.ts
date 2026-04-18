@@ -28,7 +28,9 @@ export function verifyStorageToken(token: string, companyId: number): string {
   const sig = token.slice(dot + 1);
 
   const expected = createHmac('sha256', NEXTAUTH_SECRET).update(encoded).digest('base64url');
-  if (!timingSafeEqual(Buffer.from(sig, 'base64url'), Buffer.from(expected, 'base64url'))) {
+  const sigBuf = Buffer.from(sig, 'base64url');
+  const expBuf = Buffer.from(expected, 'base64url');
+  if (sigBuf.length !== expBuf.length || !timingSafeEqual(sigBuf, expBuf)) {
     throw new Error('Invalid storage token');
   }
 
