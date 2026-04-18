@@ -216,14 +216,6 @@ class CompletionsDataLayerClient implements ICompletionsDataLayer {
         }),
       });
 
-      if (!res.ok) {
-        console.error('[Completions Client] SQL to IR API error:', res.statusText);
-        return {
-          success: false,
-          error: 'Failed to parse SQL',
-        };
-      }
-
       const data = await res.json();
       return data;
     } catch (error) {

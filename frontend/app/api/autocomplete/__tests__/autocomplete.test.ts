@@ -8,7 +8,6 @@
  * rather than hardcoded, so it stays in sync automatically.
  */
 
-import { withPythonBackend } from '@/test/harness/python-backend';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
 import { setupTestDb } from '@/test/harness/test-db';
 import { getTestDbPath } from '@/store/__tests__/test-utils';
@@ -24,7 +23,6 @@ import { DatabaseWithSchema } from '@/lib/types';
 let mxfoodSchema: DatabaseWithSchema[] = [];
 
 describe('Autocomplete API — E2E', () => {
-  const { getPythonPort } = withPythonBackend();
   setupTestDb(getTestDbPath('autocomplete_e2e'), {
     customInit: async () => {
       // Load schema from the committed fixture (exported from mxfood.duckdb).
@@ -49,7 +47,6 @@ describe('Autocomplete API — E2E', () => {
   };
 
   const mockFetch = setupMockFetch({
-    getPythonPort,
     interceptors: [
       {
         includesUrl: ['localhost:3000/api/autocomplete'],
