@@ -20,6 +20,9 @@ import { connectionTypeToDialect, DatabaseWithSchema, QuestionContent } from '@/
 import { FilesAPI } from '@/lib/data/files.server';
 import { CTEfyQuery, ResolvedReference } from '@/lib/sql/query-composer';
 import { extractReferencesFromSQL, parseReferenceAlias } from '@/lib/sql/sql-references';
+import { inferColumnsLocal } from '@/lib/sql/infer-columns';
+import { getCompletionsLocal } from '@/lib/sql/autocomplete';
+import { getMentionCompletionsLocal } from '@/lib/sql/mention-completions';
 
 /**
  * Server-side implementation of completions data layer
@@ -84,34 +87,47 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
       console.warn('[Completions] Failed to load questions/dashboards:', error);
     }
 
-    // Call Python backend
+    // Run mention completions locally (replaces Python backend call)
     try {
-      const response = await pythonBackendFetch('/api/chat-mentions', {
-        method: 'POST',
-        body: JSON.stringify({
-          prefix,
-          schema_data: schemaData,
-          available_questions: availableQuestions,
-          mention_type: mentionType
-        }),
-      });
-
-      if (!response.ok) {
-        console.error('[Completions] Backend error:', await response.text());
-        return { suggestions: [] };
-      }
-
-      const data = await response.json();
+      const suggestions = getMentionCompletionsLocal(
+        prefix,
+        schemaData,
+        availableQuestions,
+        mentionType,
+      );
       return {
-        suggestions: data.suggestions || [],
-        metadata: {
-          timestamp: Date.now()
-        }
+        suggestions,
+        metadata: { timestamp: Date.now() },
       };
     } catch (error) {
       console.error('[Completions] Error:', error);
       return { suggestions: [] };
     }
+
+    // --- Previous implementation: forward to Python backend ---
+    // try {
+    //   const response = await pythonBackendFetch('/api/chat-mentions', {
+    //     method: 'POST',
+    //     body: JSON.stringify({
+    //       prefix,
+    //       schema_data: schemaData,
+    //       available_questions: availableQuestions,
+    //       mention_type: mentionType
+    //     }),
+    //   });
+    //   if (!response.ok) {
+    //     console.error('[Completions] Backend error:', await response.text());
+    //     return { suggestions: [] };
+    //   }
+    //   const data = await response.json();
+    //   return {
+    //     suggestions: data.suggestions || [],
+    //     metadata: { timestamp: Date.now() }
+    //   };
+    // } catch (error) {
+    //   console.error('[Completions] Error:', error);
+    //   return { suggestions: [] };
+    // }
   }
 
   async getSqlCompletions(options: SqlCompletionsOptions, user: EffectiveUser): Promise<SqlCompletionsResult> {
@@ -153,21 +169,34 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
       if (!ref.inferredColumns && ref.query) {
         try {
           const inferDialect = connectionTypeToDialect(context.connectionType ?? '');
-          const inferResponse = await pythonBackendFetch('/api/infer-columns', {
-            method: 'POST',
-            body: JSON.stringify({
-              query: ref.query,
-              schema_data: context.schemaData || [],
-              dialect: inferDialect,
-            }),
-          });
-          if (inferResponse.ok) {
-            const inferData = await inferResponse.json();
-            ref.inferredColumns = inferData.columns || [];
-          }
+          const inferResult = await inferColumnsLocal(
+            ref.query,
+            context.schemaData || [],
+            inferDialect,
+          );
+          ref.inferredColumns = inferResult.columns || [];
         } catch (err) {
           console.warn(`[Completions] Failed to infer columns for ref ${ref.alias}:`, err);
         }
+
+        // --- Previous implementation: forward to Python backend ---
+        // try {
+        //   const inferDialect = connectionTypeToDialect(context.connectionType ?? '');
+        //   const inferResponse = await pythonBackendFetch('/api/infer-columns', {
+        //     method: 'POST',
+        //     body: JSON.stringify({
+        //       query: ref.query,
+        //       schema_data: context.schemaData || [],
+        //       dialect: inferDialect,
+        //     }),
+        //   });
+        //   if (inferResponse.ok) {
+        //     const inferData = await inferResponse.json();
+        //     ref.inferredColumns = inferData.columns || [];
+        //   }
+        // } catch (err) {
+        //   console.warn(`[Completions] Failed to infer columns for ref ${ref.alias}:`, err);
+        // }
       }
 
       if (ref.inferredColumns && ref.inferredColumns.length > 0) {
@@ -249,35 +278,56 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
       adjustedCursorOffset = cteSection.length + cursorOffset - atSymbolsRemoved;
     }
 
-    // Call Python backend
+    // Run autocomplete locally via WASM (replaces Python backend call)
     try {
-      const response = await pythonBackendFetch('/api/sql-autocomplete', {
-        method: 'POST',
-        body: JSON.stringify({
-          query: processedQuery,
-          cursor_offset: adjustedCursorOffset,
-          schema_data: schemaData,
-          connection_name: context.databaseName,
-          connection_type: context.connectionType,
-        }),
-      });
-
-      if (!response.ok) {
-        console.error('[Completions] SQL autocomplete backend error:', await response.text());
-        return { suggestions: [] };
-      }
-
-      const data = await response.json();
+      const completions = await getCompletionsLocal(
+        processedQuery,
+        adjustedCursorOffset,
+        schemaData,
+        context.connectionType,
+      );
       return {
-        suggestions: data.suggestions || [],
-        metadata: {
-          timestamp: Date.now()
-        }
+        suggestions: completions.map(c => ({
+          label: c.label,
+          kind: c.kind as any,
+          insertText: c.insert_text,
+          insert_text: c.insert_text,
+          detail: c.detail,
+          documentation: c.documentation,
+          sort_text: c.sort_text,
+        })),
+        metadata: { timestamp: Date.now() },
       };
     } catch (error) {
       console.error('[Completions] SQL autocomplete error:', error);
       return { suggestions: [] };
     }
+
+    // --- Previous implementation: forward to Python backend ---
+    // try {
+    //   const response = await pythonBackendFetch('/api/sql-autocomplete', {
+    //     method: 'POST',
+    //     body: JSON.stringify({
+    //       query: processedQuery,
+    //       cursor_offset: adjustedCursorOffset,
+    //       schema_data: schemaData,
+    //       connection_name: context.databaseName,
+    //       connection_type: context.connectionType,
+    //     }),
+    //   });
+    //   if (!response.ok) {
+    //     console.error('[Completions] SQL autocomplete backend error:', await response.text());
+    //     return { suggestions: [] };
+    //   }
+    //   const data = await response.json();
+    //   return {
+    //     suggestions: data.suggestions || [],
+    //     metadata: { timestamp: Date.now() }
+    //   };
+    // } catch (error) {
+    //   console.error('[Completions] SQL autocomplete error:', error);
+    //   return { suggestions: [] };
+    // }
   }
 
   async sqlToIR(options: SqlToIROptions): Promise<SqlToIRResult> {
