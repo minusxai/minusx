@@ -27,6 +27,7 @@ import 'server-only';
 import { randomUUID } from 'crypto';
 import { S3Adapter } from './s3-adapter';
 import { LocalFsAdapter } from './local-fs-adapter';
+import { ensureLocalMxfoodSeeds } from './local-seed';
 import {
   OBJECT_STORE_ACCESS_KEY_ID,
   OBJECT_STORE_BUCKET,
@@ -117,6 +118,10 @@ export async function copySeedMxfoodForCompany(
   mode: string,
   tableNames: string[],
 ): Promise<string[]> {
+  if (isLocalObjectStore()) {
+    await ensureLocalMxfoodSeeds(tableNames);
+  }
+
   const store = createObjectStore();
   const copied: string[] = [];
 

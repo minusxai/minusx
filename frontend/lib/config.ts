@@ -42,6 +42,7 @@ interface EnvironmentConfig {
   OBJECT_STORE_SECRET_ACCESS_KEY: string | undefined;
   OBJECT_STORE_PUBLIC_URL: string | undefined;
   LOCAL_UPLOAD_PATH: string;
+  MXFOOD_DUCKDB_URL: string;
 }
 
 const errors: string[] = [];
@@ -104,6 +105,10 @@ const config: EnvironmentConfig = {
   LOCAL_UPLOAD_PATH: process.env.LOCAL_UPLOAD_PATH
     ? resolve(process.env.LOCAL_UPLOAD_PATH)
     : resolve(join(baseDuckdbDataPath, 'data/uploads')),
+  MXFOOD_DUCKDB_URL: getOptional(
+    process.env.MXFOOD_DUCKDB_URL,
+    'https://github.com/minusxai/sample_datasets/releases/download/v1.0/mxfood.duckdb',
+  ),
 };
 
 // Skip validation in test mode or browser (client-side)
@@ -158,3 +163,4 @@ export const OBJECT_STORE_ACCESS_KEY_ID = config.OBJECT_STORE_ACCESS_KEY_ID;
 export const OBJECT_STORE_SECRET_ACCESS_KEY = config.OBJECT_STORE_SECRET_ACCESS_KEY;
 export const OBJECT_STORE_PUBLIC_URL = config.OBJECT_STORE_PUBLIC_URL;
 export const LOCAL_UPLOAD_PATH = config.LOCAL_UPLOAD_PATH;
+export const MXFOOD_DUCKDB_URL = config.MXFOOD_DUCKDB_URL;
