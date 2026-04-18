@@ -48,12 +48,164 @@ export async function parseSqlToIrLocal(
 
   const ast = result.ast[0];
 
+  // Pre-validate: check for unsupported features
+  const unsupported = validateSqlForGui(ast);
+  if (unsupported.length > 0) {
+    const hint = generateHint(unsupported);
+    throw new UnsupportedSQLError(
+      `SQL contains unsupported features: ${unsupported.join(', ')}`,
+      unsupported,
+      hint,
+    );
+  }
+
   // Check for UNION/compound query
   if ('union' in ast) {
     return parseCompoundQuery(ast, sql, dialect);
   }
 
   return parseSimpleQuery(ast, sql, dialect);
+}
+
+// ---------------------------------------------------------------------------
+// Pre-validation (ported from enhanced_validator.py)
+// ---------------------------------------------------------------------------
+
+function validateSqlForGui(ast: any): string[] {
+  const unsupported: string[] = [];
+  const astStr = JSON.stringify(ast);
+
+  // Check for subqueries (look for nested select inside where/from)
+  if (ast.select?.where_clause) {
+    const whereStr = JSON.stringify(ast.select.where_clause);
+    if (whereStr.includes('"select"')) {
+      unsupported.push('Subqueries');
+    }
+  }
+  // Subquery in FROM
+  if (ast.select?.from?.expressions) {
+    for (const expr of ast.select.from.expressions) {
+      if ('subquery' in expr || ('select' in expr && !('table' in expr))) {
+        unsupported.push('Subqueries');
+      }
+    }
+  }
+
+  // Window functions (polyglot uses "over" key, not "window")
+  if (astStr.includes('"over"')) {
+    unsupported.push('Window functions');
+  }
+
+  // BETWEEN
+  if (astStr.includes('"between"')) {
+    unsupported.push('BETWEEN (use >= and <= instead)');
+  }
+
+  // NOT LIKE, NOT IN, NOT ILIKE
+  checkNotOperators(ast, unsupported);
+
+  // Regex operators
+  if (astStr.includes('"regexp"') || astStr.includes('"regexp_like"') || astStr.includes('"regex"')) {
+    unsupported.push('Regex operators (~, ~*, etc.)');
+  }
+
+  // Complex filter expressions (col1 + col2 > value)
+  checkComplexFilters(ast, unsupported);
+
+  return [...new Set(unsupported)]; // deduplicate
+}
+
+function checkNotOperators(ast: any, unsupported: string[]): void {
+  const astStr = JSON.stringify(ast);
+  // Walk for "not" nodes wrapping like/in/ilike
+  const checkNode = (node: any) => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) { node.forEach(checkNode); return; }
+    if ('not' in node) {
+      const inner = node.not;
+      if (inner && typeof inner === 'object') {
+        // polyglot wraps in { this: { like: ... } }
+        const unwrapped = inner.this ?? inner;
+        const innerKey = Object.keys(unwrapped)[0];
+        if (innerKey === 'like') unsupported.push('NOT LIKE');
+        else if (innerKey === 'in') unsupported.push('NOT IN');
+        else if (innerKey === 'ilike' || innerKey === 'i_like') unsupported.push('NOT ILIKE');
+      }
+    }
+    // Also check for NOT IN via in.not flag (polyglot alternative representation)
+    if ('in' in node && node.in?.not === true) {
+      unsupported.push('NOT IN');
+    }
+    for (const key of Object.keys(node)) {
+      if (node[key] && typeof node[key] === 'object') checkNode(node[key]);
+    }
+  };
+  // Only check WHERE/HAVING
+  if (ast.select?.where_clause) checkNode(ast.select.where_clause);
+  if (ast.select?.having) checkNode(ast.select.having);
+}
+
+function checkComplexFilters(ast: any, unsupported: string[]): void {
+  const checkComparison = (cmp: any) => {
+    if (!cmp) return;
+    const left = cmp.left;
+    const right = cmp.right;
+    if (isComplexExpression(left) || isComplexExpression(right)) {
+      unsupported.push('Complex expressions in filters (e.g., col1 + col2 > 10)');
+    }
+  };
+
+  const walkFilters = (node: any) => {
+    if (!node || typeof node !== 'object') return;
+    if (Array.isArray(node)) { node.forEach(walkFilters); return; }
+    const key = Object.keys(node)[0];
+    if (['eq', 'neq', 'gt', 'lt', 'gte', 'lte', 'like', 'ilike', 'i_like'].includes(key)) {
+      checkComparison(node[key]);
+    }
+    for (const k of Object.keys(node)) {
+      if (node[k] && typeof node[k] === 'object') walkFilters(node[k]);
+    }
+  };
+
+  if (ast.select?.where_clause) walkFilters(ast.select.where_clause);
+  if (ast.select?.having) walkFilters(ast.select.having);
+}
+
+function isComplexExpression(node: any): boolean {
+  if (!node || typeof node !== 'object') return false;
+  const key = Object.keys(node)[0];
+  // Simple: column, literal, boolean, null, parameter, star, placeholder
+  if (['column', 'literal', 'boolean', 'null', 'parameter', 'star', 'placeholder'].includes(key)) return false;
+  // Aggregates are simple in HAVING context
+  if (['count', 'sum', 'avg', 'min', 'max'].includes(key)) return false;
+  // Date functions are simple
+  if (['date_trunc', 'timestamp_trunc', 'date', 'current_timestamp', 'current_date'].includes(key)) return false;
+  // ROUND and SPLIT_PART are OK
+  if (['round', 'split_part'].includes(key)) return false;
+  // Arithmetic = complex
+  if (['add', 'sub', 'mul', 'div', 'mod'].includes(key)) return true;
+  // Cast = complex
+  if (key === 'cast') return true;
+  // Generic function — check name
+  if (key === 'function') {
+    const name = node.function?.name?.toUpperCase();
+    if (['DATE_TRUNC', 'TIMESTAMP_TRUNC', 'CURRENT_TIMESTAMP', 'SPLIT_PART'].includes(name)) return false;
+    return true;
+  }
+  return false;
+}
+
+function generateHint(features: string[]): string {
+  if (features.some(f => f.includes('BETWEEN'))) {
+    return 'Use >= and <= operators instead of BETWEEN. Switch to SQL mode for advanced features.';
+  }
+  if (features.some(f => f.includes('Complex'))) {
+    return 'Simplify expressions or use SQL mode for complex queries.';
+  }
+  if (features.some(f => f.includes('Subquer') || f.includes('WITH'))) {
+    return 'Remove subqueries/CTEs or use SQL mode for advanced queries.';
+  }
+  return 'These features are not supported in GUI mode. Use SQL mode for full flexibility.';
 }
 
 // ---------------------------------------------------------------------------
@@ -350,6 +502,13 @@ function parseAggregateExpr(actual: any, key: string, alias: string | undefined,
       if (inner?.column) {
         colName = inner.column.name?.name;
         tableName = inner.column.table?.name ?? undefined;
+      } else {
+        // Complex COUNT (e.g. COUNT(CASE WHEN ...)) → raw
+        return {
+          type: 'raw',
+          raw_sql: generateSqlFromAst(actual, dialect),
+          alias,
+        };
       }
     }
   } else {

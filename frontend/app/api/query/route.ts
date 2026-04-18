@@ -8,6 +8,8 @@ import { FilesAPI } from '@/lib/data/files.server';
 import { runQuery } from '@/lib/connections/run-query';
 import { removeNoneParamConditions } from '@/lib/sql/ir-transforms';
 import { pythonBackendFetch } from '@/lib/api/python-backend-client';
+import { parseSqlToIrLocal } from '@/lib/sql/sql-to-ir';
+import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 import { getQueryHash } from '@/lib/utils/query-hash';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 import { validateQueryTables } from '@/lib/sql/validate-query-tables';
@@ -31,27 +33,12 @@ async function applyNoneParams(
 
   if (noneSet.size === 0) return { sql: query, params: effectiveParams };
 
-  // Try IR-based filter removal via Python backend
+  // Try IR-based filter removal locally via WASM (only for simple queries, not UNION)
   try {
-    const irRes = await pythonBackendFetch('/api/sql-to-ir', {
-      method: 'POST',
-      body: JSON.stringify({ sql: query, dialect }),
-    });
-    if (irRes.ok) {
-      const irData = await irRes.json();
-      if (irData.success && irData.ir) {
-        const transformed = removeNoneParamConditions(irData.ir, noneSet);
-        const sqlRes = await pythonBackendFetch('/api/ir-to-sql', {
-          method: 'POST',
-          body: JSON.stringify({ ir: transformed, dialect }),
-        });
-        if (sqlRes.ok) {
-          const sqlData = await sqlRes.json();
-          if (sqlData.success && sqlData.sql) {
-            query = sqlData.sql;
-          }
-        }
-      }
+    const ir = await parseSqlToIrLocal(query, dialect);
+    if (ir.type !== 'compound') {
+      const transformed = removeNoneParamConditions(ir as import('@/lib/sql/ir-types').QueryIR, noneSet);
+      query = irToSqlLocal(transformed, dialect);
     }
   } catch { /* fall through to NULL substitution */ }
 
