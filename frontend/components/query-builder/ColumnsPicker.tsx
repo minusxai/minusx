@@ -10,7 +10,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Box, HStack, Text, VStack, Spinner, Button, Textarea } from '@chakra-ui/react';
 import { SelectColumn } from '@/lib/sql/ir-types';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
-import { QueryChip } from './QueryChip';
+import { QueryChip, getColumnIcon } from './QueryChip';
 import { PickerPopover, PickerList, PickerItem } from './PickerPopover';
 import { AliasInput } from './AliasInput';
 import { LuColumns3, LuCode, LuPlus, LuCheck, LuChevronRight } from 'react-icons/lu';
@@ -263,12 +263,10 @@ export function ColumnsPicker({
                         }
                       >
                         <HStack gap={1.5}>
+                          <Box color="fg.subtle">{getColumnIcon(col.type)}</Box>
                           <Text fontSize="xs" fontFamily="mono" fontWeight={selected ? '600' : '400'}>
                             {col.name}
                           </Text>
-                          {col.type && (
-                            <Text fontSize="xs" color="fg.subtle" fontFamily="mono">{col.type}</Text>
-                          )}
                         </HStack>
                       </PickerItem>
                     );

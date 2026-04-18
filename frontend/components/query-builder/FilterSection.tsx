@@ -17,9 +17,10 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { FilterGroup, FilterCondition } from '@/lib/sql/ir-types';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
-import { QueryChip, AddChipButton, getColumnIcon } from './QueryChip';
+import { QueryChip, AddChipButton } from './QueryChip';
 import { PickerPopover, PickerList, PickerItem } from './PickerPopover';
-import { LuX, LuPlus } from 'react-icons/lu';
+import { ColumnPickerDropdown } from './ColumnPickerDropdown';
+import { LuX, LuPlus, LuChevronDown, LuCheck } from 'react-icons/lu';
 
 interface FilterSectionProps {
   databaseName: string;
@@ -57,6 +58,66 @@ const AGGREGATES = [
   { label: 'Max', value: 'MAX' },
   { label: 'Count distinct', value: 'COUNT_DISTINCT' },
 ];
+
+/** Inline operator picker using PickerPopover — matches column picker style */
+function OperatorPicker({ value, onChange }: { value: Operator; onChange: (op: Operator) => void }) {
+  const [open, setOpen] = useState(false);
+  const selected = OPERATORS.find(o => o.value === value);
+
+  return (
+    <PickerPopover
+      open={open}
+      onOpenChange={(details) => setOpen(details.open)}
+      trigger={
+        <HStack
+          as="button"
+          width="100%"
+          px={3}
+          py={1.5}
+          borderRadius="md"
+          border="1px solid"
+          borderColor={open ? 'accent.teal' : 'border.default'}
+          bg="bg.subtle"
+          cursor="pointer"
+          justify="space-between"
+          transition="all 0.15s ease"
+          _hover={{ borderColor: 'border.emphasized' }}
+          onClick={() => setOpen(true)}
+        >
+          <Text fontSize="xs" fontFamily="mono" color="fg">
+            {selected?.label || value}
+          </Text>
+          <Box color="fg.muted"><LuChevronDown size={12} /></Box>
+        </HStack>
+      }
+      width="180px"
+      padding={0}
+    >
+      <Box px={1} py={1}>
+        <VStack gap={0.5} align="stretch">
+          {OPERATORS.map(op => {
+            const isSelected = op.value === value;
+            return (
+              <PickerItem
+                key={op.value}
+                onClick={() => { onChange(op.value); setOpen(false); }}
+                selected={isSelected}
+                selectedBg="rgba(45, 212, 191, 0.08)"
+                rightElement={
+                  isSelected ? <Box color="accent.teal"><LuCheck size={12} /></Box> : undefined
+                }
+              >
+                <Text fontSize="xs" fontFamily="mono" fontWeight={isSelected ? '600' : '400'}>
+                  {op.label}
+                </Text>
+              </PickerItem>
+            );
+          })}
+        </VStack>
+      </Box>
+    </PickerPopover>
+  );
+}
 
 export function FilterSection({
   databaseName,
@@ -112,24 +173,19 @@ export function FilterSection({
   const handleAddFilter = useCallback(() => {
     // Validation
     if (filterType === 'having' && newFilter.isAggregate) {
-      // Aggregate filter: require aggregate function
       if (!newFilter.aggregate) return;
-      // COUNT(*) allows empty column, others require column
       if (newFilter.aggregate !== 'COUNT' && !newFilter.column) return;
     } else {
-      // Regular column filter: require column
       if (!newFilter.column) return;
     }
 
     const op = OPERATORS.find((o) => o.value === newFilter.operator);
     if (op?.needsValue && !newFilter.value) return;
 
-    // Parameter detection (Option A): Auto-detect :param_name syntax
     const isParameter = newFilter.value.startsWith(':');
     const paramName = isParameter ? newFilter.value.slice(1) : undefined;
     const actualValue = isParameter ? undefined : (op?.needsValue ? newFilter.value : undefined);
 
-    // Build condition
     const condition: FilterCondition = filterType === 'having' && newFilter.isAggregate
       ? {
           column: newFilter.column || null,
@@ -158,21 +214,16 @@ export function FilterSection({
   const handleUpdateFilter = useCallback(() => {
     if (editingIndex === null || !filter) return;
 
-    // Validation
     if (filterType === 'having' && newFilter.isAggregate) {
-      // Aggregate filter: require aggregate function
       if (!newFilter.aggregate) return;
-      // COUNT(*) allows empty column, others require column
       if (newFilter.aggregate !== 'COUNT' && !newFilter.column) return;
     } else {
-      // Regular column filter: require column
       if (!newFilter.column) return;
     }
 
     const op = OPERATORS.find((o) => o.value === newFilter.operator);
     if (op?.needsValue && !newFilter.value) return;
 
-    // Parameter detection (Option A): Auto-detect :param_name syntax
     const isParameter = newFilter.value.startsWith(':');
     const paramName = isParameter ? newFilter.value.slice(1) : undefined;
     const actualValue = isParameter ? undefined : (op?.needsValue ? newFilter.value : undefined);
@@ -202,8 +253,6 @@ export function FilterSection({
     (index: number) => {
       if (!filter) return;
 
-      // Find the actual index in the full conditions array
-      // We need to map from filterConditions index to full array index
       let actualIndex = 0;
       let filterCondCount = 0;
       for (let i = 0; i < filter.conditions.length; i++) {
@@ -226,7 +275,6 @@ export function FilterSection({
     const cond = filterConditions[index];
     if (!cond || (!cond.column && !cond.aggregate)) return;
 
-    // Populate value from either param_name (with :) or value
     const displayValue = cond.param_name ? `:${cond.param_name}` : (cond.value as string) || '';
 
     setNewFilter({
@@ -237,7 +285,6 @@ export function FilterSection({
       aggregate: cond.aggregate,
     });
 
-    // Find actual index in full conditions array
     let actualIndex = 0;
     let filterCondCount = 0;
     for (let i = 0; i < (filter?.conditions.length || 0); i++) {
@@ -269,7 +316,6 @@ export function FilterSection({
   const handleRemoveGroup = useCallback((index: number) => {
     if (!filter) return;
 
-    // Find the actual index in the full conditions array
     let actualIndex = 0;
     let groupCount = 0;
     for (let i = 0; i < filter.conditions.length; i++) {
@@ -289,7 +335,6 @@ export function FilterSection({
   const handleGroupChange = useCallback((index: number, newGroup: FilterGroup | undefined) => {
     if (!filter) return;
 
-    // Find the actual index in the full conditions array
     let actualIndex = 0;
     let groupCount = 0;
     for (let i = 0; i < filter.conditions.length; i++) {
@@ -303,11 +348,9 @@ export function FilterSection({
     }
 
     if (!newGroup) {
-      // Remove group if it becomes undefined
       const newConditions = filter.conditions.filter((_, i) => i !== actualIndex);
       onChange(newConditions.length > 0 ? { ...filter, conditions: newConditions } : undefined);
     } else {
-      // Update group
       const newConditions = [...filter.conditions];
       newConditions[actualIndex] = newGroup;
       onChange({ ...filter, conditions: newConditions });
@@ -326,7 +369,6 @@ export function FilterSection({
     const op = OPERATORS.find((o) => o.value === cond.operator);
     const opLabel = op?.label || cond.operator;
 
-    // HAVING with aggregate
     if (cond.aggregate) {
       const aggLabel = AGGREGATES.find(a => a.value === cond.aggregate)?.label || cond.aggregate;
       const columnPart = !cond.column ? '(*)' : `(${cond.column})`;
@@ -339,7 +381,6 @@ export function FilterSection({
       return `${aggDisplay} ${opLabel} ${value}`;
     }
 
-    // WHERE with column
     if (!op?.needsValue) {
       return `${cond.column} ${opLabel}`;
     }
@@ -355,8 +396,8 @@ export function FilterSection({
 
   // Shared filter form content (used by both add and edit popovers)
   const renderFilterForm = (mode: 'add' | 'edit') => (
-    <VStack gap={3} align="stretch">
-      <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" fontFamily="mono">
+    <VStack gap={2.5} align="stretch">
+      <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" fontFamily="mono">
         {mode === 'add' ? 'Add filter' : 'Edit filter'}
       </Text>
 
@@ -372,7 +413,7 @@ export function FilterSection({
               aggregate: e.checked === true ? 'COUNT' : undefined,
             }))}
           >
-            <Text fontSize="sm" fontFamily="mono">Use aggregate function</Text>
+            <Text fontSize="xs" fontFamily="mono">Use aggregate function</Text>
           </Checkbox>
 
           {newFilter.isAggregate && (
@@ -403,89 +444,37 @@ export function FilterSection({
         </>
       )}
 
-      {/* Different column selection based on aggregate */}
+      {/* Column selection — uses shared ColumnPickerDropdown */}
       {newFilter.isAggregate && newFilter.aggregate === 'COUNT' ? (
-        // COUNT: Allow * or column
-        <PickerList maxH="200px" searchable searchPlaceholder="Search columns...">
-          {(query) => [
-            !query && (
-              <PickerItem
-                key="*"
-                selected={!newFilter.column}
-                selectedBg="rgba(134, 239, 172, 0.15)"
-                onClick={() => setNewFilter(prev => ({ ...prev, column: '' }))}
-              >
-                * (all rows)
-              </PickerItem>
-            ),
-            ...availableColumns
-              .filter(col => !query || col.name.toLowerCase().includes(query.toLowerCase()))
-              .map(col => (
-                <PickerItem
-                  key={col.name}
-                  icon={getColumnIcon(col.type)}
-                  selected={newFilter.column === col.name}
-                  selectedBg="rgba(134, 239, 172, 0.15)"
-                  onClick={() => setNewFilter(prev => ({ ...prev, column: col.name }))}
-                >
-                  {col.name}
-                </PickerItem>
-              )),
-          ]}
-        </PickerList>
+        <ColumnPickerDropdown
+          databaseName={databaseName}
+          tableName={tableName}
+          tableSchema={tableSchema}
+          value={newFilter.column}
+          onChange={(col) => setNewFilter(prev => ({ ...prev, column: col }))}
+          placeholder="Select column..."
+          availableColumns={availableColumns}
+          extraItems={[{ label: '* (all rows)', value: '' }]}
+        />
       ) : (
-        // Regular column selector
-        <SelectRoot
-          collection={createListCollection({
-            items: availableColumns.map((c) => ({ label: c.name, value: c.name })),
-          })}
-          value={newFilter.column ? [newFilter.column] : []}
-          onValueChange={(e) =>
-            setNewFilter((prev) => ({ ...prev, column: e.value[0] || '' }))
-          }
-          size="sm"
-        >
-          <SelectTrigger>
-            <SelectValueText placeholder="Select column..." />
-          </SelectTrigger>
-          <SelectContent>
-            {availableColumns.map((col) => (
-              <SelectItem key={col.name} item={col.name}>
-                <HStack gap={2}>
-                  {getColumnIcon(col.type)}
-                  <Text fontFamily="mono">{col.name}</Text>
-                </HStack>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </SelectRoot>
+        <ColumnPickerDropdown
+          databaseName={databaseName}
+          tableName={tableName}
+          tableSchema={tableSchema}
+          value={newFilter.column}
+          onChange={(col) => setNewFilter(prev => ({ ...prev, column: col }))}
+          placeholder="Select column..."
+          availableColumns={availableColumns}
+        />
       )}
 
-      <SelectRoot
-        collection={createListCollection({
-          items: OPERATORS.map((o) => ({ label: o.label, value: o.value })),
-        })}
-        value={[newFilter.operator]}
-        onValueChange={(e) =>
-          setNewFilter((prev) => ({
-            ...prev,
-            operator: (e.value[0] as Operator) || '=',
-          }))
-        }
-        size="sm"
-      >
-        <SelectTrigger>
-          <SelectValueText />
-        </SelectTrigger>
-        <SelectContent>
-          {OPERATORS.map((op) => (
-            <SelectItem key={op.value} item={op.value}>
-              {op.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </SelectRoot>
+      {/* Operator picker */}
+      <OperatorPicker
+        value={newFilter.operator}
+        onChange={(op) => setNewFilter(prev => ({ ...prev, operator: op }))}
+      />
 
+      {/* Value input */}
       {OPERATORS.find((o) => o.value === newFilter.operator)?.needsValue && (
         <Input
           size="sm"
@@ -494,12 +483,21 @@ export function FilterSection({
           onChange={(e) =>
             setNewFilter((prev) => ({ ...prev, value: e.target.value }))
           }
+          fontFamily="mono"
+          fontSize="xs"
+          bg="bg.subtle"
+          border="1px solid"
+          borderColor="border.default"
+          borderRadius="md"
+          _focus={{ borderColor: 'accent.teal', boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)' }}
         />
       )}
 
       <Button
-        size="sm"
-        bg="accent.primary"
+        size="xs"
+        colorPalette="teal"
+        fontFamily="mono"
+        fontSize="xs"
         onClick={mode === 'add' ? handleAddFilter : handleUpdateFilter}
         disabled={
           filterType === 'having' && newFilter.isAggregate
@@ -535,6 +533,7 @@ export function FilterSection({
               onClick={handleOperatorToggle}
               fontSize="xs"
               fontWeight="600"
+              fontFamily="mono"
               px={2}
               py={0.5}
               h="auto"
@@ -593,7 +592,7 @@ export function FilterSection({
                 </QueryChip>
               </Box>
             }
-            width="320px"
+            width="300px"
             padding={3}
           >
             {renderFilterForm('edit')}
@@ -609,7 +608,7 @@ export function FilterSection({
               <AddChipButton onClick={() => setAddFilterOpen(true)} variant="filter" />
             </Box>
           }
-          width="320px"
+          width="300px"
           padding={3}
         >
           {renderFilterForm('add')}
@@ -622,6 +621,7 @@ export function FilterSection({
             variant="outline"
             onClick={handleAddGroup}
             fontSize="xs"
+            fontFamily="mono"
             px={2}
             py={1}
             h="auto"
