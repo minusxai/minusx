@@ -1,15 +1,14 @@
 /**
  * E2E tests for parameterised query execution through POST /api/query.
  *
- * Uses a real Python backend so the IR round-trip (applyNoneParams →
- * /api/sql-to-ir → removeNoneParamConditions → /api/ir-to-sql) is exercised
- * end-to-end.  A mocked DuckDB connector captures the final SQL/params to
- * assert on without needing a real database file.
+ * IR round-trip (applyNoneParams → sql-to-ir → removeNoneParamConditions → ir-to-sql)
+ * exercised end-to-end. sql-to-ir and ir-to-sql now run locally via WASM (no Python).
+ * A mocked DuckDB connector captures the final SQL/params to assert on.
  *
  * Architecture:
- *   Test → queryPostHandler → pythonBackendFetch('/api/sql-to-ir') → REAL PYTHON
+ *   Test → queryPostHandler → parseSqlToIrLocal (WASM)
  *                                      ↓ removeNoneParamConditions (frontend)
- *                            → pythonBackendFetch('/api/ir-to-sql') → REAL PYTHON
+ *                            → irToSqlLocal (WASM)
  *                                      ↓
  *                            → getNodeConnector (mocked) ← assert final SQL here
  */
@@ -32,7 +31,6 @@ jest.mock('@/store/store', () => ({
   getStore: () => testStore,
 }));
 
-// pythonBackendFetch is NOT mocked — it flows through setupMockFetch to real Python.
 // getNodeConnector IS mocked so we can intercept and assert on the final SQL.
 jest.mock('@/lib/connections', () => ({
   getNodeConnector: jest.fn(),
@@ -40,7 +38,6 @@ jest.mock('@/lib/connections', () => ({
 
 // ---------------------------------------------------------------------------
 
-import { withPythonBackend } from '@/test/harness/python-backend';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
 import { POST as queryPostHandler } from '@/app/api/query/route';
@@ -82,13 +79,9 @@ function capturedParams(): Record<string, unknown> {
 // Suite setup
 // ---------------------------------------------------------------------------
 
-describe('Parameterised query execution E2E (real Python backend)', () => {
-  const { getPythonPort } = withPythonBackend();
-
-  // setupMockFetch intercepts global.fetch:
-  //   • redirects localhost:8001 → dynamic Python port (BACKEND_URL constant fix)
-  //   • lets all Python calls through to the real server unchanged
-  setupMockFetch({ getPythonPort });
+describe('Parameterised query execution E2E (local WASM)', () => {
+  // No Python backend needed — sql-to-ir and ir-to-sql run locally via WASM
+  setupMockFetch({});
 
   beforeAll(async () => {
     const { resetAdapter } = await import('@/lib/database/adapter/factory');

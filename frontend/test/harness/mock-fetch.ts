@@ -58,8 +58,8 @@ export interface RouteInterceptor {
 }
 
 export interface MockFetchOptions {
-  /** Function that returns the current Python backend port */
-  getPythonPort: () => number;
+  /** Function that returns the current Python backend port (optional if no Python calls expected) */
+  getPythonPort?: () => number;
   /** Route interceptors for Next.js API routes (e.g., /api/chat, /api/sql-to-ir) */
   interceptors?: RouteInterceptor[];
   /** Optional function that returns the LLM mock server port */
@@ -141,7 +141,7 @@ export function setupMockFetch(options: MockFetchOptions) {
 
     // Let Python backend calls through to real backend using original fetch
     // Support both dynamic port and default port (8001) for BACKEND_URL constant
-    const pythonPort = getPythonPort();
+    const pythonPort = getPythonPort?.();
     if (pythonPort && (urlStr.includes(`localhost:${pythonPort}`) || urlStr.includes('localhost:8001'))) {
       // Redirect calls to default port to dynamic port
       const redirectedUrl = urlStr.replace('localhost:8001', `localhost:${pythonPort}`);
