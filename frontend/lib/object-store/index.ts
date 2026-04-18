@@ -26,6 +26,12 @@ import 'server-only';
 
 import { randomUUID } from 'crypto';
 import { S3Adapter } from './s3-adapter';
+import { LocalFsAdapter } from './local-fs-adapter';
+import { ensureLocalMxfoodSeeds } from './local-seed';
+import {
+  OBJECT_STORE_ACCESS_KEY_ID,
+  OBJECT_STORE_BUCKET,
+} from '@/lib/config';
 
 export interface UploadUrlResult {
   /** Presigned PUT URL the client uploads to directly. */
@@ -43,8 +49,13 @@ export interface ObjectStore {
   copyObject(sourceKey: string, destKey: string): Promise<void>;
 }
 
+/** True when S3 credentials are absent — local filesystem is used instead. */
+export function isLocalObjectStore(): boolean {
+  return !OBJECT_STORE_ACCESS_KEY_ID || !OBJECT_STORE_BUCKET;
+}
+
 export function createObjectStore(): ObjectStore {
-  return new S3Adapter();
+  return isLocalObjectStore() ? new LocalFsAdapter() : new S3Adapter();
 }
 
 /**
@@ -107,6 +118,10 @@ export async function copySeedMxfoodForCompany(
   mode: string,
   tableNames: string[],
 ): Promise<string[]> {
+  if (isLocalObjectStore()) {
+    await ensureLocalMxfoodSeeds(tableNames);
+  }
+
   const store = createObjectStore();
   const copied: string[] = [];
 
@@ -126,3 +141,4 @@ export async function copySeedMxfoodForCompany(
 }
 
 export { S3Adapter };
+export { LocalFsAdapter };
