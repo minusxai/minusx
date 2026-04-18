@@ -23,6 +23,8 @@ import { extractReferencesFromSQL, parseReferenceAlias } from '@/lib/sql/sql-ref
 import { inferColumnsLocal } from '@/lib/sql/infer-columns';
 import { getCompletionsLocal } from '@/lib/sql/autocomplete';
 import { getMentionCompletionsLocal } from '@/lib/sql/mention-completions';
+import { parseSqlToIrLocal, UnsupportedSQLError } from '@/lib/sql/sql-to-ir';
+import { irToSqlLocal } from '@/lib/sql/ir-to-sql';
 
 /**
  * Server-side implementation of completions data layer
@@ -334,52 +336,45 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
     const { sql, dialect } = options;
 
     try {
-      const response = await pythonBackendFetch('/api/sql-to-ir', {
-        method: 'POST',
-        body: JSON.stringify({ sql, dialect }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[Completions] SQL to IR backend error:', errorText);
+      const ir = await parseSqlToIrLocal(sql, dialect);
+      return { success: true, ir };
+    } catch (error) {
+      if (error instanceof UnsupportedSQLError) {
         return {
           success: false,
-          error: 'Failed to parse SQL',
+          error: error.message,
+          unsupportedFeatures: error.features,
+          hint: error.hint,
         };
       }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
       console.error('[Completions] SQL to IR error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
+
+    // --- Previous implementation: forward to Python backend ---
+    // try {
+    //   const response = await pythonBackendFetch('/api/sql-to-ir', {
+    //     method: 'POST',
+    //     body: JSON.stringify({ sql, dialect }),
+    //   });
+    //   if (!response.ok) {
+    //     return { success: false, error: 'Failed to parse SQL' };
+    //   }
+    //   return await response.json();
+    // } catch (error) {
+    //   return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    // }
   }
 
   async irToSql(options: IRToSqlOptions): Promise<IRToSqlResult> {
     const { ir, dialect } = options;
 
     try {
-      // Call Python backend - single source of truth for IR→SQL conversion
-      const response = await pythonBackendFetch('/api/ir-to-sql', {
-        method: 'POST',
-        body: JSON.stringify({ ir, dialect }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[Completions] IR to SQL backend error:', errorText);
-        return {
-          success: false,
-          error: 'Failed to generate SQL',
-        };
-      }
-
-      const data = await response.json();
-      return data;
+      const sql = irToSqlLocal(ir, dialect);
+      return { success: true, sql };
     } catch (error) {
       console.error('[Completions] IR to SQL error:', error);
       return {
@@ -387,6 +382,20 @@ class CompletionsDataLayerServer implements ICompletionsDataLayer {
         error: error instanceof Error ? error.message : 'Unknown error',
       };
     }
+
+    // --- Previous implementation: forward to Python backend ---
+    // try {
+    //   const response = await pythonBackendFetch('/api/ir-to-sql', {
+    //     method: 'POST',
+    //     body: JSON.stringify({ ir, dialect }),
+    //   });
+    //   if (!response.ok) {
+    //     return { success: false, error: 'Failed to generate SQL' };
+    //   }
+    //   return await response.json();
+    // } catch (error) {
+    //   return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    // }
   }
 
   async getTableSuggestions(options: TableSuggestionsOptions, user: EffectiveUser): Promise<TableSuggestionsResult> {
