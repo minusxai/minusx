@@ -6,13 +6,12 @@ import 'server-only';
  */
 
 import { randomUUID } from 'crypto';
-import { writeFileSync, readFileSync, unlinkSync } from 'fs';
+import { writeFileSync, readFileSync, unlinkSync, mkdirSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { dirname, join, resolve } from 'path';
 import {
   S3Client,
   GetObjectCommand,
-  PutObjectCommand,
   ListObjectsV2Command,
   DeleteObjectsCommand,
   DeleteObjectCommand,
@@ -25,7 +24,9 @@ import {
   OBJECT_STORE_ACCESS_KEY_ID,
   OBJECT_STORE_SECRET_ACCESS_KEY,
   OBJECT_STORE_ENDPOINT,
+  LOCAL_UPLOAD_PATH,
 } from '@/lib/config';
+import { createObjectStore, isLocalObjectStore } from '@/lib/object-store';
 import { sanitizeTableName, ensureUniqueTableNames } from '@/lib/csv-utils';
 
 // Re-export shared utilities so existing callers don't break
@@ -51,6 +52,14 @@ export interface RegisteredFile {
   columns: Array<{ name: string; type: string }>;
 }
 
+// ─── Storage helpers ──────────────────────────────────────────────────────────
+
+/** Returns the DuckDB-readable URL/path for a stored key. */
+function getStorageUrl(key: string): string {
+  if (!isLocalObjectStore()) return `s3://${OBJECT_STORE_BUCKET!}/${key}`;
+  return resolve(join(LOCAL_UPLOAD_PATH, key));
+}
+
 // ─── S3 client ───────────────────────────────────────────────────────────────
 
 function makeS3(): S3Client {
@@ -74,6 +83,17 @@ function makeS3(): S3Client {
  * Download an xlsx from S3, expand each non-empty sheet to a CSV, upload back to S3.
  * Returns one IncomingFile record per sheet.
  */
+async function getStoredFileBytes(key: string): Promise<Buffer> {
+  if (isLocalObjectStore()) {
+    return readFileSync(resolve(join(LOCAL_UPLOAD_PATH, key)));
+  }
+  const s3 = makeS3();
+  const response = await s3.send(new GetObjectCommand({ Bucket: OBJECT_STORE_BUCKET!, Key: key }));
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of response.Body as AsyncIterable<Uint8Array>) chunks.push(chunk);
+  return Buffer.concat(chunks);
+}
+
 async function expandXlsxFromS3(
   s3Key: string,
   connectionName: string,
@@ -81,11 +101,7 @@ async function expandXlsxFromS3(
   mode: string,
   schemaName: string,
 ): Promise<IncomingFile[]> {
-  const s3 = makeS3();
-  const response = await s3.send(new GetObjectCommand({ Bucket: OBJECT_STORE_BUCKET!, Key: s3Key }));
-  const chunks: Uint8Array[] = [];
-  for await (const chunk of response.Body as AsyncIterable<Uint8Array>) chunks.push(chunk);
-  const buffer = Buffer.concat(chunks);
+  const buffer = await getStoredFileBytes(s3Key);
   return xlsxBytesToS3Csvs(buffer, connectionName, companyId, mode, schemaName);
 }
 
@@ -100,7 +116,7 @@ async function xlsxBytesToS3Csvs(
   mode: string,
   schemaName: string,
 ): Promise<IncomingFile[]> {
-  const s3 = makeS3();
+  const store = createObjectStore();
   const workbook = XLSX.read(buffer, { type: 'buffer' });
   const results: IncomingFile[] = [];
 
@@ -119,7 +135,7 @@ async function xlsxBytesToS3Csvs(
       const uuid = randomUUID();
       const tmpCsvPath     = join(tmpdir(), `${uuid}.csv`);
       const tmpParquetPath = join(tmpdir(), `${uuid}.parquet`);
-      const s3Key = `${companyId}/csvs/${mode}/${connectionName}/${uuid}.parquet`;
+      const storageKey = `${companyId}/csvs/${mode}/${connectionName}/${uuid}.parquet`;
 
       try {
         writeFileSync(tmpCsvPath, csvData, 'utf-8');
@@ -127,13 +143,8 @@ async function xlsxBytesToS3Csvs(
           `COPY (SELECT * FROM read_csv_auto('${tmpCsvPath}')) TO '${tmpParquetPath}' (FORMAT PARQUET, COMPRESSION ZSTD)`
         );
         const parquetBuffer = readFileSync(tmpParquetPath);
-        await s3.send(new PutObjectCommand({
-          Bucket: OBJECT_STORE_BUCKET!,
-          Key: s3Key,
-          Body: parquetBuffer,
-          ContentType: 'application/octet-stream',
-        }));
-        results.push({ filename: csvFilename, s3_key: s3Key, schema_name: schemaName, file_format: 'parquet' });
+        await store.put(storageKey, parquetBuffer, 'application/octet-stream');
+        results.push({ filename: csvFilename, s3_key: storageKey, schema_name: schemaName, file_format: 'parquet' });
       } finally {
         try { unlinkSync(tmpCsvPath); } catch { /* ignore */ }
         try { unlinkSync(tmpParquetPath); } catch { /* ignore */ }
@@ -149,12 +160,22 @@ async function xlsxBytesToS3Csvs(
 
 // ─── S3 delete ────────────────────────────────────────────────────────────────
 
-/** Delete all S3 objects under a connection's prefix. Returns true if any were deleted. */
+/** Delete all stored files under a connection's prefix. Returns true if any were deleted. */
 export async function deleteConnectionFiles(
   companyId: number,
   mode: string,
   connectionName: string,
 ): Promise<boolean> {
+  if (isLocalObjectStore()) {
+    const dir = resolve(join(LOCAL_UPLOAD_PATH, `${companyId}/csvs/${mode}/${connectionName}`));
+    try {
+      rmSync(dir, { recursive: true, force: true });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   if (!OBJECT_STORE_BUCKET) return false;
   const s3 = makeS3();
   const prefix = `${companyId}/csvs/${mode}/${connectionName}/`;
@@ -184,8 +205,15 @@ export async function deleteConnectionFiles(
 
 // ─── S3 single-file delete ────────────────────────────────────────────────────
 
-/** Delete a single S3 object by key. Throws if not configured or if the key is missing. */
+/** Delete a single stored file by key. */
 export async function deleteS3File(s3Key: string): Promise<void> {
+  if (isLocalObjectStore()) {
+    const filePath = resolve(join(LOCAL_UPLOAD_PATH, s3Key));
+    try { unlinkSync(filePath); } catch (err: any) {
+      if (err.code !== 'ENOENT') throw err;
+    }
+    return;
+  }
   if (!OBJECT_STORE_BUCKET) throw new Error('OBJECT_STORE_BUCKET is not configured');
   const s3 = makeS3();
   await s3.send(new DeleteObjectCommand({ Bucket: OBJECT_STORE_BUCKET, Key: s3Key }));
@@ -232,20 +260,28 @@ async function readFileMetadata(
 type DuckConn = Awaited<ReturnType<InstanceType<typeof DuckDBInstance>['connect']>>;
 
 /**
- * Convert a CSV already in S3 to Parquet (same key prefix, `.parquet` extension).
+ * Convert a CSV to Parquet (same key prefix, `.parquet` extension).
+ * Works with both S3 and local filesystem storage.
  * Deletes the original CSV on success.
- * Returns the new S3 key, or null if conversion fails (original left intact).
+ * Returns the new key, or null if conversion fails (original left intact).
  */
 async function convertCsvToParquet(conn: DuckConn, csvKey: string): Promise<string | null> {
   const parquetKey = csvKey.replace(/\.[^.]+$/, '') + '.parquet';
-  const csvUrl     = `s3://${OBJECT_STORE_BUCKET!}/${csvKey}`;
-  const parquetUrl = `s3://${OBJECT_STORE_BUCKET!}/${parquetKey}`;
+  const csvUrl     = getStorageUrl(csvKey);
+  const parquetUrl = getStorageUrl(parquetKey);
   try {
+    if (isLocalObjectStore()) {
+      mkdirSync(dirname(parquetUrl), { recursive: true });
+    }
     await conn.run(
       `COPY (SELECT * FROM read_csv_auto('${csvUrl}')) TO '${parquetUrl}' (FORMAT PARQUET, COMPRESSION ZSTD)`
     );
     // Parquet written — remove the now-redundant CSV
-    await makeS3().send(new DeleteObjectCommand({ Bucket: OBJECT_STORE_BUCKET!, Key: csvKey }));
+    if (isLocalObjectStore()) {
+      try { unlinkSync(csvUrl); } catch { /* ignore */ }
+    } else {
+      await makeS3().send(new DeleteObjectCommand({ Bucket: OBJECT_STORE_BUCKET!, Key: csvKey }));
+    }
     return parquetKey;
   } catch (err) {
     console.warn(`[csv-processor] Parquet conversion failed for ${csvKey}:`, err);
@@ -267,7 +303,7 @@ export async function processFilesFromS3(
   connectionName: string,
   incomingFiles: IncomingFile[],
 ): Promise<RegisteredFile[]> {
-  if (!OBJECT_STORE_BUCKET) throw new Error('OBJECT_STORE_BUCKET is not configured');
+  if (!isLocalObjectStore() && !OBJECT_STORE_BUCKET) throw new Error('OBJECT_STORE_BUCKET is not configured');
 
   // Expand xlsx files into CSV sheets
   const flatFiles: IncomingFile[] = [];
@@ -298,7 +334,9 @@ export async function processFilesFromS3(
   const instance = await DuckDBInstance.create(':memory:');
   const conn = await instance.connect();
   try {
-    await configureDuckDBForS3(conn);
+    if (!isLocalObjectStore()) {
+      await configureDuckDBForS3(conn);
+    }
 
     const results: RegisteredFile[] = [];
     for (const file of flatFiles) {
@@ -312,8 +350,8 @@ export async function processFilesFromS3(
         if (converted) { s3Key = converted; format = 'parquet'; }
       }
 
-      const s3Url = `s3://${OBJECT_STORE_BUCKET}/${s3Key}`;
-      const { rowCount, columns } = await readFileMetadata(conn, s3Url, format);
+      const fileUrl = getStorageUrl(s3Key);
+      const { rowCount, columns } = await readFileMetadata(conn, fileUrl, format);
       results.push({
         table_name: tableName,
         schema_name: file.schema_name ?? 'public',

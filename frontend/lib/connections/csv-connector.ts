@@ -1,11 +1,13 @@
 import 'server-only';
 import { DuckDBInstance, DuckDBConnection } from '@duckdb/node-api';
+import { join } from 'path';
 import {
   OBJECT_STORE_BUCKET,
   OBJECT_STORE_REGION,
   OBJECT_STORE_ACCESS_KEY_ID,
   OBJECT_STORE_SECRET_ACCESS_KEY,
   OBJECT_STORE_ENDPOINT,
+  LOCAL_UPLOAD_PATH,
 } from '@/lib/config';
 import { NodeConnector, SchemaEntry, QueryResult, TestConnectionResult } from './base';
 
@@ -58,24 +60,27 @@ async function initInstance(
   cacheKey: string,
   files: CsvFileEntry[]
 ): Promise<DuckDBInstance> {
+  const isLocal = !OBJECT_STORE_ACCESS_KEY_ID || !OBJECT_STORE_BUCKET;
   const instance = await DuckDBInstance.create(':memory:');
   const conn = await instance.connect();
   try {
-    // Install and load httpfs for S3 access
-    await conn.run('INSTALL httpfs');
-    await conn.run('LOAD httpfs');
+    if (!isLocal) {
+      // Install and load httpfs for S3 access
+      await conn.run('INSTALL httpfs');
+      await conn.run('LOAD httpfs');
 
-    // Configure S3 credentials
-    await conn.run(`SET s3_region = '${OBJECT_STORE_REGION}'`);
-    if (OBJECT_STORE_ACCESS_KEY_ID) {
-      await conn.run(`SET s3_access_key_id = '${OBJECT_STORE_ACCESS_KEY_ID}'`);
-    }
-    if (OBJECT_STORE_SECRET_ACCESS_KEY) {
-      await conn.run(`SET s3_secret_access_key = '${OBJECT_STORE_SECRET_ACCESS_KEY}'`);
-    }
-    if (OBJECT_STORE_ENDPOINT) {
-      await conn.run(`SET s3_endpoint = '${OBJECT_STORE_ENDPOINT}'`);
-      await conn.run("SET s3_url_style = 'path'");
+      // Configure S3 credentials
+      await conn.run(`SET s3_region = '${OBJECT_STORE_REGION}'`);
+      if (OBJECT_STORE_ACCESS_KEY_ID) {
+        await conn.run(`SET s3_access_key_id = '${OBJECT_STORE_ACCESS_KEY_ID}'`);
+      }
+      if (OBJECT_STORE_SECRET_ACCESS_KEY) {
+        await conn.run(`SET s3_secret_access_key = '${OBJECT_STORE_SECRET_ACCESS_KEY}'`);
+      }
+      if (OBJECT_STORE_ENDPOINT) {
+        await conn.run(`SET s3_endpoint = '${OBJECT_STORE_ENDPOINT}'`);
+        await conn.run("SET s3_url_style = 'path'");
+      }
     }
 
     // Create schemas and views for each file
@@ -86,27 +91,25 @@ async function initInstance(
         schemas.add(file.schema_name);
       }
 
-      const bucket = OBJECT_STORE_BUCKET ?? '';
-      const s3Url = `s3://${bucket}/${file.s3_key}`;
+      const fileUrl = isLocal
+        ? join(LOCAL_UPLOAD_PATH, file.s3_key)
+        : `s3://${OBJECT_STORE_BUCKET ?? ''}/${file.s3_key}`;
 
-      let readExpr: string;
-      if (file.file_format === 'parquet') {
-        readExpr = `read_parquet('${s3Url}')`;
-      } else {
-        readExpr = `read_csv_auto('${s3Url}')`;
-      }
+      const readExpr = file.file_format === 'parquet'
+        ? `read_parquet('${fileUrl}')`
+        : `read_csv_auto('${fileUrl}')`;
 
       await conn.run(
         `CREATE OR REPLACE VIEW "${file.schema_name}"."${file.table_name}" AS SELECT * FROM ${readExpr}`
       );
     }
 
-    // Lock down external access to the company's own S3 prefix only.
-    // Must be applied after S3 setup and view creation (views reference S3 paths at query time).
-    // enable_external_access is instance-level — set once here, persists across all connections.
+    // Lock down access to the company's own storage prefix only.
     // allowed_directories must be set BEFORE disabling external access.
     const companyId = files[0]?.s3_key.split('/')[0] ?? '';
-    if (OBJECT_STORE_BUCKET && companyId) {
+    if (isLocal && companyId) {
+      await conn.run(`SET allowed_directories = ['${join(LOCAL_UPLOAD_PATH, companyId)}/']`);
+    } else if (!isLocal && OBJECT_STORE_BUCKET && companyId) {
       await conn.run(`SET allowed_directories = ['s3://${OBJECT_STORE_BUCKET}/${companyId}/']`);
     }
     await conn.run('SET enable_external_access = false');
