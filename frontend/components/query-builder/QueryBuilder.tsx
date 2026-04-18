@@ -301,7 +301,20 @@ export function QueryBuilder({
   }, []);
 
   const handleSummarizeClick = useCallback(() => {
-    setShowSummarizeSection((prev) => !prev);
+    setShowSummarizeSection((prev) => {
+      const next = !prev;
+      if (next) {
+        // Opening Summarize: strip SELECT * and plain columns — Summarize manages its own
+        setIr((ir) => {
+          if (!ir) return null;
+          const withoutPlainColumns = ir.select.filter(
+            (c) => c.type !== 'column'
+          );
+          return { ...ir, select: withoutPlainColumns };
+        });
+      }
+      return next;
+    });
   }, []);
 
   const handleJoinClick = useCallback(() => {
@@ -324,12 +337,14 @@ export function QueryBuilder({
 
   const handleSummarizeClose = useCallback(() => {
     setShowSummarizeSection(false);
-    // Remove all aggregate and raw metric columns and group by
+    // Remove aggregates/raw metrics and group by; restore SELECT * if no plain columns remain
     setIr((prev) => {
       if (!prev) return null;
+      const remaining = prev.select.filter((c) => c.type !== 'aggregate' && c.type !== 'raw');
+      const hasPlainColumns = remaining.some((c) => c.type === 'column');
       return {
         ...prev,
-        select: prev.select.filter((c) => c.type !== 'aggregate' && c.type !== 'raw'),
+        select: hasPlainColumns ? remaining : [{ type: 'column', column: '*' }, ...remaining],
         group_by: undefined,
       };
     });
@@ -463,8 +478,8 @@ export function QueryBuilder({
           onChange={handleFromTableChange}
           availableQuestions={availableQuestions}
           whitelistedSchema={whitelistedSchema}
-          columns={!showSummarizeSection ? ir.select : undefined}
-          onColumnsChange={!showSummarizeSection ? handleColumnsChange : undefined}
+          columns={ir.select}
+          onColumnsChange={handleColumnsChange}
           showColumns={!showSummarizeSection}
         />
 
