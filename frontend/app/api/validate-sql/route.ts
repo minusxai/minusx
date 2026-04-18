@@ -1,8 +1,9 @@
 import { withAuth } from '@/lib/api/with-auth';
 import { NextRequest, NextResponse } from 'next/server';
-import { pythonBackendFetch } from '@/lib/api/python-backend-client';
+// import { pythonBackendFetch } from '@/lib/api/python-backend-client';
 import { FilesAPI } from '@/lib/data/files.server';
 import { connectionTypeToDialect } from '@/lib/types';
+import { validateSqlLocal } from '@/lib/sql/validate-sql';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -29,12 +30,15 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     }
   }
 
-  // Forward to Python backend
-  const response = await pythonBackendFetch('/api/validate-sql', {
-    method: 'POST',
-    body: JSON.stringify({ query, dialect }),
-  });
+  // Validate locally via WASM (replaces Python backend call)
+  const data = await validateSqlLocal(query, dialect);
+  return NextResponse.json(data);
 
-  const data = await response.json();
-  return NextResponse.json(data, { status: response.status });
+  // --- Previous implementation: forward to Python backend ---
+  // const response = await pythonBackendFetch('/api/validate-sql', {
+  //   method: 'POST',
+  //   body: JSON.stringify({ query, dialect }),
+  // });
+  // const data = await response.json();
+  // return NextResponse.json(data, { status: response.status });
 });
