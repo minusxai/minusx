@@ -952,18 +952,7 @@
                 "createdAt": "{{TIMESTAMP}}",
                 "createdBy": 1,
                 "description": "Initial tutorial context",
-                "whitelist": [
-                  {
-                    "name": "static",
-                    "type": "connection",
-                    "children": [
-                      {
-                        "name": "mxfood",
-                        "type": "schema"
-                      }
-                    ]
-                  }
-                ]
+                "whitelist": "*"
               }
             ],
             "published": {
