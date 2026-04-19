@@ -12,6 +12,8 @@ describe('buildChartOption scatter log axis', () => {
       yAxisLabel: 'elo',
       colorPalette: ['#16a085'],
       axisConfig: { xScale: 'log' },
+      xAxisColumns: ['output_cost_per_m_tokens'],
+      columnTypes: { output_cost_per_m_tokens: 'number' },
     })
 
     const xAxis = option.xAxis as any
@@ -48,6 +50,140 @@ describe('buildChartOption scatter log axis', () => {
       { value: [30, 1300], tooltipMeta: undefined },
       { value: [150, 1400], tooltipMeta: undefined },
     ])
+  })
+})
+
+describe('buildChartOption scatter with date x-axis', () => {
+  it('uses time axis and preserves all data points when xAxisData contains dates', () => {
+    const option = buildChartOption({
+      chartType: 'scatter',
+      xAxisData: ['2024-01-15', '2024-02-20', '2024-03-10'],
+      series: [
+        { name: 'revenue', data: [100, 200, 300] },
+      ],
+      xAxisLabel: 'date',
+      yAxisLabel: 'revenue',
+      xAxisColumns: ['date'],
+      colorPalette: ['#16a085'],
+      columnTypes: { date: 'date' },
+    })
+
+    const xAxis = option.xAxis as any
+    const scatterSeries = (option.series as any[])[0]
+
+    expect(xAxis.type).toBe('time')
+    // All 3 points should be present (not filtered out as NaN)
+    expect(scatterSeries.data).toHaveLength(3)
+    // Each data point should have the date string as x
+    expect(scatterSeries.data[0].value[0]).toBe('2024-01-15')
+    expect(scatterSeries.data[1].value[0]).toBe('2024-02-20')
+    expect(scatterSeries.data[2].value[0]).toBe('2024-03-10')
+  })
+})
+
+describe('buildChartOption scatter with category x-axis', () => {
+  it('uses category axis and preserves all data points when xAxisData contains strings', () => {
+    const option = buildChartOption({
+      chartType: 'scatter',
+      xAxisData: ['US', 'UK', 'Canada', 'Germany'],
+      series: [
+        { name: 'sales', data: [500, 300, 200, 400] },
+      ],
+      xAxisLabel: 'country',
+      yAxisLabel: 'sales',
+      xAxisColumns: ['country'],
+      colorPalette: ['#16a085'],
+      columnTypes: { country: 'text' },
+    })
+
+    const xAxis = option.xAxis as any
+    const scatterSeries = (option.series as any[])[0]
+
+    expect(xAxis.type).toBe('category')
+    expect(xAxis.data).toEqual(['US', 'UK', 'Canada', 'Germany'])
+    // All 4 points should be present (not filtered out as NaN)
+    expect(scatterSeries.data).toHaveLength(4)
+  })
+})
+
+describe('buildChartOption scatter with numeric x-axis', () => {
+  it('still uses value axis for numeric data (existing behavior)', () => {
+    const option = buildChartOption({
+      chartType: 'scatter',
+      xAxisData: ['10', '20', '30'],
+      series: [
+        { name: 'metric', data: [100, 200, 300] },
+      ],
+      xAxisLabel: 'x',
+      yAxisLabel: 'y',
+      xAxisColumns: ['x'],
+      colorPalette: ['#16a085'],
+      columnTypes: { x: 'number' },
+    })
+
+    const xAxis = option.xAxis as any
+    const scatterSeries = (option.series as any[])[0]
+
+    expect(xAxis.type).toBe('value')
+    expect(scatterSeries.data).toHaveLength(3)
+    expect(scatterSeries.data[0].value).toEqual([10, 100])
+    expect(scatterSeries.data[1].value).toEqual([20, 200])
+  })
+})
+
+describe('buildChartOption cartesian x-axis type resolution', () => {
+  it.each([
+    ['line'],
+    ['bar'],
+    ['area'],
+    ['combo'],
+  ] as const)('uses time axis for %s charts when the SQL x column type is date', (chartType) => {
+    const option = buildChartOption({
+      chartType,
+      xAxisData: ['2024-01-15', '2024-02-20', '2024-03-10'],
+      series: [
+        { name: 'revenue', data: [100, 200, 300] },
+      ],
+      xAxisLabel: 'date',
+      yAxisLabel: 'revenue',
+      xAxisColumns: ['date'],
+      colorPalette: ['#16a085'],
+      columnTypes: { date: 'date' },
+    })
+
+    const xAxis = option.xAxis as any
+    const chartSeries = (option.series as any[])[0]
+
+    expect(xAxis.type).toBe('time')
+    expect(chartSeries.data[0]).toEqual(['2024-01-15', 100])
+    expect(chartSeries.data[1]).toEqual(['2024-02-20', 200])
+  })
+
+  it.each([
+    ['line'],
+    ['bar'],
+    ['area'],
+    ['combo'],
+  ] as const)('uses value axis for %s charts when the SQL x column type is number', (chartType) => {
+    const option = buildChartOption({
+      chartType,
+      xAxisData: ['10', '20', '30'],
+      series: [
+        { name: 'revenue', data: [100, 200, 300] },
+      ],
+      xAxisLabel: 'rank',
+      yAxisLabel: 'revenue',
+      xAxisColumns: ['rank'],
+      colorPalette: ['#16a085'],
+      columnTypes: { rank: 'number' },
+    })
+
+    const xAxis = option.xAxis as any
+    const chartSeries = (option.series as any[])[0]
+
+    expect(xAxis.type).toBe('value')
+    expect(chartSeries.data[0]).toEqual([10, 100])
+    expect(chartSeries.data[1]).toEqual([20, 200])
   })
 })
 
