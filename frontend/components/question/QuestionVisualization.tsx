@@ -49,6 +49,7 @@ interface QuestionVisualizationProps {
   onStyleConfigChange?: (config: VisualizationStyleConfig) => void;
   onAxisConfigChange?: (config: import('@/lib/types').AxisConfig) => void;
   onAnnotationsChange?: (annotations: ChartAnnotation[]) => void;
+  onTrendConfigChange?: (config: import('@/lib/types').TrendConfig) => void;
 }
 
 function QueryLoadingIndicator({ estimatedDurationMs }: { estimatedDurationMs?: number | null }) {
@@ -137,6 +138,7 @@ export function QuestionVisualization({
   onStyleConfigChange,
   onAxisConfigChange,
   onAnnotationsChange,
+  onTrendConfigChange,
 }: QuestionVisualizationProps) {
   const dispatch = useAppDispatch();
   const showJson = useAppSelector(state => state.ui.devMode);
@@ -416,6 +418,8 @@ export function QuestionVisualization({
                       onAxisConfigChange={onAxisConfigChange}
                       annotations={currentState.vizSettings?.annotations ?? undefined}
                       onAnnotationsChange={onAnnotationsChange}
+                      trendConfig={currentState.vizSettings?.trendConfig ?? undefined}
+                      onTrendConfigChange={onTrendConfigChange}
                       exportBranding={appConfig.branding}
                     />
                   </Box>

@@ -211,6 +211,10 @@ export type Ytitle = string | null;
  */
 export type Dualaxis = boolean | null;
 /**
+ * Which data points to compare in a trend chart.
+ */
+export type TrendCompareMode = "last" | "previous";
+/**
  * geo map configuration (only used when type is 'geo')
  */
 export type Geoconfig = (ChoroplethConfig | PointsConfig | LinesConfig | HeatmapConfig) | null;
@@ -460,6 +464,10 @@ export interface VizSettings {
    * axis configuration for scale type (linear or log). Only set when user explicitly requests log scale.
    */
   axisConfig?: AxisConfig | null;
+  /**
+   * trend chart configuration (only used when type is 'trend')
+   */
+  trendConfig?: TrendConfig | null;
   geoConfig?: Geoconfig;
 }
 /**
@@ -540,6 +548,15 @@ export interface AxisConfig {
   yMax?: Ymax;
   yTitle?: Ytitle;
   dualAxis?: Dualaxis;
+}
+/**
+ * Configuration for trend chart visualization.
+ */
+export interface TrendConfig {
+  /**
+   * which periods to compare: 'last' (default, last vs second-to-last) or 'previous' (second-to-last vs third-to-last, skips partial current period)
+   */
+  compareMode?: TrendCompareMode | null;
 }
 /**
  * Choropleth — color-filled regions by value.

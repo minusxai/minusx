@@ -16,13 +16,14 @@ import { WaterfallPlot } from './WaterfallPlot'
 import { RadarPlot } from './RadarPlot'
 import { ComboPlot } from './ComboPlot'
 import { GeoAxisBuilder } from './GeoAxisBuilder'
+import { TrendAxisBuilder } from './TrendAxisBuilder'
 import { ChartError } from './ChartError'
 import { DrillDownCard, type DrillDownState } from './DrillDownCard'
 import { AxisBuilder, type AxisZone } from './AxisBuilder'
 import { resolveColumnType } from './AxisComponents'
 import { aggregateData } from '@/lib/chart/aggregate-data'
 import { aggregatePivotData, computeFormulas, getUniqueTopLevelRowValues, getUniqueTopLevelColumnValues, getUniqueRowValuesAtLevel } from '@/lib/chart/pivot-utils'
-import type { PivotConfig, ColumnFormatConfig, AxisConfig, VisualizationStyleConfig } from '@/lib/types'
+import type { PivotConfig, ColumnFormatConfig, AxisConfig, VisualizationStyleConfig, TrendConfig } from '@/lib/types'
 import type { GeoConfig } from '@/lib/types'
 import type { VizSettings } from '@/lib/types.gen'
 import { getTimestamp } from '@/lib/chart/chart-utils'
@@ -72,6 +73,8 @@ interface ChartBuilderProps {
   onAxisConfigChange?: (config: AxisConfig) => void
   annotations?: ChartAnnotation[]
   onAnnotationsChange?: (annotations: ChartAnnotation[]) => void
+  trendConfig?: TrendConfig
+  onTrendConfigChange?: (config: TrendConfig) => void
   exportBranding?: Partial<CompanyBranding>
 }
 
@@ -81,7 +84,7 @@ interface GroupedColumns {
   categories: string[]
 }
 
-export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, initialYRightCols, onAxisChange, onYRightColsChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, initialGeoConfig, onGeoConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, annotations, onAnnotationsChange, exportBranding }: ChartBuilderProps) => {
+export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, initialYRightCols, onAxisChange, onYRightColsChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, initialGeoConfig, onGeoConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, annotations, onAnnotationsChange, trendConfig, onTrendConfigChange, exportBranding }: ChartBuilderProps) => {
   const colorMode = useAppSelector((state) => state.ui.colorMode) as 'light' | 'dark'
   const colorPalette = useMemo(() => getEffectiveColorPalette(styleConfig?.colors), [styleConfig?.colors])
 
@@ -491,8 +494,9 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
 
   // Viz type constraint validation (centralized in viz-constraints.ts)
   const constraint = useMemo(() => {
-    return getVizConstraintError(chartType, { xColCount: xAxisColumns.length, yColCount: allYColumns.length, xDataCount: aggregatedData.xAxisData.length })
-  }, [chartType, xAxisColumns.length, allYColumns.length, aggregatedData.xAxisData.length])
+    const xColTypes = xAxisColumns.map(col => resolveColumnType(col, columns, types))
+    return getVizConstraintError(chartType, { xColCount: xAxisColumns.length, yColCount: allYColumns.length, xDataCount: aggregatedData.xAxisData.length, xColTypes })
+  }, [chartType, xAxisColumns, columns, types, allYColumns.length, aggregatedData.xAxisData.length])
   const constraintError = constraint.error
 
   const hasData = allYColumns.length > 0
@@ -546,9 +550,53 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
     return getUniqueRowValuesAtLevel(pivotData, level, parentValues)
   }, [pivotData])
 
+  // Ref must be declared before any early returns (Rules of Hooks)
+  const getMapViewRef = useRef<(() => { center: [number, number]; zoom: number } | null) | null>(null)
+
+  // Trend mode: KPI cards, not ECharts
+  if (chartType === 'trend') {
+    const hasData = allYColumns.length > 0
+    return (
+      <Box display="flex" flexDirection="column" gap={0} height="100%" width="100%">
+        {showAxisBuilder && (!useCompactView || settingsExpandedProp) && (
+          <TrendAxisBuilder
+            columns={columns}
+            types={types}
+            xAxisColumns={xAxisColumns}
+            yAxisColumns={yAxisColumns}
+            onAxisChange={(x, y) => onAxisChange?.(x, y)}
+            columnFormats={columnFormats}
+            onColumnFormatChange={handleColumnFormatChange}
+            trendConfig={trendConfig}
+            onTrendConfigChange={onTrendConfigChange}
+          />
+        )}
+        <Box flex="1" overflow="hidden" display="flex" minHeight="0" alignItems="center" justifyContent="center">
+          {constraintError ? (
+            <ChartError message={constraintError} variant={constraint.variant} />
+          ) : hasData ? (
+            xAxisColumns.length === 0 ? (
+              <SingleValue series={aggregatedData.series} />
+            ) : (
+              <TrendPlot
+                series={aggregatedData.series}
+                xAxisData={aggregatedData.xAxisData}
+                columnFormats={columnFormats}
+                yAxisColumns={yAxisColumns}
+                xAxisColumns={xAxisColumns}
+                compareMode={trendConfig?.compareMode ?? 'last'}
+              />
+            )
+          ) : (
+            <ChartError variant="info" title="No data to display" message="Drag metric columns to see trend values" />
+          )}
+        </Box>
+      </Box>
+    )
+  }
+
   // Geo mode: completely different layout (Leaflet, not ECharts)
   const isGeo = chartType === 'geo'
-  const getMapViewRef = useRef<(() => { center: [number, number]; zoom: number } | null) | null>(null)
 
   if (isGeo) {
     const handleGeoConfigChangeInternal = (config: GeoConfig) => {
@@ -734,7 +782,6 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       exportBranding,
                       onDownloadImage,
                     }
-                    if (chartType === 'trend') return <TrendPlot series={aggregatedData.series} columnFormats={columnFormats} yAxisColumns={yAxisColumns} xAxisColumns={xAxisColumns} />
                     const plotMap = { line: LinePlot, bar: BarPlot, combo: ComboPlot, area: AreaPlot, scatter: ScatterPlot, funnel: FunnelPlot, pie: PiePlot, waterfall: WaterfallPlot, radar: RadarPlot } as const
                     const Plot = plotMap[chartType as keyof typeof plotMap]
                     if (Plot) return <Plot {...sharedProps} />
