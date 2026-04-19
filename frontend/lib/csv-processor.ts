@@ -158,6 +158,7 @@ async function xlsxBytesToS3Csvs(
     }
   } finally {
     conn.closeSync();
+    instance.closeSync();
   }
 
   if (results.length === 0) throw new Error('No non-empty sheets found in xlsx file');
@@ -398,6 +399,7 @@ export async function processFilesFromS3(
       return results;
     } finally {
       conn.closeSync();
+      instance.closeSync();
     }
   } catch (err) {
     // Atomic rollback: remove every file created during this call before surfacing the error
