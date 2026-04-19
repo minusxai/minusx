@@ -7,12 +7,12 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Box, HStack, Text, VStack, Spinner, Button, Textarea } from '@chakra-ui/react';
+import { Box, HStack, Text, VStack, Spinner } from '@chakra-ui/react';
 import { SelectColumn } from '@/lib/sql/ir-types';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { QueryChip, getColumnIcon } from './QueryChip';
 import { PickerPopover, PickerList, PickerItem } from './PickerPopover';
-import { AliasInput } from './AliasInput';
+import { ExpressionEditor } from './ExpressionEditor';
 import { LuColumns3, LuCode, LuPlus, LuCheck, LuChevronRight } from 'react-icons/lu';
 
 interface ColumnsPickerProps {
@@ -309,35 +309,16 @@ export function ColumnsPicker({
                       padding={3}
                       width="280px"
                     >
-                      <VStack gap={2} align="stretch">
-                        <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" fontFamily="mono">
-                          Edit expression
-                        </Text>
-                        <Textarea
-                          value={editRawSql}
-                          onChange={(e) => setEditRawSql(e.target.value)}
-                          rows={3}
-                          fontFamily="mono"
-                          fontSize="xs"
-                          resize="vertical"
-                          bg="bg.subtle"
-                          border="1px solid"
-                          borderColor="border.default"
-                          borderRadius="md"
-                          _focus={{ borderColor: 'accent.teal', boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)' }}
-                        />
-                        <HStack gap={2}>
-                          <Text fontSize="xs" color="fg.muted" fontFamily="mono" flexShrink={0}>as</Text>
-                          <AliasInput
-                            value={editRawAlias}
-                            onChange={(a) => setEditRawAlias(a || '')}
-                            placeholder="alias"
-                          />
-                        </HStack>
-                        <Button size="xs" colorPalette="teal" fontFamily="mono" fontSize="xs" onClick={() => handleSaveRawColumn(index)}>
-                          Apply
-                        </Button>
-                      </VStack>
+                      <ExpressionEditor
+                        title="Edit expression"
+                        sql={editRawSql}
+                        onSqlChange={setEditRawSql}
+                        alias={editRawAlias}
+                        onAliasChange={setEditRawAlias}
+                        buttonLabel="Apply"
+                        onSubmit={() => handleSaveRawColumn(index)}
+                        disabled={!editRawSql.trim()}
+                      />
                     </PickerPopover>
                   ) : (
                     <QueryChip
@@ -388,43 +369,17 @@ export function ColumnsPicker({
             padding={3}
             width="280px"
           >
-            <VStack gap={2} align="stretch">
-              <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" fontFamily="mono">
-                SQL Expression
-              </Text>
-              <Textarea
-                value={newExprSql}
-                onChange={(e) => setNewExprSql(e.target.value)}
-                rows={3}
-                fontFamily="mono"
-                fontSize="xs"
-                placeholder="CASE WHEN status = 'active' THEN 1 ELSE 0 END"
-                resize="vertical"
-                bg="bg.subtle"
-                border="1px solid"
-                borderColor="border.default"
-                borderRadius="md"
-                _focus={{ borderColor: 'accent.teal', boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)' }}
-              />
-              <HStack gap={2}>
-                <Text fontSize="xs" color="fg.muted" fontFamily="mono" flexShrink={0}>as</Text>
-                <AliasInput
-                  value={newExprAlias}
-                  onChange={(a) => setNewExprAlias(a || '')}
-                  placeholder="alias"
-                />
-              </HStack>
-              <Button
-                size="xs"
-                colorPalette="teal"
-                onClick={handleAddExpression}
-                disabled={!newExprSql.trim()}
-                fontFamily="mono"
-                fontSize="xs"
-              >
-                Add
-              </Button>
-            </VStack>
+            <ExpressionEditor
+              title="SQL Expression"
+              sql={newExprSql}
+              onSqlChange={setNewExprSql}
+              alias={newExprAlias}
+              onAliasChange={setNewExprAlias}
+              placeholder="CASE WHEN status = 'active' THEN 1 ELSE 0 END"
+              buttonLabel="Add"
+              onSubmit={handleAddExpression}
+              disabled={!newExprSql.trim()}
+            />
           </PickerPopover>
         </Box>
       </VStack>
