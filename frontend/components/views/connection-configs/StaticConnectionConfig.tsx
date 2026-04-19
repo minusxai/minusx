@@ -70,14 +70,46 @@ type ActivePanel = null | 'csv-upload' | 'sheets-add';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Split files into plain CSV entries and Google Sheets groups (by spreadsheet_id). */
+type DisplayItem =
+  | { kind: 'csv'; file: CsvFileInfo }
+  | { kind: 'sheets'; id: string; files: CsvFileInfo[] };
+
+/**
+ * Build a unified ordered display list from config.files, preserving array order so
+ * newly-prepended items always appear at the top. Sheets with the same spreadsheet_id
+ * are grouped at the position of their first occurrence.
+ */
+function buildDisplayItems(files: CsvFileInfo[]): DisplayItem[] {
+  const sheetsMap = new Map<string, CsvFileInfo[]>();
+  for (const f of files) {
+    if (f.source_type === 'google_sheets' && f.spreadsheet_id) {
+      if (!sheetsMap.has(f.spreadsheet_id)) sheetsMap.set(f.spreadsheet_id, []);
+      sheetsMap.get(f.spreadsheet_id)!.push(f);
+    }
+  }
+
+  const items: DisplayItem[] = [];
+  const seenIds = new Set<string>();
+  for (const f of files) {
+    if (f.source_type === 'google_sheets' && f.spreadsheet_id) {
+      if (!seenIds.has(f.spreadsheet_id)) {
+        seenIds.add(f.spreadsheet_id);
+        items.push({ kind: 'sheets', id: f.spreadsheet_id, files: sheetsMap.get(f.spreadsheet_id)! });
+      }
+    } else {
+      items.push({ kind: 'csv', file: f });
+    }
+  }
+  return items;
+}
+
+/** @deprecated use buildDisplayItems; kept for collision detection which still needs both lists */
 function groupFiles(files: CsvFileInfo[]): {
   csvFiles: CsvFileInfo[];
   sheetsGroups: Map<string, CsvFileInfo[]>;
 } {
   const csvFiles: CsvFileInfo[] = [];
   const sheetsGroups = new Map<string, CsvFileInfo[]>();
-
   for (const f of files) {
     if (f.source_type === 'google_sheets' && f.spreadsheet_id) {
       if (!sheetsGroups.has(f.spreadsheet_id)) sheetsGroups.set(f.spreadsheet_id, []);
@@ -284,7 +316,8 @@ export default function StaticConnectionConfig({
   const [editError, setEditError] = useState('');
 
   const existingFiles = (config.files ?? []) as CsvFileInfo[];
-  const { csvFiles, sheetsGroups } = groupFiles(existingFiles);
+  const { sheetsGroups } = groupFiles(existingFiles);
+  const displayItems = buildDisplayItems(existingFiles);
   const collisionSet = findCollisions(existingFiles);
 
   // ── Rename handlers ───────────────────────────────────────────────────────
@@ -784,24 +817,22 @@ export default function StaticConnectionConfig({
 
           <VStack align="stretch" gap={3}>
 
-            {/* CSV files */}
-            {csvFiles.map((f) => (
-              <FileRow
-                key={f.s3_key}
-                f={f}
-                isCollision={collisionSet.has(`${f.schema_name}.${f.table_name}`)}
-                {...sharedRowProps}
-              />
-            ))}
-
-            {/* Google Sheets groups */}
-            {Array.from(sheetsGroups.entries()).map(([sheetId, files]) => {
-              const url = files[0]?.spreadsheet_url ?? '';
-              const isReimporting = reimportingId === sheetId;
-
+            {displayItems.map((item) => {
+              if (item.kind === 'csv') {
+                return (
+                  <FileRow
+                    key={item.file.s3_key}
+                    f={item.file}
+                    isCollision={collisionSet.has(`${item.file.schema_name}.${item.file.table_name}`)}
+                    {...sharedRowProps}
+                  />
+                );
+              }
+              const url = item.files[0]?.spreadsheet_url ?? '';
+              const isReimporting = reimportingId === item.id;
               return (
                 <Box
-                  key={sheetId}
+                  key={item.id}
                   p={2}
                   borderRadius="sm"
                   border="1px solid"
@@ -818,7 +849,7 @@ export default function StaticConnectionConfig({
                         {url}
                       </Text>
                       <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap">
-                        ({files.length} sheet{files.length !== 1 ? 's' : ''})
+                        ({item.files.length} sheet{item.files.length !== 1 ? 's' : ''})
                       </Text>
                     </HStack>
                     <HStack gap={1} flexShrink={0}>
@@ -827,7 +858,7 @@ export default function StaticConnectionConfig({
                         variant="ghost"
                         aria-label="Re-import sheets from this spreadsheet"
                         loading={isReimporting}
-                        onClick={() => handleReimport(sheetId)}
+                        onClick={() => handleReimport(item.id)}
                         title="Re-import all sheets from this spreadsheet"
                       >
                         {isReimporting ? <Spinner size="xs" /> : <LuRefreshCw />}
@@ -838,7 +869,7 @@ export default function StaticConnectionConfig({
                         colorPalette="red"
                         aria-label="Delete all sheets from this spreadsheet"
                         disabled={isReimporting}
-                        onClick={() => handleDeleteSheetGroup(sheetId)}
+                        onClick={() => handleDeleteSheetGroup(item.id)}
                       >
                         <LuTrash2 />
                       </Button>
@@ -847,7 +878,7 @@ export default function StaticConnectionConfig({
 
                   {/* Individual sheet rows — each is renameable */}
                   <VStack align="stretch" gap={2} pl={2}>
-                    {files.map((f) => (
+                    {item.files.map((f) => (
                       <FileRow
                         key={f.s3_key}
                         f={f}
