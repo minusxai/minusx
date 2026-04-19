@@ -1,7 +1,7 @@
 import type { TrendCompareMode } from '@/lib/types.gen'
 
 export interface TrendComparison {
-  /** The most recent value (last data point — may be a partial period) */
+  /** The displayed value — the "base" of the comparison (last point in 'last' mode, second-to-last in 'previous' mode) */
   currentValue: number
   /** Percentage change between the two compared periods, or null if not computable */
   percentChange: number | null
@@ -34,9 +34,7 @@ export function computeTrendComparison(
 
   if (data.length === 0) return empty
 
-  const currentValue = data[data.length - 1] || 0
-
-  if (data.length === 1) return { ...empty, currentValue }
+  if (data.length === 1) return { ...empty, currentValue: data[0] || 0 }
 
   // 'last' mode: compare last (base) vs second-to-last (previous)
   // 'previous' mode with 3+ points: compare second-to-last (base) vs third-to-last (previous)
@@ -59,6 +57,9 @@ export function computeTrendComparison(
   const compareValue = data[prevIdx]
   const compareBaseLabel = labels?.[baseIdx]
   const compareLabel = labels?.[prevIdx]
+
+  // The displayed "big number" is the base of the comparison
+  const currentValue = compareBaseValue
 
   let percentChange: number | null = null
   if (compareValue !== null && compareValue !== 0) {

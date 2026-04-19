@@ -32,9 +32,10 @@ describe('computeTrendComparison', () => {
   })
 
   describe('compareMode = "previous"', () => {
-    it('uses last value as the display value', () => {
+    it('uses the compare base (second-to-last) as the display value', () => {
       const result = computeTrendComparison(data, labels, 'previous')
-      expect(result.currentValue).toBe(150)
+      // Display value is Mar (300), not Apr (150)
+      expect(result.currentValue).toBe(300)
     })
 
     it('compares the two most recent complete periods (skips last)', () => {
@@ -95,7 +96,7 @@ describe('computeTrendComparison', () => {
   describe('without labels', () => {
     it('works with undefined labels', () => {
       const result = computeTrendComparison([100, 200, 300, 150], undefined, 'previous')
-      expect(result.currentValue).toBe(150)
+      expect(result.currentValue).toBe(300)
       expect(result.percentChange).toBeCloseTo(50)
       expect(result.compareLabel).toBeUndefined()
     })
