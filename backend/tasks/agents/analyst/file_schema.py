@@ -158,6 +158,15 @@ class VisualizationStyleConfig(BaseModel):
     markerSize: Optional[int] = Field(None, description="point marker size for charts that render markers, such as scatter and line")
     stacked: Optional[bool] = Field(None, description="whether bar and area series should be stacked. Defaults to true for those chart types.")
 
+class TrendCompareMode(str, Enum):
+    """Which data points to compare in a trend chart."""
+    LAST = "last"           # last vs second-to-last (includes partial current period)
+    PREVIOUS = "previous"   # second-to-last vs third-to-last (skips partial current period)
+
+class TrendConfig(BaseModel):
+    """Configuration for trend chart visualization."""
+    compareMode: Optional[TrendCompareMode] = Field(None, description="which periods to compare: 'last' (default, last vs second-to-last) or 'previous' (second-to-last vs third-to-last, skips partial current period)")
+
 class ChartAnnotation(BaseModel):
     """A chart annotation anchored to an existing chart x value and series with a short text label."""
     x: Union[str, float] = Field(..., description="X-axis value to anchor the annotation to")
@@ -177,6 +186,7 @@ class VisualizationSettings(BaseModel):
     annotations: Optional[List[ChartAnnotation]] = Field(None, description="annotations for cartesian charts. Each annotation specifies x, series, and text.")
     colors: Optional[Dict[str, str]] = Field(None, description="deprecated legacy color overrides. Use styleConfig.colors instead.")
     axisConfig: Optional[AxisConfig] = Field(None, description="axis configuration for scale type (linear or log). Only set when user explicitly requests log scale.")
+    trendConfig: Optional[TrendConfig] = Field(None, description="trend chart configuration (only used when type is 'trend')")
     geoConfig: Optional[GeoConfig] = Field(None, description="geo map configuration (only used when type is 'geo')")
     model_config = {
         "populate_by_name": True,
