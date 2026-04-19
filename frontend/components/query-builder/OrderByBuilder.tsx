@@ -20,6 +20,8 @@ interface OrderByBuilderProps {
   orderBy?: OrderByClause[];
   onChange: (orderBy: OrderByClause[] | undefined) => void;
   onClose?: () => void;
+  /** When provided, only these columns are sortable (e.g. SELECT columns in a summarize query) */
+  sortableColumns?: string[];
 }
 
 export function OrderByBuilder({
@@ -29,6 +31,7 @@ export function OrderByBuilder({
   orderBy = [],
   onChange,
   onClose,
+  sortableColumns,
 }: OrderByBuilderProps) {
   const clauses = orderBy || [];
 
@@ -108,7 +111,7 @@ export function OrderByBuilder({
       p={3}
     >
       <HStack justify="space-between" mb={2.5}>
-        <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
+        <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" fontFamily="mono">
           Sort
         </Text>
         {onClose && (
@@ -203,8 +206,14 @@ export function OrderByBuilder({
         >
           <PickerHeader>Sort by</PickerHeader>
           <PickerList maxH="250px" searchable searchPlaceholder="Search columns...">
-            {(query) =>
-              availableColumns
+            {(query) => {
+              const cols = sortableColumns
+                ? sortableColumns.map(name => {
+                    const found = availableColumns.find(c => c.name === name);
+                    return { name, type: found?.type, displayName: found?.displayName ?? name };
+                  })
+                : availableColumns;
+              return cols
                 .filter((col) => !query || col.name.toLowerCase().includes(query.toLowerCase()))
                 .map((col) => (
                   <PickerItem
@@ -244,16 +253,10 @@ export function OrderByBuilder({
                   >
                     {col.name}
                   </PickerItem>
-                ))
-            }
+                ));
+            }}
           </PickerList>
         </PickerPopover>
-
-        {clauses.length === 0 && (
-          <Text fontSize="xs" color="fg.muted" fontStyle="italic">
-            Click + to add sorting
-          </Text>
-        )}
       </HStack>
     </Box>
   );

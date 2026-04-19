@@ -122,7 +122,7 @@ export function GroupByBuilder({
 
   return (
     <Box>
-      <Text fontSize="sm" fontWeight="medium" mb={2}>
+      <Text fontSize="sm" fontWeight="medium" mb={2} fontFamily="mono">
         <HStack gap={1}>
           <LuGroup />
           <span>GROUP BY</span>
@@ -155,7 +155,7 @@ export function GroupByBuilder({
         ))}
 
         {(!groupBy || groupBy.columns.length === 0) && (
-          <Text fontSize="sm" color="fg.muted">
+          <Text fontSize="sm" color="fg.muted" fontFamily="mono">
             No columns grouped
           </Text>
         )}
@@ -180,7 +180,7 @@ export function GroupByBuilder({
               <SelectItem key={column.name} item={column.name}>
                 {column.name}
                 {column.type && (
-                  <Text as="span" fontSize="xs" color="fg.muted" ml={2}>
+                  <Text as="span" fontSize="xs" color="fg.muted" ml={2} fontFamily="mono">
                     {column.type}
                   </Text>
                 )}
@@ -194,7 +194,7 @@ export function GroupByBuilder({
           disabled={!selectedColumnToAdd || loading}
         >
           <LuPlus />
-          <Text ml={1}>Add</Text>
+          <Text ml={1} fontFamily="mono">Add</Text>
         </Button>
       </HStack>
 
@@ -202,7 +202,7 @@ export function GroupByBuilder({
       {warnings.length > 0 && (
         <VStack align="stretch" gap={1}>
           {warnings.map((warning, index) => (
-            <Text key={index} fontSize="xs" color="orange.500">
+            <Text key={index} fontSize="xs" color="orange.500" fontFamily="mono">
               ⚠️ {warning}
             </Text>
           ))}

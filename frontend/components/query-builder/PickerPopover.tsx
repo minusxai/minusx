@@ -65,6 +65,7 @@ export function PickerHeader({ children }: { children: React.ReactNode }) {
       textTransform="uppercase"
       px={2}
       py={1.5}
+      fontFamily="mono"
     >
       {children}
     </Text>
@@ -132,6 +133,7 @@ export function PickerList({
               bg="transparent"
               border="none"
               fontSize="sm"
+              fontFamily="mono"
               px={0}
               h="auto"
               _focus={{ outline: 'none', boxShadow: 'none' }}
@@ -142,7 +144,7 @@ export function PickerList({
       )}
       <VStack gap={0.5} align="stretch" maxH={maxH} overflowY={maxH ? 'auto' : undefined}>
         {isEmpty && searchQuery ? (
-          <Text fontSize="xs" color="fg.muted" px={2} py={2} textAlign="center">
+          <Text fontSize="xs" color="fg.muted" px={2} py={2} textAlign="center" fontFamily="mono">
             No results for &ldquo;{searchQuery}&rdquo;
           </Text>
         ) : (
@@ -174,7 +176,7 @@ export function PickerItem({
 }: PickerItemProps) {
   const content =
     typeof children === 'string' ? (
-      <Text fontSize="sm">{children}</Text>
+      <Text fontSize="sm" fontFamily="mono">{children}</Text>
     ) : (
       children
     );

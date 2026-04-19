@@ -6,12 +6,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Box, HStack, Text, VStack, SimpleGrid, Input, Button, Textarea } from '@chakra-ui/react';
+import { Box, HStack, Text, VStack, SimpleGrid, Input, Button } from '@chakra-ui/react';
 import { SelectColumn, GroupByClause, GroupByItem } from '@/lib/types';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { QueryChip, AddChipButton, getColumnIcon } from './QueryChip';
 import { PickerPopover, PickerHeader, PickerList, PickerItem } from './PickerPopover';
 import { AliasInput } from './AliasInput';
+import { ExpressionEditor } from './ExpressionEditor';
 import { LuSigma, LuX, LuCalendar, LuCode } from 'react-icons/lu';
 import { Checkbox } from '@/components/ui/checkbox';
 
@@ -452,8 +453,9 @@ export function SummarizeSection({
 
   const formatMetricLabel = (col: SelectColumn) => {
     const aggLabel = AGGREGATES.find((a) => a.value === col.aggregate)?.shortLabel || col.aggregate;
-    const alias = col.alias || `${col.aggregate?.toLowerCase()}_${col.column === '*' ? 'all' : col.column}`;
-    const inner = col.column === '*' ? aggLabel : `${aggLabel}(${col.column})`;
+    const isStarOrNull = col.column === '*' || col.column == null;
+    const alias = col.alias || `${col.aggregate?.toLowerCase()}_${isStarOrNull ? 'all' : col.column}`;
+    const inner = isStarOrNull ? aggLabel : `${aggLabel}(${col.column})`;
     const withWrapper = col.wrapper_function === 'ROUND'
       ? `ROUND(${inner}${col.wrapper_args?.length ? `, ${col.wrapper_args[0]}` : ''})`
       : inner;
@@ -479,7 +481,7 @@ export function SummarizeSection({
       p={3}
     >
       <HStack justify="space-between" mb={2.5}>
-        <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
+        <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" fontFamily="mono">
           Summarize
         </Text>
         {onClose && (
@@ -521,30 +523,17 @@ export function SummarizeSection({
             padding={3}
             width="340px"
           >
-            <VStack gap={2.5} align="stretch">
-              <HStack justify="space-between" align="center">
-                <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
-                  SQL Expression
-                </Text>
-                <AliasInput
-                  value={editRawAlias}
-                  onChange={(a) => setEditRawAlias(a || '')}
-                  placeholder="alias"
-                />
-              </HStack>
-              <Textarea
-                value={editRawSql}
-                onChange={(e) => setEditRawSql(e.target.value)}
-                rows={4}
-                fontFamily="mono"
-                fontSize="xs"
-                placeholder="e.g. ROUND(COUNT(*) * 1.0 / COUNT(DISTINCT user_id), 2)"
-                resize="vertical"
-              />
-              <Button size="sm" colorPalette="blue" onClick={handleSaveRawMetric}>
-                Apply
-              </Button>
-            </VStack>
+            <ExpressionEditor
+              title="SQL Expression"
+              sql={editRawSql}
+              onSqlChange={setEditRawSql}
+              alias={editRawAlias}
+              onAliasChange={setEditRawAlias}
+              placeholder="e.g. ROUND(COUNT(*) * 1.0 / COUNT(DISTINCT user_id), 2)"
+              buttonLabel="Apply"
+              onSubmit={handleSaveRawMetric}
+              disabled={!editRawSql.trim()}
+            />
           </PickerPopover>
         ))}
 
@@ -574,11 +563,11 @@ export function SummarizeSection({
             padding={3}
           >
             <HStack justify="space-between" align="center" mb={2.5}>
-              <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
+              <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" fontFamily="mono">
                 Edit metric
               </Text>
               <HStack gap={1.5} align="center">
-                <Text fontSize="xs" color="fg.muted">as</Text>
+                <Text fontSize="xs" color="fg.muted" fontFamily="mono">as</Text>
                 <AliasInput
                   value={editAlias}
                   onChange={(alias) => setEditAlias(alias || '')}
@@ -615,11 +604,11 @@ export function SummarizeSection({
                 onCheckedChange={(e) => setWrapWithRound(e.checked === true)}
                 size="sm"
               >
-                <Text fontSize="xs" color="fg">ROUND</Text>
+                <Text fontSize="xs" color="fg" fontFamily="mono">ROUND</Text>
               </Checkbox>
               {wrapWithRound && (
                 <HStack gap={1} align="center">
-                  <Text fontSize="xs" color="fg.muted">decimals:</Text>
+                  <Text fontSize="xs" color="fg.muted" fontFamily="mono">decimals:</Text>
                   <Input
                     size="xs"
                     type="number"
@@ -676,7 +665,7 @@ export function SummarizeSection({
           }
           padding={3}
         >
-          <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" mb={2.5}>
+          <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" mb={2.5} fontFamily="mono">
             Add metric
           </Text>
           <SimpleGrid columns={3} gap={1.5} mb={1}>
@@ -750,40 +739,27 @@ export function SummarizeSection({
               onClick={() => setAddExprOpen(true)}
             >
               <LuCode size={11} color="var(--chakra-colors-fg-muted)" />
-              <Text fontSize="xs" color="fg.muted" fontWeight="500">expr</Text>
+              <Text fontSize="xs" color="fg.muted" fontWeight="500" fontFamily="mono">expr</Text>
             </Box>
           }
           padding={3}
           width="340px"
         >
-          <VStack gap={2.5} align="stretch">
-            <HStack justify="space-between" align="center">
-              <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
-                SQL Expression
-              </Text>
-              <AliasInput
-                value={newExprAlias}
-                onChange={(a) => setNewExprAlias(a || '')}
-                placeholder="alias"
-              />
-            </HStack>
-            <Textarea
-              value={newExprSql}
-              onChange={(e) => setNewExprSql(e.target.value)}
-              rows={4}
-              fontFamily="mono"
-              fontSize="xs"
-              placeholder="e.g. ROUND(COUNT(*) * 1.0 / COUNT(DISTINCT user_id), 2)"
-              resize="vertical"
-            />
-            <Button size="sm" colorPalette="blue" onClick={handleAddExprMetric} disabled={!newExprSql.trim()}>
-              Add
-            </Button>
-          </VStack>
+          <ExpressionEditor
+            title="SQL Expression"
+            sql={newExprSql}
+            onSqlChange={setNewExprSql}
+            alias={newExprAlias}
+            onAliasChange={setNewExprAlias}
+            placeholder="e.g. ROUND(COUNT(*) * 1.0 / COUNT(DISTINCT user_id), 2)"
+            buttonLabel="Add"
+            onSubmit={handleAddExprMetric}
+            disabled={!newExprSql.trim()}
+          />
         </PickerPopover>
 
         {/* "by" separator - only show if we have metrics */}
-        <Text fontSize="xs" color="fg.muted" fontWeight="500" px={1}>
+        <Text fontSize="xs" color="fg.muted" fontWeight="500" px={1} fontFamily="mono">
             group by
         </Text>
 
@@ -832,23 +808,15 @@ export function SummarizeSection({
                 padding={3}
                 width="340px"
               >
-                <VStack gap={2.5} align="stretch">
-                  <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
-                    Group By Expression
-                  </Text>
-                  <Textarea
-                    value={editRawDimSql}
-                    onChange={(e) => setEditRawDimSql(e.target.value)}
-                    rows={4}
-                    fontFamily="mono"
-                    fontSize="xs"
-                    placeholder="e.g. DATE_TRUNC('month', created_at)"
-                    resize="vertical"
-                  />
-                  <Button size="sm" colorPalette="blue" onClick={handleSaveRawDim} disabled={!editRawDimSql.trim()}>
-                    Apply
-                  </Button>
-                </VStack>
+                <ExpressionEditor
+                  title="Group By Expression"
+                  sql={editRawDimSql}
+                  onSqlChange={setEditRawDimSql}
+                  placeholder="e.g. DATE_TRUNC('month', created_at)"
+                  buttonLabel="Apply"
+                  onSubmit={handleSaveRawDim}
+                  disabled={!editRawDimSql.trim()}
+                />
               </PickerPopover>
             );
           }
@@ -936,7 +904,7 @@ export function SummarizeSection({
                         }}
                         rightElement={
                           isDateColumn(col.type) ? (
-                            <Text fontSize="xs" color="fg.muted">›</Text>
+                            <Text fontSize="xs" color="fg.muted" fontFamily="mono">›</Text>
                           ) : undefined
                         }
                       >
@@ -957,7 +925,7 @@ export function SummarizeSection({
                 >
                   ‹
                 </Box>
-                <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase">
+                <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" fontFamily="mono">
                   {selectedDateColumn.name}
                 </Text>
               </HStack>

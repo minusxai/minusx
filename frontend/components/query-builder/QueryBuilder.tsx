@@ -5,9 +5,9 @@
 
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Box, VStack, Spinner, Text, HStack, Button } from '@chakra-ui/react';
-import { LuPlay, LuSparkles, LuCode, LuChevronDown, LuChevronRight, LuDatabase } from 'react-icons/lu';
+import { LuPlay, LuCode, LuChevronDown, LuChevronRight, LuDatabase, LuTriangleAlert } from 'react-icons/lu';
 import { QueryChip } from './QueryChip';
 import { QueryIR, SelectColumn, TableReference } from '@/lib/types';
 import { isCompoundQueryIR } from '@/lib/sql/ir-types';
@@ -18,10 +18,54 @@ import type { QuestionOption } from '@/lib/hooks/useAvailableQuestions';
 import { DataSection } from './DataSection';
 import { FilterSection } from './FilterSection';
 import { SummarizeSection } from './SummarizeSection';
-import { ColumnsSection } from './ColumnsSection';
 import { ActionToolbar } from './ActionToolbar';
 import { JoinBuilder } from './JoinBuilder';
 import { OrderByBuilder } from './OrderByBuilder';
+
+/** Error boundary — catches render errors in QueryBuilder and shows a graceful fallback */
+class QueryBuilderErrorBoundary extends React.Component<
+  { children: React.ReactNode; onReset?: () => void },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode; onReset?: () => void }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('[QueryBuilder] Render error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <Box p={4}>
+          <VStack align="start" gap={3}>
+            <HStack gap={2} color="orange.400">
+              <LuTriangleAlert size={16} />
+              <Text fontSize="sm" fontWeight="600" fontFamily="mono">
+                This query cannot be displayed in GUI mode
+              </Text>
+            </HStack>
+            <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+              Switch to SQL mode to edit this query directly.
+            </Text>
+            {this.state.error && (
+              <Text fontSize="xs" color="fg.subtle" fontFamily="mono">
+                {this.state.error.message}
+              </Text>
+            )}
+          </VStack>
+        </Box>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function IRDebugView({ ir }: { ir: QueryIR | null }) {
   const showDebug = useAppSelector(selectDevMode);
@@ -52,7 +96,7 @@ function IRDebugView({ ir }: { ir: QueryIR | null }) {
           <Box color="fg.muted">
             <LuCode size={14} />
           </Box>
-          <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em">
+          <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" fontFamily="mono">
             IR JSON
           </Text>
         </HStack>
@@ -105,7 +149,15 @@ interface QueryBuilderProps {
   whitelistedSchema?: Array<{ schema: string; tables: Array<{ table: string; columns: Array<{ name: string; type: string }> }> }>;
 }
 
-export function QueryBuilder({
+export function QueryBuilder(props: QueryBuilderProps) {
+  return (
+    <QueryBuilderErrorBoundary>
+      <QueryBuilderInner {...props} />
+    </QueryBuilderErrorBoundary>
+  );
+}
+
+function QueryBuilderInner({
   databaseName,
   dialect,
   sql,
@@ -181,7 +233,7 @@ export function QueryBuilder({
           setIsDirty(false);
 
           // Show sections if they have content
-          if (simpleIR.where && simpleIR.where.conditions.length > 0) {
+          if (simpleIR.where?.conditions?.length) {
             setShowFilterSection(true);
           }
           const hasAggregates = simpleIR.select.some((c) => c.type === 'aggregate');
@@ -189,7 +241,7 @@ export function QueryBuilder({
           if (hasAggregates || hasRawWithGroupBy) {
             setShowSummarizeSection(true);
           }
-          if (simpleIR.having && simpleIR.having.conditions.length > 0) {
+          if (simpleIR.having?.conditions?.length) {
             setShowHavingSection(true);
           }
           if (simpleIR.joins && simpleIR.joins.length > 0) {
@@ -302,7 +354,20 @@ export function QueryBuilder({
   }, []);
 
   const handleSummarizeClick = useCallback(() => {
-    setShowSummarizeSection((prev) => !prev);
+    setShowSummarizeSection((prev) => {
+      const next = !prev;
+      if (next) {
+        // Opening Summarize: strip SELECT * and plain columns — Summarize manages its own
+        setIr((ir) => {
+          if (!ir) return null;
+          const withoutPlainColumns = ir.select.filter(
+            (c) => c.type !== 'column'
+          );
+          return { ...ir, select: withoutPlainColumns };
+        });
+      }
+      return next;
+    });
   }, []);
 
   const handleJoinClick = useCallback(() => {
@@ -325,12 +390,14 @@ export function QueryBuilder({
 
   const handleSummarizeClose = useCallback(() => {
     setShowSummarizeSection(false);
-    // Remove all aggregate and raw metric columns and group by
+    // Remove aggregates/raw metrics and group by; restore SELECT * if no plain columns remain
     setIr((prev) => {
       if (!prev) return null;
+      const remaining = prev.select.filter((c) => c.type !== 'aggregate' && c.type !== 'raw');
+      const hasPlainColumns = remaining.some((c) => c.type === 'column');
       return {
         ...prev,
-        select: prev.select.filter((c) => c.type !== 'aggregate' && c.type !== 'raw'),
+        select: hasPlainColumns ? remaining : [{ type: 'column', column: '*' }, ...remaining],
         group_by: undefined,
       };
     });
@@ -357,7 +424,7 @@ export function QueryBuilder({
       <Box p={4}>
         <HStack gap={3}>
           <Spinner size="sm" color="blue.400" />
-          <Text fontSize="sm" color="fg.muted">
+          <Text fontSize="sm" color="fg.muted" fontFamily="mono">
             Loading query builder...
           </Text>
         </HStack>
@@ -371,10 +438,10 @@ export function QueryBuilder({
     return (
       <Box p={4}>
         <VStack align="start" gap={2}>
-          <Text fontSize="sm" color="red.400">
+          <Text fontSize="sm" color="red.400" fontFamily="mono">
             {error}
           </Text>
-          <Text fontSize="xs" color="fg.muted">
+          <Text fontSize="xs" color="fg.muted" fontFamily="mono">
             This query cannot be edited in GUI mode. Switch to SQL mode to edit.
           </Text>
         </VStack>
@@ -388,12 +455,6 @@ export function QueryBuilder({
     return (
       <Box p={4}>
         <VStack align="stretch" gap={4}>
-          <HStack gap={2}>
-            <LuSparkles size={16} />
-            <Text fontSize="sm" color="fg.muted">
-              Start by selecting a table to query
-            </Text>
-          </HStack>
           {ir && (
             <DataSection
               databaseName={databaseName}
@@ -415,10 +476,10 @@ export function QueryBuilder({
     ...(ir.joins || []).map((j) => j.table.alias || j.table.table),
   ];
 
-  const hasFilter = !!ir.where && ir.where.conditions.length > 0;
+  const hasFilter = !!(ir.where?.conditions?.length);
   const hasSummarize = ir.select.some((c) => c.type === 'aggregate') ||
     (ir.select.some((c) => c.type === 'raw') && !!ir.group_by);
-  const hasHaving = !!ir.having && ir.having.conditions.length > 0;
+  const hasHaving = !!(ir.having?.conditions?.length);
   const hasJoin = !!ir.joins && ir.joins.length > 0;
   const hasSort = !!ir.order_by && ir.order_by.length > 0;
 
@@ -434,7 +495,7 @@ export function QueryBuilder({
             borderColor="border.muted"
             p={3}
           >
-            <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" mb={2.5}>
+            <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" mb={2.5} fontFamily="mono">
               WITH (CTEs)
             </Text>
             <HStack gap={2} flexWrap="wrap">
@@ -457,13 +518,16 @@ export function QueryBuilder({
           </Box>
         )}
 
-        {/* Data Section - Table selection */}
+        {/* Data Section - Table selection + inline columns picker */}
         <DataSection
           databaseName={databaseName}
           value={ir.from}
           onChange={handleFromTableChange}
           availableQuestions={availableQuestions}
           whitelistedSchema={whitelistedSchema}
+          columns={ir.select}
+          onColumnsChange={handleColumnsChange}
+          showColumns={!showSummarizeSection}
         />
 
         {/* Join Section - right after table selection */}
@@ -476,17 +540,6 @@ export function QueryBuilder({
             existingTables={existingTables}
             onClose={handleJoinClose}
             whitelistedSchema={whitelistedSchema}
-          />
-        )}
-
-        {/* Columns Section - SELECT columns for non-aggregate queries */}
-        {!showSummarizeSection && (
-          <ColumnsSection
-            databaseName={databaseName}
-            tableName={ir.from.table}
-            tableSchema={ir.from.schema}
-            columns={ir.select}
-            onChange={handleColumnsChange}
           />
         )}
 
@@ -532,16 +585,37 @@ export function QueryBuilder({
         )}
 
         {/* Sort Section (hidden for compound members) */}
-        {!isCompoundMember && showSortPanel && (
-          <OrderByBuilder
-            databaseName={databaseName}
-            tableName={ir.from.table}
-            tableSchema={ir.from.schema}
-            orderBy={ir.order_by}
-            onChange={handleOrderByChange}
-            onClose={handleSortClose}
-          />
-        )}
+        {!isCompoundMember && showSortPanel && (() => {
+          // Compute sortable columns: when summarizing, only group-by dims + aggregate aliases
+          const hasStarColumn = ir.select.some(c => c.type === 'column' && c.column === '*');
+          let sortable: string[] | undefined;
+          if (showSummarizeSection && !hasStarColumn) {
+            sortable = [];
+            for (const col of ir.select) {
+              if (col.type === 'column' && col.column && col.column !== '*') sortable.push(col.alias || col.column);
+              if (col.type === 'aggregate' && col.alias) sortable.push(col.alias);
+              if (col.type === 'expression' && col.alias) sortable.push(col.alias);
+              if (col.type === 'raw' && col.alias) sortable.push(col.alias);
+            }
+            // Also include group-by columns
+            if (ir.group_by) {
+              for (const gb of ir.group_by.columns) {
+                if (gb.column && !sortable.includes(gb.column)) sortable.push(gb.column);
+              }
+            }
+          }
+          return (
+            <OrderByBuilder
+              databaseName={databaseName}
+              tableName={ir.from.table}
+              tableSchema={ir.from.schema}
+              orderBy={ir.order_by}
+              onChange={handleOrderByChange}
+              onClose={handleSortClose}
+              sortableColumns={sortable}
+            />
+          );
+        })()}
 
         {/* Action Toolbar */}
         <ActionToolbar
@@ -581,7 +655,7 @@ export function QueryBuilder({
             letterSpacing="0.02em"
           >
             <LuPlay size={18} fill="white"/>
-            <Text ml={2}>Execute</Text>
+            <Text ml={2} fontFamily="mono">Execute</Text>
           </Button>
         )}
 

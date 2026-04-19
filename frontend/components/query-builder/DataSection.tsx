@@ -8,10 +8,12 @@
 import { useState, useEffect } from 'react';
 import { Box, HStack, Text, Spinner } from '@chakra-ui/react';
 import { TableReference } from '@/lib/types';
+import { SelectColumn } from '@/lib/sql/ir-types';
 import { CompletionsAPI } from '@/lib/data/completions/completions';
 import { QueryChip } from './QueryChip';
 import { PickerPopover, PickerHeader, PickerList, PickerItem } from './PickerPopover';
 import { AliasInput } from './AliasInput';
+import { ColumnsPicker } from './ColumnsPicker';
 import { LuTable, LuDatabase, LuChartBar } from 'react-icons/lu';
 import type { QuestionOption } from '@/lib/hooks/useAvailableQuestions';
 
@@ -21,9 +23,12 @@ interface DataSectionProps {
   onChange: (table: TableReference) => void;
   availableQuestions?: QuestionOption[];
   whitelistedSchema?: Array<{ schema: string; tables: Array<{ table: string; columns: Array<{ name: string; type: string }> }> }>;
+  columns?: SelectColumn[];
+  onColumnsChange?: (columns: SelectColumn[]) => void;
+  showColumns?: boolean;
 }
 
-export function DataSection({ databaseName, value, onChange, availableQuestions = [], whitelistedSchema }: DataSectionProps) {
+export function DataSection({ databaseName, value, onChange, availableQuestions = [], whitelistedSchema, columns, onColumnsChange, showColumns = false }: DataSectionProps) {
   const [tables, setTables] = useState<Array<{ name: string; schema?: string; displayName: string }>>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
@@ -85,11 +90,12 @@ export function DataSection({ databaseName, value, onChange, availableQuestions 
       borderColor="border.muted"
       p={3}
     >
-      <Text fontSize="xs" fontWeight="600" color="fg.muted" mb={2.5} textTransform="uppercase" letterSpacing="0.05em">
+      <Text fontSize="xs" fontWeight="600" color="fg.muted" mb={2.5} textTransform="uppercase" letterSpacing="0.05em" fontFamily="mono">
         Data
       </Text>
 
       <HStack gap={2} align="center" flexWrap="wrap">
+        {/* Table picker */}
         <PickerPopover
           open={open}
           onOpenChange={(details) => setOpen(details.open)}
@@ -105,25 +111,25 @@ export function DataSection({ databaseName, value, onChange, availableQuestions 
                   {isReference
                     ? (referencedQuestion?.name ?? value.table)
                     : (value.schema ? `${value.schema}.${value.table}` : value.table)}
-                  {value.alias && <Text as="span" color="fg.muted" fontWeight="400"> as {value.alias}</Text>}
+                  {value.alias && <Text as="span" color="fg.muted" fontWeight="400" fontFamily="mono"> as {value.alias}</Text>}
                 </QueryChip>
               ) : (
                 <Box
                   as="button"
-                  bg="bg.subtle"
+                  bg="transparent"
                   border="1px dashed"
                   borderColor="border.emphasized"
-                  borderRadius="lg"
-                  px={3}
-                  py={2}
+                  borderRadius="md"
+                  px={2}
+                  py={1}
                   cursor="pointer"
                   _hover={{ bg: 'bg.muted', borderStyle: 'solid' }}
                   transition="all 0.15s ease"
                   onClick={() => setOpen(true)}
                 >
-                  <HStack gap={2}>
-                    <Box color="accent.primary"><LuDatabase size={14} /></Box>
-                    <Text fontSize="sm" color="accent.primary">
+                  <HStack gap={1.5}>
+                    <Box color="accent.primary"><LuDatabase size={12} /></Box>
+                    <Text fontSize="xs" color="accent.primary" fontFamily="mono" fontWeight="500">
                       Select a table...
                     </Text>
                   </HStack>
@@ -136,7 +142,7 @@ export function DataSection({ databaseName, value, onChange, availableQuestions 
             <PickerHeader>Tables</PickerHeader>
             {value.table && (
               <HStack gap={1.5} align="center">
-                <Text fontSize="xs" color="fg.muted" flexShrink={0}>as</Text>
+                <Text fontSize="xs" color="fg.muted" flexShrink={0} fontFamily="mono">as</Text>
                 <AliasInput
                   value={value.alias}
                   onChange={(alias) => handleAliasChange(alias || '')}
@@ -151,7 +157,7 @@ export function DataSection({ databaseName, value, onChange, availableQuestions 
               loading ? (
                 <HStack px={2} py={3} justify="center">
                   <Spinner size="sm" />
-                  <Text fontSize="sm" color="fg.muted">
+                  <Text fontSize="sm" color="fg.muted" fontFamily="mono">
                     Loading...
                   </Text>
                 </HStack>
@@ -179,7 +185,7 @@ export function DataSection({ databaseName, value, onChange, availableQuestions 
                     <>
                       {(tables.length > 0 || query) && (
                         <Text fontSize="10px" fontWeight="600" color="fg.subtle" textTransform="uppercase"
-                          letterSpacing="0.08em" px={2} pt={2} pb={1}>
+                          letterSpacing="0.08em" px={2} pt={2} pb={1} fontFamily="mono">
                           Questions
                         </Text>
                       )}
@@ -205,6 +211,17 @@ export function DataSection({ databaseName, value, onChange, availableQuestions 
             }
           </PickerList>
         </PickerPopover>
+
+        {/* Columns picker - inline next to table chip */}
+        {showColumns && value.table && onColumnsChange && columns && (
+          <ColumnsPicker
+            databaseName={databaseName}
+            tableName={value.table}
+            tableSchema={value.schema}
+            columns={columns}
+            onChange={onColumnsChange}
+          />
+        )}
       </HStack>
     </Box>
   );

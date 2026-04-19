@@ -149,6 +149,7 @@ export function QueryChip({
         color={styles.color}
         whiteSpace="nowrap"
         lineHeight="1.2"
+        fontFamily="mono"
       >
         {children}
       </Text>
@@ -208,7 +209,7 @@ export function AddChipButton({ onClick, variant = 'neutral', size = 'sm' }: Add
       alignItems="center"
       justifyContent="center"
     >
-      <Text fontSize={size === 'sm' ? 'sm' : 'md'} color={styles.color} fontWeight="500" lineHeight="1">
+      <Text fontSize={size === 'sm' ? 'sm' : 'md'} color={styles.color} fontWeight="500" lineHeight="1" fontFamily="mono">
         +
       </Text>
     </Box>

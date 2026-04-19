@@ -49,12 +49,14 @@ function ActionButton({ icon, label, onClick, isActive }: ActionButtonProps) {
       px={3}
       py={2}
       flex={1}
+      minH="56px"
       borderRadius="lg"
       border="1px solid"
       borderColor={isActive ? 'accent.teal' : 'border.muted'}
       bg={isActive ? 'rgba(22, 160, 133, 0.1)' : 'transparent'}
       cursor={isActive ? 'default' : 'pointer'}
       transition="all 0.15s ease"
+      justify="center"
       _hover={isActive ? {} : {
         bg: 'bg.muted',
         borderColor: 'border.default',
@@ -65,7 +67,7 @@ function ActionButton({ icon, label, onClick, isActive }: ActionButtonProps) {
       <Box color={isActive ? 'accent.teal' : 'fg.muted'} fontSize="lg">
         {icon}
       </Box>
-      <Text fontSize="xs" color={isActive ? 'accent.teal' : 'fg.muted'} fontWeight="500">
+      <Text fontSize="xs" color={isActive ? 'accent.teal' : 'fg.muted'} fontWeight="500" whiteSpace="nowrap" fontFamily="mono">
         {label}
       </Text>
     </VStack>
@@ -158,12 +160,14 @@ export function ActionToolbar({
             px={3}
             py={2}
             flex={1}
+            minH="56px"
             borderRadius="lg"
             border="1px solid"
             borderColor={currentLimit ? 'accent.teal' : 'border.muted'}
             bg={currentLimit ? 'rgba(22, 160, 133, 0.1)' : 'transparent'}
             cursor="pointer"
             transition="all 0.15s ease"
+            justify="center"
             _hover={{
               bg: 'bg.muted',
               borderColor: 'border.default',
@@ -173,7 +177,7 @@ export function ActionToolbar({
             <Box color={currentLimit ? 'accent.teal' : 'fg.muted'} fontSize="lg">
               <LuListOrdered size={18} />
             </Box>
-            <Text fontSize="xs" color={currentLimit ? 'accent.teal' : 'fg.muted'} fontWeight="500">
+            <Text fontSize="xs" color={currentLimit ? 'accent.teal' : 'fg.muted'} fontWeight="500" whiteSpace="nowrap" fontFamily="mono">
               {currentLimit ? `${currentLimit} rows` : 'Row limit'}
             </Text>
           </VStack>
@@ -183,13 +187,14 @@ export function ActionToolbar({
             <Popover.Content width="180px" bg="bg.elevated" p={0} overflow="hidden" borderRadius="lg">
               <Popover.Body p={3}>
                 <VStack gap={2} align="stretch">
-                  <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase">
+                  <Text fontSize="xs" fontWeight="600" color="fg.muted" textTransform="uppercase" fontFamily="mono">
                     Row limit
                   </Text>
                   <Input
                     type="number"
                     size="sm"
                     placeholder="No limit"
+                    fontFamily="mono"
                     value={limitValue}
                     onChange={(e) => setLimitValue(e.target.value)}
                     onKeyDown={(e) => {
