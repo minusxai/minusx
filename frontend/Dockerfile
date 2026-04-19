@@ -13,8 +13,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy package files
+# Copy package files and postinstall script (needed during npm ci)
 COPY package*.json ./
+COPY scripts/copy-duckdb-wasm.mjs ./scripts/copy-duckdb-wasm.mjs
 
 RUN npm ci
 
