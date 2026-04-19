@@ -6,8 +6,8 @@ import { LuSparkles, LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import SchemaTreeView, { type WhitelistItem, type SchemaTreeItem } from '@/components/SchemaTreeView';
 import { pulseKeyframes, sparkleKeyframes, cursorBlinkKeyframes } from '@/lib/ui/animations';
 import { useConnections } from '@/lib/hooks/useConnections';
-import { useFile } from '@/lib/hooks/file-state-hooks';
-import { createVirtualFile, editFile, publishFile } from '@/lib/api/file-state';
+import { useFile, useFileByPath } from '@/lib/hooks/file-state-hooks';
+import { editFile, publishFile } from '@/lib/api/file-state';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { createConversation, selectActiveConversation, selectConversation, interruptChat, generateVirtualConversationId } from '@/store/chatSlice';
 import { selectAugmentedFiles } from '@/lib/store/file-selectors';
@@ -15,7 +15,6 @@ import { compressAugmentedFile } from '@/lib/api/compress-augmented';
 import Editor from '@monaco-editor/react';
 import Markdown from '@/components/Markdown';
 import ChatInterface from '@/components/explore/ChatInterface';
-import { useFilesByCriteria } from '@/lib/hooks/file-state-hooks';
 import type { ContextContent, Whitelist, WhitelistNode } from '@/lib/types';
 
 const TYPEWRITER_SPEED = 35;
@@ -100,15 +99,12 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
   const showDebug = useAppSelector((state) => state.ui.devMode);
   const dispatch = useAppDispatch();
 
-  // Check if a context file already exists (persisted, id > 0)
-  const contextCriteria = useMemo(() => ({ type: 'context' as const }), []);
-  const { files: existingContextFiles } = useFilesByCriteria({ criteria: contextCriteria, partial: true });
-  const existingContext = existingContextFiles.find(f => (f.id as number) > 0);
+  // Load the existing context file — auto-created for every company on init
+  const { file: contextByPath, loading: contextLoading } = useFileByPath('/org/context');
+  const realFileId = contextByPath ? (contextByPath.fileState.id as number) : null;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [description, setDescription] = useState('');
-  // Virtual file ID (negative) — only persisted on "Continue"
-  const [virtualFileId, setVirtualFileId] = useState<number | null>(null);
   const [showAgentFeed, setShowAgentFeed] = useState(false);
 
   // Typewriter effect for greeting
@@ -138,8 +134,8 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
   );
   const isAgentRunning = showAgentFeed && conversation?.executionState !== 'FINISHED';
 
-  // Watch the virtual file in Redux for agent edits
-  const { fileState: contextFile } = useFile(virtualFileId ?? undefined) ?? {};
+  // Watch the real context file in Redux for agent edits
+  const { fileState: contextFile } = useFile(realFileId ?? undefined) ?? {};
 
   // Sync description from Redux when agent edits the file
   const lastSyncedContent = useRef<string | null>(null);
@@ -175,7 +171,7 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
     return conn?.schema?.schemas ?? [];
   }, [connections, connectionName]);
 
-  const loading = connectionsLoading;
+  const loading = connectionsLoading || contextLoading;
 
   const defaultWhitelist: WhitelistItem[] = useMemo(() => {
     return schemas.map(s => ({ type: 'schema' as const, name: s.schema }));
@@ -188,55 +184,23 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
     setWhitelist(newWhitelist);
   }, []);
 
-  // Create virtual context file on mount (Redux-only, not persisted to DB)
-  const hasCreatedVirtual = useRef(false);
+  // Fire onContextCreated once the real context file is loaded
+  const hasNotifiedRef = useRef(false);
   useEffect(() => {
-    if (hasCreatedVirtual.current || loading || virtualFileId) return;
-    hasCreatedVirtual.current = true;
+    if (hasNotifiedRef.current || !realFileId) return;
+    hasNotifiedRef.current = true;
+    onContextCreated?.(realFileId);
+  }, [realFileId, onContextCreated]);
 
-    createVirtualFile('context').then((vId) => {
-      // Set initial content with whitelisted tables + empty doc
-      const whitelist: Whitelist = [{
-        name: connectionName,
-        type: 'connection' as const,
-        children: schemas.map(s => ({ type: 'schema' as const, name: s.schema } as WhitelistNode)),
-      }];
-      const contextContent: ContextContent = {
-        versions: [{
-          version: 1,
-          whitelist,
-          docs: [{ content: '' }],
-          createdAt: new Date().toISOString(),
-          createdBy: 0,
-          description: 'Initial setup',
-        }],
-        published: { all: 1 },
-      };
-      editFile({ fileId: vId, changes: { content: contextContent } });
-      setVirtualFileId(vId);
-      onContextCreated?.(vId);
-    }).catch((err) => {
-      console.error('[StepContext] Virtual file creation failed:', err);
-      hasCreatedVirtual.current = false;
-    });
-  }, [loading, virtualFileId, connectionName, schemas, onContextCreated]);
-
-  /** Save (publish) the virtual file to DB and advance to next step.
-   *  If a context file already exists, skip publishing and use the existing one. */
+  /** Save the context file (already exists in DB) and advance to next step. */
   const handleSave = useCallback(async () => {
-    // If a context already exists in the DB, just use it
-    if (existingContext) {
-      onComplete(existingContext.id as number);
-      return;
-    }
-    if (!virtualFileId) {
-      setError('Context file is still being created. Please wait a moment.');
+    if (!realFileId) {
+      setError('Context file is still loading. Please wait a moment.');
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      // Update content with latest description before publishing
       // Convert WhitelistItem[] to WhitelistNode[] grouped by schema
       const schemaItems = effectiveWhitelist.filter(w => w.type === 'schema');
       const tableItems = effectiveWhitelist.filter(w => w.type === 'table');
@@ -270,16 +234,8 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
         }],
         published: { all: 1 },
       };
-      editFile({
-        fileId: virtualFileId,
-        changes: {
-          content: contextContent,
-          name: 'Knowledge Base',
-          path: '/org/context',
-        },
-      });
-      // Publish persists to DB and returns the real file ID
-      const result = await publishFile({ fileId: virtualFileId });
+      editFile({ fileId: realFileId, changes: { content: contextContent, name: 'Knowledge Base' } });
+      const result = await publishFile({ fileId: realFileId });
       onComplete(result.id);
     } catch (err) {
       console.error('[StepContext] Save error:', err);
@@ -287,20 +243,20 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
     } finally {
       setSaving(false);
     }
-  }, [virtualFileId, connectionName, effectiveWhitelist, description, onComplete, existingContext]);
+  }, [realFileId, connectionName, effectiveWhitelist, description, onComplete]);
 
   /** Show inline agent activity feed and kick off the agent */
   const reduxState = useAppSelector(state => state);
   const handleAgentDescribe = useCallback(() => {
-    if (!virtualFileId) {
-      setError('Context file is still being created. Please wait a moment.');
+    if (!realFileId) {
+      setError('Context file is still loading. Please wait a moment.');
       return;
     }
-    onRequestChat?.(virtualFileId);
+    onRequestChat?.(realFileId);
 
     // Build appState so the agent knows it's on a context file page
     let appState = null;
-    const [augmented] = selectAugmentedFiles(reduxState, [virtualFileId]);
+    const [augmented] = selectAugmentedFiles(reduxState, [realFileId]);
     if (augmented) {
       appState = { type: 'file' as const, state: compressAugmentedFile(augmented) };
     }
@@ -327,7 +283,7 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
       message: AGENT_DESCRIBE_MESSAGE,
     }));
     setShowAgentFeed(true);
-  }, [virtualFileId, dispatch, onRequestChat, connectionName, reduxState, connections, description]);
+  }, [realFileId, dispatch, onRequestChat, connectionName, reduxState, connections, description]);
 
   /** Skip: interrupt agent if running, save context without docs, advance */
   const handleSkip = useCallback(async () => {
@@ -568,7 +524,7 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
       )}
 
       {/* Debug: appState */}
-      {showDebug && virtualFileId && (
+      {showDebug && realFileId && (
         <Collapsible.Root>
           <Collapsible.Trigger asChild>
             <HStack cursor="pointer" px={3} py={1.5} bg="bg.muted" borderRadius="md" gap={2}>
@@ -581,7 +537,7 @@ export default function StepContext({ connectionName, connectionId, onComplete, 
               <Text fontSize="xs" fontFamily="mono" whiteSpace="pre-wrap">
                 {JSON.stringify(
                   (() => {
-                    const [aug] = selectAugmentedFiles(reduxState, [virtualFileId]);
+                    const [aug] = selectAugmentedFiles(reduxState, [realFileId]);
                     return aug ? { type: 'file', state: compressAugmentedFile(aug) } : null;
                   })(),
                   null, 2
