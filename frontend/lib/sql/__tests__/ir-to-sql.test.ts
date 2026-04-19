@@ -89,6 +89,15 @@ describe('IR to SQL generator', () => {
     expect(normalizeSql(sql)).toContain('IN (');
   });
 
+  it('WHERE with expression column (lower) round-trip', async () => {
+    const original = "SELECT * FROM restaurants WHERE lower(city) = 'san francisco'";
+    const ir = await parseSqlToIrLocal(original, 'duckdb') as QueryIR;
+    const sql = irToSqlLocal(ir, 'duckdb');
+    const norm = normalizeSql(sql);
+    expect(norm).toContain('LOWER');
+    expect(norm).toContain('SAN FRANCISCO');
+  });
+
   it('GROUP BY round-trip', async () => {
     const original = 'SELECT category, COUNT(*) FROM products GROUP BY category';
     const ir = await parseSqlToIrLocal(original, 'duckdb') as QueryIR;

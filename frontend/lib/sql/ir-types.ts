@@ -52,6 +52,8 @@ export interface FilterCondition {
   unit?: 'DAY' | 'WEEK' | 'MONTH' | 'QUARTER' | 'YEAR' | 'HOUR' | 'MINUTE';
   // For verbatim SQL expressions on the right side (e.g. CURRENT_TIMESTAMP)
   raw_value?: string;
+  // For verbatim SQL on the left/column side (e.g. lower(city), SPLIT_PART(col, '-', 1))
+  raw_column?: string;
 }
 
 export interface FilterGroup {

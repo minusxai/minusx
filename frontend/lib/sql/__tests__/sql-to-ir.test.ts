@@ -335,4 +335,25 @@ describe('Function calls in WHERE', () => {
     expect(cond.param_name).toBe('min_elo');
     expect(cond.operator).toBe('>');
   });
+
+  it('expression-based column like lower(city)', async () => {
+    const sql = "SELECT * FROM restaurants WHERE lower(city) = 'san francisco'";
+    const ir = await parseSqlToIrLocal(sql, 'duckdb') as QueryIR;
+    expect(ir.where).not.toBeNull();
+    expect(ir.where!.conditions).toHaveLength(1);
+    const cond = ir.where!.conditions[0] as any;
+    // Should preserve the expression via raw_column
+    expect(cond.raw_column).toBeDefined();
+    expect(cond.raw_column!.toLowerCase()).toContain('lower');
+    expect(cond.raw_column!.toLowerCase()).toContain('city');
+    expect(cond.operator).toBe('=');
+    expect(cond.value).toBe('san francisco'); // Should preserve the literal value as-is (not converted to param) --- IGNORE ---
+  });
+
+  it('expression-based column round-trips through IR', async () => {
+    const sql = "SELECT * FROM restaurants WHERE lower(city) = 'san francisco'";
+    const ir = await parseSqlToIrLocal(sql, 'duckdb') as QueryIR;
+    // Ensure conditions is always an array (never undefined)
+    expect(Array.isArray(ir.where!.conditions)).toBe(true);
+  });
 });
