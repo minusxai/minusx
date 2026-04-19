@@ -452,8 +452,9 @@ export function SummarizeSection({
 
   const formatMetricLabel = (col: SelectColumn) => {
     const aggLabel = AGGREGATES.find((a) => a.value === col.aggregate)?.shortLabel || col.aggregate;
-    const alias = col.alias || `${col.aggregate?.toLowerCase()}_${col.column === '*' ? 'all' : col.column}`;
-    const inner = col.column === '*' ? aggLabel : `${aggLabel}(${col.column})`;
+    const isStarOrNull = col.column === '*' || col.column == null;
+    const alias = col.alias || `${col.aggregate?.toLowerCase()}_${isStarOrNull ? 'all' : col.column}`;
+    const inner = isStarOrNull ? aggLabel : `${aggLabel}(${col.column})`;
     const withWrapper = col.wrapper_function === 'ROUND'
       ? `ROUND(${inner}${col.wrapper_args?.length ? `, ${col.wrapper_args[0]}` : ''})`
       : inner;

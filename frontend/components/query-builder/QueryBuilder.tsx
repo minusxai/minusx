@@ -538,16 +538,37 @@ export function QueryBuilder({
         )}
 
         {/* Sort Section (hidden for compound members) */}
-        {!isCompoundMember && showSortPanel && (
-          <OrderByBuilder
-            databaseName={databaseName}
-            tableName={ir.from.table}
-            tableSchema={ir.from.schema}
-            orderBy={ir.order_by}
-            onChange={handleOrderByChange}
-            onClose={handleSortClose}
-          />
-        )}
+        {!isCompoundMember && showSortPanel && (() => {
+          // Compute sortable columns: when summarizing, only group-by dims + aggregate aliases
+          const hasStarColumn = ir.select.some(c => c.type === 'column' && c.column === '*');
+          let sortable: string[] | undefined;
+          if (showSummarizeSection && !hasStarColumn) {
+            sortable = [];
+            for (const col of ir.select) {
+              if (col.type === 'column' && col.column && col.column !== '*') sortable.push(col.alias || col.column);
+              if (col.type === 'aggregate' && col.alias) sortable.push(col.alias);
+              if (col.type === 'expression' && col.alias) sortable.push(col.alias);
+              if (col.type === 'raw' && col.alias) sortable.push(col.alias);
+            }
+            // Also include group-by columns
+            if (ir.group_by) {
+              for (const gb of ir.group_by.columns) {
+                if (gb.column && !sortable.includes(gb.column)) sortable.push(gb.column);
+              }
+            }
+          }
+          return (
+            <OrderByBuilder
+              databaseName={databaseName}
+              tableName={ir.from.table}
+              tableSchema={ir.from.schema}
+              orderBy={ir.order_by}
+              onChange={handleOrderByChange}
+              onClose={handleSortClose}
+              sortableColumns={sortable}
+            />
+          );
+        })()}
 
         {/* Action Toolbar */}
         <ActionToolbar
