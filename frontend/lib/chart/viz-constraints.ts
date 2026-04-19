@@ -11,6 +11,8 @@ interface ConstraintInput {
   yColCount: number
   /** Number of unique X-axis data points after aggregation (only available at render time) */
   xDataCount?: number
+  /** Resolved column types for X-axis columns (e.g. 'date', 'number', 'text') */
+  xColTypes?: Array<'date' | 'number' | 'text' | 'json'>
 }
 
 /**
@@ -23,9 +25,15 @@ export function getVizConstraintError(
   chartType: VisualizationType,
   input: ConstraintInput,
 ): ConstraintResult {
-  const { xColCount, yColCount, xDataCount } = input
+  const { xColCount, yColCount, xDataCount, xColTypes } = input
 
   switch (chartType) {
+    case 'trend':
+      if (xColCount > 0 && xColTypes && xColTypes.some(t => t !== 'date')) {
+        return { error: 'Trend charts require a date/time column on the X axis.' }
+      }
+      return { error: null }
+
     case 'combo':
       if (yColCount < 2) return { error: 'Combo charts require at least 2 Y-axis columns (first becomes bar, rest become lines).' }
       if (xColCount < 1) return { error: 'Combo charts require at least 1 X-axis column.' }
