@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { selectMergedContent, setEphemeral, type FileId } from '@/store/filesSlice';
+import { clearQueryResult } from '@/store/queryResultsSlice';
 import { selectProposedQuery } from '@/store/uiSlice';
 import { useFile, useQueryResult } from '@/lib/hooks/file-state-hooks';
 import { editFile } from '@/lib/api/file-state';
@@ -120,6 +121,7 @@ export default function QuestionContainerV2({ fileId, mode: containerMode }: Que
       references: mergedContent.references || []
     };
 
+    dispatch(clearQueryResult({ query: newQuery.query, params: effectiveValues, database: newQuery.database }));
     dispatch(setEphemeral({
       fileId,
       changes: { lastExecuted: newQuery }
