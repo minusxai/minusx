@@ -2,14 +2,17 @@ import { Box, HStack, VStack, Text, Icon } from '@chakra-ui/react'
 import { LuTrendingUp, LuTrendingDown, LuMinus } from 'react-icons/lu'
 import { CHART_COLORS } from '@/lib/chart/echarts-theme'
 import { formatNumber, formatDateValue, applyPrefixSuffix } from '@/lib/chart/chart-utils'
+import { computeTrendComparison } from '@/lib/chart/trend-utils'
 import { useRef, useState, useEffect } from 'react'
-import type { ColumnFormatConfig } from '@/lib/types'
+import type { ColumnFormatConfig, TrendCompareMode } from '@/lib/types'
 
 interface TrendPlotProps {
   series: Array<{ name: string; data: number[] }>
+  xAxisData?: string[]
   columnFormats?: Record<string, ColumnFormatConfig>
   yAxisColumns?: string[]
   xAxisColumns?: string[]
+  compareMode?: TrendCompareMode
 }
 
 type SizeMode = 'lg' | 'sm'
@@ -29,7 +32,7 @@ function useSizeMode(ref: React.RefObject<HTMLDivElement | null>): SizeMode {
   return mode
 }
 
-export const TrendPlot = ({ series, columnFormats, yAxisColumns, xAxisColumns }: TrendPlotProps) => {
+export const TrendPlot = ({ series, xAxisData, columnFormats, yAxisColumns, xAxisColumns, compareMode = 'last' }: TrendPlotProps) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const mode = useSizeMode(containerRef)
 
@@ -80,20 +83,11 @@ export const TrendPlot = ({ series, columnFormats, yAxisColumns, xAxisColumns }:
           const dp = cfg?.decimalPoints ?? undefined
           const fmtVal = (v: number) => applyPrefixSuffix(formatNumber(v, dp), cfg?.prefix, cfg?.suffix)
 
-          // Get the last (most recent) value and the second-to-last (previous) value
-          const currentValue = s.data[s.data.length - 1] || 0
-          const previousValue = s.data.length > 1 ? s.data[s.data.length - 2] : null
-
-          // Calculate percentage change
-          let percentChange: number | null = null
-          let isIncrease = false
-          let isDecrease = false
-
-          if (previousValue !== null && previousValue !== 0) {
-            percentChange = ((currentValue - previousValue) / Math.abs(previousValue)) * 100
-            isIncrease = percentChange > 0
-            isDecrease = percentChange < 0
-          }
+          const trend = computeTrendComparison(s.data, xAxisData, compareMode)
+          const currentValue = trend.currentValue
+          const percentChange = trend.percentChange
+          const isIncrease = percentChange !== null && percentChange > 0
+          const isDecrease = percentChange !== null && percentChange < 0
 
           const color = series.length === 1 ? 'var(--chakra-colors-fg-default)' : colors[index % colors.length]
           const trendColor = isIncrease ? CHART_COLORS.teal : isDecrease ? CHART_COLORS.danger : color
@@ -133,28 +127,33 @@ export const TrendPlot = ({ series, columnFormats, yAxisColumns, xAxisColumns }:
 
               {/* Trend Indicator */}
               {percentChange !== null ? (
-                <HStack gap={isSmall ? 1 : 2} align="center">
-                  <Icon
-                    as={isIncrease ? LuTrendingUp : isDecrease ? LuTrendingDown : LuMinus}
-                    boxSize={isSmall ? 4 : 5}
-                    color={trendColor}
-                  />
+                <VStack gap={0} align="center">
+                  <HStack gap={isSmall ? 1 : 2} align="center">
+                    <Icon
+                      as={isIncrease ? LuTrendingUp : isDecrease ? LuTrendingDown : LuMinus}
+                      boxSize={isSmall ? 5 : 6}
+                      color={trendColor}
+                    />
+                    <Text
+                      fontSize={isSmall ? 'sm' : 'lg'}
+                      fontWeight="700"
+                      color={trendColor}
+                      fontFamily="mono"
+                    >
+                      {isIncrease ? '+' : ''}{percentChange.toFixed(1)}%
+                    </Text>
+                  </HStack>
                   <Text
-                    fontSize={isSmall ? 'xs' : 'md'}
-                    fontWeight="700"
-                    color={trendColor}
-                    fontFamily="mono"
-                  >
-                    {isIncrease ? '+' : ''}{percentChange.toFixed(1)}%
-                  </Text>
-                  <Text
-                    fontSize={isSmall ? '2xs' : 'xs'}
+                    fontSize="2xs"
                     color="fg.muted"
                     fontFamily="mono"
+                    textAlign="center"
                   >
-                    vs {previousValue !== null ? fmtVal(previousValue) : ''}
+                    {trend.compareBaseLabel && trend.compareLabel
+                      ? `${fmtLabel(trend.compareBaseLabel)} vs ${fmtLabel(trend.compareLabel)}`
+                      : trend.compareValue !== null ? `vs ${fmtVal(trend.compareValue)}` : ''}
                   </Text>
-                </HStack>
+                </VStack>
               ) : (
                 <Text fontSize={isSmall ? '2xs' : 'xs'} color="fg.muted" fontFamily="mono">
                   No comparison data
