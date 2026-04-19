@@ -14,6 +14,35 @@ export interface AxisZone {
   onRemove: (column: string) => void
 }
 
+/**
+ * Declares which settings panels are visible for a given chart type.
+ * AxisBuilder reads this config instead of checking chartType with ad-hoc conditionals.
+ */
+/**
+ * Declares which settings panels are visible for each ECharts-based chart type.
+ * Non-ECharts types (geo, pivot, trend) have their own axis builders and are not listed here.
+ */
+interface ChartSettingsConfig {
+  xAxisSettings: boolean
+  yAxisSettings: boolean
+  style: boolean
+  annotations: boolean
+}
+
+const CHART_SETTINGS: Record<string, ChartSettingsConfig> = {
+  line:      { xAxisSettings: false, yAxisSettings: true,  style: true,  annotations: true  },
+  bar:       { xAxisSettings: false, yAxisSettings: true,  style: true,  annotations: true  },
+  area:      { xAxisSettings: false, yAxisSettings: true,  style: true,  annotations: true  },
+  scatter:   { xAxisSettings: true,  yAxisSettings: true,  style: true,  annotations: true  },
+  funnel:    { xAxisSettings: false, yAxisSettings: true,  style: true,  annotations: false },
+  pie:       { xAxisSettings: false, yAxisSettings: true,  style: true,  annotations: false },
+  waterfall: { xAxisSettings: false, yAxisSettings: true,  style: true,  annotations: false },
+  combo:     { xAxisSettings: false, yAxisSettings: true,  style: true,  annotations: false },
+  radar:     { xAxisSettings: false, yAxisSettings: true,  style: true,  annotations: false },
+}
+
+const DEFAULT_SETTINGS: ChartSettingsConfig = { xAxisSettings: false, yAxisSettings: true, style: true, annotations: false }
+
 interface AxisBuilderProps {
   columns: string[]
   types: string[]
@@ -242,9 +271,12 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
     setSelectedColumnForMobile(null)
   }, [draggedColumn, selectedColumnForMobile, dragSourceZone])
 
-  const showXAxisSettings = chartType === 'scatter' && !!onAxisConfigChange
-  const showYAxisSettings = !!onAxisConfigChange
-  const hasSettingsTab = showXAxisSettings || showYAxisSettings || !!stylePanel || !!annotationPanel
+  const cfg = CHART_SETTINGS[chartType ?? ''] ?? DEFAULT_SETTINGS
+  const showXAxisSettings = cfg.xAxisSettings && !!onAxisConfigChange
+  const showYAxisSettings = cfg.yAxisSettings && !!onAxisConfigChange
+  const showStylePanel = cfg.style && !!stylePanel
+  const showAnnotationPanel = cfg.annotations && !!annotationPanel
+  const hasSettingsTab = showXAxisSettings || showYAxisSettings || showStylePanel || showAnnotationPanel
 
   const tabButtonStyles = {
     px: 2.5,
@@ -422,12 +454,12 @@ export const AxisBuilder = ({ columns, types, zones, columnFormats, onColumnForm
             )}
           </VStack>
           <VStack align="stretch" gap={3} minW={0}>
-            {stylePanel ? (
+            {showStylePanel && stylePanel ? (
               renderSettingsCard('Style', 'style',
                 stylePanel
               )
             ) : null}
-            {annotationPanel ? (
+            {showAnnotationPanel && annotationPanel ? (
               renderSettingsCard('Annotations', 'annotations',
                 annotationPanel
               )
