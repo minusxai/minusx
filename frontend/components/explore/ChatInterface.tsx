@@ -26,6 +26,7 @@ import SimpleChatMessage from './SimpleChatMessage';
 import { selectDatabase } from '@/lib/utils/database-selector';
 import { preserveParams } from '@/lib/navigation/url-utils';
 import { selectEffectiveUser } from '@/store/authSlice';
+import { selectDevMode } from '@/store/uiSlice';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import ToolCallListModal from './ToolCallListModal';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
@@ -131,6 +132,7 @@ export default function ChatInterface({
 
   const effectiveUser = useAppSelector(selectEffectiveUser);
   const userIsAdmin = effectiveUser?.role ? isAdmin(effectiveUser.role) : false;
+  const devMode = useAppSelector(selectDevMode);
   const queryResultsMap = useAppSelector(state => state.queryResults.results);
   const colorMode = useAppSelector(state => state.ui.colorMode) as 'light' | 'dark';
   const allowChatQueue = useAppSelector(selectAllowChatQueue);
@@ -561,7 +563,7 @@ export default function ChatInterface({
                 </Button>
               </Tooltip>
             )}
-            {userIsAdmin && allMessages.length > 0 && (
+            {userIsAdmin && devMode && allMessages.length > 0 && (
               <Tooltip content="Inspect tool calls" positioning={{ placement: 'bottom' }}>
                 <Button
                   onClick={() => setShowToolInspector(true)}

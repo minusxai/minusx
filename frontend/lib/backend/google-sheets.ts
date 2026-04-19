@@ -45,8 +45,12 @@ export async function importGoogleSheets(
     });
 
     if (!res.ok) {
-      const error = await res.text();
-      return { success: false, message: `Import failed: ${error}` };
+      try {
+        const body = await res.json();
+        return { success: false, message: body.message ?? body.error?.message ?? 'Import failed — please try again' };
+      } catch {
+        return { success: false, message: 'Import failed — please try again' };
+      }
     }
 
     return await res.json();
@@ -78,7 +82,12 @@ export async function reimportGoogleSheets(
     });
 
     if (!res.ok) {
-      return { success: false, message: `Re-import failed: ${await res.text()}` };
+      try {
+        const body = await res.json();
+        return { success: false, message: body.message ?? body.error?.message ?? 'Re-import failed — please try again' };
+      } catch {
+        return { success: false, message: 'Re-import failed — please try again' };
+      }
     }
 
     return await res.json();

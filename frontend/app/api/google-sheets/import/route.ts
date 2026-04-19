@@ -31,13 +31,19 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     });
   } catch (error) {
     if (error instanceof Error) {
+      const isTerminated = error.message.includes('terminated');
       const knownError =
+        isTerminated ||
         error.message.includes('not publicly accessible') ||
         error.message.includes('not found') ||
         error.message.includes('not configured') ||
-        error.message.includes('Cannot parse');
+        error.message.includes('Cannot parse') ||
+        error.message.includes('No non-empty sheets');
       if (knownError) {
-        return NextResponse.json({ success: false, message: error.message, config: null }, { status: 400 });
+        const message = isTerminated
+          ? 'Something went wrong processing your spreadsheet — please try again'
+          : error.message;
+        return NextResponse.json({ success: false, message, config: null }, { status: 400 });
       }
     }
     return handleApiError(error);

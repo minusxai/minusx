@@ -1,6 +1,7 @@
 import { toaster } from '@/components/ui/toaster';
 import { getStore } from '@/store/store';
 import { selectEffectiveUser } from '@/store/authSlice';
+import { selectDevMode } from '@/store/uiSlice';
 import { isAdmin } from '@/lib/auth/role-helpers';
 
 interface ToastOptions {
@@ -18,10 +19,10 @@ export function showAdminToast(options: ToastOptions) {
   const state = getStore().getState();
   const user = selectEffectiveUser(state);
 
-  // Only show toasts to admins
-  if (!user || !isAdmin(user.role)) {
-    return;
-  }
+  if (!user || !isAdmin(user.role)) return;
+
+  // Error/warning toasts only shown when "Show Debug Options" (devMode) is enabled
+  if ((options.type === 'error' || options.type === 'warning') && !selectDevMode(state)) return;
 
   toaster.create({
     title: options.title,
