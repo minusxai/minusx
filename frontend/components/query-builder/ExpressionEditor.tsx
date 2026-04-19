@@ -6,7 +6,7 @@
 
 'use client';
 
-import { Box, HStack, Text, VStack, Textarea, Button } from '@chakra-ui/react';
+import { HStack, Text, VStack, Textarea, Button } from '@chakra-ui/react';
 import { AliasInput } from './AliasInput';
 
 interface ExpressionEditorProps {

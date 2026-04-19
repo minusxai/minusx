@@ -5,9 +5,9 @@
 
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Box, VStack, Spinner, Text, HStack, Button } from '@chakra-ui/react';
-import { LuPlay, LuSparkles, LuCode, LuChevronDown, LuChevronRight, LuDatabase } from 'react-icons/lu';
+import { LuPlay, LuCode, LuChevronDown, LuChevronRight, LuDatabase, LuTriangleAlert } from 'react-icons/lu';
 import { QueryChip } from './QueryChip';
 import { QueryIR, SelectColumn, TableReference } from '@/lib/types';
 import { isCompoundQueryIR } from '@/lib/sql/ir-types';
@@ -21,6 +21,51 @@ import { SummarizeSection } from './SummarizeSection';
 import { ActionToolbar } from './ActionToolbar';
 import { JoinBuilder } from './JoinBuilder';
 import { OrderByBuilder } from './OrderByBuilder';
+
+/** Error boundary — catches render errors in QueryBuilder and shows a graceful fallback */
+class QueryBuilderErrorBoundary extends React.Component<
+  { children: React.ReactNode; onReset?: () => void },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: React.ReactNode; onReset?: () => void }) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('[QueryBuilder] Render error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <Box p={4}>
+          <VStack align="start" gap={3}>
+            <HStack gap={2} color="orange.400">
+              <LuTriangleAlert size={16} />
+              <Text fontSize="sm" fontWeight="600" fontFamily="mono">
+                This query cannot be displayed in GUI mode
+              </Text>
+            </HStack>
+            <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+              Switch to SQL mode to edit this query directly.
+            </Text>
+            {this.state.error && (
+              <Text fontSize="xs" color="fg.subtle" fontFamily="mono">
+                {this.state.error.message}
+              </Text>
+            )}
+          </VStack>
+        </Box>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function IRDebugView({ ir }: { ir: QueryIR | null }) {
   const showDebug = useAppSelector(selectDevMode);
@@ -104,7 +149,15 @@ interface QueryBuilderProps {
   whitelistedSchema?: Array<{ schema: string; tables: Array<{ table: string; columns: Array<{ name: string; type: string }> }> }>;
 }
 
-export function QueryBuilder({
+export function QueryBuilder(props: QueryBuilderProps) {
+  return (
+    <QueryBuilderErrorBoundary>
+      <QueryBuilderInner {...props} />
+    </QueryBuilderErrorBoundary>
+  );
+}
+
+function QueryBuilderInner({
   databaseName,
   dialect,
   sql,
@@ -180,7 +233,7 @@ export function QueryBuilder({
           setIsDirty(false);
 
           // Show sections if they have content
-          if (simpleIR.where && simpleIR.where.conditions.length > 0) {
+          if (simpleIR.where?.conditions?.length) {
             setShowFilterSection(true);
           }
           const hasAggregates = simpleIR.select.some((c) => c.type === 'aggregate');
@@ -188,7 +241,7 @@ export function QueryBuilder({
           if (hasAggregates || hasRawWithGroupBy) {
             setShowSummarizeSection(true);
           }
-          if (simpleIR.having && simpleIR.having.conditions.length > 0) {
+          if (simpleIR.having?.conditions?.length) {
             setShowHavingSection(true);
           }
           if (simpleIR.joins && simpleIR.joins.length > 0) {
@@ -402,12 +455,6 @@ export function QueryBuilder({
     return (
       <Box p={4}>
         <VStack align="stretch" gap={4}>
-          <HStack gap={2}>
-            <LuSparkles size={16} />
-            <Text fontSize="sm" color="fg.muted" fontFamily="mono">
-              Start by selecting a table to query
-            </Text>
-          </HStack>
           {ir && (
             <DataSection
               databaseName={databaseName}
@@ -429,10 +476,10 @@ export function QueryBuilder({
     ...(ir.joins || []).map((j) => j.table.alias || j.table.table),
   ];
 
-  const hasFilter = !!ir.where && ir.where.conditions.length > 0;
+  const hasFilter = !!(ir.where?.conditions?.length);
   const hasSummarize = ir.select.some((c) => c.type === 'aggregate') ||
     (ir.select.some((c) => c.type === 'raw') && !!ir.group_by);
-  const hasHaving = !!ir.having && ir.having.conditions.length > 0;
+  const hasHaving = !!(ir.having?.conditions?.length);
   const hasJoin = !!ir.joins && ir.joins.length > 0;
   const hasSort = !!ir.order_by && ir.order_by.length > 0;
 

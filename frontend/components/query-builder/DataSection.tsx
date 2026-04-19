@@ -116,20 +116,20 @@ export function DataSection({ databaseName, value, onChange, availableQuestions 
               ) : (
                 <Box
                   as="button"
-                  bg="bg.subtle"
+                  bg="transparent"
                   border="1px dashed"
                   borderColor="border.emphasized"
-                  borderRadius="lg"
-                  px={3}
-                  py={2}
+                  borderRadius="md"
+                  px={2}
+                  py={1}
                   cursor="pointer"
                   _hover={{ bg: 'bg.muted', borderStyle: 'solid' }}
                   transition="all 0.15s ease"
                   onClick={() => setOpen(true)}
                 >
-                  <HStack gap={2}>
-                    <Box color="accent.primary"><LuDatabase size={14} /></Box>
-                    <Text fontSize="sm" color="accent.primary" fontFamily="mono">
+                  <HStack gap={1.5}>
+                    <Box color="accent.primary"><LuDatabase size={12} /></Box>
+                    <Text fontSize="xs" color="accent.primary" fontFamily="mono" fontWeight="500">
                       Select a table...
                     </Text>
                   </HStack>
