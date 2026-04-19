@@ -100,14 +100,17 @@ async function expandXlsxFromS3(
   companyId: number,
   mode: string,
   schemaName: string,
+  createdKeys: string[],
 ): Promise<IncomingFile[]> {
   const buffer = await getStoredFileBytes(s3Key);
-  return xlsxBytesToS3Csvs(buffer, connectionName, companyId, mode, schemaName);
+  return xlsxBytesToS3Csvs(buffer, connectionName, companyId, mode, schemaName, createdKeys);
 }
 
 /**
  * Parse xlsx bytes, convert each non-empty sheet to CSV, upload to S3.
  * Shared by both CSV uploads (xlsx file already in S3) and Google Sheets import.
+ * createdKeys is a caller-owned array; each successfully stored parquet key is pushed
+ * onto it so the caller can clean up on failure.
  */
 async function xlsxBytesToS3Csvs(
   buffer: Buffer,
@@ -115,6 +118,7 @@ async function xlsxBytesToS3Csvs(
   companyId: number,
   mode: string,
   schemaName: string,
+  createdKeys: string[] = [],
 ): Promise<IncomingFile[]> {
   const store = createObjectStore();
   const workbook = XLSX.read(buffer, { type: 'buffer' });
@@ -144,6 +148,8 @@ async function xlsxBytesToS3Csvs(
         );
         const parquetBuffer = readFileSync(tmpParquetPath);
         await store.put(storageKey, parquetBuffer, 'application/octet-stream');
+        // Track only after the put succeeds — caller uses this list for cleanup on failure
+        createdKeys.push(storageKey);
         results.push({ filename: csvFilename, s3_key: storageKey, schema_name: schemaName, file_format: 'parquet' });
       } finally {
         try { unlinkSync(tmpCsvPath); } catch { /* ignore */ }
@@ -285,6 +291,14 @@ async function convertCsvToParquet(conn: DuckConn, csvKey: string): Promise<stri
     return parquetKey;
   } catch (err) {
     console.warn(`[csv-processor] Parquet conversion failed for ${csvKey}:`, err);
+    // Delete any partial parquet DuckDB may have written before failing
+    if (isLocalObjectStore()) {
+      try { unlinkSync(parquetUrl); } catch { /* ignore — may not exist */ }
+    } else {
+      try {
+        await makeS3().send(new DeleteObjectCommand({ Bucket: OBJECT_STORE_BUCKET!, Key: parquetKey }));
+      } catch { /* ignore */ }
+    }
     return null; // keep CSV as fallback
   }
 }
@@ -296,6 +310,10 @@ async function convertCsvToParquet(conn: DuckConn, csvKey: string): Promise<stri
  * - Expands any xlsx files into per-sheet CSVs
  * - Reads row count + column metadata for each file via DuckDB
  * - Returns enriched file records ready to store in the connection config
+ *
+ * Atomic guarantee: either ALL files are fully written and DuckDB-validated and
+ * the full results list is returned, OR every file created during this call is
+ * deleted before throwing. No orphaned files are left on disk/S3.
  */
 export async function processFilesFromS3(
   companyId: number,
@@ -305,66 +323,86 @@ export async function processFilesFromS3(
 ): Promise<RegisteredFile[]> {
   if (!isLocalObjectStore() && !OBJECT_STORE_BUCKET) throw new Error('OBJECT_STORE_BUCKET is not configured');
 
-  // Expand xlsx files into CSV sheets
-  const flatFiles: IncomingFile[] = [];
-  for (const file of incomingFiles) {
-    const fmt = file.file_format ?? detectFileFormat(file.filename);
-    if (fmt === 'xlsx') {
-      const sheets = await expandXlsxFromS3(
-        file.s3_key, connectionName, companyId, mode, file.schema_name ?? 'public',
-      );
-      flatFiles.push(...sheets);
-    } else {
-      flatFiles.push({ ...file, file_format: fmt });
-    }
-  }
+  // Every key created in this call is tracked here for atomic cleanup on failure.
+  const toCleanup: string[] = [];
 
-  // Auto-assign table names where not provided, ensuring uniqueness
-  const noNameFiles = flatFiles.filter(f => !f.table_name).map(f => f.filename);
-  const autoNames = ensureUniqueTableNames(noNameFiles);
-
-  const explicitNames = new Set(flatFiles.filter(f => f.table_name).map(f => f.table_name!));
-  for (const autoName of autoNames.values()) {
-    if (explicitNames.has(autoName)) {
-      throw new Error(`Table name collision: '${autoName}' conflicts with a user-supplied table name`);
-    }
-  }
-
-  // Convert CSV → Parquet and extract metadata via DuckDB
-  const instance = await DuckDBInstance.create(':memory:');
-  const conn = await instance.connect();
   try {
-    if (!isLocalObjectStore()) {
-      await configureDuckDBForS3(conn);
+    // Expand xlsx files into CSV sheets
+    const flatFiles: IncomingFile[] = [];
+    for (const file of incomingFiles) {
+      const fmt = file.file_format ?? detectFileFormat(file.filename);
+      if (fmt === 'xlsx') {
+        toCleanup.push(file.s3_key); // original xlsx uploaded by client
+        const sheets = await expandXlsxFromS3(
+          file.s3_key, connectionName, companyId, mode, file.schema_name ?? 'public',
+          toCleanup, // xlsxBytesToS3Csvs pushes each sheet parquet key here after a successful put
+        );
+        flatFiles.push(...sheets);
+      } else {
+        toCleanup.push(file.s3_key); // original CSV/parquet uploaded by client
+        flatFiles.push({ ...file, file_format: fmt });
+      }
     }
 
-    const results: RegisteredFile[] = [];
-    for (const file of flatFiles) {
-      let s3Key = file.s3_key;
-      let format = (file.file_format ?? 'csv') as 'csv' | 'parquet';
-      const tableName = file.table_name ?? autoNames.get(file.filename) ?? sanitizeTableName(file.filename);
+    // Auto-assign table names where not provided, ensuring uniqueness
+    const noNameFiles = flatFiles.filter(f => !f.table_name).map(f => f.filename);
+    const autoNames = ensureUniqueTableNames(noNameFiles);
 
-      // Convert CSV → Parquet for fast columnar queries; fall back to CSV on error
-      if (format === 'csv') {
-        const converted = await convertCsvToParquet(conn, s3Key);
-        if (converted) { s3Key = converted; format = 'parquet'; }
+    const explicitNames = new Set(flatFiles.filter(f => f.table_name).map(f => f.table_name!));
+    for (const autoName of autoNames.values()) {
+      if (explicitNames.has(autoName)) {
+        throw new Error(`Table name collision: '${autoName}' conflicts with a user-supplied table name`);
+      }
+    }
+
+    // Convert CSV → Parquet and extract metadata via DuckDB
+    const instance = await DuckDBInstance.create(':memory:');
+    const conn = await instance.connect();
+    try {
+      if (!isLocalObjectStore()) {
+        await configureDuckDBForS3(conn);
       }
 
-      const fileUrl = getStorageUrl(s3Key);
-      const { rowCount, columns } = await readFileMetadata(conn, fileUrl, format);
-      results.push({
-        table_name: tableName,
-        schema_name: file.schema_name ?? 'public',
-        s3_key: s3Key,
-        file_format: format,
-        filename: file.filename,
-        row_count: rowCount,
-        columns,
-      });
+      const results: RegisteredFile[] = [];
+      for (const file of flatFiles) {
+        let s3Key = file.s3_key;
+        let format = (file.file_format ?? 'csv') as 'csv' | 'parquet';
+        const tableName = file.table_name ?? autoNames.get(file.filename) ?? sanitizeTableName(file.filename);
+
+        // Convert CSV → Parquet for fast columnar queries; fall back to CSV on error
+        if (format === 'csv') {
+          const converted = await convertCsvToParquet(conn, s3Key);
+          if (converted) {
+            // CSV was deleted by convertCsvToParquet; swap tracking to the parquet key
+            const idx = toCleanup.lastIndexOf(s3Key);
+            if (idx >= 0) toCleanup[idx] = converted;
+            else toCleanup.push(converted);
+            s3Key = converted;
+            format = 'parquet';
+          }
+          // conversion returned null → original CSV key stays in toCleanup
+        }
+
+        const fileUrl = getStorageUrl(s3Key);
+        const { rowCount, columns } = await readFileMetadata(conn, fileUrl, format);
+        results.push({
+          table_name: tableName,
+          schema_name: file.schema_name ?? 'public',
+          s3_key: s3Key,
+          file_format: format,
+          filename: file.filename,
+          row_count: rowCount,
+          columns,
+        });
+      }
+      return results;
+    } finally {
+      conn.closeSync();
     }
-    return results;
-  } finally {
-    conn.closeSync();
+  } catch (err) {
+    // Atomic rollback: remove every file created during this call before surfacing the error
+    await Promise.allSettled(toCleanup.map(key => deleteS3File(key)));
+    throw err;
   }
 }
 
