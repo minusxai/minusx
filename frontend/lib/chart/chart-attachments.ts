@@ -1,8 +1,11 @@
 /**
- * Chart → S3 attachment pipeline with S3 URL caching.
+ * Chart → attachment pipeline with caching.
  *
- * On first Send: renders charts to data URLs, uploads to S3, caches the public URL.
- * On subsequent sends with the same data: returns the cached URL instantly.
+ * S3 configured  → renders chart, uploads to S3, caches the public URL.
+ * Local FS (dev) → renders chart, embeds as base64 data URL (localhost URLs are
+ *                  inaccessible to the Claude API, so we skip the upload entirely).
+ *
+ * On subsequent sends with the same data: returns the cached value instantly.
  *
  * Cache key: queryResultId | updatedAt | vizSettings | titleOverride | colorMode
  * updatedAt invalidates the cache when the user re-runs a query.
@@ -10,8 +13,8 @@
  * Browser-only — safe to import only from 'use client' components.
  */
 import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client';
+import { IS_DEV } from '@/lib/constants';
 import { RENDERABLE_CHART_TYPES } from '@/lib/chart/render-chart-svg';
-import { uploadFile } from '@/lib/object-store/client';
 import type { AppState } from '@/lib/appState';
 import type { Attachment } from '@/lib/types';
 import type { QueryResult as ReduxQueryResult } from '@/store/queryResultsSlice';
@@ -76,6 +79,51 @@ export function extractChartEntries(
 }
 
 /**
+ * Upload a rendered chart JPEG (given as a data URL) to the object store and
+ * return the public URL, OR — when the local filesystem adapter is active —
+ * return the data URL as-is so the Claude API can receive the image directly.
+ *
+ * Local FS URLs (/api/object-store/serve/…) are auth-gated localhost routes
+ * that the Claude API cannot reach. The data URL avoids the round-trip entirely.
+ */
+async function uploadChartOrEmbed(dataUrl: string): Promise<string> {
+  const params = new URLSearchParams({ filename: 'chart.jpg', contentType: 'image/jpeg', keyType: 'charts' });
+  const res = await fetch(`/api/object-store/upload-url?${params}`);
+  if (!res.ok) throw new Error(`Failed to get upload URL (${res.status})`);
+  const { uploadUrl, publicUrl } = (await res.json()) as { uploadUrl: string; publicUrl: string };
+
+  // Local filesystem adapter in dev: LLM can't reach localhost, so embed as base64 data URL.
+  // The renderer returns a blob: URL — fetch it and convert to a proper data: URL.
+  // In production, build an absolute URL so the LLM can fetch it from the real domain.
+  if (uploadUrl.startsWith('/api/object-store/local-upload')) {
+    if (IS_DEV) {
+      const blob = await fetch(dataUrl).then(r => r.blob());
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+    // Upload, then return absolute URL using the current origin.
+    const blob = await fetch(dataUrl).then(r => r.blob());
+    const putRes = await fetch(uploadUrl, { method: 'PUT', body: blob, headers: { 'Content-Type': 'image/jpeg' } });
+    if (!putRes.ok) throw new Error(`Chart upload failed (${putRes.status})`);
+    return `${window.location.origin}${publicUrl}`;
+  }
+
+  // S3 (or any real object store): upload and return the public URL.
+  const blob = await fetch(dataUrl).then(r => r.blob());
+  const putRes = await fetch(uploadUrl, {
+    method: 'PUT',
+    body: blob,
+    headers: { 'Content-Type': 'image/jpeg' },
+  });
+  if (!putRes.ok) throw new Error(`Chart upload failed (${putRes.status})`);
+  return publicUrl;
+}
+
+/**
  * Render chart images for the current page and upload to S3.
  *
  * Question → one attachment. Dashboard → one per renderable chart.
@@ -109,11 +157,9 @@ export async function buildChartAttachments(
         );
         if (!rendered) return null;
 
-        const blob = await fetch(rendered.dataUrl).then(res => res.blob());
-        const file = new File([blob], 'chart.jpg', { type: 'image/jpeg' });
-        const { publicUrl } = await uploadFile(file, undefined, { keyType: 'charts' });
-        chartUrlCache.set(cacheKey, publicUrl);
-        return { type: 'image' as const, name: titleOverride || 'chart.jpg', content: publicUrl, metadata: { auto: true } };
+        const imageContent = await uploadChartOrEmbed(rendered.dataUrl);
+        chartUrlCache.set(cacheKey, imageContent);
+        return { type: 'image' as const, name: titleOverride || 'chart.jpg', content: imageContent, metadata: { auto: true } };
       })
     );
     return attachments.filter(a => a !== null) as Attachment[];
