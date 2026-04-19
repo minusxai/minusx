@@ -275,7 +275,12 @@ const FULL_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'Ju
 
 /** Format a date string using a Unicode date pattern (yyyy, MM, dd, HH, mm, ss, MMM, MMMM). */
 export const formatDateValue = (dateStr: string, format: string): string => {
-  const d = new Date(dateStr)
+  // ECharts time axis passes epoch-ms as numbers; Number("1704096000000") is finite
+  // but new Date("1704096000000") returns Invalid Date — must use new Date(number)
+  const numeric = Number(dateStr)
+  const d = Number.isFinite(numeric) && String(numeric) === dateStr
+    ? new Date(numeric)
+    : new Date(dateStr)
   if (isNaN(d.getTime())) return dateStr
 
   // Resolve legacy named formats
@@ -1630,28 +1635,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         axisLabel: { formatter: yAxisFormatter },
       }
 
-  // Step 1: Detect date data characteristics for smart formatting
-  type DateFormatNeeds = { needsYear: boolean; needsMonth: boolean; needsDay: boolean } | null
-  const detectDateFormatNeeds = (): DateFormatNeeds => {
-    const datePattern = /^\d{4}-\d{2}-\d{2}/
-    const isDateData = xAxisData.length > 0 && xAxisData.every(v => datePattern.test(v))
-    if (!isDateData) return null
-
-    const dates = xAxisData.map(v => new Date(v))
-    const years = new Set(dates.map(d => d.getUTCFullYear()))
-    const yearMonths = new Set(dates.map(d => `${d.getUTCFullYear()}-${d.getUTCMonth()}`))
-    const uniqueDates = new Set(xAxisData)
-
-    return {
-      needsYear: years.size > 1,
-      needsMonth: yearMonths.size > 1,
-      needsDay: uniqueDates.size > yearMonths.size,
-    }
-  }
-
-  const dateFormatNeeds = detectDateFormatNeeds()
-
-  // Step 2: Calculate label interval and max label length together
+  // Calculate label interval and max label length together
   // These are interdependent: interval affects visible label count, which affects space per label
   const prefixSuffixExtra = ((yPrefix?.length ?? 0) + (ySuffix?.length ?? 0)) * 7
   const gridLeftPadding = 80 + prefixSuffixExtra
@@ -1877,7 +1861,10 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           ...(xMin !== undefined ? { min: xMin } : {}),
           ...(xMax !== undefined ? { max: xMax } : {}),
           axisLabel: {
-            formatter: (value: number) => formatDateValue(String(value), xDateFormat || 'MMM dd, yyyy'),
+            hideOverlap: true,
+            ...(xDateFormat ? {
+              formatter: (value: number) => formatDateValue(String(value), xDateFormat),
+            } : {}),
           },
         }
       : {
@@ -1889,29 +1876,6 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
             interval: labelInterval,
             rotate: 0,
             formatter: (value: string) => {
-              if (xDateFormat) {
-                return formatDateValue(value, xDateFormat)
-              }
-
-              const date = new Date(value)
-              if (!isNaN(date.getTime()) && /^\d{4}-\d{2}-\d{2}/.test(value) && dateFormatNeeds) {
-                const month = date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })
-                const day = date.getUTCDate()
-                const year = date.getUTCFullYear()
-                const shortYear = (year % 100).toString().padStart(2, '0')
-                const pad = (n: number) => n.toString().padStart(2, '0')
-                const { needsDay } = dateFormatNeeds
-
-                if (maxLabelLength >= 9 && needsDay) {
-                  return `${year}-${month}-${pad(day)}`
-                } else if (maxLabelLength >= 6) {
-                  return `${month}'${shortYear}`
-                } else if (maxLabelLength >= 3) {
-                  return `${year}`
-                }
-                return month
-              }
-
               if (value.length > maxLabelLength) {
                 return value.slice(0, maxLabelLength - 1) + '…'
               }
