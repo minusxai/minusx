@@ -78,6 +78,7 @@ const SimpleChatMessage = React.memo(function SimpleChatMessage({ message, datab
       templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }}
       gap={2}
       w="100%"
+      mt={2}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >

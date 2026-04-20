@@ -124,6 +124,10 @@ export default function DashboardView({
   const editMode = (mode === 'preview' || readOnly) ? false : reduxEditMode;
   const activeTab = useAppSelector(state => selectFileViewMode(state, fileId));
 
+  // Ref to always have the latest document for callbacks that may fire with stale closures
+  const documentRef = useRef(document);
+  documentRef.current = document;
+
   // Track current columns for responsive grid background
   const [currentCols, setCurrentCols] = useState(12);
 
@@ -321,13 +325,14 @@ export default function DashboardView({
 
   // Handler for removing any asset (question or text block) from the dashboard
   const handleRemoveAsset = useCallback((idStr: string) => {
-    if (!document?.assets) return;
+    const doc = documentRef.current;
+    if (!doc?.assets) return;
 
     const parsedId = parseLayoutItemId(idStr);
     const isNumeric = typeof parsedId === 'number';
 
     // Remove from assets
-    const updatedAssets = document.assets.filter(asset => {
+    const updatedAssets = doc.assets.filter(asset => {
       if (isNumeric && asset.type === 'question') {
         return (asset as { id: number }).id !== parsedId;
       }
@@ -338,7 +343,7 @@ export default function DashboardView({
     });
 
     // Remove from layout
-    const existingLayout = document.layout?.items || [];
+    const existingLayout = doc.layout?.items || [];
     const updatedLayoutItems = existingLayout.filter(
       (item: DashboardLayoutItem) => String(item.id) !== idStr
     );
@@ -352,7 +357,7 @@ export default function DashboardView({
     if (isNumeric && isVirtualFileId(parsedId)) {
       pendingVirtualCleanup.current.push(parsedId);
     }
-  }, [document?.assets, document?.layout?.items, onChange]);
+  }, [onChange]);
 
   // Memoize the grid background to prevent re-rendering on every keystroke
   const gridBackground = useMemo(() => {

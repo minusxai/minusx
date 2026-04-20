@@ -224,7 +224,7 @@ export const QuestionBrowserPanel = ({
                 </Box>
             </Box>
 
-            <Box p={3}>
+            <Box p={3} maxHeight="320px" overflowY="auto">
                 {availableQuestions.length > 0 ? (
                 <VStack align="stretch" gap={2}>
                     {availableQuestions.map(question => (
