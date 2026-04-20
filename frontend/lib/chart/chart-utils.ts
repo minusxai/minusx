@@ -53,6 +53,8 @@ interface SpecialChartOptionConfig {
   columnFormats?: Record<string, ColumnFormatConfig>
   xAxisColumns?: string[]
   yAxisColumns?: string[]
+  xAxisLabel?: string
+  yAxisLabel?: string
   chartTitle?: string
   showChartTitle?: boolean
   colorPalette: string[]
@@ -611,6 +613,8 @@ export const buildWaterfallChartOption = ({
   columnFormats,
   xAxisColumns,
   yAxisColumns,
+  xAxisLabel,
+  yAxisLabel,
   chartTitle,
   showChartTitle = true,
   colorPalette,
@@ -621,6 +625,8 @@ export const buildWaterfallChartOption = ({
 }: SpecialChartOptionConfig): EChartsOption => {
   const { fmtName, fmtValue, yPrefix, ySuffix } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
   const yScale = getNumberScale(series)
+  const xLabel = xAxisLabel || xAxisColumns?.[0]
+  const yLabel = yAxisLabel || yAxisColumns?.[0]
 
   const values = xAxisData.map((_, index) =>
     series.reduce((sum, item) => {
@@ -682,12 +688,14 @@ export const buildWaterfallChartOption = ({
     xAxis: {
       type: 'category',
       data: allLabels,
+      name: xLabel,
       axisLabel: {
         hideOverlap: true,
       },
     },
     yAxis: {
       type: 'value',
+      name: yLabel,
       axisLabel: {
         formatter: (value: number) => applyPrefixSuffix(formatWithScale(value, yScale), yPrefix, ySuffix),
       },
