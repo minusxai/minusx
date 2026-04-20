@@ -20,6 +20,7 @@ import {
 } from '@/lib/chart/chart-utils'
 import { COLOR_PALETTE } from '@/lib/chart/echarts-theme'
 import { toJpegObjectUrl } from '@/lib/chart/render-chart-client'
+import { getChartHeight } from '@/lib/chart/render-chart-svg'
 import type { IChartImageRenderer, ChartInput, ChartRenderOptions, RenderedChart } from './IChartImageRenderer'
 import type { QueryResult } from '@/lib/types'
 import type { VizSettings } from '@/lib/types.gen'
@@ -75,7 +76,7 @@ function buildEChartsOption(
 
   return buildChartOption({
     ...sharedArgs,
-    chartType: chartType as 'line' | 'bar' | 'area' | 'scatter',
+    chartType: chartType as 'line' | 'bar' | 'area' | 'scatter' | 'combo',
     containerWidth: width,
     containerHeight: height,
     xAxisLabel,
@@ -113,10 +114,10 @@ async function renderSingleChartToDataUrl(
 export const clientChartImageRenderer: IChartImageRenderer = {
   async renderCharts(inputs: ChartInput[], options: ChartRenderOptions): Promise<RenderedChart[]> {
     const { width, colorMode, addWatermark, padding } = options
-    const height = Math.round(width * 0.5625) // 16:9
 
     const settled = await Promise.all(
       inputs.map(async ({ queryResult, vizSettings, titleOverride }) => {
+        const height = getChartHeight(vizSettings.type, width)
         const rawUrl = await renderSingleChartToDataUrl(queryResult, vizSettings, colorMode, width, height, titleOverride)
         if (!rawUrl) return null
         const dataUrl = await toJpegObjectUrl(rawUrl, width, addWatermark, colorMode, padding)
