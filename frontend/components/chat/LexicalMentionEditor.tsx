@@ -321,10 +321,11 @@ export const LexicalMentionEditor = forwardRef<LexicalMentionEditorRef, LexicalM
 // Serialization helper
 function serializeEditorState(root: any): string {
   const children = root.getChildren();
-  const parts: string[] = [];
+  const paragraphs: string[] = [];
 
   for (const child of children) {
     if (child.getType() === 'paragraph') {
+      const parts: string[] = [];
       const paragraphChildren = child.getChildren();
       for (const node of paragraphChildren) {
         if (node.getType() === 'text') {
@@ -334,8 +335,9 @@ function serializeEditorState(root: any): string {
           parts.push(`@${JSON.stringify(mentionData)}`);
         }
       }
+      paragraphs.push(parts.join(''));
     }
   }
 
-  return parts.join('');
+  return paragraphs.join('\n');
 }

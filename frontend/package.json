@@ -69,6 +69,7 @@
     "react-markdown": "^10.1.0",
     "react-moveable": "^0.56.0",
     "react-redux": "^9.2.0",
+    "remark-breaks": "^4.0.0",
     "remark-gfm": "^4.0.1",
     "rrweb": "^2.0.0-alpha.4",
     "rrweb-player": "^1.0.0-alpha.4",
