@@ -29,6 +29,13 @@ The canonical type union is `VisualizationType` in `backend/tasks/agents/analyst
 - **Image Renderable**: Whether `RENDERABLE_CHART_TYPES` includes it. These can be server-side rendered (SVG -> JPEG) and sent as images to the LLM in tool results. Defined in `lib/chart/render-chart-svg.ts`.
 - **Aspect Ratio**: Image render height-to-width ratio from `CHART_ASPECT_RATIO` in `lib/chart/render-chart-svg.ts`. Only applies to image-renderable types.
 
+## Why some types are not image-rendered
+
+- **`table`**: The data itself IS the visualization. The LLM already receives the full query result as a markdown table in the text response.
+- **`pivot`**: Same reasoning as table — it's a cross-tab of the data. The LLM gets the underlying rows and can reason about pivoted values from the text.
+- **`trend`**: Purely textual KPI cards (big number + percent change + arrow). No actual chart/graph. The LLM already gets the series values in the markdown table and can trivially derive current value and trend direction — an image of "8,801 +12.3%" adds nothing over the numbers themselves.
+- **`geo`**: Leaflet-based map rendering requires a browser with `window` (dynamic import, ssr:false). No server-side rendering path exists. Would need a fundamentally different approach (e.g., static map tile service).
+
 ## Key Files
 
 - **Type enum (source of truth)**: `backend/tasks/agents/analyst/file_schema.py` -> `VisualizationType`
