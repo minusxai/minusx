@@ -29,7 +29,7 @@ try {
 }
 
 // eslint-disable-next-line no-restricted-syntax -- immutable constant set of renderable chart types
-export const RENDERABLE_CHART_TYPES = new Set(['line', 'bar', 'area', 'scatter', 'pie', 'funnel', 'waterfall', 'radar']);
+export const RENDERABLE_CHART_TYPES = new Set(['line', 'bar', 'area', 'scatter', 'pie', 'funnel', 'waterfall', 'radar', 'combo']);
 
 /** Height-to-width ratio per chart type. Used by image renderers to pick a
  *  sensible canvas size. Charts with outside labels (pie, radar) need more
@@ -43,6 +43,7 @@ export const CHART_ASPECT_RATIO: Record<string, number> = {
   funnel:    0.5625,  // 16:9 — horizontal funnel needs width
   waterfall: 0.5625,
   radar:     1,       // 1:1
+  combo:     0.5625,  // 16:9
 };
 
 /** Compute the ideal canvas height for a given chart type and width. */
@@ -186,7 +187,7 @@ export function renderChartToSvg(
     option = buildChartOption({
       xAxisData: aggregated.xAxisData,
       series: aggregated.series,
-      chartType: chartType as 'line' | 'bar' | 'area' | 'scatter',
+      chartType: chartType as 'line' | 'bar' | 'area' | 'scatter' | 'combo',
       colorMode,
       colorPalette: COLOR_PALETTE,
       containerWidth: width,

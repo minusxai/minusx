@@ -76,7 +76,7 @@ function buildEChartsOption(
 
   return buildChartOption({
     ...sharedArgs,
-    chartType: chartType as 'line' | 'bar' | 'area' | 'scatter',
+    chartType: chartType as 'line' | 'bar' | 'area' | 'scatter' | 'combo',
     containerWidth: width,
     containerHeight: height,
     xAxisLabel,
