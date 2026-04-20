@@ -34,11 +34,11 @@ const CHART_SETTINGS: Record<string, ChartSettingsConfig> = {
   bar:       { xAxisSettings: false, yAxisSettings: true,  style: true,  annotations: true  },
   area:      { xAxisSettings: false, yAxisSettings: true,  style: true,  annotations: true  },
   scatter:   { xAxisSettings: true,  yAxisSettings: true,  style: true,  annotations: true  },
-  funnel:    { xAxisSettings: false, yAxisSettings: true,  style: true,  annotations: false },
-  pie:       { xAxisSettings: false, yAxisSettings: true,  style: true,  annotations: false },
+  funnel:    { xAxisSettings: false, yAxisSettings: false, style: true,  annotations: false },
+  pie:       { xAxisSettings: false, yAxisSettings: false, style: true,  annotations: false },
   waterfall: { xAxisSettings: false, yAxisSettings: true,  style: true,  annotations: false },
   combo:     { xAxisSettings: false, yAxisSettings: true,  style: true,  annotations: false },
-  radar:     { xAxisSettings: false, yAxisSettings: true,  style: true,  annotations: false },
+  radar:     { xAxisSettings: false, yAxisSettings: false, style: true,  annotations: false },
 }
 
 const DEFAULT_SETTINGS: ChartSettingsConfig = { xAxisSettings: false, yAxisSettings: true, style: true, annotations: false }
