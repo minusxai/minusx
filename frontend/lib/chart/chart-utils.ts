@@ -683,7 +683,6 @@ export const buildWaterfallChartOption = ({
       type: 'category',
       data: allLabels,
       axisLabel: {
-        rotate: allLabels.length > 8 ? 30 : 0,
         hideOverlap: true,
       },
     },
