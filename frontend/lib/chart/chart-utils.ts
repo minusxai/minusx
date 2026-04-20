@@ -53,6 +53,8 @@ interface SpecialChartOptionConfig {
   columnFormats?: Record<string, ColumnFormatConfig>
   xAxisColumns?: string[]
   yAxisColumns?: string[]
+  xAxisLabel?: string
+  yAxisLabel?: string
   chartTitle?: string
   showChartTitle?: boolean
   colorPalette: string[]
@@ -510,17 +512,28 @@ export const buildFunnelChartOption = ({
   })
 
   const baseColor = colorPalette[0]
-  const funnelData = rawData.map((item) => ({
-    ...item,
-    itemStyle: {
-      color: baseColor,
-      ...(styleConfig?.opacity != null ? { opacity: styleConfig.opacity } : {}),
-    },
-  }))
-
-  const maxValue = Math.max(...funnelData.map(d => d.value))
+  const maxValue = Math.max(...rawData.map(d => d.value))
   const topValue = maxValue > 0 ? maxValue : 1
-  const labelColor = colorMode === 'dark' ? '#E6EDF3' : '#0D1117'
+  const n = rawData.length
+
+  // Parse base color to RGB so we can apply per-stage alpha via rgba()
+  // This fades the fill without affecting label opacity
+  const hex = baseColor.replace('#', '')
+  const bR = parseInt(hex.substring(0, 2), 16) || 0
+  const bG = parseInt(hex.substring(2, 4), 16) || 0
+  const bB = parseInt(hex.substring(4, 6), 16) || 0
+
+  const funnelData = rawData.map((item, i) => {
+    const alpha = styleConfig?.opacity ?? (n > 1 ? 1 - (i / (n - 1)) * 0.5 : 1)
+    return {
+      ...item,
+      itemStyle: {
+        color: `rgba(${bR}, ${bG}, ${bB}, ${alpha})`,
+      },
+    }
+  })
+
+  const labelColor = '#ffffff'
 
   const baseOption: EChartsOption = {
     ...(chartTitle ? { title: { text: chartTitle, left: 'center', top: 5, show: showChartTitle } } : {}),
@@ -544,25 +557,18 @@ export const buildFunnelChartOption = ({
         return `${name}<br/>Value: ${fmtValue(value)}<br/>Percent: ${percentOfTop.toFixed(1)}%`
       },
     },
-    legend: {
-      data: funnelData.map(d => d.name),
-      top: chartTitle && showChartTitle ? 35 : 10,
-      orient: 'horizontal',
-      type: 'scroll',
-      pageIconSize: 10,
-      pageTextStyle: { fontSize: 10 },
-    },
+    legend: { show: false },
     series: [
       {
         name: 'Funnel',
         type: 'funnel',
         orient: orientation,
         ...(orientation === 'horizontal'
-          ? { left: '5%', right: '5%', top: 60, bottom: 20, width: '90%', height: '70%' }
-          : { left: '10%', top: 60, bottom: 20, width: '80%' }
+          ? { left: '5%', right: '5%', top: chartTitle && showChartTitle ? 35 : 10, bottom: 20, width: '90%', height: '80%' }
+          : { left: '10%', top: chartTitle && showChartTitle ? 35 : 10, bottom: 20, width: '80%' }
         ),
         min: 0,
-        max: Math.max(...funnelData.map(d => d.value)),
+        max: maxValue,
         minSize: '0%',
         maxSize: '100%',
         sort: 'none',
@@ -572,7 +578,7 @@ export const buildFunnelChartOption = ({
           position: 'inside',
           color: labelColor,
           fontWeight: 'bold',
-          backgroundColor: colorMode === 'dark' ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)',
+          backgroundColor: 'rgba(0,0,0,0.45)',
           borderRadius: 4,
           padding: [4, 8],
           formatter: (params: any) => {
@@ -611,6 +617,8 @@ export const buildWaterfallChartOption = ({
   columnFormats,
   xAxisColumns,
   yAxisColumns,
+  xAxisLabel,
+  yAxisLabel,
   chartTitle,
   showChartTitle = true,
   colorPalette,
@@ -621,6 +629,8 @@ export const buildWaterfallChartOption = ({
 }: SpecialChartOptionConfig): EChartsOption => {
   const { fmtName, fmtValue, yPrefix, ySuffix } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
   const yScale = getNumberScale(series)
+  const xLabel = xAxisLabel || xAxisColumns?.[0]
+  const yLabel = yAxisLabel || yAxisColumns?.[0]
 
   const values = xAxisData.map((_, index) =>
     series.reduce((sum, item) => {
@@ -682,13 +692,14 @@ export const buildWaterfallChartOption = ({
     xAxis: {
       type: 'category',
       data: allLabels,
+      name: xLabel,
       axisLabel: {
-        rotate: allLabels.length > 8 ? 30 : 0,
         hideOverlap: true,
       },
     },
     yAxis: {
       type: 'value',
+      name: yLabel,
       axisLabel: {
         formatter: (value: number) => applyPrefixSuffix(formatWithScale(value, yScale), yPrefix, ySuffix),
       },
@@ -1493,14 +1504,14 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
     : series
         .map((s, idx) => ({
           name: s.name,
-          count: s.data.filter(v => v != null && v !== 0).length,
+          total: s.data.reduce((sum, v) => sum + (typeof v === 'number' && !isNaN(v) ? Math.abs(v) : 0), 0),
           itemStyle: {
             color: palette[idx % palette.length],
             opacity: 1,
           },
         }))
-        .sort((a, b) => b.count - a.count)
-        .map(({ count, ...item }) => item)
+        .sort((a, b) => b.total - a.total)
+        .map(({ total, ...item }) => item)
 
   // Build Y-axis configuration (single or dual)
   const yAxisType = yScaleType === 'log' ? 'log' as const : 'value' as const

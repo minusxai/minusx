@@ -23,6 +23,12 @@ function hexToRgb(hex: string): [number, number, number] {
   ]
 }
 
+/** Convert hex color to rgba string */
+function hexToRgba(hex: string, alpha: number): string {
+  const [r, g, b] = hexToRgb(hex)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
 /** Convert [r, g, b] to hex */
 function rgbToHex(r: number, g: number, b: number): string {
   const toHex = (n: number) => Math.round(n).toString(16).padStart(2, '0')
@@ -107,7 +113,13 @@ export function getHeatGradient(
 ): Record<number, string> {
   const scaleKey = (scale && scale in SCALE_PALETTES ? scale : DEFAULT_SCALE) as ColorScaleKey
   const [low, mid, high] = SCALE_PALETTES[scaleKey][colorMode]
-  return { 0: low, 0.5: mid, 1: high }
+  return {
+    0: hexToRgba(low, 0),
+    0.12: low,
+    0.35: mid,
+    0.6: high,
+    1: high,
+  }
 }
 
 /**

@@ -1010,7 +1010,7 @@ export const PivotTable = ({
                     fontSize="sm"
                     fontStyle="italic"
                     color="accent.secondary"
-                    bg="accent.secondary/12"
+                    css={{ background: 'linear-gradient(var(--chakra-colors-accent-secondary/.12), var(--chakra-colors-accent-secondary/.12)), var(--chakra-colors-bg-muted)' }}
                     borderRight="1px solid"
                     borderColor="fg.muted"
 

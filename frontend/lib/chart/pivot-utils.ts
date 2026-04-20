@@ -77,8 +77,9 @@ export function aggregatePivotData(
     }
   }
 
-  const rowKeys = Array.from(rowKeyMap.keys())
-  const colKeys = Array.from(colKeyMap.keys())
+  // Sort row and column keys lexicographically ascending
+  const rowKeys = Array.from(rowKeyMap.keys()).sort()
+  const colKeys = Array.from(colKeyMap.keys()).sort()
   const rowHeaders = rowKeys.map(k => rowKeyMap.get(k)!)
   const columnHeaders = colKeys.map(k => colKeyMap.get(k)!)
 

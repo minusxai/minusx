@@ -178,7 +178,7 @@ export const LeafletMap = forwardRef<LeafletMapHandle, LeafletMapProps>(function
           pointer-events: none;
         }
       `}</style>
-      <div ref={containerRef} style={{ ...style, background: MAP_BG[colorMode] }} />
+      <div ref={containerRef} style={{ ...style, background: MAP_BG[colorMode], isolation: 'isolate' }} />
     </>
   )
 })

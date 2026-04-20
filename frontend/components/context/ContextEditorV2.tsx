@@ -425,7 +425,7 @@ export default function ContextEditorV2({
       />
 
       {/* Document Header */}
-      <Box borderBottomWidth="1px" borderColor="border.muted" pb={2} position="sticky" top={0} zIndex={10} bg="bg.canvas" mx={-3} px={3}>
+      <Box borderBottomWidth="1px" borderColor="border.muted" pb={2}>
         <DocumentHeader
           name={fileName}
           fileType="context"
