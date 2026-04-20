@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { Flex, Text, Menu, Icon, Box, Button } from '@chakra-ui/react';
+import { Flex, Text, Menu, Icon, Box, Button, Input } from '@chakra-ui/react';
 import { Link } from '@/components/ui/Link';
-import { LuChevronRight, LuChevronDown, LuTriangleAlert, LuPencil } from 'react-icons/lu';
+import { LuChevronRight, LuChevronDown, LuTriangleAlert, LuPencil, LuSearch } from 'react-icons/lu';
 import { BaseFileMetadata } from '@/lib/types';
 import { useNavigationGuard } from '@/lib/navigation/NavigationGuardProvider';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
@@ -27,6 +27,19 @@ interface BreadcrumbProps {
   bannerLabel?: string;  // Optional label shown in the banner
 }
 
+// Sort order matching FilesList sections: knowledge base → dashboards → folders → questions → other
+const TYPE_ORDER: Record<string, number> = { context: 0, dashboard: 1, folder: 2, question: 3 };
+const TYPE_LABELS: Record<string, string> = { context: 'Knowledge Base', dashboard: 'Dashboards', folder: 'Folders', question: 'Questions' };
+
+function sortByTypeHierarchy(files: BaseFileMetadata[]): BaseFileMetadata[] {
+  return [...files].sort((a, b) => {
+    const orderA = TYPE_ORDER[a.type] ?? 4;
+    const orderB = TYPE_ORDER[b.type] ?? 4;
+    if (orderA !== orderB) return orderA - orderB;
+    return a.name.localeCompare(b.name);
+  });
+}
+
 export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerColor, bannerLabel }: BreadcrumbProps) {
   const { navigate } = useNavigationGuard();
   const effectiveUser = useAppSelector(selectEffectiveUser);
@@ -35,7 +48,12 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
   const dirtyFiles = useDirtyFiles();
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false);
   const isLastItem = (index: number) => index === items.length - 1;
-  const hasDropdown = siblingFiles && siblingFiles.length > 0;
+  const [searchQuery, setSearchQuery] = useState('');
+  const sortedSiblingFiles = siblingFiles ? sortByTypeHierarchy(siblingFiles) : undefined;
+  const filteredSiblingFiles = sortedSiblingFiles
+    ? sortedSiblingFiles.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : undefined;
+  const hasDropdown = sortedSiblingFiles && sortedSiblingFiles.length > 0;
 
   // Colors that adapt based on banner mode (demo or custom banner)
   const textColor = hasBanner ? 'white' : 'fg.muted';
@@ -51,7 +69,7 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
           )}
           {/* Last item with dropdown if siblings exist */}
           {isLastItem(index) && hasDropdown ? (
-            <Menu.Root>
+            <Menu.Root onOpenChange={(details) => { if (!details.open) setSearchQuery(''); }}>
               <Menu.Trigger asChild>
                 <Flex
                   align="center"
@@ -82,41 +100,90 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
               </Menu.Trigger>
               <Menu.Positioner>
                 <Menu.Content
-                  minW="220px"
+                  minW="250px"
+                  maxH="400px"
                   p={1}
                   bg="bg.surface"
                   borderColor="border.default"
                   shadow="lg"
+                  overflow="hidden"
                 >
-                  {siblingFiles.map(file => {
+                  <Box px={1.5} pt={1} pb={1}>
+                    <Flex
+                      align="center"
+                      gap={2}
+                      px={2.5}
+                      h="32px"
+                      bg="bg.subtle"
+                      borderRadius="md"
+                      border="1px solid"
+                      borderColor="border.default"
+                      _focusWithin={{
+                        borderColor: 'accent.teal',
+                        boxShadow: '0 0 0 1px var(--chakra-colors-accent-teal)'
+                      }}
+                      transition="all 0.2s"
+                    >
+                      <Icon as={LuSearch} color="fg.muted" boxSize={3.5} flexShrink={0} />
+                      <Input
+                        size="xs"
+                        variant="unstyled"
+                        placeholder="Search files..."
+                        fontSize="sm"
+                        fontFamily="mono"
+                        px={0}
+                        h="auto"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        _focus={{ outline: 'none', boxShadow: 'none' }}
+                        _placeholder={{ color: 'fg.muted', fontFamily: 'mono' }}
+                      />
+                    </Flex>
+                  </Box>
+                  <Box overflowY="auto" maxH="340px">
+                  {filteredSiblingFiles!.map((file, i) => {
                     const metadata = getFileTypeMetadata(file.type);
+                    const prevType = i > 0 ? filteredSiblingFiles![i - 1].type : null;
+                    const isNewGroup = prevType === null || prevType !== file.type;
+                    const groupLabel = TYPE_LABELS[file.type] || 'Other';
                     return (
-                      <Menu.Item
-                        key={file.id}
-                        value={file.id.toString()}
-                        onClick={() => navigate(`/f/${file.id}`)}
-                        bg={file.id === currentFileId ? 'bg.subtle' : 'transparent'}
-                        fontWeight={file.id === currentFileId ? '600' : '400'}
-                        borderRadius="sm"
-                        px={3}
-                        py={2}
-                        cursor="pointer"
-                        _hover={{ bg: 'bg.muted' }}
-                      >
-                        <Flex align="center" gap={2}>
-                          <Icon
-                            as={metadata.icon}
-                            boxSize={4}
-                            color={metadata.color}
-                            flexShrink={0}
-                          />
-                          <Text fontSize="xs" flex="1" truncate>
-                            {file.name}
-                          </Text>
-                        </Flex>
-                      </Menu.Item>
+                      <Box key={file.id}>
+                        {isNewGroup && file.type !== 'context' && (
+                          <>
+                            {prevType !== null && <Menu.Separator />}
+                            <Text fontSize="2xs" fontWeight="600" color="fg.muted" textTransform="uppercase" letterSpacing="0.05em" px={3} pt={prevType !== null ? 1 : 0.5} pb={0.5}>
+                              {groupLabel}
+                            </Text>
+                          </>
+                        )}
+                        <Menu.Item
+                          value={file.id.toString()}
+                          onClick={() => navigate(`/f/${file.id}`)}
+                          bg={file.id === currentFileId ? 'bg.subtle' : 'transparent'}
+                          fontWeight={file.id === currentFileId ? '600' : '400'}
+                          borderRadius="sm"
+                          px={3}
+                          py={2}
+                          cursor="pointer"
+                          _hover={{ bg: 'bg.muted' }}
+                        >
+                          <Flex align="center" gap={2}>
+                            <Icon
+                              as={metadata.icon}
+                              boxSize={4}
+                              color={metadata.color}
+                              flexShrink={0}
+                            />
+                            <Text fontSize="xs" flex="1" truncate>
+                              {file.name}
+                            </Text>
+                          </Flex>
+                        </Menu.Item>
+                      </Box>
                     );
                   })}
+                  </Box>
                 </Menu.Content>
               </Menu.Positioner>
             </Menu.Root>
