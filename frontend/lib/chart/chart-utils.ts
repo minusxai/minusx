@@ -1862,9 +1862,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           ...(xMax !== undefined ? { max: xMax } : {}),
           axisLabel: {
             hideOverlap: true,
-            ...(xDateFormat ? {
-              formatter: (value: number) => formatDateValue(String(value), xDateFormat),
-            } : {}),
+            formatter: (value: number) => formatDateValue(String(value), xDateFormat || 'dd MMM yyyy'),
           },
         }
       : {
