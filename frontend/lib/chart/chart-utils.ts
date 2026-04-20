@@ -1,6 +1,7 @@
 import type { EChartsOption } from 'echarts'
 import type { EChartsType } from 'echarts/core'
 import { withMinusXTheme } from './echarts-theme'
+import type { ColumnType } from '@/lib/database/column-types'
 import type { ColumnFormatConfig, AxisConfig, VisualizationStyleConfig, ChartAnnotation } from '@/lib/types'
 import type { CompanyBranding } from '@/lib/branding/whitelabel'
 
@@ -26,6 +27,7 @@ export interface ChartProps {
   annotations?: ChartAnnotation[]
   exportBranding?: Partial<CompanyBranding>
   onDownloadImage?: () => Promise<void>
+  columnTypes?: Record<string, ColumnType>  // SQL-derived column types for axis type detection
 }
 
 interface AnnotationGraphicsConfig {
@@ -34,6 +36,7 @@ interface AnnotationGraphicsConfig {
   series: Array<{ name: string; data: number[] }>
   chartType: string
   xAxisColumns?: string[]
+  columnTypes?: Record<string, ColumnType>
   yAxisColumns?: string[]
   yRightCols?: string[]
   columnFormats?: Record<string, ColumnFormatConfig>
@@ -61,6 +64,35 @@ interface SpecialChartOptionConfig {
 
 interface FunnelChartOptionConfig extends SpecialChartOptionConfig {
   orientation?: 'horizontal' | 'vertical'
+}
+
+type CartesianXAxisKind = 'category' | 'time' | 'value'
+
+const resolveCartesianXAxisKind = (
+  xAxisColumns?: string[],
+  columnTypes?: Record<string, ColumnType>,
+): CartesianXAxisKind => {
+  const primaryXColumn = xAxisColumns?.[0]
+  if (!primaryXColumn) return 'category'
+
+  switch (columnTypes?.[primaryXColumn]) {
+    case 'number':
+      return 'value'
+    case 'date':
+      return 'time'
+    default:
+      return 'category'
+  }
+}
+
+const toCartesianAxisValue = (rawValue: string, xAxisKind: CartesianXAxisKind): string | number => {
+  return xAxisKind === 'value' ? Number(rawValue) : rawValue
+}
+
+const getCartesianYValue = (value: unknown): number | undefined => {
+  if (typeof value === 'number') return value
+  if (Array.isArray(value) && typeof value[1] === 'number') return value[1]
+  return undefined
 }
 
 const hexToRgb = (color: string): { r: number; g: number; b: number } | null => {
@@ -123,47 +155,6 @@ const wrapAnnotationText = (text: string, maxCharsPerLine = 24, maxLines = 3): s
   }
 
   return lines
-}
-
-// Calculate axis label interval based on data length, container width, and max label length after truncation
-export const calculateAxisInterval = (
-  dataLength: number,
-  containerWidth?: number,
-  maxLabelChars?: number,  // Max characters after truncation
-  useDualYAxis?: boolean   // Whether dual Y-axis is used (affects padding)
-): number | 'auto' => {
-  if (!containerWidth) {
-    // Fallback to old behavior if width is not provided
-    if (dataLength > 20) return Math.floor(dataLength / 6)
-    if (dataLength > 10) return Math.floor(dataLength / 5)
-    return 'auto'
-  }
-
-  // Account for chart padding (match the padding used in maxLabelLength calculation)
-  const gridLeftPadding = 80
-  const gridRightPadding = useDualYAxis ? 80 : 20
-  const availableWidth = containerWidth - gridLeftPadding - gridRightPadding
-
-  // Estimate label width based on truncated length (if provided) or reasonable default
-  const avgCharWidth = 7
-  const labelPadding = 20 // Space between labels
-  const effectiveChars = maxLabelChars || 15 // Use truncated length for calculation
-  const labelWidth = effectiveChars * avgCharWidth + labelPadding
-
-  // Calculate how many labels can comfortably fit
-  const maxVisibleLabels = Math.floor(availableWidth / labelWidth)
-
-  // If we can show all labels comfortably, use auto
-  if (dataLength <= maxVisibleLabels) {
-    return 'auto'
-  }
-
-  // Calculate interval to show approximately maxVisibleLabels
-  // Add small buffer (0.8x) to prevent labels from being too close
-  const targetLabels = Math.floor(maxVisibleLabels * 0.8)
-  const interval = Math.ceil(dataLength / Math.max(1, targetLabels))
-
-  return interval - 1 // ECharts uses 0-based interval (0 = show all, 1 = show every other)
 }
 
 // Format large numbers with k, M, B suffixes for compact display (axis labels)
@@ -243,7 +234,12 @@ const FULL_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'Ju
 
 /** Format a date string using a Unicode date pattern (yyyy, MM, dd, HH, mm, ss, MMM, MMMM). */
 export const formatDateValue = (dateStr: string, format: string): string => {
-  const d = new Date(dateStr)
+  // ECharts time axis passes epoch-ms as numbers; Number("1704096000000") is finite
+  // but new Date("1704096000000") returns Invalid Date — must use new Date(number)
+  const numeric = Number(dateStr)
+  const d = Number.isFinite(numeric) && String(numeric) === dateStr
+    ? new Date(numeric)
+    : new Date(dateStr)
   if (isNaN(d.getTime())) return dateStr
 
   // Resolve legacy named formats
@@ -884,6 +880,7 @@ export const buildAnnotationGraphics = ({
   series,
   chartType,
   xAxisColumns,
+  columnTypes,
   yAxisColumns,
   yRightCols,
   columnFormats,
@@ -907,6 +904,7 @@ export const buildAnnotationGraphics = ({
   const plotBottom = rect.y + rect.height
   const plotHeight = rect.height
   const useDualYAxis = axisConfig?.dualAxis === true && yRightCols && yRightCols.length > 0
+  const xAxisKind = resolveCartesianXAxisKind(xAxisColumns, columnTypes)
   const yAxisAssignments = useDualYAxis ? assignSeriesToYRightCols(series, yRightCols) : series.map(() => 0)
   const getColumnDisplayName = (col: string) => columnFormats?.[col]?.alias || col
   const getSeriesDisplayName = (seriesName: string): string => {
@@ -988,7 +986,7 @@ export const buildAnnotationGraphics = ({
 
       const pixel = chart.convertToPixel(
         finder,
-        chartType === 'scatter' ? [Number(annotation.x), pointY] : [annotation.x, pointY]
+        [typeof annotation.x === 'number' ? annotation.x : toCartesianAxisValue(String(annotation.x), xAxisKind), pointY]
       )
 
       if (!Array.isArray(pixel) || !Number.isFinite(pixel[0]) || !Number.isFinite(pixel[1])) {
@@ -1228,10 +1226,11 @@ interface BaseChartConfig {
   annotations?: ChartAnnotation[]
   exportBranding?: Partial<CompanyBranding>
   onDownloadImage?: () => Promise<void>
+  columnTypes?: Record<string, ColumnType>
 }
 
 export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
-  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, yRightCols, xAxisColumns, pointMeta, tooltipColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig, styleConfig, annotations, exportBranding, onDownloadImage } = config
+  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, yRightCols, xAxisColumns, pointMeta, tooltipColumns, chartType, additionalOptions = {}, colorMode = 'dark', columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig, styleConfig, exportBranding, onDownloadImage, columnTypes } = config
   const xScaleType = axisConfig?.xScale ?? 'linear'
   const yScaleType = axisConfig?.yScale ?? 'linear'
   const xMin = axisConfig?.xMin ?? undefined
@@ -1246,6 +1245,8 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   const logMajorGridColor = colorMode === 'dark' ? 'rgba(208, 215, 222, 0.8)' : 'rgba(48, 54, 61, 0.8)'
   const logMinorGridColor = colorMode === 'dark' ? 'rgba(208, 215, 222, 0.5)' : 'rgba(48, 54, 61, 0.5)'
 
+  const xAxisKind = resolveCartesianXAxisKind(xAxisColumns, columnTypes)
+
   // Resolve format configs for axes
   const { xDateFormat, yPrefix, ySuffix, yDecimalPoints } = resolveChartFormats(columnFormats, xAxisColumns, yAxisColumns)
   // Resolve separate prefix/suffix for right Y-axis in dual-axis mode
@@ -1256,7 +1257,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
   // Determine consistent Y-axis scale across all series (per-axis when dual axis)
   const yScale = getNumberScale(series)
 
-  const positiveScatterXValues = chartType === 'scatter'
+  const positiveXAxisValues = xAxisKind === 'value'
     ? xAxisData
         .map(value => Number(value))
         .filter(value => isFinite(value) && value > 0)
@@ -1294,19 +1295,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
 
   const resolvedYAxisLabel = axisConfig?.yTitle?.trim() || yAxisLabel
 
-  // Calculate max length for Y-axis names based on available height
-  // Y-axis text is vertical (rotated 90°), so available space = chart height - grid padding
-  // Grid padding: 60px top + 60px bottom = 120px
-  // Character height for vertical text ≈ fontSize (18px) since rotation makes line-height affect horizontal spacing
-  const calculateMaxAxisNameLength = (): number => {
-    if (!containerHeight) return 40 // Fallback (fits ~840px height)
-    const gridPadding = 50 // Only subtract actual vertical padding
-    const availableHeight = Math.max(containerHeight - gridPadding, 150)
-    const charHeight = 14 // fontSize for vertical text
-    return Math.floor(availableHeight / charHeight)
-  }
-
-  const maxAxisNameLength = calculateMaxAxisNameLength()
+  const maxAxisNameLength = 40
 
   const getColumnDisplayName = (col: string) => columnFormats?.[col]?.alias || col
 
@@ -1334,22 +1323,36 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
       ? `${series[index].name} (${yAxisAssignments[index] === 0 ? 'L' : 'R'})`
       : series[index].name
 
+    const buildPointValue = (dataIndex: number, y: number) => (
+      [toCartesianAxisValue(xAxisData[dataIndex], xAxisKind), y] as [string | number, number]
+    )
+
+    const usesPointData = type === 'scatter' || xAxisKind !== 'category'
+
+    const pointData = series[index].data
+      .map((y, dataIndex) => {
+        const value = buildPointValue(dataIndex, y)
+        return type === 'scatter'
+          ? { value, tooltipMeta: pointMeta?.[dataIndex] }
+          : value
+      })
+      .filter((item) => {
+        const value = Array.isArray(item) ? item : item.value
+        const x = value[0]
+        const y = value[1]
+        if (!isFinite(y)) return type !== 'scatter'
+        if (type === 'scatter' && yScaleType === 'log' && y <= 0) return false
+        if (xAxisKind === 'value') {
+          const numericX = x as number
+          return isFinite(numericX) && (xScaleType !== 'log' || numericX > 0)
+        }
+        return true
+      })
+
     const baseConfig = {
       name: seriesName,
       type: seriesType as 'line' | 'bar' | 'scatter',
-      data: type === 'scatter'
-        ? series[index].data
-            .map((y, i) => ({
-              value: [Number(xAxisData[i]), y] as [number, number],
-              tooltipMeta: pointMeta?.[i],
-            }))
-            .filter(({ value: [x, y] }) => (
-              isFinite(x)
-              && isFinite(y)
-              && (xScaleType !== 'log' || x > 0)
-              && (yScaleType !== 'log' || y > 0)
-            ))
-        : series[index].data,
+      data: usesPointData ? pointData : series[index].data,
       itemStyle: {
         color: palette[index % palette.length],
         ...(seriesOpacity != null ? { opacity: seriesOpacity } : {}),
@@ -1538,20 +1541,11 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
     ...(yMin !== undefined ? { min: yMin } : {}),
     ...(yMax !== undefined ? { max: yMax } : {}),
   }
-  // Estimate nameGap based on longest formatted tick label width
-  const estimateNameGap = (formatter: (v: number) => string, scale: NumberScale): number => {
-    // Sample a few representative values to find the widest label
-    const sampleValues = [0, scale.divisor, scale.divisor * 5, scale.divisor * 10]
-    const maxLen = Math.max(...sampleValues.map(v => formatter(v).length))
-    // ~7px per character + 10px padding
-    return Math.max(25, maxLen * 7 + 10)
-  }
   const yAxisConfig = useDualYAxis
     ? [
         {
           type: yAxisType,
           name: getAxisName(0),
-          nameGap: estimateNameGap(yAxisFormatterLeft, yScaleLeft),
           position: 'left' as const,
           ...yExtraProps,
           ...yLogRangeProps,
@@ -1561,7 +1555,6 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         {
           type: yAxisType,
           name: getAxisName(1),
-          nameGap: estimateNameGap(yAxisFormatterRight, yScaleRight),
           position: 'right' as const,
           ...yExtraProps,
           ...yLogRangeProps,
@@ -1572,61 +1565,12 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
       : {
         type: yAxisType,
         name: wrapAxisName(resolvedYAxisLabel, maxAxisNameLength),
-        nameGap: estimateNameGap(yAxisFormatter, yScale),
         ...yExtraProps,
         ...yLogRangeProps,
         ...yRangeProps,
         axisLabel: { formatter: yAxisFormatter },
       }
 
-  // Step 1: Detect date data characteristics for smart formatting
-  type DateFormatNeeds = { needsYear: boolean; needsMonth: boolean; needsDay: boolean } | null
-  const detectDateFormatNeeds = (): DateFormatNeeds => {
-    const datePattern = /^\d{4}-\d{2}-\d{2}/
-    const isDateData = xAxisData.length > 0 && xAxisData.every(v => datePattern.test(v))
-    if (!isDateData) return null
-
-    const dates = xAxisData.map(v => new Date(v))
-    const years = new Set(dates.map(d => d.getUTCFullYear()))
-    const yearMonths = new Set(dates.map(d => `${d.getUTCFullYear()}-${d.getUTCMonth()}`))
-    const uniqueDates = new Set(xAxisData)
-
-    return {
-      needsYear: years.size > 1,
-      needsMonth: yearMonths.size > 1,
-      needsDay: uniqueDates.size > yearMonths.size,
-    }
-  }
-
-  const dateFormatNeeds = detectDateFormatNeeds()
-
-  // Step 2: Calculate label interval and max label length together
-  // These are interdependent: interval affects visible label count, which affects space per label
-  const prefixSuffixExtra = ((yPrefix?.length ?? 0) + (ySuffix?.length ?? 0)) * 7
-  const gridLeftPadding = 80 + prefixSuffixExtra
-  const gridRightPadding = useDualYAxis ? 80 : 20
-  const availableWidth = containerWidth ? containerWidth - gridLeftPadding - gridRightPadding : 500
-  const avgCharWidth = 7
-  const labelMargin = 20
-
-  // First pass: estimate interval with minimal label length (6 chars)
-  const minLabelWidth = 6 * avgCharWidth + labelMargin
-  const maxVisibleLabels = Math.floor(availableWidth / minLabelWidth)
-  const estimatedInterval = xAxisData.length <= maxVisibleLabels
-    ? 0  // Show all labels
-    : Math.ceil(xAxisData.length / Math.max(1, Math.floor(maxVisibleLabels * 0.8))) - 1
-
-  // Calculate actual number of visible labels based on interval
-  const numVisibleLabels = estimatedInterval === 0
-    ? xAxisData.length
-    : Math.ceil(xAxisData.length / (estimatedInterval + 1))
-
-  // Now calculate max label length based on space per VISIBLE label
-  const spacePerVisibleLabel = availableWidth / Math.max(1, numVisibleLabels)
-  const maxLabelLength = Math.max(6, Math.min(25, Math.floor((spacePerVisibleLabel - labelMargin) / avgCharWidth)))
-
-  // Use the estimated interval (could refine further but this is good enough)
-  const labelInterval = estimatedInterval
   // Helper to generate and download CSV from chart data
   const downloadCsv = () => {
     // Build CSV header: first column is X-axis, rest are series names
@@ -1683,7 +1627,13 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           formatter: (params: any) => {
             const point = params.data?.value ? params.data : { value: params.data, tooltipMeta: undefined }
             const [x, y] = point.value
-            const formattedX = formatLargeNumber(x)
+            const formattedX = xAxisKind === 'time' && xDateFormat
+              ? formatDateValue(String(x), xDateFormat)
+              : xAxisKind === 'time'
+                ? formatDateValue(String(x), 'MMM dd, yyyy')
+                : xAxisKind === 'value'
+                ? formatLargeNumber(x as number)
+                : String(x)
             const scatterCfg = columnFormats?.[params.seriesName]
             const scatterPrefix = scatterCfg?.prefix || yPrefix
             const scatterSuffix = scatterCfg?.suffix || ySuffix
@@ -1739,10 +1689,16 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           formatter: (params: any) => {
             const items = Array.isArray(params) ? params : [params]
             if (items.length === 0) return ''
-            const raw = items[0].axisValueLabel
-            const isDate = /^\d{4}-\d{2}-\d{2}/.test(raw)
-            const header = xDateFormat ? formatDateValue(raw, xDateFormat) : isDate ? formatDateValue(raw, 'MMM dd, yyyy') : raw
-            const nonZeroItems = items.filter((p: any) => typeof p.value === 'number' ? p.value !== 0 : true)
+            const rawAxisValue = items[0].axisValue ?? items[0].axisValueLabel
+            const header = xAxisKind === 'time'
+              ? formatDateValue(String(rawAxisValue), xDateFormat || 'MMM dd, yyyy')
+              : xAxisKind === 'value'
+                ? formatLargeNumber(Number(rawAxisValue))
+                : String(items[0].axisValueLabel ?? rawAxisValue)
+            const nonZeroItems = items.filter((p: any) => {
+              const yValue = getCartesianYValue(p.value)
+              return yValue === undefined ? true : yValue !== 0
+            })
             const rows = nonZeroItems.map((p: any) => {
               // Resolve per-series format config: use column name stripped of axis indicator
               const baseSeriesName = p.seriesName?.replace(/ \([LR]\)$/, '') ?? ''
@@ -1752,9 +1708,10 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
               const seriesSuffix = colCfg?.suffix ?? (isRightAxis ? ySuffixRight : ySuffix)
               const seriesScale = isRightAxis ? yScaleRight : (useDualYAxis ? yScaleLeft : yScale)
               let val: string
-              if (typeof p.value === 'number') {
+              const yValue = getCartesianYValue(p.value)
+              if (yValue !== undefined) {
                 const dp = colCfg?.decimalPoints ?? undefined
-                const formatted = dp !== undefined ? formatNumber(p.value, dp) : formatWithScale(p.value, seriesScale)
+                const formatted = dp !== undefined ? formatNumber(yValue, dp) : formatWithScale(yValue, seriesScale)
                 val = applyPrefixSuffix(formatted, seriesPrefix, seriesSuffix)
               } else {
                 val = String(p.value)
@@ -1773,7 +1730,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
       pageTextStyle: {fontSize: 10},
       formatter: (name: string) => getSeriesDisplayName(name),
     },
-    xAxis: chartType === 'scatter'
+    xAxis: xAxisKind === 'value'
       ? {
           type: (xScaleType === 'log' ? 'log' : 'value') as 'log' | 'value',
           name: xAxisLabel,
@@ -1798,12 +1755,24 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
                 width: 1,
               },
             },
-            ...(xMin === undefined || xMax === undefined ? getLogExtent(positiveScatterXValues) : {}),
+            ...(xMin === undefined || xMax === undefined ? getLogExtent(positiveXAxisValues) : {}),
           } : {}),
           ...(xMin !== undefined ? { min: xMin } : {}),
           ...(xMax !== undefined ? { max: xMax } : {}),
           axisLabel: {
+            hideOverlap: true,
             formatter: (value: number) => formatLargeNumber(value),
+          },
+        }
+      : xAxisKind === 'time'
+      ? {
+          type: 'time' as const,
+          name: xAxisLabel,
+          ...(xMin !== undefined ? { min: xMin } : {}),
+          ...(xMax !== undefined ? { max: xMax } : {}),
+          axisLabel: {
+            hideOverlap: true,
+            formatter: (value: number) => formatDateValue(String(value), xDateFormat || 'dd MMM yyyy'),
           },
         }
       : {
@@ -1812,37 +1781,9 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           name: xAxisLabel,
           ...(chartType !== 'bar' && chartType !== 'combo' && { boundaryGap: false }),
           axisLabel: {
-            interval: labelInterval,
-            rotate: 0,
-            formatter: (value: string) => {
-              if (xDateFormat) {
-                return formatDateValue(value, xDateFormat)
-              }
-
-              const date = new Date(value)
-              if (!isNaN(date.getTime()) && /^\d{4}-\d{2}-\d{2}/.test(value) && dateFormatNeeds) {
-                const month = date.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })
-                const day = date.getUTCDate()
-                const year = date.getUTCFullYear()
-                const shortYear = (year % 100).toString().padStart(2, '0')
-                const pad = (n: number) => n.toString().padStart(2, '0')
-                const { needsDay } = dateFormatNeeds
-
-                if (maxLabelLength >= 9 && needsDay) {
-                  return `${year}-${month}-${pad(day)}`
-                } else if (maxLabelLength >= 6) {
-                  return `${month}'${shortYear}`
-                } else if (maxLabelLength >= 3) {
-                  return `${year}`
-                }
-                return month
-              }
-
-              if (value.length > maxLabelLength) {
-                return value.slice(0, maxLabelLength - 1) + '…'
-              }
-              return value
-            },
+            hideOverlap: true,
+            overflow: 'truncate',
+            width: 120,
           },
           ...(chartType === 'line' && { splitLine: { show: false } }),
         },

@@ -11,6 +11,7 @@ import * as echarts from 'echarts';
 import { aggregateData } from './aggregate-data';
 import { buildChartOption, buildFunnelChartOption, buildPieChartOption, buildRadarChartOption, buildWaterfallChartOption } from './chart-utils';
 import { COLOR_PALETTE } from './echarts-theme';
+import { buildColumnTypesMap } from '@/lib/database/column-types';
 import type { QueryResult } from '@/lib/types';
 import type { VizSettings } from '@/lib/types.gen';
 
@@ -92,6 +93,7 @@ export function renderChartToSvg(
 
   const xCols = vizSettings.xCols ?? [];
   const yCols = vizSettings.yCols ?? [];
+  const columnTypes = buildColumnTypesMap(queryResult.columns, queryResult.types)
 
   if (yCols.length === 0 || queryResult.rows.length === 0) {
     return null;
@@ -102,6 +104,8 @@ export function renderChartToSvg(
     xCols,
     yCols,
     chartType as Parameters<typeof aggregateData>[3],
+    [],
+    columnTypes,
   );
 
   if (aggregated.xAxisData.length === 0 && aggregated.series.length === 0) {
@@ -173,6 +177,7 @@ export function renderChartToSvg(
       yAxisLabel,
       columnFormats: vizSettings.columnFormats ?? undefined,
       chartTitle,
+      columnTypes,
     });
   }
 

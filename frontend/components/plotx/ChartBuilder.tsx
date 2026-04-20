@@ -35,6 +35,7 @@ import type { CompanyBranding } from '@/lib/branding/whitelabel'
 import type { ChartAnnotation } from '@/lib/types'
 import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client'
 import { useAppSelector } from '@/store/hooks'
+import { buildColumnTypesMap } from '@/lib/database/column-types'
 import dynamic from 'next/dynamic'
 
 // GeoPlot imports leaflet.heat which accesses `window` at module evaluation time — ssr:false prevents
@@ -87,6 +88,7 @@ interface GroupedColumns {
 export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, initialYCols, initialYRightCols, onAxisChange, onYRightColsChange, showAxisBuilder = true, useCompactView: useCompactViewProp = false, fillHeight = false, initialPivotConfig, onPivotConfigChange, initialGeoConfig, onGeoConfigChange, sql, databaseName, initialColumnFormats, onColumnFormatsChange, initialTooltipCols, onTooltipColsChange, settingsExpanded: settingsExpandedProp, showChartTitle = true, styleConfig, onStyleConfigChange, axisConfig, onAxisConfigChange, annotations, onAnnotationsChange, trendConfig, onTrendConfigChange, exportBranding }: ChartBuilderProps) => {
   const colorMode = useAppSelector((state) => state.ui.colorMode) as 'light' | 'dark'
   const colorPalette = useMemo(() => getEffectiveColorPalette(styleConfig?.colors), [styleConfig?.colors])
+  const columnTypes = useMemo(() => buildColumnTypesMap(columns, types), [columns, types])
 
   // Group columns by type
   const groupedColumns: GroupedColumns = useMemo(() => {
@@ -351,8 +353,8 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
   }, [isDualAxis, yAxisColumns, yRightColumns])
 
   const aggregatedData = useMemo(() => {
-    return aggregateData(rows, xAxisColumns, allYColumns, chartType, tooltipColumns)
-  }, [rows, xAxisColumns, allYColumns, chartType, tooltipColumns])
+    return aggregateData(rows, xAxisColumns, allYColumns, chartType, tooltipColumns, columnTypes)
+  }, [rows, xAxisColumns, allYColumns, chartType, tooltipColumns, columnTypes])
 
   // Compute axis mapping for multi-X-column charts (needed for drill-down click handler)
   const axisMapping = useMemo(() => {
@@ -779,6 +781,7 @@ export const ChartBuilder = ({ columns, types, rows, chartType, initialXCols, in
                       axisConfig,
                       styleConfig,
                       annotations,
+                      columnTypes,
                       exportBranding,
                       onDownloadImage,
                     }

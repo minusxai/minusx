@@ -10,6 +10,7 @@
  */
 import * as echarts from 'echarts'
 import { aggregateData } from '@/lib/chart/aggregate-data'
+import { buildColumnTypesMap } from '@/lib/database/column-types'
 import {
   buildChartOption,
   buildPieChartOption,
@@ -36,11 +37,14 @@ function buildEChartsOption(
   if (yCols.length === 0 || queryResult.rows.length === 0) return null
 
   const chartType = vizSettings.type
+  const columnTypes = buildColumnTypesMap(queryResult.columns, queryResult.types)
   const aggregated = aggregateData(
     queryResult.rows,
     xCols,
     yCols,
     chartType as Parameters<typeof aggregateData>[3],
+    [],
+    columnTypes,
   )
   if (aggregated.xAxisData.length === 0 && aggregated.series.length === 0) return null
 
@@ -61,6 +65,7 @@ function buildEChartsOption(
     chartTitle,
     colorPalette: COLOR_PALETTE,
     columnFormats: vizSettings.columnFormats ?? undefined,
+    columnTypes,
   }
 
   if (chartType === 'pie') return buildPieChartOption(sharedArgs)

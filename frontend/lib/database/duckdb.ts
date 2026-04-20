@@ -1,4 +1,5 @@
 import * as duckdb from '@duckdb/duckdb-wasm'
+import { getColumnType } from './column-types'
 
 let db: duckdb.AsyncDuckDB | null = null
 let connection: duckdb.AsyncDuckDBConnection | null = null
@@ -204,36 +205,7 @@ async function calculateTextStats(tableName: string, column: string): Promise<Te
   }
 }
 
-export function getColumnType(sqlType: string): 'number' | 'date' | 'text' | 'json' {
-  const type = sqlType.toUpperCase()
-
-  if (
-    type.includes('INT') ||
-    type.includes('FLOAT') ||
-    type.includes('DOUBLE') ||
-    type.includes('DECIMAL') ||
-    type.includes('NUMERIC') ||
-    type.includes('REAL')
-  ) {
-    return 'number'
-  }
-
-  if (type.includes('DATE') || type.includes('TIME') || type.includes('TIMESTAMP')) {
-    return 'date'
-  }
-
-  if (
-    type.includes('JSON') ||
-    type.includes('STRUCT') ||
-    type.includes('MAP') ||
-    type.includes('LIST') ||
-    type.includes('ARRAY')
-  ) {
-    return 'json'
-  }
-
-  return 'text'
-}
+export { getColumnType }
 
 export async function calculateColumnStats(
   tableName: string,

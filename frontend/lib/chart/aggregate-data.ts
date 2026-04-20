@@ -1,3 +1,5 @@
+import type { ColumnType } from '@/lib/database/column-types'
+
 export interface AggregatedData {
   xAxisData: string[]
   series: Array<{
@@ -13,7 +15,8 @@ export const aggregateData = (
   xAxisColumns: string[],
   yAxisColumns: string[],
   chartType: 'line' | 'bar' | 'area' | 'scatter' | 'funnel' | 'pie' | 'pivot' | 'trend' | 'waterfall' | 'combo' | 'radar' | 'geo',
-  tooltipColumns: string[] = []
+  tooltipColumns: string[] = [],
+  columnTypes?: Record<string, ColumnType>,
 ): AggregatedData => {
   if (yAxisColumns.length === 0) {
     return { xAxisData: [], series: [] }
@@ -22,16 +25,26 @@ export const aggregateData = (
   // Scatter plots: no aggregation, each row is a raw data point
   // Extra X columns (beyond the first) act as split/grouping variables
   if (chartType === 'scatter') {
-    const xCol = xAxisColumns[0] // primary X axis (numeric)
+    const xCol = xAxisColumns[0]
     const groupingCols = xAxisColumns.slice(1) // split variables
+
+    const normalizeXValue = (value: any, columnType?: ColumnType) => {
+      if (value === null || value === undefined) return ''
+      if (columnType === 'date') {
+        return value instanceof Date ? value.toISOString() : String(value)
+      }
+      if (columnType === 'json') {
+        return typeof value === 'string' ? value : JSON.stringify(value)
+      }
+      if (typeof value === 'object') {
+        return JSON.stringify(value)
+      }
+      return String(value)
+    }
 
     const formatX = (row: Record<string, any>) => {
       if (!xCol) return ''
-      const val = row[xCol]
-      if (val instanceof Date) {
-        return val.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-      }
-      return String(val ?? '')
+      return normalizeXValue(row[xCol], columnTypes?.[xCol])
     }
 
     // No split columns: one series per Y column, all rows included
@@ -109,13 +122,14 @@ export const aggregateData = (
   rows.forEach(row => {
     const xKey = xAxisColumns.map(col => {
       const val = row[col]
-      if (val instanceof Date) {
-        return val.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      const columnType = columnTypes?.[col]
+      if (columnType === 'date') {
+        return val instanceof Date ? val.toISOString() : String(val ?? '')
       }
-      if (typeof val === 'object' && val !== null) {
-        return JSON.stringify(val)
+      if (columnType === 'json' || (typeof val === 'object' && val !== null)) {
+        return typeof val === 'string' ? val : JSON.stringify(val)
       }
-      return String(val)
+      return String(val ?? '')
     }).join(' | ')
 
     if (!grouped.has(xKey)) {
@@ -176,9 +190,9 @@ export const aggregateData = (
 
     rows.forEach(row => {
       const val = row[xAxisCol]
-      const primaryKey = val instanceof Date
-        ? val.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-        : String(val)
+      const primaryKey = columnTypes?.[xAxisCol] === 'date'
+        ? (val instanceof Date ? val.toISOString() : String(val ?? ''))
+        : String(val ?? '')
 
       const secondaryKey = groupingCols.map(col => String(row[col])).join(' | ')
 

@@ -14,6 +14,16 @@ const SAMPLE_QUERY_RESULT: QueryResult = {
   rows: SAMPLE_ROWS,
 };
 
+const DATE_QUERY_RESULT: QueryResult = {
+  columns: ['date', 'revenue'],
+  types: ['DATE', 'INTEGER'],
+  rows: [
+    { date: '2024-01-15', revenue: 100 },
+    { date: '2024-02-20', revenue: 200 },
+    { date: '2024-03-10', revenue: 150 },
+  ],
+};
+
 describe('renderChartToSvg', () => {
   describe('bar chart', () => {
     it('renders a valid SVG string', () => {
@@ -49,6 +59,18 @@ describe('renderChartToSvg', () => {
       };
 
       const svg = renderChartToSvg(SAMPLE_QUERY_RESULT, vizSettings);
+      expect(svg).toContain('<svg');
+      expect(svg).toContain('</svg>');
+    });
+
+    it('renders a valid SVG string with a date x-axis from SQL types', () => {
+      const vizSettings: VizSettings = {
+        type: 'line',
+        xCols: ['date'],
+        yCols: ['revenue'],
+      };
+
+      const svg = renderChartToSvg(DATE_QUERY_RESULT, vizSettings);
       expect(svg).toContain('<svg');
       expect(svg).toContain('</svg>');
     });
