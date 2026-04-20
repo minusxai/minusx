@@ -607,7 +607,18 @@ registerFrontendTool('EditFile', async (args, _context) => {
     queryResults: deltaQueryResults,
     ...(sourceWarnings.length > 0 ? { sourceWarnings } : {}),
   };
-  const imageBlocks = await renderFileChartImageBlocks([augmented]);
+  // Image delta: only render chart when query result or vizSettings changed.
+  const queryResultChanged = compressed.queryResults.some((qr: any) => {
+    const qrId: string | undefined = qr.id;
+    return !qrId || !prevQueryResultIds.has(qrId);
+  });
+  const prevVizSettings = (augmentedBefore?.fileState.content as any)?.vizSettings;
+  const currVizSettings = (augmented.fileState.content as any)?.vizSettings;
+  const vizSettingsChanged = JSON.stringify(prevVizSettings) !== JSON.stringify(currVizSettings);
+
+  const imageBlocks = (queryResultChanged || vizSettingsChanged)
+    ? await renderFileChartImageBlocks([augmented])
+    : [];
   if (imageBlocks.length === 0) {
     return { content, details: { success: true, diff } as EditFileDetails };
   }
