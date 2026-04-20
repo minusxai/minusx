@@ -1230,7 +1230,7 @@ interface BaseChartConfig {
 }
 
 export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
-  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, yRightCols, xAxisColumns, pointMeta, tooltipColumns, chartType, additionalOptions = {}, colorMode = 'dark', containerWidth, containerHeight, columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig, styleConfig, annotations, exportBranding, onDownloadImage, columnTypes } = config
+  const { xAxisData, series, xAxisLabel, yAxisLabel, yAxisColumns, yRightCols, xAxisColumns, pointMeta, tooltipColumns, chartType, additionalOptions = {}, colorMode = 'dark', columnFormats, chartTitle, showChartTitle = true, colorPalette: palette, axisConfig, styleConfig, exportBranding, onDownloadImage, columnTypes } = config
   const xScaleType = axisConfig?.xScale ?? 'linear'
   const yScaleType = axisConfig?.yScale ?? 'linear'
   const xMin = axisConfig?.xMin ?? undefined
@@ -1295,19 +1295,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
 
   const resolvedYAxisLabel = axisConfig?.yTitle?.trim() || yAxisLabel
 
-  // Calculate max length for Y-axis names based on available height
-  // Y-axis text is vertical (rotated 90°), so available space = chart height - grid padding
-  // Grid padding: 60px top + 60px bottom = 120px
-  // Character height for vertical text ≈ fontSize (18px) since rotation makes line-height affect horizontal spacing
-  const calculateMaxAxisNameLength = (): number => {
-    if (!containerHeight) return 40 // Fallback (fits ~840px height)
-    const gridPadding = 50 // Only subtract actual vertical padding
-    const availableHeight = Math.max(containerHeight - gridPadding, 150)
-    const charHeight = 14 // fontSize for vertical text
-    return Math.floor(availableHeight / charHeight)
-  }
-
-  const maxAxisNameLength = calculateMaxAxisNameLength()
+  const maxAxisNameLength = 40
 
   const getColumnDisplayName = (col: string) => columnFormats?.[col]?.alias || col
 
@@ -1583,8 +1571,6 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         axisLabel: { formatter: yAxisFormatter },
       }
 
-  // Max characters for category axis labels before truncating (hideOverlap handles density)
-  const maxLabelLength = 20
   // Helper to generate and download CSV from chart data
   const downloadCsv = () => {
     // Build CSV header: first column is X-axis, rest are series names
@@ -1796,12 +1782,8 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           ...(chartType !== 'bar' && chartType !== 'combo' && { boundaryGap: false }),
           axisLabel: {
             hideOverlap: true,
-            formatter: (value: string) => {
-              if (value.length > maxLabelLength) {
-                return value.slice(0, maxLabelLength - 1) + '…'
-              }
-              return value
-            },
+            overflow: 'truncate',
+            width: 120,
           },
           ...(chartType === 'line' && { splitLine: { show: false } }),
         },
