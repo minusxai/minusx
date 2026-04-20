@@ -127,16 +127,17 @@ export default function Breadcrumb({ items, siblingFiles, currentFileId, bannerC
                       <Icon as={LuSearch} color="fg.muted" boxSize={3.5} flexShrink={0} />
                       <Input
                         size="xs"
-                        variant="unstyled"
-                        placeholder="Search files..."
+                        variant="outline"
+                        placeholder={`Search in ${items[index - 1]?.label ?? item.label}`}
                         fontSize="sm"
                         fontFamily="mono"
                         px={0}
                         h="auto"
+                        border="none"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         onKeyDown={(e) => e.stopPropagation()}
-                        _focus={{ outline: 'none', boxShadow: 'none' }}
+                        _focus={{ outline: 'none', boxShadow: 'none', border: 'none' }}
                         _placeholder={{ color: 'fg.muted', fontFamily: 'mono' }}
                       />
                     </Flex>
