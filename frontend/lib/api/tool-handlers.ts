@@ -22,7 +22,7 @@ import { selectEffectiveUser } from '@/store/authSlice';
 import { selectAppState } from '@/store/appStateSelector';
 import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client';
 import { RENDERABLE_CHART_TYPES } from '@/lib/chart/render-chart-svg';
-import { uploadFile } from '@/lib/object-store/client';
+import { uploadChartOrEmbed } from '@/lib/chart/chart-attachments';
 
 // ============================================================================
 // Frontend Tool Registry
@@ -159,10 +159,8 @@ async function renderFileChartImageBlocks(
     const blocks = await Promise.all(
       rendered.map(async r => {
         if (!r) return null;
-        const blob = await fetch(r.dataUrl).then(res => res.blob());
-        const chartFile = new File([blob], 'chart.jpg', { type: 'image/jpeg' });
-        const { publicUrl } = await uploadFile(chartFile, undefined, { keyType: 'charts' });
-        return { type: 'image_url' as const, image_url: { url: publicUrl } };
+        const url = await uploadChartOrEmbed(r.dataUrl);
+        return { type: 'image_url' as const, image_url: { url } };
       })
     );
     return blocks.filter(Boolean) as { type: 'image_url'; image_url: { url: string } }[];
@@ -609,7 +607,14 @@ registerFrontendTool('EditFile', async (args, _context) => {
     queryResults: deltaQueryResults,
     ...(sourceWarnings.length > 0 ? { sourceWarnings } : {}),
   };
-  return { content, details: { success: true, diff } as EditFileDetails };
+  const imageBlocks = await renderFileChartImageBlocks([augmented]);
+  if (imageBlocks.length === 0) {
+    return { content, details: { success: true, diff } as EditFileDetails };
+  }
+  return {
+    content: [{ type: 'text', text: JSON.stringify(content) }, ...imageBlocks],
+    details: { success: true, diff } as EditFileDetails,
+  };
 });
 
 /**
@@ -722,7 +727,14 @@ registerFrontendTool('CreateFile', async (args, context) => {
   }
 
   const result = { success: true, state: compressAugmentedFile(augmented) };
-  return { content: result, details: { success: true } };
+  const imageBlocks = await renderFileChartImageBlocks([augmented]);
+  if (imageBlocks.length === 0) {
+    return { content: result, details: { success: true } };
+  }
+  return {
+    content: [{ type: 'text', text: JSON.stringify(result) }, ...imageBlocks],
+    details: { success: true },
+  };
 });
 
 

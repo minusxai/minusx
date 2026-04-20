@@ -31,6 +31,26 @@ try {
 // eslint-disable-next-line no-restricted-syntax -- immutable constant set of renderable chart types
 export const RENDERABLE_CHART_TYPES = new Set(['line', 'bar', 'area', 'scatter', 'pie', 'funnel', 'waterfall', 'radar']);
 
+/** Height-to-width ratio per chart type. Used by image renderers to pick a
+ *  sensible canvas size. Charts with outside labels (pie, radar) need more
+ *  vertical space; wide charts (bar, line) work best at 16:9.  */
+export const CHART_ASPECT_RATIO: Record<string, number> = {
+  line:      0.5625,  // 16:9
+  bar:       0.5625,
+  area:      0.5625,
+  scatter:   0.5625,
+  pie:       1,       // 1:1 — outside labels need vertical room
+  funnel:    0.5625,  // 16:9 — horizontal funnel needs width
+  waterfall: 0.5625,
+  radar:     1,       // 1:1
+};
+
+/** Compute the ideal canvas height for a given chart type and width. */
+export function getChartHeight(vizType: string, width: number): number {
+  const ratio = CHART_ASPECT_RATIO[vizType] ?? 0.5625;
+  return Math.round(width * ratio);
+}
+
 export const BG_COLORS = {
   dark: '#161b22',
   light: '#ffffff',

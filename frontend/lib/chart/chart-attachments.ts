@@ -86,7 +86,7 @@ export function extractChartEntries(
  * Local FS URLs (/api/object-store/serve/…) are auth-gated localhost routes
  * that the Claude API cannot reach. The data URL avoids the round-trip entirely.
  */
-async function uploadChartOrEmbed(dataUrl: string): Promise<string> {
+export async function uploadChartOrEmbed(dataUrl: string): Promise<string> {
   const params = new URLSearchParams({ filename: 'chart.jpg', contentType: 'image/jpeg', keyType: 'charts' });
   const res = await fetch(`/api/object-store/upload-url?${params}`);
   if (!res.ok) throw new Error(`Failed to get upload URL (${res.status})`);
