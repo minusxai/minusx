@@ -159,6 +159,23 @@ function SmartEmbeddedQuestionContainerInner({
                           <span>Edit question</span>
                         </HStack>
                       </Menu.Item>
+                      {onRemove && (
+                        <Menu.Item
+                          value="remove"
+                          cursor="pointer"
+                          borderRadius="sm"
+                          px={3}
+                          py={2}
+                          _hover={{ bg: 'bg.muted' }}
+                          onClick={onRemove}
+                          aria-label="Remove from dashboard"
+                        >
+                          <HStack gap={2}>
+                            <Icon as={LuTrash2} boxSize={4} color="accent.danger" />
+                            <span>Remove from dashboard</span>
+                          </HStack>
+                        </Menu.Item>
+                      )}
                     </Menu.Content>
                   </Menu.Positioner>
                 </Portal>
