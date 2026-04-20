@@ -317,24 +317,20 @@ export const PivotAxisBuilder = ({
         <Box p={3} bg="bg.canvas" display="flex" flexDirection="column" gap={3}>
           {renderSettingsCard('Options', 'options',
             <HStack gap={4} flexWrap="wrap">
-              {config.columns.length >= 2 && (
-                <Checkbox
-                  checked={config.showRowTotals !== false}
-                  onCheckedChange={(e) => onPivotConfigChange({ ...config, showRowTotals: e.checked })}
-                  size="sm"
-                >
-                  <Text fontSize="xs" color="fg.muted">Row Totals</Text>
-                </Checkbox>
-              )}
-              {config.rows.length >= 2 && (
-                <Checkbox
-                  checked={config.showColumnTotals !== false}
-                  onCheckedChange={(e) => onPivotConfigChange({ ...config, showColumnTotals: e.checked })}
-                  size="sm"
-                >
-                  <Text fontSize="xs" color="fg.muted">Column Totals</Text>
-                </Checkbox>
-              )}
+              <Checkbox
+                checked={config.showRowTotals !== false}
+                onCheckedChange={(e) => onPivotConfigChange({ ...config, showRowTotals: e.checked })}
+                size="sm"
+              >
+                <Text fontSize="xs" color="fg.muted">Row Totals</Text>
+              </Checkbox>
+              <Checkbox
+                checked={config.showColumnTotals !== false}
+                onCheckedChange={(e) => onPivotConfigChange({ ...config, showColumnTotals: e.checked })}
+                size="sm"
+              >
+                <Text fontSize="xs" color="fg.muted">Column Totals</Text>
+              </Checkbox>
               <Checkbox
                 checked={config.showHeatmap !== false}
                 onCheckedChange={(e) => onPivotConfigChange({ ...config, showHeatmap: e.checked })}
