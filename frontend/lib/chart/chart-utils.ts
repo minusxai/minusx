@@ -1504,14 +1504,14 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
     : series
         .map((s, idx) => ({
           name: s.name,
-          count: s.data.filter(v => v != null && v !== 0).length,
+          total: s.data.reduce((sum, v) => sum + (typeof v === 'number' && !isNaN(v) ? Math.abs(v) : 0), 0),
           itemStyle: {
             color: palette[idx % palette.length],
             opacity: 1,
           },
         }))
-        .sort((a, b) => b.count - a.count)
-        .map(({ count, ...item }) => item)
+        .sort((a, b) => b.total - a.total)
+        .map(({ total, ...item }) => item)
 
   // Build Y-axis configuration (single or dual)
   const yAxisType = yScaleType === 'log' ? 'log' as const : 'value' as const
