@@ -1,4 +1,4 @@
-import { getColorScale, getRadiusScale, interpolateColor, COLOR_SCALES } from '@/lib/chart/geo-color-scale'
+import { getColorScale, getHeatGradient, getRadiusScale, interpolateColor, COLOR_SCALES } from '@/lib/chart/geo-color-scale'
 
 describe('interpolateColor', () => {
   it('returns start color at t=0', () => {
@@ -93,6 +93,19 @@ describe('COLOR_SCALES', () => {
         expect(c).toMatch(/^#[0-9a-fA-F]{6}$/)
       }
     }
+  })
+})
+
+describe('getHeatGradient', () => {
+  it('starts transparent so low-intensity heat fades naturally', () => {
+    const gradient = getHeatGradient('light', 'red-yellow-green')
+    expect(gradient[0]).toMatch(/^rgba\(\d+, \d+, \d+, 0\)$/)
+    expect(gradient[1]).toMatch(/^#[0-9a-f]{6}$/)
+    expect(gradient[0.6]).toMatch(/^#[0-9a-f]{6}$/)
+  })
+
+  it('falls back to the default palette for unknown keys', () => {
+    expect(getHeatGradient('light', 'nope')).toEqual(getHeatGradient('light'))
   })
 })
 

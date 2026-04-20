@@ -10,6 +10,8 @@ import { getColorScale, getRadiusScale, getHeatGradient, GEO_MARKER_COLOR, GEO_M
 import { COLOR_PALETTE } from '@/lib/chart/echarts-theme'
 import { formatNumber, applyPrefixSuffix } from '@/lib/chart/chart-utils'
 import { getGeoConstraintError } from '@/lib/chart/geo-constraints'
+import { computeHeatmapOptions } from '@/lib/chart/geo-heatmap-defaults'
+import { parseGeoNumber } from '@/lib/chart/geo-value-utils'
 import { useAppSelector } from '@/store/hooks'
 import type { GeoConfig, ColumnFormatConfig } from '@/lib/types'
 import type { FeatureCollection } from 'geojson'
@@ -176,7 +178,7 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColo
         let max = -Infinity
         for (const row of rows) {
           const region = String(row[geoConfig.regionCol] ?? '')
-          const val = Number(row[geoConfig.valueCol])
+          const val = parseGeoNumber(row[geoConfig.valueCol])
           if (region && !isNaN(val)) {
             valueMap.set(region.toLowerCase(), val)
             min = Math.min(min, val)
@@ -324,21 +326,21 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColo
         let max = -Infinity
         if (hasBubble) {
           for (const row of rows) {
-            const val = Number(row[geoConfig.valueCol!])
+            const val = parseGeoNumber(row[geoConfig.valueCol!])
             if (!isNaN(val)) { min = Math.min(min, val); max = Math.max(max, val) }
           }
         }
 
         // Color logic: auto-detect numeric vs categorical
         const hasColorCol = !!geoConfig.colorCol
-        const isNumericColor = hasColorCol && rows.length > 0 && typeof rows[0][geoConfig.colorCol!] === 'number'
+        const isNumericColor = hasColorCol && rows.some((row) => !isNaN(parseGeoNumber(row[geoConfig.colorCol!])))
         let colorMin = Infinity
         let colorMax = -Infinity
         const categoricalColorMap = new Map<string, string>()
         if (hasColorCol) {
           if (isNumericColor) {
             for (const row of rows) {
-              const val = Number(row[geoConfig.colorCol!])
+              const val = parseGeoNumber(row[geoConfig.colorCol!])
               if (!isNaN(val)) { colorMin = Math.min(colorMin, val); colorMax = Math.max(colorMax, val) }
             }
           } else {
@@ -352,7 +354,7 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColo
         const getPointColor = (row: Record<string, unknown>): string => {
           if (!hasColorCol) return effectiveMarkerColor
           if (isNumericColor) {
-            const val = Number(row[geoConfig.colorCol!])
+            const val = parseGeoNumber(row[geoConfig.colorCol!])
             if (isNaN(val)) return effectiveMarkerColor
             return getColorScale(val, colorMin, colorMax, colorMode, geoConfig.colorScale)
           }
@@ -361,14 +363,14 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColo
 
         const markers: L.CircleMarker[] = []
         for (const row of rows) {
-          const lat = Number(row[geoConfig.latCol])
-          const lng = Number(row[geoConfig.lngCol])
+          const lat = parseGeoNumber(row[geoConfig.latCol])
+          const lng = parseGeoNumber(row[geoConfig.lngCol])
           if (isNaN(lat) || isNaN(lng)) continue
 
           const effectiveMinRadius = geoConfig.minRadius ?? 5
           const effectiveScale = geoConfig.radiusScale ?? 1
           const radius = hasBubble
-            ? getRadiusScale(Number(row[geoConfig.valueCol!]), min, max, effectiveMinRadius, effectiveScale)
+            ? getRadiusScale(parseGeoNumber(row[geoConfig.valueCol!]), min, max, effectiveMinRadius, effectiveScale)
             : effectiveMinRadius * effectiveScale
 
           const pointColor = getPointColor(row)
@@ -387,7 +389,8 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColo
             pointTtRows.push({ key: geoConfig.colorCol, value: String(row[geoConfig.colorCol]) })
           }
           if (geoConfig.valueCol && row[geoConfig.valueCol] != null) {
-            pointTtRows.push({ key: geoConfig.valueCol, value: Number(row[geoConfig.valueCol]).toLocaleString() })
+            const value = parseGeoNumber(row[geoConfig.valueCol])
+            pointTtRows.push({ key: geoConfig.valueCol, value: isNaN(value) ? String(row[geoConfig.valueCol]) : value.toLocaleString() })
           }
           pointTtRows.push(...extraTooltipRows(row))
           pointTtRows.push({ key: 'Location', value: `${lat.toFixed(4)}, ${lng.toFixed(4)}` })
@@ -413,10 +416,10 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColo
         const allLatLngs: L.LatLng[] = []
 
         for (const row of rows) {
-          const lat1 = Number(row[geoConfig.latCol])
-          const lng1 = Number(row[geoConfig.lngCol])
-          const lat2 = Number(row[geoConfig.latCol2])
-          const lng2 = Number(row[geoConfig.lngCol2])
+          const lat1 = parseGeoNumber(row[geoConfig.latCol])
+          const lng1 = parseGeoNumber(row[geoConfig.lngCol])
+          const lat2 = parseGeoNumber(row[geoConfig.latCol2])
+          const lng2 = parseGeoNumber(row[geoConfig.lngCol2])
           if (isNaN(lat1) || isNaN(lng1) || isNaN(lat2) || isNaN(lng2)) continue
 
           // Arc line
@@ -474,18 +477,24 @@ export function GeoPlot({ rows, columns, geoConfig, tooltipCols = [], markerColo
 
         const heatPoints: [number, number, number][] = []
         for (const row of rows) {
-          const lat = Number(row[geoConfig.latCol])
-          const lng = Number(row[geoConfig.lngCol])
+          const lat = parseGeoNumber(row[geoConfig.latCol])
+          const lng = parseGeoNumber(row[geoConfig.lngCol])
           if (isNaN(lat) || isNaN(lng)) continue
-          const intensity = geoConfig.valueCol ? (Number(row[geoConfig.valueCol]) || 1) : 1
+          const intensityValue = geoConfig.valueCol ? parseGeoNumber(row[geoConfig.valueCol]) : 1
+          const intensity = !isNaN(intensityValue) && intensityValue > 0 ? intensityValue : 1
           heatPoints.push([lat, lng, intensity])
         }
 
         if (heatPoints.length > 0) {
-          const heat = L.heatLayer(heatPoints, {
-            radius: 25,
-            blur: 15,
-            maxZoom: 10,
+          const { points: normalizedPoints, radius, blur, maxZoom, max } = computeHeatmapOptions(heatPoints, {
+            weighted: !!geoConfig.valueCol,
+          })
+          const heat = L.heatLayer(normalizedPoints, {
+            radius,
+            blur,
+            maxZoom,
+            max,
+            minOpacity: 0.4,
             gradient: getHeatGradient(colorMode, geoConfig.colorScale),
           })
           builtLayers.push(heat)
