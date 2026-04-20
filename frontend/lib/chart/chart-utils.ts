@@ -157,47 +157,6 @@ const wrapAnnotationText = (text: string, maxCharsPerLine = 24, maxLines = 3): s
   return lines
 }
 
-// Calculate axis label interval based on data length, container width, and max label length after truncation
-export const calculateAxisInterval = (
-  dataLength: number,
-  containerWidth?: number,
-  maxLabelChars?: number,  // Max characters after truncation
-  useDualYAxis?: boolean   // Whether dual Y-axis is used (affects padding)
-): number | 'auto' => {
-  if (!containerWidth) {
-    // Fallback to old behavior if width is not provided
-    if (dataLength > 20) return Math.floor(dataLength / 6)
-    if (dataLength > 10) return Math.floor(dataLength / 5)
-    return 'auto'
-  }
-
-  // Account for chart padding (match the padding used in maxLabelLength calculation)
-  const gridLeftPadding = 80
-  const gridRightPadding = useDualYAxis ? 80 : 20
-  const availableWidth = containerWidth - gridLeftPadding - gridRightPadding
-
-  // Estimate label width based on truncated length (if provided) or reasonable default
-  const avgCharWidth = 7
-  const labelPadding = 20 // Space between labels
-  const effectiveChars = maxLabelChars || 15 // Use truncated length for calculation
-  const labelWidth = effectiveChars * avgCharWidth + labelPadding
-
-  // Calculate how many labels can comfortably fit
-  const maxVisibleLabels = Math.floor(availableWidth / labelWidth)
-
-  // If we can show all labels comfortably, use auto
-  if (dataLength <= maxVisibleLabels) {
-    return 'auto'
-  }
-
-  // Calculate interval to show approximately maxVisibleLabels
-  // Add small buffer (0.8x) to prevent labels from being too close
-  const targetLabels = Math.floor(maxVisibleLabels * 0.8)
-  const interval = Math.ceil(dataLength / Math.max(1, targetLabels))
-
-  return interval - 1 // ECharts uses 0-based interval (0 = show all, 1 = show every other)
-}
-
 // Format large numbers with k, M, B suffixes for compact display (axis labels)
 export const formatLargeNumber = (value: number): string => {
   const absValue = Math.abs(value)
@@ -1594,20 +1553,11 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
     ...(yMin !== undefined ? { min: yMin } : {}),
     ...(yMax !== undefined ? { max: yMax } : {}),
   }
-  // Estimate nameGap based on longest formatted tick label width
-  const estimateNameGap = (formatter: (v: number) => string, scale: NumberScale): number => {
-    // Sample a few representative values to find the widest label
-    const sampleValues = [0, scale.divisor, scale.divisor * 5, scale.divisor * 10]
-    const maxLen = Math.max(...sampleValues.map(v => formatter(v).length))
-    // ~7px per character + 10px padding
-    return Math.max(25, maxLen * 7 + 10)
-  }
   const yAxisConfig = useDualYAxis
     ? [
         {
           type: yAxisType,
           name: getAxisName(0),
-          nameGap: estimateNameGap(yAxisFormatterLeft, yScaleLeft),
           position: 'left' as const,
           ...yExtraProps,
           ...yLogRangeProps,
@@ -1617,7 +1567,6 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
         {
           type: yAxisType,
           name: getAxisName(1),
-          nameGap: estimateNameGap(yAxisFormatterRight, yScaleRight),
           position: 'right' as const,
           ...yExtraProps,
           ...yLogRangeProps,
@@ -1628,40 +1577,14 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
       : {
         type: yAxisType,
         name: wrapAxisName(resolvedYAxisLabel, maxAxisNameLength),
-        nameGap: estimateNameGap(yAxisFormatter, yScale),
         ...yExtraProps,
         ...yLogRangeProps,
         ...yRangeProps,
         axisLabel: { formatter: yAxisFormatter },
       }
 
-  // Calculate label interval and max label length together
-  // These are interdependent: interval affects visible label count, which affects space per label
-  const prefixSuffixExtra = ((yPrefix?.length ?? 0) + (ySuffix?.length ?? 0)) * 7
-  const gridLeftPadding = 80 + prefixSuffixExtra
-  const gridRightPadding = useDualYAxis ? 80 : 20
-  const availableWidth = containerWidth ? containerWidth - gridLeftPadding - gridRightPadding : 500
-  const avgCharWidth = 7
-  const labelMargin = 20
-
-  // First pass: estimate interval with minimal label length (6 chars)
-  const minLabelWidth = 6 * avgCharWidth + labelMargin
-  const maxVisibleLabels = Math.floor(availableWidth / minLabelWidth)
-  const estimatedInterval = xAxisData.length <= maxVisibleLabels
-    ? 0  // Show all labels
-    : Math.ceil(xAxisData.length / Math.max(1, Math.floor(maxVisibleLabels * 0.8))) - 1
-
-  // Calculate actual number of visible labels based on interval
-  const numVisibleLabels = estimatedInterval === 0
-    ? xAxisData.length
-    : Math.ceil(xAxisData.length / (estimatedInterval + 1))
-
-  // Now calculate max label length based on space per VISIBLE label
-  const spacePerVisibleLabel = availableWidth / Math.max(1, numVisibleLabels)
-  const maxLabelLength = Math.max(6, Math.min(25, Math.floor((spacePerVisibleLabel - labelMargin) / avgCharWidth)))
-
-  // Use the estimated interval (could refine further but this is good enough)
-  const labelInterval = estimatedInterval
+  // Max characters for category axis labels before truncating (hideOverlap handles density)
+  const maxLabelLength = 20
   // Helper to generate and download CSV from chart data
   const downloadCsv = () => {
     // Build CSV header: first column is X-axis, rest are series names
@@ -1851,6 +1774,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           ...(xMin !== undefined ? { min: xMin } : {}),
           ...(xMax !== undefined ? { max: xMax } : {}),
           axisLabel: {
+            hideOverlap: true,
             formatter: (value: number) => formatLargeNumber(value),
           },
         }
@@ -1871,8 +1795,7 @@ export const buildChartOption = (config: BaseChartConfig): EChartsOption => {
           name: xAxisLabel,
           ...(chartType !== 'bar' && chartType !== 'combo' && { boundaryGap: false }),
           axisLabel: {
-            interval: labelInterval,
-            rotate: 0,
+            hideOverlap: true,
             formatter: (value: string) => {
               if (value.length > maxLabelLength) {
                 return value.slice(0, maxLabelLength - 1) + '…'
