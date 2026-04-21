@@ -115,6 +115,7 @@ export default function ChartCarousel({
   label,
   labelPlural,
   headerIcon,
+  isCompact,
 }: ChartCarouselProps) {
   // Build items from either source
   const allItems = useMemo(() => {
@@ -129,6 +130,7 @@ export default function ChartCarousel({
   const [activeIndex, setActiveIndex] = useState(0);
   const [showQuery, setShowQuery] = useState(false);
   const [queryMode, setQueryMode] = useState<'sql' | 'gui'>('sql');
+  const [showVizControls, setShowVizControls] = useState(!isCompact);
 
   const count = successful.length;
   const safeIndex = Math.min(activeIndex, Math.max(0, count - 1));
@@ -233,20 +235,6 @@ export default function ChartCarousel({
           </HStack>
         )}
 
-        <HStack
-          gap={1}
-          cursor="pointer"
-          onClick={() => setShowQuery(!showQuery)}
-          color="fg.subtle"
-          _hover={{ color: 'fg.default' }}
-          transition="color 0.1s"
-        >
-          <Icon as={LuCode} boxSize={3} />
-          <Text fontSize="2xs" fontFamily="mono" fontWeight="500">
-            Query
-          </Text>
-          <Icon as={showQuery ? LuChevronUp : LuChevronDown} boxSize={3} />
-        </HStack>
       </HStack>
 
       {/* Content area */}
@@ -260,6 +248,39 @@ export default function ChartCarousel({
             </Text>
           </HStack>
         )}
+
+        {/* Viz + Query toggles */}
+        <HStack justify="space-between" px={3} pb={1}>
+          {isCompact ? (
+            <HStack
+              gap={1}
+              cursor="pointer"
+              onClick={() => setShowVizControls(!showVizControls)}
+              color="fg.subtle"
+              _hover={{ color: 'fg.default' }}
+              transition="color 0.1s"
+            >
+              <Text fontSize="2xs" fontFamily="mono" fontWeight="500">
+                Viz Options
+              </Text>
+              <Icon as={showVizControls ? LuChevronUp : LuChevronDown} boxSize={3} />
+            </HStack>
+          ) : <Box />}
+          <HStack
+            gap={1}
+            cursor="pointer"
+            onClick={() => setShowQuery(!showQuery)}
+            color="fg.subtle"
+            _hover={{ color: 'fg.default' }}
+            transition="color 0.1s"
+          >
+            <Icon as={LuCode} boxSize={3} />
+            <Text fontSize="2xs" fontFamily="mono" fontWeight="500">
+              Query
+            </Text>
+            <Icon as={showQuery ? LuChevronUp : LuChevronDown} boxSize={3} />
+          </HStack>
+        </HStack>
 
         {/* Expandable query editor */}
         {showQuery && current?.question?.query && (
@@ -302,8 +323,8 @@ export default function ChartCarousel({
                 showJsonToggle: false,
                 editable: false,
                 viz: {
-                  showTypeButtons: true,
-                  showChartBuilder: true,
+                  showTypeButtons: showVizControls,
+                  showChartBuilder: showVizControls,
                   typesButtonsOrientation: 'horizontal',
                   showTitle: true,
                 },

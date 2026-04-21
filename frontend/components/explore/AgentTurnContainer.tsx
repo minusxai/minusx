@@ -390,7 +390,7 @@ export default function AgentTurnContainer({
         }
       }
       if (chartItems.length > 0) {
-        return <ChartCarousel items={chartItems} databaseName={databaseName} label={node.label} labelPlural={node.labelPlural} headerIcon={node.icon} />;
+        return <ChartCarousel items={chartItems} databaseName={databaseName} label={node.label} labelPlural={node.labelPlural} headerIcon={node.icon} isCompact={isCompact} />;
       }
     }
 
@@ -435,7 +435,7 @@ export default function AgentTurnContainer({
     timeline.some(n => n.type === 'query' || FILE_LABELS.has(n.label)),
     [timeline],
   );
-  const rightPaneH = hasChartContent ? '450px' : '300px';
+  const rightPaneH = hasChartContent ? '400px' : '300px';
 
   // Scroll active horizontal timeline chip into view
   // eslint-disable-next-line react-hooks/exhaustive-deps
