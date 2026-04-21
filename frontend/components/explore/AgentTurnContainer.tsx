@@ -442,7 +442,7 @@ export default function AgentTurnContainer({
     })),
     [timeline],
   );
-  const rightPaneH = hasClarify ? '400px' : hasChartContent ? '425px' : '300px';
+  const rightPaneH = hasClarify ? '400px' : hasChartContent ? '400px' : '300px';
 
   // Scroll active horizontal timeline chip into view
   // eslint-disable-next-line react-hooks/exhaustive-deps

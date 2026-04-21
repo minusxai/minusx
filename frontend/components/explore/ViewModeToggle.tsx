@@ -1,12 +1,18 @@
 'use client';
 
-import { HStack, Box, Text } from '@chakra-ui/react';
+import { HStack, Box, Icon, Text } from '@chakra-ui/react';
+import { LuLayoutPanelLeft, LuList } from 'react-icons/lu';
 import type { ChatViewMode } from '@/lib/types';
 
 interface ViewModeToggleProps {
   viewMode: ChatViewMode;
   onChange: (mode: ChatViewMode) => void;
 }
+
+const MODES: { mode: ChatViewMode; icon: typeof LuLayoutPanelLeft; label: string }[] = [
+  { mode: 'compact', icon: LuLayoutPanelLeft, label: 'Summary' },
+  { mode: 'detailed', icon: LuList, label: 'Detailed' },
+];
 
 export default function ViewModeToggle({ viewMode, onChange }: ViewModeToggleProps) {
   return (
@@ -18,29 +24,34 @@ export default function ViewModeToggle({ viewMode, onChange }: ViewModeTogglePro
       borderColor="border.default"
       p={0.5}
     >
-      {(['compact', 'detailed'] as const).map((mode) => (
-        <Box
-          key={mode}
-          as="button"
-          aria-label={`Switch to ${mode} view`}
-          px={2.5}
-          py={1}
-          borderRadius="sm"
-          fontSize="xs"
-          fontFamily="mono"
-          fontWeight={viewMode === mode ? '600' : '400'}
-          color={viewMode === mode ? 'fg.default' : 'fg.muted'}
-          bg={viewMode === mode ? 'bg.default' : 'transparent'}
-          border={viewMode === mode ? '1px solid' : '1px solid transparent'}
-          borderColor={viewMode === mode ? 'border.default' : 'transparent'}
-          cursor="pointer"
-          transition="all 0.15s"
-          _hover={viewMode !== mode ? { color: 'fg.default' } : {}}
-          onClick={() => onChange(mode)}
-        >
-          <Text fontSize="xs">{mode === 'compact' ? 'Compact' : 'Detailed'}</Text>
-        </Box>
-      ))}
+      {MODES.map(({ mode, icon, label }) => {
+        const isActive = viewMode === mode;
+        return (
+          <Box
+            key={mode}
+            as="button"
+            aria-label={`Switch to ${label} view`}
+            px={2}
+            py={1}
+            borderRadius="sm"
+            bg={isActive ? 'accent.teal/12' : 'transparent'}
+            border="1px solid"
+            borderColor={isActive ? 'accent.teal/30' : 'transparent'}
+            cursor="pointer"
+            transition="all 0.15s"
+            _hover={!isActive ? { bg: 'bg.muted' } : {}}
+            onClick={() => onChange(mode)}
+            display="flex"
+            alignItems="center"
+            gap={1.5}
+          >
+            <Icon as={icon} boxSize={3.5} color={isActive ? 'accent.teal' : 'fg.muted'} />
+            <Text fontSize="xs" fontFamily="mono" fontWeight={isActive ? '600' : '400'} color={isActive ? 'accent.teal' : 'fg.muted'}>
+              {label}
+            </Text>
+          </Box>
+        );
+      })}
     </HStack>
   );
 }
