@@ -1,9 +1,9 @@
 'use client';
 
-import { Box, Container, Heading, VStack, Text, Spinner, HStack, Icon, Input, Button } from '@chakra-ui/react';
+import { Box, Container, Heading, VStack, Text, Spinner, HStack, Icon, Input, Button, Badge } from '@chakra-ui/react';
 import { useRouter } from 'next/navigation';
 import React, { useCallback, useMemo, useState } from 'react';
-import { LuSlack, LuSearch, LuPlus } from 'react-icons/lu';
+import { LuSlack, LuSearch, LuPlus, LuMessageSquare } from 'react-icons/lu';
 import { ConversationSummary } from '@/app/api/conversations/route';
 import { FILE_TYPE_METADATA } from '@/lib/ui/file-metadata';
 import { useFetch } from '@/lib/api/useFetch';
@@ -60,9 +60,15 @@ function ConversationRow({ conversation, onClick }: { conversation: Conversation
       borderColor="border.muted"
     >
       <HStack justify="space-between" align="center">
-        <Text fontSize="sm" fontFamily="mono" truncate flex="1">
-          {conversation.name}
-        </Text>
+        <HStack flex="1" gap={2} truncate>
+          <Text fontSize="sm" fontFamily="mono" truncate>
+            {conversation.name}
+          </Text>
+          <Badge variant="subtle" size="sm" fontFamily="mono" flexShrink={0}>
+            <LuMessageSquare size={11} />
+            {conversation.messageCount}
+          </Badge>
+        </HStack>
         <HStack gap={3} flexShrink={0}>
           {sourceLabel && sourceType && (
             <HStack gap={1}>
