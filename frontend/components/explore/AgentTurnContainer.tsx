@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Box, HStack, VStack, Text, Icon, Grid } from '@chakra-ui/react';
-import { LuCheck, LuX, LuBrain, LuDatabase } from 'react-icons/lu';
+import { LuCheck, LuX, LuBrain, LuDatabase, LuChevronLeft, LuChevronRight } from 'react-icons/lu';
 import type { Turn } from './message/groupIntoTurns';
 import type { MessageWithFlags } from './message/messageHelpers';
 import SimpleChatMessage from './SimpleChatMessage';
@@ -14,6 +14,8 @@ import { immutableSet } from '@/lib/utils/immutable-collections';
 import { useAppSelector } from '@/store/hooks';
 import Markdown from '../Markdown';
 import type { QueryResult } from '@/lib/types';
+import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
+import type { FileType } from '@/lib/ui/file-metadata';
 
 interface AgentTurnContainerProps {
   turn: Turn;
@@ -65,11 +67,24 @@ function getDisplayName(msg: MessageWithFlags, filesDict: Record<number, any>): 
     parsed = typeof args === 'string' ? JSON.parse(args) : args || {};
   } catch { /* ignore */ }
 
+  // 1. Look up file name from Redux by ID
   const fileId = parsed.fileId || parsed.fileIds?.[0];
   if (fileId && filesDict[fileId]) {
     return filesDict[fileId].name || `#${fileId}`;
   }
-  return parsed.name || parsed.file_type || getToolName(msg);
+
+  // 2. Check tool args for name
+  if (parsed.name) return parsed.name;
+
+  // 3. Check tool response content for file name
+  try {
+    const content = typeof toolMsg.content === 'string' ? JSON.parse(toolMsg.content) : toolMsg.content;
+    const stateName = content?.state?.fileState?.name;
+    if (stateName) return stateName;
+  } catch { /* ignore */ }
+
+  // 4. Fallback
+  return parsed.file_type || (fileId ? `#${fileId}` : getToolName(msg));
 }
 
 function isSuccess(msg: MessageWithFlags): boolean {
@@ -297,6 +312,7 @@ export default function AgentTurnContainer({
     return 0;
   }, [timeline]);
   const [userSelectedIdx, setUserSelectedIdx] = useState<number | null>(null);
+  const [toolCardIdx, setToolCardIdx] = useState(0);
   // If user hasn't clicked anything, show the most recent work node
   const selectedIdx = userSelectedIdx ?? mostRecentWorkIdx;
   const setSelectedIdx = setUserSelectedIdx;
@@ -353,53 +369,329 @@ export default function AgentTurnContainer({
   };
 
   const renderToolDetail = (node: TimelineNode) => {
-    // Check if these are CreateFile messages with chart data
+    // For CreateFile: show charts for questions, file list for other types
     if (node.label === 'created') {
-      const chartItems = node.messages.map(m => {
+      const chartItems: (import('./tools/ChartCarousel').ChartItem | import('./tools/ChartCarousel').ChartErrorItem)[] = [];
+
+      for (const m of node.messages) {
         const { content, queryResult } = parseCreateFileContent(m);
         const name = getDisplayName(m, filesDict);
         if (content && queryResult) {
-          return { name, question: content, queryResult } as import('./tools/ChartCarousel').ChartItem;
+          chartItems.push({ name, question: content, queryResult });
+        } else {
+          chartItems.push({ name, error: 'No chart data' });
         }
-        return { name, error: 'No chart data' } as import('./tools/ChartCarousel').ChartErrorItem;
-      });
+      }
 
-      const hasCharts = chartItems.some(i => !i.error);
+      const hasCharts = chartItems.some(i => !('error' in i));
       if (hasCharts) {
         return (
           <ChartCarousel
             items={chartItems}
             databaseName={databaseName}
-            label={node.count === 1 ? 'created' : 'created'}
+            label="created"
+            headerIcon={node.icon}
           />
         );
       }
+      // Fall through to default list for non-question files
     }
 
-    // Default: simple list
-    return (
-      <VStack gap={0.5} align="stretch" p={3}>
-        <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600" textTransform="uppercase" mb={1}>
-          {node.count} {node.label}
-        </Text>
-        {node.messages.map((msg, idx) => {
-          const toolMsg = msg as any;
-          const success = isSuccess(msg);
-          const name = getDisplayName(msg, filesDict);
-          return (
-            <HStack key={toolMsg.tool_call_id || idx} gap={1.5} py={0.5}>
-              <Icon
-                as={success ? LuCheck : LuX}
-                boxSize={2.5}
-                color={success ? 'accent.success' : 'accent.danger'}
-                flexShrink={0}
-              />
-              <Text fontSize="xs" fontFamily="mono" color="fg.default" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
-                {name}
+    // Search (files + schema): show query + results
+    if (node.label === 'searched') {
+      const searches = node.messages.map(m => {
+        const toolMsg = m as any;
+        const toolName = getToolName(m);
+        let args: any = {};
+        let result: any = {};
+        try {
+          args = typeof toolMsg.function?.arguments === 'string'
+            ? JSON.parse(toolMsg.function.arguments) : toolMsg.function?.arguments || {};
+        } catch { /* ignore */ }
+        try {
+          result = typeof toolMsg.content === 'string' ? JSON.parse(toolMsg.content) : toolMsg.content || {};
+        } catch { /* ignore */ }
+        const isSchema = toolName === 'SearchDBSchema';
+        return {
+          kind: isSchema ? 'schema' as const : 'files' as const,
+          query: args.query || result.query || '',
+          // SearchFiles results
+          results: result.results || [],
+          total: result.total || 0,
+          // SearchDBSchema results
+          tables: result.schema || [],
+          schemaList: result._schema || [],
+        };
+      });
+
+      const safeIdx = Math.min(toolCardIdx, searches.length - 1);
+      const search = searches[safeIdx];
+
+      return (
+        <VStack gap={0} align="stretch">
+          {/* Header with nav */}
+          <HStack justify="space-between" px={3} pt={2} pb={1}>
+            <HStack gap={1.5}>
+              <Icon as={node.icon} boxSize={3} color="fg.muted" />
+              <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600" textTransform="uppercase">
+                {node.count} {node.count === 1 ? 'search' : 'searches'}
               </Text>
             </HStack>
-          );
-        })}
+            {searches.length > 1 && (
+              <HStack gap={1.5}>
+                <Box as="button" aria-label="Previous"
+                  onClick={() => safeIdx > 0 && setToolCardIdx(safeIdx - 1)}
+                  w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
+                  display="flex" alignItems="center" justifyContent="center"
+                  cursor={safeIdx === 0 ? 'default' : 'pointer'}
+                  opacity={safeIdx === 0 ? 0.3 : 1}
+                  _hover={safeIdx === 0 ? {} : { bg: 'accent.teal/25' }}
+                >
+                  <LuChevronLeft size={12} />
+                </Box>
+                {searches.map((_, idx) => (
+                  <Box key={idx} as="button" aria-label={`Search ${idx + 1}`}
+                    w={idx === safeIdx ? '16px' : '6px'} h="6px" borderRadius="full"
+                    bg={idx === safeIdx ? 'accent.teal' : 'border.default'}
+                    cursor="pointer" transition="all 0.2s" onClick={() => setToolCardIdx(idx)}
+                  />
+                ))}
+                <Box as="button" aria-label="Next"
+                  onClick={() => safeIdx < searches.length - 1 && setToolCardIdx(safeIdx + 1)}
+                  w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
+                  display="flex" alignItems="center" justifyContent="center"
+                  cursor={safeIdx === searches.length - 1 ? 'default' : 'pointer'}
+                  opacity={safeIdx === searches.length - 1 ? 0.3 : 1}
+                  _hover={safeIdx === searches.length - 1 ? {} : { bg: 'accent.teal/25' }}
+                >
+                  <LuChevronRight size={12} />
+                </Box>
+              </HStack>
+            )}
+          </HStack>
+
+          {/* Kind label + query */}
+          <HStack mx={3} mb={1} gap={2}>
+            <Box bg="bg.muted" px={1.5} py={0.5} borderRadius="full" flexShrink={0}>
+              <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="500">
+                {search.kind === 'schema' ? 'DB Schema' : 'Files'}
+              </Text>
+            </Box>
+            {search.query && (
+              <Text fontSize="xs" fontFamily="mono" color="fg.muted" fontStyle="italic" truncate flex={1}>
+                &ldquo;{search.query}&rdquo;
+              </Text>
+            )}
+          </HStack>
+
+          {/* Results */}
+          <VStack gap={1} align="stretch" px={3} pb={2} maxH="350px" overflowY="auto">
+            {search.kind === 'files' ? (
+              // File search results
+              search.results.length === 0 ? (
+                <Text fontSize="xs" color="fg.subtle" fontFamily="mono">No results found</Text>
+              ) : (
+                <>
+                  <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
+                    {search.total} {search.total === 1 ? 'result' : 'results'}
+                  </Text>
+                  {search.results.map((r: any, idx: number) => {
+                    const meta = r.type ? getFileTypeMetadata(r.type as FileType) : null;
+                    return (
+                      <Box key={r.id || idx} p={2} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default">
+                        <HStack gap={2}>
+                          <Icon as={meta?.icon || LuCheck} boxSize={3.5} color={meta?.color || 'fg.muted'} flexShrink={0} />
+                          <VStack gap={0} align="start" flex={1} minW={0}>
+                            <Text fontSize="xs" fontFamily="mono" color="fg.default" fontWeight="600" truncate w="full">
+                              {r.name}
+                            </Text>
+                            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate w="full">
+                              {r.path}
+                            </Text>
+                          </VStack>
+                          {meta && (
+                            <Box bg={`${meta.color}/10`} px={1.5} py={0.5} borderRadius="full" flexShrink={0}>
+                              <Text fontSize="2xs" fontFamily="mono" color={meta.color} fontWeight="500">
+                                {meta.label}
+                              </Text>
+                            </Box>
+                          )}
+                        </HStack>
+                      </Box>
+                    );
+                  })}
+                </>
+              )
+            ) : (
+              // DB Schema results — tables with column chips
+              search.tables.length > 0 ? (
+                <>
+                  <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
+                    {search.tables.length} {search.tables.length === 1 ? 'table' : 'tables'}
+                  </Text>
+                  {search.tables.map((t: any, idx: number) => (
+                    <Box key={idx} p={2} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default">
+                      <HStack gap={2} mb={t.columns?.length > 0 ? 1 : 0}>
+                        <Icon as={LuDatabase} boxSize={3} color="accent.primary" flexShrink={0} />
+                        <Text fontSize="xs" fontFamily="mono" color="fg.default" fontWeight="600">
+                          {t._schema ? `${t._schema}.` : ''}{t.table}
+                        </Text>
+                        {t.columns && (
+                          <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
+                            {t.columns.length} cols
+                          </Text>
+                        )}
+                      </HStack>
+                      {t.columns && t.columns.length > 0 && (
+                        <HStack gap={1} flexWrap="wrap" pl={5}>
+                          {t.columns.slice(0, 6).map((col: any, ci: number) => (
+                            <Box key={ci} bg="bg.muted" px={1.5} py={0.5} borderRadius="sm">
+                              <Text fontSize="2xs" fontFamily="mono" color="fg.muted">
+                                {col.name} <Text as="span" color="fg.subtle">{col.type}</Text>
+                              </Text>
+                            </Box>
+                          ))}
+                          {t.columns.length > 6 && (
+                            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">+{t.columns.length - 6}</Text>
+                          )}
+                        </HStack>
+                      )}
+                    </Box>
+                  ))}
+                </>
+              ) : search.schemaList.length > 0 ? (
+                // Schema overview — table name chips
+                search.schemaList.map((s: any, idx: number) => (
+                  <Box key={idx} p={2} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default">
+                    <HStack gap={2} mb={1}>
+                      <Icon as={LuDatabase} boxSize={3} color="accent.primary" />
+                      <Text fontSize="xs" fontFamily="mono" color="fg.default" fontWeight="600">{s.schema}</Text>
+                      <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">{s.tables?.length || 0} tables</Text>
+                    </HStack>
+                    {s.tables && (
+                      <HStack gap={1} flexWrap="wrap" pl={5}>
+                        {s.tables.slice(0, 10).map((t: string, ti: number) => (
+                          <Box key={ti} bg="bg.muted" px={1.5} py={0.5} borderRadius="sm">
+                            <Text fontSize="2xs" fontFamily="mono" color="fg.muted">{t}</Text>
+                          </Box>
+                        ))}
+                        {s.tables.length > 10 && (
+                          <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">+{s.tables.length - 10}</Text>
+                        )}
+                      </HStack>
+                    )}
+                  </Box>
+                ))
+              ) : (
+                <Text fontSize="xs" color="fg.subtle" fontFamily="mono">No schema data</Text>
+              )
+            )}
+          </VStack>
+        </VStack>
+      );
+    }
+
+    // Default: file cards with carousel-style navigation
+    const fileCards = node.messages.map((msg) => {
+      const toolMsg = msg as any;
+      const name = getDisplayName(msg, filesDict);
+      const success = isSuccess(msg);
+      let fileType: string | null = null;
+      let filePath: string | null = null;
+      let fileId: number | null = null;
+      try {
+        const args = typeof toolMsg.function?.arguments === 'string'
+          ? JSON.parse(toolMsg.function.arguments) : toolMsg.function?.arguments || {};
+        fileId = args.fileId || args.fileIds?.[0] || null;
+        if (fileId && filesDict[fileId]) {
+          fileType = filesDict[fileId].type;
+          filePath = filesDict[fileId].path;
+        }
+        if (!fileType) fileType = args.file_type;
+      } catch { /* ignore */ }
+      // Also try response content
+      try {
+        const content = typeof toolMsg.content === 'string' ? JSON.parse(toolMsg.content) : toolMsg.content;
+        if (!filePath && content?.state?.fileState?.path) filePath = content.state.fileState.path;
+        if (!fileType && content?.state?.fileState?.type) fileType = content.state.fileState.type;
+      } catch { /* ignore */ }
+      const meta = fileType ? getFileTypeMetadata(fileType as FileType) : null;
+      return { name, success, fileType, filePath, fileId, meta };
+    });
+
+    const safeCardIdx = Math.min(toolCardIdx, fileCards.length - 1);
+    const card = fileCards[safeCardIdx];
+
+    return (
+      <VStack gap={0} align="stretch">
+        {/* Header with nav */}
+        <HStack justify="space-between" px={3} pt={2} pb={1}>
+          <HStack gap={1.5}>
+            <Icon as={node.icon} boxSize={3} color="fg.muted" />
+            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600" textTransform="uppercase">
+              {node.count} {node.label}
+            </Text>
+          </HStack>
+          {fileCards.length > 1 && (
+            <HStack gap={1.5}>
+              <Box
+                as="button" aria-label="Previous"
+                onClick={() => safeCardIdx > 0 && setToolCardIdx(safeCardIdx - 1)}
+                w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
+                display="flex" alignItems="center" justifyContent="center"
+                cursor={safeCardIdx === 0 ? 'default' : 'pointer'}
+                opacity={safeCardIdx === 0 ? 0.3 : 1}
+                _hover={safeCardIdx === 0 ? {} : { bg: 'accent.teal/25' }}
+              >
+                <LuChevronLeft size={12} />
+              </Box>
+              {fileCards.map((_, idx) => (
+                <Box key={idx} as="button" aria-label={`Item ${idx + 1}`}
+                  w={idx === safeCardIdx ? '16px' : '6px'} h="6px" borderRadius="full"
+                  bg={idx === safeCardIdx ? 'accent.teal' : 'border.default'}
+                  cursor="pointer" transition="all 0.2s" onClick={() => setToolCardIdx(idx)}
+                />
+              ))}
+              <Box
+                as="button" aria-label="Next"
+                onClick={() => safeCardIdx < fileCards.length - 1 && setToolCardIdx(safeCardIdx + 1)}
+                w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
+                display="flex" alignItems="center" justifyContent="center"
+                cursor={safeCardIdx === fileCards.length - 1 ? 'default' : 'pointer'}
+                opacity={safeCardIdx === fileCards.length - 1 ? 0.3 : 1}
+                _hover={safeCardIdx === fileCards.length - 1 ? {} : { bg: 'accent.teal/25' }}
+              >
+                <LuChevronRight size={12} />
+              </Box>
+            </HStack>
+          )}
+        </HStack>
+
+        {/* File card */}
+        {card && (
+          <Box mx={3} mb={2} p={3} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default">
+            <HStack gap={2} mb={1}>
+              <Icon as={card.meta?.icon || LuCheck} boxSize={4} color={card.success ? 'fg.muted' : 'accent.danger'} />
+              <VStack gap={0} align="start" flex={1} minW={0}>
+                <Text fontSize="sm" fontFamily="mono" color="fg.default" fontWeight="600" truncate w="full">
+                  {card.name || 'Unnamed'}
+                </Text>
+                {card.filePath && (
+                  <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate w="full">
+                    {card.filePath}
+                  </Text>
+                )}
+              </VStack>
+              {card.meta && (
+                <Box bg="bg.muted" px={2} py={0.5} borderRadius="full" flexShrink={0}>
+                  <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="500">
+                    {card.meta.label}
+                  </Text>
+                </Box>
+              )}
+            </HStack>
+          </Box>
+        )}
       </VStack>
     );
   };
@@ -444,7 +736,8 @@ export default function AgentTurnContainer({
               borderColor="border.default"
               py={1}
               gap={0}
-              minW="fit-content"
+              w="150px"
+              minW="150px"
             >
               {timeline.map((node, idx) => {
                 const isSelected = idx === safeIdx;

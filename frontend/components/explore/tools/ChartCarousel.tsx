@@ -39,6 +39,8 @@ interface ChartCarouselProps {
   readOnly?: boolean;
   /** Label for the header (default: "queries") */
   label?: string;
+  /** Icon for the header (default: LuDatabase) */
+  headerIcon?: React.ComponentType;
 }
 
 // ─── ExecuteQuery message parser ─────────────────────────────────
@@ -109,6 +111,7 @@ export default function ChartCarousel({
   executeMessages,
   databaseName,
   label,
+  headerIcon,
 }: ChartCarouselProps) {
   // Build items from either source
   const allItems = useMemo(() => {
@@ -177,7 +180,7 @@ export default function ChartCarousel({
       {/* Top bar */}
       <HStack justify="space-between" px={3} pt={2} pb={1}>
         <HStack gap={1.5}>
-          <Icon as={LuDatabase} boxSize={3} color="fg.muted" />
+          <Icon as={headerIcon || LuDatabase} boxSize={3} color="fg.muted" />
           <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600" textTransform="uppercase">
             {totalCount} {displayLabel}
             {failedCount > 0 && ` (${failedCount} failed)`}
