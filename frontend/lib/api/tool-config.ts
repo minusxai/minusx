@@ -4,9 +4,6 @@ import DefaultToolDisplay from '@/components/explore/tools/DefaultToolDisplay';
 import ContentDisplay from '@/components/explore/tools/ContentDisplay';
 import ClarifyDisplay from '@/components/explore/tools/ClarifyDisplay';
 import NavigateDisplay from '@/components/explore/tools/NavigateDisplay';
-import EditDashboardDisplay from '@/components/explore/tools/EditDashboardDisplay';
-import EditReportDisplay from '@/components/explore/tools/EditReportDisplay';
-import EditAlertDisplay from '@/components/explore/tools/EditAlertDisplay';
 import EditFileDisplay from '@/components/explore/tools/EditFileDisplay';
 import ReadFilesDisplay from '@/components/explore/tools/ReadFilesDisplay';
 import SearchFilesDisplay from '@/components/explore/tools/SearchFilesDisplay';
@@ -17,8 +14,8 @@ import LoadSkillDisplay from '@/components/explore/tools/LoadSkillDisplay';
 import { DisplayProps } from '@/lib/types';
 import type { IconType } from 'react-icons/lib';
 import {
-  LuDatabase, LuMessageSquare, LuBadgeInfo, LuArrowRight, LuLayoutGrid,
-  LuFileText, LuBell, LuPencilLine, LuBookOpen, LuSearch, LuFilePlus2,
+  LuDatabase, LuMessageSquare, LuBadgeInfo, LuArrowRight,
+  LuPencilLine, LuBookOpen, LuSearch, LuFilePlus2,
   LuUpload, LuBookMarked, LuWrench,
 } from 'react-icons/lu';
 
@@ -117,27 +114,6 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
     chipLabel: 'navigated',
     chipIcon: LuArrowRight,
     timelineVerb: 'Navigating',
-  },
-  'EditDashboard': {
-    displayComponent: EditDashboardDisplay,
-    tier: 3,
-    chipLabel: 'edited dashboard',
-    chipIcon: LuLayoutGrid,
-    timelineVerb: 'Editing',
-  },
-  'EditReport': {
-    displayComponent: EditReportDisplay,
-    tier: 3,
-    chipLabel: 'edited report',
-    chipIcon: LuFileText,
-    timelineVerb: 'Editing',
-  },
-  'EditAlert': {
-    displayComponent: EditAlertDisplay,
-    tier: 3,
-    chipLabel: 'edited alert',
-    chipIcon: LuBell,
-    timelineVerb: 'Editing',
   },
   'EditFile': {
     displayComponent: EditFileDisplay,
