@@ -6,7 +6,6 @@ import { LuBrain, LuDatabase } from 'react-icons/lu';
 import type { Turn } from './message/groupIntoTurns';
 import type { MessageWithFlags } from './message/messageHelpers';
 import SimpleChatMessage from './SimpleChatMessage';
-import ToolChips from './tools/ToolChips';
 import ChartCarousel from './tools/ChartCarousel';
 import DetailCarousel, { type DetailCardProps, getToolNameFromMsg, isToolSuccess } from './tools/DetailCarousel';
 import { NavigateDetailCard } from './tools/NavigateDisplay';
@@ -439,8 +438,8 @@ export default function AgentTurnContainer({
         />
       )}
 
-      {/* Working area: timeline + detail pane — wider than text for charts */}
-      {hasTimeline && !isCompact && (
+      {/* Working area: timeline + detail pane */}
+      {hasTimeline && (
         <Box
           my={2}
           border="1px solid"
@@ -566,17 +565,6 @@ export default function AgentTurnContainer({
               {selectedNode && renderRightPane(selectedNode)}
             </Box>
           </HStack>
-        </Box>
-      )}
-
-      {/* Sidebar: chips only */}
-      {hasTimeline && isCompact && (
-        <Box my={1}>
-          <ToolChips
-            toolMessages={timeline.flatMap(n => n.messages)}
-            readOnly={readOnly}
-            showThinking={showThinking}
-          />
         </Box>
       )}
 
