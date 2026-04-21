@@ -61,6 +61,9 @@ export default function DetailCarousel({ icon, label, labelPlural, itemCount, er
 
   if (itemCount === 0) return null;
 
+  const canPrev = safeIdx > 0;
+  const canNext = safeIdx < itemCount - 1;
+
   return (
     <VStack gap={0} align="stretch">
       <HStack justify="space-between" px={3} pt={2} pb={1}>
@@ -76,12 +79,15 @@ export default function DetailCarousel({ icon, label, labelPlural, itemCount, er
         {itemCount > 1 && (
           <HStack gap={1.5}>
             <Box as="button" aria-label="Previous"
-              onClick={() => safeIdx > 0 && setCurrentIdx(safeIdx - 1)}
-              w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
+              onClick={() => canPrev && setCurrentIdx(safeIdx - 1)}
+              w="24px" h="24px" borderRadius="full"
+              bg={canPrev ? 'accent.teal' : 'accent.teal/15'} color={canPrev ? 'white' : 'accent.teal'}
               display="flex" alignItems="center" justifyContent="center"
-              cursor={safeIdx === 0 ? 'default' : 'pointer'} opacity={safeIdx === 0 ? 0.3 : 1}
-              _hover={safeIdx === 0 ? {} : { bg: 'accent.teal/25' }}
-            ><LuChevronLeft size={12} /></Box>
+              cursor={canPrev ? 'pointer' : 'default'}
+              opacity={canPrev ? 1 : 0.4}
+              _hover={canPrev ? { bg: 'accent.teal', boxShadow: 'sm' } : {}}
+              transition="all 0.15s"
+            ><LuChevronLeft size={14} /></Box>
             {Array.from({ length: itemCount }).map((_, idx) => (
               <Box key={idx} as="button" aria-label={`Item ${idx + 1}`}
                 w={idx === safeIdx ? '16px' : '6px'} h="6px" borderRadius="full"
@@ -90,13 +96,15 @@ export default function DetailCarousel({ icon, label, labelPlural, itemCount, er
               />
             ))}
             <Box as="button" aria-label="Next"
-              onClick={() => safeIdx < itemCount - 1 && setCurrentIdx(safeIdx + 1)}
-              w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
+              onClick={() => canNext && setCurrentIdx(safeIdx + 1)}
+              w="24px" h="24px" borderRadius="full"
+              bg={canNext ? 'accent.teal' : 'accent.teal/15'} color={canNext ? 'white' : 'accent.teal'}
               display="flex" alignItems="center" justifyContent="center"
-              cursor={safeIdx === itemCount - 1 ? 'default' : 'pointer'}
-              opacity={safeIdx === itemCount - 1 ? 0.3 : 1}
-              _hover={safeIdx === itemCount - 1 ? {} : { bg: 'accent.teal/25' }}
-            ><LuChevronRight size={12} /></Box>
+              cursor={canNext ? 'pointer' : 'default'}
+              opacity={canNext ? 1 : 0.4}
+              _hover={canNext ? { bg: 'accent.teal', boxShadow: 'sm' } : {}}
+              transition="all 0.15s"
+            ><LuChevronRight size={14} /></Box>
           </HStack>
         )}
       </HStack>

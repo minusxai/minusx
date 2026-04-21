@@ -192,21 +192,22 @@ export default function ChartCarousel({
           </Text>
         </HStack>
 
-        {/* Dot navigation */}
+        {/* Navigation */}
         {count > 1 && (
           <HStack gap={1.5}>
             <Box
-              as="button"
-              aria-label="Previous chart"
+              as="button" aria-label="Previous chart"
               onClick={() => safeIndex > 0 && setActiveIndex(safeIndex - 1)}
-              w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
+              w="24px" h="24px" borderRadius="full"
+              bg={safeIndex > 0 ? 'accent.teal' : 'accent.teal/15'}
+              color={safeIndex > 0 ? 'white' : 'accent.teal'}
               display="flex" alignItems="center" justifyContent="center"
               cursor={safeIndex === 0 ? 'default' : 'pointer'}
-              opacity={safeIndex === 0 ? 0.3 : 1}
-              _hover={safeIndex === 0 ? {} : { bg: 'accent.teal/25' }}
+              opacity={safeIndex === 0 ? 0.4 : 1}
+              _hover={safeIndex === 0 ? {} : { boxShadow: 'sm' }}
               transition="all 0.15s"
             >
-              <LuChevronLeft size={12} />
+              <LuChevronLeft size={14} />
             </Box>
             {successful.map((_, idx) => (
               <Box
@@ -220,17 +221,18 @@ export default function ChartCarousel({
               />
             ))}
             <Box
-              as="button"
-              aria-label="Next chart"
+              as="button" aria-label="Next chart"
               onClick={() => safeIndex < count - 1 && setActiveIndex(safeIndex + 1)}
-              w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
+              w="24px" h="24px" borderRadius="full"
+              bg={safeIndex < count - 1 ? 'accent.teal' : 'accent.teal/15'}
+              color={safeIndex < count - 1 ? 'white' : 'accent.teal'}
               display="flex" alignItems="center" justifyContent="center"
               cursor={safeIndex === count - 1 ? 'default' : 'pointer'}
-              opacity={safeIndex === count - 1 ? 0.3 : 1}
-              _hover={safeIndex === count - 1 ? {} : { bg: 'accent.teal/25' }}
+              opacity={safeIndex === count - 1 ? 0.4 : 1}
+              _hover={safeIndex === count - 1 ? {} : { boxShadow: 'sm' }}
               transition="all 0.15s"
             >
-              <LuChevronRight size={12} />
+              <LuChevronRight size={14} />
             </Box>
           </HStack>
         )}
@@ -251,74 +253,78 @@ export default function ChartCarousel({
         </HStack>
       </HStack>
 
-      {/* Current item name — skip if it's just the default "Query" */}
-      {current && current.name !== 'Query' && (
-        <HStack px={3} pb={1} gap={1.5}>
-          <Icon as={LuCheck} boxSize={2.5} color="accent.success" />
-          <Text fontSize="xs" fontFamily="mono" color="fg.default" fontWeight="600" truncate>
-            {current.name}
-          </Text>
-        </HStack>
-      )}
-
-      {/* Expandable query editor */}
-      {showQuery && current?.question?.query && (
-        <Box mx={2} mb={1}>
-          <HStack mb={1}>
-            <QueryModeSelector
-              mode={queryMode}
-              onModeChange={setQueryMode}
-              canUseGUI
-            />
+      {/* Content area */}
+      <Box>
+        {/* Current item name — skip if it's just the default "Query" */}
+        {current && current.name !== 'Query' && (
+          <HStack px={3} pb={1} gap={1.5}>
+            <Icon as={LuCheck} boxSize={2.5} color="accent.success" />
+            <Text fontSize="xs" fontFamily="mono" color="fg.default" fontWeight="600" truncate>
+              {current.name}
+            </Text>
           </HStack>
-          <Box borderRadius="md" overflow="hidden">
-            {queryMode === 'sql' ? (
-              <SqlEditor
-                value={current.question.query}
-                readOnly
-                showRunButton={false}
-                showFormatButton={false}
+        )}
+
+        {/* Expandable query editor */}
+        {showQuery && current?.question?.query && (
+          <Box mx={2} mb={1}>
+            <HStack mb={1}>
+              <QueryModeSelector
+                mode={queryMode}
+                onModeChange={setQueryMode}
+                canUseGUI
               />
-            ) : (
-              <QueryBuilderRoot
-                databaseName={databaseName}
-                dialect={connectionTypeToDialect('')}
-                sql={current.question.query}
-                onSqlChange={() => {}}
-              />
-            )}
+            </HStack>
+            <Box borderRadius="md" overflow="hidden">
+              {queryMode === 'sql' ? (
+                <SqlEditor
+                  value={current.question.query}
+                  readOnly
+                  showRunButton={false}
+                  showFormatButton={false}
+                />
+              ) : (
+                <QueryBuilderRoot
+                  databaseName={databaseName}
+                  dialect={connectionTypeToDialect('')}
+                  sql={current.question.query}
+                  onSqlChange={() => {}}
+                />
+              )}
+            </Box>
+          </Box>
+        )}
+
+        {/* Chart */}
+        <Box px={1} pb={2} minH="200px">
+          <Box borderRadius="md" overflow="hidden" border="1px solid" borderColor="border.default">
+          {localContent && current?.queryResult ? (
+            <QuestionVisualization
+              currentState={localContent}
+              config={{
+                showHeader: false,
+                showJsonToggle: false,
+                editable: false,
+                viz: {
+                  showTypeButtons: true,
+                  showChartBuilder: true,
+                  typesButtonsOrientation: 'horizontal',
+                  showTitle: true,
+                },
+                fixError: false,
+              }}
+              loading={false}
+              error={null}
+              data={current.queryResult}
+              onVizTypeChange={(type) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, type } })}
+              onAxisChange={(xCols, yCols) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, xCols, yCols } })}
+            />
+          ) : (
+            <Text fontSize="xs" color="fg.muted" fontFamily="mono" p={3}>No data</Text>
+          )}
           </Box>
         </Box>
-      )}
 
-      {/* Chart */}
-      <Box px={1} pb={2} minH="200px">
-        <Box borderRadius="md" overflow="hidden" border="1px solid" borderColor="border.default">
-        {localContent && current?.queryResult ? (
-          <QuestionVisualization
-            currentState={localContent}
-            config={{
-              showHeader: false,
-              showJsonToggle: false,
-              editable: false,
-              viz: {
-                showTypeButtons: true,
-                showChartBuilder: true,
-                typesButtonsOrientation: 'horizontal',
-                showTitle: true,
-              },
-              fixError: false,
-            }}
-            loading={false}
-            error={null}
-            data={current.queryResult}
-            onVizTypeChange={(type) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, type } })}
-            onAxisChange={(xCols, yCols) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, xCols, yCols } })}
-          />
-        ) : (
-          <Text fontSize="xs" color="fg.muted" fontFamily="mono" p={3}>No data</Text>
-        )}
-        </Box>
       </Box>
     </VStack>
   );

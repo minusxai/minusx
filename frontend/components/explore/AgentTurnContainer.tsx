@@ -318,29 +318,31 @@ export default function AgentTurnContainer({
     const { thinking, content } = parseAgentContent(lastMsg);
 
     return (
-      <VStack gap={2} align="stretch" p={3} maxH="350px" overflowY="auto">
-        {thinking && (
-          <Box>
-            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600" textTransform="uppercase" mb={1}>
-              Thinking
-            </Text>
-            <Box
-              bg="bg.elevated"
-              borderRadius="md"
-              p={3}
-            >
+      <Box p={3}>
+        <Box
+          bg="bg.elevated"
+          borderRadius="lg"
+          border="1px solid"
+          borderColor="border.default"
+          p={4}
+        >
+          {thinking && (
+            <Box mb={content ? 3 : 0}>
+              <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600" textTransform="uppercase" mb={1.5}>
+                Thinking
+              </Text>
               <Text fontSize="xs" fontFamily="mono" color="fg.muted" fontStyle="italic" whiteSpace="pre-wrap">
                 {thinking}
               </Text>
             </Box>
-          </Box>
-        )}
-        {content && (
-          <Box fontSize="sm">
-            <Markdown context={markdownContext}>{content}</Markdown>
-          </Box>
-        )}
-      </VStack>
+          )}
+          {content && (
+            <Box fontSize="sm">
+              <Markdown context={markdownContext}>{content}</Markdown>
+            </Box>
+          )}
+        </Box>
+      </Box>
     );
   };
 
@@ -427,6 +429,13 @@ export default function AgentTurnContainer({
   // Clamp selection
   const safeIdx = Math.min(selectedIdx, timeline.length - 1);
   const selectedNode = timeline[safeIdx];
+
+  // Stable min height for right pane — based on ALL timeline contents, not just selected
+  const hasChartContent = useMemo(() =>
+    timeline.some(n => n.type === 'query' || FILE_LABELS.has(n.label)),
+    [timeline],
+  );
+  const rightPaneMinH = hasChartContent ? '450px' : '200px';
 
   return (
     <>
@@ -646,10 +655,60 @@ export default function AgentTurnContainer({
                 })}
               </VStack>
 
-              {/* Right pane */}
-              <Box flex={1} minW={0} bg="bg.canvas">
-                {selectedNode && renderRightPane(selectedNode)}
-              </Box>
+              {/* Right pane — height driven by timeline, scrolls if content overflows */}
+              <VStack flex={1} minW={0} minH={rightPaneMinH} bg="bg.canvas" gap={0} align="stretch" position="relative">
+                <Box position="absolute" inset={0} display="flex" flexDirection="column">
+                  <Box flex={1} minH={0} overflowY="auto">
+                    {selectedNode && renderRightPane(selectedNode)}
+                  </Box>
+
+                  {/* Bottom prev/next nav */}
+                  {timeline.length > 1 && (
+                    <HStack
+                      justify="space-between"
+                      px={3} py={1.5}
+                      borderTop="1px solid"
+                    borderColor="border.default"
+                  >
+                    <Box
+                      as="button"
+                      aria-label="Previous tool"
+                      onClick={() => safeIdx > 0 && setSelectedIdx(safeIdx - 1)}
+                      display="flex" alignItems="center" gap={1}
+                      cursor={safeIdx > 0 ? 'pointer' : 'default'}
+                      opacity={safeIdx > 0 ? 1 : 0.3}
+                      _hover={safeIdx > 0 ? { color: 'accent.teal' } : {}}
+                      transition="all 0.15s"
+                      color="fg.subtle"
+                    >
+                      <LuChevronLeft size={14} />
+                      <Text fontSize="2xs" fontFamily="mono" fontWeight="500">
+                        {safeIdx > 0 ? timeline[safeIdx - 1].verb : 'Prev'}
+                      </Text>
+                    </Box>
+                    <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
+                      {safeIdx + 1} / {timeline.length}
+                    </Text>
+                    <Box
+                      as="button"
+                      aria-label="Next tool"
+                      onClick={() => safeIdx < timeline.length - 1 && setSelectedIdx(safeIdx + 1)}
+                      display="flex" alignItems="center" gap={1}
+                      cursor={safeIdx < timeline.length - 1 ? 'pointer' : 'default'}
+                      opacity={safeIdx < timeline.length - 1 ? 1 : 0.3}
+                      _hover={safeIdx < timeline.length - 1 ? { color: 'accent.teal' } : {}}
+                      transition="all 0.15s"
+                      color="fg.subtle"
+                    >
+                      <Text fontSize="2xs" fontFamily="mono" fontWeight="500">
+                        {safeIdx < timeline.length - 1 ? timeline[safeIdx + 1].verb : 'Next'}
+                      </Text>
+                      <LuChevronRight size={14} />
+                    </Box>
+                  </HStack>
+                )}
+                </Box>
+              </VStack>
             </HStack>
           )}
         </Box>
