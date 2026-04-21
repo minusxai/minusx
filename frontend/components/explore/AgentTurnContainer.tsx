@@ -435,7 +435,14 @@ export default function AgentTurnContainer({
     timeline.some(n => n.type === 'query' || FILE_LABELS.has(n.label)),
     [timeline],
   );
-  const rightPaneH = hasChartContent ? '400px' : '300px';
+  const hasClarify = useMemo(() =>
+    timeline.some(n => n.messages.some(m => {
+      const name = (m as any).function?.name || '';
+      return name === 'ClarifyFrontend' || name === 'Clarify';
+    })),
+    [timeline],
+  );
+  const rightPaneH = hasClarify ? '400px' : hasChartContent ? '425px' : '300px';
 
   // Scroll active horizontal timeline chip into view
   // eslint-disable-next-line react-hooks/exhaustive-deps
