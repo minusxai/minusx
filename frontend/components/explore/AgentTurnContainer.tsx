@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Box, HStack, VStack, Text, Icon, Grid } from '@chakra-ui/react';
-import { LuCheck, LuX, LuBrain, LuDatabase, LuChevronLeft, LuChevronRight } from 'react-icons/lu';
+import { LuCheck, LuX, LuBrain, LuDatabase, LuChevronLeft, LuChevronRight, LuFile, LuFolder, LuFilePlus2, LuArrowRight, LuUpload, LuBookOpen } from 'react-icons/lu';
 import type { Turn } from './message/groupIntoTurns';
 import type { MessageWithFlags } from './message/messageHelpers';
 import SimpleChatMessage from './SimpleChatMessage';
@@ -604,6 +604,267 @@ export default function AgentTurnContainer({
               )
             )}
           </VStack>
+        </VStack>
+      );
+    }
+
+    // Navigate: show navigation target cards with links
+    if (node.label === 'navigated') {
+      const navItems = node.messages.map(m => {
+        const toolMsg = m as any;
+        let args: any = {};
+        try {
+          args = typeof toolMsg.function?.arguments === 'string'
+            ? JSON.parse(toolMsg.function.arguments) : toolMsg.function?.arguments || {};
+        } catch { /* ignore */ }
+        const success = isSuccess(m);
+        const { file_id, path, newFileType } = args;
+
+        let icon = LuArrowRight;
+        let label = 'Unknown';
+        let href: string | null = null;
+        if (file_id !== undefined) {
+          const file = filesDict[file_id];
+          icon = LuFile;
+          label = file?.name || `File #${file_id}`;
+          href = `/f/${file_id}`;
+        } else if (newFileType !== undefined) {
+          icon = LuFilePlus2;
+          label = `New ${newFileType}`;
+          href = null; // Don't link to new file creation pages
+        } else if (path !== undefined) {
+          icon = LuFolder;
+          label = path;
+          const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+          href = `/p/${cleanPath}`;
+        }
+        return { icon, label, href, success };
+      });
+
+      const safeIdx = Math.min(toolCardIdx, navItems.length - 1);
+      const nav = navItems[safeIdx];
+
+      return (
+        <VStack gap={0} align="stretch">
+          <HStack justify="space-between" px={3} pt={2} pb={1}>
+            <HStack gap={1.5}>
+              <Icon as={node.icon} boxSize={3} color="fg.muted" />
+              <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600" textTransform="uppercase">
+                {node.count} {node.count === 1 ? 'navigation' : 'navigations'}
+              </Text>
+            </HStack>
+            {navItems.length > 1 && (
+              <HStack gap={1.5}>
+                <Box as="button" aria-label="Previous"
+                  onClick={() => safeIdx > 0 && setToolCardIdx(safeIdx - 1)}
+                  w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
+                  display="flex" alignItems="center" justifyContent="center"
+                  cursor={safeIdx === 0 ? 'default' : 'pointer'} opacity={safeIdx === 0 ? 0.3 : 1}
+                  _hover={safeIdx === 0 ? {} : { bg: 'accent.teal/25' }}
+                ><LuChevronLeft size={12} /></Box>
+                {navItems.map((_, idx) => (
+                  <Box key={idx} as="button" aria-label={`Nav ${idx + 1}`}
+                    w={idx === safeIdx ? '16px' : '6px'} h="6px" borderRadius="full"
+                    bg={idx === safeIdx ? 'accent.teal' : 'border.default'}
+                    cursor="pointer" transition="all 0.2s" onClick={() => setToolCardIdx(idx)}
+                  />
+                ))}
+                <Box as="button" aria-label="Next"
+                  onClick={() => safeIdx < navItems.length - 1 && setToolCardIdx(safeIdx + 1)}
+                  w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
+                  display="flex" alignItems="center" justifyContent="center"
+                  cursor={safeIdx === navItems.length - 1 ? 'default' : 'pointer'}
+                  opacity={safeIdx === navItems.length - 1 ? 0.3 : 1}
+                  _hover={safeIdx === navItems.length - 1 ? {} : { bg: 'accent.teal/25' }}
+                ><LuChevronRight size={12} /></Box>
+              </HStack>
+            )}
+          </HStack>
+          {nav && (
+            <Box
+              mx={3} mb={2} p={3} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default"
+              {...(nav.href && nav.success ? {
+                as: Link, href: nav.href, cursor: 'pointer',
+                _hover: { borderColor: 'accent.teal', bg: 'bg.muted' }, transition: 'all 0.15s',
+              } : {})}
+            >
+              <HStack gap={2}>
+                <Icon as={nav.success ? nav.icon : LuX} boxSize={4}
+                  color={nav.success ? 'fg.muted' : 'accent.danger'} />
+                <VStack gap={0} align="start" flex={1} minW={0}>
+                  <Text fontSize="sm" fontFamily="mono" color="fg.default" fontWeight="600" truncate w="full">
+                    {nav.label}
+                  </Text>
+                  {nav.href && (
+                    <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate w="full">
+                      {nav.href}
+                    </Text>
+                  )}
+                </VStack>
+                <Box bg="accent.teal/10" px={2} py={0.5} borderRadius="full" flexShrink={0}>
+                  <Text fontSize="2xs" fontFamily="mono" color="accent.teal" fontWeight="500">
+                    {nav.success ? 'Navigated' : 'Failed'}
+                  </Text>
+                </Box>
+              </HStack>
+            </Box>
+          )}
+        </VStack>
+      );
+    }
+
+    // PublishAll: show publish status
+    if (node.label === 'published') {
+      const pubItems = node.messages.map(m => {
+        const success = isSuccess(m);
+        const toolMsg = m as any;
+        let message = '';
+        try {
+          const parsed = typeof toolMsg.content === 'string' ? JSON.parse(toolMsg.content) : toolMsg.content;
+          message = parsed?.message || '';
+        } catch { /* ignore */ }
+        return { success, message };
+      });
+
+      const safeIdx = Math.min(toolCardIdx, pubItems.length - 1);
+      const pub = pubItems[safeIdx];
+
+      return (
+        <VStack gap={0} align="stretch">
+          <HStack justify="space-between" px={3} pt={2} pb={1}>
+            <HStack gap={1.5}>
+              <Icon as={LuUpload} boxSize={3} color="fg.muted" />
+              <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600" textTransform="uppercase">
+                {node.count} {node.count === 1 ? 'publish' : 'publishes'}
+              </Text>
+            </HStack>
+            {pubItems.length > 1 && (
+              <HStack gap={1.5}>
+                <Box as="button" aria-label="Previous"
+                  onClick={() => safeIdx > 0 && setToolCardIdx(safeIdx - 1)}
+                  w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
+                  display="flex" alignItems="center" justifyContent="center"
+                  cursor={safeIdx === 0 ? 'default' : 'pointer'} opacity={safeIdx === 0 ? 0.3 : 1}
+                  _hover={safeIdx === 0 ? {} : { bg: 'accent.teal/25' }}
+                ><LuChevronLeft size={12} /></Box>
+                {pubItems.map((_, idx) => (
+                  <Box key={idx} as="button" aria-label={`Publish ${idx + 1}`}
+                    w={idx === safeIdx ? '16px' : '6px'} h="6px" borderRadius="full"
+                    bg={idx === safeIdx ? 'accent.teal' : 'border.default'}
+                    cursor="pointer" transition="all 0.2s" onClick={() => setToolCardIdx(idx)}
+                  />
+                ))}
+                <Box as="button" aria-label="Next"
+                  onClick={() => safeIdx < pubItems.length - 1 && setToolCardIdx(safeIdx + 1)}
+                  w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
+                  display="flex" alignItems="center" justifyContent="center"
+                  cursor={safeIdx === pubItems.length - 1 ? 'default' : 'pointer'}
+                  opacity={safeIdx === pubItems.length - 1 ? 0.3 : 1}
+                  _hover={safeIdx === pubItems.length - 1 ? {} : { bg: 'accent.teal/25' }}
+                ><LuChevronRight size={12} /></Box>
+              </HStack>
+            )}
+          </HStack>
+          {pub && (
+            <Box mx={3} mb={2} p={3} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default">
+              <HStack gap={2}>
+                <Icon as={pub.success ? LuCheck : LuX} boxSize={4}
+                  color={pub.success ? 'accent.success' : 'accent.danger'} />
+                <VStack gap={0} align="start" flex={1} minW={0}>
+                  <Text fontSize="sm" fontFamily="mono" color="fg.default" fontWeight="600">
+                    {pub.success ? 'Published successfully' : 'Publish failed'}
+                  </Text>
+                  {pub.message && (
+                    <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate w="full">
+                      {pub.message}
+                    </Text>
+                  )}
+                </VStack>
+                <Box bg={pub.success ? 'accent.success/10' : 'accent.danger/10'} px={2} py={0.5} borderRadius="full" flexShrink={0}>
+                  <Text fontSize="2xs" fontFamily="mono" color={pub.success ? 'accent.success' : 'accent.danger'} fontWeight="500">
+                    {pub.success ? 'Done' : 'Error'}
+                  </Text>
+                </Box>
+              </HStack>
+            </Box>
+          )}
+        </VStack>
+      );
+    }
+
+    // LoadSkill: show skill name cards
+    if (node.label === 'loaded skill') {
+      const skillItems = node.messages.map(m => {
+        const toolMsg = m as any;
+        let args: any = {};
+        try {
+          args = typeof toolMsg.function?.arguments === 'string'
+            ? JSON.parse(toolMsg.function.arguments) : toolMsg.function?.arguments || {};
+        } catch { /* ignore */ }
+        const success = isSuccess(m);
+        return { name: args.name || 'unknown', success };
+      });
+
+      const safeIdx = Math.min(toolCardIdx, skillItems.length - 1);
+      const skill = skillItems[safeIdx];
+
+      return (
+        <VStack gap={0} align="stretch">
+          <HStack justify="space-between" px={3} pt={2} pb={1}>
+            <HStack gap={1.5}>
+              <Icon as={LuBookOpen} boxSize={3} color="fg.muted" />
+              <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600" textTransform="uppercase">
+                {node.count} {node.count === 1 ? 'skill' : 'skills'}
+              </Text>
+            </HStack>
+            {skillItems.length > 1 && (
+              <HStack gap={1.5}>
+                <Box as="button" aria-label="Previous"
+                  onClick={() => safeIdx > 0 && setToolCardIdx(safeIdx - 1)}
+                  w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
+                  display="flex" alignItems="center" justifyContent="center"
+                  cursor={safeIdx === 0 ? 'default' : 'pointer'} opacity={safeIdx === 0 ? 0.3 : 1}
+                  _hover={safeIdx === 0 ? {} : { bg: 'accent.teal/25' }}
+                ><LuChevronLeft size={12} /></Box>
+                {skillItems.map((_, idx) => (
+                  <Box key={idx} as="button" aria-label={`Skill ${idx + 1}`}
+                    w={idx === safeIdx ? '16px' : '6px'} h="6px" borderRadius="full"
+                    bg={idx === safeIdx ? 'accent.teal' : 'border.default'}
+                    cursor="pointer" transition="all 0.2s" onClick={() => setToolCardIdx(idx)}
+                  />
+                ))}
+                <Box as="button" aria-label="Next"
+                  onClick={() => safeIdx < skillItems.length - 1 && setToolCardIdx(safeIdx + 1)}
+                  w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
+                  display="flex" alignItems="center" justifyContent="center"
+                  cursor={safeIdx === skillItems.length - 1 ? 'default' : 'pointer'}
+                  opacity={safeIdx === skillItems.length - 1 ? 0.3 : 1}
+                  _hover={safeIdx === skillItems.length - 1 ? {} : { bg: 'accent.teal/25' }}
+                ><LuChevronRight size={12} /></Box>
+              </HStack>
+            )}
+          </HStack>
+          {skill && (
+            <Box mx={3} mb={2} p={3} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default">
+              <HStack gap={2}>
+                <Icon as={skill.success ? LuBookOpen : LuX} boxSize={4}
+                  color={skill.success ? 'fg.muted' : 'accent.danger'} />
+                <VStack gap={0} align="start" flex={1} minW={0}>
+                  <Text fontSize="sm" fontFamily="mono" color="fg.default" fontWeight="600">
+                    {skill.name}
+                  </Text>
+                  <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
+                    {skill.success ? 'Skill loaded' : 'Failed to load'}
+                  </Text>
+                </VStack>
+                <Box bg={skill.success ? 'accent.teal/10' : 'accent.danger/10'} px={2} py={0.5} borderRadius="full" flexShrink={0}>
+                  <Text fontSize="2xs" fontFamily="mono" color={skill.success ? 'accent.teal' : 'accent.danger'} fontWeight="500">
+                    {skill.success ? 'Loaded' : 'Error'}
+                  </Text>
+                </Box>
+              </HStack>
+            </Box>
+          )}
         </VStack>
       );
     }
