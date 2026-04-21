@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Box, Text, VStack, HStack, Button, Icon, Input } from '@chakra-ui/react';
-import { LuUpload, LuX, LuFile } from 'react-icons/lu';
+import { Box, Text, VStack, HStack, Button, Input } from '@chakra-ui/react';
+import { LuUpload, LuX, LuFile, LuCheck } from 'react-icons/lu';
 import { CsvFileInfo } from '@/lib/types';
 import { uploadCsvFilesS3, FileWithSchema } from '@/lib/backend/csv-upload';
 import { BaseConfigProps } from './types';
@@ -107,21 +107,26 @@ export default function CsvConfig({
   const existingFiles = (config.files ?? []) as CsvFileInfo[];
 
   return (
-    <VStack gap={4} align="stretch">
+    <VStack gap={3} align="stretch">
       {/* File selector */}
       <Box>
-        <Text fontSize="sm" fontWeight="700" mb={2}>
-          Files
-          {mode === 'view' && existingFiles.length > 0 && (
-            <Text as="span" fontSize="xs" color="fg.muted" ml={2}>
-              ({existingFiles.length} registered)
-            </Text>
-          )}
-        </Text>
-
-        <VStack align="stretch" gap={3}>
-          <Button as="label" size="sm" bg="accent.teal" cursor="pointer" width="fit-content">
-            <LuUpload /> {mode === 'create' ? 'Select Files' : 'Upload New Files'}
+        <HStack justify="space-between" mb={2}>
+          <Text fontSize="sm" fontWeight="700">
+            Files
+            {mode === 'view' && existingFiles.length > 0 && (
+              <Text as="span" fontSize="xs" color="fg.muted" ml={2}>
+                ({existingFiles.length} registered)
+              </Text>
+            )}
+          </Text>
+          <Button
+            as="label"
+            size="xs"
+            variant="outline"
+            cursor="pointer"
+          >
+            <LuUpload size={12} />
+            {mode === 'create' ? 'Select Files' : 'Upload Files'}
             <input
               type="file"
               accept=".csv,.parquet,.pq,.xlsx"
@@ -130,25 +135,33 @@ export default function CsvConfig({
               style={{ display: 'none' }}
             />
           </Button>
+        </HStack>
 
+        <Text fontSize="xs" color="fg.muted" mb={3}>
+          Accepts <Text as="span" fontFamily="mono">.csv</Text>,{' '}
+          <Text as="span" fontFamily="mono">.parquet</Text>, and{' '}
+          <Text as="span" fontFamily="mono">.xlsx</Text> files
+        </Text>
+
+        <VStack align="stretch" gap={3}>
           {/* Pending files with per-file schema input */}
           {pendingFiles.length > 0 && (
-            <Box p={3} borderRadius="md" border="1px solid" borderColor="accent.teal" bg="accent.teal/5">
-              <Text fontSize="xs" fontWeight="600" mb={3} color="accent.teal">
+            <Box p={3} borderRadius="md" border="1px solid" borderColor="accent.teal/30" bg="accent.teal/5">
+              <Text fontSize="xs" fontWeight="600" mb={2} color="accent.teal">
                 {pendingFiles.length} file{pendingFiles.length !== 1 ? 's' : ''} selected
               </Text>
 
-              <VStack align="stretch" gap={3}>
+              <VStack align="stretch" gap={2}>
                 {pendingFiles.map(({ file, schemaName, tableName }, idx) => (
-                  <Box key={idx} p={2} borderRadius="sm" bg="bg.surface" border="1px solid" borderColor="border.subtle">
+                  <Box key={idx} p={2} borderRadius="md" bg="bg.surface" border="1px solid" borderColor="border.subtle">
                     <HStack justify="space-between" mb={2}>
                       <HStack gap={2}>
-                        <Icon as={LuFile} boxSize={3} color="fg.muted" />
+                        <LuFile size={12} color="var(--chakra-colors-fg-muted)" />
                         <Text fontSize="xs" fontFamily="mono">{file.name}</Text>
-                        <Text fontSize="xs" color="fg.muted">({(file.size / 1024).toFixed(1)} KB)</Text>
+                        <Text fontSize="2xs" color="fg.muted">({(file.size / 1024).toFixed(1)} KB)</Text>
                       </HStack>
                       <Button size="xs" variant="ghost" onClick={() => removeFile(idx)}>
-                        <LuX />
+                        <LuX size={12} />
                       </Button>
                     </HStack>
                     <HStack gap={2}>
@@ -160,15 +173,13 @@ export default function CsvConfig({
                         onChange={(e) => updateSchema(idx, e.target.value)}
                         placeholder="public"
                       />
-                    </HStack>
-                    <HStack gap={2} mt={1}>
                       <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap">Table:</Text>
                       <Input
                         size="xs"
                         fontFamily="mono"
                         value={tableName}
                         onChange={(e) => updateTableName(idx, e.target.value)}
-                        placeholder="auto-generated from filename"
+                        placeholder="auto from filename"
                       />
                     </HStack>
                   </Box>
@@ -184,22 +195,25 @@ export default function CsvConfig({
                 mt={3}
                 width="100%"
               >
-                <LuUpload /> Upload & Register
+                <LuUpload size={14} /> Upload & Register
               </Button>
             </Box>
           )}
 
           {uploadProgress === 'uploading' && (
-            <Text fontSize="xs" color="accent.teal">Uploading to S3 and reading metadata…</Text>
+            <Text fontSize="xs" color="accent.teal">Uploading to S3 and reading metadata...</Text>
           )}
           {uploadProgress === 'done' && (
-            <Text fontSize="xs" color="accent.teal">Files registered. You can now test the connection.</Text>
+            <HStack gap={1.5}>
+              <LuCheck size={12} color="var(--chakra-colors-accent-teal)" />
+              <Text fontSize="xs" color="accent.teal">Files registered. You can now test the connection.</Text>
+            </HStack>
           )}
 
           {/* Registered tables */}
           {existingFiles.length > 0 && pendingFiles.length === 0 && (
-            <Box p={3} borderRadius="md" border="1px solid" borderColor={mode === 'view' ? 'border.subtle' : 'accent.teal'} bg={mode === 'view' ? 'bg.muted' : 'accent.teal/5'}>
-              <Text fontSize="xs" fontWeight="600" mb={2} color={mode === 'view' ? undefined : 'accent.teal'}>
+            <Box p={3} borderRadius="md" border="1px solid" borderColor="border.subtle" bg="bg.muted">
+              <Text fontSize="xs" fontWeight="600" mb={2}>
                 Registered Tables
               </Text>
               <VStack align="stretch" gap={2}>
@@ -210,31 +224,19 @@ export default function CsvConfig({
                         {f.schema_name}.{f.table_name}
                       </Text>
                       <HStack gap={2}>
-                        <Text fontSize="xs" color="fg.muted" fontFamily="mono">{f.file_format}</Text>
-                        <Text fontSize="xs" color="fg.muted">{f.row_count.toLocaleString()} rows</Text>
+                        <Text fontSize="2xs" color="fg.muted" fontFamily="mono">{f.file_format}</Text>
+                        <Text fontSize="2xs" color="fg.muted">{f.row_count.toLocaleString()} rows</Text>
                       </HStack>
                     </HStack>
-                    <Text fontSize="xs" color="fg.muted" fontFamily="mono">
+                    <Text fontSize="2xs" color="fg.muted" fontFamily="mono">
                       {f.columns.slice(0, 5).map((c) => c.name).join(', ')}
                       {f.columns.length > 5 ? ` +${f.columns.length - 5} more` : ''}
                     </Text>
                   </Box>
                 ))}
               </VStack>
-              {mode === 'view' && (
-                <Text fontSize="xs" color="fg.muted" mt={3}>
-                  Upload new files above to add more tables
-                </Text>
-              )}
             </Box>
           )}
-
-          <Text fontSize="xs" color="fg.muted">
-            Accepts <Text as="span" fontFamily="mono">.csv</Text>,{' '}
-            <Text as="span" fontFamily="mono">.parquet</Text>, and{' '}
-            <Text as="span" fontFamily="mono">.xlsx</Text> files. Each file (or sheet) becomes a
-            table queried as <Text as="span" fontFamily="mono">schema_name.table_name</Text>.
-          </Text>
         </VStack>
       </Box>
     </VStack>

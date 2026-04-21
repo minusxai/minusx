@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { Box, Text, VStack, HStack, Button, Input, Icon, Span } from '@chakra-ui/react';
-import { LuDownload, LuLink, LuTable } from 'react-icons/lu';
+import { Box, Text, VStack, HStack, Button, Input, Span } from '@chakra-ui/react';
+import { LuDownload, LuLink, LuTable, LuCheck } from 'react-icons/lu';
 import { CsvFileInfo } from '@/lib/types';
 import { importGoogleSheets } from '@/lib/backend/google-sheets';
 import { BaseConfigProps } from './types';
@@ -69,7 +69,7 @@ export default function GoogleSheetsConfig({
   };
 
   return (
-    <VStack gap={4} align="stretch">
+    <VStack gap={3} align="stretch">
       {/* Google Sheets URL Input */}
       <Box>
         <Text fontSize="sm" fontWeight="700" mb={2}>
@@ -81,138 +81,102 @@ export default function GoogleSheetsConfig({
           )}
         </Text>
 
-        <VStack align="stretch" gap={3}>
-          {/* URL Input */}
-          <HStack gap={2}>
-            <Icon as={LuLink} boxSize={4} color="fg.muted" />
-            <Input
-              value={spreadsheetUrl}
-              onChange={(e) => {
-                setSpreadsheetUrl(e.target.value);
-                setImportProgress('idle');
-              }}
-              placeholder="https://docs.google.com/spreadsheets/d/..."
-              fontFamily="mono"
-              fontSize="sm"
-            />
-          </HStack>
+        <HStack gap={2}>
+          <LuLink size={16} color="var(--chakra-colors-fg-muted)" style={{ flexShrink: 0 }} />
+          <Input
+            value={spreadsheetUrl}
+            onChange={(e) => {
+              setSpreadsheetUrl(e.target.value);
+              setImportProgress('idle');
+            }}
+            placeholder="https://docs.google.com/spreadsheets/d/..."
+            fontFamily="mono"
+            fontSize="sm"
+          />
+        </HStack>
 
-          {/* Schema Input */}
-          <HStack gap={2}>
-            <Text fontSize="xs" color="fg.muted" whiteSpace="nowrap">Schema:</Text>
-            <Input
-              size="sm"
-              fontFamily="mono"
-              value={schemaName}
-              onChange={(e) => setSchemaName(e.target.value.toLowerCase())}
-              placeholder="public"
-            />
-          </HStack>
-
-          <Text fontSize="xs" color="fg.muted">
-            Enter the URL of a public Google Sheets document. The sheet must be shared as <Span color="accent.warning">&quot;Anyone with the link can view&quot;</Span>.
-          </Text>
-
-          {/* Import Button */}
-          <Button
-            onClick={handleImport}
-            loading={importProgress === 'importing'}
-            disabled={!spreadsheetUrl}
-            colorPalette="teal"
-            size="sm"
-            width="fit-content"
-          >
-            <LuDownload /> {mode === 'create' ? 'Fetch & Create Database' : 'Re-import Sheets'}
-          </Button>
-
-          {/* Import progress indicator */}
-          {importProgress === 'importing' && (
-            <Text fontSize="xs" color="accent.teal">
-              Downloading and processing Google Sheets... This may take a moment.
-            </Text>
-          )}
-          {importProgress === 'done' && (
-            <Text fontSize="xs" color="accent.success">
-              Database created successfully! You can now test the connection.
-            </Text>
-          )}
-
-          {/* Show existing tables in view mode */}
-          {mode === 'view' && config.files?.length > 0 && (
-            <Box
-              p={3}
-              borderRadius="md"
-              border="1px solid"
-              borderColor="border.subtle"
-              bg="bg.muted"
-            >
-              <HStack gap={2} mb={2}>
-                <Icon as={LuTable} boxSize={4} color="fg.muted" />
-                <Text fontSize="xs" fontWeight="600">
-                  Imported Sheets
-                </Text>
-              </HStack>
-              <VStack align="stretch" gap={2}>
-                {(config.files as CsvFileInfo[]).map((file, idx) => (
-                  <Box key={idx}>
-                    <HStack justify="space-between">
-                      <Text fontSize="xs" fontFamily="mono" fontWeight="600">
-                        {file.schema_name || schemaName}.{file.table_name}
-                      </Text>
-                      <Text fontSize="xs" color="fg.muted">
-                        {file.row_count.toLocaleString()} rows
-                      </Text>
-                    </HStack>
-                    <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-                      {file.columns.map(c => c.name).join(', ')}
-                    </Text>
-                  </Box>
-                ))}
-              </VStack>
-              {config.spreadsheet_url && (
-                <Text fontSize="xs" color="fg.muted" mt={3}>
-                  Source: {config.spreadsheet_url}
-                </Text>
-              )}
-            </Box>
-          )}
-
-          {/* Show created tables after import in create mode */}
-          {mode === 'create' && config.files?.length > 0 && (
-            <Box
-              p={3}
-              borderRadius="md"
-              border="1px solid"
-              borderColor="accent.success"
-              bg="accent.success/5"
-            >
-              <HStack gap={2} mb={2}>
-                <Icon as={LuTable} boxSize={4} color="accent.success" />
-                <Text fontSize="xs" fontWeight="600" color="accent.success">
-                  Created Tables
-                </Text>
-              </HStack>
-              <VStack align="stretch" gap={2}>
-                {(config.files as CsvFileInfo[]).map((file, idx) => (
-                  <Box key={idx}>
-                    <HStack justify="space-between">
-                      <Text fontSize="xs" fontFamily="mono" fontWeight="600">
-                        {file.schema_name || schemaName}.{file.table_name}
-                      </Text>
-                      <Text fontSize="xs" color="fg.muted">
-                        {file.row_count.toLocaleString()} rows
-                      </Text>
-                    </HStack>
-                    <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-                      {file.columns.map(c => c.name).join(', ')}
-                    </Text>
-                  </Box>
-                ))}
-              </VStack>
-            </Box>
-          )}
-        </VStack>
+        <Text fontSize="xs" color="fg.muted" mt={1.5}>
+          Must be shared as <Span color="accent.warning">&quot;Anyone with the link can view&quot;</Span>
+        </Text>
       </Box>
+
+      {/* Schema Input */}
+      <Box>
+        <Text fontSize="sm" fontWeight="700" mb={2}>Schema</Text>
+        <Input
+          fontFamily="mono"
+          value={schemaName}
+          onChange={(e) => setSchemaName(e.target.value.toLowerCase())}
+          placeholder="public"
+        />
+      </Box>
+
+      {/* Import Button */}
+      <Button
+        onClick={handleImport}
+        loading={importProgress === 'importing'}
+        disabled={!spreadsheetUrl}
+        bg="accent.teal"
+        size="sm"
+        width="fit-content"
+      >
+        <LuDownload size={14} /> {mode === 'create' ? 'Fetch & Create Database' : 'Re-import Sheets'}
+      </Button>
+
+      {/* Import progress indicator */}
+      {importProgress === 'importing' && (
+        <Text fontSize="xs" color="accent.teal">
+          Downloading and processing Google Sheets...
+        </Text>
+      )}
+      {importProgress === 'done' && (
+        <HStack gap={1.5}>
+          <LuCheck size={12} color="var(--chakra-colors-accent-teal)" />
+          <Text fontSize="xs" color="accent.teal">
+            Database created. You can now test the connection.
+          </Text>
+        </HStack>
+      )}
+
+      {/* Imported tables list */}
+      {config.files?.length > 0 && (
+        <Box
+          p={3}
+          borderRadius="md"
+          border="1px solid"
+          borderColor="border.subtle"
+          bg="bg.muted"
+        >
+          <HStack gap={2} mb={2}>
+            <LuTable size={14} color="var(--chakra-colors-fg-muted)" />
+            <Text fontSize="xs" fontWeight="600">
+              {mode === 'view' ? 'Imported Sheets' : 'Created Tables'}
+            </Text>
+          </HStack>
+          <VStack align="stretch" gap={2}>
+            {(config.files as CsvFileInfo[]).map((file, idx) => (
+              <Box key={idx}>
+                <HStack justify="space-between">
+                  <Text fontSize="xs" fontFamily="mono" fontWeight="600">
+                    {file.schema_name || schemaName}.{file.table_name}
+                  </Text>
+                  <Text fontSize="2xs" color="fg.muted">
+                    {file.row_count.toLocaleString()} rows
+                  </Text>
+                </HStack>
+                <Text fontSize="2xs" color="fg.muted" fontFamily="mono">
+                  {file.columns.map(c => c.name).join(', ')}
+                </Text>
+              </Box>
+            ))}
+          </VStack>
+          {config.spreadsheet_url && mode === 'view' && (
+            <Text fontSize="2xs" color="fg.muted" mt={2} fontFamily="mono" truncate>
+              {config.spreadsheet_url}
+            </Text>
+          )}
+        </Box>
+      )}
     </VStack>
   );
 }
