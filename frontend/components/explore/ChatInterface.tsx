@@ -319,6 +319,11 @@ export default function ChatInterface({
     checkScrollPosition();
   }, [userMessageCount]);
 
+  // Re-check scroll position when any message changes (e.g. agent adds responses/suggestions)
+  useEffect(() => {
+    checkScrollPosition();
+  }, [allMessages.length, checkScrollPosition]);
+
   const handleNewChat = () => {
     setLocalError(null);
     dispatch(clearChatAttachments());
