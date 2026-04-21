@@ -156,7 +156,7 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
   'SearchFiles': {
     displayComponent: SearchFilesDisplay,
     tier: 3,
-    chipLabel: 'searched files',
+    chipLabel: 'searched',
     chipIcon: LuSearch,
     timelineVerb: 'Searching',
   },
@@ -170,8 +170,8 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
   'SearchDBSchema': {
     displayComponent: SearchDBSchemaDisplay,
     tier: 3,
-    chipLabel: 'searched schema',
-    chipIcon: LuDatabase,
+    chipLabel: 'searched',
+    chipIcon: LuSearch,
     timelineVerb: 'Searching',
   },
   'PublishAll': {

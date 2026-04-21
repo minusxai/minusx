@@ -9,6 +9,7 @@ import SimpleChatMessage from './SimpleChatMessage';
 import ToolChips from './tools/ToolChips';
 import ChartCarousel from './tools/ChartCarousel';
 import { getToolTier, getToolConfig } from '@/lib/api/tool-config';
+import Link from 'next/link';
 import { ToolNames, CompletedToolCall } from '@/lib/types';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { useAppSelector } from '@/store/hooks';
@@ -150,18 +151,33 @@ function parseAgentContent(msg: MessageWithFlags): { thinking: string | null; co
   return { thinking, content };
 }
 
-/** Parse CreateFile tool content to extract question content + query result for rendering */
-function parseCreateFileContent(msg: MessageWithFlags): {
+/** Parse file tool content (CreateFile/EditFile/ReadFiles) to extract question content + query result */
+function parseFileToolContent(msg: MessageWithFlags): {
   content: import('@/lib/types').QuestionContent | null;
   queryResult: QueryResult | null;
+  fileName: string | null;
+  filePath: string | null;
+  fileType: string | null;
+  assetCount: number | null; // for dashboards
 } {
   const toolMsg = msg as any;
+  const empty = { content: null, queryResult: null, fileName: null, filePath: null, fileType: null, assetCount: null };
   try {
     const parsed = typeof toolMsg.content === 'string' ? JSON.parse(toolMsg.content) : toolMsg.content;
-    const fileState = parsed?.state?.fileState;
-    const queryResults = parsed?.state?.queryResults;
+    // Handle CreateFile (state.fileState), EditFile (fileState), ReadFiles (files[0].fileState)
+    const fileState = parsed?.state?.fileState || parsed?.fileState || parsed?.files?.[0]?.fileState;
+    const queryResults = parsed?.state?.queryResults || parsed?.queryResults || parsed?.files?.[0]?.queryResults;
 
-    if (!fileState?.content || fileState.type !== 'question') return { content: null, queryResult: null };
+    if (!fileState) return empty;
+
+    const fileName = fileState.name || null;
+    const filePath = fileState.path || null;
+    const fileType = fileState.type || null;
+    const assetCount = fileState.content?.assets?.filter((a: any) => a.type === 'question')?.length ?? null;
+
+    if (!fileState.content || fileState.type !== 'question') {
+      return { content: null, queryResult: null, fileName, filePath, fileType, assetCount };
+    }
 
     const content = fileState.content;
     let queryResult: QueryResult | null = null;
@@ -199,9 +215,9 @@ function parseCreateFileContent(msg: MessageWithFlags): {
       }
     }
 
-    return { content, queryResult };
+    return { content, queryResult, fileName, filePath, fileType, assetCount };
   } catch {
-    return { content: null, queryResult: null };
+    return empty;
   }
 }
 
@@ -369,32 +385,33 @@ export default function AgentTurnContainer({
   };
 
   const renderToolDetail = (node: TimelineNode) => {
-    // For CreateFile: show charts for questions, file list for other types
-    if (node.label === 'created') {
+    // For file-mutating tools (created/edited/read): show charts for questions, rich cards for others
+    if (node.label === 'created' || node.label === 'edited' || node.label === 'read') {
       const chartItems: (import('./tools/ChartCarousel').ChartItem | import('./tools/ChartCarousel').ChartErrorItem)[] = [];
+      const nonChartItems: { name: string; path: string | null; fileType: string | null; assetCount: number | null }[] = [];
 
       for (const m of node.messages) {
-        const { content, queryResult } = parseCreateFileContent(m);
-        const name = getDisplayName(m, filesDict);
-        if (content && queryResult) {
-          chartItems.push({ name, question: content, queryResult });
+        const parsed = parseFileToolContent(m);
+        const name = parsed.fileName || getDisplayName(m, filesDict);
+        if (parsed.content && parsed.queryResult) {
+          chartItems.push({ name, question: parsed.content, queryResult: parsed.queryResult });
         } else {
-          chartItems.push({ name, error: 'No chart data' });
+          nonChartItems.push({ name, path: parsed.filePath, fileType: parsed.fileType, assetCount: parsed.assetCount });
         }
       }
 
-      const hasCharts = chartItems.some(i => !('error' in i));
-      if (hasCharts) {
+      // If we have any charts, show carousel
+      if (chartItems.length > 0) {
         return (
           <ChartCarousel
             items={chartItems}
             databaseName={databaseName}
-            label="created"
+            label={node.label}
             headerIcon={node.icon}
           />
         );
       }
-      // Fall through to default list for non-question files
+      // Fall through to default cards for non-question files
     }
 
     // Search (files + schema): show query + results
@@ -591,33 +608,32 @@ export default function AgentTurnContainer({
       );
     }
 
-    // Default: file cards with carousel-style navigation
+    // Default: file cards with carousel-style navigation (successful first, failed at end)
     const fileCards = node.messages.map((msg) => {
-      const toolMsg = msg as any;
-      const name = getDisplayName(msg, filesDict);
+      const parsed = parseFileToolContent(msg);
+      const name = parsed.fileName || getDisplayName(msg, filesDict);
       const success = isSuccess(msg);
-      let fileType: string | null = null;
-      let filePath: string | null = null;
+      const fileType = parsed.fileType || null;
+      const filePath = parsed.filePath || null;
+      const assetCount = parsed.assetCount;
+      // Get fileId for linking
       let fileId: number | null = null;
+      const toolMsg = msg as any;
       try {
         const args = typeof toolMsg.function?.arguments === 'string'
           ? JSON.parse(toolMsg.function.arguments) : toolMsg.function?.arguments || {};
         fileId = args.fileId || args.fileIds?.[0] || null;
-        if (fileId && filesDict[fileId]) {
-          fileType = filesDict[fileId].type;
-          filePath = filesDict[fileId].path;
-        }
-        if (!fileType) fileType = args.file_type;
       } catch { /* ignore */ }
-      // Also try response content
-      try {
-        const content = typeof toolMsg.content === 'string' ? JSON.parse(toolMsg.content) : toolMsg.content;
-        if (!filePath && content?.state?.fileState?.path) filePath = content.state.fileState.path;
-        if (!fileType && content?.state?.fileState?.type) fileType = content.state.fileState.type;
-      } catch { /* ignore */ }
+      if (!fileId) {
+        try {
+          const content = typeof toolMsg.content === 'string' ? JSON.parse(toolMsg.content) : toolMsg.content;
+          fileId = content?.state?.fileState?.id || content?.fileState?.id || null;
+        } catch { /* ignore */ }
+      }
       const meta = fileType ? getFileTypeMetadata(fileType as FileType) : null;
-      return { name, success, fileType, filePath, fileId, meta };
-    });
+      const canLink = fileId != null && fileId > 0;
+      return { name, success, fileType, filePath, assetCount, meta, fileId, canLink };
+    }).sort((a, b) => (a.success === b.success ? 0 : a.success ? -1 : 1));
 
     const safeCardIdx = Math.min(toolCardIdx, fileCards.length - 1);
     const card = fileCards[safeCardIdx];
@@ -669,9 +685,18 @@ export default function AgentTurnContainer({
 
         {/* File card */}
         {card && (
-          <Box mx={3} mb={2} p={3} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default">
-            <HStack gap={2} mb={1}>
-              <Icon as={card.meta?.icon || LuCheck} boxSize={4} color={card.success ? 'fg.muted' : 'accent.danger'} />
+          <Box
+            mx={3} mb={2} p={3} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default"
+            {...(card.canLink ? {
+              as: Link,
+              href: `/f/${card.fileId}`,
+              cursor: 'pointer',
+              _hover: { borderColor: 'accent.teal', bg: 'bg.muted' },
+              transition: 'all 0.15s',
+            } : {})}
+          >
+            <HStack gap={2}>
+              <Icon as={card.meta?.icon || LuCheck} boxSize={4} color={card.meta?.color || (card.success ? 'fg.muted' : 'accent.danger')} />
               <VStack gap={0} align="start" flex={1} minW={0}>
                 <Text fontSize="sm" fontFamily="mono" color="fg.default" fontWeight="600" truncate w="full">
                   {card.name || 'Unnamed'}
@@ -683,13 +708,18 @@ export default function AgentTurnContainer({
                 )}
               </VStack>
               {card.meta && (
-                <Box bg="bg.muted" px={2} py={0.5} borderRadius="full" flexShrink={0}>
-                  <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="500">
+                <Box bg={`${card.meta.color}/10`} px={2} py={0.5} borderRadius="full" flexShrink={0}>
+                  <Text fontSize="2xs" fontFamily="mono" color={card.meta.color} fontWeight="500">
                     {card.meta.label}
                   </Text>
                 </Box>
               )}
             </HStack>
+            {card.assetCount != null && card.assetCount > 0 && (
+              <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" mt={1} pl={6}>
+                {card.assetCount} {card.assetCount === 1 ? 'question' : 'questions'}
+              </Text>
+            )}
           </Box>
         )}
       </VStack>
