@@ -273,10 +273,11 @@ export default function ChatInterface({
   }, []);
 
   // Compute layout based on container width and mode
-//   console.log('Container width:', containerWidth, 'Container:', container);
+  console.log('Container width:', containerWidth, 'Container:', container);
   const isCompact = container === 'sidebar' || (containerWidth > 0 && containerWidth < 900);
-  const colSpan = isCompact ? 12 : { base: 12, md: 8, lg: 6 };
-  const colStart = isCompact ? 1 : { base: 1, md: 3, lg: 4 };
+  const isMedium = !isCompact && containerWidth > 0 && containerWidth < 1100;
+  const colSpan = isCompact ? 12 : isMedium ? { base: 12, md: 8 } : { base: 12, md: 8, lg: 6 };
+  const colStart = isCompact ? 1 : isMedium ? { base: 1, md: 3 } : { base: 1, md: 3, lg: 4 };
 
   // Clear errors when navigating between conversations — intentional setState in effect
   const prevProvidedIdRef = useRef(providedConversationId);
@@ -1000,6 +1001,8 @@ export default function ChatInterface({
               onDatabaseChange={handleDatabaseChange}
               container={container}
               isCompact={isCompact}
+              colSpan={colSpan}
+              colStart={colStart}
               connectionsLoading={connectionsLoading}
               contextsLoading={contextsLoading}
               selectedContextPath={contextPath}

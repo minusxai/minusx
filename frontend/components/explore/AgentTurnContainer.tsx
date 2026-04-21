@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { Box, HStack, VStack, Text, Icon } from '@chakra-ui/react';
-import { LuBrain, LuDatabase } from 'react-icons/lu';
+import { LuBrain, LuDatabase, LuChevronLeft, LuChevronRight } from 'react-icons/lu';
 import type { Turn } from './message/groupIntoTurns';
 import type { MessageWithFlags } from './message/messageHelpers';
 import SimpleChatMessage from './SimpleChatMessage';
@@ -447,124 +447,211 @@ export default function AgentTurnContainer({
           borderRadius="md"
           overflow="hidden"
         >
-          <HStack gap={0} align="stretch">
-            {/* Timeline rail */}
-            <VStack
-              flexShrink={0}
-              bg="bg.elevated"
-              borderRight="1px solid"
-              borderColor="border.default"
-              py={1}
-              gap={0}
-              w="150px"
-              minW="150px"
-            >
-              {timeline.map((node, idx) => {
-                const isSelected = idx === safeIdx;
-                const isFirst = idx === 0;
-                const isLast = idx === timeline.length - 1;
-                // Dot center: pl=3 (12px) + half dot width (4px) = 16px
-                const lineLeft = '15.5px';
+          {isCompact ? (
+            /* ── Compact: horizontal timeline on top, detail below ── */
+            <VStack gap={0} align="stretch">
+              {/* Horizontal timeline strip with chevrons */}
+              <HStack
+                bg="bg.elevated"
+                borderBottom="1px solid"
+                borderColor="border.default"
+                px={1} py={1} gap={1}
+              >
+                <Text
+                  fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600"
+                  textTransform="uppercase" flexShrink={0} pl={1}
+                >
+                  Tools
+                </Text>
+                {/* Prev chevron */}
+                <Box
+                  as="button"
+                  aria-label="Previous step"
+                  onClick={() => safeIdx > 0 && setSelectedIdx(safeIdx - 1)}
+                  w="20px" h="20px" borderRadius="full"
+                  bg="accent.teal/15" color="accent.teal"
+                  display="flex" alignItems="center" justifyContent="center"
+                  cursor={safeIdx === 0 ? 'default' : 'pointer'}
+                  opacity={safeIdx === 0 ? 0.3 : 1}
+                  _hover={safeIdx === 0 ? {} : { bg: 'accent.teal/25' }}
+                  flexShrink={0}
+                >
+                  <LuChevronLeft size={12} />
+                </Box>
 
-                return (
-                  <Box
-                    key={idx}
-                    as="button"
-                    aria-label={`${node.verb}${node.count > 1 ? ` ×${node.count}` : ''}`}
-                    onClick={() => setSelectedIdx(idx)}
-                    display="flex"
-                    alignItems="center"
-                    gap={2}
-                    py={1.5}
-                    pl={3}
-                    pr={3}
-                    w="100%"
-                    cursor="pointer"
-                    bg={isSelected ? 'accent.teal/12' : 'transparent'}
-                    _hover={{ bg: isSelected ? 'accent.teal/12' : 'bg.muted' }}
-                    transition="all 0.1s"
-                    position="relative"
-                  >
-                    {/* Vertical timeline line — through dot center */}
-                    {!isFirst && (
-                      <Box
-                        position="absolute"
-                        left={lineLeft}
-                        top={0}
-                        h="50%"
-                        w="1.5px"
-                        bg="border.default"
-                      />
-                    )}
-                    {!isLast && (
-                      <Box
-                        position="absolute"
-                        left={lineLeft}
-                        top="50%"
-                        h="50%"
-                        w="1.5px"
-                        bg="border.default"
-                      />
-                    )}
+                {/* All steps — scroll horizontally if they overflow */}
+                <HStack gap={0} flex={1} minW={0} overflowX="auto" flexWrap="nowrap" css={{ scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}>
+                  {timeline.map((node, idx) => {
+                    const isSelected = idx === safeIdx;
+                    const isLast = idx === timeline.length - 1;
 
-                    {/* Timeline dot */}
-                    <Box
-                      w="8px"
-                      h="8px"
-                      borderRadius="full"
-                      bg={isSelected ? 'accent.teal' : 'bg.elevated'}
-                      border="1.5px solid"
-                      borderColor={isSelected ? 'accent.teal' : 'fg.subtle'}
-                      flexShrink={0}
-                      zIndex={1}
-                    />
+                    return (
+                      <React.Fragment key={idx}>
+                        <Box
+                          as="button"
+                          aria-label={`${node.verb}${node.count > 1 ? ` ×${node.count}` : ''}`}
+                          onClick={() => setSelectedIdx(idx)}
+                          display="flex"
+                          alignItems="center"
+                          gap={1}
+                          px={1.5}
+                          py={0.5}
+                          cursor="pointer"
+                          bg={isSelected ? 'accent.teal/12' : 'transparent'}
+                          borderRadius="sm"
+                          _hover={{ bg: isSelected ? 'accent.teal/12' : 'bg.muted' }}
+                          transition="all 0.1s"
+                          flexShrink={0}
+                        >
+                          <Icon
+                            as={node.icon}
+                            boxSize={3}
+                            color={isSelected ? 'accent.teal' : 'fg.muted'}
+                            flexShrink={0}
+                          />
+                          <Text
+                            fontSize="2xs"
+                            fontFamily="mono"
+                            color={isSelected ? 'accent.teal' : 'fg.subtle'}
+                            fontWeight={isSelected ? '600' : '400'}
+                            whiteSpace="nowrap"
+                          >
+                            {node.verb}
+                          </Text>
+                          {node.count > 1 && (
+                            <Box
+                              bg={isSelected ? 'accent.teal/20' : 'bg.muted'}
+                              color={isSelected ? 'accent.teal' : 'fg.subtle'}
+                              borderRadius="full"
+                              px={1}
+                              fontSize="2xs"
+                              fontFamily="mono"
+                              fontWeight="600"
+                              lineHeight="1.4"
+                              flexShrink={0}
+                            >
+                              {node.count}
+                            </Box>
+                          )}
+                        </Box>
+                        {!isLast && (
+                          <Text color="border.default" fontSize="xs" flexShrink={0} lineHeight={1}>›</Text>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </HStack>
 
-                    {/* Icon */}
-                    <Icon
-                      as={node.icon}
-                      boxSize={3}
-                      color={isSelected ? 'accent.teal' : 'fg.muted'}
-                      flexShrink={0}
-                    />
+                {/* Next chevron */}
+                <Box
+                  as="button"
+                  aria-label="Next step"
+                  onClick={() => safeIdx < timeline.length - 1 && setSelectedIdx(safeIdx + 1)}
+                  w="20px" h="20px" borderRadius="full"
+                  bg="accent.teal/15" color="accent.teal"
+                  display="flex" alignItems="center" justifyContent="center"
+                  cursor={safeIdx >= timeline.length - 1 ? 'default' : 'pointer'}
+                  opacity={safeIdx >= timeline.length - 1 ? 0.3 : 1}
+                  _hover={safeIdx >= timeline.length - 1 ? {} : { bg: 'accent.teal/25' }}
+                  flexShrink={0}
+                >
+                  <LuChevronRight size={12} />
+                </Box>
+              </HStack>
 
-                    {/* Verb label */}
-                    <Text
-                      fontSize="xs"
-                      fontFamily="mono"
-                      color={isSelected ? 'accent.teal' : 'fg.subtle'}
-                      fontWeight={isSelected ? '600' : '400'}
-                      whiteSpace="nowrap"
-                    >
-                      {node.verb}
-                    </Text>
-
-                    {/* Count badge */}
-                    {node.count > 1 && (
-                      <Box
-                        bg={isSelected ? 'accent.teal/20' : 'bg.muted'}
-                        color={isSelected ? 'accent.teal' : 'fg.subtle'}
-                        borderRadius="full"
-                        px={1.5}
-                        py={0}
-                        fontSize="2xs"
-                        fontFamily="mono"
-                        fontWeight="600"
-                        lineHeight="1.6"
-                        flexShrink={0}
-                      >
-                        {node.count}
-                      </Box>
-                    )}
-                  </Box>
-                );
-              })}
+              {/* Detail pane below */}
+              <Box minW={0} bg="bg.canvas">
+                {selectedNode && renderRightPane(selectedNode)}
+              </Box>
             </VStack>
+          ) : (
+            /* ── Full: vertical timeline rail on left, detail on right ── */
+            <HStack gap={0} align="stretch">
+              {/* Timeline rail */}
+              <VStack
+                flexShrink={0}
+                bg="bg.elevated"
+                borderRight="1px solid"
+                borderColor="border.default"
+                py={1}
+                gap={0}
+                w="150px"
+                minW="150px"
+              >
+                <Text
+                  fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600"
+                  textTransform="uppercase" px={3} pt={1} pb={1.5} w="100%"
+                >
+                  Tools
+                </Text>
+                {timeline.map((node, idx) => {
+                  const isSelected = idx === safeIdx;
+                  const isFirst = idx === 0;
+                  const isLast = idx === timeline.length - 1;
+                  const lineLeft = '15.5px';
 
-            {/* Right pane */}
-            <Box flex={1} minW={0} bg="bg.canvas">
-              {selectedNode && renderRightPane(selectedNode)}
-            </Box>
-          </HStack>
+                  return (
+                    <Box
+                      key={idx}
+                      as="button"
+                      aria-label={`${node.verb}${node.count > 1 ? ` ×${node.count}` : ''}`}
+                      onClick={() => setSelectedIdx(idx)}
+                      display="flex"
+                      alignItems="center"
+                      gap={2}
+                      py={1.5}
+                      pl={3}
+                      pr={3}
+                      w="100%"
+                      cursor="pointer"
+                      bg={isSelected ? 'accent.teal/12' : 'transparent'}
+                      _hover={{ bg: isSelected ? 'accent.teal/12' : 'bg.muted' }}
+                      transition="all 0.1s"
+                      position="relative"
+                    >
+                      {!isFirst && (
+                        <Box position="absolute" left={lineLeft} top={0} h="50%" w="1.5px" bg="border.default" />
+                      )}
+                      {!isLast && (
+                        <Box position="absolute" left={lineLeft} top="50%" h="50%" w="1.5px" bg="border.default" />
+                      )}
+                      <Box
+                        w="8px" h="8px" borderRadius="full"
+                        bg={isSelected ? 'accent.teal' : 'bg.elevated'}
+                        border="1.5px solid" borderColor={isSelected ? 'accent.teal' : 'fg.subtle'}
+                        flexShrink={0} zIndex={1}
+                      />
+                      <Icon as={node.icon} boxSize={3} color={isSelected ? 'accent.teal' : 'fg.muted'} flexShrink={0} />
+                      <Text
+                        fontSize="xs" fontFamily="mono"
+                        color={isSelected ? 'accent.teal' : 'fg.subtle'}
+                        fontWeight={isSelected ? '600' : '400'}
+                        whiteSpace="nowrap"
+                      >
+                        {node.verb}
+                      </Text>
+                      {node.count > 1 && (
+                        <Box
+                          bg={isSelected ? 'accent.teal/20' : 'bg.muted'}
+                          color={isSelected ? 'accent.teal' : 'fg.subtle'}
+                          borderRadius="full" px={1.5} py={0}
+                          fontSize="2xs" fontFamily="mono" fontWeight="600" lineHeight="1.6"
+                          flexShrink={0}
+                        >
+                          {node.count}
+                        </Box>
+                      )}
+                    </Box>
+                  );
+                })}
+              </VStack>
+
+              {/* Right pane */}
+              <Box flex={1} minW={0} bg="bg.canvas">
+                {selectedNode && renderRightPane(selectedNode)}
+              </Box>
+            </HStack>
+          )}
         </Box>
       )}
 

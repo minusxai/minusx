@@ -28,6 +28,8 @@ interface ChatInputProps {
   onDatabaseChange: (name: string) => void;
   container?: 'page' | 'sidebar';
   isCompact: boolean;
+  colSpan?: any;
+  colStart?: any;
   connectionsLoading?: boolean;
   contextsLoading?: boolean;
   selectedContextPath?: string | null;
@@ -48,6 +50,8 @@ export default function ChatInput({
   onDatabaseChange,
   container = 'page',
   isCompact,
+  colSpan: colSpanProp,
+  colStart: colStartProp,
   connectionsLoading = false,
   contextsLoading = false,
   selectedContextPath,
@@ -171,8 +175,8 @@ export default function ChatInput({
     }
   };
 
-  const colSpan = isCompact ? 12 : { base: 12, md: 8, lg: 6 };
-  const colStart = isCompact ? 1 : { base: 1, md: 3, lg: 4 };
+  const colSpan = colSpanProp ?? (isCompact ? 12 : { base: 12, md: 8, lg: 6 });
+  const colStart = colStartProp ?? (isCompact ? 1 : { base: 1, md: 3, lg: 4 });
 
   return (
     <Grid templateColumns={{ base: 'repeat(12, 1fr)', md: 'repeat(12, 1fr)' }}

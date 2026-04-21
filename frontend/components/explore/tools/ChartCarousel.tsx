@@ -55,7 +55,7 @@ function parseQueryMessage(msg: MessageWithFlags, databaseName: string): ChartIt
     parsed = typeof args === 'string' ? JSON.parse(args) : args || {};
   } catch { /* ignore */ }
 
-  const name = parsed.name || parsed.query?.slice(0, 40) || 'Query';
+  const name = parsed.name || 'Query';
 
   try {
     let vizSettings = { type: 'table' as const };
@@ -251,8 +251,8 @@ export default function ChartCarousel({
         </HStack>
       </HStack>
 
-      {/* Current item name */}
-      {current && (
+      {/* Current item name — skip if it's just the default "Query" */}
+      {current && current.name !== 'Query' && (
         <HStack px={3} pb={1} gap={1.5}>
           <Icon as={LuCheck} boxSize={2.5} color="accent.success" />
           <Text fontSize="xs" fontFamily="mono" color="fg.default" fontWeight="600" truncate>
