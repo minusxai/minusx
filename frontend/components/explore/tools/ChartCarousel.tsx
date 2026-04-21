@@ -130,7 +130,7 @@ export default function ChartCarousel({
   const [activeIndex, setActiveIndex] = useState(0);
   const [showQuery, setShowQuery] = useState(false);
   const [queryMode, setQueryMode] = useState<'sql' | 'gui'>('sql');
-  const [showVizControls, setShowVizControls] = useState(!isCompact);
+  const [showVizControls, setShowVizControls] = useState(false);
 
   const count = successful.length;
   const safeIndex = Math.min(activeIndex, Math.max(0, count - 1));
@@ -251,21 +251,19 @@ export default function ChartCarousel({
 
         {/* Viz + Query toggles */}
         <HStack justify="space-between" px={3} pb={1}>
-          {isCompact ? (
-            <HStack
-              gap={1}
-              cursor="pointer"
-              onClick={() => setShowVizControls(!showVizControls)}
-              color="fg.subtle"
-              _hover={{ color: 'fg.default' }}
-              transition="color 0.1s"
-            >
-              <Text fontSize="2xs" fontFamily="mono" fontWeight="500">
-                Viz Options
-              </Text>
-              <Icon as={showVizControls ? LuChevronUp : LuChevronDown} boxSize={3} />
-            </HStack>
-          ) : <Box />}
+          <HStack
+            gap={1}
+            cursor="pointer"
+            onClick={() => setShowVizControls(!showVizControls)}
+            color="fg.subtle"
+            _hover={{ color: 'fg.default' }}
+            transition="color 0.1s"
+          >
+            <Text fontSize="2xs" fontFamily="mono" fontWeight="500">
+              Viz Options
+            </Text>
+            <Icon as={showVizControls ? LuChevronUp : LuChevronDown} boxSize={3} />
+          </HStack>
           <HStack
             gap={1}
             cursor="pointer"

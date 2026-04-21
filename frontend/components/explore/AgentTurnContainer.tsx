@@ -644,8 +644,8 @@ export default function AgentTurnContainer({
                 borderColor="border.default"
                 py={1}
                 gap={0}
-                w="150px"
-                minW="150px"
+                w="170px"
+                minW="170px"
               >
                 <Text
                   fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600"
@@ -669,8 +669,7 @@ export default function AgentTurnContainer({
                       alignItems="center"
                       gap={2}
                       py={1.5}
-                      pl={3}
-                      pr={3}
+                      px={3}
                       w="100%"
                       cursor="pointer"
                       bg={isSelected ? 'accent.teal/12' : 'transparent'}
