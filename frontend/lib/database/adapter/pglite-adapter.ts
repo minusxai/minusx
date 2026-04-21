@@ -14,7 +14,15 @@ export class PgliteAdapter implements IDatabaseAdapter {
 
   /** @param dataDir - undefined = in-memory (tests); path = filesystem-backed (prod) */
   constructor(dataDir?: string) {
-    this.db = dataDir ? new PGlite(dataDir) : new PGlite();
+    // Return TIMESTAMP/TIMESTAMPTZ columns as ISO strings rather than Date objects.
+    // PGLite's default is Date objects, but the rest of the codebase (DbRow, Redux state)
+    // expects strings, and Date objects fail Redux Toolkit's serializableStateInvariantMiddleware.
+    const parsers = {
+      1082: (v: string) => v,                                          // date
+      1114: (v: string) => v.replace(' ', 'T') + 'Z',                 // timestamp
+      1184: (v: string) => new Date(v).toISOString(),                  // timestamptz
+    };
+    this.db = dataDir ? new PGlite(dataDir, { parsers }) : new PGlite({ parsers });
   }
 
   async query<T = any>(sql: string, params: any[] = []): Promise<QueryResult<T>> {

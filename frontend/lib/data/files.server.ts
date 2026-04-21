@@ -844,7 +844,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
       // prevents removing the last context file from a folder.
       if (file.type === 'context') {
         const parentPath = file.path.substring(0, file.path.lastIndexOf('/'));
-        const siblings = await DocumentDB.listAll(user.companyId, 'context', [parentPath], 1, false);
+        const siblings = await DocumentDB.listAll('context', [parentPath], 1, false);
         if (siblings.length <= 1) {
           throw new AccessPermissionError(`Cannot delete the only context file in this folder.`);
         }

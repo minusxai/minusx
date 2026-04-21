@@ -8,12 +8,6 @@
 // Mock server-only module (Next.js 13+ server components)
 jest.mock('server-only', () => ({}));
 
-// Suppress console.log during tests — production code (connectionLoader, ChatInterface, etc.)
-// emits noisy logs that obscure real test failures. Use console.warn/error for signal.
-const originalLog = console.log.bind(console);
-beforeAll(() => { console.log = () => {}; });
-afterAll(() => { console.log = originalLog; });
-
 // Prevent native DuckDB binary from loading in any Jest worker.
 // Any import chain reaching file-analytics.db.ts triggers require('duckdb') — a native C++
 // module whose destructor SIGSEGV-crashes the worker process on exit, causing flaky CI failures.
@@ -21,6 +15,7 @@ afterAll(() => { console.log = originalLog; });
 jest.mock('@/lib/analytics/file-analytics.server', () => ({
   trackFileEvent: jest.fn().mockResolvedValue(undefined),
   trackLLMCallEvents: jest.fn().mockResolvedValue(undefined),
+  trackQueryExecutionEvent: jest.fn().mockResolvedValue(undefined),
   getFileAnalyticsSummary: jest.fn().mockResolvedValue(null),
   getFilesAnalyticsSummary: jest.fn().mockResolvedValue({}),
   getConversationAnalytics: jest.fn().mockResolvedValue(null),
