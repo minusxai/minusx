@@ -357,17 +357,24 @@ export default function AgentTurnContainer({
     );
   };
 
-  // ─── Detail card mapping by chipLabel ──
+  // ─── Tool name → detail card mapping ──
 
-  const DETAIL_CARD_MAP: Record<string, React.ComponentType<DetailCardProps>> = {
-    'navigated': NavigateDetailCard,
-    'published': PublishAllDetailCard,
-    'loaded skill': LoadSkillDetailCard,
+  const DETAIL_CARD_BY_TOOL: Record<string, React.ComponentType<DetailCardProps>> = {
+    'Navigate': NavigateDetailCard,
+    'PublishAll': PublishAllDetailCard,
+    'LoadSkill': LoadSkillDetailCard,
+    'EditFile': EditFileDetailCard,
+    'ReadFiles': ReadFilesDetailCard,
+    'CreateFile': FileDetailCard,
+    'SearchFiles': SearchFilesDetailCard,
+    'SearchDBSchema': SearchDBSchemaDetailCard,
   };
 
+  const FILE_LABELS = new Set(['created', 'edited', 'read']);
+
   const renderToolDetail = (node: TimelineNode) => {
-    // File-mutating tools (created/edited/read): check for chart items first
-    if (node.label === 'created' || node.label === 'edited' || node.label === 'read') {
+    // File-mutating tools: check for chart items first (questions with query results)
+    if (FILE_LABELS.has(node.label)) {
       const chartItems: (import('./tools/ChartCarousel').ChartItem | import('./tools/ChartCarousel').ChartErrorItem)[] = [];
       for (const m of node.messages) {
         const parsed = parseFileToolContent(m);
@@ -379,48 +386,16 @@ export default function AgentTurnContainer({
       if (chartItems.length > 0) {
         return <ChartCarousel items={chartItems} databaseName={databaseName} label={node.label} headerIcon={node.icon} />;
       }
-      // Non-chart files: route to the right detail card per tool
-      return (
-        <DetailCarousel icon={node.icon} label={node.label} itemCount={node.messages.length}
-          renderCard={(idx) => {
-            const msg = node.messages[idx];
-            const toolName = getToolNameFromMsg(msg);
-            if (toolName === 'EditFile') return <EditFileDetailCard msg={msg} filesDict={filesDict} />;
-            if (toolName === 'ReadFiles') return <ReadFilesDetailCard msg={msg} filesDict={filesDict} />;
-            return <FileDetailCard msg={msg} filesDict={filesDict} />;
-          }}
-        />
-      );
     }
 
-    // Search: mixed SearchFiles + SearchDBSchema in one carousel
-    if (node.label === 'searched') {
-      return (
-        <DetailCarousel icon={node.icon} label={node.label} itemCount={node.messages.length}
-          renderCard={(idx) => {
-            const msg = node.messages[idx];
-            return getToolNameFromMsg(msg) === 'SearchDBSchema'
-              ? <SearchDBSchemaDetailCard msg={msg} filesDict={filesDict} />
-              : <SearchFilesDetailCard msg={msg} filesDict={filesDict} />;
-          }}
-        />
-      );
-    }
-
-    // Mapped tools (navigate, publish, skill, edit dashboard/report/alert)
-    const Card = DETAIL_CARD_MAP[node.label];
-    if (Card) {
-      return (
-        <DetailCarousel icon={node.icon} label={node.label} itemCount={node.messages.length}
-          renderCard={(idx) => <Card msg={node.messages[idx]} filesDict={filesDict} />}
-        />
-      );
-    }
-
-    // Fallback: generic file cards
+    // Everything else: look up detail card by tool name, fallback to FileDetailCard
     return (
       <DetailCarousel icon={node.icon} label={node.label} itemCount={node.messages.length}
-        renderCard={(idx) => <FileDetailCard msg={node.messages[idx]} filesDict={filesDict} />}
+        renderCard={(idx) => {
+          const msg = node.messages[idx];
+          const Card = DETAIL_CARD_BY_TOOL[getToolNameFromMsg(msg)] || FileDetailCard;
+          return <Card msg={msg} filesDict={filesDict} />;
+        }}
       />
     );
   };
