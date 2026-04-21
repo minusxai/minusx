@@ -100,7 +100,7 @@ describe('JOINs', () => {
   });
 
   it('JOIN with multiple ON conditions', async () => {
-    const sql = `SELECT * FROM users u INNER JOIN orders o ON u.id = o.user_id AND u.company_id = o.company_id`;
+    const sql = `SELECT * FROM users u INNER JOIN orders o ON u.id = o.user_id AND u.dept_id = o.dept_id`;
     const ir = await parseSqlToIrLocal(sql, 'duckdb') as QueryIR;
     expect(ir.joins![0].on).toHaveLength(2);
   });

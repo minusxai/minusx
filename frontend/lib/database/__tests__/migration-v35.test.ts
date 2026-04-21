@@ -1,5 +1,5 @@
 import { MIGRATIONS } from '../migrations';
-import type { InitData, CompanyData, ExportedDocument } from '../import-export';
+import type { InitData, OrgData, ExportedDocument } from '../import-export';
 
 const migrate = MIGRATIONS.find(m => m.dataVersion === 35)!.dataMigration!;
 
@@ -12,26 +12,26 @@ function makeDoc(overrides: Partial<ExportedDocument> & Pick<ExportedDocument, '
     last_edit_id: null,
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
-    company_id: 1,
+
     ...overrides,
   };
 }
 
-function makeData(documents: ExportedDocument[], companyId = 1): InitData {
-  const company: CompanyData = {
-    id: companyId, name: 'test', display_name: 'Test', subdomain: null,
+function makeData(documents: ExportedDocument[], orgId = 1): InitData {
+  const org: OrgData = {
+    id: orgId, name: 'test', display_name: 'Test',
     created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z',
     users: [], documents,
   };
-  return { companies: [company] } as unknown as InitData;
+  return { orgs: [org] } as unknown as InitData;
 }
 
-function getDocs(data: InitData, companyIdx = 0): ExportedDocument[] {
-  return (data.companies[companyIdx] as CompanyData).documents;
+function getDocs(data: InitData, orgIdx = 0): ExportedDocument[] {
+  return (data.orgs![orgIdx] as OrgData).documents;
 }
 
-function getDoc(data: InitData, path: string, companyIdx = 0): ExportedDocument | undefined {
-  return getDocs(data, companyIdx).find(d => d.path === path);
+function getDoc(data: InitData, path: string, orgIdx = 0): ExportedDocument | undefined {
+  return getDocs(data, orgIdx).find(d => d.path === path);
 }
 
 describe('V35 migration — create missing /{mode}/database/static connection', () => {
@@ -107,33 +107,33 @@ describe('V35 migration — create missing /{mode}/database/static connection', 
     expect(doc!.id).toBe(100);
   });
 
-  it('works across multiple companies independently', () => {
-    const company1: CompanyData = {
-      id: 1, name: 'co1', display_name: 'Co1', subdomain: null,
+  it('works across multiple orgs independently', () => {
+    const org1: OrgData = {
+      id: 1, name: 'co1', display_name: 'Co1',
       created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z',
       users: [],
       documents: [
-        makeDoc({ id: 1, path: '/org', type: 'folder', company_id: 1 }),
-        makeDoc({ id: 2, path: '/org/database', type: 'folder', company_id: 1 }),
+        makeDoc({ id: 1, path: '/org', type: 'folder' }),
+        makeDoc({ id: 2, path: '/org/database', type: 'folder' }),
       ],
     };
-    const company2: CompanyData = {
-      id: 2, name: 'co2', display_name: 'Co2', subdomain: null,
+    const org2: OrgData = {
+      id: 2, name: 'co2', display_name: 'Co2',
       created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z',
       users: [],
       documents: [
-        makeDoc({ id: 1, path: '/org', type: 'folder', company_id: 2 }),
-        makeDoc({ id: 2, path: '/org/database', type: 'folder', company_id: 2 }),
-        makeDoc({ id: 3, path: '/org/database/static', type: 'connection', company_id: 2 }),
+        makeDoc({ id: 1, path: '/org', type: 'folder' }),
+        makeDoc({ id: 2, path: '/org/database', type: 'folder' }),
+        makeDoc({ id: 3, path: '/org/database/static', type: 'connection' }),
       ],
     };
-    const data = { companies: [company1, company2] } as unknown as InitData;
+    const data = { orgs: [org1, org2] } as unknown as InitData;
     const result = migrate(data);
 
-    // company1 — missing static, should be created
+    // org1 — missing static, should be created
     expect(getDoc(result, '/org/database/static', 0)).toBeDefined();
-    // company2 — already had static, no duplicate
-    const co2docs = getDocs(result, 1).filter(d => d.path === '/org/database/static');
-    expect(co2docs).toHaveLength(1);
+    // org2 — already had static, no duplicate
+    const org2docs = getDocs(result, 1).filter(d => d.path === '/org/database/static');
+    expect(org2docs).toHaveLength(1);
   });
 });

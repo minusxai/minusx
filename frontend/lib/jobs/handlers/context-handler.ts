@@ -23,7 +23,7 @@ export const contextJobHandler: JobHandler = {
     if (context.recipients && context.recipients.length > 0) {
       const contextFileResult = await FilesAPI.loadFile(parseInt(jobId, 10), user);
       const contextName = contextFileResult.data?.name ?? `Context ${jobId}`;
-      const baseUrl = await resolveBaseUrl(user.companyId);
+      const baseUrl = await resolveBaseUrl();
       const link = `${baseUrl}/f/${runFileId}`;
       const subject = `[Evals] ${contextName}`;
       const passed = results.filter(r => r.passed).length;

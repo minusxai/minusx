@@ -1,9 +1,9 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
-import { CompanyConfig, DEFAULT_CONFIG } from '@/lib/branding/whitelabel';
+import { OrgConfig, DEFAULT_CONFIG } from '@/lib/branding/whitelabel';
 import { RootState } from './store';
 
 export interface ConfigsState {
-  config: CompanyConfig;  // Never null - always has valid config
+  config: OrgConfig;  // Never null - always has valid config
   loadedAt: number | null;
 }
 
@@ -16,7 +16,7 @@ const configsSlice = createSlice({
   name: 'configs',
   initialState,
   reducers: {
-    setConfigs(state, action: PayloadAction<{ config: CompanyConfig }>) {
+    setConfigs(state, action: PayloadAction<{ config: OrgConfig }>) {
       state.config = action.payload.config;
       state.loadedAt = Date.now();
     },

@@ -12,15 +12,11 @@
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_chat_input_image.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const,
-    DB_TYPE: 'sqlite',
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 jest.mock('@/lib/navigation/use-navigation', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn(), prefetch: jest.fn() }),

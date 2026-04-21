@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
     console.log('[verify-otp] OTP verified successfully for user:', payload.email);
 
     // Create a short-lived verified token so the frontend can call signIn() without a password
-    const verifiedToken = createVerifiedToken(payload.email, payload.companyId);
+    const verifiedToken = createVerifiedToken(payload.email);
 
     // Return success - frontend can now proceed with signIn()
     return successResponse({

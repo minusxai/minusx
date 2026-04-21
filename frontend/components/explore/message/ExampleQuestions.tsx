@@ -72,7 +72,7 @@ export default function ExampleQuestions({ onPromptClick, container, colSpan, co
                   borderColor="accent.teal/30"
                 >
                   <Box
-                    aria-label="Company logo"
+                    aria-label="Workspace logo"
                     role="img"
                     boxSize={6}
                     flexShrink={0}

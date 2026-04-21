@@ -15,15 +15,11 @@
 
 // ---- Jest module mocks (hoisted before imports) ----------------------------
 
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  const dbPath = path.join(process.cwd(), 'data', 'test_param_query_e2e.db');
-  return {
-    DB_PATH: dbPath,
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite',
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 let testStore: any;
 jest.mock('@/store/store', () => ({
@@ -59,7 +55,7 @@ function makeQueryRequest(body: object): NextRequest {
   return new NextRequest('http://localhost:3000/api/query', {
     method: 'POST',
     body: JSON.stringify(body),
-    headers: { 'x-company-id': '1', 'x-user-id': '1' },
+    headers: { 'x-user-id': '1' },
   });
 }
 
@@ -88,23 +84,23 @@ describe('Parameterised query execution E2E (local WASM)', () => {
     await resetAdapter();
     await initTestDatabase(dbPath);
 
-    const { createAdapter } = await import('@/lib/database/adapter/factory');
-    const db = await createAdapter({ type: 'sqlite', sqlitePath: dbPath });
+    const { getAdapter } = await import('@/lib/database/adapter/factory');
+    const db = await getAdapter();
     const now = new Date().toISOString();
     const { rows } = await db.query<{ next_id: number }>(
-      `SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM files WHERE company_id = $1`,
-      [1]
+      `SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM files`,
+      []
     );
     await db.query(
-      `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
       [
-        1, rows[0].next_id, DUCK_CONN, `/org/database/${DUCK_CONN}`, 'connection',
+        rows[0].next_id, DUCK_CONN, `/org/database/${DUCK_CONN}`, 'connection',
         JSON.stringify({ id: DUCK_CONN, name: DUCK_CONN, type: 'duckdb', config: { file_path: 'test.duckdb' } }),
         '[]', now, now,
       ]
     );
-    await db.close();
+    // adapter is the singleton, don't close
   });
 
   afterAll(async () => {

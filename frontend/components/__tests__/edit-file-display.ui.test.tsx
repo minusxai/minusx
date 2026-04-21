@@ -128,7 +128,7 @@ describe('EditFileDisplay restore buttons', () => {
         references: [],
         created_at: '2024-01-01T00:00:00Z',
         updated_at: '2024-01-01T00:00:00Z',
-        company_id: 1,
+
         version: 1,
         last_edit_id: null,
       },

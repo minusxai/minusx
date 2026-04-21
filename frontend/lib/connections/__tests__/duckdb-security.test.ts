@@ -176,7 +176,7 @@ describe('CSV connection security (in-memory DuckDB)', () => {
 
   // ── Green: with fix applied ──
 
-  it('[GREEN] allowed_directories permits company prefix, blocks everything else', async () => {
+  it('[GREEN] allowed_directories permits org prefix, blocks everything else', async () => {
     const companyDir = join(tmpDir, 'company_42');
     mkdirSync(companyDir);
     const otherDir = join(tmpDir, 'company_99');
@@ -190,12 +190,12 @@ describe('CSV connection security (in-memory DuckDB)', () => {
       await conn.run(`SET allowed_directories = ['${companyDir}/']`);
       await conn.run("SET enable_external_access = false");
 
-      // Company's own prefix → allowed
+      // Org's own prefix → allowed
       const result = await conn.run(`SELECT * FROM read_csv_auto('${join(companyDir, 'data.csv')}')`);
       const rows = await result.getRowObjectsJS();
       expect(rows).toHaveLength(2);
 
-      // Other company's prefix → blocked
+      // Other org's prefix → blocked
       await expect(
         conn.run(`SELECT * FROM read_csv_auto('${join(otherDir, 'data.csv')}')`)
       ).rejects.toThrow();
@@ -210,7 +210,7 @@ describe('CSV connection security (in-memory DuckDB)', () => {
     const otherDir = join(tmpDir, 'company_99');
     mkdirSync(otherDir);
 
-    // Create another company's DuckDB file with data
+    // Create another org's DuckDB file with data
     const otherDb = join(otherDir, '99.duckdb');
     const otherInst = await DuckDBInstance.create(otherDb);
     const otherConn = await otherInst.connect();

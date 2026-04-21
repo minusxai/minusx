@@ -182,26 +182,27 @@ export default function DataManagementSection() {
             return;
           }
 
-          // Basic structure validation (V2 format check)
-          const hasV2Structure = parsedData.companies && Array.isArray(parsedData.companies) && parsedData.companies.length > 0;
-          const firstCompany = parsedData.companies?.[0];
-          const isV2Format = firstCompany && ('users' in firstCompany || 'documents' in firstCompany);
+          // Basic structure validation (nested format check)
+          const nestedOrgs = parsedData.orgs ?? parsedData.companies;
+          const hasNestedStructure = nestedOrgs && Array.isArray(nestedOrgs) && nestedOrgs.length > 0;
+          const firstOrg = nestedOrgs?.[0];
+          const isNestedFormat = firstOrg && ('users' in firstOrg || 'documents' in firstOrg);
 
-          if (!hasV2Structure) {
-            throw new Error('Invalid data structure: missing companies array');
+          if (!hasNestedStructure) {
+            throw new Error('Invalid data structure: missing orgs array');
           }
 
-          if (!isV2Format) {
-            throw new Error('Invalid data format: expected V2 format (nested companies)');
+          if (!isNestedFormat) {
+            throw new Error('Invalid data format: expected nested format with users and documents');
           }
 
-          // Validate exactly 1 company for web UI
-          if (parsedData.companies.length !== 1) {
+          // Validate exactly 1 org for web UI
+          if (nestedOrgs.length !== 1) {
             setImportStatus({
               valid: false,
               errors: [
-                `File must contain exactly 1 company (found ${parsedData.companies.length})`,
-                'Web UI only supports single-company imports. Use CLI for multi-company imports.'
+                `File must contain exactly 1 org (found ${nestedOrgs.length})`,
+                'Web UI only supports single-org imports. Use CLI for multi-org imports.'
               ],
               warnings: []
             });
@@ -209,17 +210,17 @@ export default function DataManagementSection() {
             return;
           }
 
-          const company = parsedData.companies[0];
+          const firstOrgEntry = nestedOrgs[0];
           setUploadedData(parsedData);
           setUploadedFile(file);
 
-          // Show ready to import with company details
+          // Show ready to import with org details
           setImportStatus({
             valid: true,
             errors: [],
             warnings: [
-              `${company.display_name}: ${company.users.length} users, ${company.documents.length} documents`,
-              '⚠ This will OVERWRITE your current company data'
+              `${firstOrgEntry.display_name}: ${firstOrgEntry.users.length} users, ${firstOrgEntry.documents.length} documents`,
+              '⚠ This will OVERWRITE your current data'
             ]
           });
         } catch (parseError: any) {
@@ -255,7 +256,7 @@ export default function DataManagementSection() {
 
       // Note: Using direct fetch for file upload (FormData with multipart/form-data)
       // This is intentionally not using fetchWithCache as FormData requires special handling
-      const response = await fetch('/api/admin/import-company', {
+      const response = await fetch('/api/admin/import-data', {
         method: 'POST',
         body: formData
       });
@@ -283,7 +284,7 @@ export default function DataManagementSection() {
     } catch (error) {
       setImportStatus({
         valid: false,
-        errors: ['Failed to import company data'],
+        errors: ['Failed to import workspace data'],
         warnings: []
       });
     } finally {
@@ -474,7 +475,7 @@ export default function DataManagementSection() {
         <Box py={4} px={4}>
           <Flex justify="space-between" align="center" mb={exportStatus ? 2 : 0}>
             <Text fontSize="sm" fontWeight="medium" fontFamily="mono">
-              Export Company Data
+              Export Workspace Data
             </Text>
             <Button
               size="sm"
@@ -501,7 +502,7 @@ export default function DataManagementSection() {
             </Button>
           </Flex>
           <Text fontSize="xs" color="fg.muted" fontFamily="mono" mb={exportStatus ? 2 : 0}>
-            Export your company data to compressed JSON file (.json.gz)
+            Export your workspace data to compressed JSON file (.json.gz)
           </Text>
           {renderStatusWithErrors(exportStatus, 'export')}
         </Box>
@@ -612,7 +613,7 @@ export default function DataManagementSection() {
         <Box py={4} px={4}>
           <Flex justify="space-between" align="center" mb={2}>
             <Text fontSize="sm" fontWeight="medium" fontFamily="mono">
-              Import Company Data
+              Import Workspace Data
             </Text>
             <Flex gap={2}>
               <Input
@@ -652,7 +653,7 @@ export default function DataManagementSection() {
                       Importing...
                     </>
                   ) : (
-                    'Overwrite Company Data'
+                    'Overwrite Workspace Data'
                   )}
                 </Button>
               )}
@@ -660,7 +661,7 @@ export default function DataManagementSection() {
           </Flex>
           <VStack align="stretch" gap={1} mb={importStatus ? 2 : 0}>
             <Text fontSize="xs" color="fg.muted" fontFamily="mono">
-              Import your company's data from a JSON file (.json or .json.gz)
+              Import your workspace data from a JSON file (.json or .json.gz)
             </Text>
             {currentVersion !== null && (
               <Text fontSize="xs" color="fg.muted" fontFamily="mono">
@@ -684,7 +685,7 @@ export default function DataManagementSection() {
                   {showUploadedData ? <LuChevronDown /> : <LuChevronRight />}
                 </Icon>
                 <Text fontSize="xs" fontWeight="medium" color="fg.muted" fontFamily="mono">
-                  Uploaded Data Preview ({uploadedData.companies?.length || 0} companies, {uploadedData.users?.length || 0} users, {uploadedData.documents?.length || 0} documents)
+                  Uploaded Data Preview ({(uploadedData.orgs ?? uploadedData.companies)?.length || 0} orgs, {uploadedData.users?.length || 0} users, {uploadedData.documents?.length || 0} documents)
                 </Text>
               </Flex>
 

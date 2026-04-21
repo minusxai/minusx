@@ -97,13 +97,12 @@ async function getStoredFileBytes(key: string): Promise<Buffer> {
 async function expandXlsxFromS3(
   s3Key: string,
   connectionName: string,
-  companyId: number,
   mode: string,
   schemaName: string,
   createdKeys: string[],
 ): Promise<IncomingFile[]> {
   const buffer = await getStoredFileBytes(s3Key);
-  return xlsxBytesToS3Csvs(buffer, connectionName, companyId, mode, schemaName, createdKeys);
+  return xlsxBytesToS3Csvs(buffer, connectionName, mode, schemaName);
 }
 
 /**
@@ -115,7 +114,6 @@ async function expandXlsxFromS3(
 async function xlsxBytesToS3Csvs(
   buffer: Buffer,
   connectionName: string,
-  companyId: number,
   mode: string,
   schemaName: string,
   createdKeys: string[] = [],
@@ -139,7 +137,7 @@ async function xlsxBytesToS3Csvs(
       const uuid = randomUUID();
       const tmpCsvPath     = join(tmpdir(), `${uuid}.csv`);
       const tmpParquetPath = join(tmpdir(), `${uuid}.parquet`);
-      const storageKey = `${companyId}/csvs/${mode}/${connectionName}/${uuid}.parquet`;
+      const storageKey = `csvs/${mode}/${connectionName}/${uuid}.parquet`;
 
       try {
         writeFileSync(tmpCsvPath, csvData, 'utf-8');
@@ -169,12 +167,11 @@ async function xlsxBytesToS3Csvs(
 
 /** Delete all stored files under a connection's prefix. Returns true if any were deleted. */
 export async function deleteConnectionFiles(
-  companyId: number,
   mode: string,
   connectionName: string,
 ): Promise<boolean> {
   if (isLocalObjectStore()) {
-    const dir = resolve(join(LOCAL_UPLOAD_PATH, `${companyId}/csvs/${mode}/${connectionName}`));
+    const dir = resolve(join(LOCAL_UPLOAD_PATH, `csvs/${mode}/${connectionName}`));
     try {
       rmSync(dir, { recursive: true, force: true });
       return true;
@@ -185,7 +182,7 @@ export async function deleteConnectionFiles(
 
   if (!OBJECT_STORE_BUCKET) return false;
   const s3 = makeS3();
-  const prefix = `${companyId}/csvs/${mode}/${connectionName}/`;
+  const prefix = `csvs/${mode}/${connectionName}/`;
 
   const keys: string[] = [];
   let token: string | undefined;
@@ -317,7 +314,6 @@ async function convertCsvToParquet(conn: DuckConn, csvKey: string): Promise<stri
  * deleted before throwing. No orphaned files are left on disk/S3.
  */
 export async function processFilesFromS3(
-  companyId: number,
   mode: string,
   connectionName: string,
   incomingFiles: IncomingFile[],
@@ -335,7 +331,7 @@ export async function processFilesFromS3(
       if (fmt === 'xlsx') {
         toCleanup.push(file.s3_key); // original xlsx uploaded by client
         const sheets = await expandXlsxFromS3(
-          file.s3_key, connectionName, companyId, mode, file.schema_name ?? 'public',
+          file.s3_key, connectionName, mode, file.schema_name ?? 'public',
           toCleanup, // xlsxBytesToS3Csvs pushes each sheet parquet key here after a successful put
         );
         flatFiles.push(...sheets);
@@ -429,13 +425,12 @@ export async function downloadSpreadsheetAsXlsx(spreadsheetId: string): Promise<
 export async function importGoogleSheetToS3(
   spreadsheetUrl: string,
   connectionName: string,
-  companyId: number,
   mode: string,
   schemaName: string,
 ): Promise<{ files: IncomingFile[]; spreadsheetId: string }> {
   const spreadsheetId = parseSpreadsheetId(spreadsheetUrl);
   const xlsxBuffer = await downloadSpreadsheetAsXlsx(spreadsheetId);
-  const files = await xlsxBytesToS3Csvs(xlsxBuffer, connectionName, companyId, mode, schemaName);
+  const files = await xlsxBytesToS3Csvs(xlsxBuffer, connectionName, mode, schemaName);
   return { files, spreadsheetId };
 }
 

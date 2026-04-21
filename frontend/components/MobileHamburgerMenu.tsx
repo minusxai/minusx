@@ -30,7 +30,7 @@ export default function MobileHamburgerMenu({ onClose }: MobileHamburgerMenuProp
       <Flex justify="center" align="center" mb={6} mt={2}>
         <HStack gap={3}>
           <Box
-            aria-label="Company logo"
+            aria-label="Workspace logo"
             role="img"
             width={8}
             height={8}

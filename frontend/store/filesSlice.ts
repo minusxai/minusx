@@ -271,7 +271,6 @@ const filesSlice = createSlice({
           content: {} as any,
           created_at: '',
           updated_at: '',
-          company_id: 0,  // Placeholder value
           version: 1,
           last_edit_id: null,
           loading,
@@ -306,7 +305,6 @@ const filesSlice = createSlice({
         content: null,
         created_at: '',
         updated_at: '',
-        company_id: 0,
         version: 1,
         last_edit_id: null,
         loading: true,
@@ -344,7 +342,6 @@ const filesSlice = createSlice({
           content: null,
           created_at: '',
           updated_at: '',
-          company_id: 0,
           version: 1,
           last_edit_id: null,
           loading: true,
@@ -532,7 +529,6 @@ const filesSlice = createSlice({
           content: { description: '' },  // Empty folder content (name is in file metadata)
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-          company_id: 0,  // Synthetic folder placeholder
           version: 1,
           last_edit_id: null,
           loading: false,

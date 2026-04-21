@@ -198,7 +198,7 @@ export default function Sidebar() {
               transition="opacity 0.2s"
             >
               <Box
-                aria-label="Company logo"
+                aria-label="Workspace logo"
                 role="img"
                 width={8}
                 height={8}
@@ -208,7 +208,7 @@ export default function Sidebar() {
           ) : (
             <HStack gap={3} cursor="pointer" _hover={{ opacity: 0.8 }} transition="opacity 0.2s">
               <Box
-                aria-label="Company logo"
+                aria-label="Workspace logo"
                 role="img"
                 width={8}
                 height={8}

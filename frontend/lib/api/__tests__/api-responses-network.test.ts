@@ -30,7 +30,6 @@ type ReadonlyHeaders = Awaited<ReturnType<typeof import('next/headers')['headers
 
 function makeHeaders(values: {
   requestId?: string | null;
-  companyId?: string | null;
   userId?: string | null;
   mode?: string | null;
   requestPath?: string | null;
@@ -39,7 +38,6 @@ function makeHeaders(values: {
     get: (key: string) => {
       switch (key) {
         case 'x-request-id':   return values.requestId ?? null;
-        case 'x-company-id':   return values.companyId ?? null;
         case 'x-user-id':      return values.userId ?? null;
         case 'x-mode':         return values.mode ?? null;
         case 'x-request-path': return values.requestPath ?? null;
@@ -96,7 +94,6 @@ describe('errorResponse', () => {
   it('includes request_id in response JSON and POSTs is_error=true to /network/response', async () => {
     mockHeaders.mockResolvedValue(makeHeaders({
       requestId: 'req-e2e-2',
-      companyId: 'co-2',
       userId: '99',
       mode: 'tutorial',
       requestPath: '/api/query',
@@ -117,7 +114,6 @@ describe('errorResponse', () => {
     expect(networkBody.status_code).toBe(404);
     expect(networkBody.is_error).toBe(true);
     expect(networkBody.response_body.error.code).toBe('NOT_FOUND');
-    expect(networkBody.company_id).toBe('co-2');
     expect(networkBody.user_id).toBe('99');
     expect(networkBody.mode).toBe('tutorial');
   });
@@ -142,7 +138,6 @@ describe('handleApiError', () => {
   it('includes request_id in response JSON and POSTs to /network/response', async () => {
     mockHeaders.mockResolvedValue(makeHeaders({
       requestId: 'req-e2e-3',
-      companyId: 'co-3',
       userId: '42',
       mode: 'org',
     }));
@@ -160,7 +155,6 @@ describe('handleApiError', () => {
     expect(networkBody.request_id).toBe('req-e2e-3');
     expect(networkBody.is_error).toBe(true);
     expect(networkBody.status_code).toBe(500);
-    expect(networkBody.company_id).toBe('co-3');
     expect(networkBody.user_id).toBe('42');
   });
 

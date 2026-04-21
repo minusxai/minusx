@@ -18,14 +18,11 @@ import { setupMockFetch } from '@/test/harness/mock-fetch';
 import { NextRequest } from 'next/server';
 import type { EvalItem } from '@/lib/types';
 
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_evals_e2e.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 const TEST_DB_PATH = getTestDbPath('evals_e2e');
 

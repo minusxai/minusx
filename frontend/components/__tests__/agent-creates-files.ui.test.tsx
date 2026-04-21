@@ -24,15 +24,11 @@
  * setupMockFetch matches on startsWithUrl: ['/api/chat'] to handle these relative calls.
  */
 
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_agent_creates_files_ui.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const,
-    DB_TYPE: 'sqlite',
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 import React from 'react';
 import { screen, waitFor } from '@testing-library/react';

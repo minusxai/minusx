@@ -16,7 +16,6 @@ function makeFile(path: string, type: DbFile['type'] = 'conversation'): DbFile {
     version: 1,
     last_edit_id: null,
     content: null,
-    company_id: 1,
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
   };
@@ -29,7 +28,6 @@ function makeUser(overrides: Partial<EffectiveUser> = {}): EffectiveUser {
     name: 'Editor',
     role: 'editor',
     home_folder: '',   // default DB value → resolves to /org
-    companyId: 1,
     mode: 'org',
     ...overrides,
   };

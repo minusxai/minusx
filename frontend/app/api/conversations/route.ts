@@ -85,11 +85,11 @@ export async function GET() {
     // Get effective user
     const user = await getEffectiveUser();
 
-    if (!user || !user.companyId) {
+    if (!user) {
       return NextResponse.json(
         {
           conversations: [],
-          error: 'No company ID found for user'
+          error: 'Unauthorized'
         } as ConversationsResponse,
         { status: 401 }
       );

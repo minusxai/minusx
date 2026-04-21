@@ -53,9 +53,9 @@ async function applyNoneParams(
 const QUERY_CACHE_TTL_MS = 60_000; // 60 seconds, hardcoded
 
 interface CacheEntry { result: QueryResult; cachedAt: number; finalQuery: string; }
-// eslint-disable-next-line no-restricted-syntax -- tenant-isolated: keys are `${companyId}:${mode}:${queryHash}`
+// eslint-disable-next-line no-restricted-syntax -- keys are `${mode}:${queryHash}`
 const queryCache = new Map<string, CacheEntry>();
-// eslint-disable-next-line no-restricted-syntax -- tenant-isolated: keys are `${companyId}:${mode}:${queryHash}`
+// eslint-disable-next-line no-restricted-syntax -- keys are `${mode}:${queryHash}`
 const queryInflight = new Map<string, Promise<QueryResult & { _finalQuery: string }>>();
 
 // Evict stale entries every 5 minutes
@@ -92,8 +92,8 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
     // Compute hash on raw inputs (matches client-side Redux hash key)
     const queryHash = getQueryHash(query, paramValues, connection_name);
-    // Server cache key includes company+mode to prevent cross-tenant hits
-    const serverCacheKey = `${user.companyId}:${user.mode}:${queryHash}`;
+    // Server cache key includes mode to prevent cross-mode hits
+    const serverCacheKey = `${user.mode}:${queryHash}`;
 
     // Cache hit — return immediately
     const cached = queryCache.get(serverCacheKey);
@@ -101,7 +101,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
         queryHash, databaseName: connection_name, durationMs: 0,
         rowCount: cached.result.rows.length, wasCacheHit: true,
-        companyId: user.companyId, mode: user.mode, userEmail: user.email,
+         mode: user.mode, userEmail: user.email,
       });
       console.log(`[QUERY API] Cache hit. Total request time: ${Date.now() - startTime}ms`);
       return NextResponse.json({ success: true, data: { ...cached.result, cachedAt: cached.cachedAt }, finalQuery: cached.finalQuery });
@@ -185,7 +185,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       appEventRegistry.publish(AppEvents.QUERY_EXECUTED, {
         queryHash, databaseName: connection_name, durationMs,
         rowCount: result.rows.length, wasCacheHit: false,
-        companyId: user.companyId, mode: user.mode, userEmail: user.email,
+         mode: user.mode, userEmail: user.email,
       });
 
       return { ...result, cachedAt, _finalQuery: displayQuery };

@@ -32,14 +32,11 @@ import { setupMockFetch, commonInterceptors } from '@/test/harness/mock-fetch';
 import { setupTestDb } from '@/test/harness/test-db';
 
 // Database-specific mock (test name must match)
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_atlas_analyst_dyn.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 describe('Agent - E2E with Dynamic LLM Mocking', () => {
   // Setup infrastructure with reusable harnesses

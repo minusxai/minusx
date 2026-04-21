@@ -29,10 +29,10 @@ export const POST = withAuth(async (request: NextRequest, user) => {
     if (!query || !database) return successResponse(EMPTY_ESTIMATE);
 
     // Don't create the analytics DB just to answer a read-only estimate request
-    if (!analyticsDbExists(user.companyId)) return successResponse(EMPTY_ESTIMATE);
+    if (!analyticsDbExists()) return successResponse(EMPTY_ESTIMATE);
 
     const queryHash = getQueryHash(query, params ?? {}, database);
-    const db = await getAnalyticsDb(user.companyId);
+    const db = await getAnalyticsDb();
     const rows = await runQuery<Record<string, unknown>>(db, ESTIMATE_SQL, [queryHash]);
     const row = rows[0] ?? {};
 

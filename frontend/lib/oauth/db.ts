@@ -19,7 +19,6 @@ import { NEXTAUTH_SECRET } from '@/lib/config';
 // ---------------------------------------------------------------------------
 
 interface CodeEntry {
-  companyId: number;
   userId: number;
   redirectUri: string;
   codeChallenge: string;
@@ -27,7 +26,7 @@ interface CodeEntry {
   expiresAt: number; // ms since epoch
 }
 
-/* eslint-disable no-restricted-syntax -- safe: single-use PKCE codes, companyId embedded in each entry */
+/* eslint-disable no-restricted-syntax -- globalThis used to survive HMR; in-process singleton is intentional */
 const codeStore: Map<string, CodeEntry> = (
   (globalThis as Record<string, unknown>).__oauthCodes ??= new Map<string, CodeEntry>()
 ) as Map<string, CodeEntry>;
@@ -43,7 +42,6 @@ export class OAuthCodeDB {
    * Returns the plaintext code to send to the client.
    */
   static async create(
-    companyId: number,
     userId: number,
     redirectUri: string,
     codeChallenge: string,
@@ -52,7 +50,6 @@ export class OAuthCodeDB {
   ): Promise<string> {
     const code = randomBytes(24).toString('hex');
     codeStore.set(code, {
-      companyId,
       userId,
       redirectUri,
       codeChallenge,
@@ -70,7 +67,7 @@ export class OAuthCodeDB {
     code: string,
     redirectUri: string,
     codeVerifier: string,
-  ): Promise<{ companyId: number; userId: number; scope: string | null } | null> {
+  ): Promise<{ userId: number; scope: string | null } | null> {
     const entry = codeStore.get(code);
     if (!entry) return null;
 
@@ -83,7 +80,7 @@ export class OAuthCodeDB {
     const verifierHash = createHash('sha256').update(codeVerifier).digest('base64url');
     if (verifierHash !== entry.codeChallenge) return null;
 
-    return { companyId: entry.companyId, userId: entry.userId, scope: entry.scope };
+    return { userId: entry.userId, scope: entry.scope };
   }
 
   /** Prune stale entries (bounded by 5-min TTL, so this is just housekeeping). */
@@ -102,7 +99,6 @@ export class OAuthCodeDB {
 interface AccessTokenPayload {
   jti: string; // unique token ID — prevents identical JWTs when issued in the same second
   userId: number;
-  companyId: number;
   scope: string | null;
 }
 
@@ -117,25 +113,25 @@ export class OAuthTokenDB {
     return NEXTAUTH_SECRET || 'dev-insecure-secret';
   }
 
-  /** Issue a signed JWT access token. */
+  /** Issue a signed JWT access token. extra fields are spread directly into the payload. */
   static async create(
-    companyId: number,
     userId: number,
     scope?: string | null,
+    extra?: Record<string, unknown>,
   ): Promise<OAuthTokenPair> {
     const expiresIn = 3600; // 1 hour
-    const payload: AccessTokenPayload = { jti: randomBytes(16).toString('hex'), userId, companyId, scope: scope ?? null };
+    const payload = { jti: randomBytes(16).toString('hex'), userId, scope: scope ?? null, ...extra };
     const accessToken = jwt.sign(payload, OAuthTokenDB.secret, { expiresIn });
     return { accessToken, expiresIn, tokenType: 'Bearer' };
   }
 
-  /** Verify a JWT access token. Returns user info or null if invalid/expired. */
+  /** Verify a JWT access token. Returns the decoded payload (including any extra fields) or null. */
   static async validateAccessToken(
     accessToken: string,
-  ): Promise<{ companyId: number; userId: number; scope: string | null } | null> {
+  ): Promise<{ userId: number; scope: string | null; [key: string]: unknown } | null> {
     try {
-      const decoded = jwt.verify(accessToken, OAuthTokenDB.secret) as AccessTokenPayload;
-      return { companyId: decoded.companyId, userId: decoded.userId, scope: decoded.scope };
+      const decoded = jwt.verify(accessToken, OAuthTokenDB.secret) as { userId: number; scope: string | null; [key: string]: unknown };
+      return decoded;
     } catch {
       return null;
     }

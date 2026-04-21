@@ -4,7 +4,7 @@ import { ConnectionsAPI } from '@/lib/data/connections.server';
 import { sessionTokenManager } from '@/lib/auth/session-tokens';
 import { getNodeConnector } from '@/lib/connections';
 
-// Force Node.js runtime (required for better-sqlite3 and DuckDB)
+// Force Node.js runtime (required for DuckDB)
 export const runtime = 'nodejs';
 
 /**
@@ -42,9 +42,9 @@ export async function GET(
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    const { companyId, mode } = tokenData;
+    const { mode } = tokenData;
 
-    const { type, config } = await ConnectionsAPI.getRawByName(name, companyId, mode);
+    const { type, config } = await ConnectionsAPI.getRawByName(name, mode);
 
     // Only handle types that Node.js manages (DuckDB, CSV, Google Sheets)
     const connector = getNodeConnector(name, type, config);

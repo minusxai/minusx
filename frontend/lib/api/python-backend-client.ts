@@ -1,7 +1,7 @@
 /**
  * Centralized client for Python backend API calls
  *
- * Automatically adds required headers (x-company-id) and session tokens for all Python backend requests.
+ * Automatically adds required headers and session tokens for all Python backend requests.
  * Session tokens allow Python to securely call back to Next.js internal APIs without shared secrets.
  */
 
@@ -12,7 +12,7 @@ import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 
 /**
  * Fetch wrapper for Python backend API calls
- * Automatically adds x-company-id header and session token from current user's session
+ * Automatically adds session token from current user's session
  *
  * @param endpoint - API endpoint path (e.g., '/api/chat', '/api/execute-query')
  * @param options - Standard fetch options (method, body, etc.)
@@ -39,11 +39,6 @@ export async function pythonBackendFetch(
     ...options.headers
   };
 
-  // Add company ID header for multi-tenant isolation
-  if (user?.companyId) {
-    requestHeaders['x-company-id'] = user.companyId.toString();
-  }
-
   // Add mode header for mode-based isolation
   if (user?.mode) {
     requestHeaders['x-mode'] = user.mode;
@@ -51,7 +46,7 @@ export async function pythonBackendFetch(
 
   // Generate session token for this request
   // Python will echo this back when calling Next.js internal APIs
-  const sessionToken = user?.companyId ? sessionTokenManager.generate(user.companyId, user.mode) : null;
+  const sessionToken = user ? sessionTokenManager.generate(user.mode) : null;
 
   // Inject session token into request body (if body exists)
   let modifiedBody = options.body;

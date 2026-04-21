@@ -1,5 +1,5 @@
 import { hasDeliveryEnabled, buildDropdownOptions } from '../delivery-options';
-import type { CompanyConfig } from '@/lib/branding/whitelabel';
+import type { OrgConfig } from '@/lib/branding/whitelabel';
 import type { AlertRecipient, User } from '@/lib/types';
 
 // ─── fixtures ─────────────────────────────────────────────────────────────────
@@ -15,7 +15,7 @@ const phoneChannel  = { type: 'phone' as const,  name: 'On-Call',      address: 
 const alice: User = { id: 1, name: 'Alice', email: 'alice@example.com', role: 'admin' };
 const bob: User   = { id: 2, name: 'Bob',   email: 'bob@example.com',   role: 'viewer', phone: '+15550009999' };
 
-function config(overrides: Partial<CompanyConfig> = {}): CompanyConfig {
+function config(overrides: Partial<OrgConfig> = {}): OrgConfig {
   return {
     branding: { displayName: 'Test', agentName: 'Agent', favicon: '/favicon.ico' },
     links: { docsUrl: '', supportUrl: '', githubIssuesUrl: '' },

@@ -1,18 +1,16 @@
 import 'server-only';
 import { FilesAPI } from '@/lib/data/files.server';
-import { getConfigsByCompanyId, getRawConfigByCompanyId, saveConfigByCompanyId } from '@/lib/data/configs.server';
-import { CompanyDB } from '@/lib/database/company-db';
+import { getConfigsForMode, getRawConfig, saveRawConfig } from '@/lib/data/configs.server';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { VALID_MODES, type Mode } from '@/lib/mode/mode-types';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
 import type { ConfigBot, ConfigContent, ConversationFileContent, ConversationSource, SlackBotConfig } from '@/lib/types';
 
 // ============================================================================
-// Bot config CRUD — lives in /org/configs/config (per-company config file)
+// Bot config CRUD — lives in /org/configs/config (org config file)
 // ============================================================================
 
 export interface SlackInstallationMatch {
-  companyId: number;
   mode: Mode;
   bot: SlackBotConfig;
   config: ConfigContent;
@@ -23,11 +21,10 @@ function normalizeSlackBot(bot: SlackBotConfig): SlackBotConfig {
 }
 
 export async function upsertSlackBotConfig(
-  companyId: number,
   mode: Mode,
   bot: SlackBotConfig,
 ): Promise<void> {
-  const rawConfig = await getRawConfigByCompanyId(companyId, mode);
+  const rawConfig = await getRawConfig(mode);
   const existing = (rawConfig.bots ?? []) as ConfigBot[];
   const normalized = normalizeSlackBot(bot);
 
@@ -43,33 +40,31 @@ export async function upsertSlackBotConfig(
     next.push(normalized);
   }
 
-  await saveConfigByCompanyId(companyId, mode, { ...rawConfig, bots: next });
+  await saveRawConfig(mode, { ...rawConfig, bots: next });
 }
 
 export async function removeSlackBotConfig(
-  companyId: number,
   mode: Mode,
   teamId: string,
 ): Promise<void> {
-  const rawConfig = await getRawConfigByCompanyId(companyId, mode);
-  await saveConfigByCompanyId(companyId, mode, {
+  const rawConfig = await getRawConfig(mode);
+  await saveRawConfig(mode, {
     ...rawConfig,
     bots: (rawConfig.bots ?? []).filter(b => !(b.type === 'slack' && b.team_id === teamId)),
   });
 }
 
-async function findSlackBotByTeamInCompany(
-  companyId: number,
+async function findSlackBotByTeam(
   teamId: string,
 ): Promise<SlackInstallationMatch | null> {
   for (const mode of VALID_MODES) {
-    const { config } = await getConfigsByCompanyId(companyId, mode);
+    const { config } = await getConfigsForMode(mode);
     const bot = (config.bots ?? []).find(
       (b): b is SlackBotConfig =>
         b.type === 'slack' && b.enabled !== false && b.team_id === teamId,
     );
     if (bot) {
-      return { companyId, mode, bot, config: config as ConfigContent };
+      return { mode, bot, config: config as ConfigContent };
     }
   }
   return null;
@@ -78,16 +73,7 @@ async function findSlackBotByTeamInCompany(
 export async function findSlackInstallationByTeam(
   teamId: string,
 ): Promise<SlackInstallationMatch | null> {
-  const defaultCompany = await CompanyDB.getDefaultCompany();
-  if (defaultCompany) {
-    return findSlackBotByTeamInCompany(defaultCompany.id, teamId);
-  }
-  const companies = await CompanyDB.listAll();
-  for (const company of companies) {
-    const match = await findSlackBotByTeamInCompany(company.id, teamId);
-    if (match) return match;
-  }
-  return null;
+  return findSlackBotByTeam(teamId);
 }
 
 // ============================================================================
@@ -146,7 +132,7 @@ export async function getOrCreateSlackConversationId(
 // Acceptable for single-instance deployments; Slack retries are infrequent.
 // ============================================================================
 
-// eslint-disable-next-line no-restricted-syntax -- Slack event IDs are globally unique (assigned by Slack), dedup is cross-company safe
+// eslint-disable-next-line no-restricted-syntax -- Slack event IDs are globally unique (assigned by Slack), dedup is cross-org safe
 const processedEventIds = new Set<string>();
 const MAX_DEDUP_SIZE = 500;
 

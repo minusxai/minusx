@@ -13,14 +13,11 @@
  */
 
 // Must be first — Jest hoists mock above imports
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_prompt_measure.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const,
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 import { configureStore } from '@reduxjs/toolkit';
 import { withPythonBackend } from '@/test/harness/python-backend';
@@ -42,8 +39,7 @@ jest.mock('@/lib/auth/auth-helpers', () => ({
     email: 'test@example.com',
     name: 'Test User',
     role: 'admin',
-    companyId: 1,
-    companyName: 'test-company',
+    companyName: 'test-workspace',
     home_folder: '',
     mode: 'tutorial',
   }),
@@ -80,7 +76,7 @@ const DASHBOARD_ID = 11; // /tutorial/top-level-metrics
   it('prints AnalystAgent token breakdown — top-level-metrics dashboard, mxfood schema', async () => {
     // Load dashboard + its questions from the test DB (copy of tutorial DB)
     const { DocumentDB } = await import('@/lib/database/documents-db');
-    const dashboardFile = await DocumentDB.getById(DASHBOARD_ID, 1);
+    const dashboardFile = await DocumentDB.getById(DASHBOARD_ID);
     if (!dashboardFile) throw new Error(`Dashboard ${DASHBOARD_ID} not found in test DB`);
 
     const referencedIds: number[] = (dashboardFile.content as any)?.assets
@@ -88,7 +84,7 @@ const DASHBOARD_ID = 11; // /tutorial/top-level-metrics
       ?.map((a: any) => a.id) ?? [];
 
     const referenceFiles = (
-      await Promise.all(referencedIds.map((id) => DocumentDB.getById(id, 1)))
+      await Promise.all(referencedIds.map((id) => DocumentDB.getById(id)))
     ).filter(Boolean) as NonNullable<Awaited<ReturnType<typeof DocumentDB.getById>>>[];
 
     // Build app_state via the real selector — same path as production

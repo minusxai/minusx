@@ -31,34 +31,69 @@ jest.mock('@/auth', () => ({
   signOut: jest.fn()
 }));
 
+// Register default test modules — DocumentDB routes through getModules().db.exec().
+// This module lazily calls getAdapter() on each exec() so tests that call resetAdapter()
+// in beforeEach always pick up the fresh adapter after re-initialization.
+// Tests that need a different module (e.g. pglite-adapter.test.ts) call registerModules()
+// in their own beforeEach, overwriting this default registration.
+{
+  const { registerModules } = require('@/lib/modules/registry');
+  registerModules({
+    auth: {
+      handleRequest: async () => { throw new Error('auth.handleRequest not available in tests'); },
+      getRequestContext: async () => ({
+        userId: 1, email: 'test@example.com', name: 'Test User',
+        role: 'admin' as const, home_folder: '/org', mode: 'org' as const,
+      }),
+      addHeaders: async () => {},
+      register: async () => { throw new Error('auth.register not available in tests'); },
+    },
+    db: {
+      exec: async (sql: string, params?: unknown[]) => {
+        // Lazy: get adapter at call time — respects resetAdapter() in test beforeEach
+        const { getAdapter } = require('@/lib/database/adapter/factory');
+        const adapter = await getAdapter();
+        // Multi-statement DDL: route through exec() (no prepared statements).
+        if ((!params || params.length === 0) && sql.includes(';')) {
+          await adapter.exec(sql);
+          return { rows: [] };
+        }
+        return adapter.query(sql, params);
+      },
+      init: async () => {},
+    },
+    store: {
+      resolvePath: () => '',
+      getUploadUrl: async () => { throw new Error('store.getUploadUrl not available in tests'); },
+      getDownloadUrl: async () => { throw new Error('store.getDownloadUrl not available in tests'); },
+      generateKey: () => { throw new Error('store.generateKey not available in tests'); },
+    },
+    cache: {
+      get: async () => null,
+      set: async () => {},
+      invalidate: async () => {},
+      invalidatePrefix: async () => {},
+    },
+  });
+}
+
 // Mock auth helpers with default test user
 jest.mock('@/lib/auth/auth-helpers', () => {
-  // Use actual DB modules so getCompanyUserEffectiveUser works with real test DBs
   const { UserDB } = jest.requireActual('@/lib/database/user-db');
-  const { CompanyDB } = jest.requireActual('@/lib/database/company-db');
   return {
     getEffectiveUser: jest.fn().mockResolvedValue({
       userId: 1,
       email: 'test@example.com',
       name: 'Test User',
       role: 'admin',
-      companyId: 1,
-      companyName: 'test-company',
       home_folder: '/org',
       mode: 'org',
     }),
     isAdmin: jest.fn().mockReturnValue(true),
     shouldRefreshToken: jest.fn().mockReturnValue(false),
     isTokenOutdated: jest.fn().mockReturnValue(false),
-    getCompanyUserEffectiveUser: async (
-      companyId: number,
-      email: string,
-      mode: string,
-    ) => {
-      const [user, company] = await Promise.all([
-        UserDB.getByEmailAndCompany(email, companyId),
-        CompanyDB.getById(companyId),
-      ]);
+    getUserEffectiveUser: async (email: string, mode: string) => {
+      const user = await UserDB.getByEmail(email);
       if (!user) return null;
       return {
         userId: user.id,
@@ -66,8 +101,6 @@ jest.mock('@/lib/auth/auth-helpers', () => {
         name: user.name,
         role: user.role,
         home_folder: user.home_folder,
-        companyId,
-        companyName: company?.name,
         mode,
       };
     },

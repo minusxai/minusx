@@ -20,11 +20,6 @@ export async function PUT(req: NextRequest) {
     const key = req.nextUrl.searchParams.get('key');
     if (!key) return NextResponse.json({ error: 'key is required' }, { status: 400 });
 
-    // Security: key must belong to this company
-    if (!key.startsWith(`${user.companyId}/`)) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
-    }
-
     const filePath = resolve(join(LOCAL_UPLOAD_PATH, key));
     // Prevent path traversal
     if (!filePath.startsWith(LOCAL_UPLOAD_PATH)) {

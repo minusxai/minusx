@@ -9,9 +9,8 @@
 
 import { NextRequest } from 'next/server';
 import { UserDB } from '@/lib/database/user-db';
-import { CompanyDB } from '@/lib/database/company-db';
 import { generateOTP, hashOTP, createOTPToken } from '@/lib/auth/otp-utils';
-import { getConfigsByCompanyId } from '@/lib/data/configs.server';
+import { getConfigsForMode } from '@/lib/data/configs.server';
 import { executeWebhook, sendEmailViaWebhook } from '@/lib/messaging/webhook-executor';
 import { resolveWebhook } from '@/lib/messaging/webhook-resolver.server';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
@@ -22,37 +21,25 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { email, channel = 'phone' } = body;
-    let { companyId } = body;
 
     if (!email) {
       return ApiErrors.badRequest('Email is required');
     }
 
-    // Resolve companyId from company name if not provided directly
-    if (!companyId) {
-      const company = body.company
-        ? await CompanyDB.getByName(body.company)
-        : await CompanyDB.getDefaultCompany();
-      if (!company) {
-        return ApiErrors.badRequest('Company not found');
-      }
-      companyId = company.id;
-    }
-
     // Look up user
-    const user = await UserDB.getByEmailAndCompany(email, companyId);
+    const user = await UserDB.getByEmail(email);
     if (!user) {
       // Return generic error to avoid user enumeration
-      return ApiErrors.badRequest('Invalid email or company');
+      return ApiErrors.badRequest('Invalid email or workspace');
     }
 
     if (channel === 'email') {
       // --- Passwordless email OTP ---
-      const { config } = await getConfigsByCompanyId(companyId);
+      const { config } = await getConfigsForMode();
       const _emailOtpRaw = config.messaging?.webhooks?.find(w => w.type === 'email_otp');
       const webhook = _emailOtpRaw ? resolveWebhook(_emailOtpRaw) : null;
       if (!webhook) {
-        return ApiErrors.badRequest('Email OTP is not configured for this company');
+        return ApiErrors.badRequest('Email OTP is not configured');
       }
 
       const otp = generateOTP();
@@ -61,7 +48,6 @@ export async function POST(request: NextRequest) {
 
       const token = createOTPToken({
         email: user.email,
-        companyId: user.company_id,
         otpHash,
       });
 
@@ -101,14 +87,13 @@ export async function POST(request: NextRequest) {
     const token = createOTPToken({
       email: user.email,
       phone: user.phone,
-      companyId: user.company_id,
       otpHash,
     });
     console.log('[send-otp/phone] Created token for user:', user.email);
 
-    const { config } = await getConfigsByCompanyId(companyId);
+    const { config } = await getConfigsForMode();
     if (!config.messaging?.webhooks?.length) {
-      return ApiErrors.internalError('Messaging configuration not found in company config');
+      return ApiErrors.internalError('Messaging configuration not found in config');
     }
 
     const _phoneOtpRaw = config.messaging.webhooks.find(w => w.type === 'phone_otp') || config.messaging.webhooks[0];

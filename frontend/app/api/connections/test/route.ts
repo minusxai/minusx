@@ -26,7 +26,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       return ApiErrors.badRequest('type and config are required');
     }
 
-    validateDuckDbFilePath(type, config, user.companyId);
+    validateDuckDbFilePath(type, config);
 
     // Handle DuckDB (and csv/google-sheets which are DuckDB-backed) in Node.js.
     // This bypasses Python entirely, avoiding the exclusive file lock conflict.

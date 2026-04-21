@@ -97,7 +97,7 @@ export const transformationJobHandler: JobHandler = {
     if (transformation.recipients && transformation.recipients.length > 0) {
       const transformationFileResult = await FilesAPI.loadFile(parseInt(jobId, 10), user);
       const transformationName = transformationFileResult.data?.name ?? `Transformation ${jobId}`;
-      const baseUrl = await resolveBaseUrl(user.companyId);
+      const baseUrl = await resolveBaseUrl();
       const link = `${baseUrl}/f/${runFileId}`;
       const subject = `[Transformation] ${transformationName}`;
       const succeeded = results.filter(r => r.status === 'success').length;

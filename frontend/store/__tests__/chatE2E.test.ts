@@ -26,14 +26,11 @@ import { setupMockFetch } from '@/test/harness/mock-fetch';
 import { setupTestDb } from '@/test/harness/test-db';
 
 // Unified test database path for all suites in this file
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_chat_api.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 const TEST_DB_PATH = getTestDbPath('chat_api');
 
@@ -200,7 +197,7 @@ describe('Chat API Tests', () => {
       const data = await response.json();
 
       expect(response.status).toBe(401);
-      expect(data.error).toBe('No company ID found for user');
+      expect(data.error).toBe('Unauthorized');
     });
   });
 

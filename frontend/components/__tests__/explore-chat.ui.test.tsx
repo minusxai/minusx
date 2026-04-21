@@ -21,15 +21,11 @@
 // Hoisted mocks — must appear before any import statements
 // ---------------------------------------------------------------------------
 
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_explore_chat_ui.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const,
-    DB_TYPE: 'sqlite',
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 // Mock router — ChatInterface calls router.push('/explore/{id}') on new conversation
 const mockRouterPush = jest.fn();

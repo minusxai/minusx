@@ -9,14 +9,14 @@ export interface ValidationResult {
 }
 
 /**
- * Validate company name
+ * Validate workspace name
  * Rules: Alphanumeric + hyphens/underscores only, minimum 3 characters
  */
-export function validateCompanyName(name: string): ValidationResult {
+export function validateWorkspaceName(name: string): ValidationResult {
   if (!name || name.trim().length === 0) {
     return {
       valid: false,
-      error: 'Company name is required',
+      error: 'Workspace name is required',
     };
   }
 
@@ -25,7 +25,7 @@ export function validateCompanyName(name: string): ValidationResult {
   if (trimmedName.length < 3) {
     return {
       valid: false,
-      error: 'Company name must be at least 3 characters',
+      error: 'Workspace name must be at least 3 characters',
     };
   }
 
@@ -33,15 +33,7 @@ export function validateCompanyName(name: string): ValidationResult {
   if (!validPattern.test(trimmedName)) {
     return {
       valid: false,
-      error: 'Company name can only contain letters, numbers, hyphens, and underscores',
-    };
-  }
-
-  const previewSubdomain = trimmedName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
-  if (previewSubdomain.startsWith('mx-')) {
-    return {
-      valid: false,
-      error: 'Company name generates a reserved subdomain prefix',
+      error: 'Workspace name can only contain letters, numbers, hyphens, and underscores',
     };
   }
 

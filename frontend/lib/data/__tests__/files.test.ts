@@ -22,14 +22,11 @@ import type {
 import * as pythonBackend from '@/lib/backend/python-backend.server';
 
 // Database-specific mock
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_files.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 const TEST_DB_PATH = getTestDbPath('files');
 
@@ -42,8 +39,6 @@ const testUser: EffectiveUser = {
   name: 'Test User',
   email: 'test@example.com',
   role: 'admin',
-  companyId: 1,
-  companyName: 'test-company',
   mode: 'org',
   home_folder: ''
 };
@@ -83,8 +78,7 @@ describe('Files Data Layer - getTemplate', () => {
           file_path: 'data/default_db.duckdb'
         }
       } as ConnectionContent,
-      [],
-      testUser.companyId
+      []
     );
 
     // Create custom_db connection for template test
@@ -98,8 +92,7 @@ describe('Files Data Layer - getTemplate', () => {
           file_path: 'data/custom_db.duckdb'
         }
       } as ConnectionContent,
-      [],
-      testUser.companyId
+      []
     );
   });
 
@@ -224,11 +217,11 @@ describe('Files Data Layer - getTemplate', () => {
         fullSchema: [],
         fullDocs: []
       };
-      const existing = await DocumentDB.getByPath('/org/context', testUser.companyId);
+      const existing = await DocumentDB.getByPath('/org/context');
       if (existing) {
-        await DocumentDB.update(existing.id, 'context', '/org/context', testContextContent, [], testUser.companyId);
+        await DocumentDB.update(existing.id, 'context', '/org/context', testContextContent, [], 'test-edit');
       } else {
-        await DocumentDB.create('context', '/org/context', 'context', testContextContent, [], testUser.companyId);
+        await DocumentDB.create('context', '/org/context', 'context', testContextContent, []);
       }
     });
 

@@ -18,7 +18,7 @@ export function buildWelcomeBlocks(appName: string): { text: string; blocks: unk
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `Hi there! :wave: I'm *${appName}* agent, your AI data analyst.\nAsk me anything about your company's data.`,
+        text: `Hi there! :wave: I'm *${appName}* agent, your AI data analyst.\nAsk me anything about your organization's data.`,
       },
     },
     ...suggestions.map((label) => ({
@@ -60,7 +60,7 @@ export function buildHomeView(appName: string, platformUrl: string = 'https://mi
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `*${appName}* is your AI data analyst. Ask questions in plain English and get answers backed by your company's data and context.`,
+        text: `*${appName}* is your AI data analyst. Ask questions in plain English and get answers backed by your organization's data and context.`,
       },
     },
     {
@@ -143,7 +143,7 @@ export function buildHomeView(appName: string, platformUrl: string = 'https://mi
 // Keyed by `${teamId}:${userId}` — avoids sending the welcome on every DM open.
 // ---------------------------------------------------------------------------
 
-// eslint-disable-next-line no-restricted-syntax -- tracks welcomed user emails; cross-tenant sharing is intentional (idempotent welcome, not data access)
+// eslint-disable-next-line no-restricted-syntax -- tracks welcomed user emails; cross-org sharing is intentional (idempotent welcome, not data access)
 const welcomedUsers = new Set<string>();
 const MAX_WELCOMED_SIZE = 2000;
 

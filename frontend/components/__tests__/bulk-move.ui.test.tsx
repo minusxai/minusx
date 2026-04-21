@@ -8,15 +8,11 @@
  *   4. Move button is disabled when no files are selected
  */
 
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_bulk_move_ui.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const,
-    DB_TYPE: 'sqlite',
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 import React from 'react';
 import { screen, waitFor, within, act } from '@testing-library/react';
@@ -58,7 +54,6 @@ function makeQuestion(id: number, name: string) {
     references: [] as number[],
     version: 1,
     last_edit_id: null,
-    company_id: 1,
   };
 }
 
@@ -74,7 +69,6 @@ function makeFolder(id: number, name: string, path: string) {
     references: [] as number[],
     version: 1,
     last_edit_id: null,
-    company_id: 1,
   };
 }
 
@@ -90,19 +84,18 @@ const allFiles = [question1, question2, question3, folder1, destFolder];
 // DB seeding
 // ---------------------------------------------------------------------------
 
-async function insertTestFiles(dbPath: string): Promise<void> {
-  const { createAdapter } = await import('@/lib/database/adapter/factory');
-  const db = await createAdapter({ type: 'sqlite', sqlitePath: dbPath });
+async function insertTestFiles(_dbPath: string): Promise<void> {
+  const { getAdapter } = await import('@/lib/database/adapter/factory');
+  const db = await getAdapter();
   const now = new Date().toISOString();
 
   for (const file of allFiles) {
     await db.query(
-      `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [1, file.id, file.name, file.path, file.type, JSON.stringify(file.content), '[]', now, now]
+      `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [file.id, file.name, file.path, file.type, JSON.stringify(file.content), '[]', now, now]
     );
   }
-  await db.close();
 }
 
 // ---------------------------------------------------------------------------

@@ -61,7 +61,7 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       scopes: [...SLACK_BOT_SCOPES],
     };
 
-    await upsertSlackBotConfig(user.companyId, user.mode, bot);
+    await upsertSlackBotConfig(user.mode, bot);
 
     return successResponse({ bot });
   } catch (error) {

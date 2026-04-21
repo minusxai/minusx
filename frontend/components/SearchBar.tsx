@@ -45,7 +45,7 @@ export default function SearchBar({
   const leftWidth = leftSidebarCollapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH_EXPANDED;
   const rightWidth = rightSidebarCollapsed ? RIGHTSIDEBAR_WIDTH_COLLAPSED : `${rightSidebarWidth}px`;
 
-  // Get company-specific config from Redux
+  // Get org config from Redux
   const { config } = useConfigs();
   const agentName = config.branding.agentName;
 

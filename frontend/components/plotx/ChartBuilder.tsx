@@ -31,7 +31,7 @@ import { getVizConstraintError } from '@/lib/chart/viz-constraints'
 import { getEffectiveColorPalette } from '@/lib/chart/echarts-theme'
 import { StyleConfigPopover } from './StyleConfigPopover'
 import { AnnotationEditor } from './AnnotationEditor'
-import type { CompanyBranding } from '@/lib/branding/whitelabel'
+import type { OrgBranding } from '@/lib/branding/whitelabel'
 import type { ChartAnnotation } from '@/lib/types'
 import { clientChartImageRenderer } from '@/lib/chart/ChartImageRenderer.client'
 import { useAppSelector } from '@/store/hooks'
@@ -76,7 +76,7 @@ interface ChartBuilderProps {
   onAnnotationsChange?: (annotations: ChartAnnotation[]) => void
   trendConfig?: TrendConfig
   onTrendConfigChange?: (config: TrendConfig) => void
-  exportBranding?: Partial<CompanyBranding>
+  exportBranding?: Partial<OrgBranding>
 }
 
 interface GroupedColumns {

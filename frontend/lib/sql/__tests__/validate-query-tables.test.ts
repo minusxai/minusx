@@ -21,8 +21,6 @@ const TEST_USER: EffectiveUser = {
   email: 'test@example.com',
   name: 'Test User',
   role: 'admin',
-  companyId: 1,
-  companyName: 'test',
   home_folder: '/org',
   mode: 'org',
 };

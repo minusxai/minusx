@@ -1,5 +1,5 @@
 import { MIGRATIONS } from '../migrations';
-import type { InitData, CompanyData, ExportedDocument } from '../import-export';
+import type { InitData, OrgData, ExportedDocument } from '../import-export';
 import type { Whitelist } from '@/lib/types';
 
 const migrate = MIGRATIONS.find(m => m.dataVersion === 33)!.dataMigration!;
@@ -16,28 +16,28 @@ function makeDoc(overrides: Partial<ExportedDocument>): ExportedDocument {
     last_edit_id: null,
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
-    company_id: 1,
+
     ...overrides,
   };
 }
 
 function makeData(documents: ExportedDocument[]): InitData {
-  const company: CompanyData = {
-    id: 1, name: 'test', display_name: 'Test', subdomain: null,
+  const org: OrgData = {
+    id: 1, name: 'test', display_name: 'Test',
     created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z',
     users: [], documents,
   };
-  return { companies: [company] } as unknown as InitData;
+  return { orgs: [org] } as unknown as InitData;
 }
 
 function getContextVersions(data: InitData, path: string): any[] | undefined {
-  const docs = (data.companies[0] as CompanyData).documents;
+  const docs = (data.orgs![0] as OrgData).documents;
   const doc = docs.find(d => d.path === path);
   return (doc?.content as any)?.versions;
 }
 
 function getContextPaths(data: InitData): string[] {
-  return (data.companies[0] as CompanyData).documents
+  return (data.orgs![0] as OrgData).documents
     .filter(d => d.type === 'context')
     .map(d => d.path);
 }
@@ -224,7 +224,7 @@ describe('V33 migration — Part B: create default context per folder', () => {
     const data = makeData([folderDoc]);
 
     const result = migrate(data);
-    const docs = (result.companies[0] as CompanyData).documents;
+    const docs = (result.orgs![0] as OrgData).documents;
     const newContext = docs.find(d => d.path === '/org/context');
 
     expect(newContext).toBeDefined();
@@ -242,7 +242,7 @@ describe('V33 migration — Part B: create default context per folder', () => {
     const data = makeData(docs);
 
     const result = migrate(data);
-    const allDocs = (result.companies[0] as CompanyData).documents;
+    const allDocs = (result.orgs![0] as OrgData).documents;
     const newContextIds = allDocs
       .filter(d => d.type === 'context')
       .map(d => d.id);
@@ -280,7 +280,7 @@ describe('V33 migration — combined', () => {
     const data = makeData(docs);
 
     const result = migrate(data);
-    const allDocs = (result.companies[0] as CompanyData).documents;
+    const allDocs = (result.orgs![0] as OrgData).documents;
 
     // Part A: existing context converted
     const orgContext = allDocs.find(d => d.path === '/org/context')!;

@@ -23,15 +23,11 @@ import { loadUsers, setUsersInStore, _resetForTesting } from '@/lib/hooks/useUse
 // Jest module mocks — hoisted to top by Jest
 // ---------------------------------------------------------------------------
 
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  const dbPath = path.join(process.cwd(), 'data', 'test_users_state.db');
-  return {
-    DB_PATH: dbPath,
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite',
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 // Make users-state.ts use our test store
 let testStore: any;
@@ -46,7 +42,7 @@ jest.mock('@/store/store', () => ({
 
 const dbPath = getTestDbPath('users_state');
 const ADMIN_SESSION = {
-  user: { userId: 1, email: 'test@example.com', role: 'admin', companyId: 1 },
+  user: { userId: 1, email: 'test@example.com', role: 'admin' },
 };
 
 function makeTestStore() {
@@ -151,7 +147,7 @@ describe('Users state', () => {
     expect(selectUsersStatus(state)).toBe('loaded');
     const users = selectUsers(state);
     expect(users.length).toBeGreaterThan(0);
-    // The seed company always creates the admin user
+    // The seed org always creates the admin user
     expect(users.some(u => u.email === 'test@example.com')).toBe(true);
   });
 

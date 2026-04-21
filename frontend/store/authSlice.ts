@@ -9,8 +9,6 @@ interface AuthUser {
   name: string;
   role: UserRole;
   home_folder?: string;
-  companyId: number;  // Required - enforced by withAuth middleware
-  companyName?: string;
   mode: Mode;  // Mode parameter from URL (org, tutorial, etc.)
 }
 
@@ -50,6 +48,6 @@ export const {
 
 // Simplified selectors - effectiveUser is now just the user
 export const selectEffectiveUser = (state: RootState) => state.auth.user;
-export const selectCompanyName = (state: RootState) => state.auth.user?.companyName;
+export const selectCompanyName = (_state: RootState) => undefined;
 
 export default authSlice.reducer;

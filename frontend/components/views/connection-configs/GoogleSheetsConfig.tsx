@@ -9,7 +9,6 @@ import { BaseConfigProps } from './types';
 
 interface GoogleSheetsConfigProps extends BaseConfigProps {
   connectionName: string;
-  companyId: number | undefined;
   userMode: string;
   onError: (error: string) => void;
 }
@@ -19,7 +18,6 @@ export default function GoogleSheetsConfig({
   onChange,
   mode,
   connectionName,
-  companyId,
   userMode,
   onError
 }: GoogleSheetsConfigProps) {
@@ -30,11 +28,6 @@ export default function GoogleSheetsConfig({
   const handleImport = async () => {
     if (!spreadsheetUrl) {
       onError('Please enter a Google Sheets URL');
-      return;
-    }
-
-    if (!companyId) {
-      onError('Unable to determine company ID');
       return;
     }
 
@@ -55,8 +48,6 @@ export default function GoogleSheetsConfig({
       const result = await importGoogleSheets(
         connectionName,
         spreadsheetUrl,
-        companyId,
-        userMode,
         mode === 'view',  // replace_existing in view mode
         schemaName,
       );

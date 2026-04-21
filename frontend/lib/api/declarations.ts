@@ -204,26 +204,6 @@ export const API = {
     },
   },
 
-  // Pipelines API
-  pipelines: {
-    run: {
-      url: '/api/pipelines/run',
-      method: 'POST',
-      cache: {
-        ttl: 0,  // No caching
-        deduplicate: true,  // Prevent duplicate pipeline runs
-      },
-    },
-    status: {
-      url: (id: string) => `/api/pipelines/status/${id}`,
-      method: 'GET',
-      cache: {
-        ttl: 5 * 1000,  // 5 seconds (status updates frequently)
-        deduplicate: true,
-      },
-    },
-  },
-
   // Users API
   users: {
     list: {
@@ -252,34 +232,6 @@ export const API = {
     },
     delete: {
       url: (email: string) => `/api/users/${encodeURIComponent(email)}`,
-      method: 'DELETE',
-      cache: {
-        ttl: 0,  // No caching for mutations
-        deduplicate: true,
-      },
-    },
-  },
-
-  // Access Tokens API
-  accessTokens: {
-    list: {
-      url: '/api/access-tokens',
-      method: 'GET',
-      cache: {
-        ttl: 2 * 60 * 1000,  // 2 minutes
-        deduplicate: true,
-      },
-    },
-    create: {
-      url: '/api/access-tokens',
-      method: 'POST',
-      cache: {
-        ttl: 0,  // No caching for mutations
-        deduplicate: false,
-      },
-    },
-    delete: {
-      url: (id: number) => `/api/access-tokens/${id}`,
       method: 'DELETE',
       cache: {
         ttl: 0,  // No caching for mutations
@@ -350,8 +302,8 @@ export const API = {
         deduplicate: true,
       },
     },
-    importCompany: {
-      url: '/api/admin/import-company',
+    importData: {
+      url: '/api/admin/import-data',
       method: 'POST',
       cache: {
         ttl: 0,  // No caching for mutations
@@ -412,10 +364,10 @@ export const API = {
     },
   },
 
-  // Companies API (for registration)
-  companies: {
+  // Registration API
+  orgs: {
     register: {
-      url: '/api/companies/register',
+      url: '/api/orgs/register',
       method: 'POST',
       cache: {
         ttl: 0,  // No caching

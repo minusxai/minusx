@@ -28,7 +28,7 @@ export default function LayoutWrapper({ children }: LayoutWrapperProps) {
   }, [pathname, dispatch]);
 
   // Public routes that should not show sidebar
-  const publicRoutes = ['/login', '/create-organisation'];
+  const publicRoutes = ['/login'];
   const isPublicRoute = publicRoutes.some(route => pathname.startsWith(route));
 
   // If it's a public route, render children without sidebar (and without recording)

@@ -81,7 +81,7 @@ export const POST = withResponseLogging(async function POST(request: NextRequest
     // Get effective user
     user = await getEffectiveUser();
 
-    if (!user || !user.companyId) {
+    if (!user) {
       return NextResponse.json(
         {
           conversationID: 0,
@@ -89,7 +89,7 @@ export const POST = withResponseLogging(async function POST(request: NextRequest
           pending_tool_calls: [],
           completed_tool_calls: [],
           debug: [],
-          error: 'No company ID found for user'
+          error: 'Not authenticated'
         } as ChatResponse,
         { status: 401 }
       );
@@ -118,7 +118,7 @@ export const POST = withResponseLogging(async function POST(request: NextRequest
         userId: user.userId,
         userEmail: user.email,
         messagePreview: user_message.slice(0, 100),
-        companyId: user.companyId,
+        
         mode: user.mode,
       });
     }
@@ -209,7 +209,7 @@ export const POST = withResponseLogging(async function POST(request: NextRequest
         appEventRegistry.publish(AppEvents.LLM_CALL, {
           llmCalls: pythonResponse.llm_calls,
           conversationId: currentConversationID,
-          companyId: user.companyId,
+          
           mode: user.mode,
           userId: user.userId,
           userEmail: user.email,
@@ -265,11 +265,10 @@ export const POST = withResponseLogging(async function POST(request: NextRequest
     }
 
     // Publish soft Python errors (returned as HTTP 200 with error field)
-    if (pythonResponse.error && user?.companyId) {
+    if (pythonResponse.error && user) {
       appEventRegistry.publish(AppEvents.ERROR, {
         source: 'python_backend',
         message: pythonResponse.error,
-        companyId: user.companyId,
         mode: user.mode,
         context: { route: '/api/chat' },
       });
@@ -307,11 +306,10 @@ export const POST = withResponseLogging(async function POST(request: NextRequest
     // Handle other errors
     console.error('Chat API error:', error);
 
-    if (user?.companyId) {
+    if (user) {
       appEventRegistry.publish(AppEvents.ERROR, {
         source: 'nextjs_chat',
         message: error.message || 'Unknown error',
-        companyId: user.companyId,
         mode: user.mode,
         context: { route: '/api/chat' },
       });

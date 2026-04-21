@@ -50,7 +50,7 @@ export default function FileLayout(props: FileLayoutProps) {
   // Fetch sibling files from parent folder
   const { files: siblingFiles } = useFolder(filePath);
 
-  // Get company-specific config from Redux
+  // Get org config from Redux
   const { config } = useConfigs();
 
   // Build breadcrumb from file path

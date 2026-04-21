@@ -9,7 +9,7 @@ export default function PostgreSQLConfig({ config, onChange }: BaseConfigProps) 
       <Box>
         <Text fontSize="sm" fontWeight="700" mb={2}>Host</Text>
         <Input
-          value={config.host || 'localhost'}
+          value={config.host ?? ''}
           onChange={(e) => onChange({ ...config, host: e.target.value })}
           placeholder="localhost"
           fontFamily="mono"
@@ -20,8 +20,8 @@ export default function PostgreSQLConfig({ config, onChange }: BaseConfigProps) 
         <Text fontSize="sm" fontWeight="700" mb={2}>Port</Text>
         <Input
           type="number"
-          value={config.port || 5432}
-          onChange={(e) => onChange({ ...config, port: parseInt(e.target.value) || 5432 })}
+          value={config.port ?? ''}
+          onChange={(e) => onChange({ ...config, port: e.target.value === '' ? undefined : parseInt(e.target.value) })}
           placeholder="5432"
           fontFamily="mono"
         />

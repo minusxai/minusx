@@ -14,15 +14,11 @@
  */
 
 // Must be hoisted before any module imports
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_viewer_readonly_ui.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const,
-    DB_TYPE: 'sqlite',
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 jest.mock('@/store/filesSlice', () => {
   const actual = jest.requireActual('@/store/filesSlice');
@@ -74,8 +70,7 @@ const VIEWER_AUTH_USER = {
   email: 'viewer@example.com',
   name: 'Viewer User',
   role: 'viewer' as UserRole,
-  companyId: 1,
-  companyName: 'test-company',
+  companyName: 'test-workspace',
   home_folder: '/org',
   mode: 'org' as const,
 };
@@ -86,8 +81,7 @@ const VIEWER_EFFECTIVE_USER = {
   email: 'viewer@example.com',
   name: 'Viewer User',
   role: 'viewer' as UserRole,
-  companyId: 1,
-  companyName: 'test-company',
+  companyName: 'test-workspace',
   home_folder: '/org',
   mode: 'org' as const,
 };
@@ -104,7 +98,6 @@ function makeDashboardDbFile() {
     references: [] as number[],
     version: 1,
     last_edit_id: null,
-    company_id: 1,
   };
 }
 
@@ -120,28 +113,26 @@ function makeQuestionDbFile() {
     references: [] as number[],
     version: 1,
     last_edit_id: null,
-    company_id: 1,
   };
 }
 
-async function insertDashboardAndQuestion(dbPath: string): Promise<void> {
-  const { createAdapter } = await import('@/lib/database/adapter/factory');
-  const db = await createAdapter({ type: 'sqlite', sqlitePath: dbPath });
+async function insertDashboardAndQuestion(_dbPath: string): Promise<void> {
+  const { getAdapter } = await import('@/lib/database/adapter/factory');
+  const db = await getAdapter();
   const now = new Date().toISOString();
   await db.query(
-    `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-    [1, DASHBOARD_ID, 'Viewer Dashboard', '/org/Viewer Dashboard', 'dashboard',
+    `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [DASHBOARD_ID, 'Viewer Dashboard', '/org/Viewer Dashboard', 'dashboard',
       JSON.stringify({ assets: [], layout: null }), '[]', now, now]
   );
   await db.query(
-    `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-    [1, QUESTION_ID, 'Sales Revenue', '/org/Sales Revenue', 'question',
+    `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [QUESTION_ID, 'Sales Revenue', '/org/Sales Revenue', 'question',
       JSON.stringify({ query: 'SELECT 1', vizSettings: { type: 'table' }, connection_name: '' }),
       '[]', now, now]
   );
-  await db.close();
 }
 
 /**

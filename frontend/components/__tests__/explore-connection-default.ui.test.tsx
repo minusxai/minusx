@@ -12,15 +12,11 @@
 // Hoisted mocks — must appear before any import statements
 // ---------------------------------------------------------------------------
 
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_explore_connection_default_ui.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const,
-    DB_TYPE: 'sqlite',
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 const mockRouterPush = jest.fn();
 jest.mock('@/lib/navigation/use-navigation', () => ({
@@ -104,7 +100,7 @@ function makeConnectionFile(id: number, name: string, withSchema = true): DbFile
         },
       } : {}),
     },
-    company_id: 1,
+
     created_at: NOW,
     updated_at: NOW,
     references: [],

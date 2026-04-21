@@ -16,7 +16,6 @@ jest.mock('@/lib/config', () => ({
 import { createHash, randomBytes } from 'crypto';
 import { OAuthCodeDB, OAuthTokenDB } from '@/lib/oauth/db';
 
-const COMPANY_ID = 1;
 const USER_ID = 42;
 const REDIRECT_URI = 'http://localhost:3000/oauth/callback';
 
@@ -34,7 +33,7 @@ describe('OAuthCodeDB', () => {
   describe('create', () => {
     it('returns a non-empty plaintext code', async () => {
       const { challenge } = pkce();
-      const code = await OAuthCodeDB.create(COMPANY_ID, USER_ID, REDIRECT_URI, challenge);
+      const code = await OAuthCodeDB.create(USER_ID, REDIRECT_URI, challenge);
       expect(typeof code).toBe('string');
       expect(code.length).toBeGreaterThan(10);
     });
@@ -43,12 +42,11 @@ describe('OAuthCodeDB', () => {
   describe('consume', () => {
     it('returns user data when code, redirect_uri, and PKCE verifier are correct', async () => {
       const { verifier, challenge } = pkce();
-      const code = await OAuthCodeDB.create(COMPANY_ID, USER_ID, REDIRECT_URI, challenge);
+      const code = await OAuthCodeDB.create(USER_ID, REDIRECT_URI, challenge);
 
       const result = await OAuthCodeDB.consume(code, REDIRECT_URI, verifier);
 
       expect(result).not.toBeNull();
-      expect(result!.companyId).toBe(COMPANY_ID);
       expect(result!.userId).toBe(USER_ID);
     });
 
@@ -60,21 +58,21 @@ describe('OAuthCodeDB', () => {
     it('returns null when PKCE verifier does not match', async () => {
       const { challenge } = pkce();
       const { verifier: wrongVerifier } = pkce();
-      const code = await OAuthCodeDB.create(COMPANY_ID, USER_ID, REDIRECT_URI, challenge);
+      const code = await OAuthCodeDB.create(USER_ID, REDIRECT_URI, challenge);
 
       expect(await OAuthCodeDB.consume(code, REDIRECT_URI, wrongVerifier)).toBeNull();
     });
 
     it('returns null when redirect_uri does not match', async () => {
       const { verifier, challenge } = pkce();
-      const code = await OAuthCodeDB.create(COMPANY_ID, USER_ID, REDIRECT_URI, challenge);
+      const code = await OAuthCodeDB.create(USER_ID, REDIRECT_URI, challenge);
 
       expect(await OAuthCodeDB.consume(code, 'http://evil.example.com/callback', verifier)).toBeNull();
     });
 
     it('returns null on second consume — code is single-use', async () => {
       const { verifier, challenge } = pkce();
-      const code = await OAuthCodeDB.create(COMPANY_ID, USER_ID, REDIRECT_URI, challenge);
+      const code = await OAuthCodeDB.create(USER_ID, REDIRECT_URI, challenge);
 
       const first = await OAuthCodeDB.consume(code, REDIRECT_URI, verifier);
       expect(first).not.toBeNull();
@@ -85,7 +83,7 @@ describe('OAuthCodeDB', () => {
 
     it('preserves the optional scope value', async () => {
       const { verifier, challenge } = pkce();
-      const code = await OAuthCodeDB.create(COMPANY_ID, USER_ID, REDIRECT_URI, challenge, 'S256', 'read:schema');
+      const code = await OAuthCodeDB.create(USER_ID, REDIRECT_URI, challenge, 'S256', 'read:schema');
 
       const result = await OAuthCodeDB.consume(code, REDIRECT_URI, verifier);
       expect(result!.scope).toBe('read:schema');
@@ -93,7 +91,7 @@ describe('OAuthCodeDB', () => {
 
     it('returns null scope when none provided', async () => {
       const { verifier, challenge } = pkce();
-      const code = await OAuthCodeDB.create(COMPANY_ID, USER_ID, REDIRECT_URI, challenge);
+      const code = await OAuthCodeDB.create(USER_ID, REDIRECT_URI, challenge);
 
       const result = await OAuthCodeDB.consume(code, REDIRECT_URI, verifier);
       expect(result!.scope).toBeNull();
@@ -101,7 +99,7 @@ describe('OAuthCodeDB', () => {
 
     it('returns null for an expired code', async () => {
       const { verifier, challenge } = pkce();
-      const code = await OAuthCodeDB.create(COMPANY_ID, USER_ID, REDIRECT_URI, challenge);
+      const code = await OAuthCodeDB.create(USER_ID, REDIRECT_URI, challenge);
 
       // Manually expire the entry by backdating it
       const store = (globalThis as Record<string, unknown>).__oauthCodes as Map<string, { expiresAt: number }>;
@@ -115,7 +113,7 @@ describe('OAuthCodeDB', () => {
   describe('cleanupExpired', () => {
     it('removes expired entries without error', async () => {
       const { challenge } = pkce();
-      const code = await OAuthCodeDB.create(COMPANY_ID, USER_ID, REDIRECT_URI, challenge);
+      const code = await OAuthCodeDB.create(USER_ID, REDIRECT_URI, challenge);
 
       // Expire it
       const store = (globalThis as Record<string, unknown>).__oauthCodes as Map<string, { expiresAt: number }>;
@@ -136,7 +134,7 @@ describe('OAuthCodeDB', () => {
 describe('OAuthTokenDB', () => {
   describe('create', () => {
     it('returns an access token with correct shape', async () => {
-      const pair = await OAuthTokenDB.create(COMPANY_ID, USER_ID);
+      const pair = await OAuthTokenDB.create(USER_ID);
 
       expect(typeof pair.accessToken).toBe('string');
       expect(pair.accessToken.length).toBeGreaterThan(10);
@@ -145,8 +143,8 @@ describe('OAuthTokenDB', () => {
     });
 
     it('issues unique tokens on each call', async () => {
-      const a = await OAuthTokenDB.create(COMPANY_ID, USER_ID);
-      const b = await OAuthTokenDB.create(COMPANY_ID, USER_ID);
+      const a = await OAuthTokenDB.create(USER_ID);
+      const b = await OAuthTokenDB.create(USER_ID);
 
       expect(a.accessToken).not.toBe(b.accessToken);
     });
@@ -154,12 +152,11 @@ describe('OAuthTokenDB', () => {
 
   describe('validateAccessToken', () => {
     it('returns user data for a fresh valid token', async () => {
-      const { accessToken } = await OAuthTokenDB.create(COMPANY_ID, USER_ID);
+      const { accessToken } = await OAuthTokenDB.create(USER_ID);
 
       const result = await OAuthTokenDB.validateAccessToken(accessToken);
 
       expect(result).not.toBeNull();
-      expect(result!.companyId).toBe(COMPANY_ID);
       expect(result!.userId).toBe(USER_ID);
     });
 
@@ -171,7 +168,7 @@ describe('OAuthTokenDB', () => {
       // Sign with wrong secret using the same jwt library
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const jwt = require('jsonwebtoken') as typeof import('jsonwebtoken');
-      const forged = jwt.sign({ userId: USER_ID, companyId: COMPANY_ID, scope: null }, 'wrong-secret', { expiresIn: 3600 });
+      const forged = jwt.sign({ userId: USER_ID, scope: null }, 'wrong-secret', { expiresIn: 3600 });
 
       expect(await OAuthTokenDB.validateAccessToken(forged)).toBeNull();
     });
@@ -180,7 +177,7 @@ describe('OAuthTokenDB', () => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const jwt = require('jsonwebtoken') as typeof import('jsonwebtoken');
       const expired = jwt.sign(
-        { userId: USER_ID, companyId: COMPANY_ID, scope: null },
+        { userId: USER_ID, scope: null },
         'test-secret-for-unit-tests',
         { expiresIn: -1 }, // already expired
       );
@@ -189,14 +186,14 @@ describe('OAuthTokenDB', () => {
     });
 
     it('preserves the optional scope in the returned data', async () => {
-      const { accessToken } = await OAuthTokenDB.create(COMPANY_ID, USER_ID, 'read:schema');
+      const { accessToken } = await OAuthTokenDB.create(USER_ID, 'read:schema');
 
       const result = await OAuthTokenDB.validateAccessToken(accessToken);
       expect(result!.scope).toBe('read:schema');
     });
 
     it('returns null scope when none was set', async () => {
-      const { accessToken } = await OAuthTokenDB.create(COMPANY_ID, USER_ID);
+      const { accessToken } = await OAuthTokenDB.create(USER_ID);
 
       const result = await OAuthTokenDB.validateAccessToken(accessToken);
       expect(result!.scope).toBeNull();

@@ -60,39 +60,36 @@ export function createObjectStore(): ObjectStore {
 
 /**
  * Key path structure:
- *   Uploads/charts:  {companyId}/{type}/{userId}/{mode}/{YYYY-MM-DD}/{uuid}{ext}
- *   CSV files:       {companyId}/csvs/{mode}/{connectionName}/{uuid}{ext}
+ *   Uploads/charts:  {type}/{userId}/{mode}/{YYYY-MM-DD}/{uuid}{ext}
+ *   CSV files:       csvs/{mode}/{connectionName}/{uuid}{ext}
  *   Seed files:      seeds/mxfood/{table}.parquet  (shared, read-only)
  *
  * - type: 'uploads' | 'charts' | 'csvs'
- * - CSV keys are scoped to companyId + mode for company isolation.
  */
 export function generateUploadKey(params: {
-  companyId: number;
   userId: number;
   mode: string;
   type: 'uploads' | 'charts';
   ext: string; // e.g. '.jpg', '.png', '.pdf'
 }): string {
   const day = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  return `${params.companyId}/${params.type}/${params.userId}/${params.mode}/${day}/${randomUUID()}${params.ext}`;
+  return `${params.type}/${params.userId}/${params.mode}/${day}/${randomUUID()}${params.ext}`;
 }
 
 /**
  * Generate an S3 key for a CSV file upload.
- * Scoped to company + mode to prevent cross-company access.
+ * Scoped to mode for isolation.
  *
- * Key path: {companyId}/csvs/{mode}/{connectionName}/{uuid}.{ext}
+ * Key path: csvs/{mode}/{connectionName}/{uuid}.{ext}
  * The original file extension is preserved so parquet files keep their .parquet suffix in S3.
  */
 export function generateCsvUploadKey(params: {
-  companyId: number;
   mode: string;
   connectionName: string;
   filename: string;
 }): string {
   const ext = params.filename.split('.').pop()?.toLowerCase() || 'csv';
-  return `${params.companyId}/csvs/${params.mode}/${params.connectionName}/${randomUUID()}.${ext}`;
+  return `csvs/${params.mode}/${params.connectionName}/${randomUUID()}.${ext}`;
 }
 
 /** Shared S3 seed path for a single mxfood table. */
@@ -100,21 +97,20 @@ export function getMxfoodSeedKey(tableName: string): string {
   return `seeds/mxfood/${tableName}.parquet`;
 }
 
-/** Per-company destination key for a mxfood tutorial table. */
-export function getMxfoodCompanyKey(companyId: number, mode: string, tableName: string): string {
-  return `${companyId}/csvs/${mode}/mxfood/${tableName}.parquet`;
+/** Destination key for a mxfood tutorial table. */
+export function getMxfoodTutorialKey(mode: string, tableName: string): string {
+  return `csvs/${mode}/mxfood/${tableName}.parquet`;
 }
 
 /**
  * Copy all mxfood seed Parquet files from the shared `seeds/mxfood/` prefix
- * to the company-specific `{companyId}/csvs/{mode}/mxfood/` prefix using
+ * to the mode-specific `csvs/{mode}/mxfood/` prefix using
  * server-side S3 CopyObject (no data transfer through Node.js).
  *
  * Returns the list of table names that were copied successfully.
  * Failures are logged but do not throw — call is best-effort.
  */
-export async function copySeedMxfoodForCompany(
-  companyId: number,
+export async function copySeedMxfoodForMode(
   mode: string,
   tableNames: string[],
 ): Promise<string[]> {
@@ -129,11 +125,11 @@ export async function copySeedMxfoodForCompany(
     try {
       await store.copyObject(
         getMxfoodSeedKey(table),
-        getMxfoodCompanyKey(companyId, mode, table),
+        getMxfoodTutorialKey(mode, table),
       );
       copied.push(table);
     } catch (err) {
-      console.warn(`[copySeedMxfoodForCompany] Failed to copy ${table} for company ${companyId}:`, err);
+      console.warn(`[copySeedMxfoodForMode] Failed to copy ${table}:`, err);
     }
   }));
 

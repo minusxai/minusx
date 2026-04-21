@@ -30,7 +30,6 @@ async function getRequestPath(): Promise<string | undefined> {
 }
 
 interface RequestUserContext {
-  companyId: string | null;
   userId: string | null;
   mode: string | null;
 }
@@ -39,12 +38,11 @@ async function getRequestUser(): Promise<RequestUserContext> {
   try {
     const h = await headers();
     return {
-      companyId: h.get('x-company-id'),
       userId: h.get('x-user-id'),
       mode: h.get('x-mode'),
     };
   } catch {
-    return { companyId: null, userId: null, mode: null };
+    return { userId: null, mode: null };
   }
 }
 

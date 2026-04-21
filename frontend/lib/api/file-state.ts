@@ -565,7 +565,6 @@ export async function publishFile(
     path: fileState.metadataChanges?.path || fileState.path,
     type: fileState.type,
     content: contentToSave,
-    company_id: state.auth.user?.companyId
   };
 
   const extractReferences = extractReferencesFromContent;
@@ -610,19 +609,43 @@ export async function publishFile(
       savedName = result.data.name;
       updatedFile = result.data;
     } else {
-      const result = await FilesAPI.saveFile(
-        fileId,
-        fileData.name,
-        fileData.path,
-        fileData.content,
-        references,
-        undefined,
-        editId,
-        fileState.version
-      );
-      savedId = result.data.id;
-      savedName = result.data.name;
-      updatedFile = result.data;
+      let saveVersion = fileState.version;
+      let saveContent = fileData.content;
+      try {
+        const result = await FilesAPI.saveFile(
+          fileId,
+          fileData.name,
+          fileData.path,
+          saveContent,
+          references,
+          undefined,
+          editId,
+          saveVersion
+        );
+        savedId = result.data.id;
+        savedName = result.data.name;
+        updatedFile = result.data;
+      } catch (firstError) {
+        if (!(firstError instanceof ConflictError)) throw firstError;
+        // 409: server has a newer version (e.g. schema cache write).
+        // Merge our edits on top of the server's latest content and retry once.
+        const serverFile = firstError.currentFile;
+        getStore().dispatch(setFile({ file: serverFile }));
+        const retryContent = { ...serverFile.content, ...fileState.persistableChanges } as typeof saveContent;
+        const result = await FilesAPI.saveFile(
+          fileId,
+          fileData.name,
+          fileData.path,
+          retryContent,
+          references,
+          undefined,
+          editId,
+          serverFile.version
+        );
+        savedId = result.data.id;
+        savedName = result.data.name;
+        updatedFile = result.data;
+      }
     }
   } catch (error) {
     if (error instanceof ConflictError) {
@@ -985,7 +1008,7 @@ export async function createVirtualFile(
     ? providedVirtualId
     : generateVirtualId();
 
-  // Get user from Redux for folder resolution and company_id
+  // Get user from Redux for folder resolution
   const state = getStore().getState();
   const user = state.auth.user;
 
@@ -1024,13 +1047,12 @@ export async function createVirtualFile(
   const virtualFile: DbFile = {
     id: virtualId,
     name: template.fileName,
-    path: `${resolvedFolder}/${template.fileName}`,
+    path: `${resolvedFolder.replace(/\/+$/, '')}/${template.fileName}`,
     type: type,
     references: [],
     content: template.content,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
-    company_id: user?.companyId ?? 0,
     version: 1,
     last_edit_id: null,
   };
@@ -1080,10 +1102,6 @@ export async function createFolder(
     cacheStrategy: API.folders.create.cache,
   });
 
-  // Get user from Redux for company_id
-  const state = getStore().getState();
-  const companyId = state.auth.user?.companyId ?? 0;
-
   // Construct folder file object
   const now = new Date().toISOString();
   const folderFile: DbFile = {
@@ -1095,7 +1113,6 @@ export async function createFolder(
     content: { description: '' },
     created_at: now,
     updated_at: now,
-    company_id: companyId,
     version: 1,
     last_edit_id: null,
   };

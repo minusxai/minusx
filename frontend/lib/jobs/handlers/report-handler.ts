@@ -78,7 +78,7 @@ export const reportJobHandler: JobHandler = {
     // Build email messages for recipients when the report succeeded
     const messages: JobHandlerResult['messages'] = [];
     if (runData?.status === 'success' && report.recipients && report.recipients.length > 0) {
-      const baseUrl = await resolveBaseUrl(user.companyId);
+      const baseUrl = await resolveBaseUrl();
       const reportLink = `${baseUrl}/f/${runFileId}`;
       const subject = `[Report] ${reportName}`;
 

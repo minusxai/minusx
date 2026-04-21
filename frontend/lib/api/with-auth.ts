@@ -1,16 +1,16 @@
 /**
- * Auth middleware for Next.js API routes
- * Extracts repetitive authentication and authorization logic into reusable wrapper
+ * Auth middleware for Next.js API routes.
+ * Extracts repetitive authentication and authorization logic into a reusable wrapper.
+ *
+ * User context (user ID, mode) is established by middleware before the request reaches any
+ * API route via x-user-id and x-mode headers.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getEffectiveUser, type EffectiveUser } from '@/lib/auth/auth-helpers';
 import { ApiErrors } from '@/lib/api/api-responses';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
-/**
- * Type for authenticated API route handlers
- * Handler receives the request, authenticated user, and optional route context
- */
+
 type AuthHandler = (
   request: NextRequest,
   user: EffectiveUser,
@@ -19,17 +19,13 @@ type AuthHandler = (
 
 /**
  * Type for cron route handlers — no user, just the raw request.
- * The route is responsible for constructing per-company EffectiveUsers itself.
+ * The route is responsible for constructing per-org EffectiveUsers itself.
  */
 type CronHandler = (request: NextRequest) => Promise<NextResponse>;
 
 /**
  * Auth middleware for cron endpoints.
- *
  * Only accepts `Authorization: Bearer <CRON_SECRET>`. No session fallback.
- * The route receives the raw request and handles per-company logic itself.
- *
- * Required env var: CRON_SECRET
  */
 export function withCronAuth(handler: CronHandler) {
   return async (request: NextRequest) => {
@@ -37,7 +33,6 @@ export function withCronAuth(handler: CronHandler) {
     const cronSecret = process.env.CRON_SECRET;
     const authHeader = request.headers.get('authorization');
     if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-      // Return 200 to avoid leaking that this endpoint exists or requires auth
       return NextResponse.json({ ok: true });
     }
     return handler(request);
@@ -46,33 +41,21 @@ export function withCronAuth(handler: CronHandler) {
 
 export function withAuth(handler: AuthHandler) {
   return async (request: NextRequest, context?: any) => {
-    const authStart = Date.now();
-    console.log('[AUTH] Starting authentication check');
-
-    // Check if user is authenticated (considering impersonation)
     const user = await getEffectiveUser();
-    console.log(`[AUTH] getEffectiveUser took ${Date.now() - authStart}ms`);
 
     if (!user) {
       return ApiErrors.unauthorized();
     }
 
-    // Check if user has a company assigned (required for multi-tenant security)
-    if (!user.companyId) {
-      return ApiErrors.forbidden('User does not have a company assigned');
-    }
-
-    console.log(`[AUTH] Total auth check took ${Date.now() - authStart}ms`);
-    // User is authenticated and authorized, proceed to handler
     try {
       return await handler(request, user, context);
     } catch (e) {
       appEventRegistry.publish(AppEvents.ERROR, {
-        companyId: user.companyId,
+        
         mode: user.mode ?? 'org',
         source: `server:${request.nextUrl.pathname}`,
         message: e instanceof Error ? e.message : String(e),
-        context: { user: user.email, ...(user.companyName ? { company: user.companyName } : {}) },
+        context: { user: user.email },
       });
       throw e;
     }

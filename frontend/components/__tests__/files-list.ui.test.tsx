@@ -17,7 +17,6 @@ function makeQuestion(id: number, name: string) {
     references: [] as number[],
     version: 1,
     last_edit_id: null,
-    company_id: 1,
   };
 }
 
@@ -33,7 +32,6 @@ function makeContext(id: number, name: string) {
     references: [] as number[],
     version: 1,
     last_edit_id: null,
-    company_id: 1,
   };
 }
 

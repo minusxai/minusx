@@ -30,27 +30,27 @@ export interface FileTypeAccessOverride {
  */
 export type AccessRulesOverride = Partial<Record<UserRole, FileTypeAccessOverride>>;
 
-export interface CompanyBranding {
-  displayName: string;  // Company display name
+export interface OrgBranding {
+  displayName: string;  // Workspace display name
   agentName: string;    // Agent name
   favicon: string;      // Favicon URL
   logoLight?: string;   // Light mode logo URL
   logoDark?: string;    // Dark mode logo URL
 }
 
-export interface CompanyLinks {
+export interface OrgLinks {
   docsUrl: string;
   supportUrl: string;
   githubIssuesUrl: string;
 }
 
 /**
- * Company configuration structure
+ * Org configuration structure
  * Parent type containing branding and future config sections
  */
-export interface CompanyConfig {
-  branding: CompanyBranding;
-  links: CompanyLinks;
+export interface OrgConfig {
+  branding: OrgBranding;
+  links: OrgLinks;
   messaging?: {
     webhooks: MessagingWebhook[];
   };
@@ -58,7 +58,7 @@ export interface CompanyConfig {
   error_delivery?: AlertRecipient[];
   city?: string;  // Optional city identifier for agent context
   thinkingPhrases?: string[];  // Optional custom thinking phrases for AI indicator
-  accessRules?: AccessRulesOverride;  // Per-company file type access overrides (overrides rules.json)
+  accessRules?: AccessRulesOverride;  // Per-org file type access overrides (overrides rules.json)
   setupWizard?: SetupWizard;
   bots?: ConfigBot[];
   allowedVizTypes?: VisualizationType[];  // Restrict available visualization types (default: all)
@@ -69,7 +69,7 @@ export interface CompanyConfig {
  * Default configuration
  * Used as fallback when no config file exists, or for deep merge with partial configs
  */
-export const DEFAULT_CONFIG: CompanyConfig = {
+export const DEFAULT_CONFIG: OrgConfig = {
   branding: {
     displayName: 'MinusX',
     agentName: 'MinusX',
@@ -92,11 +92,11 @@ export const DEFAULT_CONFIG: CompanyConfig = {
 };
 
 /**
- * Default CSS styles for company branding
+ * Default CSS styles for org branding
  * Uses aria-label selectors to style logo elements
  */
 export const DEFAULT_STYLES = `
-[aria-label="Company logo"] {
+[aria-label="Workspace logo"] {
   background-image: url('/logox_dark.svg');
   background-size: contain;
   background-position: center;
@@ -104,7 +104,7 @@ export const DEFAULT_STYLES = `
   display: block;
 }
 
-.dark [aria-label="Company logo"] {
+.dark [aria-label="Workspace logo"] {
   background-image: url('/logox.svg');
 }
 `.trim();
@@ -114,9 +114,9 @@ export const DEFAULT_STYLES = `
  * Database values override defaults
  */
 export function mergeConfig(
-  defaults: CompanyConfig,
-  overrides: Partial<CompanyConfig>
-): CompanyConfig {
+  defaults: OrgConfig,
+  overrides: Partial<OrgConfig>
+): OrgConfig {
   return {
     branding: {
       ...defaults.branding,
@@ -143,7 +143,7 @@ export function mergeConfig(
 }
 
 export function getBrandLogoUrl(
-  branding: Partial<CompanyBranding> | undefined,
+  branding: Partial<OrgBranding> | undefined,
   colorMode: 'light' | 'dark',
 ): string {
   if (colorMode === 'dark') {

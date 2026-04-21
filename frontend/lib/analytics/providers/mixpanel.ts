@@ -29,10 +29,7 @@ export class MixpanelProvider implements AnalyticsProvider {
   identify(properties: UserProperties): void {
     if (!this.initialized) return;
 
-    // Use composite key: companyId/email
-    // - companyId: immutable, ensures company isolation
-    // - email: human-readable, globally unique
-    const distinctId = `${properties.companyId}/${properties.email}`;
+    const distinctId = properties.email;
 
     mixpanel.identify(distinctId);
     // $email / $name are Mixpanel reserved display fields; spread the rest of UserProperties

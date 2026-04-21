@@ -1,5 +1,5 @@
 import 'server-only';
-import { DocumentDB, AccessTokenDB } from '@/lib/database/documents-db';
+import { DocumentDB } from '@/lib/database/documents-db';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
 import { DbFile, BaseFileContent, FileType, QuestionContent, DocumentContent, ConnectionContent, ContextContent, ReportContent, AlertContent, TransformationContent } from '@/lib/types';
 import { IFilesDataLayer } from './files.interface';
@@ -29,7 +29,7 @@ import { validateFileState } from '@/lib/validation/content-validators';
 import { PROTECTED_FILE_PATHS } from '@/lib/constants';
 import { canAccessFileType, canCreateFileType, validateFileLocation, canDeleteFileType, canCreateFileByRole } from '@/lib/auth/access-rules';
 import type { AccessRulesOverride } from '@/lib/branding/whitelabel';
-import { getConfigsByCompanyId } from './configs.server';
+import { getConfigs } from './configs.server';
 import { resolvePath, resolveHomeFolderSync, isFileTypeAllowedInPath, resolveHomeFolder } from '@/lib/mode/path-resolver';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { getLoader, LoaderOptions } from './loaders';
@@ -39,14 +39,15 @@ import { makeDefaultContextContent, resolveVersionWhitelist } from '@/lib/contex
 import { selectDatabase } from '@/lib/utils/database-selector';
 import { getFileAnalyticsSummary, getFilesAnalyticsSummary, getConversationAnalytics } from '@/lib/analytics/file-analytics.server';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
+import { hashContent } from '@/lib/utils/query-hash';
 
 /**
  * Resolves direct child IDs for a folder path.
  * Injected into extractReferenceIds to break the circular import that would
  * arise if references.ts imported FilesAPI directly.
  */
-const resolveChildIds = async (folderPath: string, companyId: number): Promise<number[]> => {
-  const children = await DocumentDB.listAll(companyId, undefined, [folderPath], 1, false);
+const resolveChildIds = async (folderPath: string): Promise<number[]> => {
+  const children = await DocumentDB.listAll(undefined, [folderPath], 1, false);
   return children.map(c => c.id);
 };
 
@@ -68,11 +69,11 @@ export class ConflictError extends Error {
  */
 class FilesDataLayerServer implements IFilesDataLayer {
   /**
-   * Load access rules overrides from company config (cached per-company by configs layer)
+   * Load access rules overrides from org config (cached per-org by configs layer)
    */
   private async _getOverrides(user: EffectiveUser): Promise<AccessRulesOverride | undefined> {
     try {
-      const { config } = await getConfigsByCompanyId(user.companyId, user.mode);
+      const { config } = await getConfigs(user);
       return config.accessRules;
     } catch {
       return undefined;
@@ -81,7 +82,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
   async loadFile(id: number, user: EffectiveUser, options?: LoaderOptions): Promise<LoadFileResult> {
     const dbStart = Date.now();
-    const file = await DocumentDB.getById(id, user.companyId);
+    const file = await DocumentDB.getById(id);
     console.log(`[FILES DataLayer] DocumentDB.getById took ${Date.now() - dbStart}ms`);
 
     if (!file) {
@@ -94,8 +95,6 @@ class FilesDataLayerServer implements IFilesDataLayer {
     // Check file access (unified: type + mode + path) - Phase 4
     console.log(`[FILES DataLayer] Checking access for user:`, {
       email: user.email,
-      user_companyId: user.companyId,
-      file_companyId: file.company_id,
       role: user.role,
       fileType: file.type,
       fileId: id
@@ -109,9 +108,9 @@ class FilesDataLayerServer implements IFilesDataLayer {
     const refIds = await extractReferenceIds(file, resolveChildIds);
     const isConversation = file.type === 'conversation';
     const [references, analytics, conversationAnalytics] = await Promise.all([
-      refIds.length > 0 ? DocumentDB.getByIds(refIds, user.companyId) : Promise.resolve([]),
-      getFileAnalyticsSummary(id, user.companyId).catch(() => null),
-      isConversation ? getConversationAnalytics(id, user.companyId).catch(() => null) : Promise.resolve(null),
+      refIds.length > 0 ? DocumentDB.getByIds(refIds) : Promise.resolve([]),
+      getFileAnalyticsSummary(id).catch(() => null),
+      isConversation ? getConversationAnalytics(id).catch(() => null) : Promise.resolve(null),
     ]);
     console.log(`[FILES DataLayer] Loading ${refIds.length} references took ${Date.now() - refStart}ms`);
 
@@ -125,7 +124,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
         userId: user.userId,
         userEmail: user.email,
         userRole: user.role,
-        companyId: user.companyId,
+        
         mode: user.mode,
         referencedByFileId: file.id,
         referencedByFileType: file.type,
@@ -165,7 +164,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
   }
 
   async loadFiles(ids: number[], user: EffectiveUser, options?: LoaderOptions): Promise<LoadFilesResult> {
-    const files = await DocumentDB.getByIds(ids, user.companyId);
+    const files = await DocumentDB.getByIds(ids);
     const overrides = await this._getOverrides(user);
 
     // Filter by unified permission check (Phase 4)
@@ -183,8 +182,8 @@ class FilesDataLayerServer implements IFilesDataLayer {
     const uniqueRefIds = [...new Set([...folderRefIdArrays.flat(), ...contentRefIdArrays.flat()])];
 
     const [references, analytics] = await Promise.all([
-      uniqueRefIds.length > 0 ? DocumentDB.getByIds(uniqueRefIds, user.companyId) : Promise.resolve([]),
-      getFilesAnalyticsSummary(filteredFiles.map(f => f.id), user.companyId).catch(() => ({})),
+      uniqueRefIds.length > 0 ? DocumentDB.getByIds(uniqueRefIds) : Promise.resolve([]),
+      getFilesAnalyticsSummary(filteredFiles.map(f => f.id)).catch(() => ({})),
     ]);
 
     // Reference filtering depends on the parent file type:
@@ -227,7 +226,6 @@ class FilesDataLayerServer implements IFilesDataLayer {
     // Pass path filters and depth to database for SQL-level filtering
     // Phase 6: Skip content loading for performance - references are cached in DB column
     let files = await DocumentDB.listAll(
-      user.companyId,
       type,
       paths.length > 0 ? paths : undefined,
       depth,
@@ -260,7 +258,6 @@ class FilesDataLayerServer implements IFilesDataLayer {
       references: await extractReferenceIds(file, resolveChildIds),
       created_at: file.created_at,
       updated_at: file.updated_at,
-      company_id: file.company_id,
       version: file.version,
       last_edit_id: file.last_edit_id,
     })));
@@ -273,7 +270,6 @@ class FilesDataLayerServer implements IFilesDataLayer {
       references: [],
       created_at: file.created_at,
       updated_at: file.updated_at,
-      company_id: file.company_id,
       version: file.version,
       last_edit_id: file.last_edit_id,
     }));
@@ -289,9 +285,9 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     // Idempotency: if this editId was already used, return the existing file
     if (editId) {
-      const existing = await DocumentDB.getByEditId(editId, user.companyId);
+      const existing = await DocumentDB.getByEditId(editId);
       if (existing) {
-        const existingFile = await DocumentDB.getById(existing.id, user.companyId);
+        const existingFile = await DocumentDB.getById(existing.id);
         if (existingFile) {
           return { data: existingFile };
         }
@@ -338,7 +334,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
         user.mode,
         user.home_folder || '',
         async (checkPath) => {
-          const exists = await DocumentDB.getByPath(checkPath, user.companyId);
+          const exists = await DocumentDB.getByPath(checkPath);
           return exists !== null;
         }
       );
@@ -370,7 +366,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     // Handle returnExisting option: return existing file if path exists
     if (options?.returnExisting) {
-      const existingFile = await DocumentDB.getByPath(finalPath, user.companyId);
+      const existingFile = await DocumentDB.getByPath(finalPath);
       if (existingFile) {
         return { data: existingFile };
       }
@@ -380,7 +376,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     if (!options?.createPath) {
       const parentPath = finalPath.substring(0, finalPath.lastIndexOf('/'));
       if (parentPath) {
-        const parent = await DocumentDB.getByPath(parentPath, user.companyId);
+        const parent = await DocumentDB.getByPath(parentPath);
         if (!parent || parent.type !== 'folder') {
           throw new UserFacingError(`Cannot create file: parent folder '${parentPath}' does not exist`);
         }
@@ -395,7 +391,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
       // Create each parent folder if it doesn't exist
       for (let i = 0; i < pathSegments.length - 1; i++) {
         currentPath += '/' + pathSegments[i];
-        const folderExists = await DocumentDB.getByPath(currentPath, user.companyId);
+        const folderExists = await DocumentDB.getByPath(currentPath);
 
         if (!folderExists) {
           await DocumentDB.create(
@@ -403,15 +399,14 @@ class FilesDataLayerServer implements IFilesDataLayer {
             currentPath,
             'folder',
             { name: pathSegments[i] },
-            [],  // Phase 6: Folders have no references
-            user.companyId
+            []  // Phase 6: Folders have no references
           );
           // Create default context for the new folder
           const contextPath = `${currentPath}/context`;
-          const contextExists = await DocumentDB.getByPath(contextPath, user.companyId);
+          const contextExists = await DocumentDB.getByPath(contextPath);
           if (!contextExists) {
             await DocumentDB.create('Knowledge Base', contextPath, 'context',
-              makeDefaultContextContent(user.userId), [], user.companyId);
+              makeDefaultContextContent(user.userId), []);
           }
         }
       }
@@ -434,14 +429,14 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     // Create file in database (returns numeric ID)
     // Phase 6: Pass references from client (server is dumb, no extraction)
-    const newFileId = await DocumentDB.create(name, finalPath, type, contentToCreate, references, user.companyId, editId);
+    const newFileId = await DocumentDB.create(name, finalPath, type, contentToCreate, references, editId);
 
     if (!newFileId) {
       throw new Error('Failed to create file');
     }
 
     // Fetch the newly created file
-    const newFile = await DocumentDB.getById(newFileId, user.companyId);
+    const newFile = await DocumentDB.getById(newFileId);
 
     if (!newFile) {
       throw new Error('File not found after creation');
@@ -456,17 +451,17 @@ class FilesDataLayerServer implements IFilesDataLayer {
       userId: user.userId,
       userEmail: user.email,
       userRole: user.role,
-      companyId: user.companyId,
+      
       mode: user.mode,
     });
 
     // Atomically create default context for every new folder
     if (type === 'folder') {
       const contextPath = `${finalPath}/context`;
-      const existingContext = await DocumentDB.getByPath(contextPath, user.companyId);
+      const existingContext = await DocumentDB.getByPath(contextPath);
       if (!existingContext) {
         const contextContent = makeDefaultContextContent(user.userId);
-        await DocumentDB.create('Knowledge Base', contextPath, 'context', contextContent, [], user.companyId);
+        await DocumentDB.create('Knowledge Base', contextPath, 'context', contextContent, []);
       }
     }
 
@@ -477,7 +472,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
   async saveFile(id: number, name: string, path: string, content: BaseFileContent, references: number[], user: EffectiveUser, editId?: string, expectedVersion?: number): Promise<SaveFileResult> {
     // Get existing file
-    const existingFile = await DocumentDB.getById(id, user.companyId);
+    const existingFile = await DocumentDB.getById(id);
 
     if (!existingFile) {
       throw new FileNotFoundError(id);
@@ -543,18 +538,18 @@ class FilesDataLayerServer implements IFilesDataLayer {
     const newParentPath = path.substring(0, path.lastIndexOf('/'));
     const oldParentPath = existingFile.path.substring(0, existingFile.path.lastIndexOf('/'));
     if (newParentPath && newParentPath !== oldParentPath) {
-      const parent = await DocumentDB.getByPath(newParentPath, user.companyId);
+      const parent = await DocumentDB.getByPath(newParentPath);
       if (!parent || parent.type !== 'folder') {
         throw new UserFacingError(`Cannot save file: parent folder '${newParentPath}' does not exist`);
       }
     }
 
     // Phase 6: Server is dumb - just saves what client sends (no extraction)
-    const updateResult = await DocumentDB.update(id, name, path, contentToSave, references, user.companyId, editId, expectedVersion);
+    const updateResult = await DocumentDB.update(id, name, path, contentToSave, references, editId ?? hashContent({ id, content: contentToSave }), expectedVersion);
 
     if ('alreadyApplied' in updateResult && updateResult.alreadyApplied) {
       // Already applied — return the current file as success
-      const currentFile = await DocumentDB.getById(id, user.companyId);
+      const currentFile = await DocumentDB.getById(id);
       if (!currentFile) {
         throw new Error('File not found after update');
       }
@@ -563,7 +558,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     if ('conflict' in updateResult && updateResult.conflict) {
       // Version conflict — throw ConflictError with the current server file
-      const currentFile = await DocumentDB.getById(id, user.companyId);
+      const currentFile = await DocumentDB.getById(id);
       if (!currentFile) {
         throw new Error('File not found during conflict check');
       }
@@ -579,7 +574,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
       userId: user.userId,
       userEmail: user.email,
       userRole: user.role,
-      companyId: user.companyId,
+      
       mode: user.mode,
     });
 
@@ -596,7 +591,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
 
     // For other types, fetch updated file normally
-    const updatedFile = await DocumentDB.getById(id, user.companyId);
+    const updatedFile = await DocumentDB.getById(id);
 
     if (!updatedFile) {
       throw new Error('File not found after update');
@@ -608,7 +603,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
   }
 
   async loadFileByPath(path: string, user: EffectiveUser, options?: LoaderOptions): Promise<LoadFileResult> {
-    const file = await DocumentDB.getByPath(path, user.companyId);
+    const file = await DocumentDB.getByPath(path);
 
     if (!file) {
       throw new FileNotFoundError(`File not found at path: ${path}`);
@@ -801,10 +796,29 @@ class FilesDataLayerServer implements IFilesDataLayer {
   }
 
   async batchCreateFiles(inputs: BatchCreateInput[], user: EffectiveUser): Promise<BatchCreateFileResult> {
+    // Validate: no path in the batch may be a prefix of another path.
+    // e.g. a dashboard at /org/Foo and a question at /org/Foo/bar is illegal —
+    // /org/Foo cannot be both a file and a parent folder.
+    const paths = inputs.map(i => i.path);
+    for (let i = 0; i < paths.length; i++) {
+      for (let j = 0; j < paths.length; j++) {
+        if (i !== j && paths[j].startsWith(paths[i] + '/')) {
+          throw new UserFacingError(
+            `Path conflict in batch: '${paths[i]}' (${inputs[i].type}) is used as both a file path ` +
+            `and a parent folder for '${paths[j]}' (${inputs[j].type}). ` +
+            `A file and its containing folder cannot share the same path.`
+          );
+        }
+      }
+    }
+
     const results: Array<{ virtualId: number; file: DbFile }> = [];
     for (const input of inputs) {
       const { virtualId, ...createInput } = input;
-      const result = await this.createFile(createInput, user);
+      const result = await this.createFile(
+        { ...createInput, options: { ...createInput.options, createPath: true } },
+        user
+      );
       results.push({ virtualId, file: result.data });
     }
     return { data: results };
@@ -820,7 +834,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
   }
 
   async deleteFile(id: number, user: EffectiveUser): Promise<DeleteFileResult> {
-    const file = await DocumentDB.getById(id, user.companyId);
+    const file = await DocumentDB.getById(id);
     if (!file) {
       throw new FileNotFoundError(id);
     }
@@ -855,7 +869,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     let deletedCount: number;
     if (file.type === 'folder') {
-      const descendants = await DocumentDB.listAll(user.companyId, undefined, [file.path], -1, false);
+      const descendants = await DocumentDB.listAll(undefined, [file.path], -1, false);
       // A 'context' file is normally undeletable, BUT it can be cascade-deleted when
       // its parent folder is also being deleted (the folder is either the root being
       // deleted, or another folder in the subtree that is also being deleted).
@@ -877,9 +891,9 @@ class FilesDataLayerServer implements IFilesDataLayer {
         );
       }
       const allIds = [...descendants.map(f => f.id), id];
-      deletedCount = await DocumentDB.deleteByIds(allIds, user.companyId);
+      deletedCount = await DocumentDB.deleteByIds(allIds);
     } else {
-      deletedCount = await DocumentDB.deleteByIds([id], user.companyId);
+      deletedCount = await DocumentDB.deleteByIds([id]);
       if (deletedCount === 0) {
         throw new FileNotFoundError(id);
       }
@@ -893,7 +907,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
       userId: user.userId,
       userEmail: user.email,
       userRole: user.role,
-      companyId: user.companyId,
+      
       mode: user.mode,
     });
 
@@ -903,7 +917,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
   async moveFile(input: MoveFileInput, user: EffectiveUser): Promise<MoveFileResult> {
     const { id, name, newPath } = input;
 
-    const file = await DocumentDB.getById(id, user.companyId);
+    const file = await DocumentDB.getById(id);
     if (!file) {
       throw new FileNotFoundError(id);
     }
@@ -918,7 +932,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
     const newParentPath = newPath.substring(0, newPath.lastIndexOf('/'));
     const oldParentPath = oldPath.substring(0, oldPath.lastIndexOf('/'));
     if (newParentPath && newParentPath !== oldParentPath) {
-      const parent = await DocumentDB.getByPath(newParentPath, user.companyId);
+      const parent = await DocumentDB.getByPath(newParentPath);
       if (!parent || parent.type !== 'folder') {
         throw new UserFacingError(`Parent folder '${newParentPath}' does not exist`);
       }
@@ -926,7 +940,7 @@ class FilesDataLayerServer implements IFilesDataLayer {
 
     if (file.type === 'folder' && oldPath !== newPath) {
       // Fetch all descendants (metadata only)
-      const descendants = await DocumentDB.listAll(user.companyId, undefined, [oldPath], -1, false);
+      const descendants = await DocumentDB.listAll(undefined, [oldPath], -1, false);
 
       // Check move permission on every descendant
       const blocked = descendants.filter(f => !canDeleteFileType(f.type));
@@ -937,9 +951,9 @@ class FilesDataLayerServer implements IFilesDataLayer {
       }
 
       const descendantIds = descendants.map(f => f.id);
-      await DocumentDB.moveFolderAndChildren(id, descendantIds, oldPath, newPath, name, user.companyId);
+      await DocumentDB.moveFolderAndChildren(id, descendantIds, oldPath, newPath, name);
     } else {
-      const success = await DocumentDB.updateMetadata(id, name, newPath, user.companyId);
+      const success = await DocumentDB.updateMetadata(id, name, newPath);
       if (!success) {
         throw new FileNotFoundError(id);
       }

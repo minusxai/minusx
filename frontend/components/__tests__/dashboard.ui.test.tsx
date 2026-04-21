@@ -18,15 +18,11 @@
 
 // Must be hoisted before any module imports
 
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_dashboard_ui.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const,
-    DB_TYPE: 'sqlite',
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 // Wrap generateVirtualId in jest.fn so combined-flow tests can use
 // mockReturnValueOnce to predict which virtual IDs Navigate and CreateFile produce.
@@ -101,7 +97,7 @@ function makeDashboardDbFile() {
     references: [] as number[],
     version: 1,
     last_edit_id: null,
-    company_id: 1,
+
   };
 }
 
@@ -117,7 +113,7 @@ function makeQuestionDbFile() {
     references: [] as number[],
     version: 1,
     last_edit_id: null,
-    company_id: 1,
+
   };
 }
 
@@ -133,7 +129,7 @@ function makeQuestionDbFile2() {
     references: [] as number[],
     version: 1,
     last_edit_id: null,
-    company_id: 1,
+
   };
 }
 
@@ -220,23 +216,22 @@ function AutoPublishUserInput() {
  * Insert the shared dashboard + question fixtures into the test SQLite DB.
  * Used as `customInit` in setupTestDb for tests that need pre-existing files.
  */
-async function insertDashboardAndQuestion(dbPath: string): Promise<void> {
-  const { createAdapter } = await import('@/lib/database/adapter/factory');
-  const db = await createAdapter({ type: 'sqlite', sqlitePath: dbPath });
+async function insertDashboardAndQuestion(_dbPath: string): Promise<void> {
+  const { getAdapter } = await import('@/lib/database/adapter/factory');
+  const db = await getAdapter();
   const now = new Date().toISOString();
   await db.query(
-    `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-    [1, DASHBOARD_ID, 'Test Dashboard', '/org/Test Dashboard', 'dashboard',
+    `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [DASHBOARD_ID, 'Test Dashboard', '/org/Test Dashboard', 'dashboard',
       JSON.stringify({ assets: [], layout: null }), '[]', now, now]
   );
   await db.query(
-    `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-    [1, QUESTION_ID, QUESTION_NAME, `/org/${QUESTION_NAME}`, 'question',
+    `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [QUESTION_ID, QUESTION_NAME, `/org/${QUESTION_NAME}`, 'question',
       JSON.stringify({ query: 'SELECT 1', vizSettings: { type: 'table' }, connection_name: '' }), '[]', now, now]
   );
-  await db.close();
 }
 
 /**
@@ -244,48 +239,46 @@ async function insertDashboardAndQuestion(dbPath: string): Promise<void> {
  */
 async function insertDashboardAndTwoQuestions(dbPath: string): Promise<void> {
   await insertDashboardAndQuestion(dbPath);
-  const { createAdapter } = await import('@/lib/database/adapter/factory');
-  const db = await createAdapter({ type: 'sqlite', sqlitePath: dbPath });
+  const { getAdapter } = await import('@/lib/database/adapter/factory');
+  const db = await getAdapter();
   const now = new Date().toISOString();
   await db.query(
-    `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-    [1, QUESTION_ID_2, 'Regional Revenue', '/org/Regional Revenue', 'question',
+    `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [QUESTION_ID_2, 'Regional Revenue', '/org/Regional Revenue', 'question',
       JSON.stringify({ query: 'SELECT region FROM sales GROUP BY region', vizSettings: { type: 'table' }, connection_name: '' }),
       '[]', now, now]
   );
-  await db.close();
 }
 
 /**
  * Seeds dashboard(1) + two questions with a shared :start_date param — for parameter merging tests.
  */
-async function insertQuestionsWithSharedParams(dbPath: string): Promise<void> {
-  const { createAdapter } = await import('@/lib/database/adapter/factory');
-  const db = await createAdapter({ type: 'sqlite', sqlitePath: dbPath });
+async function insertQuestionsWithSharedParams(_dbPath: string): Promise<void> {
+  const { getAdapter } = await import('@/lib/database/adapter/factory');
+  const db = await getAdapter();
   const now = new Date().toISOString();
   await db.query(
-    `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-    [1, DASHBOARD_ID, 'Param Dashboard', '/org/Param Dashboard', 'dashboard',
+    `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [DASHBOARD_ID, 'Param Dashboard', '/org/Param Dashboard', 'dashboard',
       JSON.stringify({ assets: [{ type: 'question', id: QUESTION_ID }, { type: 'question', id: QUESTION_ID_2 }], layout: null }),
       JSON.stringify([QUESTION_ID, QUESTION_ID_2]), now, now]
   );
   await db.query(
-    `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-    [1, QUESTION_ID, 'Orders Q', '/org/Orders Q', 'question',
+    `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [QUESTION_ID, 'Orders Q', '/org/Orders Q', 'question',
       JSON.stringify({ query: 'SELECT * FROM orders WHERE order_date >= :start_date', parameters: [], vizSettings: { type: 'table' }, connection_name: '' }),
       '[]', now, now]
   );
   await db.query(
-    `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-    [1, QUESTION_ID_2, 'Revenue Q', '/org/Revenue Q', 'question',
+    `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [QUESTION_ID_2, 'Revenue Q', '/org/Revenue Q', 'question',
       JSON.stringify({ query: 'SELECT * FROM revenue WHERE order_date >= :start_date AND region = :region', parameters: [], vizSettings: { type: 'table' }, connection_name: '' }),
       '[]', now, now]
   );
-  await db.close();
 }
 
 /**
@@ -507,7 +500,7 @@ describe('Create new dashboard and question, then publishAll', () => {
         path: `/org/${Q_NAME}`,
         content: { query: '', vizSettings: { type: 'table' as const }, connection_name: '' },
         created_at: '', updated_at: '', references: [] as number[],
-        version: 1, last_edit_id: null, company_id: 1,
+        version: 1, last_edit_id: null,
       },
       references: [],
     }));
@@ -517,7 +510,7 @@ describe('Create new dashboard and question, then publishAll', () => {
         path: `/org/${DASH_NAME}`,
         content: { assets: [], layout: null },
         created_at: '', updated_at: '', references: [] as number[],
-        version: 1, last_edit_id: null, company_id: 1,
+        version: 1, last_edit_id: null,
       },
       references: [],
     }));
@@ -777,7 +770,7 @@ describe('Dashboard agentic scenarios', () => {
         path: `/org/${AGENTIC_Q_NAME}`,
         content: { query: '', vizSettings: { type: 'table' as const }, connection_name: '' },
         created_at: '', updated_at: '',
-        references: [] as number[], version: 1, last_edit_id: null, company_id: 1,
+        references: [] as number[], version: 1, last_edit_id: null,
       },
       references: [],
     }));
@@ -787,7 +780,7 @@ describe('Dashboard agentic scenarios', () => {
         path: `/org/${AGENTIC_DASH_NAME}`,
         content: { assets: [], layout: null },
         created_at: '', updated_at: '',
-        references: [] as number[], version: 1, last_edit_id: null, company_id: 1,
+        references: [] as number[], version: 1, last_edit_id: null,
       },
       references: [],
     }));
@@ -1207,7 +1200,7 @@ describe('publishAll retry idempotency', () => {
         path: `/org/${Q_RETRY_NAME}`,
         content: { query: 'SELECT retry FROM data', vizSettings: { type: 'table' as const }, connection_name: '' },
         created_at: '', updated_at: '', references: [] as number[],
-        version: 1, last_edit_id: null, company_id: 1,
+        version: 1, last_edit_id: null,
       },
       references: [],
     }));
@@ -1221,7 +1214,7 @@ describe('publishAll retry idempotency', () => {
         path: `/org/${DASH_RETRY_NAME}`,
         content: { assets: [], layout: null },
         created_at: '', updated_at: '', references: [] as number[],
-        version: 1, last_edit_id: null, company_id: 1,
+        version: 1, last_edit_id: null,
       },
       references: [],
     }));
@@ -1305,7 +1298,7 @@ describe('publishAll error handling', () => {
         path: '/org/Q',
         content: { query: '', vizSettings: { type: 'table' as const }, connection_name: '' },
         created_at: '', updated_at: '', references: [] as number[],
-        version: 1, last_edit_id: null, company_id: 1,
+        version: 1, last_edit_id: null,
       },
       references: [],
     }));
@@ -1355,7 +1348,7 @@ describe('publishAll error handling', () => {
         id: A, name: 'DashA', type: 'dashboard' as const, path: '/org/DashA',
         content: { assets: [{ type: 'question' as const, id: B }], layout: null },
         created_at: '', updated_at: '', references: [] as number[],
-        version: 1, last_edit_id: null, company_id: 1,
+        version: 1, last_edit_id: null,
       },
       references: [],
     }));
@@ -1364,7 +1357,7 @@ describe('publishAll error handling', () => {
         id: B, name: 'DashB', type: 'dashboard' as const, path: '/org/DashB',
         content: { assets: [{ type: 'question' as const, id: A }], layout: null },
         created_at: '', updated_at: '', references: [] as number[],
-        version: 1, last_edit_id: null, company_id: 1,
+        version: 1, last_edit_id: null,
       },
       references: [],
     }));
@@ -1413,7 +1406,7 @@ describe('Mixed real + virtual publishAll', () => {
         path: '/org/Mix Query',
         content: { query: '', vizSettings: { type: 'table' as const }, connection_name: '' },
         created_at: '', updated_at: '', references: [] as number[],
-        version: 1, last_edit_id: null, company_id: 1,
+        version: 1, last_edit_id: null,
       },
       references: [],
     }));
@@ -1578,7 +1571,7 @@ describe('Dashboard parameter merging', () => {
     },
     created_at: '2025-01-01T00:00:00Z', updated_at: new Date().toISOString(),
     references: [QUESTION_ID, QUESTION_ID_2] as number[],
-    version: 1, last_edit_id: null, company_id: 1,
+    version: 1, last_edit_id: null,
   });
   const paramQ1 = () => ({
     id: QUESTION_ID, name: 'Orders Q', type: 'question' as const,
@@ -1590,7 +1583,7 @@ describe('Dashboard parameter merging', () => {
       connection_name: '',
     },
     created_at: '2025-01-01T00:00:00Z', updated_at: new Date().toISOString(),
-    references: [] as number[], version: 1, last_edit_id: null, company_id: 1,
+    references: [] as number[], version: 1, last_edit_id: null,
   });
   const paramQ2 = () => ({
     id: QUESTION_ID_2, name: 'Revenue Q', type: 'question' as const,
@@ -1602,7 +1595,7 @@ describe('Dashboard parameter merging', () => {
       connection_name: '',
     },
     created_at: '2025-01-01T00:00:00Z', updated_at: new Date().toISOString(),
-    references: [] as number[], version: 1, last_edit_id: null, company_id: 1,
+    references: [] as number[], version: 1, last_edit_id: null,
   });
 
   beforeEach(() => {

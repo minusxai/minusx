@@ -1,7 +1,7 @@
 /**
  * Session token manager for securing internal API calls
  *
- * Uses signed JWTs to encode company ID and mode.
+ * Uses signed JWTs to encode mode.
  * When Next.js calls Python backend, it generates a JWT token.
  * Python echoes this token back when calling Next.js internal APIs.
  * Next.js verifies the JWT signature to ensure authenticity.
@@ -19,7 +19,6 @@ import { NEXTAUTH_SECRET } from '@/lib/config';
 import { IS_DEV } from '@/lib/constants';
 
 interface SessionTokenPayload {
-  companyId: number;
   mode: Mode;
   iat: number;  // Issued at
   exp: number;  // Expiration
@@ -49,9 +48,8 @@ class SessionTokenManager {
   /**
    * Generate a new session token (JWT) for a request
    */
-  generate(companyId: number, mode: Mode = DEFAULT_MODE): string {
+  generate(mode: Mode = DEFAULT_MODE): string {
     const payload: Omit<SessionTokenPayload, 'iat' | 'exp'> = {
-      companyId,
       mode,
     };
 
@@ -63,14 +61,13 @@ class SessionTokenManager {
   }
 
   /**
-   * Validate a session token (JWT) and return the company ID and mode
+   * Validate a session token (JWT) and return the mode
    * Returns null if token is invalid, expired, or malformed
    */
-  validate(token: string): { companyId: number; mode: Mode } | null {
+  validate(token: string): { mode: Mode } | null {
     try {
       const decoded = jwt.verify(token, this.secret) as SessionTokenPayload;
       return {
-        companyId: decoded.companyId,
         mode: decoded.mode,
       };
     } catch (error) {

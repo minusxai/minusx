@@ -13,6 +13,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { authenticateOAuthRequest } from '@/lib/mcp/auth';
 import { createMcpServer } from '@/lib/mcp/server';
+import { getModules } from '@/lib/modules/registry';
 import { McpSessionLogger } from '@/lib/mcp/session-logger';
 import { appEventRegistry, AppEvents } from '@/lib/app-event-registry';
 
@@ -91,6 +92,7 @@ function unauthorizedResponse(): Response {
 // ---------------------------------------------------------------------------
 
 export async function POST(request: NextRequest): Promise<Response> {
+  await getModules().auth.addHeaders(request, new Headers());
   // Authenticate via OAuth Bearer token
   const user = await authenticateOAuthRequest(request);
   if (!user) {
@@ -124,7 +126,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         source: 'mcp',
         userId: user.userId,
         userEmail: user.email,
-        companyId: user.companyId,
+        
         mode: user.mode,
       });
     },
@@ -145,7 +147,7 @@ export async function POST(request: NextRequest): Promise<Response> {
       source: 'mcp',
       message: err instanceof Error ? err.message : String(err),
       error: err,
-      companyId: user.companyId,
+      
       mode: user.mode,
     });
     return new Response(JSON.stringify({ jsonrpc: '2.0', error: { code: -32603, message: 'Internal error' }, id: null }), {
@@ -160,6 +162,7 @@ export async function POST(request: NextRequest): Promise<Response> {
 // ---------------------------------------------------------------------------
 
 export async function GET(request: NextRequest): Promise<Response> {
+  await getModules().auth.addHeaders(request, new Headers());
   const user = await authenticateOAuthRequest(request);
   if (!user) {
     return unauthorizedResponse();

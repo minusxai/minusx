@@ -4,8 +4,6 @@ export interface UserProperties {
   userId: number;
   email: string;
   role: string;
-  companyId: number;
-  companyName?: string;
   mode: string;
 }
 

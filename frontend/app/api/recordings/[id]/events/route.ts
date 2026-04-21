@@ -14,7 +14,7 @@ export async function POST(
   try {
     const user = await getEffectiveUser();
 
-    if (!user || !user.companyId) {
+    if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }

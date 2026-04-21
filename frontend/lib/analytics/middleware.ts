@@ -64,7 +64,7 @@ export const analyticsMiddleware: Middleware = (store) => (next) => (action) => 
     const user = store.getState().auth?.user;
     analytics.captureEvent(eventName, {
       ...(action.payload !== undefined ? { payload: action.payload } : { hasPayload: false }),
-      ...(user && { userId: user.id, email: user.email, role: user.role, companyId: user.companyId }),
+      ...(user && { userId: user.id, email: user.email, role: user.role }),
     });
   }
 

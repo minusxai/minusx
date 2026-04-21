@@ -153,10 +153,10 @@ export default function StylesEditor({
         bg="bg.muted"
       >
         <Text fontSize="sm" color="fg.muted" fontFamily="mono">
-          <strong>Styles:</strong> CSS rules for company branding (logos, colors, etc.)
+          <strong>Styles:</strong> CSS rules for org branding (logos, colors, etc.)
         </Text>
         <Text fontSize="xs" color="fg.muted" fontFamily="mono" mt={2}>
-          Example: <code>{`[aria-label="Company logo"] { background-image: url('/logo.svg'); }`}</code>
+          Example: <code>{`[aria-label="Workspace logo"] { background-image: url('/logo.svg'); }`}</code>
         </Text>
       </Box>
     </VStack>

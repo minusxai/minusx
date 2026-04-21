@@ -1,107 +1,45 @@
+import { Suspense } from 'react';
 import { headers } from 'next/headers';
-import { CompanyDB } from '@/lib/database/company-db';
+import { OrgConfig, DEFAULT_CONFIG } from '@/lib/branding/whitelabel';
 import { LoginOrRegisterForm } from './LoginOrRegisterForm';
-import { CompanyConfig, DEFAULT_CONFIG } from '@/lib/branding/whitelabel';
-import { getConfigsByCompanyId } from '@/lib/data/configs.server';
-import { ALLOW_MULTIPLE_COMPANIES, CREATE_COMPANY_SECRET } from '@/lib/config';
+import { getConfigsForMode } from '@/lib/data/configs.server';
+import { UserDB } from '@/lib/database/user-db';
+import { MD_LOGIN, MD_REGISTER, LANDING_TEXT, AUTH_URL } from '@/lib/config';
 
-/**
- * Login page - checks if companies exist server-side
- * Shows login form if companies exist, registration form if not
- */
-export default async function LoginPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
-}) {
-  // Get invite code from URL parameters
-  const params = await searchParams;
-  const inviteCode = typeof params.invite_code === 'string' ? params.invite_code : null;
-  // Check if any companies exist (server-side)
-  let hasCompanies = false;
-  let defaultCompanyName: string | null = null;
-  let loginPageConfig: CompanyConfig | null = null;
+export default async function LoginPage() {
+  // Only show landing text on the root domain, not on company subdomains
+  const hdrs = await headers();
+  const host = hdrs.get('host') || '';
+  const rootHost = new URL(AUTH_URL).host;
+  const isRootDomain = host === rootHost;
 
+  let hasUsers = false;
   try {
-    const count = await CompanyDB.count();
-    hasCompanies = count > 0;
-  } catch (error) {
-    console.error('[LoginPage] Failed to check company count:', error);
-    // On error, assume companies exist and show login form
-    hasCompanies = true;
+    const users = await UserDB.listAll();
+    hasUsers = users.length > 0;
+  } catch {
+    // DB not yet ready — treat as having users to avoid showing register form unexpectedly
+    hasUsers = true;
   }
 
-  // Check if multiple companies are allowed (default: false)
-  const allowMultipleCompanies = ALLOW_MULTIPLE_COMPANIES;
-
-  // Extract subdomain from headers (set by middleware)
-  const headersList = await headers();
-  const subdomain = headersList.get('x-subdomain');
-  console.log('[LoginPage] x-subdomain header:', subdomain);
-  console.log('[LoginPage] ALLOW_MULTIPLE_COMPANIES:', ALLOW_MULTIPLE_COMPANIES);
-
-  // Look up company by subdomain if present (multi-tenant mode)
-  let subdomainCompanyName: string | null = null;
-  let companyForConfig: { id: number; name: string } | null = null;
-
-  if (subdomain) {
-    try {
-      const company = await CompanyDB.getBySubdomain(subdomain);
-      console.log('[LoginPage] Company lookup result for subdomain:', subdomain, '→', company ? company.name : 'NOT FOUND');
-      if (company) {
-        subdomainCompanyName = company.name;
-        companyForConfig = company;
-      }
-      // If company not found, subdomainCompanyName stays null
-      // Client-side form will show error (no redirect needed)
-    } catch (error) {
-      console.error('[LoginPage] Failed to fetch company by subdomain:', error);
-    }
-  }
-
-  // Get default company if in single-tenant mode
-  if (!allowMultipleCompanies) {
-    try {
-      const defaultCompany = await CompanyDB.getDefaultCompany();
-      if (defaultCompany) {
-        defaultCompanyName = defaultCompany.name;
-        companyForConfig = defaultCompany;
-      }
-    } catch (error) {
-      console.error('[LoginPage] Failed to fetch default company:', error);
-    }
-  }
-
-  // Load company-specific config for branding (single-tenant or subdomain mode)
+  let loginPageConfig: OrgConfig = DEFAULT_CONFIG;
   let hasEmailOTP = false;
-  if (companyForConfig) {
-    try {
-      const result = await getConfigsByCompanyId(companyForConfig.id);
-      loginPageConfig = result.config;
-      hasEmailOTP = !!loginPageConfig.messaging?.webhooks?.some(w => w.type === 'email_otp');
-    } catch (error) {
-      console.error('[LoginPage] Failed to load company config:', error);
-      // Fallback to default config
-      loginPageConfig = DEFAULT_CONFIG;
-    }
-  }
-
-  // Check if we should show marketing page instead of login
-  // Only on main domain (no subdomain), multi-tenant mode, and CREATE_COMPANY_SECRET is set
-  const hasCompanySecret = !!CREATE_COMPANY_SECRET;
-  const showMarketingPage = !subdomain && allowMultipleCompanies && hasCompanySecret;
+  try {
+    const result = await getConfigsForMode();
+    loginPageConfig = result.config;
+    hasEmailOTP = !!loginPageConfig.messaging?.webhooks?.some((w: any) => w.type === 'email_otp');
+  } catch {}
 
   return (
-    <LoginOrRegisterForm
-      hasCompanies={hasCompanies}
-      allowMultipleCompanies={allowMultipleCompanies}
-      defaultCompanyName={defaultCompanyName}
-      subdomain={subdomain}
-      subdomainCompanyName={subdomainCompanyName}
-      companyConfig={loginPageConfig}
-      showMarketingPage={showMarketingPage}
-      inviteCode={inviteCode}
-      hasEmailOTP={hasEmailOTP}
-    />
+    <Suspense>
+      <LoginOrRegisterForm
+        orgConfig={loginPageConfig}
+        hasEmailOTP={hasEmailOTP}
+        loginText={MD_LOGIN || undefined}
+        registerText={MD_REGISTER || undefined}
+        initialMode={hasUsers ? 'login' : 'register'}
+        landingText={isRootDomain ? (LANDING_TEXT || undefined) : undefined}
+      />
+    </Suspense>
   );
 }

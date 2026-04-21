@@ -45,8 +45,7 @@ jest.mock('@/lib/auth/auth-helpers', () => ({
     email: 'test@example.com',
     name: 'Test User',
     role: 'admin',
-    companyId: 1,
-    companyName: 'test-company',
+    companyName: 'test-workspace',
     home_folder: '',
     mode: 'tutorial'
   }),
@@ -54,14 +53,11 @@ jest.mock('@/lib/auth/auth-helpers', () => ({
 }));
 
 // Database-specific mock (test name must match)
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_atlas_llm_encoding.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 // Use IDs well above the template range (template creates IDs 1–107) to avoid conflicts.
 const FIXTURE_QUESTION_ID = 1001;
@@ -82,32 +78,30 @@ describe('LLM Message Encoding', () => {
   const { getPythonPort, getLLMMockPort, getLLMMockServer } = withPythonBackend({ withLLMMock: true });
   const { getStore } = setupTestDb(getTestDbPath('atlas_llm_encoding'), {
     withTestConnection: true,
-    customInit: async (dbPath) => {
-      const { createAdapter } = await import('@/lib/database/adapter/factory');
-      const db = await createAdapter({ type: 'sqlite', sqlitePath: dbPath });
+    customInit: async (_dbPath) => {
+      const { getAdapter } = await import('@/lib/database/adapter/factory');
+      const db = await getAdapter();
       const now = new Date().toISOString();
 
       // The template creates a file at '/tutorial/user-engagement-dashboard' (id=12).
       // Delete it so we can insert our own version at TUTORIAL_DASHBOARD_ID=1002.
-      await db.query(`DELETE FROM files WHERE company_id = 1 AND path = '/tutorial/user-engagement-dashboard'`, []);
+      await db.query(`DELETE FROM files WHERE path = '/tutorial/user-engagement-dashboard'`, []);
 
       // Question file referenced by the dashboard
       await db.query(
-        `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [1, FIXTURE_QUESTION_ID, 'Sales Overview', '/tutorial/sales-overview', 'question',
+        `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [FIXTURE_QUESTION_ID, 'Sales Overview', '/tutorial/sales-overview', 'question',
           JSON.stringify(FIXTURE_QUESTION_CONTENT), '[]', now, now]
       );
 
       // Dashboard file at the tutorial path the test expects
       await db.query(
-        `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [1, TUTORIAL_DASHBOARD_ID, 'User Engagement Dashboard', '/tutorial/user-engagement-dashboard', 'dashboard',
+        `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [TUTORIAL_DASHBOARD_ID, 'User Engagement Dashboard', '/tutorial/user-engagement-dashboard', 'dashboard',
           JSON.stringify(FIXTURE_DASHBOARD_CONTENT), `[${FIXTURE_QUESTION_ID}]`, now, now]
       );
-
-      await db.close();
     }
   });
   const mockFetch = setupMockFetch({
@@ -252,7 +246,7 @@ describe('LLM Message Encoding', () => {
     // app: NavigationListener loads the file → selectAppState computes AppState →
     // ChatInterface passes it as app_state in agent_args.
     const { DocumentDB } = await import('@/lib/database/documents-db');
-    const dashboardFile = await DocumentDB.getById(TUTORIAL_DASHBOARD_ID, 1);
+    const dashboardFile = await DocumentDB.getById(TUTORIAL_DASHBOARD_ID);
     expect(dashboardFile).toBeDefined();
 
     // Load referenced question files too so compressAugmentedFile includes them
@@ -260,7 +254,7 @@ describe('LLM Message Encoding', () => {
       ?.filter((a: any) => a.type === 'question')
       ?.map((a: any) => a.id) ?? [];
     const referenceFiles = (await Promise.all(
-      referencedIds.map(id => DocumentDB.getById(id, 1))
+      referencedIds.map(id => DocumentDB.getById(id))
     )).filter(Boolean) as NonNullable<Awaited<ReturnType<typeof DocumentDB.getById>>>[];
 
     const pageStore = configureStore({

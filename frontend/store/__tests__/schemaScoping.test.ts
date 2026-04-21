@@ -25,14 +25,11 @@ import { withPythonBackend } from '@/test/harness/python-backend';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
 import { setupTestDb } from '@/test/harness/test-db';
 
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_schema_scoping.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 // ─── Fixture ─────────────────────────────────────────────────────────────────
 
@@ -42,22 +39,22 @@ const CONN_ID = 'scoping_conn';
 const ALL_TABLES = ['orders', 'customers', 'products'];
 
 async function addScopingFixtures(dbPath: string) {
-  const { createAdapter } = await import('@/lib/database/adapter/factory');
-  const db = await createAdapter({ type: 'sqlite', sqlitePath: dbPath });
+  const { getAdapter } = await import('@/lib/database/adapter/factory');
+  const db = await getAdapter();
   const now = new Date().toISOString();
 
   const nextId = async () => {
     const r = await db.query<{ n: number }>(
-      `SELECT COALESCE(MAX(id), 0) + 1 AS n FROM files WHERE company_id = $1`, [1]
+      `SELECT COALESCE(MAX(id), 0) + 1 AS n FROM files`, []
     );
     return r.rows[0].n;
   };
 
   await db.query(
-    `INSERT INTO files (company_id, id, name, path, type, content, file_references, created_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [
-      1, await nextId(), CONN_ID,
+      await nextId(), CONN_ID,
       `/org/database/${CONN_ID}`,
       'connection',
       JSON.stringify({
@@ -77,7 +74,7 @@ async function addScopingFixtures(dbPath: string) {
     ]
   );
 
-  await db.close();
+  // adapter is the singleton, don't close
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────

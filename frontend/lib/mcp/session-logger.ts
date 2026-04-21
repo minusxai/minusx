@@ -73,7 +73,6 @@ export class McpSessionLogger {
       tool,
       userId: this.user.userId,
       userEmail: this.user.email,
-      companyId: this.user.companyId,
       mode: this.user.mode,
     });
   }

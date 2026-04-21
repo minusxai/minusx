@@ -37,7 +37,6 @@ describe('Autocomplete API — E2E', () => {
   });
 
   const mockUser = {
-    companyId: 1,
     companyName: 'test',
     userId: 1,
     email: 'test@test.com',

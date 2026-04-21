@@ -88,7 +88,6 @@ function parseSSEChunk(chunk: string): SSEEvent | null {
 
 /**
  * Stream Python backend SSE and forward events
- * Uses pythonBackendFetch to automatically include company ID header
  */
 async function* consumePythonStream(
   endpoint: string,
@@ -158,10 +157,10 @@ export async function POST(request: NextRequest) {
         const body: ChatRequest = await request.json();
         user = await getEffectiveUser();
 
-        if (!user || !user.companyId) {
+        if (!user) {
           safeEnqueue(controller, encoder, 'error', {
             type: 'error',
-            error: 'No company ID found for user',
+            error: 'Unauthorized',
             timestamp: new Date().toISOString()
           });
           controller.close();
@@ -215,7 +214,7 @@ export async function POST(request: NextRequest) {
             agent_args: body.agent_args || {}
           };
 
-          // Consume Python stream and forward events (company ID header added automatically)
+          // Consume Python stream and forward events
           let pythonDoneEvent: SSEEvent | null = null;
           let pythonErrorEvent: SSEEvent | null = null;
 
@@ -316,7 +315,7 @@ export async function POST(request: NextRequest) {
             appEventRegistry.publish(AppEvents.LLM_CALL, {
               llmCalls: pythonDoneEvent.llm_calls,
               conversationId: currentConversationID,
-              companyId: user.companyId,
+              
               mode: user.mode,
               userId: user.userId,
               userEmail: user.email,
@@ -424,11 +423,10 @@ export async function POST(request: NextRequest) {
 
         // Handle other errors
         console.error('[CHAT STREAM] Error:', error);
-        if (user?.companyId) {
+        if (user) {
           appEventRegistry.publish(AppEvents.ERROR, {
             source: 'nextjs_stream',
             message: error.message || 'Stream error',
-            companyId: user.companyId,
             mode: user.mode,
             context: { route: '/api/chat/stream' },
           });

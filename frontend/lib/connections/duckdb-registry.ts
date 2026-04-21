@@ -6,9 +6,9 @@ export type DuckDbAccessMode = 'READ_WRITE' | 'READ_ONLY';
 
 // Keyed by absolute resolved file path — one instance per file, process-wide.
 // This prevents two DuckDBInstances from opening the same file (exclusive lock conflict).
-// eslint-disable-next-line no-restricted-syntax -- server-only; keyed by absolute file path (unique per company by directory layout)
+// eslint-disable-next-line no-restricted-syntax -- server-only; keyed by absolute file path (unique per org by directory layout)
 const registry = new Map<string, DuckDBInstance>();
-// eslint-disable-next-line no-restricted-syntax -- server-only; keyed by absolute file path (unique per company by directory layout)
+// eslint-disable-next-line no-restricted-syntax -- server-only; keyed by absolute file path (unique per org by directory layout)
 const initPromises = new Map<string, Promise<DuckDBInstance>>();
 
 async function applySecuritySettings(instance: DuckDBInstance, absPath: string): Promise<void> {

@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server';
 import { auth } from '@/auth';
 import { UserDB } from '@/lib/database/user-db';
-import { CompanyDB } from '@/lib/database/company-db';
 import { hashPassword } from '@/lib/auth/password-utils';
 import { successResponse, ApiErrors, handleApiError } from '@/lib/api/api-responses';
 import { isAdmin } from '@/lib/auth/role-helpers';
@@ -21,25 +20,17 @@ export async function GET(request: NextRequest) {
     }
 
     const userRole = session.user.role || 'viewer';
-    const companyId = session.user.companyId;
-
-    if (!companyId) {
-      return ApiErrors.forbidden('User does not have a company assigned');
-    }
 
     // Get users from database
     let users;
     if (isAdmin(userRole)) {
-      // Admin: return all users in their company
-      users = await UserDB.listByCompany(companyId);
+      // Admin: return all users
+      users = await UserDB.listAll();
     } else {
       // Non-admin: return only current user
-      const currentUser = session.user.userId ? await UserDB.getById(session.user.userId, companyId) : null;
+      const currentUser = session.user.userId ? await UserDB.getById(session.user.userId) : null;
       users = currentUser ? [currentUser] : [];
     }
-
-    // Get company name for response
-    const company = await CompanyDB.getById(companyId);
 
     // Map to safe response format (exclude password_hash)
     const safeUsers = users.map(user => ({
@@ -50,8 +41,6 @@ export async function GET(request: NextRequest) {
       state: user.state,
       role: user.role,
       home_folder: user.home_folder,
-      companyId: user.company_id,
-      companyName: company?.name,
     }));
 
     return successResponse({ users: safeUsers });
@@ -72,12 +61,6 @@ export async function POST(request: NextRequest) {
       return ApiErrors.forbidden();
     }
 
-    const companyId = session.user.companyId;
-
-    if (!companyId) {
-      return ApiErrors.forbidden('User does not have a company assigned');
-    }
-
     const body = await request.json();
 
     // Validate required fields
@@ -89,9 +72,8 @@ export async function POST(request: NextRequest) {
     // Default to '' (mode root) if not provided
     const home_folder = body.home_folder ?? '';
 
-    // Check if user already exists in this company
-    if (await UserDB.emailExists(body.email, companyId)) {
-      return ApiErrors.badRequest('User with this email already exists in this company');
+    if (await UserDB.emailExists(body.email)) {
+      return ApiErrors.badRequest('User with this email already exists');
     }
 
     // Hash password if provided
@@ -104,7 +86,6 @@ export async function POST(request: NextRequest) {
     const userId = await UserDB.create(
       body.email,
       body.name,
-      companyId,
       home_folder,
       {
         password_hash,
@@ -115,14 +96,11 @@ export async function POST(request: NextRequest) {
     );
 
     // Get created user
-    const newUser = await UserDB.getById(userId, companyId);
+    const newUser = await UserDB.getById(userId);
 
     if (!newUser) {
       return ApiErrors.internalError('Failed to create user');
     }
-
-    // Get company name for response
-    const company = await CompanyDB.getById(companyId);
 
     // Return created user without password_hash
     const safeUser = {
@@ -133,12 +111,9 @@ export async function POST(request: NextRequest) {
       state: newUser.state,
       role: newUser.role,
       home_folder: newUser.home_folder,
-      companyId: newUser.company_id,
-      companyName: company?.name,
     };
 
     appEventRegistry.publish(AppEvents.USER_CREATED, {
-      companyId,
       mode: 'org',
       userId: newUser.id,
       userEmail: newUser.email,

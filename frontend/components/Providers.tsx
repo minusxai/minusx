@@ -11,7 +11,7 @@ import { NavigationSync } from './NavigationSync';
 import { NavigationGuardProvider } from '@/lib/navigation/NavigationGuardProvider';
 import { AnalyticsProvider } from './AnalyticsProvider';
 import type { EffectiveUser } from '@/lib/auth/auth-helpers';
-import type { CompanyConfig } from '@/lib/branding/whitelabel';
+import type { OrgConfig } from '@/lib/branding/whitelabel';
 import { DEFAULT_CONFIG } from '@/lib/branding/whitelabel';
 
 // Import fetch patch to auto-initialize (don't remove - needed for side effect)
@@ -21,7 +21,7 @@ interface ProvidersProps {
   children: React.ReactNode;
   initialData?: {
     user: EffectiveUser | null;
-    config: CompanyConfig;  // Always present (from SSR or defaults)
+    config: OrgConfig;  // Always present (from SSR or defaults)
   };
 }
 
@@ -45,8 +45,6 @@ export function Providers({ children, initialData }: ProvidersProps) {
           name: initialData.user.name,
           role: initialData.user.role,
           home_folder: initialData.user.home_folder,
-          companyId: initialData.user.companyId,
-          companyName: initialData.user.companyName,
           mode: initialData.user.mode,
         },
         loading: false,

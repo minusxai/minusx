@@ -8,14 +8,12 @@ export interface GoogleSheetsDeleteResult {
 
 export async function deleteGoogleSheetsData(
   connectionName: string,
-  companyId: number,
   mode: string
 ): Promise<GoogleSheetsDeleteResult> {
   try {
     const res = await fetch(`${BACKEND_URL}/api/google-sheets/delete/${encodeURIComponent(connectionName)}`, {
       method: 'DELETE',
       headers: {
-        'x-company-id': companyId.toString(),
         'x-mode': mode
       }
     });

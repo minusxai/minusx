@@ -1,5 +1,5 @@
 import 'server-only';
-import { getConfigsByCompanyId } from '@/lib/data/configs.server';
+import { getConfigsForMode } from '@/lib/data/configs.server';
 import { UserDB } from '@/lib/database/user-db';
 import { sendEmailViaWebhook, sendSlackViaWebhook, sendPhoneAlertViaWebhook } from './webhook-executor';
 import { resolveWebhook } from './webhook-resolver.server';
@@ -8,20 +8,19 @@ import type { AppEventPayloads } from '@/lib/app-event-registry/events';
 import type { Mode } from '@/lib/mode/mode-types';
 
 export async function notifyErrorEvent(payload: AppEventPayloads['error']): Promise<void> {
-  // Always notify bug reporting channel (independent of company config, fire-and-forget)
+  // Always notify bug reporting channel (independent of org config, fire-and-forget)
   const internalExtras: Record<string, string> = {};
-  if (payload.companyId)        internalExtras.companyId = String(payload.companyId);
   if (payload.mode)             internalExtras.mode      = payload.mode;
   if (payload.context?.user)    internalExtras.user      = String(payload.context.user);
   if (payload.context?.url)     internalExtras.url       = String(payload.context.url);
-  if (payload.context?.company) internalExtras.company   = String(payload.context.company);
+  if (payload.context?.org) internalExtras.org   = String(payload.context.org);
   void notifyInternal(payload.source, payload.message, internalExtras);
-  const { config } = await getConfigsByCompanyId(payload.companyId, payload.mode as Mode | undefined);
+  const { config } = await getConfigsForMode(payload.mode as Mode | undefined);
   const recipients = config.error_delivery ?? [];
   if (!recipients.length) return;
 
   // Resolve addresses for normalized recipients
-  const dbUsers = await UserDB.listByCompany(payload.companyId);
+  const dbUsers = await UserDB.listAll();
   const userById = Object.fromEntries(dbUsers.map(u => [u.id, u]));
 
   const webhooks = config.messaging?.webhooks ?? [];

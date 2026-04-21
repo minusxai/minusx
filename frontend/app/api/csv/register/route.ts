@@ -11,13 +11,13 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
     if (!files?.length) return ApiErrors.badRequest('At least one file is required');
 
-    // Verify each s3_key token — proves it was issued by this server for this company.
+    // Verify each s3_key token — proves it was issued by this server.
     const verifiedFiles = files.map((f: { s3_key: string; [k: string]: unknown }) => ({
       ...f,
-      s3_key: verifyStorageToken(f.s3_key, user.companyId),
+      s3_key: verifyStorageToken(f.s3_key),
     }));
 
-    const registered = await processFilesFromS3(user.companyId, user.mode, connection_name, verifiedFiles);
+    const registered = await processFilesFromS3(user.mode, connection_name, verifiedFiles);
 
     return NextResponse.json({
       success: true,

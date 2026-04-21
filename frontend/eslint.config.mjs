@@ -21,7 +21,7 @@ const BASE_RESTRICTED_SYNTAX = [
   },
   {
     selector: "Program > VariableDeclaration NewExpression[callee.name='Map']",
-    message: "Module-level Maps are shared across all requests and tenants. For mutable caches: ensure keys include companyId+mode, then add eslint-disable-next-line with justification. For immutable constants: use immutableMap() from lib/utils/immutable-collections instead of new Map().",
+    message: "Module-level Maps are shared across all requests. For mutable caches: ensure keys include a per-request scope key, then add eslint-disable-next-line with justification. For immutable constants: use immutableMap() from lib/utils/immutable-collections instead of new Map().",
   },
   {
     selector: "Program > VariableDeclaration NewExpression[callee.name='Set']",

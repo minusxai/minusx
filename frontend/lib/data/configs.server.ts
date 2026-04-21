@@ -1,8 +1,9 @@
 import 'server-only';
 import { DocumentDB } from '@/lib/database/documents-db';
+import { hashContent } from '@/lib/utils/query-hash';
 import { EffectiveUser } from '@/lib/auth/auth-helpers';
-import { CompanyConfig, DEFAULT_CONFIG, DEFAULT_STYLES, mergeConfig, type AccessRulesOverride } from '@/lib/branding/whitelabel';
-import { getAdapter } from '@/lib/database/adapter/factory';
+import { OrgConfig, DEFAULT_CONFIG, DEFAULT_STYLES, mergeConfig, type AccessRulesOverride } from '@/lib/branding/whitelabel';
+import { getModules } from '@/lib/modules/registry';
 import { resolvePath } from '@/lib/mode/path-resolver';
 import { Mode, DEFAULT_MODE } from '@/lib/mode/mode-types';
 import { validateWebhook } from '@/lib/messaging/webhook-executor';
@@ -11,36 +12,14 @@ import { immutableSet } from '@/lib/utils/immutable-collections';
 import type { VisualizationType } from '@/lib/types';
 
 export interface GetConfigsResult {
-  config: CompanyConfig;
+  config: OrgConfig;
 }
 
 /**
- * Get company name from companies table by ID
- */
-export async function getCompanyNameById(companyId: number): Promise<string | null> {
-  try {
-    const db = await getAdapter();
-    const result = await db.query<{ name: string }>(
-      'SELECT name FROM companies WHERE id = $1',
-      [companyId]
-    );
-
-    if (result.rows.length === 0) {
-      return null;
-    }
-
-    return result.rows[0].name;
-  } catch (error) {
-    console.error('[Configs] Error looking up company name:', error);
-    return null;
-  }
-}
-
-/**
- * Validate company config structure
+ * Validate org config structure
  * Supports partial configs - validates that present fields are properly typed
  */
-export function validateCompanyConfig(content: unknown): content is Partial<CompanyConfig> {
+export function validateOrgConfig(content: unknown): content is Partial<OrgConfig> {
   if (!content || typeof content !== 'object') return false;
 
   const config = content as any;
@@ -225,9 +204,9 @@ function validateAccessRulesOverride(accessRules: unknown): accessRules is Acces
  * Nested objects (branding, links) are deep-merged so partial nested updates don't wipe sibling fields.
  */
 export function mergePartialConfigs(
-  base: Partial<CompanyConfig>,
-  incoming: Partial<CompanyConfig>
-): Partial<CompanyConfig> {
+  base: Partial<OrgConfig>,
+  incoming: Partial<OrgConfig>
+): Partial<OrgConfig> {
   return {
     ...base,
     ...incoming,
@@ -242,51 +221,51 @@ class ConfigsDataLayerServer {
    * Used after login
    */
   async getConfig(user: EffectiveUser): Promise<GetConfigsResult> {
-    return this._loadConfigsByCompanyId(user.companyId, user.mode);
+    return this._loadConfigs(user.mode);
   }
 
   /**
-   * Save (create or update) company config.
+   * Save (create or update) org config.
    * Merges incoming partial config onto existing stored content.
    * Returns the new document ID and the merged config.
    */
   async saveConfig(
-    incoming: Partial<CompanyConfig>,
+    incoming: Partial<OrgConfig>,
     user: EffectiveUser
-  ): Promise<{ id: number; config: CompanyConfig }> {
+  ): Promise<{ id: number; config: OrgConfig }> {
     const configPath = resolvePath(user.mode, '/configs/config');
-    const existing = await DocumentDB.getByPath(configPath, user.companyId);
+    const existing = await DocumentDB.getByPath(configPath);
 
-    let existingContent: Partial<CompanyConfig> = {};
+    let existingContent: Partial<OrgConfig> = {};
     if (existing?.content && typeof existing.content === 'object') {
-      existingContent = existing.content as Partial<CompanyConfig>;
+      existingContent = existing.content as Partial<OrgConfig>;
     }
 
     const mergedContent = mergePartialConfigs(existingContent, incoming);
 
     let id: number;
     if (existing) {
-      await DocumentDB.update(existing.id, 'config.json', configPath, mergedContent as any, [], user.companyId);
+      await DocumentDB.update(existing.id, 'config.json', configPath, mergedContent as any, [], hashContent({ id: existing.id, content: mergedContent }));
       id = existing.id;
     } else {
-      id = await DocumentDB.create('config.json', configPath, 'config', mergedContent as any, [], user.companyId);
+      id = await DocumentDB.create('config.json', configPath, 'config', mergedContent as any, []);
     }
 
-    const { config } = await this._loadConfigsByCompanyId(user.companyId, user.mode);
+    const { config } = await this._loadConfigs(user.mode);
     return { id, config };
   }
 
-  private async _loadConfigsByCompanyId(companyId: number, mode: Mode = DEFAULT_MODE): Promise<GetConfigsResult> {
+  private async _loadConfigs(mode: Mode = DEFAULT_MODE): Promise<GetConfigsResult> {
     try {
       // Load from database
       const configPath = resolvePath(mode, '/configs/config');
-      const doc = await DocumentDB.getByPath(configPath, companyId);
+      const doc = await DocumentDB.getByPath(configPath);
 
       if (doc && doc.content && typeof doc.content === 'object') {
-        const dbContent = doc.content as Partial<CompanyConfig>;
+        const dbContent = doc.content as Partial<OrgConfig>;
 
         // Validate structure
-        if (validateCompanyConfig(dbContent)) {
+        if (validateOrgConfig(dbContent)) {
           // Merge with defaults (database overrides defaults)
           const merged = mergeConfig(DEFAULT_CONFIG, dbContent);
           return { config: merged };
@@ -308,24 +287,23 @@ export const getConfigs = ConfigsAPI.getConfig.bind(ConfigsAPI);
 export const saveConfig = ConfigsAPI.saveConfig.bind(ConfigsAPI);
 
 /**
- * Get configs by company ID directly
- * Used for pre-login in single-tenant mode
+ * Load configs for a given mode without a user session.
+ * Used for pre-login branding, middleware, and background jobs in open-source deployments.
  */
-export async function getConfigsByCompanyId(companyId: number, mode: Mode = DEFAULT_MODE): Promise<GetConfigsResult> {
-  return ConfigsAPI['_loadConfigsByCompanyId'](companyId, mode);
+export async function getConfigsForMode(mode: Mode = DEFAULT_MODE): Promise<GetConfigsResult> {
+  return ConfigsAPI['_loadConfigs'](mode);
 }
 
 /**
  * Get the raw (unmerged) config content from the database.
  * Returns an empty object if no config document exists.
- * Used by integrations that need to read/write specific config fields.
  */
-export async function getRawConfigByCompanyId(companyId: number, mode: Mode = DEFAULT_MODE): Promise<Partial<CompanyConfig>> {
+export async function getRawConfig(mode: Mode = DEFAULT_MODE): Promise<Partial<OrgConfig>> {
   try {
     const configPath = resolvePath(mode, '/configs/config');
-    const doc = await DocumentDB.getByPath(configPath, companyId);
+    const doc = await DocumentDB.getByPath(configPath);
     if (doc && doc.content && typeof doc.content === 'object') {
-      return doc.content as Partial<CompanyConfig>;
+      return doc.content as Partial<OrgConfig>;
     }
   } catch {
     // no-op — fall through to empty config
@@ -337,25 +315,25 @@ export async function getRawConfigByCompanyId(companyId: number, mode: Mode = DE
  * Save a partial config back to the database.
  * Creates the document if it does not exist, updates it otherwise.
  */
-export async function saveConfigByCompanyId(companyId: number, mode: Mode, content: Partial<CompanyConfig>): Promise<void> {
+export async function saveRawConfig(mode: Mode, content: Partial<OrgConfig>): Promise<void> {
   const configPath = resolvePath(mode, '/configs/config');
-  const existing = await DocumentDB.getByPath(configPath, companyId);
+  const existing = await DocumentDB.getByPath(configPath);
   if (existing) {
-    await DocumentDB.update(existing.id, existing.name, configPath, content as any, [], companyId);
+    await DocumentDB.update(existing.id, existing.name, configPath, content as any, [], hashContent({ id: existing.id, content }));
   } else {
-    await DocumentDB.create('config', configPath, 'config', content as any, [], companyId);
+    await DocumentDB.create('config', configPath, 'config', content as any, []);
   }
 }
 
 /**
- * Load styles.css for a company
+ * Load styles.css
  * @private
  */
-async function _loadStylesByCompanyId(companyId: number, mode: Mode = DEFAULT_MODE): Promise<string> {
+async function _loadStyles(mode: Mode = DEFAULT_MODE): Promise<string> {
   try {
-    console.log(`[Styles] Loading styles for company ${companyId} (mode: ${mode})`);
+    console.log(`[Styles] Loading styles (mode: ${mode})`);
     const stylesPath = resolvePath(mode, '/configs/styles');
-    const doc = await DocumentDB.getByPath(stylesPath, companyId);
+    const doc = await DocumentDB.getByPath(stylesPath);
 
     console.log(`[Styles] Document found:`, !!doc);
     if (doc) {
@@ -406,15 +384,14 @@ async function _loadStylesByCompanyId(companyId: number, mode: Mode = DEFAULT_MO
  * Get styles for authenticated user
  */
 async function getStyles(user: EffectiveUser): Promise<string> {
-  return _loadStylesByCompanyId(user.companyId, user.mode);
+  return _loadStyles(user.mode);
 }
 
-export const getCompanyStyles = getStyles;
+export const getOrgStyles = getStyles;
 
 /**
- * Get styles by company ID directly
- * Used for pre-login in single-tenant mode
+ * Get styles for a given mode without a user session.
  */
-export async function getCompanyStylesById(companyId: number, mode: Mode = DEFAULT_MODE): Promise<string> {
-  return _loadStylesByCompanyId(companyId, mode);
+export async function getStylesForMode(mode: Mode = DEFAULT_MODE): Promise<string> {
+  return _loadStyles(mode);
 }

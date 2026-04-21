@@ -19,14 +19,11 @@
 // Hoisted mocks — must appear before any imports
 // ---------------------------------------------------------------------------
 
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_batch_move_e2e.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const,
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 // ---------------------------------------------------------------------------
 // Imports
@@ -42,8 +39,6 @@ import { POST as batchMoveHandler } from '@/app/api/files/batch-move/route';
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const COMPANY_ID = 1;
 
 function makeQuestion(description = 'test'): QuestionContent {
   return {
@@ -84,8 +79,8 @@ describe('Move operations E2E', () => {
   beforeAll(async () => {
     await initTestDatabase(dbPath);
     // Seed additional folders needed across all tests
-    await DocumentDB.create('source', '/org/source', 'folder', { description: '' }, [], COMPANY_ID);
-    await DocumentDB.create('dest',   '/org/dest',   'folder', { description: '' }, [], COMPANY_ID);
+    await DocumentDB.create('source', '/org/source', 'folder', { description: '' }, []);
+    await DocumentDB.create('dest',   '/org/dest',   'folder', { description: '' }, []);
   });
 
   afterAll(async () => {
@@ -99,7 +94,7 @@ describe('Move operations E2E', () => {
   describe('PATCH /api/files/[id] — metadata-only move', () => {
     it('moves a regular file to a new path', async () => {
       const fileId = await DocumentDB.create(
-        'q-patch-move', '/org/source/q-patch-move', 'question', makeQuestion(), [], COMPANY_ID
+        'q-patch-move', '/org/source/q-patch-move', 'question', makeQuestion(), []
       );
 
       const res = await patchMove(fileId, 'q-patch-moved', '/org/dest/q-patch-moved');
@@ -114,32 +109,32 @@ describe('Move operations E2E', () => {
       });
 
       // Verify DB reflects the new path
-      const updated = await DocumentDB.getById(fileId, COMPANY_ID);
+      const updated = await DocumentDB.getById(fileId);
       expect(updated?.path).toBe('/org/dest/q-patch-moved');
       expect(updated?.name).toBe('q-patch-moved');
     });
 
     it('moves a folder and all its descendants', async () => {
       // Create a folder with two children
-      await DocumentDB.create('move-folder', '/org/source/move-folder', 'folder', { description: '' }, [], COMPANY_ID);
+      await DocumentDB.create('move-folder', '/org/source/move-folder', 'folder', { description: '' }, []);
       const child1Id = await DocumentDB.create(
-        'child-1', '/org/source/move-folder/child-1', 'question', makeQuestion(), [], COMPANY_ID
+        'child-1', '/org/source/move-folder/child-1', 'question', makeQuestion(), []
       );
       const child2Id = await DocumentDB.create(
-        'child-2', '/org/source/move-folder/child-2', 'question', makeQuestion(), [], COMPANY_ID
+        'child-2', '/org/source/move-folder/child-2', 'question', makeQuestion(), []
       );
 
-      const folderId = (await DocumentDB.getByPath('/org/source/move-folder', COMPANY_ID))!.id;
+      const folderId = (await DocumentDB.getByPath('/org/source/move-folder'))!.id;
       const res = await patchMove(folderId, 'moved-folder', '/org/dest/moved-folder');
       expect(res.status).toBe(200);
 
       // Folder itself moved
-      const folder = await DocumentDB.getById(folderId, COMPANY_ID);
+      const folder = await DocumentDB.getById(folderId);
       expect(folder?.path).toBe('/org/dest/moved-folder');
 
       // Children paths updated too
-      const c1 = await DocumentDB.getById(child1Id, COMPANY_ID);
-      const c2 = await DocumentDB.getById(child2Id, COMPANY_ID);
+      const c1 = await DocumentDB.getById(child1Id);
+      const c2 = await DocumentDB.getById(child2Id);
       expect(c1?.path).toBe('/org/dest/moved-folder/child-1');
       expect(c2?.path).toBe('/org/dest/moved-folder/child-2');
     });
@@ -151,7 +146,7 @@ describe('Move operations E2E', () => {
 
     it('returns 400 when destination parent folder does not exist', async () => {
       const fileId = await DocumentDB.create(
-        'q-no-parent', '/org/source/q-no-parent', 'question', makeQuestion(), [], COMPANY_ID
+        'q-no-parent', '/org/source/q-no-parent', 'question', makeQuestion(), []
       );
       const res = await patchMove(fileId, 'q-no-parent', '/org/nonexistent/q-no-parent');
       expect(res.status).toBe(400);
@@ -165,10 +160,10 @@ describe('Move operations E2E', () => {
   describe('POST /api/files/batch-move', () => {
     it('moves multiple regular files in one request', async () => {
       const id1 = await DocumentDB.create(
-        'batch-q1', '/org/source/batch-q1', 'question', makeQuestion(), [], COMPANY_ID
+        'batch-q1', '/org/source/batch-q1', 'question', makeQuestion(), []
       );
       const id2 = await DocumentDB.create(
-        'batch-q2', '/org/source/batch-q2', 'question', makeQuestion(), [], COMPANY_ID
+        'batch-q2', '/org/source/batch-q2', 'question', makeQuestion(), []
       );
 
       const res = await batchMove([
@@ -187,22 +182,22 @@ describe('Move operations E2E', () => {
       );
 
       // Verify DB
-      expect((await DocumentDB.getById(id1, COMPANY_ID))?.path).toBe('/org/dest/batch-q1');
-      expect((await DocumentDB.getById(id2, COMPANY_ID))?.path).toBe('/org/dest/batch-q2');
+      expect((await DocumentDB.getById(id1))?.path).toBe('/org/dest/batch-q1');
+      expect((await DocumentDB.getById(id2))?.path).toBe('/org/dest/batch-q2');
     });
 
     it('moves a folder and all its descendants via batch-move', async () => {
-      await DocumentDB.create('batch-folder', '/org/source/batch-folder', 'folder', { description: '' }, [], COMPANY_ID);
+      await DocumentDB.create('batch-folder', '/org/source/batch-folder', 'folder', { description: '' }, []);
       const childId = await DocumentDB.create(
-        'batch-child', '/org/source/batch-folder/batch-child', 'question', makeQuestion(), [], COMPANY_ID
+        'batch-child', '/org/source/batch-folder/batch-child', 'question', makeQuestion(), []
       );
-      const folderId = (await DocumentDB.getByPath('/org/source/batch-folder', COMPANY_ID))!.id;
+      const folderId = (await DocumentDB.getByPath('/org/source/batch-folder'))!.id;
 
       const res = await batchMove([{ id: folderId, name: 'batch-folder', destFolder: '/org/dest' }]);
       expect(res.status).toBe(200);
 
-      expect((await DocumentDB.getById(folderId, COMPANY_ID))?.path).toBe('/org/dest/batch-folder');
-      expect((await DocumentDB.getById(childId, COMPANY_ID))?.path).toBe('/org/dest/batch-folder/batch-child');
+      expect((await DocumentDB.getById(folderId))?.path).toBe('/org/dest/batch-folder');
+      expect((await DocumentDB.getById(childId))?.path).toBe('/org/dest/batch-folder/batch-child');
     });
 
     it('returns 404 when a file in the batch does not exist', async () => {
@@ -213,7 +208,7 @@ describe('Move operations E2E', () => {
     it('returns 400 when destination parent folder does not exist', async () => {
       // NEW behaviour — batch-move previously skipped this check; data-layer enforces it
       const fileId = await DocumentDB.create(
-        'batch-no-parent', '/org/source/batch-no-parent', 'question', makeQuestion(), [], COMPANY_ID
+        'batch-no-parent', '/org/source/batch-no-parent', 'question', makeQuestion(), []
       );
       const res = await batchMove([{ id: fileId, name: 'batch-no-parent', destFolder: '/org/nonexistent' }]);
       expect(res.status).toBe(400);

@@ -32,14 +32,11 @@ jest.mock('@/lib/connections', () => ({
   getNodeConnector: () => null,
 }));
 
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_context_whitelist_e2e.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Imports
@@ -130,12 +127,12 @@ function schemaNames(result: DatabaseWithSchema): string[] {
 
 const admin: EffectiveUser = {
   userId: 1, name: 'Admin', email: 'admin@test.com',
-  role: 'admin', companyId: 1, companyName: 'test', mode: 'org', home_folder: '',
+  role: 'admin', mode: 'org', home_folder: '',
 };
 
 const viewer: EffectiveUser = {
   userId: 2, name: 'Viewer', email: 'viewer@test.com',
-  role: 'viewer', companyId: 1, companyName: 'test', mode: 'org', home_folder: '',
+  role: 'viewer', mode: 'org', home_folder: '',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -354,7 +351,7 @@ describe('Context loader — ContextVersion.whitelist (new schema)', () => {
     jest.clearAllMocks();
     const { getAdapter } = await import('@/lib/database/adapter/factory');
     const db = await getAdapter();
-    await db.query('DELETE FROM files WHERE company_id = $1', [1]);
+    await db.query('DELETE FROM files', []);
 
     // Two connections — one DuckDB, one BigQuery
     mockGetSchemaFromPython.mockImplementation((name: string) => {
@@ -386,10 +383,10 @@ describe('Context loader — ContextVersion.whitelist (new schema)', () => {
     // Create connection files
     await DocumentDB.create('duckdb_main', '/org/database/duckdb_main', 'connection',
       { type: 'duckdb', config: { file_path: '../data/test.duckdb' }, description: '' } as ConnectionContent,
-      [], 1);
+      []);
     await DocumentDB.create('bigquery_analytics', '/org/database/bigquery_analytics', 'connection',
       { type: 'bigquery', config: { project_id: 'test' }, description: '' } as ConnectionContent,
-      [], 1);
+      []);
   });
 
   // ── Test 4: root context with whitelist:'*' ──────────────────────────────
@@ -404,7 +401,7 @@ describe('Context loader — ContextVersion.whitelist (new schema)', () => {
     };
     const id = await DocumentDB.create('context', '/org/context', 'context',
       { versions: [v], published: { all: 1 } } as ContextContent,
-      [], 1);
+      []);
 
     const { data: [loaded] } = await FilesAPI.loadFiles([id], viewer);
     const content = loaded.content as ContextContent;
@@ -440,7 +437,7 @@ describe('Context loader — ContextVersion.whitelist (new schema)', () => {
     };
     const id = await DocumentDB.create('context', '/org/context', 'context',
       { versions: [v], published: { all: 1 } } as ContextContent,
-      [], 1);
+      []);
 
     const { data: [loaded] } = await FilesAPI.loadFiles([id], viewer);
     const content = loaded.content as ContextContent;
@@ -471,7 +468,7 @@ describe('Context loader — ContextVersion.whitelist (new schema)', () => {
     };
     await DocumentDB.create('context', '/org/context', 'context',
       { versions: [parentVersion], published: { all: 1 } } as ContextContent,
-      [], 1);
+      []);
 
     // Child at /org/sales/context with whitelist:'*' — should see everything parent exposes
     const childVersion: ContextVersion = {
@@ -483,7 +480,7 @@ describe('Context loader — ContextVersion.whitelist (new schema)', () => {
     };
     const childId = await DocumentDB.create('context', '/org/sales/context', 'context',
       { versions: [childVersion], published: { all: 1 } } as ContextContent,
-      [], 1);
+      []);
 
     const { data: [childLoaded] } = await FilesAPI.loadFiles([childId], viewer);
     const childContent = childLoaded.content as ContextContent;
@@ -512,7 +509,7 @@ describe('Context loader — ContextVersion.whitelist (new schema)', () => {
     };
     await DocumentDB.create('context', '/org/context', 'context',
       { versions: [parentVersion], published: { all: 1 } } as ContextContent,
-      [], 1);
+      []);
 
     // Child only whitelists the orders table
     const childVersion: ContextVersion = {
@@ -528,7 +525,7 @@ describe('Context loader — ContextVersion.whitelist (new schema)', () => {
     };
     const childId = await DocumentDB.create('context', '/org/sales/context', 'context',
       { versions: [childVersion], published: { all: 1 } } as ContextContent,
-      [], 1);
+      []);
 
     const { data: [childLoaded] } = await FilesAPI.loadFiles([childId], viewer);
     const childContent = childLoaded.content as ContextContent;
@@ -563,7 +560,7 @@ describe('Context loader — ContextVersion.whitelist (new schema)', () => {
     };
     await DocumentDB.create('context', '/org/context', 'context',
       { versions: [parentVersion], published: { all: 1 } } as ContextContent,
-      [], 1);
+      []);
 
     // team_a child: whitelist:'*' — should get users (not orders)
     const teamAVersion: ContextVersion = {
@@ -571,7 +568,7 @@ describe('Context loader — ContextVersion.whitelist (new schema)', () => {
       createdAt: new Date().toISOString(), createdBy: 1,
     };
     const teamAId = await DocumentDB.create('context', '/org/team_a/context', 'context',
-      { versions: [teamAVersion], published: { all: 1 } } as ContextContent, [], 1);
+      { versions: [teamAVersion], published: { all: 1 } } as ContextContent, []);
 
     // team_b child: whitelist:'*' — should get orders (not users)
     const teamBVersion: ContextVersion = {
@@ -579,7 +576,7 @@ describe('Context loader — ContextVersion.whitelist (new schema)', () => {
       createdAt: new Date().toISOString(), createdBy: 1,
     };
     const teamBId = await DocumentDB.create('context', '/org/team_b/context', 'context',
-      { versions: [teamBVersion], published: { all: 1 } } as ContextContent, [], 1);
+      { versions: [teamBVersion], published: { all: 1 } } as ContextContent, []);
 
     const { data: [teamA] } = await FilesAPI.loadFiles([teamAId], viewer);
     const { data: [teamB] } = await FilesAPI.loadFiles([teamBId], viewer);
@@ -603,9 +600,9 @@ describe('Default context per folder', () => {
   beforeEach(async () => {
     const { getAdapter } = await import('@/lib/database/adapter/factory');
     const db = await getAdapter();
-    await db.query('DELETE FROM files WHERE company_id = $1', [1]);
+    await db.query('DELETE FROM files', []);
     // Re-create the /org root folder so parent checks pass
-    await DocumentDB.create('org', '/org', 'folder', { description: '' }, [], 1);
+    await DocumentDB.create('org', '/org', 'folder', { description: '' }, []);
   });
 
   // ── Test 8: folder creation atomically creates a context ─────────────────
@@ -617,7 +614,7 @@ describe('Default context per folder', () => {
     );
 
     // Context must now exist
-    const contextFile = await DocumentDB.getByPath('/org/my-team/context', 1);
+    const contextFile = await DocumentDB.getByPath('/org/my-team/context');
     expect(contextFile).toBeDefined();
     expect(contextFile!.type).toBe('context');
   });
@@ -630,7 +627,7 @@ describe('Default context per folder', () => {
       admin,
     );
 
-    const contextFile = await DocumentDB.getByPath('/org/sales/context', 1);
+    const contextFile = await DocumentDB.getByPath('/org/sales/context');
     expect(contextFile).toBeDefined();
 
     const content = contextFile!.content as ContextContent;
@@ -665,7 +662,7 @@ describe('Default context per folder', () => {
 
     await DocumentDB.create('duckdb_main', '/org/database/duckdb_main', 'connection',
       { type: 'duckdb', config: { file_path: '../data/test.duckdb' }, description: '' } as ConnectionContent,
-      [], 1);
+      []);
 
     // Three levels, all whitelist:'*'
     const makeCtx = (): ContextContent => ({
@@ -673,9 +670,9 @@ describe('Default context per folder', () => {
       published: { all: 1 },
     });
 
-    await DocumentDB.create('context', '/org/context',     'context', makeCtx(), [], 1);
-    await DocumentDB.create('context', '/org/a/context',   'context', makeCtx(), [], 1);
-    const deepId = await DocumentDB.create('context', '/org/a/b/context', 'context', makeCtx(), [], 1);
+    await DocumentDB.create('context', '/org/context',     'context', makeCtx(), []);
+    await DocumentDB.create('context', '/org/a/context',   'context', makeCtx(), []);
+    const deepId = await DocumentDB.create('context', '/org/a/b/context', 'context', makeCtx(), []);
 
     const { data: [deepCtx] } = await FilesAPI.loadFiles([deepId], viewer);
     const content = deepCtx.content as ContextContent;
@@ -698,14 +695,14 @@ describe('Delete protection', () => {
   beforeEach(async () => {
     const { getAdapter } = await import('@/lib/database/adapter/factory');
     const db = await getAdapter();
-    await db.query('DELETE FROM files WHERE company_id = $1', [1]);
+    await db.query('DELETE FROM files', []);
   });
 
   // ── Test 11: standalone context deletion is blocked ───────────────────────
 
   it('standalone deletion of a context file throws AccessPermissionError', async () => {
     const ctxId = await DocumentDB.create('context', '/org/myteam/context', 'context',
-      makeDefaultContextContent(1), [], 1);
+      makeDefaultContextContent(1), []);
 
     await expect(
       FilesAPI.deleteFile(ctxId, admin)
@@ -714,7 +711,7 @@ describe('Delete protection', () => {
 
   it('standalone context deletion is blocked for all roles', async () => {
     const ctxId = await DocumentDB.create('context', '/org/viewer-team/context', 'context',
-      makeDefaultContextContent(1), [], 1);
+      makeDefaultContextContent(1), []);
 
     await expect(FilesAPI.deleteFile(ctxId, viewer)).rejects.toThrow();
     await expect(FilesAPI.deleteFile(ctxId, admin)).rejects.toThrow();
@@ -725,31 +722,31 @@ describe('Delete protection', () => {
   it('deleting a folder also deletes its contained context (cascade succeeds)', async () => {
     // Create folder + its default context
     const folderId = await DocumentDB.create('folder', '/org/removable-team', 'folder',
-      { description: '' }, [], 1);
+      { description: '' }, []);
     await DocumentDB.create('context', '/org/removable-team/context', 'context',
-      makeDefaultContextContent(1), [], 1);
+      makeDefaultContextContent(1), []);
 
     // Folder deletion MUST succeed even though the folder contains a context
     await expect(FilesAPI.deleteFile(folderId, admin)).resolves.toBeDefined();
 
     // Both folder and context are gone
-    expect(await DocumentDB.getByPath('/org/removable-team', 1)).toBeNull();
-    expect(await DocumentDB.getByPath('/org/removable-team/context', 1)).toBeNull();
+    expect(await DocumentDB.getByPath('/org/removable-team')).toBeNull();
+    expect(await DocumentDB.getByPath('/org/removable-team/context')).toBeNull();
   });
 
   it('deleting a nested folder deletes all child contexts in the subtree', async () => {
     // Folder tree: /org/parent → /org/parent/child, each with a context
-    const parentId = await DocumentDB.create('folder', '/org/parent', 'folder', { description: '' }, [], 1);
-    await DocumentDB.create('folder',  '/org/parent/child',         'folder',  { description: '' }, [], 1);
-    await DocumentDB.create('context', '/org/parent/context',       'context', makeDefaultContextContent(1), [], 1);
-    await DocumentDB.create('context', '/org/parent/child/context', 'context', makeDefaultContextContent(1), [], 1);
+    const parentId = await DocumentDB.create('folder', '/org/parent', 'folder', { description: '' }, []);
+    await DocumentDB.create('folder',  '/org/parent/child',         'folder',  { description: '' }, []);
+    await DocumentDB.create('context', '/org/parent/context',       'context', makeDefaultContextContent(1), []);
+    await DocumentDB.create('context', '/org/parent/child/context', 'context', makeDefaultContextContent(1), []);
 
     await expect(FilesAPI.deleteFile(parentId, admin)).resolves.toBeDefined();
 
-    expect(await DocumentDB.getByPath('/org/parent', 1)).toBeNull();
-    expect(await DocumentDB.getByPath('/org/parent/child', 1)).toBeNull();
-    expect(await DocumentDB.getByPath('/org/parent/context', 1)).toBeNull();
-    expect(await DocumentDB.getByPath('/org/parent/child/context', 1)).toBeNull();
+    expect(await DocumentDB.getByPath('/org/parent')).toBeNull();
+    expect(await DocumentDB.getByPath('/org/parent/child')).toBeNull();
+    expect(await DocumentDB.getByPath('/org/parent/context')).toBeNull();
+    expect(await DocumentDB.getByPath('/org/parent/child/context')).toBeNull();
   });
 });
 
@@ -779,7 +776,7 @@ describe('V33 migration', () => {
         documents: [
           {
             id: 1, name: 'context', path: '/org/context', type: 'context',
-            references: [], company_id: 1,
+            references: [],
             created_at: '2024-01-01', updated_at: '2024-01-01',
             version: 1, last_edit_id: null,
             content: {
@@ -806,7 +803,7 @@ describe('V33 migration', () => {
           // A folder without a context (V33 should add one)
           {
             id: 2, name: 'sales', path: '/org/sales', type: 'folder',
-            references: [], company_id: 1,
+            references: [],
             created_at: '2024-01-01', updated_at: '2024-01-01',
             version: 1, last_edit_id: null,
             content: { description: '' },
@@ -816,10 +813,10 @@ describe('V33 migration', () => {
     };
 
     const result = v33!.dataMigration!(inputData);
-    const company = result.companies[0] as any;
+    const orgEntry = result.orgs![0] as any;
 
     // ── Test 13: whitelist format conversion ──
-    const orgCtx = company.documents.find((d: any) => d.path === '/org/context');
+    const orgCtx = orgEntry.documents.find((d: any) => d.path === '/org/context');
     expect(orgCtx).toBeDefined();
 
     const convertedVersion = orgCtx.content.versions[0];
@@ -870,26 +867,26 @@ describe('V33 migration', () => {
           // Two folders with NO context files
           {
             id: 1, name: 'org', path: '/org', type: 'folder',
-            references: [], company_id: 1,
+            references: [],
             created_at: '2024-01-01', updated_at: '2024-01-01', version: 1, last_edit_id: null,
             content: { description: '' },
           },
           {
             id: 2, name: 'sales', path: '/org/sales', type: 'folder',
-            references: [], company_id: 1,
+            references: [],
             created_at: '2024-01-01', updated_at: '2024-01-01', version: 1, last_edit_id: null,
             content: { description: '' },
           },
           // A folder that already has a context (should not get a duplicate)
           {
             id: 3, name: 'database', path: '/org/database', type: 'folder',
-            references: [], company_id: 1,
+            references: [],
             created_at: '2024-01-01', updated_at: '2024-01-01', version: 1, last_edit_id: null,
             content: { description: '' },
           },
           {
             id: 4, name: 'context', path: '/org/database/context', type: 'context',
-            references: [], company_id: 1,
+            references: [],
             created_at: '2024-01-01', updated_at: '2024-01-01', version: 1, last_edit_id: null,
             content: {
               versions: [{ version: 1, whitelist: '*', docs: [], createdAt: '2024-01-01', createdBy: 1 }],
@@ -901,7 +898,7 @@ describe('V33 migration', () => {
     };
 
     const result = v33!.dataMigration!(inputData);
-    const docs = (result.companies[0] as any).documents;
+    const docs = (result.orgs![0] as any).documents;
 
     // /org/context must now exist
     const orgCtx = docs.find((d: any) => d.path === '/org/context');
@@ -937,7 +934,7 @@ describe('V33 migration', () => {
         documents: [
           {
             id: 1, name: 'org', path: '/org', type: 'folder',
-            references: [], company_id: 1,
+            references: [],
             created_at: '2024-01-01', updated_at: '2024-01-01', version: 1, last_edit_id: null,
             content: { description: '' },
           },
@@ -948,7 +945,7 @@ describe('V33 migration', () => {
     const afterFirst = v33!.dataMigration!(inputData);
     const afterSecond = v33!.dataMigration!(afterFirst);
 
-    const orgCtxs = (afterSecond.companies[0] as any).documents.filter(
+    const orgCtxs = (afterSecond.orgs![0] as any).documents.filter(
       (d: any) => d.path === '/org/context'
     );
     expect(orgCtxs).toHaveLength(1);

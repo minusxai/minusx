@@ -21,7 +21,7 @@ function createMockQuestion(
     type: 'question',
     references: [],  // Phase 6: Questions have no references
     content,
-    company_id: 1,
+
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
     version: 1,
@@ -43,7 +43,7 @@ function createMockDashboard(
     type: 'dashboard',
     references: [],  // Phase 6: References extracted from content.assets
     content,
-    company_id: 1,
+
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
     version: 1,
@@ -65,7 +65,7 @@ function createMockConnection(
     type: 'connection',
     references: [],  // Phase 6: Connections have no references
     content,
-    company_id: 1,
+
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:00:00Z',
     version: 1,

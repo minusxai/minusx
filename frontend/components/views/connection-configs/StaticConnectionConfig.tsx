@@ -54,7 +54,6 @@ import { BaseConfigProps } from './types';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface StaticConnectionConfigProps extends BaseConfigProps {
-  companyId: number | undefined;
   userMode: string;
   onError: (error: string) => void;
   onPendingDeletion?: (s3Key: string) => void;
@@ -288,7 +287,6 @@ function FileRow({
 export default function StaticConnectionConfig({
   config,
   onChange,
-  companyId,
   userMode,
   onError,
   onPendingDeletion,
@@ -452,13 +450,11 @@ export default function StaticConnectionConfig({
       const tableErr = s.tableName ? validateIdentifier(s.tableName) : null;
       if (tableErr) { onError(`Table name "${s.tableName}": ${tableErr}`); return; }
     }
-    if (!companyId) { onError('Unable to determine company ID'); return; }
-
     setImportProgress('importing');
     let allNewFiles: CsvFileInfo[] = [];
     try {
       for (const sheet of validSheets) {
-        const result = await importGoogleSheets('static', sheet.url, companyId, userMode, false, sheet.schema || 'public');
+        const result = await importGoogleSheets('static', sheet.url, false, sheet.schema || 'public');
         if (!result.success) { onError(result.message); setImportProgress('error'); return; }
 
         const spreadsheetFiles: CsvFileInfo[] = (result.config!.files ?? []).map((f, idx) => ({

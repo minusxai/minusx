@@ -33,7 +33,7 @@ function getEffectiveRule(role: UserRole, overrides?: AccessRulesOverride) {
  * Check if a user can access a specific file type (client-side)
  * @param role - User's role
  * @param fileType - The file type to check
- * @param overrides - Optional per-company access rules overrides
+ * @param overrides - Optional per-org access rules overrides
  * @returns true if user can access the file type
  */
 export function canAccessFileType(role: UserRole, fileType: FileType, overrides?: AccessRulesOverride): boolean {
@@ -103,7 +103,7 @@ export function canDeleteFileType(type: FileType): boolean {
 /**
  * Check if a file type should show in the Create menu for a role (client-side)
  * This is purely for UI filtering - API can still create types not in this list
- * @param overrides - Optional per-company access rules overrides
+ * @param overrides - Optional per-org access rules overrides
  */
 export function canShowInCreateMenu(role: UserRole, type: FileType, overrides?: AccessRulesOverride): boolean {
   const rule = getEffectiveRule(role, overrides);
@@ -121,7 +121,7 @@ export function canShowInCreateMenu(role: UserRole, type: FileType, overrides?: 
 }
 
 /**
- * Hook that returns access rule functions bound to the current company's config overrides.
+ * Hook that returns access rule functions bound to the current org's config overrides.
  * Reads accessRules from the Redux config store.
  */
 export function useAccessRules() {

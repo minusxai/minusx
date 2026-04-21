@@ -14,15 +14,11 @@ import queryResultsReducer from '../queryResultsSlice';
 import authReducer from '../authSlice';
 
 // Mock db-config to use test database
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  const dbPath = path.join(process.cwd(), 'data', 'test_edit_file.db');
-  return {
-    DB_PATH: dbPath,
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite'
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 // Mock the store import so file-state.ts uses the test store
 let testStore: any;
@@ -35,7 +31,6 @@ jest.mock('@/store/store', () => ({
 
 describe('editFile - Question Editing Flow', () => {
   const dbPath = getTestDbPath('edit_file');
-  const companyId = 1;
   let questionId1: number;
   let questionId2: number;
   let questionId3: number;
@@ -68,7 +63,6 @@ describe('editFile - Question Editing Flow', () => {
           ...init,
           headers: {
             ...init?.headers,
-            'x-company-id': '1',
             'x-user-id': '1'
           }
         });
@@ -117,8 +111,7 @@ describe('editFile - Question Editing Flow', () => {
           yCols: []
         }
       } as QuestionContent,
-      [],
-      companyId
+      []
     );
 
     // Create test question 2
@@ -137,8 +130,7 @@ describe('editFile - Question Editing Flow', () => {
           yCols: []
         }
       } as QuestionContent,
-      [],
-      companyId
+      []
     );
 
     // Create test question 3
@@ -157,8 +149,7 @@ describe('editFile - Question Editing Flow', () => {
           yCols: []
         }
       } as QuestionContent,
-      [],
-      companyId
+      []
     );
 
     // Create test store
@@ -378,7 +369,6 @@ describe('editFile - Question Editing Flow', () => {
 
 describe('editFile - Question content validation', () => {
   const dbPath = getTestDbPath('edit_file'); // same mock path as db-config module mock above
-  const companyId = 1;
   let questionId: number;
 
   const { POST: batchPostHandler } = require('@/app/api/files/batch/route');
@@ -401,7 +391,7 @@ describe('editFile - Question content validation', () => {
         const request = new Request(fullUrl, {
           method: 'POST',
           ...init,
-          headers: { ...init?.headers, 'x-company-id': '1', 'x-user-id': '1' }
+          headers: { ...init?.headers, 'x-user-id': '1' }
         });
         const response = await batchPostHandler(request);
         const data = await response.json();
@@ -434,8 +424,7 @@ describe('editFile - Question content validation', () => {
         references: [],
         vizSettings: { type: 'table', xCols: [], yCols: [] }
       } as QuestionContent,
-      [],
-      companyId
+      []
     );
 
     testStore = setupStore();
@@ -545,7 +534,6 @@ describe('editFile - Question content validation', () => {
 
 describe('editFile - Dashboard content validation', () => {
   const dbPath = getTestDbPath('edit_file'); // same db-config mock path
-  const companyId = 1;
   let dashboardId: number;
 
   const { POST: batchPostHandler } = require('@/app/api/files/batch/route');
@@ -574,7 +562,7 @@ describe('editFile - Dashboard content validation', () => {
         const request = new Request(fullUrl, {
           method: 'POST',
           ...init,
-          headers: { ...init?.headers, 'x-company-id': '1', 'x-user-id': '1' },
+          headers: { ...init?.headers, 'x-user-id': '1' },
         });
         const response = await batchPostHandler(request);
         const data = await response.json();
@@ -600,8 +588,7 @@ describe('editFile - Dashboard content validation', () => {
       '/org/test-dashboard',
       'dashboard',
       initialContent,
-      [],
-      companyId
+      []
     );
 
     testStore = setupStore();

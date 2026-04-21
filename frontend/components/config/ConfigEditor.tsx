@@ -193,10 +193,10 @@ export default function ConfigEditor({
         bg="bg.muted"
       >
         <Text fontSize="sm" color="fg.muted" fontFamily="mono">
-          <strong>Config Structure:</strong> This file configures company-specific settings like branding.
+          <strong>Config Structure:</strong> This file configures org-specific settings like branding.
         </Text>
         <Text fontSize="xs" color="fg.muted" fontFamily="mono" mt={2}>
-          Example: <code>{`{ "branding": { "logoLight": "/logo.svg", "logoDark": "/logo-dark.svg", "displayName": "Company", "agentName": "Agent" } }`}</code>
+          Example: <code>{`{ "branding": { "logoLight": "/logo.svg", "logoDark": "/logo-dark.svg", "displayName": "Org Name", "agentName": "Agent" } }`}</code>
         </Text>
       </Box>
     </VStack>

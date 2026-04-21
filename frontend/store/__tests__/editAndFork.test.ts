@@ -19,14 +19,11 @@
  */
 
 // IMPORTANT: jest.mock calls are hoisted before imports.
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_edit_and_fork.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const,
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 import {
   selectConversation,
@@ -62,9 +59,8 @@ async function loadConversationIntoRedux(
 ): Promise<void> {
   const { getOrCreateConversation } = await import('@/lib/conversations');
 
-  // Use the same mock user that getEffectiveUser returns in tests (companyId=1)
+  // Use the same mock user that getEffectiveUser returns in tests
   const mockUser: any = {
-    companyId: 1,
     userId: 1,
     email: 'test@example.com',
     role: 'admin',

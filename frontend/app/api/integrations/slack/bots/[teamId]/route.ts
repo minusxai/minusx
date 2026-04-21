@@ -20,7 +20,7 @@ export const DELETE = withAuth(async (
       return ApiErrors.validationError('teamId is required');
     }
 
-    await removeSlackBotConfig(user.companyId, user.mode, teamId);
+    await removeSlackBotConfig(user.mode, teamId);
     return successResponse({ ok: true });
   } catch (error) {
     return handleApiError(error);

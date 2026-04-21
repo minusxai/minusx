@@ -72,8 +72,7 @@ export function buildOAuthUrl(state: string): string {
   return `https://slack.com/oauth/v2/authorize?${params.toString()}`;
 }
 
-export function buildSlackManifest(appName: string, baseUrl: string = AUTH_URL, devSubdomain?: string) {
-  const subdomainSuffix = devSubdomain ? `?subdomain=${encodeURIComponent(devSubdomain)}` : '';
+export function buildSlackManifest(appName: string, baseUrl: string = AUTH_URL) {
   return {
     display_information: {
       name: appName,
@@ -99,12 +98,12 @@ export function buildSlackManifest(appName: string, baseUrl: string = AUTH_URL, 
     },
     settings: {
       event_subscriptions: {
-        request_url: `${baseUrl}/api/integrations/slack/events${subdomainSuffix}`,
+        request_url: `${baseUrl}/api/integrations/slack/events`,
         bot_events: ['app_mention', 'message.im', 'app_home_opened'],
       },
       interactivity: {
         is_enabled: true,
-        request_url: `${baseUrl}/api/integrations/slack/interact${subdomainSuffix}`,
+        request_url: `${baseUrl}/api/integrations/slack/interact`,
       },
       org_deploy_enabled: false,
       socket_mode_enabled: false,

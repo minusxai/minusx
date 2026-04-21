@@ -25,14 +25,11 @@
 
 // IMPORTANT: jest.mock calls are hoisted to the top before imports.
 // Use require() inside the factory — cannot reference imported modules here.
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_chat_interruption.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 import { POST as chatPostHandler } from '@/app/api/chat/route';
 import {

@@ -23,3 +23,12 @@ function cyrb53(str: string, seed = 0): string {
 export function getQueryHash(query: string, params: Record<string, any>, database: string): string {
   return cyrb53(`${database}|||${query}|||${JSON.stringify(params)}`);
 }
+
+/**
+ * Generate a stable content-based hash for any serializable value.
+ * Safe to use on both client and server (no Node.js APIs).
+ * Suitable as an editId for DocumentDB writes.
+ */
+export function hashContent(value: unknown): string {
+  return cyrb53(JSON.stringify(value));
+}

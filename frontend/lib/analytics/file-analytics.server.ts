@@ -14,7 +14,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
  * Fire-and-forget: call without await from critical paths.
  */
 export async function trackFileEvent(event: FileEvent): Promise<void> {
-  const db = await getAnalyticsDb(event.companyId);
+  const db = await getAnalyticsDb();
 
   await runStatement(db, INSERT_SQL, [
     event.eventType,
@@ -67,10 +67,9 @@ ORDER BY id DESC LIMIT 1
  */
 export async function getFileAnalyticsSummary(
   fileId: number,
-  companyId: number
 ): Promise<FileAnalyticsSummary | null> {
   try {
-    const db = await getAnalyticsDb(companyId);
+    const db = await getAnalyticsDb();
 
     const [aggRows, createdByRows, lastEditedByRows] = await Promise.all([
       runQuery<Record<string, unknown>>(db, AGGREGATION_SQL, [fileId]),
@@ -102,11 +101,10 @@ export async function getFileAnalyticsSummary(
  */
 export async function getFilesAnalyticsSummary(
   fileIds: number[],
-  companyId: number
 ): Promise<Record<number, FileAnalyticsSummary>> {
   try {
     if (fileIds.length === 0) return {};
-    const db = await getAnalyticsDb(companyId);
+    const db = await getAnalyticsDb();
 
     const placeholders = fileIds.map(() => '?').join(', ');
 
@@ -194,8 +192,8 @@ GROUP BY file_id
 
 const INSERT_QUERY_EXEC_SQL = `
 INSERT INTO query_execution_events
-  (query_hash, connection_name, duration_ms, row_count, was_cache_hit, user_email, company_id)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+  (query_hash, connection_name, duration_ms, row_count, was_cache_hit, user_email)
+VALUES (?, ?, ?, ?, ?, ?)
 `;
 
 interface QueryExecutionEvent {
@@ -205,7 +203,6 @@ interface QueryExecutionEvent {
   rowCount: number;
   wasCacheHit: boolean;
   userEmail: string | null;
-  companyId: number;
 }
 
 /**
@@ -213,7 +210,7 @@ interface QueryExecutionEvent {
  */
 export async function trackQueryExecutionEvent(event: QueryExecutionEvent): Promise<void> {
   try {
-    const db = await getAnalyticsDb(event.companyId);
+    const db = await getAnalyticsDb();
     await runStatement(db, INSERT_QUERY_EXEC_SQL, [
       event.queryHash,
       event.databaseName ?? null,
@@ -221,7 +218,6 @@ export async function trackQueryExecutionEvent(event: QueryExecutionEvent): Prom
       event.rowCount,
       event.wasCacheHit,
       event.userEmail ?? null,
-      event.companyId,
     ]);
   } catch (err) {
     console.error('[analytics] trackQueryExecutionEvent failed:', err);
@@ -240,12 +236,11 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 export async function trackLLMCallEvents(
   llmCalls: Record<string, LLMCallDetail>,
   conversationId: number,
-  companyId: number,
   userId: number,
   userEmail: string,
   userRole: string,
 ): Promise<void> {
-  const db = await getAnalyticsDb(companyId);
+  const db = await getAnalyticsDb();
   const inserts = Object.values(llmCalls).map((call) =>
     runStatement(db, INSERT_LLM_SQL, [
       conversationId,
@@ -285,10 +280,9 @@ GROUP BY model
  */
 export async function getConversationAnalytics(
   conversationId: number,
-  companyId: number
 ): Promise<ConversationAnalyticsSummary | null> {
   try {
-    const db = await getAnalyticsDb(companyId);
+    const db = await getAnalyticsDb();
     const rows = await runQuery<Record<string, unknown>>(db, CONV_AGG_SQL, [conversationId]);
 
     if (rows.length === 0) return null;

@@ -12,11 +12,6 @@ export const DELETE = withAuth(async (request: NextRequest, user) => {
       return ApiErrors.badRequest('s3_key is required');
     }
 
-    // Security: key must belong to this company
-    if (!s3_key.startsWith(`${user.companyId}/`)) {
-      return NextResponse.json({ error: 'Access denied' }, { status: 403 });
-    }
-
     await deleteS3File(s3_key);
     return NextResponse.json({ success: true });
   } catch (error) {

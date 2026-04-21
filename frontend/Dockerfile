@@ -25,9 +25,6 @@ COPY . .
 # Dummy secret satisfies build-time validation; real value is set at runtime via docker-compose
 ENV NEXTAUTH_SECRET=build-placeholder
 
-# Create directories and empty database for build
-RUN mkdir -p data && npm run create-empty-db
-
 # Build Next.js application (generates .next/standalone)
 # Accept git commit SHA from CI build arg — embedded into the Next.js build by next.config.ts
 ARG GIT_COMMIT_SHA
@@ -42,6 +39,8 @@ WORKDIR /app
 
 # Set production environment
 ENV NODE_ENV=production
+ENV BASE_DUCKDB_DATA_PATH=/app
+ENV PGLITE_DATA_DIR=/app/data/pglite
 
 # Install curl and ca-certificates for downloading DuckDB files
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -53,7 +52,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/data ./data
 
 # Copy database scripts and lib for initialization
 COPY --from=builder /app/scripts ./scripts
@@ -63,10 +61,12 @@ COPY --from=builder /app/tsconfig.json ./tsconfig.json
 # Install tsx for running TypeScript scripts
 RUN npm install --ignore-scripts tsx
 
+# Create data directories (docker-compose volumes mount over these; standalone runs use them directly)
+RUN mkdir -p /app/data/pglite /app/data/analytics
+
 # Expose frontend port
 EXPOSE 3000
 
-# Set up PostgreSQL (if DB_TYPE=postgres), initialize database (if missing), run migrations (if needed), and start
-# All setup steps are non-blocking - server will start even if they fail
-# Standalone mode uses server.js as entry point
-CMD ["sh", "-c", "(npm run setup-postgres 2>/dev/null || true) && (npm run import-db 2>/dev/null || true) && (npm run migrate-db || echo '⚠️  Migration failed, server starting anyway') && node server.js"]
+# Set up PostgreSQL user/db (if DB_TYPE=postgres and POSTGRES_SUPERUSER_URL provided), run migrations, start
+# migrate-db handles fresh installs (initializeSchema) and upgrades for both PGLite and Postgres
+CMD ["sh", "-c", "(npm run setup-postgres 2>/dev/null || true) && (npm run migrate-db || echo '⚠️  Migration failed, server starting anyway') && node server.js"]

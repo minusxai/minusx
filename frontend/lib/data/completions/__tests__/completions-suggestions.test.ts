@@ -4,14 +4,11 @@
  */
 
 // Database-specific mock (test name must match)
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_completions_suggestions.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 // Mock Node.js connector so schema falls through to getSchemaFromPython mock below
 jest.mock('@/lib/connections', () => ({
@@ -87,9 +84,9 @@ const TEST_SCHEMA = {
 describe('Completions Suggestions - E2E Tests', () => {
   setupTestDb(getTestDbPath('completions_suggestions'), {
     withTestConnection: true,
-    customInit: async (dbPath) => {
-      const { createAdapter } = await import('@/lib/database/adapter/factory');
-      const db = await createAdapter({ type: 'sqlite', sqlitePath: dbPath });
+    customInit: async (_dbPath) => {
+      const { getAdapter } = await import('@/lib/database/adapter/factory');
+      const db = await getAdapter();
       await db.query(
         `UPDATE files SET content = ? WHERE path = ?`,
         [
@@ -103,7 +100,6 @@ describe('Completions Suggestions - E2E Tests', () => {
           '/org/connections/test_connection'
         ]
       );
-      await db.close();
     }
   });
 
@@ -113,8 +109,6 @@ describe('Completions Suggestions - E2E Tests', () => {
     name: 'Test User',
     email: 'test@example.com',
     role: 'admin',
-    companyId: 1,
-    companyName: 'test_company',
     home_folder: '/org',
     mode: 'org',
   };

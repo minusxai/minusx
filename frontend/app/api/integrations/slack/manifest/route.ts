@@ -4,7 +4,6 @@ import { ApiErrors } from '@/lib/api/api-responses';
 import { isAdmin } from '@/lib/auth/role-helpers';
 import { buildSlackManifest, getSlackCapabilities } from '@/lib/integrations/slack/config';
 import { getConfigs } from '@/lib/data/configs.server';
-import { IS_DEV } from '@/lib/constants';
 
 export const GET = withAuth(async (_request: NextRequest, user) => {
   if (!isAdmin(user.role)) {
@@ -19,8 +18,7 @@ export const GET = withAuth(async (_request: NextRequest, user) => {
 
   const { config } = await getConfigs(user);
   const appName = `${config.branding.agentName || 'MinusX'}`;
-  const devSubdomain = IS_DEV ? (_request.nextUrl.searchParams.get('subdomain') ?? undefined) : undefined;
-  const manifest = buildSlackManifest(appName, capabilities.baseUrl ?? undefined, devSubdomain);
+  const manifest = buildSlackManifest(appName, capabilities.baseUrl ?? undefined);
 
   return new NextResponse(JSON.stringify(manifest, null, 2), {
     status: 200,

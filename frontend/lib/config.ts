@@ -17,10 +17,9 @@ interface EnvironmentConfig {
   BASE_DUCKDB_DATA_PATH: string;
   NEXTAUTH_SECRET: string;
   ADMIN_PWD: string | undefined;
-  ALLOW_MULTIPLE_COMPANIES: boolean;
-  CREATE_COMPANY_SECRET: string | undefined;
-  DB_TYPE: 'sqlite' | 'postgres';
+  DB_TYPE: 'postgres' | 'pglite';
   DATABASE_URL: string;
+  PGLITE_DATA_DIR: string | undefined;
   POSTGRES_URL: string | undefined;
   POSTGRES_SCHEMA: string;
   CRON_SECRET: string | undefined;
@@ -43,6 +42,11 @@ interface EnvironmentConfig {
   OBJECT_STORE_PUBLIC_URL: string | undefined;
   LOCAL_UPLOAD_PATH: string;
   MXFOOD_DUCKDB_URL: string;
+  MD_HOME: string;
+  MD_LOGIN: string;
+  MD_REGISTER: string;
+  CUSTOM_MODULE: string | undefined;
+  LANDING_TEXT: string | undefined;
 }
 
 const errors: string[] = [];
@@ -79,10 +83,9 @@ const config: EnvironmentConfig = {
 
   ADMIN_PWD: process.env.ADMIN_PWD,
 
-  ALLOW_MULTIPLE_COMPANIES: process.env.ALLOW_MULTIPLE_COMPANIES === 'true',
-  CREATE_COMPANY_SECRET: process.env.CREATE_COMPANY_SECRET,
-  DB_TYPE: getOptional(process.env.DB_TYPE, 'sqlite') as 'sqlite' | 'postgres',
-  DATABASE_URL: getOptional(process.env.DATABASE_URL, 'data/atlas_documents.db'),
+  DB_TYPE: getOptional(process.env.DB_TYPE, 'pglite') as 'postgres' | 'pglite',
+  DATABASE_URL: getOptional(process.env.DATABASE_URL, ''),
+  PGLITE_DATA_DIR: process.env.PGLITE_DATA_DIR,
   POSTGRES_URL: process.env.POSTGRES_URL,
   POSTGRES_SCHEMA: getOptional(process.env.POSTGRES_SCHEMA, 'public'),
   CRON_SECRET: process.env.CRON_SECRET,
@@ -109,6 +112,11 @@ const config: EnvironmentConfig = {
     process.env.MXFOOD_DUCKDB_URL,
     'https://github.com/minusxai/sample_datasets/releases/download/v1.0/mxfood.duckdb',
   ),
+  MD_HOME: process.env.MD_HOME ?? '',
+  MD_LOGIN: process.env.MD_LOGIN ?? '',
+  MD_REGISTER: process.env.MD_REGISTER ?? '',
+  CUSTOM_MODULE: process.env.CUSTOM_MODULE,
+  LANDING_TEXT: process.env.LANDING_TEXT,
 };
 
 // Skip validation in test mode or browser (client-side)
@@ -139,10 +147,9 @@ export const AUTH_URL = config.AUTH_URL;
 export const BASE_DUCKDB_DATA_PATH = config.BASE_DUCKDB_DATA_PATH;
 export const NEXTAUTH_SECRET = config.NEXTAUTH_SECRET;
 export const ADMIN_PWD = config.ADMIN_PWD;
-export const ALLOW_MULTIPLE_COMPANIES = config.ALLOW_MULTIPLE_COMPANIES;
-export const CREATE_COMPANY_SECRET = config.CREATE_COMPANY_SECRET;
 export const DB_TYPE = config.DB_TYPE;
 export const DATABASE_URL = config.DATABASE_URL;
+export const PGLITE_DATA_DIR_ENV = config.PGLITE_DATA_DIR;
 export const POSTGRES_URL = config.POSTGRES_URL;
 export const POSTGRES_SCHEMA = config.POSTGRES_SCHEMA;
 export const CRON_SECRET = config.CRON_SECRET;
@@ -164,3 +171,8 @@ export const OBJECT_STORE_SECRET_ACCESS_KEY = config.OBJECT_STORE_SECRET_ACCESS_
 export const OBJECT_STORE_PUBLIC_URL = config.OBJECT_STORE_PUBLIC_URL;
 export const LOCAL_UPLOAD_PATH = config.LOCAL_UPLOAD_PATH;
 export const MXFOOD_DUCKDB_URL = config.MXFOOD_DUCKDB_URL;
+export const MD_HOME = config.MD_HOME;
+export const MD_LOGIN = config.MD_LOGIN;
+export const MD_REGISTER = config.MD_REGISTER;
+export const CUSTOM_MODULE = config.CUSTOM_MODULE;
+export const LANDING_TEXT = config.LANDING_TEXT;

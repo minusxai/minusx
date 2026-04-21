@@ -1,4 +1,4 @@
-import { LuTable, LuFileText, LuClock, LuMessageSquare, LuCode, LuShare2, LuLayoutDashboard, LuNotebookText, LuChartBar } from 'react-icons/lu';
+import { LuTable, LuFileText, LuClock, LuMessageSquare, LuCode, LuLayoutDashboard, LuNotebookText, LuChartBar } from 'react-icons/lu';
 import { IconType } from 'react-icons';
 
 /**
@@ -12,7 +12,6 @@ export type SidebarSectionId =
   | 'databases'
   | 'documentation'
   | 'history'
-  | 'share'
   | 'dev';
 
 /**
@@ -68,11 +67,6 @@ export const SIDEBAR_SECTION_METADATA: Record<SidebarSectionId, Omit<SidebarSect
     title: 'History',
     icon: LuClock,
     color: 'accent.warning',
-  },
-  share: {
-    title: 'Share',
-    icon: LuShare2,
-    color: 'accent.success',
   },
   dev: {
     title: 'Dev Tools',

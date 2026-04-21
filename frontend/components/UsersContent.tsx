@@ -415,7 +415,7 @@ export default function UsersContent() {
                       {!formData.phone
                         ? 'Enter phone number to enable 2FA'
                         : !hasPhoneOtpWebhook
-                        ? 'Configure Phone 2FA webhook in company config to enable 2FA'
+                        ? 'Configure Phone 2FA webhook in org config to enable 2FA'
                         : 'Requires phone number and messaging configuration'
                       }
                     </Text>
@@ -571,7 +571,7 @@ export default function UsersContent() {
                       {!formData.phone
                         ? 'Enter phone number to enable 2FA'
                         : !hasPhoneOtpWebhook
-                        ? 'Configure Phone 2FA webhook in company config to enable 2FA'
+                        ? 'Configure Phone 2FA webhook in org config to enable 2FA'
                         : 'Requires phone number and messaging configuration'
                       }
                     </Text>

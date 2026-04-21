@@ -6,9 +6,6 @@ import { isSlackOAuthConfigured, SLACK_BOT_SCOPES } from '@/lib/integrations/sla
 import { slackAuthTest } from '@/lib/integrations/slack/api';
 import { upsertSlackBotConfig } from '@/lib/integrations/slack/store';
 import { NEXTAUTH_SECRET, SLACK_CLIENT_ID, SLACK_CLIENT_SECRET, AUTH_URL } from '@/lib/config';
-import { CompanyDB } from '@/lib/database/company-db';
-import { getEffectiveUser } from '@/lib/auth/auth-helpers';
-import { isAdmin } from '@/lib/auth/role-helpers';
 import type { SlackBotConfig } from '@/lib/types';
 
 const STATE_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
@@ -16,7 +13,6 @@ const STATE_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
 interface StatePayload {
   ts: number;
   nonce: string;
-  subdomain: string | null;
   returnUrl: string;
   userEmail: string;
 }
@@ -102,100 +98,31 @@ function buildBotConfig(
   };
 }
 
-// ─── Direct install helpers ───────────────────────────────────────────────────
+// ─── Direct install helper ────────────────────────────────────────────────────
 
 const rootDomain = new URL(AUTH_URL).hostname;
 
-function renderHtml(title: string, body: string): NextResponse {
+function handleDirectInstall(): NextResponse {
   return new NextResponse(
     `<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${title}</title>
+<title>Log in to MinusX</title>
 <style>
   body{font-family:system-ui,sans-serif;max-width:480px;margin:80px auto;padding:0 24px;color:#e2e8f0;background:#0d1117;}
   h1{font-size:1.25rem;font-weight:600;margin-bottom:12px;}
   p{color:#94a3b8;font-size:.9rem;margin-bottom:20px;line-height:1.6;}
-  ul{list-style:none;padding:0;margin:0;}
-  li{margin-bottom:10px;}
   a{display:inline-block;padding:8px 16px;background:#0d9488;color:#fff;border-radius:6px;text-decoration:none;font-size:.875rem;}
   a:hover{background:#0f766e;}
 </style>
-</head><body>${body}</body></html>`,
+</head><body>
+<h1>Almost there</h1>
+<p>Please log in to your MinusX workspace first, then go to
+<strong>Settings → Integrations → Slack</strong> and click
+<strong>Add to Slack</strong> from there.</p>
+<a href="https://${rootDomain}">Go to MinusX</a>
+</body></html>`,
     { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } },
   );
-}
-
-async function handleDirectInstallRootDomain(
-  request: NextRequest,
-  code: string,
-): Promise<NextResponse> {
-  const raw = request.cookies.get('mx-companies')?.value ?? '[]';
-  let companies: string[] = [];
-  try { companies = JSON.parse(raw); } catch { companies = []; }
-  // Validate each entry is a well-formed subdomain label (RFC 1123) — prevents
-  // any malformed cookie value from being rendered into HTML.
-  companies = companies.filter((s): s is string => typeof s === 'string' && /^[a-z0-9][a-z0-9-]*$/.test(s));
-
-  if (companies.length === 0) {
-    return renderHtml(
-      'Log in to MinusX',
-      `<h1>Almost there</h1>
-       <p>Please log in to your MinusX workspace first, then go to
-       <strong>Settings → Integrations → Slack</strong> and click
-       <strong>Add to Slack</strong> from there.</p>
-       <a href="https://${rootDomain}">Go to MinusX</a>`,
-    );
-  }
-
-  if (companies.length === 1) {
-    const url = `https://${companies[0]}.${rootDomain}/api/integrations/slack/oauth-callback?code=${encodeURIComponent(code)}`;
-    return NextResponse.redirect(url);
-  }
-
-  // Multiple companies — render picker
-  const links = companies
-    .map(s => `<li><a href="https://${s}.${rootDomain}/api/integrations/slack/oauth-callback?code=${encodeURIComponent(code)}">${s}</a></li>`)
-    .join('\n');
-
-  return renderHtml(
-    'Select workspace — MinusX',
-    `<h1>Select your workspace</h1>
-     <p>You are logged into multiple MinusX workspaces. Choose which one to connect to Slack.</p>
-     <ul>${links}</ul>`,
-  );
-}
-
-async function handleDirectInstallSubdomain(
-  request: NextRequest,
-  code: string,
-): Promise<NextResponse> {
-  const host = request.headers.get('host') ?? '';
-
-  const user = await getEffectiveUser();
-  if (!user) {
-    const callbackUrl = encodeURIComponent(`/api/integrations/slack/oauth-callback?code=${code}`);
-    return NextResponse.redirect(`https://${host}/login?callbackUrl=${callbackUrl}`);
-  }
-
-  if (!isAdmin(user.role)) {
-    return ApiErrors.forbidden('Only admins can install Slack bots');
-  }
-
-  try {
-    const oauthResp = await exchangeCode(code);
-    if (!oauthResp.ok || !oauthResp.access_token) {
-      throw new Error(`Slack OAuth exchange failed: ${oauthResp.error ?? 'unknown'}`);
-    }
-
-    const authTest = await slackAuthTest(oauthResp.access_token);
-    const bot = buildBotConfig(oauthResp, authTest, user.email);
-
-    await upsertSlackBotConfig(user.companyId, 'org', bot);
-
-    return NextResponse.redirect(`https://${host}/settings?tab=integrations&slack=installed`);
-  } catch (error) {
-    return handleApiError(error);
-  }
 }
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
@@ -225,14 +152,9 @@ export async function GET(request: NextRequest) {
 
   // Direct install path — no signed state.
   // User arrived from Slack App Directory or a manually constructed install URL,
-  // not via our oauth-start route. Route based on whether middleware set x-subdomain.
+  // not via our oauth-start route. Show login page directing them to install via settings.
   if (!state && code) {
-    const subdomain = request.headers.get('x-subdomain');
-    if (!subdomain) {
-      return handleDirectInstallRootDomain(request, code);
-    } else {
-      return handleDirectInstallSubdomain(request, code);
-    }
+    return handleDirectInstall();
   }
 
   if (!code || !state) {
@@ -244,18 +166,6 @@ export async function GET(request: NextRequest) {
     return ApiErrors.validationError('Invalid or expired state parameter');
   }
 
-  // Look up company from subdomain encoded in the signed state.
-  // We don't use a session cookie here — the callback lands on the root domain
-  // (minusx.app) while the user's session is scoped to their company subdomain.
-  // Security: the state is HMAC-signed, so subdomain can't be tampered with.
-  const company = payload.subdomain
-    ? await CompanyDB.getBySubdomain(payload.subdomain)
-    : await CompanyDB.getDefaultCompany();
-
-  if (!company) {
-    return ApiErrors.notFound('Company not found for this workspace');
-  }
-
   try {
     const oauthResp = await exchangeCode(code);
     if (!oauthResp.ok || !oauthResp.access_token) {
@@ -265,7 +175,7 @@ export async function GET(request: NextRequest) {
     const authTest = await slackAuthTest(oauthResp.access_token);
     const bot = buildBotConfig(oauthResp, authTest, payload.userEmail);
 
-    await upsertSlackBotConfig(company.id, 'org', bot);
+    await upsertSlackBotConfig('org', bot);
 
     return NextResponse.redirect(`${payload.returnUrl}&slack=installed`);
   } catch (error) {

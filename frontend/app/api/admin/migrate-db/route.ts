@@ -16,20 +16,16 @@ import { validateInitData } from '@/lib/database/validation';
 import { getDataVersion, getSchemaVersion, setDataVersion, setSchemaVersion } from '@/lib/database/config-db';
 import { applyMigrations, getTargetVersions, needsSchemaMigration, MIGRATIONS } from '@/lib/database/migrations';
 import { LATEST_SCHEMA_VERSION } from '@/lib/database/constants';
-import { DB_PATH, getDbType } from '@/lib/database/db-config';
+import { getDbType } from '@/lib/database/db-config';
 import { createAdapter } from '@/lib/database/adapter/factory';
-import { BACKEND_URL } from '@/lib/config';
-import { POSTGRES_URL } from '@/lib/config';
-import fs from 'fs';
+import { BACKEND_URL, POSTGRES_URL } from '@/lib/config';
 
 export const POST = withAuth(async (request: NextRequest, user) => {
-  // Check admin permission
   if (!isAdmin(user.role)) {
     return ApiErrors.forbidden('Admin access required');
   }
 
   try {
-    // Parse request body for force parameter
     let force = false;
     try {
       const body = await request.json();
@@ -40,25 +36,14 @@ export const POST = withAuth(async (request: NextRequest, user) => {
 
     const dbType = getDbType();
 
-    // Check if database exists (SQLite only - PostgreSQL assumes DB exists)
-    if (dbType === 'sqlite' && !fs.existsSync(DB_PATH)) {
-      return NextResponse.json({
-        success: false,
-        errors: ['No database found'],
-        warnings: []
-      }, { status: 400 });
-    }
-
-    // Get current versions
-    const db = dbType === 'sqlite'
-      ? await createAdapter({ type: 'sqlite', sqlitePath: DB_PATH })
+    const db = dbType === 'pglite'
+      ? await createAdapter({ type: 'pglite' })
       : await createAdapter({ type: 'postgres', postgresConnectionString: POSTGRES_URL });
     const currentDataVersion = await getDataVersion(db);
     const currentSchemaVersion = await getSchemaVersion(db);
     const { dataVersion: targetDataVersion, schemaVersion: targetSchemaVersion } = getTargetVersions();
     await db.close();
 
-    // Check if migrations are needed
     const needsDataMigration = currentDataVersion < targetDataVersion;
     const needsSchemaRecreation = needsSchemaMigration(currentSchemaVersion);
 
@@ -68,30 +53,17 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         message: 'Database is already up to date',
         migrations: [],
         versions: {
-          current: {
-            data: currentDataVersion,
-            schema: currentSchemaVersion
-          },
-          target: {
-            data: targetDataVersion,
-            schema: targetSchemaVersion
-          }
+          current: { data: currentDataVersion, schema: currentSchemaVersion },
+          target: { data: targetDataVersion, schema: targetSchemaVersion }
         },
-        validation: {
-          valid: true,
-          errors: [],
-          warnings: []
-        }
+        validation: { valid: true, errors: [], warnings: [] }
       });
     }
 
-    // Export current company's data only (API must never touch other companies)
-    const exportedData = await exportDatabase(DB_PATH, user.companyId);
+    const exportedData = await exportDatabase();
 
-    // Apply data migrations
     const migratedData = applyMigrations(exportedData, currentDataVersion);
 
-    // Collect applied migrations for reporting
     const appliedMigrations: string[] = [];
     MIGRATIONS.forEach(m => {
       if (m.dataVersion && m.dataVersion > currentDataVersion && m.dataVersion <= targetDataVersion) {
@@ -102,7 +74,6 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       }
     });
 
-    // Validate migrated data
     const validation = validateInitData(migratedData);
 
     if (!validation.valid) {
@@ -112,30 +83,21 @@ export const POST = withAuth(async (request: NextRequest, user) => {
         warnings: validation.warnings,
         migrations: appliedMigrations,
         versions: {
-          current: {
-            data: currentDataVersion,
-            schema: currentSchemaVersion
-          },
-          target: {
-            data: targetDataVersion,
-            schema: targetSchemaVersion
-          }
+          current: { data: currentDataVersion, schema: currentSchemaVersion },
+          target: { data: targetDataVersion, schema: targetSchemaVersion }
         }
       }, { status: 400 });
     }
 
-    // Re-import scoped to this company only (surgical — other companies untouched)
-    await atomicImport(migratedData, DB_PATH, [user.companyId]);
+    await atomicImport(migratedData);
 
-    // Update version markers
-    const newDb = dbType === 'sqlite'
-      ? await createAdapter({ type: 'sqlite', sqlitePath: DB_PATH })
+    const newDb = dbType === 'pglite'
+      ? await createAdapter({ type: 'pglite' })
       : await createAdapter({ type: 'postgres', postgresConnectionString: POSTGRES_URL });
     await setDataVersion(targetDataVersion, newDb);
     await setSchemaVersion(LATEST_SCHEMA_VERSION, newDb);
     await newDb.close();
 
-    // Tell Python backend to drop its cached connections so it re-fetches updated configs
     try {
       const response = await fetch(`${BACKEND_URL}/api/connections/reinitialize`, { method: 'POST' });
       if (!response.ok) {
@@ -145,7 +107,6 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       console.warn(`Warning: Could not reach Python backend to reinitialize connections: ${error.message}`);
     }
 
-    // Determine success message
     const isEmptyMigration = force && appliedMigrations.length === 0;
     const successMessage = isEmptyMigration
       ? 'Empty migration completed successfully (exported and re-imported data)'
@@ -156,14 +117,8 @@ export const POST = withAuth(async (request: NextRequest, user) => {
       message: successMessage,
       migrations: appliedMigrations,
       versions: {
-        current: {
-          data: targetDataVersion,
-          schema: targetSchemaVersion
-        },
-        target: {
-          data: targetDataVersion,
-          schema: targetSchemaVersion
-        }
+        current: { data: targetDataVersion, schema: targetSchemaVersion },
+        target: { data: targetDataVersion, schema: targetSchemaVersion }
       },
       validation: {
         valid: validation.valid,

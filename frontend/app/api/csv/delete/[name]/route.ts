@@ -8,7 +8,7 @@ export const DELETE = withAuth(async (request: NextRequest, user, context) => {
     const { name } = await context.params;
     if (!name) return ApiErrors.badRequest('connection name is required');
 
-    await deleteConnectionFiles(user.companyId, user.mode, name);
+    await deleteConnectionFiles(user.mode, name);
 
     return NextResponse.json({ success: true, message: `Connection '${name}' removed` });
   } catch (error) {

@@ -25,25 +25,19 @@ jest.mock('@/lib/connections', () => ({
 }));
 
 // Database-specific mock — must be at module top level (Jest hoisting)
-jest.mock('@/lib/database/db-config', () => {
-  const path = require('path');
-  return {
-    DB_PATH: path.join(process.cwd(), 'data', 'test_connection_loader.db'),
-    DB_DIR: path.join(process.cwd(), 'data'),
-    getDbType: () => 'sqlite' as const,
-  };
-});
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
 
 const TEST_DB_PATH = getTestDbPath('connection_loader');
-const COMPANY_ID = 1;
 
 const testUser: EffectiveUser = {
   userId: 1,
   name: 'Test User',
   email: 'test@example.com',
   role: 'admin',
-  companyId: COMPANY_ID,
-  companyName: 'test-company',
   mode: 'org',
   home_folder: '',
 };
@@ -77,8 +71,8 @@ async function createConnection(name: string, path: string, schema?: DatabaseSch
     config: { host: 'localhost' },
     ...(schema && { schema }),
   };
-  const id = await DocumentDB.create(name, path, 'connection', content, [], COMPANY_ID);
-  return DocumentDB.getById(id, COMPANY_ID);
+  const id = await DocumentDB.create(name, path, 'connection', content, []);
+  return DocumentDB.getById(id);
 }
 
 function staleTimestamp() {
@@ -125,7 +119,7 @@ describe('connectionLoader — stale or missing schema', () => {
     expect(content.schema?.schemas).toEqual(FRESH_SCHEMA.schemas);
 
     // Verify the schema was persisted back to DB
-    const reloaded = await DocumentDB.getById(file!.id, COMPANY_ID);
+    const reloaded = await DocumentDB.getById(file!.id);
     const reloadedContent = reloaded?.content as ConnectionContent;
     expect(reloadedContent.schema?.schemas).toEqual(FRESH_SCHEMA.schemas);
   });
@@ -145,7 +139,7 @@ describe('connectionLoader — stale or missing schema', () => {
     expect(content.schema?.schemas).toEqual(FRESH_SCHEMA.schemas);
 
     // Verify the updated schema was persisted
-    const reloaded = await DocumentDB.getById(file!.id, COMPANY_ID);
+    const reloaded = await DocumentDB.getById(file!.id);
     const reloadedContent = reloaded?.content as ConnectionContent;
     expect(reloadedContent.schema?.schemas).toEqual(FRESH_SCHEMA.schemas);
   });
@@ -202,8 +196,8 @@ describe('connectionLoader — Python fetch failure', () => {
 
 describe('connectionLoader — metadata-only file', () => {
   it('returns file unchanged when content is null', async () => {
-    const id = await DocumentDB.create('conn_meta', '/org/database/conn_meta', 'connection', { type: 'postgresql', config: {} }, [], COMPANY_ID);
-    const metaFile = { ...(await DocumentDB.getById(id, COMPANY_ID))!, content: null };
+    const id = await DocumentDB.create('conn_meta', '/org/database/conn_meta', 'connection', { type: 'postgresql', config: {} }, []);
+    const metaFile = { ...(await DocumentDB.getById(id))!, content: null };
 
     const result = await connectionLoader(metaFile, testUser);
 
