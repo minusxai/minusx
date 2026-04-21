@@ -18,7 +18,7 @@ export default function DuckDBConfig({ config, onChange }: BaseConfigProps) {
         fontFamily="mono"
       />
       <Text fontSize="xs" color="fg.muted" mt={1}>
-        Path to the DuckDB database file inside the <span style={{ fontFamily: 'mono', color: 'var(--chakra-colors-accent-danger)' }}>data/</span> directory in root.
+        Relative to the <Text as="span" fontFamily="mono" fontWeight="600" color="fg.default">data/</Text> directory
       </Text>
     </Box>
   );
