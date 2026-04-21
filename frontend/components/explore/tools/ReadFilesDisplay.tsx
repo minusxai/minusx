@@ -176,7 +176,7 @@ export default function ReadFilesDisplay({ toolCallTuple, showThinking }: Displa
     return `${url}${separator}mode=${mode}`;
   };
 
-  const color = 'fg.muted';
+  const accent = 'accent.primary';
 
   return (
     <GridItem colSpan={12} my={1}>
@@ -184,15 +184,15 @@ export default function ReadFilesDisplay({ toolCallTuple, showThinking }: Displa
         gap={1.5}
         py={1.5}
         px={2}
-        bg="bg.subtle"
+        bg={`${accent}/8`}
         borderRadius="md"
         border="1px solid"
-        borderColor="border.default"
+        borderColor={`${accent}/15`}
         flexWrap="wrap"
       >
-        <Icon as={LuCheck} boxSize={3} color={color} flexShrink={0} />
-        <Icon as={LuBookOpen} boxSize={3} color={color} flexShrink={0} />
-        <Text fontSize="xs" color={color} fontFamily="mono">
+        <Icon as={LuCheck} boxSize={3} color={accent} flexShrink={0} />
+        <Icon as={LuBookOpen} boxSize={3} color={accent} flexShrink={0} />
+        <Text fontSize="xs" color="fg.muted" fontFamily="mono">
           Read
         </Text>
         {fileInfos.map(({ id, name, type }) => {
@@ -213,7 +213,7 @@ export default function ReadFilesDisplay({ toolCallTuple, showThinking }: Displa
               cursor={isNewFile ? 'default' : 'pointer'}
               _hover={isNewFile ? {} : { bg: 'bg.emphasized' }}
             >
-              {FileIcon && <Icon as={FileIcon} boxSize={2.5} color={color} />}
+              {FileIcon && <Icon as={FileIcon} boxSize={2.5} color="fg.muted" />}
               <Text fontSize="xs" color="fg.default" fontFamily="mono" fontWeight="500">
                 {displayName}
               </Text>

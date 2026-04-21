@@ -106,7 +106,7 @@ export default function CreateFileDisplay({ toolCallTuple, showThinking }: Displ
     ) : null;
   }
 
-  const color = 'fg.muted';
+  const accent = 'accent.success';
   const meta = file_type ? getFileTypeMetadata(file_type as FileType) : null;
   const FileIcon = meta?.icon;
   const displayName = name || file_type || 'file';
@@ -121,29 +121,29 @@ export default function CreateFileDisplay({ toolCallTuple, showThinking }: Displ
         gap={1.5}
         py={1.5}
         px={2}
-        bg="bg.subtle"
+        bg={`${accent}/8`}
         borderRadius="md"
         border="1px solid"
-        borderColor="border.default"
+        borderColor={`${accent}/15`}
         flexWrap="wrap"
       >
-        <Icon as={LuCheck} boxSize={3} color={color} flexShrink={0} />
-        <Icon as={LuFilePlus2} boxSize={3} color={color} flexShrink={0} />
-        <Text fontSize="xs" color={color} fontFamily="mono">
+        <Icon as={LuCheck} boxSize={3} color={accent} flexShrink={0} />
+        <Icon as={LuFilePlus2} boxSize={3} color={accent} flexShrink={0} />
+        <Text fontSize="xs" color="fg.muted" fontFamily="mono">
           Created {file_type || 'file'}
         </Text>
         {href ? (
           <Link href={href}>
             <HStack
               gap={1}
-              bg="bg.muted"
+              bg={`${accent}/10`}
               px={1.5}
               py={0.5}
               borderRadius="sm"
               cursor="pointer"
-              _hover={{ bg: 'bg.emphasized' }}
+              _hover={{ bg: `${accent}/20` }}
             >
-              {FileIcon && <Icon as={FileIcon} boxSize={2.5} color={color} />}
+              {FileIcon && <Icon as={FileIcon} boxSize={2.5} color="fg.muted" />}
               <Text fontSize="xs" color="fg.default" fontFamily="mono" fontWeight="600">
                 {displayName}
               </Text>

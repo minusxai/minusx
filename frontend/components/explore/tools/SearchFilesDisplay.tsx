@@ -140,16 +140,16 @@ export default function SearchFilesDisplay({ toolCallTuple, showThinking }: Disp
     ) : null;
   }
 
-  const color = 'fg.muted';
+  const accent = 'accent.cyan';
   const hasResults = results.length > 0;
 
   return (
     <GridItem colSpan={12} my={1}>
       <Box
-        bg="bg.subtle"
+        bg={`${accent}/6`}
         borderRadius="md"
         border="1px solid"
-        borderColor="border.default"
+        borderColor={`${accent}/15`}
         overflow="hidden"
       >
         <HStack
@@ -161,13 +161,13 @@ export default function SearchFilesDisplay({ toolCallTuple, showThinking }: Disp
           align="start"
         >
           {hasResults && (
-            <Icon as={isExpanded ? LuChevronDown : LuChevronRight} boxSize={3} color={color} flexShrink={0} mt={0.5} />
+            <Icon as={isExpanded ? LuChevronDown : LuChevronRight} boxSize={3} color={accent} flexShrink={0} mt={0.5} />
           )}
           {!hasResults && (
-            <Icon as={LuCheck} boxSize={3} color={color} flexShrink={0} mt={0.5} />
+            <Icon as={LuCheck} boxSize={3} color={accent} flexShrink={0} mt={0.5} />
           )}
           <HStack gap={1} minW={0} flex={1}>
-            <Text fontSize="xs" color={color} fontFamily="mono" truncate>
+            <Text fontSize="xs" color="fg.muted" fontFamily="mono" truncate>
               <Icon as={LuSearch} boxSize={3} display="inline" verticalAlign="middle" mr={1} />
               Search{query ? ` "${query}"` : ''}
             </Text>
@@ -195,7 +195,7 @@ export default function SearchFilesDisplay({ toolCallTuple, showThinking }: Disp
                     _hover={{ bg: 'bg.muted' }}
                     cursor="pointer"
                   >
-                    {FileIcon && <Icon as={FileIcon} boxSize={3} color={color} flexShrink={0} />}
+                    {FileIcon && <Icon as={FileIcon} boxSize={3} color="fg.muted" flexShrink={0} />}
                     <VStack gap={0} align="start" flex={1} minW={0}>
                       <Text fontSize="xs" color="fg.default" fontFamily="mono" fontWeight="600" truncate w="full">
                         {file.name}

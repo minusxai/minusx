@@ -125,13 +125,13 @@ export default function NavigateDisplay({ toolCallTuple }: DisplayProps) {
           gap={1.5}
           py={1.5}
           px={2}
-          bg="bg.elevated"
+          bg="accent.danger/8"
           borderRadius="md"
           border="1px solid"
-          borderColor="border.default"
+          borderColor="accent.danger/15"
           flexWrap="wrap"
         >
-          <Icon as={LuX} boxSize={3} color="fg.muted" flexShrink={0} />
+          <Icon as={LuX} boxSize={3} color="accent.danger" flexShrink={0} />
           <Text fontSize="xs" color="fg.muted" fontFamily="mono">
             {failMessage || 'User declined navigation'}
           </Text>
@@ -171,13 +171,13 @@ export default function NavigateDisplay({ toolCallTuple }: DisplayProps) {
         gap={1.5}
         py={1.5}
         px={2}
-        bg="bg.subtle"
+        bg="accent.teal/8"
         borderRadius="md"
         border="1px solid"
-        borderColor="border.default"
+        borderColor="accent.teal/15"
         flexWrap="wrap"
       >
-        <Icon as={LuCheck} boxSize={3} color="accent.success" flexShrink={0} />
+        <Icon as={LuCheck} boxSize={3} color="accent.teal" flexShrink={0} />
         <Text fontSize="xs" color="fg.muted" fontFamily="mono" whiteSpace="nowrap">
           Navigated to
         </Text>

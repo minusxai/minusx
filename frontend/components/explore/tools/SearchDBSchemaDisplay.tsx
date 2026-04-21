@@ -149,7 +149,7 @@ export default function SearchDBSchemaDisplay({ toolCallTuple, showThinking }: D
     ) : null;
   }
 
-  const color = 'fg.muted';
+  const accent = 'accent.cyan';
 
   // Build expandable content based on query type
   const searchResults: SchemaSearchResult[] = result?.results || [];
@@ -160,10 +160,10 @@ export default function SearchDBSchemaDisplay({ toolCallTuple, showThinking }: D
   return (
     <GridItem colSpan={12} my={1}>
       <Box
-        bg="bg.subtle"
+        bg={`${accent}/6`}
         borderRadius="md"
         border="1px solid"
-        borderColor="border.default"
+        borderColor={`${accent}/15`}
         overflow="hidden"
       >
         <HStack
@@ -175,13 +175,13 @@ export default function SearchDBSchemaDisplay({ toolCallTuple, showThinking }: D
           align="start"
         >
           {hasExpandableContent && (
-            <Icon as={isExpanded ? LuChevronDown : LuChevronRight} boxSize={3} color={color} flexShrink={0} mt={0.5} />
+            <Icon as={isExpanded ? LuChevronDown : LuChevronRight} boxSize={3} color={accent} flexShrink={0} mt={0.5} />
           )}
           {!hasExpandableContent && (
-            <Icon as={LuCheck} boxSize={3} color={color} flexShrink={0} mt={0.5} />
+            <Icon as={LuCheck} boxSize={3} color={accent} flexShrink={0} mt={0.5} />
           )}
           <HStack gap={1} minW={0} flex={1}>
-            <Text fontSize="xs" color={color} fontFamily="mono" truncate>
+            <Text fontSize="xs" color="fg.muted" fontFamily="mono" truncate>
               <Icon as={LuDatabase} boxSize={3} display="inline" verticalAlign="middle" mr={1} />
               Schema{query ? ` "${query}"` : ''}{connectionId ? ` on ${connectionId}` : ''}
             </Text>
@@ -207,7 +207,7 @@ export default function SearchDBSchemaDisplay({ toolCallTuple, showThinking }: D
                   borderRadius="sm"
                   bg="bg.subtle"
                 >
-                  <Icon as={LuDatabase} boxSize={3} color={color} flexShrink={0} />
+                  <Icon as={LuDatabase} boxSize={3} color="fg.muted" flexShrink={0} />
                   <VStack gap={0} align="start" flex={1} minW={0}>
                     <Text fontSize="xs" color="fg.default" fontFamily="mono" fontWeight="600" truncate w="full">
                       {schemaName} ({tableCt} {tableCt === 1 ? 'table' : 'tables'})
@@ -250,7 +250,7 @@ export default function SearchDBSchemaDisplay({ toolCallTuple, showThinking }: D
                   borderRadius="sm"
                   bg="bg.subtle"
                 >
-                  <Icon as={LuDatabase} boxSize={3} color={color} flexShrink={0} />
+                  <Icon as={LuDatabase} boxSize={3} color="fg.muted" flexShrink={0} />
                   <Text fontSize="xs" color="fg.default" fontFamily="mono" fontWeight="600" truncate>
                     {colName
                       ? `${schemaName}.${tableName}.${colName} (${colType})`

@@ -152,7 +152,7 @@ export default function EditFileDisplay({ toolCallTuple, showThinking, readOnly 
     setIsUndone(false);
   }, [canUndoRedo, isUndone, fileId, finalState]);
 
-  const color = 'fg.muted';
+  const accent = 'accent.secondary';
 
   if (!success) {
     return showThinking ? (
@@ -185,10 +185,10 @@ export default function EditFileDisplay({ toolCallTuple, showThinking, readOnly 
   return (
     <GridItem colSpan={12} my={1}>
       <Box
-        bg="bg.subtle"
+        bg={`${accent}/8`}
         borderRadius="md"
         border="1px solid"
-        borderColor="border.default"
+        borderColor={`${accent}/15`}
         overflow="hidden"
       >
         <HStack
@@ -200,13 +200,13 @@ export default function EditFileDisplay({ toolCallTuple, showThinking, readOnly 
           onClick={() => hasDiff && setIsExpanded(!isExpanded)}
         >
           {hasDiff && (
-            <Icon as={isExpanded ? LuChevronDown : LuChevronRight} boxSize={3} color={color} flexShrink={0} />
+            <Icon as={isExpanded ? LuChevronDown : LuChevronRight} boxSize={3} color={accent} flexShrink={0} />
           )}
           {!hasDiff && (
-            <Icon as={LuCheck} boxSize={3} color={color} flexShrink={0} />
+            <Icon as={LuCheck} boxSize={3} color={accent} flexShrink={0} />
           )}
-          <Icon as={LuPencilLine} boxSize={3} color={color} flexShrink={0} />
-          <Text fontSize="xs" color={color} fontFamily="mono">
+          <Icon as={LuPencilLine} boxSize={3} color={accent} flexShrink={0} />
+          <Text fontSize="xs" color="fg.muted" fontFamily="mono">
             Edited
           </Text>
           {fileId !== undefined && (() => {
@@ -220,7 +220,7 @@ export default function EditFileDisplay({ toolCallTuple, showThinking, readOnly 
                 cursor={href ? 'pointer' : 'default'}
                 _hover={href ? { bg: 'bg.emphasized' } : {}}
               >
-                {FileIcon && <Icon as={FileIcon} boxSize={2.5} color={color} />}
+                {FileIcon && <Icon as={FileIcon} boxSize={2.5} color="fg.muted" />}
                 <Text fontSize="xs" color="fg.default" fontFamily="mono" fontWeight="600">
                   {displayName}
                 </Text>
@@ -246,7 +246,7 @@ export default function EditFileDisplay({ toolCallTuple, showThinking, readOnly 
                   opacity={isUndone ? 0.4 : 1}
                   _hover={isUndone ? {} : { bg: 'bg.muted' }}
                 >
-                  <Icon as={LuUndo2} boxSize={3} color={color} />
+                  <Icon as={LuUndo2} boxSize={3} color="fg.muted" />
                 </Box>
               </Tooltip>
               <Tooltip content="Restore to after this edit">
@@ -261,7 +261,7 @@ export default function EditFileDisplay({ toolCallTuple, showThinking, readOnly 
                   opacity={!isUndone ? 0.4 : 1}
                   _hover={!isUndone ? {} : { bg: 'bg.muted' }}
                 >
-                  <Icon as={LuRedo2} boxSize={3} color={color} />
+                  <Icon as={LuRedo2} boxSize={3} color="fg.muted" />
                 </Box>
               </Tooltip>
             </HStack>
