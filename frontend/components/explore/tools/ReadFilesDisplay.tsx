@@ -17,16 +17,30 @@ export function ReadFilesDetailCard({ msg, filesDict }: DetailCardProps) {
   const args = parseToolArgs(msg);
   const content = parseToolContent(msg);
   const success = isToolSuccess(msg);
+
+  // Parse files from response content first (has name, type, path), fall back to args + Redux
+  const responseFiles: any[] = content?.files || [];
   const fileIds: number[] = args.fileIds || [];
 
-  const files = fileIds.map(id => {
-    const file = filesDict[id];
-    const type = (file?.type ?? null) as FileType | null;
-    const meta = type ? getFileTypeMetadata(type) : null;
-    const isNewFile = id < 0;
-    const name = isNewFile ? `New ${meta?.label ?? type ?? 'file'}` : (file?.name ?? `#${id}`);
-    return { id, name, meta, isNewFile, canLink: !isNewFile && id > 0 };
-  });
+  const files = responseFiles.length > 0
+    ? responseFiles.map((f: any) => {
+        const fs = f.fileState || {};
+        const id = fs.id ?? 0;
+        const type = (fs.type ?? null) as FileType | null;
+        const meta = type ? getFileTypeMetadata(type) : null;
+        const name = fs.name || (filesDict[id]?.name) || `#${id}`;
+        const path = fs.path || null;
+        const assetCount = fs.content?.assets?.filter((a: any) => a.type === 'question')?.length ?? null;
+        return { id, name, path, meta, assetCount, canLink: id > 0 };
+      })
+    : fileIds.map(id => {
+        const file = filesDict[id];
+        const type = (file?.type ?? null) as FileType | null;
+        const meta = type ? getFileTypeMetadata(type) : null;
+        const isNewFile = id < 0;
+        const name = isNewFile ? `New ${meta?.label ?? type ?? 'file'}` : (file?.name ?? `#${id}`);
+        return { id, name, path: null as string | null, meta, assetCount: null as number | null, canLink: !isNewFile && id > 0 };
+      });
 
   // Single file: show as a full card
   if (files.length === 1) {
@@ -41,9 +55,16 @@ export function ReadFilesDetailCard({ msg, filesDict }: DetailCardProps) {
       >
         <HStack gap={2}>
           <Icon as={f.meta?.icon || LuBookOpen} boxSize={4} color={success ? (f.meta?.color || 'fg.muted') : 'accent.danger'} />
-          <Text fontSize="sm" fontFamily="mono" color="fg.default" fontWeight="600" truncate flex={1}>
-            {f.name}
-          </Text>
+          <VStack gap={0} align="start" flex={1} minW={0}>
+            <Text fontSize="sm" fontFamily="mono" color="fg.default" fontWeight="600" truncate w="full">
+              {f.name}
+            </Text>
+            {f.path && (
+              <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate w="full">
+                {f.path}
+              </Text>
+            )}
+          </VStack>
           {f.meta && (
             <Box bg={`${f.meta.color}/10`} px={2} py={0.5} borderRadius="full" flexShrink={0}>
               <Text fontSize="2xs" fontFamily="mono" color={f.meta.color} fontWeight="500">
@@ -52,6 +73,11 @@ export function ReadFilesDetailCard({ msg, filesDict }: DetailCardProps) {
             </Box>
           )}
         </HStack>
+        {f.assetCount != null && f.assetCount > 0 && (
+          <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" mt={1} pl={6}>
+            {f.assetCount} {f.assetCount === 1 ? 'question' : 'questions'}
+          </Text>
+        )}
       </Box>
     );
   }
@@ -69,9 +95,16 @@ export function ReadFilesDetailCard({ msg, filesDict }: DetailCardProps) {
         >
           <HStack gap={2}>
             <Icon as={f.meta?.icon || LuBookOpen} boxSize={3.5} color={f.meta?.color || 'fg.muted'} flexShrink={0} />
-            <Text fontSize="xs" fontFamily="mono" color="fg.default" fontWeight="600" truncate flex={1}>
-              {f.name}
-            </Text>
+            <VStack gap={0} align="start" flex={1} minW={0}>
+              <Text fontSize="xs" fontFamily="mono" color="fg.default" fontWeight="600" truncate w="full">
+                {f.name}
+              </Text>
+              {f.path && (
+                <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate w="full">
+                  {f.path}
+                </Text>
+              )}
+            </VStack>
             {f.meta && (
               <Box bg={`${f.meta.color}/10`} px={1.5} py={0.5} borderRadius="full" flexShrink={0}>
                 <Text fontSize="2xs" fontFamily="mono" color={f.meta.color} fontWeight="500">
@@ -80,6 +113,11 @@ export function ReadFilesDetailCard({ msg, filesDict }: DetailCardProps) {
               </Box>
             )}
           </HStack>
+          {f.assetCount != null && f.assetCount > 0 && (
+            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" mt={0.5} pl={5.5}>
+              {f.assetCount} {f.assetCount === 1 ? 'question' : 'questions'}
+            </Text>
+          )}
         </Box>
       ))}
     </VStack>

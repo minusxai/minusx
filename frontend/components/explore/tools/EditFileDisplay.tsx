@@ -21,11 +21,12 @@ export function EditFileDetailCard({ msg, filesDict }: DetailCardProps) {
   const content = parseToolContent(msg);
   const success = isToolSuccess(msg);
 
-  const fileId = args.fileId;
   const fileState = content?.state?.fileState || content?.fileState;
+  const fileId = fileState?.id ?? args.fileId;
   const fileName = fileState?.name || (fileId && filesDict[fileId]?.name) || (fileId ? `#${fileId}` : 'file');
   const filePath = fileState?.path || null;
   const fileType = (fileState?.type || (fileId && filesDict[fileId]?.type) || null) as FileType | null;
+  const assetCount = fileState?.content?.assets?.filter((a: any) => a.type === 'question')?.length ?? null;
   const meta = fileType ? getFileTypeMetadata(fileType) : null;
   const canLink = fileId != null && fileId > 0;
 
@@ -73,6 +74,11 @@ export function EditFileDetailCard({ msg, filesDict }: DetailCardProps) {
           </Box>
         )}
       </HStack>
+      {assetCount != null && assetCount > 0 && (
+        <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" mt={1} pl={6}>
+          {assetCount} {assetCount === 1 ? 'question' : 'questions'}
+        </Text>
+      )}
     </Box>
   );
 }

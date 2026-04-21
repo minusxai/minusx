@@ -8,7 +8,7 @@ import type { MessageWithFlags } from './message/messageHelpers';
 import SimpleChatMessage from './SimpleChatMessage';
 import ToolChips from './tools/ToolChips';
 import ChartCarousel from './tools/ChartCarousel';
-import DetailCarousel, { type DetailCardProps, getToolNameFromMsg } from './tools/DetailCarousel';
+import DetailCarousel, { type DetailCardProps, getToolNameFromMsg, isToolSuccess } from './tools/DetailCarousel';
 import { NavigateDetailCard } from './tools/NavigateDisplay';
 import { PublishAllDetailCard } from './tools/PublishAllDisplay';
 import { LoadSkillDetailCard } from './tools/LoadSkillDisplay';
@@ -388,11 +388,19 @@ export default function AgentTurnContainer({
       }
     }
 
-    // Everything else: look up detail card by tool name, fallback to FileDetailCard
+    // Sort messages: successes first, errors last
+    const sorted = [...node.messages].sort((a, b) => {
+      const aOk = isToolSuccess(a) ? 0 : 1;
+      const bOk = isToolSuccess(b) ? 0 : 1;
+      return aOk - bOk;
+    });
+    const errorCount = sorted.filter(m => !isToolSuccess(m)).length;
+
+    // Look up detail card by tool name, fallback to FileDetailCard
     return (
-      <DetailCarousel icon={node.icon} label={node.label} itemCount={node.messages.length}
+      <DetailCarousel icon={node.icon} label={node.label} itemCount={sorted.length} errorCount={errorCount}
         renderCard={(idx) => {
-          const msg = node.messages[idx];
+          const msg = sorted[idx];
           const Card = DETAIL_CARD_BY_TOOL[getToolNameFromMsg(msg)] || FileDetailCard;
           return <Card msg={msg} filesDict={filesDict} />;
         }}
