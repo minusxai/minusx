@@ -1108,6 +1108,8 @@ export interface ConversationFileContent extends BaseFileContent {
   log: ConversationLogEntry[];
 }
 
+export type ChatViewMode = 'compact' | 'detailed';
+
 export interface DisplayProps {
   toolCallTuple: CompletedToolCall;
   databaseName?: string;
@@ -1116,6 +1118,7 @@ export interface DisplayProps {
   toggleShowThinking?: () => void;
   markdownContext?: 'sidebar' | 'mainpage';
   readOnly?: boolean;
+  viewMode?: ChatViewMode;
 }
 
 // ============================================================================

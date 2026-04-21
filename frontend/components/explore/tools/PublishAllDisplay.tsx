@@ -22,7 +22,7 @@ export default function PublishAllDisplay({ toolCallTuple, showThinking }: Displ
     ) : null;
   }
 
-  const color = 'accent.success';
+  const color = 'fg.muted';
 
   return (
     <GridItem colSpan={12} my={1}>
@@ -30,10 +30,10 @@ export default function PublishAllDisplay({ toolCallTuple, showThinking }: Displ
         gap={1.5}
         py={1.5}
         px={2}
-        bg={`${color}/10`}
+        bg="bg.subtle"
         borderRadius="md"
         border="1px solid"
-        borderColor={`${color}/20`}
+        borderColor="border.default"
       >
         <Icon as={LuCheck} boxSize={3} color={color} flexShrink={0} />
         <Icon as={LuUpload} boxSize={3} color={color} flexShrink={0} />

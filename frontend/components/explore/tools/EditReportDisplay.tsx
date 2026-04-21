@@ -39,23 +39,23 @@ export default function EditReportDisplay({ toolCallTuple, showThinking }: Displ
   const getOpInfo = () => {
     switch (operation) {
       case 'update_schedule':
-        return { icon: LuClock, label: 'Updated schedule', color: 'accent.teal' };
+        return { icon: LuClock, label: 'Updated schedule' };
       case 'add_reference':
-        return { icon: LuCirclePlus, label: `Added ${reference_type} #${reference_id}`, color: 'accent.teal' };
+        return { icon: LuCirclePlus, label: `Added ${reference_type} #${reference_id}` };
       case 'remove_reference':
-        return { icon: LuTrash2, label: `Removed reference #${reference_id}`, color: 'accent.danger' };
+        return { icon: LuTrash2, label: `Removed reference #${reference_id}` };
       case 'update_reference':
-        return { icon: LuPencil, label: `Updated prompt for #${reference_id}`, color: 'accent.teal' };
+        return { icon: LuPencil, label: `Updated prompt for #${reference_id}` };
       case 'update_report_prompt':
-        return { icon: LuFileText, label: 'Updated synthesis instructions', color: 'accent.teal' };
+        return { icon: LuFileText, label: 'Updated synthesis instructions' };
       case 'update_emails':
-        return { icon: LuMail, label: 'Updated delivery emails', color: 'accent.teal' };
+        return { icon: LuMail, label: 'Updated delivery emails' };
       default:
-        return { icon: LuCheck, label: operation || 'Updated report', color: 'accent.teal' };
+        return { icon: LuCheck, label: operation || 'Updated report' };
     }
   };
 
-  const { icon, label, color } = getOpInfo();
+  const { icon, label } = getOpInfo();
 
   return (
     <GridItem colSpan={12} my={1}>
@@ -63,14 +63,14 @@ export default function EditReportDisplay({ toolCallTuple, showThinking }: Displ
         gap={1.5}
         py={1.5}
         px={2}
-        bg={`${color}/10`}
+        bg="bg.subtle"
         borderRadius="md"
         border="1px solid"
-        borderColor={`${color}/20`}
+        borderColor="border.default"
         flexWrap="wrap"
       >
-        <Icon as={icon} boxSize={3} color={color} flexShrink={0} />
-        <Text fontSize="xs" color={color} fontFamily="mono">
+        <Icon as={icon} boxSize={3} color="fg.muted" flexShrink={0} />
+        <Text fontSize="xs" color="fg.muted" fontFamily="mono">
           {label}
         </Text>
       </HStack>

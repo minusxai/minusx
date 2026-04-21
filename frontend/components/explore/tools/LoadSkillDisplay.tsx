@@ -65,13 +65,13 @@ export default function LoadSkillDisplay({ toolCallTuple }: DisplayProps) {
         gap={1.5}
         py={1.5}
         px={2}
-        bg="accent.success/10"
+        bg="bg.subtle"
         borderRadius="md"
         border="1px solid"
-        borderColor="accent.success/20"
+        borderColor="border.default"
       >
         <Icon as={LuCheck} boxSize={3} color="accent.success" flexShrink={0} />
-        <Text fontSize="xs" color="accent.success" fontFamily="mono" whiteSpace="nowrap">
+        <Text fontSize="xs" color="fg.muted" fontFamily="mono" whiteSpace="nowrap">
           Loaded skill
         </Text>
         <HStack gap={1} bg="bg.subtle" px={1.5} py={0.5} borderRadius="sm">

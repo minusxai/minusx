@@ -39,25 +39,25 @@ export default function EditDashboardDisplay({ toolCallTuple, showThinking }: Di
   const getOpInfo = () => {
     switch (operation) {
       case 'add_existing_question':
-        return { icon: LuCirclePlus, label: `Added question #${question_id}`, color: 'accent.teal' };
+        return { icon: LuCirclePlus, label: `Added question #${question_id}` };
       case 'remove_question':
-        return { icon: LuTrash2, label: `Removed question #${question_id}`, color: 'accent.danger' };
+        return { icon: LuTrash2, label: `Removed question #${question_id}` };
       case 'update_layout':
-        return { icon: LuLayoutGrid, label: 'Updated layout', color: 'accent.teal' };
+        return { icon: LuLayoutGrid, label: 'Updated layout' };
       case 'add_text':
-        return { icon: LuType, label: 'Added text', color: 'accent.teal' };
+        return { icon: LuType, label: 'Added text' };
       case 'remove_asset':
-        return { icon: LuTrash2, label: `Removed ${asset_id}`, color: 'accent.danger' };
+        return { icon: LuTrash2, label: `Removed ${asset_id}` };
       case 'add_new_question':
-        return { icon: LuCirclePlus, label: 'Created & added question', color: 'accent.teal' };
+        return { icon: LuCirclePlus, label: 'Created & added question' };
       case 'update_question':
-        return { icon: LuPencil, label: `Updated question #${question_id}`, color: 'accent.teal' };
+        return { icon: LuPencil, label: `Updated question #${question_id}` };
       default:
-        return { icon: LuCheck, label: operation || 'Updated dashboard', color: 'accent.teal' };
+        return { icon: LuCheck, label: operation || 'Updated dashboard' };
     }
   };
 
-  const { icon, label, color } = getOpInfo();
+  const { icon, label } = getOpInfo();
 
   return (
     <GridItem colSpan={12} my={1}>
@@ -65,14 +65,14 @@ export default function EditDashboardDisplay({ toolCallTuple, showThinking }: Di
         gap={1.5}
         py={1.5}
         px={2}
-        bg={`${color}/10`}
+        bg="bg.subtle"
         borderRadius="md"
         border="1px solid"
-        borderColor={`${color}/20`}
+        borderColor="border.default"
         flexWrap="wrap"
       >
-        <Icon as={icon} boxSize={3} color={color} flexShrink={0} />
-        <Text fontSize="xs" color={color} fontFamily="mono">
+        <Icon as={icon} boxSize={3} color="fg.muted" flexShrink={0} />
+        <Text fontSize="xs" color="fg.muted" fontFamily="mono">
           {label}
         </Text>
       </HStack>

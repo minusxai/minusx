@@ -70,16 +70,16 @@ export default function SearchFilesDisplay({ toolCallTuple, showThinking }: Disp
     ) : null;
   }
 
-  const color = 'accent.warning';
+  const color = 'fg.muted';
   const hasResults = results.length > 0;
 
   return (
     <GridItem colSpan={12} my={1}>
       <Box
-        bg={`${color}/10`}
+        bg="bg.subtle"
         borderRadius="md"
         border="1px solid"
-        borderColor={`${color}/20`}
+        borderColor="border.default"
         overflow="hidden"
       >
         <HStack
@@ -121,8 +121,8 @@ export default function SearchFilesDisplay({ toolCallTuple, showThinking }: Disp
                     px={2}
                     py={1}
                     borderRadius="sm"
-                    bg={`${color}/8`}
-                    _hover={{ bg: `${color}/18` }}
+                    bg="bg.subtle"
+                    _hover={{ bg: 'bg.muted' }}
                     cursor="pointer"
                   >
                     {FileIcon && <Icon as={FileIcon} boxSize={3} color={color} flexShrink={0} />}

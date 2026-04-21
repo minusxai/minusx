@@ -41,7 +41,7 @@ export default function CreateFileDisplay({ toolCallTuple, showThinking }: Displ
     ) : null;
   }
 
-  const color = 'accent.success';
+  const color = 'fg.muted';
   const meta = file_type ? getFileTypeMetadata(file_type as FileType) : null;
   const FileIcon = meta?.icon;
   const displayName = name || file_type || 'file';
@@ -56,10 +56,10 @@ export default function CreateFileDisplay({ toolCallTuple, showThinking }: Displ
         gap={1.5}
         py={1.5}
         px={2}
-        bg={`${color}/10`}
+        bg="bg.subtle"
         borderRadius="md"
         border="1px solid"
-        borderColor={`${color}/20`}
+        borderColor="border.default"
         flexWrap="wrap"
       >
         <Icon as={LuCheck} boxSize={3} color={color} flexShrink={0} />
@@ -71,12 +71,12 @@ export default function CreateFileDisplay({ toolCallTuple, showThinking }: Displ
           <Link href={href}>
             <HStack
               gap={1}
-              bg={`${color}/15`}
+              bg="bg.muted"
               px={1.5}
               py={0.5}
               borderRadius="sm"
               cursor="pointer"
-              _hover={{ bg: `${color}/25` }}
+              _hover={{ bg: 'bg.emphasized' }}
             >
               {FileIcon && <Icon as={FileIcon} boxSize={2.5} color={color} />}
               <Text fontSize="xs" color="fg.default" fontFamily="mono" fontWeight="600">

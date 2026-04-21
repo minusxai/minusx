@@ -56,7 +56,7 @@ export default function SearchDBSchemaDisplay({ toolCallTuple, showThinking }: D
     ) : null;
   }
 
-  const color = 'accent.warning';
+  const color = 'fg.muted';
 
   // Build expandable content based on query type
   const searchResults: SchemaSearchResult[] = result?.results || [];
@@ -67,10 +67,10 @@ export default function SearchDBSchemaDisplay({ toolCallTuple, showThinking }: D
   return (
     <GridItem colSpan={12} my={1}>
       <Box
-        bg={`${color}/10`}
+        bg="bg.subtle"
         borderRadius="md"
         border="1px solid"
-        borderColor={`${color}/20`}
+        borderColor="border.default"
         overflow="hidden"
       >
         <HStack
@@ -112,7 +112,7 @@ export default function SearchDBSchemaDisplay({ toolCallTuple, showThinking }: D
                   px={2}
                   py={1}
                   borderRadius="sm"
-                  bg={`${color}/8`}
+                  bg="bg.subtle"
                 >
                   <Icon as={LuDatabase} boxSize={3} color={color} flexShrink={0} />
                   <VStack gap={0} align="start" flex={1} minW={0}>
@@ -155,7 +155,7 @@ export default function SearchDBSchemaDisplay({ toolCallTuple, showThinking }: D
                   px={2}
                   py={1}
                   borderRadius="sm"
-                  bg={`${color}/8`}
+                  bg="bg.subtle"
                 >
                   <Icon as={LuDatabase} boxSize={3} color={color} flexShrink={0} />
                   <Text fontSize="xs" color="fg.default" fontFamily="mono" fontWeight="600" truncate>

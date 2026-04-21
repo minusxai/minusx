@@ -80,7 +80,7 @@ export default function EditFileDisplay({ toolCallTuple, showThinking, readOnly 
     setIsUndone(false);
   }, [canUndoRedo, isUndone, fileId, finalState]);
 
-  const color = 'accent.secondary';
+  const color = 'fg.muted';
 
   if (!success) {
     return showThinking ? (
@@ -113,10 +113,10 @@ export default function EditFileDisplay({ toolCallTuple, showThinking, readOnly 
   return (
     <GridItem colSpan={12} my={1}>
       <Box
-        bg={`${color}/10`}
+        bg="bg.subtle"
         borderRadius="md"
         border="1px solid"
-        borderColor={`${color}/20`}
+        borderColor="border.default"
         overflow="hidden"
       >
         <HStack
@@ -141,12 +141,12 @@ export default function EditFileDisplay({ toolCallTuple, showThinking, readOnly 
             const chip = (
               <HStack
                 gap={1}
-                bg={`${color}/15`}
+                bg="bg.muted"
                 px={1.5}
                 py={0.5}
                 borderRadius="sm"
                 cursor={href ? 'pointer' : 'default'}
-                _hover={href ? { bg: `${color}/25` } : {}}
+                _hover={href ? { bg: 'bg.emphasized' } : {}}
               >
                 {FileIcon && <Icon as={FileIcon} boxSize={2.5} color={color} />}
                 <Text fontSize="xs" color="fg.default" fontFamily="mono" fontWeight="600">
@@ -172,7 +172,7 @@ export default function EditFileDisplay({ toolCallTuple, showThinking, readOnly 
                   borderRadius="sm"
                   cursor={isUndone ? 'default' : 'pointer'}
                   opacity={isUndone ? 0.4 : 1}
-                  _hover={isUndone ? {} : { bg: `${color}/20` }}
+                  _hover={isUndone ? {} : { bg: 'bg.muted' }}
                 >
                   <Icon as={LuUndo2} boxSize={3} color={color} />
                 </Box>
@@ -187,7 +187,7 @@ export default function EditFileDisplay({ toolCallTuple, showThinking, readOnly 
                   borderRadius="sm"
                   cursor={!isUndone ? 'default' : 'pointer'}
                   opacity={!isUndone ? 0.4 : 1}
-                  _hover={!isUndone ? {} : { bg: `${color}/20` }}
+                  _hover={!isUndone ? {} : { bg: 'bg.muted' }}
                 >
                   <Icon as={LuRedo2} boxSize={3} color={color} />
                 </Box>

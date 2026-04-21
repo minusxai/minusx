@@ -36,17 +36,17 @@ export default function EditAlertDisplay({ toolCallTuple, showThinking }: Displa
   const getOpInfo = () => {
     switch (operation) {
       case 'update_schedule':
-        return { icon: LuClock, label: 'Updated schedule', color: 'accent.teal' };
+        return { icon: LuClock, label: 'Updated schedule' };
       case 'update_question':
-        return { icon: LuBell, label: `Set question to #${question_id}`, color: 'accent.teal' };
+        return { icon: LuBell, label: `Set question to #${question_id}` };
       case 'update_condition':
-        return { icon: LuSettings, label: 'Updated condition', color: 'accent.teal' };
+        return { icon: LuSettings, label: 'Updated condition' };
       default:
-        return { icon: LuCheck, label: operation || 'Updated alert', color: 'accent.teal' };
+        return { icon: LuCheck, label: operation || 'Updated alert' };
     }
   };
 
-  const { icon, label, color } = getOpInfo();
+  const { icon, label } = getOpInfo();
 
   return (
     <GridItem colSpan={12} my={1}>
@@ -54,14 +54,14 @@ export default function EditAlertDisplay({ toolCallTuple, showThinking }: Displa
         gap={1.5}
         py={1.5}
         px={2}
-        bg={`${color}/10`}
+        bg="bg.subtle"
         borderRadius="md"
         border="1px solid"
-        borderColor={`${color}/20`}
+        borderColor="border.default"
         flexWrap="wrap"
       >
-        <Icon as={icon} boxSize={3} color={color} flexShrink={0} />
-        <Text fontSize="xs" color={color} fontFamily="mono">
+        <Icon as={icon} boxSize={3} color="fg.muted" flexShrink={0} />
+        <Text fontSize="xs" color="fg.muted" fontFamily="mono">
           {label}
         </Text>
       </HStack>

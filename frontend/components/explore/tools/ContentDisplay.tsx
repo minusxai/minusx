@@ -9,7 +9,7 @@ import { parseThinkingAnswer } from '@/lib/utils/xml-parser';
 
 
 
-export default function ContentDisplay({ toolCallTuple, databaseName, isCompact, showThinking, toggleShowThinking, markdownContext = 'mainpage' }: DisplayProps) {
+export default function ContentDisplay({ toolCallTuple, databaseName, isCompact, showThinking, toggleShowThinking, markdownContext = 'mainpage', viewMode }: DisplayProps) {
   const [toolCall, toolMessage] = toolCallTuple;
   let content;
   let citations: any[] = [];
@@ -171,8 +171,8 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
 
   return (
             <>
-            {/* Show/Hide Thinking toggle — only when thinking exists */}
-            {hasThinking && toggleShowThinking && (
+            {/* Show/Hide Thinking toggle — only in detailed mode when thinking exists */}
+            {viewMode !== 'compact' && hasThinking && toggleShowThinking && (
               <GridItem colSpan={12} colStart={1}>
                 <HStack
                   mt={1}
@@ -190,8 +190,8 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
               </GridItem>
             )}
 
-            {/* Native or legacy thinking blocks */}
-            {showThinking && thinkingToRender.map((block, idx) => (
+            {/* Native or legacy thinking blocks — hidden in compact mode */}
+            {viewMode !== 'compact' && showThinking && thinkingToRender.map((block, idx) => (
                 <GridItem
                     key={`thinking-${idx}`}
                     colSpan={12}
@@ -208,7 +208,7 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
             ))}
 
             {/* Show citations with thinking if no answer exists */}
-            {showCitationsWithThinking && renderCitations(true)}
+            {viewMode !== 'compact' && showCitationsWithThinking && renderCitations(true)}
 
             {/* Legacy unparsed content (content before first XML tag) */}
             {legacyParsed?.unparsed && (

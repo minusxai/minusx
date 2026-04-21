@@ -60,7 +60,7 @@ export default function ReadFilesDisplay({ toolCallTuple, showThinking }: Displa
     return `${url}${separator}mode=${mode}`;
   };
 
-  const color = 'accent.primary';
+  const color = 'fg.muted';
 
   return (
     <GridItem colSpan={12} my={1}>
@@ -68,10 +68,10 @@ export default function ReadFilesDisplay({ toolCallTuple, showThinking }: Displa
         gap={1.5}
         py={1.5}
         px={2}
-        bg={`${color}/10`}
+        bg="bg.subtle"
         borderRadius="md"
         border="1px solid"
-        borderColor={`${color}/20`}
+        borderColor="border.default"
         flexWrap="wrap"
       >
         <Icon as={LuCheck} boxSize={3} color={color} flexShrink={0} />
@@ -90,12 +90,12 @@ export default function ReadFilesDisplay({ toolCallTuple, showThinking }: Displa
           const chip = (
             <HStack
               gap={1}
-              bg={`${color}/15`}
+              bg="bg.muted"
               px={1.5}
               py={0.5}
               borderRadius="sm"
               cursor={isNewFile ? 'default' : 'pointer'}
-              _hover={isNewFile ? {} : { bg: `${color}/25` }}
+              _hover={isNewFile ? {} : { bg: 'bg.emphasized' }}
             >
               {FileIcon && <Icon as={FileIcon} boxSize={2.5} color={color} />}
               <Text fontSize="xs" color="fg.default" fontFamily="mono" fontWeight="500">
