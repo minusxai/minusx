@@ -4,6 +4,99 @@ import { useState } from 'react';
 import { HStack, VStack, Text, Icon, GridItem, Box } from '@chakra-ui/react';
 import { LuCheck, LuX, LuDatabase, LuChevronDown, LuChevronRight } from 'react-icons/lu';
 import { DisplayProps } from '@/lib/types';
+import { type DetailCardProps, parseToolArgs, parseToolContent } from './DetailCarousel';
+
+// ─── Detail card for AgentTurnContainer carousel ──────────────────
+
+export function SearchDBSchemaDetailCard({ msg }: DetailCardProps) {
+  const args = parseToolArgs(msg);
+  const result = parseToolContent(msg);
+  const query = args.query || '';
+  const tables: any[] = result?.schema || [];
+  const schemaList: any[] = result?._schema || [];
+
+  return (
+    <VStack gap={1} align="stretch" px={3} pb={2}>
+      {/* Kind + query */}
+      <HStack gap={2} mb={1}>
+        <Box bg="bg.muted" px={1.5} py={0.5} borderRadius="full" flexShrink={0}>
+          <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="500">DB Schema</Text>
+        </Box>
+        {query && (
+          <Text fontSize="xs" fontFamily="mono" color="fg.muted" fontStyle="italic" truncate flex={1}>
+            &ldquo;{query}&rdquo;
+          </Text>
+        )}
+      </HStack>
+
+      {/* Results */}
+      <VStack gap={1} align="stretch" maxH="350px" overflowY="auto">
+        {tables.length > 0 ? (
+          <>
+            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
+              {tables.length} {tables.length === 1 ? 'table' : 'tables'}
+            </Text>
+            {tables.map((t: any, idx: number) => (
+              <Box key={idx} p={2} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default">
+                <HStack gap={2} mb={t.columns?.length > 0 ? 1 : 0}>
+                  <Icon as={LuDatabase} boxSize={3} color="accent.primary" flexShrink={0} />
+                  <Text fontSize="xs" fontFamily="mono" color="fg.default" fontWeight="600">
+                    {t._schema ? `${t._schema}.` : ''}{t.table}
+                  </Text>
+                  {t.columns && (
+                    <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
+                      {t.columns.length} cols
+                    </Text>
+                  )}
+                </HStack>
+                {t.columns && t.columns.length > 0 && (
+                  <HStack gap={1} flexWrap="wrap" pl={5}>
+                    {t.columns.slice(0, 6).map((col: any, ci: number) => (
+                      <Box key={ci} bg="bg.muted" px={1.5} py={0.5} borderRadius="sm">
+                        <Text fontSize="2xs" fontFamily="mono" color="fg.muted">
+                          {col.name} <Text as="span" color="fg.subtle">{col.type}</Text>
+                        </Text>
+                      </Box>
+                    ))}
+                    {t.columns.length > 6 && (
+                      <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">+{t.columns.length - 6}</Text>
+                    )}
+                  </HStack>
+                )}
+              </Box>
+            ))}
+          </>
+        ) : schemaList.length > 0 ? (
+          schemaList.map((s: any, idx: number) => (
+            <Box key={idx} p={2} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default">
+              <HStack gap={2} mb={1}>
+                <Icon as={LuDatabase} boxSize={3} color="accent.primary" />
+                <Text fontSize="xs" fontFamily="mono" color="fg.default" fontWeight="600">{s.schema}</Text>
+                <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">{s.tables?.length || 0} tables</Text>
+              </HStack>
+              {s.tables && (
+                <HStack gap={1} flexWrap="wrap" pl={5}>
+                  {s.tables.slice(0, 10).map((t: string, ti: number) => (
+                    <Box key={ti} bg="bg.muted" px={1.5} py={0.5} borderRadius="sm">
+                      <Text fontSize="2xs" fontFamily="mono" color="fg.muted">{t}</Text>
+                    </Box>
+                  ))}
+                  {s.tables.length > 10 && (
+                    <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">+{s.tables.length - 10}</Text>
+                  )}
+                </HStack>
+              )}
+            </Box>
+          ))
+        ) : (
+          <Text fontSize="xs" color="fg.subtle" fontFamily="mono">No schema data</Text>
+        )}
+      </VStack>
+    </VStack>
+  );
+}
+
+// ─── Compact display (existing) ───────────────────────────────────
 
 interface SchemaSearchResult {
   schema: { schema: string; tables: { table: string; columns: { name: string; type: string }[] }[] };

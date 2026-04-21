@@ -1,22 +1,28 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { Box, HStack, VStack, Text, Icon, Grid } from '@chakra-ui/react';
-import { LuCheck, LuX, LuBrain, LuDatabase, LuChevronLeft, LuChevronRight, LuFile, LuFolder, LuFilePlus2, LuArrowRight, LuUpload, LuBookOpen } from 'react-icons/lu';
+import { Box, HStack, VStack, Text, Icon } from '@chakra-ui/react';
+import { LuBrain, LuDatabase } from 'react-icons/lu';
 import type { Turn } from './message/groupIntoTurns';
 import type { MessageWithFlags } from './message/messageHelpers';
 import SimpleChatMessage from './SimpleChatMessage';
 import ToolChips from './tools/ToolChips';
 import ChartCarousel from './tools/ChartCarousel';
-import { getToolTier, getToolConfig } from '@/lib/api/tool-config';
-import Link from 'next/link';
-import { ToolNames, CompletedToolCall } from '@/lib/types';
+import DetailCarousel, { type DetailCardProps, getToolNameFromMsg } from './tools/DetailCarousel';
+import { NavigateDetailCard } from './tools/NavigateDisplay';
+import { PublishAllDetailCard } from './tools/PublishAllDisplay';
+import { LoadSkillDetailCard } from './tools/LoadSkillDisplay';
+import { SearchFilesDetailCard } from './tools/SearchFilesDisplay';
+import { SearchDBSchemaDetailCard } from './tools/SearchDBSchemaDisplay';
+import { FileDetailCard } from './tools/CreateFileDisplay';
+import { EditFileDetailCard } from './tools/EditFileDisplay';
+import { ReadFilesDetailCard } from './tools/ReadFilesDisplay';
+import { getToolConfig } from '@/lib/api/tool-config';
+import { ToolNames } from '@/lib/types';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { useAppSelector } from '@/store/hooks';
 import Markdown from '../Markdown';
 import type { QueryResult } from '@/lib/types';
-import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
-import type { FileType } from '@/lib/ui/file-metadata';
 
 interface AgentTurnContainerProps {
   turn: Turn;
@@ -86,38 +92,6 @@ function getDisplayName(msg: MessageWithFlags, filesDict: Record<number, any>): 
 
   // 4. Fallback
   return parsed.file_type || (fileId ? `#${fileId}` : getToolName(msg));
-}
-
-function isSuccess(msg: MessageWithFlags): boolean {
-  const toolMsg = msg as any;
-  const content = toolMsg.content;
-  if (!content || content === '(executing...)') return true;
-  try {
-    const parsed = typeof content === 'string' ? JSON.parse(content) : content;
-    return parsed.success !== false;
-  } catch {
-    return true;
-  }
-}
-
-function toToolCallTuple(msg: MessageWithFlags): CompletedToolCall {
-  const toolMsg = msg as any;
-  let functionArgs: Record<string, any>;
-  if (typeof toolMsg.function.arguments === 'string') {
-    try { functionArgs = JSON.parse(toolMsg.function.arguments); } catch { functionArgs = {}; }
-  } else {
-    functionArgs = toolMsg.function.arguments || {};
-  }
-  return [{
-    id: toolMsg.tool_call_id,
-    type: 'function',
-    function: { name: toolMsg.function.name, arguments: functionArgs },
-  }, {
-    role: 'tool',
-    tool_call_id: toolMsg.tool_call_id,
-    content: toolMsg.content,
-    ...(toolMsg.details && { details: toolMsg.details }),
-  }];
 }
 
 /** Parse agent content (TalkToUser) into thinking + content sections */
@@ -328,7 +302,6 @@ export default function AgentTurnContainer({
     return 0;
   }, [timeline]);
   const [userSelectedIdx, setUserSelectedIdx] = useState<number | null>(null);
-  const [toolCardIdx, setToolCardIdx] = useState(0);
   // If user hasn't clicked anything, show the most recent work node
   const selectedIdx = userSelectedIdx ?? mostRecentWorkIdx;
   const setSelectedIdx = setUserSelectedIdx;
@@ -384,606 +357,71 @@ export default function AgentTurnContainer({
     );
   };
 
+  // ─── Detail card mapping by chipLabel ──
+
+  const DETAIL_CARD_MAP: Record<string, React.ComponentType<DetailCardProps>> = {
+    'navigated': NavigateDetailCard,
+    'published': PublishAllDetailCard,
+    'loaded skill': LoadSkillDetailCard,
+  };
+
   const renderToolDetail = (node: TimelineNode) => {
-    // For file-mutating tools (created/edited/read): show charts for questions, rich cards for others
+    // File-mutating tools (created/edited/read): check for chart items first
     if (node.label === 'created' || node.label === 'edited' || node.label === 'read') {
       const chartItems: (import('./tools/ChartCarousel').ChartItem | import('./tools/ChartCarousel').ChartErrorItem)[] = [];
-      const nonChartItems: { name: string; path: string | null; fileType: string | null; assetCount: number | null }[] = [];
-
       for (const m of node.messages) {
         const parsed = parseFileToolContent(m);
         const name = parsed.fileName || getDisplayName(m, filesDict);
         if (parsed.content && parsed.queryResult) {
           chartItems.push({ name, question: parsed.content, queryResult: parsed.queryResult });
-        } else {
-          nonChartItems.push({ name, path: parsed.filePath, fileType: parsed.fileType, assetCount: parsed.assetCount });
         }
       }
-
-      // If we have any charts, show carousel
       if (chartItems.length > 0) {
-        return (
-          <ChartCarousel
-            items={chartItems}
-            databaseName={databaseName}
-            label={node.label}
-            headerIcon={node.icon}
-          />
-        );
+        return <ChartCarousel items={chartItems} databaseName={databaseName} label={node.label} headerIcon={node.icon} />;
       }
-      // Fall through to default cards for non-question files
+      // Non-chart files: route to the right detail card per tool
+      return (
+        <DetailCarousel icon={node.icon} label={node.label} itemCount={node.messages.length}
+          renderCard={(idx) => {
+            const msg = node.messages[idx];
+            const toolName = getToolNameFromMsg(msg);
+            if (toolName === 'EditFile') return <EditFileDetailCard msg={msg} filesDict={filesDict} />;
+            if (toolName === 'ReadFiles') return <ReadFilesDetailCard msg={msg} filesDict={filesDict} />;
+            return <FileDetailCard msg={msg} filesDict={filesDict} />;
+          }}
+        />
+      );
     }
 
-    // Search (files + schema): show query + results
+    // Search: mixed SearchFiles + SearchDBSchema in one carousel
     if (node.label === 'searched') {
-      const searches = node.messages.map(m => {
-        const toolMsg = m as any;
-        const toolName = getToolName(m);
-        let args: any = {};
-        let result: any = {};
-        try {
-          args = typeof toolMsg.function?.arguments === 'string'
-            ? JSON.parse(toolMsg.function.arguments) : toolMsg.function?.arguments || {};
-        } catch { /* ignore */ }
-        try {
-          result = typeof toolMsg.content === 'string' ? JSON.parse(toolMsg.content) : toolMsg.content || {};
-        } catch { /* ignore */ }
-        const isSchema = toolName === 'SearchDBSchema';
-        return {
-          kind: isSchema ? 'schema' as const : 'files' as const,
-          query: args.query || result.query || '',
-          // SearchFiles results
-          results: result.results || [],
-          total: result.total || 0,
-          // SearchDBSchema results
-          tables: result.schema || [],
-          schemaList: result._schema || [],
-        };
-      });
-
-      const safeIdx = Math.min(toolCardIdx, searches.length - 1);
-      const search = searches[safeIdx];
-
       return (
-        <VStack gap={0} align="stretch">
-          {/* Header with nav */}
-          <HStack justify="space-between" px={3} pt={2} pb={1}>
-            <HStack gap={1.5}>
-              <Icon as={node.icon} boxSize={3} color="fg.muted" />
-              <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600" textTransform="uppercase">
-                {node.count} {node.count === 1 ? 'search' : 'searches'}
-              </Text>
-            </HStack>
-            {searches.length > 1 && (
-              <HStack gap={1.5}>
-                <Box as="button" aria-label="Previous"
-                  onClick={() => safeIdx > 0 && setToolCardIdx(safeIdx - 1)}
-                  w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
-                  display="flex" alignItems="center" justifyContent="center"
-                  cursor={safeIdx === 0 ? 'default' : 'pointer'}
-                  opacity={safeIdx === 0 ? 0.3 : 1}
-                  _hover={safeIdx === 0 ? {} : { bg: 'accent.teal/25' }}
-                >
-                  <LuChevronLeft size={12} />
-                </Box>
-                {searches.map((_, idx) => (
-                  <Box key={idx} as="button" aria-label={`Search ${idx + 1}`}
-                    w={idx === safeIdx ? '16px' : '6px'} h="6px" borderRadius="full"
-                    bg={idx === safeIdx ? 'accent.teal' : 'border.default'}
-                    cursor="pointer" transition="all 0.2s" onClick={() => setToolCardIdx(idx)}
-                  />
-                ))}
-                <Box as="button" aria-label="Next"
-                  onClick={() => safeIdx < searches.length - 1 && setToolCardIdx(safeIdx + 1)}
-                  w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
-                  display="flex" alignItems="center" justifyContent="center"
-                  cursor={safeIdx === searches.length - 1 ? 'default' : 'pointer'}
-                  opacity={safeIdx === searches.length - 1 ? 0.3 : 1}
-                  _hover={safeIdx === searches.length - 1 ? {} : { bg: 'accent.teal/25' }}
-                >
-                  <LuChevronRight size={12} />
-                </Box>
-              </HStack>
-            )}
-          </HStack>
-
-          {/* Kind label + query */}
-          <HStack mx={3} mb={1} gap={2}>
-            <Box bg="bg.muted" px={1.5} py={0.5} borderRadius="full" flexShrink={0}>
-              <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="500">
-                {search.kind === 'schema' ? 'DB Schema' : 'Files'}
-              </Text>
-            </Box>
-            {search.query && (
-              <Text fontSize="xs" fontFamily="mono" color="fg.muted" fontStyle="italic" truncate flex={1}>
-                &ldquo;{search.query}&rdquo;
-              </Text>
-            )}
-          </HStack>
-
-          {/* Results */}
-          <VStack gap={1} align="stretch" px={3} pb={2} maxH="350px" overflowY="auto">
-            {search.kind === 'files' ? (
-              // File search results
-              search.results.length === 0 ? (
-                <Text fontSize="xs" color="fg.subtle" fontFamily="mono">No results found</Text>
-              ) : (
-                <>
-                  <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
-                    {search.total} {search.total === 1 ? 'result' : 'results'}
-                  </Text>
-                  {search.results.map((r: any, idx: number) => {
-                    const meta = r.type ? getFileTypeMetadata(r.type as FileType) : null;
-                    return (
-                      <Box key={r.id || idx} p={2} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default">
-                        <HStack gap={2}>
-                          <Icon as={meta?.icon || LuCheck} boxSize={3.5} color={meta?.color || 'fg.muted'} flexShrink={0} />
-                          <VStack gap={0} align="start" flex={1} minW={0}>
-                            <Text fontSize="xs" fontFamily="mono" color="fg.default" fontWeight="600" truncate w="full">
-                              {r.name}
-                            </Text>
-                            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate w="full">
-                              {r.path}
-                            </Text>
-                          </VStack>
-                          {meta && (
-                            <Box bg={`${meta.color}/10`} px={1.5} py={0.5} borderRadius="full" flexShrink={0}>
-                              <Text fontSize="2xs" fontFamily="mono" color={meta.color} fontWeight="500">
-                                {meta.label}
-                              </Text>
-                            </Box>
-                          )}
-                        </HStack>
-                      </Box>
-                    );
-                  })}
-                </>
-              )
-            ) : (
-              // DB Schema results — tables with column chips
-              search.tables.length > 0 ? (
-                <>
-                  <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
-                    {search.tables.length} {search.tables.length === 1 ? 'table' : 'tables'}
-                  </Text>
-                  {search.tables.map((t: any, idx: number) => (
-                    <Box key={idx} p={2} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default">
-                      <HStack gap={2} mb={t.columns?.length > 0 ? 1 : 0}>
-                        <Icon as={LuDatabase} boxSize={3} color="accent.primary" flexShrink={0} />
-                        <Text fontSize="xs" fontFamily="mono" color="fg.default" fontWeight="600">
-                          {t._schema ? `${t._schema}.` : ''}{t.table}
-                        </Text>
-                        {t.columns && (
-                          <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
-                            {t.columns.length} cols
-                          </Text>
-                        )}
-                      </HStack>
-                      {t.columns && t.columns.length > 0 && (
-                        <HStack gap={1} flexWrap="wrap" pl={5}>
-                          {t.columns.slice(0, 6).map((col: any, ci: number) => (
-                            <Box key={ci} bg="bg.muted" px={1.5} py={0.5} borderRadius="sm">
-                              <Text fontSize="2xs" fontFamily="mono" color="fg.muted">
-                                {col.name} <Text as="span" color="fg.subtle">{col.type}</Text>
-                              </Text>
-                            </Box>
-                          ))}
-                          {t.columns.length > 6 && (
-                            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">+{t.columns.length - 6}</Text>
-                          )}
-                        </HStack>
-                      )}
-                    </Box>
-                  ))}
-                </>
-              ) : search.schemaList.length > 0 ? (
-                // Schema overview — table name chips
-                search.schemaList.map((s: any, idx: number) => (
-                  <Box key={idx} p={2} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default">
-                    <HStack gap={2} mb={1}>
-                      <Icon as={LuDatabase} boxSize={3} color="accent.primary" />
-                      <Text fontSize="xs" fontFamily="mono" color="fg.default" fontWeight="600">{s.schema}</Text>
-                      <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">{s.tables?.length || 0} tables</Text>
-                    </HStack>
-                    {s.tables && (
-                      <HStack gap={1} flexWrap="wrap" pl={5}>
-                        {s.tables.slice(0, 10).map((t: string, ti: number) => (
-                          <Box key={ti} bg="bg.muted" px={1.5} py={0.5} borderRadius="sm">
-                            <Text fontSize="2xs" fontFamily="mono" color="fg.muted">{t}</Text>
-                          </Box>
-                        ))}
-                        {s.tables.length > 10 && (
-                          <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">+{s.tables.length - 10}</Text>
-                        )}
-                      </HStack>
-                    )}
-                  </Box>
-                ))
-              ) : (
-                <Text fontSize="xs" color="fg.subtle" fontFamily="mono">No schema data</Text>
-              )
-            )}
-          </VStack>
-        </VStack>
+        <DetailCarousel icon={node.icon} label={node.label} itemCount={node.messages.length}
+          renderCard={(idx) => {
+            const msg = node.messages[idx];
+            return getToolNameFromMsg(msg) === 'SearchDBSchema'
+              ? <SearchDBSchemaDetailCard msg={msg} filesDict={filesDict} />
+              : <SearchFilesDetailCard msg={msg} filesDict={filesDict} />;
+          }}
+        />
       );
     }
 
-    // Navigate: show navigation target cards with links
-    if (node.label === 'navigated') {
-      const navItems = node.messages.map(m => {
-        const toolMsg = m as any;
-        let args: any = {};
-        try {
-          args = typeof toolMsg.function?.arguments === 'string'
-            ? JSON.parse(toolMsg.function.arguments) : toolMsg.function?.arguments || {};
-        } catch { /* ignore */ }
-        const success = isSuccess(m);
-        const { file_id, path, newFileType } = args;
-
-        let icon = LuArrowRight;
-        let label = 'Unknown';
-        let href: string | null = null;
-        if (file_id !== undefined) {
-          const file = filesDict[file_id];
-          icon = LuFile;
-          label = file?.name || `File #${file_id}`;
-          href = `/f/${file_id}`;
-        } else if (newFileType !== undefined) {
-          icon = LuFilePlus2;
-          label = `New ${newFileType}`;
-          href = null; // Don't link to new file creation pages
-        } else if (path !== undefined) {
-          icon = LuFolder;
-          label = path;
-          const cleanPath = path.startsWith('/') ? path.slice(1) : path;
-          href = `/p/${cleanPath}`;
-        }
-        return { icon, label, href, success };
-      });
-
-      const safeIdx = Math.min(toolCardIdx, navItems.length - 1);
-      const nav = navItems[safeIdx];
-
+    // Mapped tools (navigate, publish, skill, edit dashboard/report/alert)
+    const Card = DETAIL_CARD_MAP[node.label];
+    if (Card) {
       return (
-        <VStack gap={0} align="stretch">
-          <HStack justify="space-between" px={3} pt={2} pb={1}>
-            <HStack gap={1.5}>
-              <Icon as={node.icon} boxSize={3} color="fg.muted" />
-              <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600" textTransform="uppercase">
-                {node.count} {node.count === 1 ? 'navigation' : 'navigations'}
-              </Text>
-            </HStack>
-            {navItems.length > 1 && (
-              <HStack gap={1.5}>
-                <Box as="button" aria-label="Previous"
-                  onClick={() => safeIdx > 0 && setToolCardIdx(safeIdx - 1)}
-                  w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
-                  display="flex" alignItems="center" justifyContent="center"
-                  cursor={safeIdx === 0 ? 'default' : 'pointer'} opacity={safeIdx === 0 ? 0.3 : 1}
-                  _hover={safeIdx === 0 ? {} : { bg: 'accent.teal/25' }}
-                ><LuChevronLeft size={12} /></Box>
-                {navItems.map((_, idx) => (
-                  <Box key={idx} as="button" aria-label={`Nav ${idx + 1}`}
-                    w={idx === safeIdx ? '16px' : '6px'} h="6px" borderRadius="full"
-                    bg={idx === safeIdx ? 'accent.teal' : 'border.default'}
-                    cursor="pointer" transition="all 0.2s" onClick={() => setToolCardIdx(idx)}
-                  />
-                ))}
-                <Box as="button" aria-label="Next"
-                  onClick={() => safeIdx < navItems.length - 1 && setToolCardIdx(safeIdx + 1)}
-                  w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
-                  display="flex" alignItems="center" justifyContent="center"
-                  cursor={safeIdx === navItems.length - 1 ? 'default' : 'pointer'}
-                  opacity={safeIdx === navItems.length - 1 ? 0.3 : 1}
-                  _hover={safeIdx === navItems.length - 1 ? {} : { bg: 'accent.teal/25' }}
-                ><LuChevronRight size={12} /></Box>
-              </HStack>
-            )}
-          </HStack>
-          {nav && (
-            <Box
-              mx={3} mb={2} p={3} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default"
-              {...(nav.href && nav.success ? {
-                as: Link, href: nav.href, cursor: 'pointer',
-                _hover: { borderColor: 'accent.teal', bg: 'bg.muted' }, transition: 'all 0.15s',
-              } : {})}
-            >
-              <HStack gap={2}>
-                <Icon as={nav.success ? nav.icon : LuX} boxSize={4}
-                  color={nav.success ? 'fg.muted' : 'accent.danger'} />
-                <VStack gap={0} align="start" flex={1} minW={0}>
-                  <Text fontSize="sm" fontFamily="mono" color="fg.default" fontWeight="600" truncate w="full">
-                    {nav.label}
-                  </Text>
-                  {nav.href && (
-                    <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate w="full">
-                      {nav.href}
-                    </Text>
-                  )}
-                </VStack>
-                <Box bg="accent.teal/10" px={2} py={0.5} borderRadius="full" flexShrink={0}>
-                  <Text fontSize="2xs" fontFamily="mono" color="accent.teal" fontWeight="500">
-                    {nav.success ? 'Navigated' : 'Failed'}
-                  </Text>
-                </Box>
-              </HStack>
-            </Box>
-          )}
-        </VStack>
+        <DetailCarousel icon={node.icon} label={node.label} itemCount={node.messages.length}
+          renderCard={(idx) => <Card msg={node.messages[idx]} filesDict={filesDict} />}
+        />
       );
     }
 
-    // PublishAll: show publish status
-    if (node.label === 'published') {
-      const pubItems = node.messages.map(m => {
-        const success = isSuccess(m);
-        const toolMsg = m as any;
-        let message = '';
-        try {
-          const parsed = typeof toolMsg.content === 'string' ? JSON.parse(toolMsg.content) : toolMsg.content;
-          message = parsed?.message || '';
-        } catch { /* ignore */ }
-        return { success, message };
-      });
-
-      const safeIdx = Math.min(toolCardIdx, pubItems.length - 1);
-      const pub = pubItems[safeIdx];
-
-      return (
-        <VStack gap={0} align="stretch">
-          <HStack justify="space-between" px={3} pt={2} pb={1}>
-            <HStack gap={1.5}>
-              <Icon as={LuUpload} boxSize={3} color="fg.muted" />
-              <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600" textTransform="uppercase">
-                {node.count} {node.count === 1 ? 'publish' : 'publishes'}
-              </Text>
-            </HStack>
-            {pubItems.length > 1 && (
-              <HStack gap={1.5}>
-                <Box as="button" aria-label="Previous"
-                  onClick={() => safeIdx > 0 && setToolCardIdx(safeIdx - 1)}
-                  w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
-                  display="flex" alignItems="center" justifyContent="center"
-                  cursor={safeIdx === 0 ? 'default' : 'pointer'} opacity={safeIdx === 0 ? 0.3 : 1}
-                  _hover={safeIdx === 0 ? {} : { bg: 'accent.teal/25' }}
-                ><LuChevronLeft size={12} /></Box>
-                {pubItems.map((_, idx) => (
-                  <Box key={idx} as="button" aria-label={`Publish ${idx + 1}`}
-                    w={idx === safeIdx ? '16px' : '6px'} h="6px" borderRadius="full"
-                    bg={idx === safeIdx ? 'accent.teal' : 'border.default'}
-                    cursor="pointer" transition="all 0.2s" onClick={() => setToolCardIdx(idx)}
-                  />
-                ))}
-                <Box as="button" aria-label="Next"
-                  onClick={() => safeIdx < pubItems.length - 1 && setToolCardIdx(safeIdx + 1)}
-                  w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
-                  display="flex" alignItems="center" justifyContent="center"
-                  cursor={safeIdx === pubItems.length - 1 ? 'default' : 'pointer'}
-                  opacity={safeIdx === pubItems.length - 1 ? 0.3 : 1}
-                  _hover={safeIdx === pubItems.length - 1 ? {} : { bg: 'accent.teal/25' }}
-                ><LuChevronRight size={12} /></Box>
-              </HStack>
-            )}
-          </HStack>
-          {pub && (
-            <Box mx={3} mb={2} p={3} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default">
-              <HStack gap={2}>
-                <Icon as={pub.success ? LuCheck : LuX} boxSize={4}
-                  color={pub.success ? 'accent.success' : 'accent.danger'} />
-                <VStack gap={0} align="start" flex={1} minW={0}>
-                  <Text fontSize="sm" fontFamily="mono" color="fg.default" fontWeight="600">
-                    {pub.success ? 'Published successfully' : 'Publish failed'}
-                  </Text>
-                  {pub.message && (
-                    <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate w="full">
-                      {pub.message}
-                    </Text>
-                  )}
-                </VStack>
-                <Box bg={pub.success ? 'accent.success/10' : 'accent.danger/10'} px={2} py={0.5} borderRadius="full" flexShrink={0}>
-                  <Text fontSize="2xs" fontFamily="mono" color={pub.success ? 'accent.success' : 'accent.danger'} fontWeight="500">
-                    {pub.success ? 'Done' : 'Error'}
-                  </Text>
-                </Box>
-              </HStack>
-            </Box>
-          )}
-        </VStack>
-      );
-    }
-
-    // LoadSkill: show skill name cards
-    if (node.label === 'loaded skill') {
-      const skillItems = node.messages.map(m => {
-        const toolMsg = m as any;
-        let args: any = {};
-        try {
-          args = typeof toolMsg.function?.arguments === 'string'
-            ? JSON.parse(toolMsg.function.arguments) : toolMsg.function?.arguments || {};
-        } catch { /* ignore */ }
-        const success = isSuccess(m);
-        return { name: args.name || 'unknown', success };
-      });
-
-      const safeIdx = Math.min(toolCardIdx, skillItems.length - 1);
-      const skill = skillItems[safeIdx];
-
-      return (
-        <VStack gap={0} align="stretch">
-          <HStack justify="space-between" px={3} pt={2} pb={1}>
-            <HStack gap={1.5}>
-              <Icon as={LuBookOpen} boxSize={3} color="fg.muted" />
-              <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600" textTransform="uppercase">
-                {node.count} {node.count === 1 ? 'skill' : 'skills'}
-              </Text>
-            </HStack>
-            {skillItems.length > 1 && (
-              <HStack gap={1.5}>
-                <Box as="button" aria-label="Previous"
-                  onClick={() => safeIdx > 0 && setToolCardIdx(safeIdx - 1)}
-                  w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
-                  display="flex" alignItems="center" justifyContent="center"
-                  cursor={safeIdx === 0 ? 'default' : 'pointer'} opacity={safeIdx === 0 ? 0.3 : 1}
-                  _hover={safeIdx === 0 ? {} : { bg: 'accent.teal/25' }}
-                ><LuChevronLeft size={12} /></Box>
-                {skillItems.map((_, idx) => (
-                  <Box key={idx} as="button" aria-label={`Skill ${idx + 1}`}
-                    w={idx === safeIdx ? '16px' : '6px'} h="6px" borderRadius="full"
-                    bg={idx === safeIdx ? 'accent.teal' : 'border.default'}
-                    cursor="pointer" transition="all 0.2s" onClick={() => setToolCardIdx(idx)}
-                  />
-                ))}
-                <Box as="button" aria-label="Next"
-                  onClick={() => safeIdx < skillItems.length - 1 && setToolCardIdx(safeIdx + 1)}
-                  w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
-                  display="flex" alignItems="center" justifyContent="center"
-                  cursor={safeIdx === skillItems.length - 1 ? 'default' : 'pointer'}
-                  opacity={safeIdx === skillItems.length - 1 ? 0.3 : 1}
-                  _hover={safeIdx === skillItems.length - 1 ? {} : { bg: 'accent.teal/25' }}
-                ><LuChevronRight size={12} /></Box>
-              </HStack>
-            )}
-          </HStack>
-          {skill && (
-            <Box mx={3} mb={2} p={3} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default">
-              <HStack gap={2}>
-                <Icon as={skill.success ? LuBookOpen : LuX} boxSize={4}
-                  color={skill.success ? 'fg.muted' : 'accent.danger'} />
-                <VStack gap={0} align="start" flex={1} minW={0}>
-                  <Text fontSize="sm" fontFamily="mono" color="fg.default" fontWeight="600">
-                    {skill.name}
-                  </Text>
-                  <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
-                    {skill.success ? 'Skill loaded' : 'Failed to load'}
-                  </Text>
-                </VStack>
-                <Box bg={skill.success ? 'accent.teal/10' : 'accent.danger/10'} px={2} py={0.5} borderRadius="full" flexShrink={0}>
-                  <Text fontSize="2xs" fontFamily="mono" color={skill.success ? 'accent.teal' : 'accent.danger'} fontWeight="500">
-                    {skill.success ? 'Loaded' : 'Error'}
-                  </Text>
-                </Box>
-              </HStack>
-            </Box>
-          )}
-        </VStack>
-      );
-    }
-
-    // Default: file cards with carousel-style navigation (successful first, failed at end)
-    const fileCards = node.messages.map((msg) => {
-      const parsed = parseFileToolContent(msg);
-      const name = parsed.fileName || getDisplayName(msg, filesDict);
-      const success = isSuccess(msg);
-      const fileType = parsed.fileType || null;
-      const filePath = parsed.filePath || null;
-      const assetCount = parsed.assetCount;
-      // Get fileId for linking
-      let fileId: number | null = null;
-      const toolMsg = msg as any;
-      try {
-        const args = typeof toolMsg.function?.arguments === 'string'
-          ? JSON.parse(toolMsg.function.arguments) : toolMsg.function?.arguments || {};
-        fileId = args.fileId || args.fileIds?.[0] || null;
-      } catch { /* ignore */ }
-      if (!fileId) {
-        try {
-          const content = typeof toolMsg.content === 'string' ? JSON.parse(toolMsg.content) : toolMsg.content;
-          fileId = content?.state?.fileState?.id || content?.fileState?.id || null;
-        } catch { /* ignore */ }
-      }
-      const meta = fileType ? getFileTypeMetadata(fileType as FileType) : null;
-      const canLink = fileId != null && fileId > 0;
-      return { name, success, fileType, filePath, assetCount, meta, fileId, canLink };
-    }).sort((a, b) => (a.success === b.success ? 0 : a.success ? -1 : 1));
-
-    const safeCardIdx = Math.min(toolCardIdx, fileCards.length - 1);
-    const card = fileCards[safeCardIdx];
-
+    // Fallback: generic file cards
     return (
-      <VStack gap={0} align="stretch">
-        {/* Header with nav */}
-        <HStack justify="space-between" px={3} pt={2} pb={1}>
-          <HStack gap={1.5}>
-            <Icon as={node.icon} boxSize={3} color="fg.muted" />
-            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600" textTransform="uppercase">
-              {node.count} {node.label}
-            </Text>
-          </HStack>
-          {fileCards.length > 1 && (
-            <HStack gap={1.5}>
-              <Box
-                as="button" aria-label="Previous"
-                onClick={() => safeCardIdx > 0 && setToolCardIdx(safeCardIdx - 1)}
-                w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
-                display="flex" alignItems="center" justifyContent="center"
-                cursor={safeCardIdx === 0 ? 'default' : 'pointer'}
-                opacity={safeCardIdx === 0 ? 0.3 : 1}
-                _hover={safeCardIdx === 0 ? {} : { bg: 'accent.teal/25' }}
-              >
-                <LuChevronLeft size={12} />
-              </Box>
-              {fileCards.map((_, idx) => (
-                <Box key={idx} as="button" aria-label={`Item ${idx + 1}`}
-                  w={idx === safeCardIdx ? '16px' : '6px'} h="6px" borderRadius="full"
-                  bg={idx === safeCardIdx ? 'accent.teal' : 'border.default'}
-                  cursor="pointer" transition="all 0.2s" onClick={() => setToolCardIdx(idx)}
-                />
-              ))}
-              <Box
-                as="button" aria-label="Next"
-                onClick={() => safeCardIdx < fileCards.length - 1 && setToolCardIdx(safeCardIdx + 1)}
-                w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
-                display="flex" alignItems="center" justifyContent="center"
-                cursor={safeCardIdx === fileCards.length - 1 ? 'default' : 'pointer'}
-                opacity={safeCardIdx === fileCards.length - 1 ? 0.3 : 1}
-                _hover={safeCardIdx === fileCards.length - 1 ? {} : { bg: 'accent.teal/25' }}
-              >
-                <LuChevronRight size={12} />
-              </Box>
-            </HStack>
-          )}
-        </HStack>
-
-        {/* File card */}
-        {card && (
-          <Box
-            mx={3} mb={2} p={3} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default"
-            {...(card.canLink ? {
-              as: Link,
-              href: `/f/${card.fileId}`,
-              cursor: 'pointer',
-              _hover: { borderColor: 'accent.teal', bg: 'bg.muted' },
-              transition: 'all 0.15s',
-            } : {})}
-          >
-            <HStack gap={2}>
-              <Icon as={card.meta?.icon || LuCheck} boxSize={4} color={card.meta?.color || (card.success ? 'fg.muted' : 'accent.danger')} />
-              <VStack gap={0} align="start" flex={1} minW={0}>
-                <Text fontSize="sm" fontFamily="mono" color="fg.default" fontWeight="600" truncate w="full">
-                  {card.name || 'Unnamed'}
-                </Text>
-                {card.filePath && (
-                  <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate w="full">
-                    {card.filePath}
-                  </Text>
-                )}
-              </VStack>
-              {card.meta && (
-                <Box bg={`${card.meta.color}/10`} px={2} py={0.5} borderRadius="full" flexShrink={0}>
-                  <Text fontSize="2xs" fontFamily="mono" color={card.meta.color} fontWeight="500">
-                    {card.meta.label}
-                  </Text>
-                </Box>
-              )}
-            </HStack>
-            {card.assetCount != null && card.assetCount > 0 && (
-              <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" mt={1} pl={6}>
-                {card.assetCount} {card.assetCount === 1 ? 'question' : 'questions'}
-              </Text>
-            )}
-          </Box>
-        )}
-      </VStack>
+      <DetailCarousel icon={node.icon} label={node.label} itemCount={node.messages.length}
+        renderCard={(idx) => <FileDetailCard msg={node.messages[idx]} filesDict={filesDict} />}
+      />
     );
   };
 

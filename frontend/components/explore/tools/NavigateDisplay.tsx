@@ -1,10 +1,66 @@
 'use client';
 
-import { HStack, Text, Icon, GridItem } from '@chakra-ui/react';
+import { Box, HStack, VStack, Text, Icon, GridItem } from '@chakra-ui/react';
 import { LuCheck, LuX, LuFile, LuFolder, LuFilePlus2, LuArrowRight } from 'react-icons/lu';
 import { DisplayProps, ToolCallDetails, contentToDetails } from '@/lib/types';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { type DetailCardProps, parseToolArgs, isToolSuccess } from './DetailCarousel';
+
+// ─── Detail card for AgentTurnContainer carousel ──────────────────
+
+export function NavigateDetailCard({ msg, filesDict }: DetailCardProps) {
+  const args = parseToolArgs(msg);
+  const success = isToolSuccess(msg);
+  const { file_id, path, newFileType } = args;
+
+  let navIcon = LuArrowRight;
+  let label = 'Unknown';
+  let href: string | null = null;
+  if (file_id !== undefined) {
+    navIcon = LuFile;
+    label = filesDict[file_id]?.name || `File #${file_id}`;
+    href = `/f/${file_id}`;
+  } else if (newFileType !== undefined) {
+    navIcon = LuFilePlus2;
+    label = `New ${newFileType}`;
+    href = null;
+  } else if (path !== undefined) {
+    navIcon = LuFolder;
+    label = path;
+    href = `/p/${path.startsWith('/') ? path.slice(1) : path}`;
+  }
+
+  return (
+    <Box mx={3} mb={2} p={3} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default"
+      {...(href && success ? {
+        as: Link, href, cursor: 'pointer',
+        _hover: { borderColor: 'accent.teal', bg: 'bg.muted' }, transition: 'all 0.15s',
+      } : {})}
+    >
+      <HStack gap={2}>
+        <Icon as={success ? navIcon : LuX} boxSize={4} color={success ? 'fg.muted' : 'accent.danger'} />
+        <VStack gap={0} align="start" flex={1} minW={0}>
+          <Text fontSize="sm" fontFamily="mono" color="fg.default" fontWeight="600" truncate w="full">
+            {label}
+          </Text>
+          {href && (
+            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate w="full">
+              {href}
+            </Text>
+          )}
+        </VStack>
+        <Box bg={success ? 'accent.teal/10' : 'accent.danger/10'} px={2} py={0.5} borderRadius="full" flexShrink={0}>
+          <Text fontSize="2xs" fontFamily="mono" color={success ? 'accent.teal' : 'accent.danger'} fontWeight="500">
+            {success ? 'Navigated' : 'Failed'}
+          </Text>
+        </Box>
+      </HStack>
+    </Box>
+  );
+}
+
+// ─── Compact display (existing) ───────────────────────────────────
 
 export default function NavigateDisplay({ toolCallTuple }: DisplayProps) {
   const searchParams = useSearchParams();

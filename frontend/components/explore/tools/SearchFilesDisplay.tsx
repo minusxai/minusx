@@ -8,6 +8,76 @@ import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
 import type { FileType } from '@/lib/ui/file-metadata';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { type DetailCardProps, parseToolArgs, parseToolContent } from './DetailCarousel';
+
+// ─── Detail card for AgentTurnContainer carousel ──────────────────
+
+export function SearchFilesDetailCard({ msg }: DetailCardProps) {
+  const args = parseToolArgs(msg);
+  const result = parseToolContent(msg);
+  const query = args.query || result.query || '';
+  const results: SearchResult[] = result?.results || [];
+  const total = result?.total ?? results.length;
+
+  return (
+    <VStack gap={1} align="stretch" px={3} pb={2}>
+      {/* Kind + query */}
+      <HStack gap={2} mb={1}>
+        <Box bg="bg.muted" px={1.5} py={0.5} borderRadius="full" flexShrink={0}>
+          <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="500">Files</Text>
+        </Box>
+        {query && (
+          <Text fontSize="xs" fontFamily="mono" color="fg.muted" fontStyle="italic" truncate flex={1}>
+            &ldquo;{query}&rdquo;
+          </Text>
+        )}
+      </HStack>
+
+      {/* Results */}
+      <VStack gap={1} align="stretch" maxH="350px" overflowY="auto">
+        {results.length === 0 ? (
+          <Text fontSize="xs" color="fg.subtle" fontFamily="mono">No results found</Text>
+        ) : (
+          <>
+            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
+              {total} {total === 1 ? 'result' : 'results'}
+            </Text>
+            {results.slice(0, 6).map((r, idx) => {
+              const meta = r.type ? getFileTypeMetadata(r.type as FileType) : null;
+              return (
+                <Box key={r.id || idx} p={2} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default">
+                  <HStack gap={2}>
+                    <Icon as={meta?.icon || LuCheck} boxSize={3.5} color={meta?.color || 'fg.muted'} flexShrink={0} />
+                    <VStack gap={0} align="start" flex={1} minW={0}>
+                      <Text fontSize="xs" fontFamily="mono" color="fg.default" fontWeight="600" truncate w="full">
+                        {r.name}
+                      </Text>
+                      <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate w="full">
+                        {r.path}
+                      </Text>
+                    </VStack>
+                    {meta && (
+                      <Box bg={`${meta.color}/10`} px={1.5} py={0.5} borderRadius="full" flexShrink={0}>
+                        <Text fontSize="2xs" fontFamily="mono" color={meta.color} fontWeight="500">
+                          {meta.label}
+                        </Text>
+                      </Box>
+                    )}
+                  </HStack>
+                </Box>
+              );
+            })}
+            {results.length > 6 && (
+              <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">+{results.length - 6} more</Text>
+            )}
+          </>
+        )}
+      </VStack>
+    </VStack>
+  );
+}
+
+// ─── Compact display (existing) ───────────────────────────────────
 
 interface SearchResult {
   id: number;

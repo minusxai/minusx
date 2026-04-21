@@ -12,6 +12,72 @@ import { useAppSelector } from '@/store/hooks';
 import { Tooltip } from '@/components/ui/tooltip';
 import { decodeFileStr } from '@/lib/api/file-encoding';
 import { replaceFileState } from '@/lib/api/file-state';
+import { type DetailCardProps, parseToolArgs, parseToolContent, isToolSuccess } from './DetailCarousel';
+
+// ─── Detail card for AgentTurnContainer carousel ──────────────────
+
+export function EditFileDetailCard({ msg, filesDict }: DetailCardProps) {
+  const args = parseToolArgs(msg);
+  const content = parseToolContent(msg);
+  const success = isToolSuccess(msg);
+
+  const fileId = args.fileId;
+  const fileState = content?.state?.fileState || content?.fileState;
+  const fileName = fileState?.name || (fileId && filesDict[fileId]?.name) || (fileId ? `#${fileId}` : 'file');
+  const filePath = fileState?.path || null;
+  const fileType = (fileState?.type || (fileId && filesDict[fileId]?.type) || null) as FileType | null;
+  const meta = fileType ? getFileTypeMetadata(fileType) : null;
+  const canLink = fileId != null && fileId > 0;
+
+  // Parse diff summary
+  const diff = content?.diff || content?.details?.diff;
+  const diffLines = diff ? String(diff).split('\n').filter((l: string) => l.startsWith('+') || l.startsWith('-')) : [];
+  const additions = diffLines.filter((l: string) => l.startsWith('+')).length;
+  const removals = diffLines.filter((l: string) => l.startsWith('-')).length;
+
+  return (
+    <Box
+      mx={3} mb={2} p={3} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default"
+      {...(canLink ? {
+        as: Link, href: `/f/${fileId}`, cursor: 'pointer',
+        _hover: { borderColor: 'accent.teal', bg: 'bg.muted' }, transition: 'all 0.15s',
+      } : {})}
+    >
+      <HStack gap={2}>
+        <Icon as={meta?.icon || LuPencilLine} boxSize={4} color={success ? (meta?.color || 'fg.muted') : 'accent.danger'} />
+        <VStack gap={0} align="start" flex={1} minW={0}>
+          <Text fontSize="sm" fontFamily="mono" color="fg.default" fontWeight="600" truncate w="full">
+            {fileName}
+          </Text>
+          {filePath && (
+            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" truncate w="full">
+              {filePath}
+            </Text>
+          )}
+        </VStack>
+        {(additions > 0 || removals > 0) && (
+          <HStack gap={1} flexShrink={0}>
+            {additions > 0 && (
+              <Text fontSize="2xs" fontFamily="mono" color="green.fg" fontWeight="600">+{additions}</Text>
+            )}
+            {removals > 0 && (
+              <Text fontSize="2xs" fontFamily="mono" color="red.fg" fontWeight="600">-{removals}</Text>
+            )}
+          </HStack>
+        )}
+        {meta && (
+          <Box bg={`${meta.color}/10`} px={2} py={0.5} borderRadius="full" flexShrink={0}>
+            <Text fontSize="2xs" fontFamily="mono" color={meta.color} fontWeight="500">
+              {meta.label}
+            </Text>
+          </Box>
+        )}
+      </HStack>
+    </Box>
+  );
+}
+
+// ─── Compact display (existing) ───────────────────────────────────
 
 /**
  * Extract the original (pre-edit) and final (post-edit) file objects from a diff string.

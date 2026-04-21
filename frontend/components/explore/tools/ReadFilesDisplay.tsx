@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { HStack, Text, Icon, GridItem } from '@chakra-ui/react';
+import { Box, HStack, VStack, Text, Icon, GridItem } from '@chakra-ui/react';
 import { LuCheck, LuX, LuBookOpen } from 'react-icons/lu';
 import { DisplayProps, contentToDetails } from '@/lib/types';
 import { getFileTypeMetadata } from '@/lib/ui/file-metadata';
@@ -9,6 +9,84 @@ import type { FileType } from '@/lib/ui/file-metadata';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useAppSelector } from '@/store/hooks';
+import { type DetailCardProps, parseToolArgs, parseToolContent, isToolSuccess } from './DetailCarousel';
+
+// ─── Detail card for AgentTurnContainer carousel ──────────────────
+
+export function ReadFilesDetailCard({ msg, filesDict }: DetailCardProps) {
+  const args = parseToolArgs(msg);
+  const content = parseToolContent(msg);
+  const success = isToolSuccess(msg);
+  const fileIds: number[] = args.fileIds || [];
+
+  const files = fileIds.map(id => {
+    const file = filesDict[id];
+    const type = (file?.type ?? null) as FileType | null;
+    const meta = type ? getFileTypeMetadata(type) : null;
+    const isNewFile = id < 0;
+    const name = isNewFile ? `New ${meta?.label ?? type ?? 'file'}` : (file?.name ?? `#${id}`);
+    return { id, name, meta, isNewFile, canLink: !isNewFile && id > 0 };
+  });
+
+  // Single file: show as a full card
+  if (files.length === 1) {
+    const f = files[0];
+    return (
+      <Box
+        mx={3} mb={2} p={3} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default"
+        {...(f.canLink ? {
+          as: Link, href: `/f/${f.id}`, cursor: 'pointer',
+          _hover: { borderColor: 'accent.teal', bg: 'bg.muted' }, transition: 'all 0.15s',
+        } : {})}
+      >
+        <HStack gap={2}>
+          <Icon as={f.meta?.icon || LuBookOpen} boxSize={4} color={success ? (f.meta?.color || 'fg.muted') : 'accent.danger'} />
+          <Text fontSize="sm" fontFamily="mono" color="fg.default" fontWeight="600" truncate flex={1}>
+            {f.name}
+          </Text>
+          {f.meta && (
+            <Box bg={`${f.meta.color}/10`} px={2} py={0.5} borderRadius="full" flexShrink={0}>
+              <Text fontSize="2xs" fontFamily="mono" color={f.meta.color} fontWeight="500">
+                {f.meta.label}
+              </Text>
+            </Box>
+          )}
+        </HStack>
+      </Box>
+    );
+  }
+
+  // Multiple files: show as a list
+  return (
+    <VStack gap={1} align="stretch" mx={3} mb={2}>
+      {files.map(f => (
+        <Box
+          key={f.id} p={2} bg="bg.subtle" borderRadius="md" border="1px solid" borderColor="border.default"
+          {...(f.canLink ? {
+            as: Link, href: `/f/${f.id}`, cursor: 'pointer',
+            _hover: { borderColor: 'accent.teal', bg: 'bg.muted' }, transition: 'all 0.15s',
+          } : {})}
+        >
+          <HStack gap={2}>
+            <Icon as={f.meta?.icon || LuBookOpen} boxSize={3.5} color={f.meta?.color || 'fg.muted'} flexShrink={0} />
+            <Text fontSize="xs" fontFamily="mono" color="fg.default" fontWeight="600" truncate flex={1}>
+              {f.name}
+            </Text>
+            {f.meta && (
+              <Box bg={`${f.meta.color}/10`} px={1.5} py={0.5} borderRadius="full" flexShrink={0}>
+                <Text fontSize="2xs" fontFamily="mono" color={f.meta.color} fontWeight="500">
+                  {f.meta.label}
+                </Text>
+              </Box>
+            )}
+          </HStack>
+        </Box>
+      ))}
+    </VStack>
+  );
+}
+
+// ─── Compact display (existing) ───────────────────────────────────
 
 export default function ReadFilesDisplay({ toolCallTuple, showThinking }: DisplayProps) {
   const searchParams = useSearchParams();
