@@ -1115,6 +1115,7 @@ export interface DisplayProps {
   showThinking: boolean;
   toggleShowThinking?: () => void;
   markdownContext?: 'sidebar' | 'mainpage';
+  readOnly?: boolean;
 }
 
 // ============================================================================

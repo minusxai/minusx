@@ -33,7 +33,7 @@ function parseUndoRedoFromDiff(diff: string | undefined): { original: any | null
   return { original, final };
 }
 
-export default function EditFileDisplay({ toolCallTuple, showThinking }: DisplayProps) {
+export default function EditFileDisplay({ toolCallTuple, showThinking, readOnly }: DisplayProps) {
   const searchParams = useSearchParams();
   const mode = searchParams.get('mode');
   const [toolCall, toolMessage] = toolCallTuple;
@@ -95,12 +95,15 @@ export default function EditFileDisplay({ toolCallTuple, showThinking }: Display
     ) : null;
   }
 
-  const href = fileId !== undefined
+  const isNewFile = fileId !== undefined && fileId < 0;
+  const href = fileId !== undefined && !isNewFile
     ? `/f/${fileId}${mode ? `?mode=${mode}` : ''}`
     : undefined;
 
-  const displayName = fileName || (fileId !== undefined ? `#${fileId}` : 'file');
   const meta = fileType ? getFileTypeMetadata(fileType) : null;
+  const displayName = isNewFile
+    ? `a new ${meta?.label ?? fileType ?? 'file'}`
+    : fileName || (fileId !== undefined ? `#${fileId}` : 'file');
   const FileIcon = meta?.icon;
 
   // Parse diff for display
@@ -115,43 +118,7 @@ export default function EditFileDisplay({ toolCallTuple, showThinking }: Display
         border="1px solid"
         borderColor={`${color}/20`}
         overflow="hidden"
-        position="relative"
       >
-        {/* Undo/Redo buttons — top right */}
-        {canUndoRedo && (
-          <HStack gap={0.5} position="absolute" top={0} right={1.5} zIndex={1}>
-            <Tooltip content="Restore to before this edit">
-              <Box
-                as="button"
-                aria-label="Restore to before this edit"
-                onClick={handleUndo}
-                px={1.5}
-                py={0.5}
-                borderRadius="sm"
-                cursor={isUndone ? 'default' : 'pointer'}
-                opacity={isUndone ? 0.4 : 1}
-                _hover={isUndone ? {} : { bg: `${color}/20` }}
-              >
-                <Icon as={LuUndo2} boxSize={3} color={color} />
-              </Box>
-            </Tooltip>
-            <Tooltip content="Restore to after this edit">
-              <Box
-                as="button"
-                aria-label="Restore to after this edit"
-                onClick={handleRedo}
-                px={1.5}
-                py={0.5}
-                borderRadius="sm"
-                cursor={!isUndone ? 'default' : 'pointer'}
-                opacity={!isUndone ? 0.4 : 1}
-                _hover={!isUndone ? {} : { bg: `${color}/20` }}
-              >
-                <Icon as={LuRedo2} boxSize={3} color={color} />
-              </Box>
-            </Tooltip>
-          </HStack>
-        )}
         <HStack
           gap={1.5}
           py={1.5}
@@ -170,23 +137,62 @@ export default function EditFileDisplay({ toolCallTuple, showThinking }: Display
           <Text fontSize="xs" color={color} fontFamily="mono">
             Edited
           </Text>
-          {fileId !== undefined && href && (
-            <Link href={href} onClick={(e) => e.stopPropagation()}>
+          {fileId !== undefined && (() => {
+            const chip = (
               <HStack
                 gap={1}
                 bg={`${color}/15`}
                 px={1.5}
                 py={0.5}
                 borderRadius="sm"
-                cursor="pointer"
-                _hover={{ bg: `${color}/25` }}
+                cursor={href ? 'pointer' : 'default'}
+                _hover={href ? { bg: `${color}/25` } : {}}
               >
                 {FileIcon && <Icon as={FileIcon} boxSize={2.5} color={color} />}
                 <Text fontSize="xs" color="fg.default" fontFamily="mono" fontWeight="600">
                   {displayName}
                 </Text>
               </HStack>
-            </Link>
+            );
+            return href ? (
+              <Link href={href} onClick={(e) => e.stopPropagation()}>
+                {chip}
+              </Link>
+            ) : chip;
+          })()}
+          {canUndoRedo && !readOnly && (
+            <HStack gap={0.5} ml="auto" flexShrink={0}>
+              <Tooltip content="Restore to before this edit">
+                <Box
+                  as="button"
+                  aria-label="Restore to before this edit"
+                  onClick={handleUndo}
+                  px={1.5}
+                  py={0.5}
+                  borderRadius="sm"
+                  cursor={isUndone ? 'default' : 'pointer'}
+                  opacity={isUndone ? 0.4 : 1}
+                  _hover={isUndone ? {} : { bg: `${color}/20` }}
+                >
+                  <Icon as={LuUndo2} boxSize={3} color={color} />
+                </Box>
+              </Tooltip>
+              <Tooltip content="Restore to after this edit">
+                <Box
+                  as="button"
+                  aria-label="Restore to after this edit"
+                  onClick={handleRedo}
+                  px={1.5}
+                  py={0.5}
+                  borderRadius="sm"
+                  cursor={!isUndone ? 'default' : 'pointer'}
+                  opacity={!isUndone ? 0.4 : 1}
+                  _hover={!isUndone ? {} : { bg: `${color}/20` }}
+                >
+                  <Icon as={LuRedo2} boxSize={3} color={color} />
+                </Box>
+              </Tooltip>
+            </HStack>
           )}
         </HStack>
 

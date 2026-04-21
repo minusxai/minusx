@@ -82,22 +82,33 @@ export default function ReadFilesDisplay({ toolCallTuple, showThinking }: Displa
         {fileInfos.map(({ id, name, type }) => {
           const meta = type ? getFileTypeMetadata(type) : null;
           const FileIcon = meta?.icon;
-          return (
+          const isNewFile = id < 0;
+          const displayName = isNewFile
+            ? `a new ${meta?.label ?? type ?? 'file'}`
+            : name || `#${id}`;
+
+          const chip = (
+            <HStack
+              gap={1}
+              bg={`${color}/15`}
+              px={1.5}
+              py={0.5}
+              borderRadius="sm"
+              cursor={isNewFile ? 'default' : 'pointer'}
+              _hover={isNewFile ? {} : { bg: `${color}/25` }}
+            >
+              {FileIcon && <Icon as={FileIcon} boxSize={2.5} color={color} />}
+              <Text fontSize="xs" color="fg.default" fontFamily="mono" fontWeight="500">
+                {displayName}
+              </Text>
+            </HStack>
+          );
+
+          return isNewFile ? (
+            <span key={id}>{chip}</span>
+          ) : (
             <Link key={id} href={withMode(`/f/${id}`)}>
-              <HStack
-                gap={1}
-                bg={`${color}/15`}
-                px={1.5}
-                py={0.5}
-                borderRadius="sm"
-                cursor="pointer"
-                _hover={{ bg: `${color}/25` }}
-              >
-                {FileIcon && <Icon as={FileIcon} boxSize={2.5} color={color} />}
-                <Text fontSize="xs" color="fg.default" fontFamily="mono" fontWeight="500">
-                  {name || `#${id}`}
-                </Text>
-              </HStack>
+              {chip}
             </Link>
           );
         })}

@@ -657,6 +657,7 @@ export default function ChatInterface({
                         toggleShowThinking={toggleShowThinking}
                         markdownContext={container === 'sidebar' ? 'sidebar' : 'mainpage'}
                         conversationID={conversationID}
+                        readOnly={readOnly || needsContinueConfirmation}
                     />
                 })
               }
