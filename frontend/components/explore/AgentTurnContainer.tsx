@@ -367,7 +367,7 @@ export default function AgentTurnContainer({
     'Navigate': NavigateDetailCard,
     'PublishAll': PublishAllDetailCard,
     'LoadSkill': LoadSkillDetailCard,
-    'Clarify': null,
+    'Clarify': ClarifyDetailCard,
     'ClarifyFrontend': ClarifyDetailCard,
     'EditFile': EditFileDetailCard,
     'ReadFiles': ReadFilesDetailCard,

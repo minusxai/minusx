@@ -64,17 +64,34 @@ export function ClarifyDetailCard({ msg }: DetailCardProps) {
     );
   }
 
-  const selectedLabels = getSelectedLabels(selection);
-  const isFigureItOut = selection?.figureItOut;
-  const isOther = selection?.other;
+  // If tool is still executing but user already submitted, extract selection from resolved user input
+  const resolvedUserInput = pendingTool?.userInputs?.find(ui => ui.result !== undefined);
+  const effectiveSelection = selection || resolvedUserInput?.result || null;
+  const selectedLabels = getSelectedLabels(effectiveSelection);
+  const isFigureItOut = effectiveSelection?.figureItOut;
+  const isOther = effectiveSelection?.other;
+  const isProcessing = isPending && !pendingUserInputs?.length && !!resolvedUserInput;
 
   const getStatusMessage = () => {
+    if (isProcessing) return 'Processing your selection…';
     if (isPending) return 'Waiting for response…';
     if (!success) return message || 'Cancelled';
     if (isFigureItOut) return 'Agent will figure it out';
-    if (isOther) return `Other: "${selection.text}"`;
+    if (isOther) return `Other: "${effectiveSelection.text}"`;
     return `Selected: ${Array.from(selectedLabels).join(', ')}`;
   };
+
+  // Still loading — no content, no user inputs, no selection
+  if (isPending && !question && !effectiveSelection) {
+    return (
+      <Box mx={3} mb={2} py={3} px={4} border="1px solid" borderColor="border.default" borderRadius="lg">
+        <HStack gap={2}>
+          <Icon as={LuBadgeInfo} boxSize={3.5} color="fg.subtle" />
+          <Text fontSize="xs" fontFamily="mono" color="fg.subtle">Processing clarification…</Text>
+        </HStack>
+      </Box>
+    );
+  }
 
   // Completed or non-interactive pending state
   return (
@@ -91,7 +108,7 @@ export function ClarifyDetailCard({ msg }: DetailCardProps) {
         {options.length > 0 && (
           <HStack gap={1} flexWrap="wrap">
             {options.map((opt: any, idx: number) => {
-              const isSelected = !isPending && selectedLabels.has(opt.label);
+              const isSelected = (!isPending || isProcessing) && selectedLabels.has(opt.label);
               return (
                 <Badge
                   key={idx}
@@ -106,13 +123,13 @@ export function ClarifyDetailCard({ msg }: DetailCardProps) {
                 </Badge>
               );
             })}
-            {!isPending && success && isFigureItOut && (
+            {(!isPending || isProcessing) && (success || isProcessing) && isFigureItOut && (
               <Badge bg="accent.teal/20" color="accent.teal" px={2} py={0.5} borderRadius="full"
                 fontSize="xs" fontWeight="medium" fontFamily="mono" display="flex" alignItems="center">
                 <Icon as={LuCheck} boxSize={2.5} mr={1} flexShrink={0} />Figure it out
               </Badge>
             )}
-            {!isPending && success && isOther && (
+            {(!isPending || isProcessing) && (success || isProcessing) && isOther && (
               <Badge bg="accent.teal/20" color="accent.teal" px={2} py={0.5} borderRadius="full"
                 fontSize="xs" fontWeight="medium" fontFamily="mono" display="flex" alignItems="center">
                 <Icon as={LuCheck} boxSize={2.5} mr={1} flexShrink={0} />Other
