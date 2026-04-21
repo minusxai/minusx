@@ -13,7 +13,7 @@ import { ToolNames, CompletedToolCall } from '@/lib/types';
 import { immutableSet } from '@/lib/utils/immutable-collections';
 import { useAppSelector } from '@/store/hooks';
 import Markdown from '../Markdown';
-import ExecuteSQLDisplay from './tools/ExecuteSQLDisplay';
+import type { QueryResult } from '@/lib/types';
 
 interface AgentTurnContainerProps {
   turn: Turn;
@@ -135,6 +135,61 @@ function parseAgentContent(msg: MessageWithFlags): { thinking: string | null; co
   return { thinking, content };
 }
 
+/** Parse CreateFile tool content to extract question content + query result for rendering */
+function parseCreateFileContent(msg: MessageWithFlags): {
+  content: import('@/lib/types').QuestionContent | null;
+  queryResult: QueryResult | null;
+} {
+  const toolMsg = msg as any;
+  try {
+    const parsed = typeof toolMsg.content === 'string' ? JSON.parse(toolMsg.content) : toolMsg.content;
+    const fileState = parsed?.state?.fileState;
+    const queryResults = parsed?.state?.queryResults;
+
+    if (!fileState?.content || fileState.type !== 'question') return { content: null, queryResult: null };
+
+    const content = fileState.content;
+    let queryResult: QueryResult | null = null;
+
+    if (queryResults?.[0]) {
+      const qr = queryResults[0];
+
+      // Option 1: rows already parsed as array
+      if (qr.rows && Array.isArray(qr.rows) && qr.rows.length > 0) {
+        queryResult = { columns: qr.columns, types: qr.types, rows: qr.rows };
+      }
+      // Option 2: data is markdown table string — parse into Record<string, any>[]
+      else if (qr.data && typeof qr.data === 'string') {
+        const columns: string[] = qr.columns;
+        const lines = qr.data.split('\n').filter((l: string) => l.trim().startsWith('|') && !l.includes('---'));
+        // First line is header, rest are data
+        const dataLines = lines.slice(1);
+        const rows = dataLines
+          .filter((line: string) => line.trim().length > 0)
+          .map((line: string) => {
+            const cells = line.split('|').slice(1, -1).map((cell: string) => {
+              const trimmed = cell.trim();
+              if (trimmed === '' || trimmed === '-') return null;
+              const num = Number(trimmed);
+              return isNaN(num) ? trimmed : num;
+            });
+            // Build a Record<string, any> using column names as keys
+            const row: Record<string, any> = {};
+            columns.forEach((col, i) => { row[col] = cells[i] ?? null; });
+            return row;
+          });
+        if (rows.length > 0) {
+          queryResult = { columns: qr.columns, types: qr.types, rows };
+        }
+      }
+    }
+
+    return { content, queryResult };
+  } catch {
+    return { content: null, queryResult: null };
+  }
+}
+
 // ─── Build timeline from messages ──────────────────────────────────
 
 function buildTimeline(
@@ -253,12 +308,11 @@ export default function AgentTurnContainer({
   // ── Right pane renderers ──
 
   const renderAgentDetail = (node: TimelineNode) => {
-    // Show the last message's content (most relevant), with thinking from all
     const lastMsg = node.messages[node.messages.length - 1];
     const { thinking, content } = parseAgentContent(lastMsg);
 
     return (
-      <VStack gap={2} align="stretch" p={3}>
+      <VStack gap={2} align="stretch" p={3} maxH="350px" overflowY="auto">
         {thinking && (
           <Box>
             <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600" textTransform="uppercase" mb={1}>
@@ -267,24 +321,17 @@ export default function AgentTurnContainer({
             <Box
               bg="bg.elevated"
               borderRadius="md"
-              p={2}
-              maxH="150px"
-              overflowY="auto"
+              p={3}
             >
               <Text fontSize="xs" fontFamily="mono" color="fg.muted" fontStyle="italic" whiteSpace="pre-wrap">
-                {thinking.length > 500 ? thinking.slice(0, 497) + '...' : thinking}
+                {thinking}
               </Text>
             </Box>
           </Box>
         )}
         {content && (
-          <Box>
-            <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600" textTransform="uppercase" mb={1}>
-              Response
-            </Text>
-            <Box fontSize="sm">
-              <Markdown context={markdownContext}>{content}</Markdown>
-            </Box>
+          <Box fontSize="sm">
+            <Markdown context={markdownContext}>{content}</Markdown>
           </Box>
         )}
       </VStack>
@@ -306,6 +353,30 @@ export default function AgentTurnContainer({
   };
 
   const renderToolDetail = (node: TimelineNode) => {
+    // Check if these are CreateFile messages with chart data
+    if (node.label === 'created') {
+      const chartItems = node.messages.map(m => {
+        const { content, queryResult } = parseCreateFileContent(m);
+        const name = getDisplayName(m, filesDict);
+        if (content && queryResult) {
+          return { name, question: content, queryResult } as import('./tools/ChartCarousel').ChartItem;
+        }
+        return { name, error: 'No chart data' } as import('./tools/ChartCarousel').ChartErrorItem;
+      });
+
+      const hasCharts = chartItems.some(i => !i.error);
+      if (hasCharts) {
+        return (
+          <ChartCarousel
+            items={chartItems}
+            databaseName={databaseName}
+            label={node.count === 1 ? 'created' : 'created'}
+          />
+        );
+      }
+    }
+
+    // Default: simple list
     return (
       <VStack gap={0.5} align="stretch" p={3}>
         <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600" textTransform="uppercase" mb={1}>

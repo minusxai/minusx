@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useMemo, useRef } from 'react';
-import { Box, HStack, VStack, Text, Icon, IconButton } from '@chakra-ui/react';
-import { LuChevronLeft, LuChevronRight, LuChevronDown, LuChevronUp, LuDatabase, LuX, LuCode } from 'react-icons/lu';
+import { Box, HStack, VStack, Text, Icon } from '@chakra-ui/react';
+import { LuChevronLeft, LuChevronRight, LuChevronDown, LuChevronUp, LuDatabase, LuX, LuCode, LuCheck } from 'react-icons/lu';
 import type { MessageWithFlags } from '../message/messageHelpers';
 import type { QuestionContent, QueryResult, ExecuteQueryDetails } from '@/lib/types';
 import { contentToDetails } from '@/lib/types';
@@ -11,25 +11,39 @@ import SqlEditor from '@/components/SqlEditor';
 import { QueryBuilderRoot, QueryModeSelector } from '@/components/query-builder';
 import { connectionTypeToDialect } from '@/lib/utils/connection-dialect';
 
+/** A generic chart item that can come from ExecuteQuery or CreateFile */
+export interface ChartItem {
+  name: string;
+  question: QuestionContent;
+  queryResult: QueryResult;
+  error?: null;
+}
+
+export interface ChartErrorItem {
+  name: string;
+  question?: null;
+  queryResult?: null;
+  error: string;
+}
+
 interface ChartCarouselProps {
-  executeMessages: MessageWithFlags[];
+  /** Pre-parsed chart items (from CreateFile, etc.) */
+  items?: (ChartItem | ChartErrorItem)[];
+  /** Raw ExecuteQuery messages (parsed internally) */
+  executeMessages?: MessageWithFlags[];
   databaseName: string;
-  isCompact: boolean;
-  showThinking: boolean;
-  toggleShowThinking: () => void;
-  markdownContext: 'sidebar' | 'mainpage';
-  readOnly: boolean;
+  isCompact?: boolean;
+  showThinking?: boolean;
+  toggleShowThinking?: () => void;
+  markdownContext?: 'sidebar' | 'mainpage';
+  readOnly?: boolean;
+  /** Label for the header (default: "queries") */
+  label?: string;
 }
 
-interface ParsedQuery {
-  msg: MessageWithFlags;
-  question: QuestionContent | null;
-  queryResult: QueryResult | null;
-  error: string | null;
-  query: string;
-}
+// ─── ExecuteQuery message parser ─────────────────────────────────
 
-function parseQueryMessage(msg: MessageWithFlags, databaseName: string): ParsedQuery {
+function parseQueryMessage(msg: MessageWithFlags, databaseName: string): ChartItem | ChartErrorItem {
   const toolMsg = msg as any;
   const args = toolMsg.function?.arguments;
   let parsed: any = {};
@@ -37,10 +51,7 @@ function parseQueryMessage(msg: MessageWithFlags, databaseName: string): ParsedQ
     parsed = typeof args === 'string' ? JSON.parse(args) : args || {};
   } catch { /* ignore */ }
 
-  let question: QuestionContent | null = null;
-  let queryResult: QueryResult | null = null;
-  let error: string | null = null;
-  const query = parsed.query || '';
+  const name = parsed.name || parsed.query?.slice(0, 40) || 'Query';
 
   try {
     let vizSettings = { type: 'table' as const };
@@ -55,8 +66,8 @@ function parseQueryMessage(msg: MessageWithFlags, databaseName: string): ParsedQ
       if (Array.isArray(ps)) parameters = ps;
     }
 
-    question = {
-      query,
+    const question: QuestionContent = {
+      query: parsed.query || '',
       vizSettings,
       parameters,
       connection_name: databaseName || '',
@@ -70,38 +81,51 @@ function parseQueryMessage(msg: MessageWithFlags, databaseName: string): ParsedQ
     };
 
     const details = contentToDetails<ExecuteQueryDetails>(toolMessage);
-    error = details.error ?? null;
+    const error = details.error ?? null;
 
-    if (!error) {
-      queryResult = details.queryResult
-        ?? (details.columns ? { columns: details.columns, types: details.types ?? [], rows: details.rows ?? [] } : null);
+    if (error) {
+      return { name, error };
     }
-  } catch {
-    error = 'Failed to parse query';
-  }
 
-  return { msg, question, queryResult, error, query };
+    const queryResult = details.queryResult
+      ?? (details.columns ? { columns: details.columns, types: details.types ?? [], rows: details.rows ?? [] } : null);
+
+    if (!queryResult) return { name, error: 'No data returned' };
+
+    return { name, question, queryResult };
+  } catch {
+    return { name, error: 'Failed to parse query' };
+  }
 }
 
+function isChartItem(item: ChartItem | ChartErrorItem): item is ChartItem {
+  return !item.error && !!item.question && !!item.queryResult;
+}
+
+// ─── Component ───────────────────────────────────────────────────
+
 export default function ChartCarousel({
+  items: providedItems,
   executeMessages,
   databaseName,
+  label,
 }: ChartCarouselProps) {
-  const { successful, failed } = useMemo(() => {
-    const all = executeMessages.map(m => parseQueryMessage(m, databaseName));
-    return {
-      successful: all.filter(q => !q.error && q.queryResult),
-      failed: all.filter(q => q.error),
-    };
-  }, [executeMessages, databaseName]);
+  // Build items from either source
+  const allItems = useMemo(() => {
+    if (providedItems) return providedItems;
+    if (executeMessages) return executeMessages.map(m => parseQueryMessage(m, databaseName));
+    return [];
+  }, [providedItems, executeMessages, databaseName]);
+
+  const successful = useMemo(() => allItems.filter(isChartItem), [allItems]);
+  const failedCount = allItems.length - successful.length;
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [showQuery, setShowQuery] = useState(false);
   const [queryMode, setQueryMode] = useState<'sql' | 'gui'>('sql');
-  const [canUseGUI, setCanUseGUI] = useState(true);
+
   const count = successful.length;
   const safeIndex = Math.min(activeIndex, Math.max(0, count - 1));
-
   const current = successful[safeIndex] ?? null;
 
   const [localContent, setLocalContent] = useState<QuestionContent | null>(current?.question ?? null);
@@ -126,14 +150,17 @@ export default function ChartCarousel({
     });
   };
 
-  // All failed — just show error chips
+  const totalCount = allItems.length;
+  const displayLabel = label || (totalCount === 1 ? 'query' : 'queries');
+
+  // All failed
   if (count === 0) {
     return (
       <VStack gap={1} align="stretch" p={2}>
         <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600" textTransform="uppercase">
-          {executeMessages.length} {executeMessages.length === 1 ? 'query' : 'queries'} (all failed)
+          {totalCount} {displayLabel} (all failed)
         </Text>
-        {failed.map((q, idx) => (
+        {allItems.filter(i => i.error).map((q, idx) => (
           <HStack key={idx} gap={1.5} px={2} py={1} bg="accent.danger/8" borderRadius="sm">
             <Icon as={LuX} boxSize={2.5} color="accent.danger" />
             <Text fontSize="xs" fontFamily="mono" color="accent.danger" truncate>
@@ -147,13 +174,13 @@ export default function ChartCarousel({
 
   return (
     <VStack gap={0} align="stretch">
-      {/* Top bar: query count + navigation + show query toggle */}
+      {/* Top bar */}
       <HStack justify="space-between" px={3} pt={2} pb={1}>
         <HStack gap={1.5}>
           <Icon as={LuDatabase} boxSize={3} color="fg.muted" />
           <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600" textTransform="uppercase">
-            {executeMessages.length} {executeMessages.length === 1 ? 'query' : 'queries'}
-            {failed.length > 0 && ` (${failed.length} failed)`}
+            {totalCount} {displayLabel}
+            {failedCount > 0 && ` (${failedCount} failed)`}
           </Text>
         </HStack>
 
@@ -163,18 +190,12 @@ export default function ChartCarousel({
             <Box
               as="button"
               aria-label="Previous chart"
-              onClick={() => setActiveIndex(Math.max(0, safeIndex - 1))}
-              disabled={safeIndex === 0}
-              w="20px"
-              h="20px"
-              borderRadius="full"
-              bg="bg.muted"
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
+              onClick={() => safeIndex > 0 && setActiveIndex(safeIndex - 1)}
+              w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
+              display="flex" alignItems="center" justifyContent="center"
               cursor={safeIndex === 0 ? 'default' : 'pointer'}
               opacity={safeIndex === 0 ? 0.3 : 1}
-              _hover={safeIndex === 0 ? {} : { bg: 'bg.emphasized' }}
+              _hover={safeIndex === 0 ? {} : { bg: 'accent.teal/25' }}
               transition="all 0.15s"
             >
               <LuChevronLeft size={12} />
@@ -184,30 +205,21 @@ export default function ChartCarousel({
                 key={idx}
                 as="button"
                 aria-label={`Go to chart ${idx + 1}`}
-                w={idx === safeIndex ? '16px' : '6px'}
-                h="6px"
-                borderRadius="full"
+                w={idx === safeIndex ? '16px' : '6px'} h="6px" borderRadius="full"
                 bg={idx === safeIndex ? 'accent.teal' : 'border.default'}
-                cursor="pointer"
-                transition="all 0.2s"
+                cursor="pointer" transition="all 0.2s"
                 onClick={() => setActiveIndex(idx)}
               />
             ))}
             <Box
               as="button"
               aria-label="Next chart"
-              onClick={() => setActiveIndex(Math.min(count - 1, safeIndex + 1))}
-              disabled={safeIndex === count - 1}
-              w="20px"
-              h="20px"
-              borderRadius="full"
-              bg="bg.muted"
-              display="flex"
-              alignItems="center"
-              justifyContent="center"
+              onClick={() => safeIndex < count - 1 && setActiveIndex(safeIndex + 1)}
+              w="20px" h="20px" borderRadius="full" bg="accent.teal/15" color="accent.teal"
+              display="flex" alignItems="center" justifyContent="center"
               cursor={safeIndex === count - 1 ? 'default' : 'pointer'}
               opacity={safeIndex === count - 1 ? 0.3 : 1}
-              _hover={safeIndex === count - 1 ? {} : { bg: 'bg.emphasized' }}
+              _hover={safeIndex === count - 1 ? {} : { bg: 'accent.teal/25' }}
               transition="all 0.15s"
             >
               <LuChevronRight size={12} />
@@ -231,20 +243,30 @@ export default function ChartCarousel({
         </HStack>
       </HStack>
 
-      {/* Expandable query editor (read-only) */}
-      {showQuery && current?.query && (
+      {/* Current item name */}
+      {current && (
+        <HStack px={3} pb={1} gap={1.5}>
+          <Icon as={LuCheck} boxSize={2.5} color="accent.success" />
+          <Text fontSize="xs" fontFamily="mono" color="fg.default" fontWeight="600" truncate>
+            {current.name}
+          </Text>
+        </HStack>
+      )}
+
+      {/* Expandable query editor */}
+      {showQuery && current?.question?.query && (
         <Box mx={2} mb={1}>
           <HStack mb={1}>
             <QueryModeSelector
               mode={queryMode}
               onModeChange={setQueryMode}
-              canUseGUI={canUseGUI}
+              canUseGUI
             />
           </HStack>
           <Box borderRadius="md" overflow="hidden">
             {queryMode === 'sql' ? (
               <SqlEditor
-                value={current.query}
+                value={current.question.query}
                 readOnly
                 showRunButton={false}
                 showFormatButton={false}
@@ -253,7 +275,7 @@ export default function ChartCarousel({
               <QueryBuilderRoot
                 databaseName={databaseName}
                 dialect={connectionTypeToDialect('')}
-                sql={current.query}
+                sql={current.question.query}
                 onSqlChange={() => {}}
               />
             )}
@@ -286,11 +308,10 @@ export default function ChartCarousel({
             onAxisChange={(xCols, yCols) => handleContentChange({ vizSettings: { ...localContent!.vizSettings, xCols, yCols } })}
           />
         ) : (
-          <Text fontSize="xs" color="fg.muted" fontFamily="mono">No data</Text>
+          <Text fontSize="xs" color="fg.muted" fontFamily="mono" p={3}>No data</Text>
         )}
         </Box>
       </Box>
-
     </VStack>
   );
 }
