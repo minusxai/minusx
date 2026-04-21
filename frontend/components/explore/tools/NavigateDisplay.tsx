@@ -6,13 +6,43 @@ import { DisplayProps, ToolCallDetails, contentToDetails } from '@/lib/types';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { type DetailCardProps, parseToolArgs, isToolSuccess } from './DetailCarousel';
+import { useMemo } from 'react';
+import { useSelector } from 'react-redux';
+import type { RootState } from '@/store/store';
+import { makeSelectConversationByToolCallId } from '@/store/chatSlice';
+import UserInputComponent from '../UserInputComponent';
 
 // ─── Detail card for AgentTurnContainer carousel ──────────────────
 
 export function NavigateDetailCard({ msg, filesDict }: DetailCardProps) {
+  const toolMsg = msg as any;
+  const toolCallId = toolMsg.tool_call_id;
   const args = parseToolArgs(msg);
   const success = isToolSuccess(msg);
   const { file_id, path, newFileType } = args;
+
+  // Check for pending user input (navigation confirmation)
+  const selectConversation = useMemo(() => makeSelectConversationByToolCallId(), []);
+  const conversation = useSelector((state: RootState) => selectConversation(state, toolCallId));
+  const pendingTool = conversation?.pending_tool_calls.find(p => p.toolCall.id === toolCallId);
+  const pendingUserInputs = pendingTool?.userInputs?.filter(ui => ui.result === undefined);
+
+  if (pendingUserInputs && pendingUserInputs.length > 0 && conversation) {
+    return (
+      <Box mx={3} mb={2}>
+        {pendingUserInputs.map(userInput => (
+          <UserInputComponent
+            key={userInput.id}
+            conversationID={conversation.conversationID}
+            tool_call_id={toolCallId}
+            userInput={userInput}
+            toolName={toolMsg.function?.name}
+            toolArgs={args}
+          />
+        ))}
+      </Box>
+    );
+  }
 
   let navIcon = LuArrowRight;
   let label = 'Unknown';

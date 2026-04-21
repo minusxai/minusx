@@ -15,6 +15,7 @@ import { LoadSkillDetailCard } from './tools/LoadSkillDisplay';
 import { SearchFilesDetailCard } from './tools/SearchFilesDisplay';
 import { SearchDBSchemaDetailCard } from './tools/SearchDBSchemaDisplay';
 import { FileDetailCard } from './tools/CreateFileDisplay';
+import { ClarifyDetailCard } from './tools/ClarifyDisplay';
 import { EditFileDetailCard } from './tools/EditFileDisplay';
 import { ReadFilesDetailCard } from './tools/ReadFilesDisplay';
 import { getToolConfig } from '@/lib/api/tool-config';
@@ -359,10 +360,13 @@ export default function AgentTurnContainer({
 
   // ─── Tool name → detail card mapping ──
 
-  const DETAIL_CARD_BY_TOOL: Record<string, React.ComponentType<DetailCardProps>> = {
+  // null = skip this tool in the carousel (e.g. Clarify is redundant with ClarifyFrontend)
+  const DETAIL_CARD_BY_TOOL: Record<string, React.ComponentType<DetailCardProps> | null> = {
     'Navigate': NavigateDetailCard,
     'PublishAll': PublishAllDetailCard,
     'LoadSkill': LoadSkillDetailCard,
+    'Clarify': null,
+    'ClarifyFrontend': ClarifyDetailCard,
     'EditFile': EditFileDetailCard,
     'ReadFiles': ReadFilesDetailCard,
     'CreateFile': FileDetailCard,
@@ -388,8 +392,12 @@ export default function AgentTurnContainer({
       }
     }
 
-    // Sort messages: successes first, errors last
-    const sorted = [...node.messages].sort((a, b) => {
+    // Filter out skipped tools (explicit null in map), then sort successes first
+    const filtered = node.messages.filter(m => {
+      const name = getToolNameFromMsg(m);
+      return !(name in DETAIL_CARD_BY_TOOL && DETAIL_CARD_BY_TOOL[name] === null);
+    });
+    const sorted = filtered.sort((a, b) => {
       const aOk = isToolSuccess(a) ? 0 : 1;
       const bOk = isToolSuccess(b) ? 0 : 1;
       return aOk - bOk;

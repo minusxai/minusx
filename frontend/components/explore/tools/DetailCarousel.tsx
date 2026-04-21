@@ -58,6 +58,8 @@ export default function DetailCarousel({ icon, label, itemCount, errorCount = 0,
   const [currentIdx, setCurrentIdx] = useState(0);
   const safeIdx = Math.min(currentIdx, Math.max(0, itemCount - 1));
 
+  if (itemCount === 0) return null;
+
   return (
     <VStack gap={0} align="stretch">
       <HStack justify="space-between" px={3} pt={2} pb={1}>
