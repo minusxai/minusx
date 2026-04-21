@@ -59,7 +59,8 @@ type TimelineNodeType = 'agent' | 'query' | 'tool';
 interface TimelineNode {
   type: TimelineNodeType;
   icon: React.ComponentType;
-  label: string;          // e.g. "created", "edited", "query"
+  label: string;          // Singular noun: "file edit", "search", "query"
+  labelPlural: string;    // Plural noun: "file edits", "searches", "queries"
   verb: string;           // e.g. "Creating", "Editing", "Executing"
   count: number;
   messages: MessageWithFlags[];
@@ -216,7 +217,7 @@ function buildTimeline(
         last.messages.push(msg);
         last.count++;
       } else {
-        nodes.push({ type: 'agent', icon: LuBrain, label: 'agent', verb: 'Thinking', count: 1, messages: [msg] });
+        nodes.push({ type: 'agent', icon: LuBrain, label: 'thought', labelPlural: 'thoughts', verb: 'Thinking', count: 1, messages: [msg] });
       }
     } else if (toolName === ToolNames.EXECUTE_QUERY) {
       const last = nodes[nodes.length - 1];
@@ -224,7 +225,7 @@ function buildTimeline(
         last.messages.push(msg);
         last.count++;
       } else {
-        nodes.push({ type: 'query', icon: LuDatabase, label: 'query', verb: 'Querying', count: 1, messages: [msg] });
+        nodes.push({ type: 'query', icon: LuDatabase, label: 'query', labelPlural: 'queries', verb: 'Querying', count: 1, messages: [msg] });
       }
     } else {
       const config = getToolConfig(toolName);
@@ -234,7 +235,7 @@ function buildTimeline(
         last.messages.push(msg);
         last.count++;
       } else {
-        nodes.push({ type: 'tool', icon: config.chipIcon, label: key, verb: config.timelineVerb, count: 1, messages: [msg] });
+        nodes.push({ type: 'tool', icon: config.chipIcon, label: config.chipLabel, labelPlural: config.chipLabelPlural, verb: config.timelineVerb, count: 1, messages: [msg] });
       }
     }
   }
@@ -374,7 +375,7 @@ export default function AgentTurnContainer({
     'SearchDBSchema': SearchDBSchemaDetailCard,
   };
 
-  const FILE_LABELS = new Set(['created', 'edited', 'read']);
+  const FILE_LABELS = new Set(['file create', 'file edit', 'file read']);
 
   const renderToolDetail = (node: TimelineNode) => {
     // File-mutating tools: check for chart items first (questions with query results)
@@ -388,7 +389,7 @@ export default function AgentTurnContainer({
         }
       }
       if (chartItems.length > 0) {
-        return <ChartCarousel items={chartItems} databaseName={databaseName} label={node.label} headerIcon={node.icon} />;
+        return <ChartCarousel items={chartItems} databaseName={databaseName} label={node.label} labelPlural={node.labelPlural} headerIcon={node.icon} />;
       }
     }
 
@@ -406,7 +407,7 @@ export default function AgentTurnContainer({
 
     // Look up detail card by tool name, fallback to FileDetailCard
     return (
-      <DetailCarousel icon={node.icon} label={node.label} itemCount={sorted.length} errorCount={errorCount}
+      <DetailCarousel icon={node.icon} label={node.label} labelPlural={node.labelPlural} itemCount={sorted.length} errorCount={errorCount}
         renderCard={(idx) => {
           const msg = sorted[idx];
           const Card = DETAIL_CARD_BY_TOOL[getToolNameFromMsg(msg)] || FileDetailCard;

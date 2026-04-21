@@ -15,7 +15,9 @@ interface ToolChipsProps {
 
 interface ChipGroup {
   chipLabel: string;
+  chipLabelPlural: string;
   chipIcon: React.ComponentType;
+  chipColor: string;
   messages: MessageWithFlags[];
 }
 
@@ -67,7 +69,9 @@ export default function ToolChips({ toolMessages, readOnly, showThinking }: Tool
       if (!groupMap.has(key)) {
         groupMap.set(key, {
           chipLabel: config.chipLabel,
+          chipLabelPlural: config.chipLabelPlural,
           chipIcon: config.chipIcon,
+          chipColor: config.chipColor,
           messages: [],
         });
       }
@@ -86,40 +90,41 @@ export default function ToolChips({ toolMessages, readOnly, showThinking }: Tool
         {chipGroups.map((group) => {
           const isExpanded = expandedChip === group.chipLabel;
           const count = group.messages.length;
-          const failCount = group.messages.filter(m => !isSuccess(m)).length;
 
           return (
             <Box
               key={group.chipLabel}
               as="button"
-              aria-label={`${count} ${group.chipLabel}`}
+              aria-label={`${count} ${count === 1 ? group.chipLabel : group.chipLabelPlural}`}
               onClick={() => setExpandedChip(isExpanded ? null : group.chipLabel)}
               display="flex"
               alignItems="center"
-              gap={1}
+              gap={1.5}
               px={2}
-              py={0.5}
-              bg={isExpanded ? 'bg.muted' : 'bg.subtle'}
-              border="1px solid"
-              borderColor={isExpanded ? 'border.emphasized' : 'border.default'}
-              borderRadius="full"
+              py={1}
+              bg={isExpanded ? 'accent.teal/18' : 'accent.teal/10'}
+              borderLeft="2px solid"
+              borderColor={isExpanded ? 'accent.teal' : 'accent.teal/40'}
+              borderRadius="sm"
               cursor="pointer"
-              transition="all 0.15s"
-              _hover={{ bg: 'bg.muted', borderColor: 'border.emphasized' }}
+              transition="all 0.2s"
+              backdropFilter="blur(4px)"
+              _hover={{
+                bg: 'accent.teal/18',
+                borderColor: 'accent.teal',
+                boxShadow: '0 0 8px var(--chakra-colors-accent-teal/15)',
+              }}
             >
-              <Icon as={group.chipIcon} boxSize={3} color="fg.muted" />
+              <Icon as={group.chipIcon} boxSize={3} color="accent.teal" opacity={0.8} />
               <Text fontSize="xs" fontFamily="mono" color="fg.muted" fontWeight="500">
-                {count} {group.chipLabel}
+                <Text as="span" color="accent.teal" fontWeight="700">{count}</Text>
+                {' '}{count === 1 ? group.chipLabel : group.chipLabelPlural}
               </Text>
-              {failCount > 0 && (
-                <Text fontSize="2xs" color="accent.danger">
-                  ({failCount} failed)
-                </Text>
-              )}
               <Icon
                 as={isExpanded ? LuChevronDown : LuChevronRight}
                 boxSize={2.5}
-                color="fg.subtle"
+                color="accent.teal"
+                opacity={0.6}
               />
             </Box>
           );
@@ -133,10 +138,10 @@ export default function ToolChips({ toolMessages, readOnly, showThinking }: Tool
 
         return (
           <Box
-            bg="bg.subtle"
-            border="1px solid"
-            borderColor="border.default"
-            borderRadius="md"
+            bg="accent.teal/5"
+            borderLeft="2px solid"
+            borderColor="accent.teal/30"
+            borderRadius="sm"
             px={2}
             py={1.5}
           >
@@ -166,13 +171,13 @@ export default function ToolChips({ toolMessages, readOnly, showThinking }: Tool
                     <Icon
                       as={success ? LuCheck : LuX}
                       boxSize={2.5}
-                      color={success ? 'accent.success' : 'accent.danger'}
+                      color={success ? 'accent.teal' : 'accent.danger'}
                       flexShrink={0}
                     />
                     <Text
                       fontSize="xs"
                       fontFamily="mono"
-                      color="fg.default"
+                      color="fg.muted"
                       overflow="hidden"
                       textOverflow="ellipsis"
                       whiteSpace="nowrap"

@@ -49,12 +49,13 @@ export function getToolNameFromMsg(msg: MessageWithFlags): string {
 interface DetailCarouselProps {
   icon: React.ComponentType;
   label: string;
+  labelPlural?: string;
   itemCount: number;
   errorCount?: number;
   renderCard: (index: number) => React.ReactNode;
 }
 
-export default function DetailCarousel({ icon, label, itemCount, errorCount = 0, renderCard }: DetailCarouselProps) {
+export default function DetailCarousel({ icon, label, labelPlural, itemCount, errorCount = 0, renderCard }: DetailCarouselProps) {
   const [currentIdx, setCurrentIdx] = useState(0);
   const safeIdx = Math.min(currentIdx, Math.max(0, itemCount - 1));
 
@@ -66,7 +67,7 @@ export default function DetailCarousel({ icon, label, itemCount, errorCount = 0,
         <HStack gap={1.5}>
           <Icon as={icon} boxSize={3} color="fg.muted" />
           <Text fontSize="2xs" fontFamily="mono" color="fg.subtle" fontWeight="600" textTransform="uppercase">
-            {itemCount} {label}
+            {itemCount} {itemCount === 1 ? label : (labelPlural || `${label}s`)}
             {errorCount > 0 && (
               <Text as="span" color="accent.danger"> ({errorCount} {errorCount === 1 ? 'error' : 'errors'})</Text>
             )}

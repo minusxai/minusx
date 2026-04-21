@@ -37,8 +37,10 @@ interface ChartCarouselProps {
   toggleShowThinking?: () => void;
   markdownContext?: 'sidebar' | 'mainpage';
   readOnly?: boolean;
-  /** Label for the header (default: "queries") */
+  /** Label for the header (singular, default: "query") */
   label?: string;
+  /** Plural label for the header (default: "queries") */
+  labelPlural?: string;
   /** Icon for the header (default: LuDatabase) */
   headerIcon?: React.ComponentType;
 }
@@ -111,6 +113,7 @@ export default function ChartCarousel({
   executeMessages,
   databaseName,
   label,
+  labelPlural,
   headerIcon,
 }: ChartCarouselProps) {
   // Build items from either source
@@ -154,7 +157,9 @@ export default function ChartCarousel({
   };
 
   const totalCount = allItems.length;
-  const displayLabel = label || (totalCount === 1 ? 'query' : 'queries');
+  const displayLabel = totalCount === 1
+    ? (label || 'query')
+    : (labelPlural || label ? `${label}s` : 'queries');
 
   // All failed
   if (count === 0) {
