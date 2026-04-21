@@ -336,8 +336,8 @@ function ImageToolsPanel({ fileId, appState }: { fileId: number | undefined; app
 
         <HStack gap={2} align="center" flexWrap="wrap">
           <label style={checkboxStyle}>
-            <input type="checkbox" checked={webLink} onChange={e => setWebLink(e.target.checked)} aria-label="Upload to S3 and return web link" />
-            <Text fontSize="2xs" color="fg.muted">Web link</Text>
+            <input type="checkbox" checked={webLink} onChange={e => setWebLink(e.target.checked)} aria-label="Upload and get link" />
+            <Text fontSize="2xs" color="fg.muted">Get link</Text>
           </label>
           <label style={checkboxStyle}>
             <input type="checkbox" checked={limit512} onChange={e => setLimit512(e.target.checked)} aria-label="Limit width to 512px" />

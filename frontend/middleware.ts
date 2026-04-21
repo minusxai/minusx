@@ -73,7 +73,8 @@ export default auth(async (req) => {
     pathname.startsWith('/api/integrations/slack/interact') ||
     pathname.startsWith('/api/integrations/slack/oauth-callback') ||
     pathname.startsWith('/api/health') ||
-    pathname === '/api/jobs/cron'
+    pathname === '/api/jobs/cron' ||
+    pathname.startsWith('/api/object-store/serve')
   ) {
     // Create modified request headers with subdomain
     const requestHeaders = new Headers(req.headers);
