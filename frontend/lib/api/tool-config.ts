@@ -197,11 +197,9 @@ export const TOOL_CONFIGS: Record<string, ToolConfig> = {
 // Default configuration for unknown tools
 export const DEFAULT_TOOL_CONFIG: ToolConfig = {
   displayComponent: DefaultToolDisplay,
-  tier: 3,
   chipLabel: 'action',
   chipLabelPlural: 'actions',
   chipIcon: LuWrench,
-  chipColor: 'fg.muted',
   timelineVerb: 'Working',
 };
 
