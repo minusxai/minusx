@@ -126,8 +126,11 @@ export function canDeleteVersion(content: ContextContent, version: number): bool
 
 /**
  * Find the nearest context path to a given base path.
- * Returns the most specific ancestor path from the provided list,
- * or the first path if none are ancestors.
+ *
+ * Context files live at paths like /org/context or /org/sales/context.
+ * The folder a context "serves" is its parent directory.
+ * We find the context whose serving folder is the deepest ancestor of basePath,
+ * breaking ties alphabetically for a stable, deterministic result.
  */
 export function findNearestContextPath(
   contextPaths: string[],
@@ -135,16 +138,26 @@ export function findNearestContextPath(
 ): string | null {
   if (contextPaths.length === 0) return null;
 
-  // Find all paths that are ancestors of basePath (or equal to it)
-  const ancestors = contextPaths.filter((p) => basePath.startsWith(p));
-
-  if (ancestors.length > 0) {
-    // Return longest match (most specific ancestor)
-    return ancestors.reduce((best, p) => (p.length > best.length ? p : best));
+  // For each context file at /a/b/ctx-name, the folder it serves is /a/b.
+  // Collect candidates whose serving folder is an ancestor of (or equal to) basePath.
+  const candidates: { path: string; depth: number }[] = [];
+  for (const p of contextPaths) {
+    const folder = p.substring(0, p.lastIndexOf('/')) || '/';
+    if (basePath === folder || basePath.startsWith(folder + '/')) {
+      candidates.push({ path: p, depth: folder.length });
+    }
   }
 
-  // No ancestor found — return first available context
-  return contextPaths[0];
+  if (candidates.length > 0) {
+    const maxDepth = Math.max(...candidates.map((c) => c.depth));
+    const deepest = candidates.filter((c) => c.depth === maxDepth);
+    // Stable tie-break: alphabetical (so /org/context beats /org/eval-context)
+    deepest.sort((a, b) => a.path.localeCompare(b.path));
+    return deepest[0].path;
+  }
+
+  // No ancestor found — return alphabetically first for stability
+  return [...contextPaths].sort((a, b) => a.localeCompare(b))[0];
 }
 
 /**

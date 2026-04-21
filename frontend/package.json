@@ -10,7 +10,7 @@
     "validate": "concurrently -g --names tsc,eslint \"tsc --noEmit\" \"eslint --cache --quiet\"",
     "test": "node --expose-gc --experimental-vm-modules ./node_modules/.bin/jest",
     "test:watch": "node --expose-gc --experimental-vm-modules ./node_modules/.bin/jest --watch",
-    "test:ui": "node --expose-gc ./node_modules/.bin/jest --config jest.config.ui.js",
+    "test:ui": "node --expose-gc --experimental-vm-modules ./node_modules/.bin/jest --config jest.config.ui.js",
     "update-workspace-template": "tsx --conditions react-server scripts/update-workspace-template.ts",
     "generate-types": "(cd ../backend && uv run python scripts/export_schema.py) | tee lib/validation/atlas-schema.gen.json | node_modules/.bin/json2ts --unreachableDefinitions --additionalProperties=false > lib/types.gen.ts",
     "postinstall": "node scripts/copy-duckdb-wasm.mjs"

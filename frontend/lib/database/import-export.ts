@@ -149,6 +149,29 @@ function escapeForJson(s: string): string {
   return JSON.stringify(s).slice(1, -1);
 }
 
+/**
+ * Build InitData from the workspace template without importing it.
+ * Pre-computes the bcrypt hash so callers can reuse this for fast per-test
+ * data resets (atomicImport only) without rehashing on every test.
+ */
+export async function buildInitData(
+  adminName = 'Test User',
+  adminEmail = 'test@example.com',
+  adminPassword = 'password',
+): Promise<InitData> {
+  const hash = await hashPassword(adminPassword);
+  const now = new Date().toISOString();
+  const templateStr = JSON.stringify(workspaceTemplate)
+    .replace(/\{\{ORG_NAME\}\}/g, escapeForJson('org'))
+    .replace(/\{\{ADMIN_EMAIL\}\}/g, escapeForJson(adminEmail))
+    .replace(/\{\{ADMIN_NAME\}\}/g, escapeForJson(adminName))
+    .replace(/\{\{ADMIN_PASSWORD_HASH\}\}/g, escapeForJson(hash))
+    .replace(/\{\{TIMESTAMP\}\}/g, escapeForJson(now));
+  const rawData: InitData = JSON.parse(templateStr);
+  rawData.version = LATEST_DATA_VERSION;
+  return rawData;
+}
+
 /** Initialize the database with a default admin user and seed resources. */
 export async function initializeDatabase(
   adminName: string,

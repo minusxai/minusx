@@ -29,6 +29,15 @@ class JSDOMWithFetchEnvironment extends TestEnvironment {
       this.global.TextEncoder = TextEncoder;
       this.global.TextDecoder = TextDecoder;
     }
+    // JSDOM's Blob and File lack arrayBuffer() / text() / stream() which PGLite
+    // (and other modern web APIs) require. Replace them with the Node.js globals
+    // which implement the full Blob interface (Node 16+).
+    if (typeof Blob !== 'undefined' && typeof Blob.prototype.arrayBuffer === 'function') {
+      this.global.Blob = Blob;
+    }
+    if (typeof File !== 'undefined' && typeof File.prototype.arrayBuffer === 'function') {
+      this.global.File = File;
+    }
   }
 }
 

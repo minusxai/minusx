@@ -4,15 +4,14 @@
  */
 
 import { setupMockFetch } from '@/test/harness/mock-fetch';
-import { setupTestDb } from '@/test/harness/test-db';
-import { getTestDbPath } from '@/store/__tests__/test-utils';
 import { POST as sqlToIRHandler } from '@/app/api/sql-to-ir/route';
 import { POST as irToSqlHandler } from '@/app/api/ir-to-sql/route';
 import { CompletionsAPI } from '../completions';
 import { QueryIR } from '@/lib/sql/ir-types';
 
 describe('Completions SQL IR - E2E Tests', () => {
-  setupTestDb(getTestDbPath('sql_ir_completions'));
+  // These routes use local WASM (no DB needed) — don't init PGLite to avoid WASM conflicts.
+  beforeEach(() => jest.clearAllMocks());
 
   // Mock fetch with route interceptors — no Python backend needed (routes use local WASM)
   const mockFetch = setupMockFetch({

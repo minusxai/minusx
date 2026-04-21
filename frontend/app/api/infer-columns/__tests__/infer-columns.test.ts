@@ -38,8 +38,8 @@ describe('Infer Columns - E2E Tests', () => {
       const { getAdapter } = await import('@/lib/database/adapter/factory');
       const db = await getAdapter();
       await db.query(
-        `INSERT INTO files (id, name, path, type, content, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
           TEST_QUESTION_ID,
           'Test Infer Question',
@@ -52,6 +52,7 @@ describe('Infer Columns - E2E Tests', () => {
             connection_name: null,
             references: [],
           }),
+          '[]',
           new Date().toISOString(),
           new Date().toISOString(),
         ]

@@ -32,10 +32,16 @@ jest.mock('@/lib/connections', () => ({
   getNodeConnector: jest.fn(),
 }));
 
+// Mock ConnectionsAPI.getRawByName so tests don't need a live DB for connection lookup.
+jest.mock('@/lib/data/connections.server', () => ({
+  ConnectionsAPI: {
+    getRawByName: jest.fn().mockResolvedValue({ type: 'duckdb', config: { file_path: 'test.duckdb' } }),
+  },
+}));
+
 // ---------------------------------------------------------------------------
 
 import { setupMockFetch } from '@/test/harness/mock-fetch';
-import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
 import { POST as queryPostHandler } from '@/app/api/query/route';
 import { NextRequest } from 'next/server';
 import { getNodeConnector } from '@/lib/connections';
@@ -44,7 +50,6 @@ import { getNodeConnector } from '@/lib/connections';
 // Constants
 // ---------------------------------------------------------------------------
 
-const dbPath = getTestDbPath('param_query_e2e');
 const DUCK_CONN = 'duck_conn';
 
 // ---------------------------------------------------------------------------
@@ -79,37 +84,8 @@ describe('Parameterised query execution E2E (local WASM)', () => {
   // No Python backend needed — sql-to-ir and ir-to-sql run locally via WASM
   setupMockFetch({});
 
-  beforeAll(async () => {
-    const { resetAdapter } = await import('@/lib/database/adapter/factory');
-    await resetAdapter();
-    await initTestDatabase(dbPath);
 
-    const { getAdapter } = await import('@/lib/database/adapter/factory');
-    const db = await getAdapter();
-    const now = new Date().toISOString();
-    const { rows } = await db.query<{ next_id: number }>(
-      `SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM files`,
-      []
-    );
-    await db.query(
-      `INSERT INTO files (id, name, path, type, content, file_references, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [
-        rows[0].next_id, DUCK_CONN, `/org/database/${DUCK_CONN}`, 'connection',
-        JSON.stringify({ id: DUCK_CONN, name: DUCK_CONN, type: 'duckdb', config: { file_path: 'test.duckdb' } }),
-        '[]', now, now,
-      ]
-    );
-    // adapter is the singleton, don't close
-  });
-
-  afterAll(async () => {
-    await cleanupTestDatabase(dbPath);
-  });
-
-  beforeEach(async () => {
-    const { resetAdapter } = await import('@/lib/database/adapter/factory');
-    await resetAdapter();
+  beforeEach(() => {
     jest.clearAllMocks();
 
     (getNodeConnector as jest.Mock).mockReturnValue({

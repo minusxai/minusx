@@ -88,7 +88,7 @@ describe('Completions Suggestions - E2E Tests', () => {
       const { getAdapter } = await import('@/lib/database/adapter/factory');
       const db = await getAdapter();
       await db.query(
-        `UPDATE files SET content = ? WHERE path = ?`,
+        `UPDATE files SET content = $1 WHERE path = $2`,
         [
           JSON.stringify({
             id: 'test_connection',

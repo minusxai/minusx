@@ -1,18 +1,71 @@
-/**
- * Unit tests for slack/messages.ts parsing helpers.
- *
- * These tests verify extractSlackReply against the three log formats
- * the Python backend can produce:
- *
- *   1. finish_reason='stop' → task_result.result = { success: true, content: "..." }
- *   2. Explicit TalkToUser tool call → completed_tool_calls[].content = { success: true, content: "...", citations: [] }
- *   3. Auto-dispatched TalkToUser (text alongside tool_calls) → completed_tool_calls[].content = { success: true, content_blocks: [{ type: 'text', text: '...' }] }
- */
-
+import { uploadSlackFile } from '@/lib/integrations/slack/api';
 import { extractSlackReply, markdownToSlackMrkdwn, buildSlackReplyBlocks, extractQueryChart, extractQueryCharts } from '@/lib/integrations/slack/messages';
 import type { ConversationLogEntry } from '@/lib/types';
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ─── api.test.ts ───
+
+describe('uploadSlackFile', () => {
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    global.fetch = jest.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.startsWith('https://slack.com/api/files.getUploadURLExternal')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ ok: true, upload_url: 'https://uploads.slack.test/file', file_id: 'F_TEST_FILE' }),
+        } as Response;
+      }
+
+      if (url === 'https://uploads.slack.test/file') {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => '',
+        } as Response;
+      }
+
+      if (url === 'https://slack.com/api/files.completeUploadExternal') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ ok: true, files: [{ id: 'F_TEST_FILE' }] }),
+        } as Response;
+      }
+
+      throw new Error(`Unexpected fetch URL: ${url} (${JSON.stringify(init ?? {})})`);
+    }) as typeof fetch;
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    jest.restoreAllMocks();
+  });
+
+  it('uploads file and associates with channel via completeUploadExternal', async () => {
+    const result = await uploadSlackFile('xoxb-test', {
+      channel: 'C123',
+      filename: 'chart.png',
+      fileData: Buffer.from('png-bytes'),
+    });
+
+    expect(result).toEqual({ fileId: 'F_TEST_FILE' });
+
+    const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+
+    const completeCall = fetchMock.mock.calls[2];
+    expect(String(completeCall[0])).toBe('https://slack.com/api/files.completeUploadExternal');
+    expect(JSON.parse(String(completeCall[1]?.body))).toEqual({
+      files: [{ id: 'F_TEST_FILE', title: 'chart.png' }],
+      channel_id: 'C123',
+    });
+  });
+});
+
+// ─── messages.unit.test.ts ───
 
 function taskEntry(message: string): ConversationLogEntry {
   return {
@@ -54,8 +107,6 @@ function taskResultWithTalkToUserContentBlocks(blocks: Array<Record<string, unkn
     },
   } as unknown as ConversationLogEntry;
 }
-
-// ── markdownToSlackMrkdwn ────────────────────────────────────────────────────
 
 describe('markdownToSlackMrkdwn', () => {
   describe('bold', () => {
@@ -104,7 +155,6 @@ describe('markdownToSlackMrkdwn', () => {
     });
 
     it('does not convert image links ![alt](url)', () => {
-      // Image links should be stripped or left alone, not converted to text links
       expect(markdownToSlackMrkdwn('![chart](https://example.com/chart.png)')).not.toContain('[chart]');
     });
   });
@@ -162,8 +212,6 @@ describe('markdownToSlackMrkdwn', () => {
     });
   });
 });
-
-// ── extractSlackReply (structured) ───────────────────────────────────────────
 
 describe('extractSlackReply', () => {
   it('returns text from a simple reply', () => {
@@ -290,8 +338,6 @@ describe('extractSlackReply', () => {
   });
 });
 
-// ── buildSlackReplyBlocks ────────────────────────────────────────────────────
-
 describe('buildSlackReplyBlocks', () => {
   it('returns a section block with mrkdwn text', () => {
     const blocks = buildSlackReplyBlocks({ text: 'Hello world' });
@@ -355,8 +401,6 @@ describe('buildSlackReplyBlocks', () => {
     expect(blocks).toHaveLength(1);
   });
 });
-
-// ── extractQueryChart ────────────────────────────────────────────────────────
 
 describe('extractQueryChart', () => {
   function executeQueryTask(uniqueId: string, vizSettings?: string | object): ConversationLogEntry {
@@ -474,7 +518,6 @@ describe('extractQueryChart', () => {
     ];
     const charts = extractQueryCharts(log);
     expect(charts).toHaveLength(2);
-    // Last 2 in chronological order
     expect(charts[0].vizSettings.type).toBe('line');
     expect(charts[1].vizSettings.type).toBe('pie');
   });

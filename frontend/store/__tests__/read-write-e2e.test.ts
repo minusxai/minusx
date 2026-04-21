@@ -28,6 +28,16 @@ import { readFilesByCriteria } from '@/lib/api/file-state';
 import { selectContextFromPath } from '@/store/filesSlice';
 import { NextRequest } from 'next/server';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
+import type { EffectiveUser } from '@/lib/auth/auth-helpers';
+
+const TEST_USER: EffectiveUser = {
+  userId: 1,
+  email: 'test@example.com',
+  name: 'Test User',
+  role: 'admin',
+  home_folder: '/org',
+  mode: 'org',
+};
 
 // Mock db-config to use test database
 jest.mock('@/lib/database/db-config', () => ({
@@ -294,7 +304,7 @@ describe('Phase 1: Unified File System API E2E', () => {
       query: 'SELECT category, COUNT(*) as count FROM products GROUP BY category',
       connectionId: 'test_db',
       parameters: {}
-    });
+    }, TEST_USER);
 
     // Verify ExecuteQuery output (mock returns products data)
     expect(exploreResult).toBeDefined();
@@ -564,7 +574,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         query: 'SELECT name, age FROM users WHERE age > :minAge',
         connectionId: 'test_db',
         parameters: { minAge: 20 }
-      });
+      }, TEST_USER);
 
       expect(result).toBeDefined();
       const resultDetails = result.details as import('@/lib/types').ExecuteQueryDetails;
@@ -627,7 +637,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         query: 'SELECT category, COUNT(*) as count FROM products GROUP BY category',
         connectionId: 'test_db',
         parameters: {}
-      });
+      }, TEST_USER);
 
       // content must be a CompressedQueryResult object, NOT the raw QueryResult
       expect(result.content).toBeDefined();
@@ -650,7 +660,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         query: 'SELECT category, COUNT(*) as count FROM products GROUP BY category',
         connectionId: 'test_db',
         parameters: {}
-      });
+      }, TEST_USER);
 
       const compressed = result.content as CompressedQueryResult;
       // Markdown table should include actual cell values
@@ -674,7 +684,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         query: 'SELECT * FROM nonexistent_table_xyz',
         connectionId: 'test_db',
         parameters: {}
-      });
+      }, TEST_USER);
 
       // content and details both reflect the error (no raw rows)
       const details = result.details as ExecuteQueryDetails;
@@ -723,7 +733,7 @@ describe('Phase 1: Unified File System API E2E', () => {
         query: 'SELECT name, age FROM users WHERE age > :minAge',
         connectionId: 'test_db',
         parameters: { minAge: 20 }
-      });
+      }, TEST_USER);
 
       // Simulate how a completed tool call message looks after route injects details
       const newToolMessage: ToolMessage = {

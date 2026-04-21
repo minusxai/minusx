@@ -59,7 +59,8 @@ async function* makeStream(buf: Buffer): AsyncIterable<Uint8Array> {
 
 let mockSend: jest.Mock;
 let mockConnRun: jest.Mock;
-let mockCloseSync: jest.Mock;
+let mockConnCloseSync: jest.Mock;
+let mockInstanceCloseSync: jest.Mock;
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -79,9 +80,11 @@ beforeEach(() => {
     };
     return {};
   });
-  mockCloseSync = jest.fn();
+  mockConnCloseSync = jest.fn();
+  mockInstanceCloseSync = jest.fn();
   (DuckDBInstance.create as jest.Mock).mockResolvedValue({
-    connect: jest.fn().mockResolvedValue({ run: mockConnRun, closeSync: mockCloseSync }),
+    connect: jest.fn().mockResolvedValue({ run: mockConnRun, closeSync: mockConnCloseSync }),
+    closeSync: mockInstanceCloseSync,
   });
 });
 
@@ -335,7 +338,8 @@ describe('processFilesFromS3', () => {
       s3_key: 'k1',
     }]);
 
-    expect(mockCloseSync).toHaveBeenCalledTimes(1);
+    expect(mockConnCloseSync).toHaveBeenCalledTimes(1);
+    expect(mockInstanceCloseSync).toHaveBeenCalledTimes(1);
   });
 
   it('still closes DuckDB connection when metadata extraction fails', async () => {
@@ -345,7 +349,8 @@ describe('processFilesFromS3', () => {
       processFilesFromS3('org', 'myconn', [{ filename: 'bad.csv', s3_key: 'k1' }]),
     ).rejects.toThrow('DuckDB exploded');
 
-    expect(mockCloseSync).toHaveBeenCalledTimes(1);
+    expect(mockConnCloseSync).toHaveBeenCalledTimes(1);
+    expect(mockInstanceCloseSync).toHaveBeenCalledTimes(1);
   });
 });
 

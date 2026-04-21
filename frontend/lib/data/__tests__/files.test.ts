@@ -67,21 +67,7 @@ describe('Files Data Layer - getTemplate', () => {
       ]
     });
 
-    // Create test connections
-    duckdbConnectionId = await DocumentDB.create(
-      'default_db',
-      '/org/database/default_db',
-      'connection',
-      {
-        type: 'duckdb',
-        config: {
-          file_path: 'data/default_db.duckdb'
-        }
-      } as ConnectionContent,
-      []
-    );
-
-    // Create custom_db connection for template test
+    // Create custom_db first so it has an earlier updated_at (ORDER BY updated_at DESC)
     await DocumentDB.create(
       'custom_db',
       '/org/database/custom_db',
@@ -90,6 +76,20 @@ describe('Files Data Layer - getTemplate', () => {
         type: 'duckdb',
         config: {
           file_path: 'data/custom_db.duckdb'
+        }
+      } as ConnectionContent,
+      []
+    );
+
+    // Create default_db last so it sorts first (most recent updated_at DESC)
+    duckdbConnectionId = await DocumentDB.create(
+      'default_db',
+      '/org/database/default_db',
+      'connection',
+      {
+        type: 'duckdb',
+        config: {
+          file_path: 'data/default_db.duckdb'
         }
       } as ConnectionContent,
       []

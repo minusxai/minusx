@@ -268,7 +268,7 @@ export class DocumentDB {
 
     const db = getModules().db;
     const allIds = [folderId, ...descendantIds];
-    const placeholders = allIds.map((_, i) => `$${i + 4}`).join(', ');
+    const placeholders = allIds.map((_, i) => `$${i + 5}`).join(', ');
     const result = await db.exec(
       `UPDATE files
        SET

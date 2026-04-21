@@ -8,15 +8,19 @@
  * 4. Test metadata extraction
  */
 
-import * as path from 'path';
+// Must be hoisted before any imports that touch the DB
+jest.mock('@/lib/database/db-config', () => ({
+  DB_PATH: undefined,
+  DB_DIR: undefined,
+  getDbType: () => 'pglite' as const,
+}));
+
 import {
   InitData,
   exportDatabase,
   atomicImport,
 } from '@/lib/database/import-export';
-import { createEmptyDatabase } from '@/scripts/create-empty-db';
-
-const TEST_DB_PATH = path.join(process.cwd(), 'data', 'test_selective_import.db');
+import { LATEST_DATA_VERSION } from '@/lib/database/constants';
 
 // Create test data in flat format
 function createTestData(userCount: number, docCount: number): { users: InitData['users']; documents: InitData['documents'] } {
@@ -52,46 +56,22 @@ function createTestData(userCount: number, docCount: number): { users: InitData[
 
 describe('Import/Export E2E', () => {
   beforeEach(async () => {
-    // Clean up any existing test database
-    try {
-      const fs = require('fs');
-      [TEST_DB_PATH, TEST_DB_PATH + '-wal', TEST_DB_PATH + '-shm', TEST_DB_PATH + '.backup'].forEach(p => {
-        if (fs.existsSync(p)) {
-          fs.unlinkSync(p);
-        }
-      });
-    } catch (err) {
-      // Ignore cleanup errors
-    }
-
-    // Create fresh empty database
-    await createEmptyDatabase(TEST_DB_PATH);
+    const { resetAdapter } = await import('@/lib/database/adapter/factory');
+    await resetAdapter();  // fresh in-memory PGLite per test
   });
 
   afterEach(async () => {
-    // Clean up test database
-    try {
-      const { resetAdapter } = await import('@/lib/database/adapter/factory');
-      await resetAdapter();
-
-      const fs = require('fs');
-      [TEST_DB_PATH, TEST_DB_PATH + '-wal', TEST_DB_PATH + '-shm', TEST_DB_PATH + '.backup'].forEach(p => {
-        if (fs.existsSync(p)) {
-          fs.unlinkSync(p);
-        }
-      });
-    } catch (err) {
-      // Ignore cleanup errors
-    }
+    const { resetAdapter } = await import('@/lib/database/adapter/factory');
+    await resetAdapter();
   });
 
   it('should import and export flat data correctly', async () => {
     const { users, documents } = createTestData(2, 3);
-    const initialData: InitData = { version: 2, users, documents };
+    const initialData: InitData = { version: LATEST_DATA_VERSION, users, documents };
 
-    await atomicImport(initialData, TEST_DB_PATH);
+    await atomicImport(initialData, '');
 
-    const exportedData = await exportDatabase(TEST_DB_PATH);
+    const exportedData = await exportDatabase('');
 
     expect(exportedData.users).toHaveLength(2);
     expect(exportedData.documents).toHaveLength(3);
@@ -102,20 +82,20 @@ describe('Import/Export E2E', () => {
   it('should replace all data on subsequent import', async () => {
     // First import: 2 users, 3 documents
     const initial = createTestData(2, 3);
-    await atomicImport({ version: 2, ...initial }, TEST_DB_PATH);
+    await atomicImport({ version: LATEST_DATA_VERSION, ...initial }, '');
 
     // Second import: 1 user, 5 documents (fully replaces first)
     const replacement = createTestData(1, 5);
-    await atomicImport({ version: 2, ...replacement }, TEST_DB_PATH);
+    await atomicImport({ version: LATEST_DATA_VERSION, ...replacement }, '');
 
-    const exportedData = await exportDatabase(TEST_DB_PATH);
+    const exportedData = await exportDatabase('');
     expect(exportedData.users).toHaveLength(1);
     expect(exportedData.documents).toHaveLength(5);
   });
 
   it('should handle import with nested orgs format (flattened automatically)', async () => {
     const initialData: InitData = {
-      version: 2,
+      version: LATEST_DATA_VERSION,
       orgs: [
         {
           id: 1,
@@ -135,9 +115,9 @@ describe('Import/Export E2E', () => {
       ]
     };
 
-    await atomicImport(initialData, TEST_DB_PATH);
+    await atomicImport(initialData, '');
 
-    const exportedData = await exportDatabase(TEST_DB_PATH);
+    const exportedData = await exportDatabase('');
     expect(exportedData.users).toHaveLength(2);
     expect(exportedData.documents).toHaveLength(2);
   });

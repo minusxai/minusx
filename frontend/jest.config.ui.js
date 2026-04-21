@@ -34,9 +34,11 @@ const config = {
     '**/__tests__/**/*.ui.test.ts',
   ],
   transformIgnorePatterns: [
-    'node_modules/(?!(next-auth|@auth|jsonpath-plus)/)',
+    'node_modules/(?!(next-auth|@auth|jsonpath-plus|@electric-sql/pglite)/)',
   ],
   transform: {
+    // Patch PGLite CJS bundle to force file:// base URL in JSDOM (see pglite-transform.js)
+    'node_modules/@electric-sql/pglite/dist/index\\.cjs$': '<rootDir>/test/setup/pglite-transform.js',
     '^.+\\.tsx?$': ['ts-jest', {
       tsconfig: {
         jsx: 'react-jsx',

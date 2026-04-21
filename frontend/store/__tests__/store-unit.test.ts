@@ -1,13 +1,177 @@
-/**
- * Integration test for File Analytics - DuckDB event tracking
- *
- * Tests the analytics layer end-to-end:
- *   trackFileEvent() → DuckDB write → SELECT verification
- *
- * No Python backend or Redux needed — analytics are pure Node.js DuckDB writes.
- *
- * Run: npm test -- store/__tests__/fileAnalytics.test.ts
- */
+// ─── chatQueueFork.test.ts ───
+
+import { configureStore } from '@reduxjs/toolkit';
+
+import chatReducer, {
+  addStreamingMessage,
+  clearStreamingContent,
+  createConversation,
+  queueMessage,
+  selectConversation,
+  updateConversation,
+} from '../chatSlice';
+import type { RootState } from '../store';
+
+describe('chat queue across temp to real conversation fork', () => {
+  it('preserves queued messages added after /explore navigates to the real conversation', () => {
+    const store = configureStore({
+      reducer: {
+        chat: chatReducer,
+      },
+    });
+    const tempConversationID = -105;
+    const realConversationID = 321;
+
+    store.dispatch(createConversation({
+      conversationID: tempConversationID,
+      agent: 'MultiToolAgent',
+      agent_args: {},
+      message: 'start from explore',
+    }));
+
+    store.dispatch(addStreamingMessage({
+      conversationID: realConversationID,
+      type: 'NewConversation',
+      payload: { name: 'Queued chat regression' },
+    }));
+
+    store.dispatch(addStreamingMessage({
+      conversationID: realConversationID,
+      type: 'StreamedThinking',
+      payload: { chunk: 'thinking...' },
+    }));
+
+    store.dispatch(queueMessage({
+      conversationID: realConversationID,
+      message: 'follow-up queued after navigation',
+    }));
+
+    let realConversation = selectConversation(
+      store.getState() as RootState,
+      realConversationID
+    );
+    expect(realConversation?.queuedMessages).toHaveLength(1);
+    expect(realConversation?.queuedMessages?.[0].message).toBe('follow-up queued after navigation');
+
+    store.dispatch(updateConversation({
+      conversationID: tempConversationID,
+      newConversationID: realConversationID,
+      log_index: 1,
+      completed_tool_calls: [],
+      pending_tool_calls: [],
+    }));
+
+    realConversation = selectConversation(
+      store.getState() as RootState,
+      realConversationID
+    );
+    expect(realConversation?.queuedMessages).toHaveLength(1);
+    expect(realConversation?.queuedMessages?.[0].message).toBe('follow-up queued after navigation');
+  });
+
+  it('preserves queued messages if the UI still dispatches to the temp conversation after the real one exists', () => {
+    const store = configureStore({
+      reducer: {
+        chat: chatReducer,
+      },
+    });
+    const tempConversationID = -106;
+    const realConversationID = 322;
+
+    store.dispatch(createConversation({
+      conversationID: tempConversationID,
+      agent: 'MultiToolAgent',
+      agent_args: {},
+      message: 'start from explore',
+    }));
+
+    store.dispatch(addStreamingMessage({
+      conversationID: realConversationID,
+      type: 'NewConversation',
+      payload: { name: 'Queued chat regression' },
+    }));
+
+    store.dispatch(queueMessage({
+      conversationID: tempConversationID,
+      message: 'follow-up queued on stale temp conversation',
+    }));
+
+    const tempConversation = selectConversation(
+      store.getState() as RootState,
+      tempConversationID
+    );
+    expect(tempConversation?.queuedMessages).toHaveLength(1);
+
+    store.dispatch(updateConversation({
+      conversationID: tempConversationID,
+      newConversationID: realConversationID,
+      log_index: 1,
+      completed_tool_calls: [],
+      pending_tool_calls: [],
+    }));
+
+    const realConversation = selectConversation(
+      store.getState() as RootState,
+      realConversationID
+    );
+    expect(realConversation?.queuedMessages).toHaveLength(1);
+    expect(realConversation?.queuedMessages?.[0].message).toBe('follow-up queued on stale temp conversation');
+  });
+
+  it('clears ephemeral streamed assistant content when the temp conversation resolves to the real conversation', () => {
+    const store = configureStore({
+      reducer: {
+        chat: chatReducer,
+      },
+    });
+    const tempConversationID = -107;
+    const realConversationID = 323;
+
+    store.dispatch(createConversation({
+      conversationID: tempConversationID,
+      agent: 'MultiToolAgent',
+      agent_args: {},
+      message: 'start from explore',
+    }));
+
+    store.dispatch(addStreamingMessage({
+      conversationID: realConversationID,
+      type: 'NewConversation',
+      payload: { name: 'Streaming cleanup regression' },
+    }));
+
+    store.dispatch(addStreamingMessage({
+      conversationID: realConversationID,
+      type: 'StreamedContent',
+      payload: { chunk: 'stale streamed answer' },
+    }));
+
+    let realConversation = selectConversation(
+      store.getState() as RootState,
+      realConversationID
+    );
+    expect(realConversation?.streamedCompletedToolCalls).toHaveLength(1);
+
+    store.dispatch(clearStreamingContent({ conversationID: tempConversationID }));
+
+    store.dispatch(updateConversation({
+      conversationID: tempConversationID,
+      newConversationID: realConversationID,
+      log_index: 1,
+      completed_tool_calls: [],
+      pending_tool_calls: [],
+    }));
+
+    realConversation = selectConversation(
+      store.getState() as RootState,
+      realConversationID
+    );
+    expect(realConversation?.streamedCompletedToolCalls).toHaveLength(0);
+    expect(realConversation?.streamedThinking).toBe('');
+  });
+});
+
+// ─── fileAnalytics.test.ts ───
 
 import * as fs from 'fs';
 import * as path from 'path';
@@ -16,8 +180,6 @@ import * as os from 'os';
 // Override the global jest.setup.ts mock — this suite specifically tests the real DuckDB layer.
 jest.unmock('@/lib/analytics/file-analytics.server');
 
-// NOTE: process.env.ANALYTICS_DB_DIR is read at *call time* (not import time),
-// so setting it in beforeAll() before any getAnalyticsDb() call works correctly.
 import { trackFileEvent } from '@/lib/analytics/file-analytics.server';
 import { getAnalyticsDb, runQuery } from '@/lib/analytics/file-analytics.db';
 
@@ -30,16 +192,10 @@ describe('File Analytics - DuckDB event tracking', () => {
 
   afterAll(() => {
     delete process.env.ANALYTICS_DB_DIR;
-    // rmSync unlinks the directory entry even if DuckDB still has the file open;
-    // on macOS/Linux this is safe — the file descriptor outlives the path.
     if (fs.existsSync(TEST_DIR)) {
       fs.rmSync(TEST_DIR, { recursive: true, force: true });
     }
   });
-
-  // ---------------------------------------------------------------------------
-  // Schema initialization
-  // ---------------------------------------------------------------------------
 
   describe('schema initialization', () => {
     it('creates the DuckDB file and file_events table on first access', async () => {
@@ -61,14 +217,9 @@ describe('File Analytics - DuckDB event tracking', () => {
     });
 
     it('is idempotent: CREATE TABLE IF NOT EXISTS does not error on re-init', async () => {
-      // getAnalyticsDb is called again — should not throw even though table exists
       await expect(getAnalyticsDb()).resolves.toBeDefined();
     });
   });
-
-  // ---------------------------------------------------------------------------
-  // Event types — all five types round-trip correctly
-  // ---------------------------------------------------------------------------
 
   describe('event types', () => {
     it('tracks a "created" event with all fields populated', async () => {
@@ -187,7 +338,6 @@ describe('File Analytics - DuckDB event tracking', () => {
       });
 
       const db = await getAnalyticsDb();
-      // file 10 has accumulated: created → updated → read_as_reference → deleted
       const rows = await runQuery<{ event_type: string }>(
         db,
         "SELECT event_type FROM file_events WHERE file_id = 10 ORDER BY id",
@@ -201,16 +351,11 @@ describe('File Analytics - DuckDB event tracking', () => {
     });
   });
 
-  // ---------------------------------------------------------------------------
-  // Optional fields — NULL handling
-  // ---------------------------------------------------------------------------
-
   describe('optional fields', () => {
     it('stores NULL for all optional fields when omitted', async () => {
       await trackFileEvent({
         eventType: 'created',
         fileId: 30,
-        // No fileType, filePath, fileName, userId, userEmail, userRole, referenced*
       });
 
       const db = await getAnalyticsDb();
@@ -231,13 +376,8 @@ describe('File Analytics - DuckDB event tracking', () => {
     });
   });
 
-  // ---------------------------------------------------------------------------
-  // Aggregate queries — validate OLAP use cases from the plan
-  // ---------------------------------------------------------------------------
-
   describe('aggregate queries', () => {
     it('supports GROUP BY user_email for top-editors ranking', async () => {
-      // alice already has several events; add more for a second user
       await trackFileEvent({ eventType: 'updated', fileId: 40, userEmail: 'bob@example.com' });
       await trackFileEvent({ eventType: 'updated', fileId: 41, userEmail: 'alice@example.com' });
       await trackFileEvent({ eventType: 'updated', fileId: 42, userEmail: 'alice@example.com' });
@@ -263,7 +403,6 @@ describe('File Analytics - DuckDB event tracking', () => {
         "SELECT DATE_TRUNC('day', timestamp) AS day, COUNT(*) AS events FROM file_events GROUP BY day ORDER BY day",
         []
       );
-      // All events in this test run happened today — should be one bucket
       expect(rows).toHaveLength(1);
       expect(Number(rows[0].events)).toBeGreaterThan(0);
     });

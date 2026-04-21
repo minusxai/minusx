@@ -36,6 +36,14 @@ jest.mock('@/lib/database/db-config', () => ({
 
 const TEST_DB_PATH = getTestDbPath('job_runs_e2e');
 
+// ─── Node connector mock ─────────────────────────────────────────────────────
+// Force getNodeConnector to return null so runQuery falls through to
+// pythonBackendFetch for all connection types including 'postgresql'.
+jest.mock('@/lib/connections', () => ({
+  ...jest.requireActual('@/lib/connections'),
+  getNodeConnector: jest.fn().mockReturnValue(null),
+}));
+
 // ─── Query execution mock (no Python backend needed) ─────────────────────────
 // Mocked pythonBackendFetch returns a single row with value=150 for any query.
 jest.mock('@/lib/api/python-backend-client', () => ({
@@ -479,9 +487,9 @@ describe('Job Runs E2E', () => {
 
       expect(res.status).toBe(200);
       // 1 live alert triggered, 1 draft skipped
-      expect(body.data.results[1].triggered).toBe(1);
-      expect(body.data.results[1].failed).toBe(0);
-      expect(body.data.results[1].skipped).toBeGreaterThanOrEqual(1);
+      expect(body.data.results[0].triggered).toBe(1);
+      expect(body.data.results[0].failed).toBe(0);
+      expect(body.data.results[0].skipped).toBeGreaterThanOrEqual(1);
 
       // job_runs row created for the live alert
       const runs = await JobRunsDB.getByJobId(String(alertId), 'alert');
@@ -512,7 +520,7 @@ describe('Job Runs E2E', () => {
       const res2 = await cronPostHandler(req2);
       const body2 = await parseResponse(res2);
 
-      expect(body2.data.results[1].triggered).toBe(0);
+      expect(body2.data.results[0].triggered).toBe(0);
       // The live alert was already run; the second call finds the existing run in the time window
       const runs = await JobRunsDB.getByJobId(String(alertId), 'alert');
       expect(runs).toHaveLength(1);  // only one run, not two
@@ -537,7 +545,7 @@ describe('Job Runs E2E', () => {
       const body = await parseResponse(res);
 
       expect(res.status).toBe(200);
-      expect(body.data.results[1].triggered).toBe(0);
+      expect(body.data.results[0].triggered).toBe(0);
       const runs = await JobRunsDB.getByJobId(String(alertId), 'alert');
       expect(runs).toHaveLength(0);
     });
@@ -561,7 +569,7 @@ describe('Job Runs E2E', () => {
       const body = await parseResponse(res);
 
       expect(res.status).toBe(200);
-      expect(body.data.results[1].triggered).toBe(1);
+      expect(body.data.results[0].triggered).toBe(1);
       const runs = await JobRunsDB.getByJobId(String(alertId), 'alert');
       expect(runs).toHaveLength(1);
       expect(runs[0].status).toBe('SUCCESS');
@@ -583,7 +591,7 @@ describe('Job Runs E2E', () => {
       const res = await cronPostHandler(req);
       const body = await parseResponse(res);
 
-      expect(body.data.results[1].triggered).toBe(0);
+      expect(body.data.results[0].triggered).toBe(0);
       const runs = await JobRunsDB.getByJobId(String(alertId), 'alert');
       expect(runs).toHaveLength(0);
     });

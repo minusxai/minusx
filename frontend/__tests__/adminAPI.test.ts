@@ -32,8 +32,7 @@ jest.mock('@/lib/database/db-config', () => ({
 
 // Import after mocking
 import { InitData, exportDatabase, atomicImport } from '@/lib/database/import-export';
-import { createEmptyDatabase } from '@/scripts/create-empty-db';
-import { setDataVersion } from '@/lib/database/config-db';
+import { LATEST_DATA_VERSION } from '@/lib/database/constants';
 
 // Import API route handlers AFTER mocking
 import { GET as exportHandler } from '@/app/api/admin/export-db/route';
@@ -90,29 +89,13 @@ function createResetRequest(url = 'http://localhost:3000/api/admin/reset-tutoria
 
 describe('Import/Export API Endpoints', () => {
   beforeEach(async () => {
-    const { resetAdapter, getAdapter } = await import('@/lib/database/adapter/factory');
+    const { resetAdapter } = await import('@/lib/database/adapter/factory');
     await resetAdapter();
-
     cleanupDbFiles();
 
-    await createEmptyDatabase(TEST_DB_PATH);
-    await resetAdapter();
-
-    const { getDataVersion } = await import('@/lib/database/config-db');
-    const db = await getAdapter();
-    await setDataVersion(2, db);
-    await resetAdapter();
-
-    const verifyDb = await getAdapter();
-    const actualVersion = await getDataVersion(verifyDb);
-    await resetAdapter();
-
-    if (actualVersion !== 2) {
-      throw new Error(`Failed to set version! Expected 2, got ${actualVersion}`);
-    }
-
+    // Seed test data — atomicImport lazily creates the adapter (with schema) on first exec().
     const initialData: InitData = {
-      version: 2,
+      version: LATEST_DATA_VERSION,
       users: [
         { id: 1, email: 'user1@alpha.com', name: 'User 1', password_hash: 'hash', phone: null, state: null, home_folder: '/org', role: 'admin', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
         { id: 2, email: 'user2@alpha.com', name: 'User 2', password_hash: 'hash', phone: null, state: null, home_folder: '/org', role: 'viewer', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
@@ -124,7 +107,6 @@ describe('Import/Export API Endpoints', () => {
       ],
     };
     await atomicImport(initialData, TEST_DB_PATH);
-    await resetAdapter();
 
     mockGetEffectiveUser.mockResolvedValue({
       userId: 1,
@@ -180,7 +162,7 @@ describe('Import/Export API Endpoints', () => {
 
       expect(response.status).toBe(200);
       const result = await response.json();
-      expect(result.version).toBe(2);
+      expect(result.version).toBe(LATEST_DATA_VERSION);
     });
 
     it('should require admin role', async () => {
@@ -203,7 +185,7 @@ describe('Import/Export API Endpoints', () => {
   describe('POST /api/admin/import-data', () => {
     it('should import and replace all data', async () => {
       const importData: InitData = {
-        version: 2,
+        version: LATEST_DATA_VERSION,
         users: [
           { id: 1, email: 'newadmin@example.com', name: 'New Admin', password_hash: 'hash', phone: null, state: null, home_folder: '/org', role: 'admin', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
           { id: 2, email: 'newuser@example.com', name: 'New User', password_hash: 'hash', phone: null, state: null, home_folder: '/org', role: 'viewer', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
@@ -254,7 +236,7 @@ describe('Import/Export API Endpoints', () => {
 
     it('should handle gzipped files', async () => {
       const importData: InitData = {
-        version: 2,
+        version: LATEST_DATA_VERSION,
         users: [
           { id: 1, email: 'admin@gzipped.com', name: 'Admin', password_hash: 'hash', phone: null, state: null, home_folder: '/org', role: 'admin', created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
         ],
@@ -321,13 +303,8 @@ describe('POST /api/admin/reset-tutorial', () => {
     await resetAdapter();
     cleanupDbFiles();
 
-    await createEmptyDatabase(TEST_DB_PATH);
-    await resetAdapter();
-
-    const db = await getAdapter();
-    await setDataVersion(15, db);
-    await resetAdapter();
-
+    // Use a single adapter instance for all setup — intermediate resetAdapter() calls
+    // would destroy the in-memory PGLite state before the handler can read it.
     const setupDb = await getAdapter();
     const now = new Date().toISOString();
 
@@ -369,8 +346,6 @@ describe('POST /api/admin/reset-tutorial', () => {
         JSON.stringify([]), now, now
       ]
     );
-
-    await resetAdapter();
 
     mockGetEffectiveUser.mockResolvedValue({
       userId: 1,
@@ -461,7 +436,7 @@ describe('POST /api/admin/reset-tutorial', () => {
   });
 
   it('should delete id < 100 orphan even when path is not under /tutorial', async () => {
-    const { getAdapter, resetAdapter } = await import('@/lib/database/adapter/factory');
+    const { getAdapter } = await import('@/lib/database/adapter/factory');
     const now = new Date().toISOString();
     const orphanDb = await getAdapter();
     await orphanDb.query(
@@ -472,7 +447,6 @@ describe('POST /api/admin/reset-tutorial', () => {
         JSON.stringify([]), now, now
       ]
     );
-    await resetAdapter();
 
     const request = createResetRequest();
     const response = await resetTutorialHandler(request, {} as any);

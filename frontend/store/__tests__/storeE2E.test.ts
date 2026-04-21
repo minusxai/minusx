@@ -1,18 +1,11 @@
 /**
- * Test Runner E2E Tests
+ * Store E2E Tests — merged from testRunnerE2E and jsonAgentTests
  *
- * Tests for the unified Test runner (lib/tests/server.ts), exercised via
- * the POST /api/evals route with the new `test` body field.
- *
- * Three suites:
- *  1. Unit tests for shared comparison utilities (pure, no I/O)
- *  2. Query-type test end-to-end (FilesAPI + runQuery mocked)
- *  3. LLM-type test end-to-end (LLM mock server)
- *
- * Run: npm test -- store/__tests__/testRunnerE2E.test.ts
+ * Suite 1 (testRunnerE2E): Test-runner comparison utilities + query/LLM test execution
+ * Suite 2 (jsonAgentTests): JSON-driven agent tests against real LLM (skipped unless ANTHROPIC_API_KEY set)
  */
 
-// Must be first — Jest hoists this above imports
+// Must be first — Jest hoists these above all imports
 jest.mock('@/lib/database/db-config', () => ({
   DB_PATH: undefined,
   DB_DIR: undefined,
@@ -30,11 +23,14 @@ jest.mock('@/lib/connections/run-query', () => ({
   runQuery: mockRunQuery,
 }));
 
+import * as path from 'path';
 import { POST as evalsPostHandler } from '@/app/api/jobs/test/route';
 import { POST as chatPostHandler } from '@/app/api/chat/route';
 import { getTestDbPath, initTestDatabase, cleanupTestDatabase } from './test-utils';
 import { withPythonBackend } from '@/test/harness/python-backend';
 import { setupMockFetch } from '@/test/harness/mock-fetch';
+import { setupTestDb, addMxfoodConnection, ensureMxfoodDataset } from '@/test/harness/test-db';
+import { loadAgentTestSpecs, runAgentTestSpecs } from '@/test/harness/agent-test-runner';
 import { NextRequest } from 'next/server';
 import {
   compareValues,
@@ -43,7 +39,9 @@ import {
 } from '@/lib/tests/index';
 import type { Test } from '@/lib/types';
 
-const TEST_DB_PATH = getTestDbPath('test_runner_e2e');
+// ─── testRunnerE2E ────────────────────────────────────────────────────────────
+
+const TEST_RUNNER_DB_PATH = getTestDbPath('test_runner_e2e');
 
 function createEvalsRequest(body: Record<string, unknown>): NextRequest {
   return new NextRequest('http://localhost:3000/api/jobs/test', {
@@ -52,10 +50,6 @@ function createEvalsRequest(body: Record<string, unknown>): NextRequest {
     headers: { 'Content-Type': 'application/json' },
   });
 }
-
-// ---------------------------------------------------------------------------
-// 1. Comparison utility unit tests
-// ---------------------------------------------------------------------------
 
 describe('compareValues — shared utility', () => {
   describe('binary', () => {
@@ -106,51 +100,37 @@ describe('extractCellValue + resolveRowIndex', () => {
   it('resolveRowIndex: empty → undefined', () => expect(resolveRowIndex([], 0)).toBeUndefined());
 });
 
-// ---------------------------------------------------------------------------
-// 2. Query-type test end-to-end
-// ---------------------------------------------------------------------------
-
 describe('Query Test Runner E2E (FilesAPI + runQuery mocked)', () => {
   beforeEach(async () => {
     const { resetAdapter } = await import('@/lib/database/adapter/factory');
     await resetAdapter();
-    await initTestDatabase(TEST_DB_PATH);
+    await initTestDatabase(TEST_RUNNER_DB_PATH);
     mockLoadFile.mockClear();
     mockRunQuery.mockClear();
   });
 
   afterAll(async () => {
-    await cleanupTestDatabase(TEST_DB_PATH);
+    await cleanupTestDatabase(TEST_RUNNER_DB_PATH);
   });
 
   it('query test — constant = match → passed', async () => {
-    // Mock the subject question (question_id: 1) returning a single row with value 42
     mockLoadFile.mockResolvedValue({
       data: {
-        id: 1,
-        name: 'Total Revenue',
-        type: 'question',
+        id: 1, name: 'Total Revenue', type: 'question',
         content: { query: 'SELECT 42 AS total', connection_name: 'default' },
       },
     });
-    mockRunQuery.mockResolvedValue({
-      columns: ['total'],
-      types: ['number'],
-      rows: [{ total: 42 }],
-    });
+    mockRunQuery.mockResolvedValue({ columns: ['total'], types: ['number'], rows: [{ total: 42 }] });
 
     const test: Test = {
       type: 'query',
       subject: { type: 'query', question_id: 1, column: 'total', row: 0 },
-      answerType: 'number',
-      operator: '=',
+      answerType: 'number', operator: '=',
       value: { type: 'constant', value: 42 },
     };
 
     const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
     const data = await resp.json();
-    console.log('query = match:', JSON.stringify(data, null, 2));
-
     expect(data.passed).toBe(true);
     expect(data.actualValue).toBeCloseTo(42, 4);
     expect(data.expectedValue).toBe(42);
@@ -159,30 +139,21 @@ describe('Query Test Runner E2E (FilesAPI + runQuery mocked)', () => {
   it('query test — constant = mismatch → failed', async () => {
     mockLoadFile.mockResolvedValue({
       data: {
-        id: 2,
-        name: 'Row Count',
-        type: 'question',
+        id: 2, name: 'Row Count', type: 'question',
         content: { query: 'SELECT 5 AS cnt', connection_name: 'default' },
       },
     });
-    mockRunQuery.mockResolvedValue({
-      columns: ['cnt'],
-      types: ['number'],
-      rows: [{ cnt: 5 }],
-    });
+    mockRunQuery.mockResolvedValue({ columns: ['cnt'], types: ['number'], rows: [{ cnt: 5 }] });
 
     const test: Test = {
       type: 'query',
       subject: { type: 'query', question_id: 2, column: 'cnt' },
-      answerType: 'number',
-      operator: '=',
+      answerType: 'number', operator: '=',
       value: { type: 'constant', value: 999 },
     };
 
     const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
     const data = await resp.json();
-    console.log('query = mismatch:', JSON.stringify(data, null, 2));
-
     expect(data.passed).toBe(false);
     expect(data.actualValue).toBeCloseTo(5, 4);
     expect(data.expectedValue).toBe(999);
@@ -191,30 +162,21 @@ describe('Query Test Runner E2E (FilesAPI + runQuery mocked)', () => {
   it('query test — > operator passes when actual > expected', async () => {
     mockLoadFile.mockResolvedValue({
       data: {
-        id: 3,
-        name: 'Active Users',
-        type: 'question',
+        id: 3, name: 'Active Users', type: 'question',
         content: { query: 'SELECT 100 AS users', connection_name: 'default' },
       },
     });
-    mockRunQuery.mockResolvedValue({
-      columns: ['users'],
-      types: ['number'],
-      rows: [{ users: 100 }],
-    });
+    mockRunQuery.mockResolvedValue({ columns: ['users'], types: ['number'], rows: [{ users: 100 }] });
 
     const test: Test = {
       type: 'query',
       subject: { type: 'query', question_id: 3 },
-      answerType: 'number',
-      operator: '>',
+      answerType: 'number', operator: '>',
       value: { type: 'constant', value: 50 },
     };
 
     const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
     const data = await resp.json();
-    console.log('query > operator:', JSON.stringify(data, null, 2));
-
     expect(data.passed).toBe(true);
     expect(data.actualValue).toBeCloseTo(100, 4);
   });
@@ -222,30 +184,21 @@ describe('Query Test Runner E2E (FilesAPI + runQuery mocked)', () => {
   it('query test — string regex match ~ → passed', async () => {
     mockLoadFile.mockResolvedValue({
       data: {
-        id: 4,
-        name: 'Status Check',
-        type: 'question',
+        id: 4, name: 'Status Check', type: 'question',
         content: { query: "SELECT 'active' AS status", connection_name: 'default' },
       },
     });
-    mockRunQuery.mockResolvedValue({
-      columns: ['status'],
-      types: ['varchar'],
-      rows: [{ status: 'active' }],
-    });
+    mockRunQuery.mockResolvedValue({ columns: ['status'], types: ['varchar'], rows: [{ status: 'active' }] });
 
     const test: Test = {
       type: 'query',
       subject: { type: 'query', question_id: 4, column: 'status' },
-      answerType: 'string',
-      operator: '~',
+      answerType: 'string', operator: '~',
       value: { type: 'constant', value: '^act' },
     };
 
     const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
     const data = await resp.json();
-    console.log('query ~ regex:', JSON.stringify(data, null, 2));
-
     expect(data.passed).toBe(true);
     expect(data.actualValue).toBe('active');
   });
@@ -253,42 +206,28 @@ describe('Query Test Runner E2E (FilesAPI + runQuery mocked)', () => {
   it('query test — last row (-1) extraction', async () => {
     mockLoadFile.mockResolvedValue({
       data: {
-        id: 5,
-        name: 'Time Series',
-        type: 'question',
+        id: 5, name: 'Time Series', type: 'question',
         content: { query: 'SELECT day, value FROM series', connection_name: 'default' },
       },
     });
     mockRunQuery.mockResolvedValue({
-      columns: ['day', 'value'],
-      types: ['varchar', 'number'],
-      rows: [
-        { day: '2024-01-01', value: 10 },
-        { day: '2024-01-02', value: 20 },
-        { day: '2024-01-03', value: 30 },
-      ],
+      columns: ['day', 'value'], types: ['varchar', 'number'],
+      rows: [{ day: '2024-01-01', value: 10 }, { day: '2024-01-02', value: 20 }, { day: '2024-01-03', value: 30 }],
     });
 
     const test: Test = {
       type: 'query',
       subject: { type: 'query', question_id: 5, column: 'value', row: -1 },
-      answerType: 'number',
-      operator: '=',
+      answerType: 'number', operator: '=',
       value: { type: 'constant', value: 30 },
     };
 
     const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
     const data = await resp.json();
-    console.log('query last row:', JSON.stringify(data, null, 2));
-
     expect(data.passed).toBe(true);
     expect(data.actualValue).toBeCloseTo(30, 4);
   });
 });
-
-// ---------------------------------------------------------------------------
-// 3. LLM-type test end-to-end (mock LLM server)
-// ---------------------------------------------------------------------------
 
 describe('LLM Test Runner E2E (mock LLM server)', () => {
   const { getPythonPort, getLLMMockPort, getLLMMockServer } = withPythonBackend({ withLLMMock: true });
@@ -309,27 +248,20 @@ describe('LLM Test Runner E2E (mock LLM server)', () => {
   beforeEach(async () => {
     const { resetAdapter } = await import('@/lib/database/adapter/factory');
     await resetAdapter();
-    await initTestDatabase(TEST_DB_PATH);
+    await initTestDatabase(TEST_RUNNER_DB_PATH);
     await getLLMMockServer!().reset();
     mockFetch.mockClear();
   });
 
   afterAll(async () => {
-    await cleanupTestDatabase(TEST_DB_PATH);
+    await cleanupTestDatabase(TEST_RUNNER_DB_PATH);
   });
 
   it('llm binary test — SubmitBinary(true) against expected true → passed', async () => {
     await getLLMMockServer!().configure({
       response: {
-        content: '',
-        role: 'assistant',
-        tool_calls: [
-          {
-            id: 'call_1',
-            type: 'function',
-            function: { name: 'SubmitBinary', arguments: JSON.stringify({ answer: true }) },
-          },
-        ],
+        content: '', role: 'assistant',
+        tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'SubmitBinary', arguments: JSON.stringify({ answer: true }) } }],
         finish_reason: 'tool_calls',
       },
       usage: USAGE,
@@ -337,20 +269,13 @@ describe('LLM Test Runner E2E (mock LLM server)', () => {
 
     const test: Test = {
       type: 'llm',
-      subject: {
-        type: 'llm',
-        prompt: 'Does the dashboard show any charts?',
-        context: { type: 'explore' },
-      },
-      answerType: 'binary',
-      operator: '=',
+      subject: { type: 'llm', prompt: 'Does the dashboard show any charts?', context: { type: 'explore' } },
+      answerType: 'binary', operator: '=',
       value: { type: 'constant', value: true },
     };
 
     const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
     const data = await resp.json();
-    console.log('llm binary pass:', JSON.stringify(data, null, 2));
-
     expect(data.passed).toBe(true);
     expect(data.actualValue).toBe(true);
     expect(data.expectedValue).toBe(true);
@@ -360,15 +285,8 @@ describe('LLM Test Runner E2E (mock LLM server)', () => {
   it('llm binary test — SubmitBinary(false) against expected true → failed', async () => {
     await getLLMMockServer!().configure({
       response: {
-        content: '',
-        role: 'assistant',
-        tool_calls: [
-          {
-            id: 'call_1',
-            type: 'function',
-            function: { name: 'SubmitBinary', arguments: JSON.stringify({ answer: false }) },
-          },
-        ],
+        content: '', role: 'assistant',
+        tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'SubmitBinary', arguments: JSON.stringify({ answer: false }) } }],
         finish_reason: 'tool_calls',
       },
       usage: USAGE,
@@ -376,22 +294,60 @@ describe('LLM Test Runner E2E (mock LLM server)', () => {
 
     const test: Test = {
       type: 'llm',
-      subject: {
-        type: 'llm',
-        prompt: 'Is the revenue chart showing an upward trend?',
-        context: { type: 'explore' },
-      },
-      answerType: 'binary',
-      operator: '=',
+      subject: { type: 'llm', prompt: 'Is the revenue chart showing an upward trend?', context: { type: 'explore' } },
+      answerType: 'binary', operator: '=',
       value: { type: 'constant', value: true },
     };
 
     const resp = await evalsPostHandler(createEvalsRequest({ test, connection_id: '' }));
     const data = await resp.json();
-    console.log('llm binary fail:', JSON.stringify(data, null, 2));
-
     expect(data.passed).toBe(false);
     expect(data.actualValue).toBe(false);
     expect(data.expectedValue).toBe(true);
   }, 60000);
+});
+
+// ─── jsonAgentTests ───────────────────────────────────────────────────────────
+
+const JSON_AGENT_DB_PATH = getTestDbPath('json_agent_tests');
+
+(process.env.ANTHROPIC_API_KEY ? describe : describe.skip)('JSON Agent Tests', () => {
+  // Guard: describe.skip still evaluates the callback body (to collect tests). Without
+  // this return, setupMockFetch below would install a new fetch mock that overwrites the
+  // one set up by the 'LLM Test Runner E2E' suite above, breaking its /mock/configure calls.
+  if (!process.env.ANTHROPIC_API_KEY) return;
+
+  beforeAll(async () => {
+    await ensureMxfoodDataset();
+  }, 60_000);
+
+  const { getPythonPort: getJsonAgentPythonPort } = withPythonBackend();
+
+  const { getStore } = setupTestDb(JSON_AGENT_DB_PATH, {
+    customInit: async (dbPath) => {
+      await addMxfoodConnection(dbPath);
+    },
+  });
+
+  const jsonAgentMockFetch = setupMockFetch({
+    getPythonPort: getJsonAgentPythonPort,
+    interceptors: [
+      {
+        includesUrl: ['localhost:3000/api/chat'],
+        startsWithUrl: ['/api/chat'],
+        handler: chatPostHandler,
+      },
+    ],
+  });
+
+  beforeEach(() => {
+    jsonAgentMockFetch.mockClear();
+  });
+
+  afterAll(async () => {
+    await cleanupTestDatabase(JSON_AGENT_DB_PATH);
+  });
+
+  const specs = loadAgentTestSpecs(path.join(__dirname, 'agent-tests/test-definitions.json'));
+  runAgentTestSpecs(specs, { getStore });
 });
