@@ -180,9 +180,12 @@ export default function ChartCarousel({
     );
   }
 
+  const canPrev = safeIndex > 0;
+  const canNext = safeIndex < count - 1;
+
   return (
     <VStack gap={0} align="stretch">
-      {/* Top bar */}
+      {/* Top bar — label + nav + query toggle */}
       <HStack justify="space-between" px={3} pt={2} pb={1}>
         <HStack gap={1.5}>
           <Icon as={headerIcon || LuDatabase} boxSize={3} color="fg.muted" />
@@ -192,23 +195,19 @@ export default function ChartCarousel({
           </Text>
         </HStack>
 
-        {/* Navigation */}
         {count > 1 && (
           <HStack gap={1.5}>
             <Box
               as="button" aria-label="Previous chart"
-              onClick={() => safeIndex > 0 && setActiveIndex(safeIndex - 1)}
+              onClick={() => canPrev && setActiveIndex(safeIndex - 1)}
               w="24px" h="24px" borderRadius="full"
-              bg={safeIndex > 0 ? 'accent.teal' : 'accent.teal/15'}
-              color={safeIndex > 0 ? 'white' : 'accent.teal'}
+              bg={canPrev ? 'accent.teal' : 'accent.teal/15'} color={canPrev ? 'white' : 'accent.teal'}
               display="flex" alignItems="center" justifyContent="center"
-              cursor={safeIndex === 0 ? 'default' : 'pointer'}
-              opacity={safeIndex === 0 ? 0.4 : 1}
-              _hover={safeIndex === 0 ? {} : { boxShadow: 'sm' }}
+              cursor={canPrev ? 'pointer' : 'default'}
+              opacity={canPrev ? 1 : 0.4}
+              _hover={canPrev ? { bg: 'accent.teal', boxShadow: 'sm' } : {}}
               transition="all 0.15s"
-            >
-              <LuChevronLeft size={14} />
-            </Box>
+            ><LuChevronLeft size={14} /></Box>
             {successful.map((_, idx) => (
               <Box
                 key={idx}
@@ -222,18 +221,15 @@ export default function ChartCarousel({
             ))}
             <Box
               as="button" aria-label="Next chart"
-              onClick={() => safeIndex < count - 1 && setActiveIndex(safeIndex + 1)}
+              onClick={() => canNext && setActiveIndex(safeIndex + 1)}
               w="24px" h="24px" borderRadius="full"
-              bg={safeIndex < count - 1 ? 'accent.teal' : 'accent.teal/15'}
-              color={safeIndex < count - 1 ? 'white' : 'accent.teal'}
+              bg={canNext ? 'accent.teal' : 'accent.teal/15'} color={canNext ? 'white' : 'accent.teal'}
               display="flex" alignItems="center" justifyContent="center"
-              cursor={safeIndex === count - 1 ? 'default' : 'pointer'}
-              opacity={safeIndex === count - 1 ? 0.4 : 1}
-              _hover={safeIndex === count - 1 ? {} : { boxShadow: 'sm' }}
+              cursor={canNext ? 'pointer' : 'default'}
+              opacity={canNext ? 1 : 0.4}
+              _hover={canNext ? { bg: 'accent.teal', boxShadow: 'sm' } : {}}
               transition="all 0.15s"
-            >
-              <LuChevronRight size={14} />
-            </Box>
+            ><LuChevronRight size={14} /></Box>
           </HStack>
         )}
 
@@ -326,6 +322,7 @@ export default function ChartCarousel({
         </Box>
 
       </Box>
+
     </VStack>
   );
 }

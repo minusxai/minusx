@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Box, HStack, VStack, Text, Icon } from '@chakra-ui/react';
 import { LuBrain, LuDatabase, LuChevronLeft, LuChevronRight } from 'react-icons/lu';
 import type { Turn } from './message/groupIntoTurns';
@@ -435,7 +435,13 @@ export default function AgentTurnContainer({
     timeline.some(n => n.type === 'query' || FILE_LABELS.has(n.label)),
     [timeline],
   );
-  const rightPaneMinH = hasChartContent ? '450px' : '200px';
+  const rightPaneH = hasChartContent ? '450px' : '300px';
+
+  // Scroll active horizontal timeline chip into view
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const activeChipRef = useCallback((el: HTMLElement | null) => {
+    el?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+  }, [safeIdx]);
 
   return (
     <>
@@ -497,6 +503,7 @@ export default function AgentTurnContainer({
                     return (
                       <React.Fragment key={idx}>
                         <Box
+                          ref={isSelected ? activeChipRef : undefined}
                           as="button"
                           aria-label={`${node.verb}${node.count > 1 ? ` ×${node.count}` : ''}`}
                           onClick={() => setSelectedIdx(idx)}
@@ -569,9 +576,55 @@ export default function AgentTurnContainer({
               </HStack>
 
               {/* Detail pane below */}
-              <Box minW={0} bg="bg.canvas">
+              <Box minW={0} h={rightPaneH} overflowY="auto" bg="bg.canvas">
                 {selectedNode && renderRightPane(selectedNode)}
               </Box>
+
+              {/* Bottom prev/next nav */}
+              {timeline.length > 1 && (
+                <HStack
+                  justify="space-between"
+                  px={3} py={1.5}
+                  borderTop="1px solid"
+                  borderColor="border.default"
+                >
+                  <Box
+                    as="button"
+                    aria-label="Previous tool"
+                    onClick={() => safeIdx > 0 && setSelectedIdx(safeIdx - 1)}
+                    display="flex" alignItems="center" gap={1}
+                    cursor={safeIdx > 0 ? 'pointer' : 'default'}
+                    opacity={safeIdx > 0 ? 1 : 0.3}
+                    _hover={safeIdx > 0 ? { color: 'accent.teal' } : {}}
+                    transition="all 0.15s"
+                    color="fg.subtle"
+                  >
+                    <LuChevronLeft size={14} />
+                    <Text fontSize="2xs" fontFamily="mono" fontWeight="500">
+                      {safeIdx > 0 ? timeline[safeIdx - 1].verb : 'Prev'}
+                    </Text>
+                  </Box>
+                  <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
+                    {safeIdx + 1} / {timeline.length}
+                  </Text>
+                  <Box
+                    as="button"
+                    aria-label="Next tool"
+                    onClick={() => safeIdx < timeline.length - 1 && setSelectedIdx(safeIdx + 1)}
+                    display="flex" alignItems="center" gap={1}
+                    cursor={safeIdx < timeline.length - 1 ? 'pointer' : 'default'}
+                    opacity={safeIdx < timeline.length - 1 ? 1 : 0.3}
+                    _hover={safeIdx < timeline.length - 1 ? { color: 'accent.teal' } : {}}
+                    transition="all 0.15s"
+                    color="fg.subtle"
+                  >
+                    <Text fontSize="2xs" fontFamily="mono" fontWeight="500">
+                      {safeIdx < timeline.length - 1 ? timeline[safeIdx + 1].verb : 'Next'}
+                    </Text>
+                    <LuChevronRight size={14} />
+                  </Box>
+                </HStack>
+              )}
             </VStack>
           ) : (
             /* ── Full: vertical timeline rail on left, detail on right ── */
@@ -655,60 +708,10 @@ export default function AgentTurnContainer({
                 })}
               </VStack>
 
-              {/* Right pane — height driven by timeline, scrolls if content overflows */}
-              <VStack flex={1} minW={0} minH={rightPaneMinH} bg="bg.canvas" gap={0} align="stretch" position="relative">
-                <Box position="absolute" inset={0} display="flex" flexDirection="column">
-                  <Box flex={1} minH={0} overflowY="auto">
-                    {selectedNode && renderRightPane(selectedNode)}
-                  </Box>
-
-                  {/* Bottom prev/next nav */}
-                  {timeline.length > 1 && (
-                    <HStack
-                      justify="space-between"
-                      px={3} py={1.5}
-                      borderTop="1px solid"
-                    borderColor="border.default"
-                  >
-                    <Box
-                      as="button"
-                      aria-label="Previous tool"
-                      onClick={() => safeIdx > 0 && setSelectedIdx(safeIdx - 1)}
-                      display="flex" alignItems="center" gap={1}
-                      cursor={safeIdx > 0 ? 'pointer' : 'default'}
-                      opacity={safeIdx > 0 ? 1 : 0.3}
-                      _hover={safeIdx > 0 ? { color: 'accent.teal' } : {}}
-                      transition="all 0.15s"
-                      color="fg.subtle"
-                    >
-                      <LuChevronLeft size={14} />
-                      <Text fontSize="2xs" fontFamily="mono" fontWeight="500">
-                        {safeIdx > 0 ? timeline[safeIdx - 1].verb : 'Prev'}
-                      </Text>
-                    </Box>
-                    <Text fontSize="2xs" fontFamily="mono" color="fg.subtle">
-                      {safeIdx + 1} / {timeline.length}
-                    </Text>
-                    <Box
-                      as="button"
-                      aria-label="Next tool"
-                      onClick={() => safeIdx < timeline.length - 1 && setSelectedIdx(safeIdx + 1)}
-                      display="flex" alignItems="center" gap={1}
-                      cursor={safeIdx < timeline.length - 1 ? 'pointer' : 'default'}
-                      opacity={safeIdx < timeline.length - 1 ? 1 : 0.3}
-                      _hover={safeIdx < timeline.length - 1 ? { color: 'accent.teal' } : {}}
-                      transition="all 0.15s"
-                      color="fg.subtle"
-                    >
-                      <Text fontSize="2xs" fontFamily="mono" fontWeight="500">
-                        {safeIdx < timeline.length - 1 ? timeline[safeIdx + 1].verb : 'Next'}
-                      </Text>
-                      <LuChevronRight size={14} />
-                    </Box>
-                  </HStack>
-                )}
-                </Box>
-              </VStack>
+              {/* Right pane */}
+              <Box flex={1} minW={0} h={rightPaneH} overflowY="auto" bg="bg.canvas">
+                {selectedNode && renderRightPane(selectedNode)}
+              </Box>
             </HStack>
           )}
         </Box>
