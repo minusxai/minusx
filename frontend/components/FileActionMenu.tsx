@@ -15,13 +15,16 @@ interface FileActionMenuProps {
   fileType: FileType;
   size?: 'xs' | 'sm';
   onSelect?: (fileId: number) => void;
+  /** When provided, overrides the default type-level delete permission for this specific file. */
+  canDelete?: boolean;
 }
 
-export default function FileActionMenu({ fileId, fileName, filePath, fileType, size = 'sm', onSelect }: FileActionMenuProps) {
+export default function FileActionMenu({ fileId, fileName, filePath, fileType, size = 'sm', onSelect, canDelete }: FileActionMenuProps) {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const { canDeleteFileType } = useAccessRules();
   const canDeleteOrMove = canDeleteFileType(fileType);
+  const canDeleteFile = canDelete !== undefined ? canDelete : canDeleteOrMove;
 
   const handleDeleteClick = () => {
     setIsDeleteDialogOpen(true);
@@ -122,7 +125,7 @@ export default function FileActionMenu({ fileId, fileName, filePath, fileType, s
                 </HStack>
               </Menu.Item>
             )}
-            {canDeleteOrMove && (
+            {canDeleteFile && (
               <Menu.Item
                 value="delete"
                 color="fg.error"

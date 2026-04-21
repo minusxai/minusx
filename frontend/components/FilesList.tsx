@@ -80,6 +80,16 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
   // If availableTypes is provided, use that; otherwise infer from files
   const filterTypes = availableTypes || Array.from(new Set(files.map(f => f.type)));
 
+  // Compute per-folder context file counts (used to enable deletion when >1 exist)
+  const contextCountByFolder = useMemo(() => {
+    const map = new Map<string, number>();
+    files.filter(f => f.type === 'context').forEach(f => {
+      const parent = f.path.substring(0, f.path.lastIndexOf('/')) || '/';
+      map.set(parent, (map.get(parent) ?? 0) + 1);
+    });
+    return map;
+  }, [files]);
+
   // Compute reverse reference index: question ID -> dashboard(s) that use it
   const dashboardsByQuestionId = useMemo(() => {
     const map = new Map<number, { id: number; name: string }[]>();
@@ -646,7 +656,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
                               e.stopPropagation();
                             }}
                           >
-                            <FileActionMenu fileId={file.id} fileName={file.name} filePath={file.path} fileType={file.type} size="sm" onSelect={enterSelectionWithFile} />
+                            <FileActionMenu fileId={file.id} fileName={file.name} filePath={file.path} fileType={file.type} size="sm" onSelect={enterSelectionWithFile} canDelete={file.type === 'context' ? (contextCountByFolder.get(file.path.substring(0, file.path.lastIndexOf('/')) || '/') ?? 0) > 1 : undefined} />
                           </Box>
                         </Box>
                       ))}
@@ -766,7 +776,7 @@ export default function FilesList({ files, limit, showToolbar = true, availableT
                               e.stopPropagation();
                             }}
                           >
-                            <FileActionMenu fileId={file.id} fileName={file.name} filePath={file.path} fileType={file.type} size="xs" onSelect={enterSelectionWithFile} />
+                            <FileActionMenu fileId={file.id} fileName={file.name} filePath={file.path} fileType={file.type} size="xs" onSelect={enterSelectionWithFile} canDelete={file.type === 'context' ? (contextCountByFolder.get(file.path.substring(0, file.path.lastIndexOf('/')) || '/') ?? 0) > 1 : undefined} />
                           </Box>
                           )}
                         </Box>

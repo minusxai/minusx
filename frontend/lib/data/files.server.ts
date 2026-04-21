@@ -826,9 +826,20 @@ class FilesDataLayerServer implements IFilesDataLayer {
     }
 
     if (!canDeleteFileType(file.type)) {
-      throw new AccessPermissionError(
-        `Files of type '${file.type}' cannot be deleted. They are critical system files.`
-      );
+      // Context files can be deleted when the folder contains more than one —
+      // prevents removing the last context file from a folder.
+      if (file.type === 'context') {
+        const parentPath = file.path.substring(0, file.path.lastIndexOf('/'));
+        const siblings = await DocumentDB.listAll(user.companyId, 'context', [parentPath], 1, false);
+        if (siblings.length <= 1) {
+          throw new AccessPermissionError(`Cannot delete the only context file in this folder.`);
+        }
+        // More than one — fall through and allow deletion
+      } else {
+        throw new AccessPermissionError(
+          `Files of type '${file.type}' cannot be deleted. They are critical system files.`
+        );
+      }
     }
 
     if (PROTECTED_FILE_PATHS.includes(file.path as any)) {
