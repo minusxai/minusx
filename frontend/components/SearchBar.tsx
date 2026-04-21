@@ -83,6 +83,9 @@ export default function SearchBar({
     }
   };
 
+  // Hide floating search bar when right sidebar is open (chat is visible there)
+  const hideFloatingBar = !inBottomBar && !rightSidebarCollapsed;
+
   return (
     <Box
           position={inBottomBar ? "relative" : "fixed"}
@@ -91,7 +94,9 @@ export default function SearchBar({
           right={inBottomBar ? "auto" : { base: 0, md: rightWidth }}
           pointerEvents="none"
           zIndex={1000}
-          transition="left 0.2s ease, right 0.3s ease"
+          transition="left 0.2s ease, right 0.3s ease, opacity 0.2s ease"
+          opacity={hideFloatingBar ? 0 : 1}
+          visibility={hideFloatingBar ? "hidden" : "visible"}
         >
         <Box
         pointerEvents="auto"
