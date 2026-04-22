@@ -171,8 +171,8 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
 
   return (
             <>
-            {/* Show/Hide Thinking toggle — only in detailed mode when thinking exists */}
-            {viewMode !== 'compact' && hasThinking && toggleShowThinking && (
+            {/* Show/Hide Thinking toggle — only when thinking exists */}
+            {hasThinking && toggleShowThinking && (
               <GridItem colSpan={12} colStart={1}>
                 <HStack
                   mt={1}
@@ -190,8 +190,8 @@ export default function ContentDisplay({ toolCallTuple, databaseName, isCompact,
               </GridItem>
             )}
 
-            {/* Native or legacy thinking blocks — hidden in compact mode */}
-            {viewMode !== 'compact' && showThinking && thinkingToRender.map((block, idx) => (
+            {/* Native or legacy thinking blocks */}
+            {showThinking && thinkingToRender.map((block, idx) => (
                 <GridItem
                     key={`thinking-${idx}`}
                     colSpan={12}
